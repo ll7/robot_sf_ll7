@@ -46,6 +46,7 @@ _FORBIDDEN_STATUSES = frozenset(
         "unavailable",
     }
 )
+_FORBIDDEN_STATUS_PREFIXES = ("predictive_foresight_model_fallback",)
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
@@ -91,7 +92,9 @@ def _status_markers(  # noqa: C901, PLR0912
 
     def _add(path: str, value: Any) -> None:
         status = _normalized_status(value)
-        if status in _FORBIDDEN_STATUSES:
+        if status in _FORBIDDEN_STATUSES or any(
+            status.startswith(prefix) for prefix in _FORBIDDEN_STATUS_PREFIXES
+        ):
             markers.append((f"{prefix}.{path}", status))
 
     for field in ("status", "row_status", "readiness_status", "availability_status"):
@@ -130,6 +133,10 @@ def _status_markers(  # noqa: C901, PLR0912
         if runtime_marker is not None:
             marker_path, marker_value = runtime_marker
             markers.append((f"{prefix}.{field}.planner_runtime.{marker_path}", marker_value))
+        foresight_marker = runtime_fallback_or_degraded_marker(metadata.get("foresight_prediction"))
+        if foresight_marker is not None:
+            marker_path, marker_value = foresight_marker
+            markers.append((f"{prefix}.{field}.foresight_prediction.{marker_path}", marker_value))
     availability = payload.get("benchmark_availability")
     if isinstance(availability, Mapping):
         for field in ("status", "readiness_status", "availability_status", "execution_mode"):

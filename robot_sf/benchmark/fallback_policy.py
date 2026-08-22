@@ -62,9 +62,10 @@ _RUNTIME_STATUS_FIELDS = frozenset(
     {"status", "row_status", "readiness_status", "availability_status", "execution_mode"}
 )
 _RUNTIME_BOOLEAN_MARKERS = frozenset(
-    {"fallback", "degraded", "fallback_triggered", "fallback_or_degraded"}
+    {"fallback", "degraded", "fallback_triggered", "fallback_or_degraded", "fallback_used"}
 )
 _RUNTIME_FORBIDDEN_STATUSES = frozenset({"degraded", "fallback", "not_available", "unavailable"})
+_RUNTIME_FORBIDDEN_STATUS_PREFIXES = ("predictive_foresight_model_fallback",)
 
 
 def runtime_fallback_or_degraded_marker(  # noqa: C901
@@ -74,7 +75,8 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
 
     The traversal is deliberately key-aware: descriptive strings such as an
     implementation-mode label are not failures by substring.  Only canonical
-    status fields, explicit booleans, and positive fallback counters fail closed.
+    status fields (including the predictive-foresight fallback prefix), explicit
+    boolean markers, and positive fallback counters fail closed.
 
     Returns:
         ``(path, normalized_value)`` for the first forbidden marker, otherwise ``None``.
@@ -87,7 +89,10 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
                 item_path = f"{path}.{key}" if path else key
                 if key in _RUNTIME_STATUS_FIELDS:
                     normalized = str(item).strip().lower().replace("-", "_")
-                    if normalized in _RUNTIME_FORBIDDEN_STATUSES:
+                    if normalized in _RUNTIME_FORBIDDEN_STATUSES or any(
+                        normalized.startswith(prefix)
+                        for prefix in _RUNTIME_FORBIDDEN_STATUS_PREFIXES
+                    ):
                         return item_path, normalized
                 if key in _RUNTIME_BOOLEAN_MARKERS and item is True:
                     return item_path, "true"

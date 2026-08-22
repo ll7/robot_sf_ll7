@@ -264,6 +264,26 @@ def test_generic_runtime_fallback_fails_benchmark_availability() -> None:
     assert "fallback_triggered=true" in str(availability.availability_reason)
 
 
+@pytest.mark.parametrize(
+    ("planner_runtime", "expected_marker"),
+    [
+        (
+            {"status": "predictive_foresight_model_fallback:KeyError"},
+            ("status", "predictive_foresight_model_fallback:keyerror"),
+        ),
+        (
+            {"foresight_prediction": {"fallback_used": True}},
+            ("foresight_prediction.fallback_used", "true"),
+        ),
+    ],
+)
+def test_runtime_fallback_detector_catches_foresight_fallback_metadata(
+    planner_runtime: dict[str, object], expected_marker: tuple[str, str]
+) -> None:
+    """The canonical runtime detector recognizes both foresight fallback signals."""
+    assert runtime_fallback_or_degraded_marker(planner_runtime) == expected_marker
+
+
 def test_runtime_fallback_detector_ignores_descriptive_baseline_label() -> None:
     """The in-repo heuristic baseline label is not a fallback by substring."""
     planner_runtime = {

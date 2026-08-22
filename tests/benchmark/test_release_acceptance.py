@@ -181,6 +181,48 @@ def test_full_release_rejects_episode_fallback_markers(tmp_path: Path) -> None:
     assert any("planner_kinematics.execution_mode" in blocker for blocker in result["blockers"])
 
 
+@pytest.mark.parametrize(
+    ("algorithm_metadata", "forbidden_count_key", "path_fragment"),
+    [
+        (
+            {"status": "predictive_foresight_model_fallback"},
+            "predictive_foresight_model_fallback",
+            "algorithm_metadata.status",
+        ),
+        (
+            {
+                "status": "ok",
+                "foresight_prediction": {"fallback_used": True},
+            },
+            "true",
+            "algorithm_metadata.foresight_prediction.fallback_used",
+        ),
+    ],
+)
+def test_full_release_rejects_and_counts_foresight_fallback_metadata(
+    tmp_path: Path,
+    algorithm_metadata: dict[str, Any],
+    forbidden_count_key: str,
+    path_fragment: str,
+) -> None:
+    """Foresight fallback status and provenance cannot hide in a successful row."""
+    campaign_root = _write_full_campaign(tmp_path)
+    episode_path = campaign_root / "runs" / _PLANNER_KEYS[0] / "episodes.jsonl"
+    rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+    rows[0]["algorithm_metadata"] = algorithm_metadata
+    episode_path.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    result = validate_full_benchmark_release_acceptance(campaign_root, manifest=_full_manifest())
+
+    assert result["status"] == "invalid"
+    assert result["benchmark_success"] is False
+    assert result["forbidden_status_counts"][forbidden_count_key] == 1
+    assert any(path_fragment in blocker for blocker in result["blockers"])
+
+
 def test_full_release_rejects_duplicate_planner_aggregate_roster(tmp_path: Path) -> None:
     """Aggregate rows must cover the exact unique manifest roster."""
     campaign_root = _write_full_campaign(tmp_path)

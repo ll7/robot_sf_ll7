@@ -1,0 +1,217 @@
+schema: scenario_validation_waivers.v1
+
+# These are exact, measured exceptions for the four pinned archetype maps.
+# They are intentionally row-level: a changed identity, measurement, or route
+# count must be reviewed instead of being silently absorbed by a broad waiver.
+geometry:
+  - map: maps/svg_maps/classic_doorway.svg
+    finding_type: endpoint
+    route_kind: robot
+    label: robot_route_0_0
+    end: start
+    zone_kind: robot_spawn_zone
+    zone_index: 0
+    expected_offset_to_centre_m: 2.398
+    rationale: Accepted interaction-segment route anchor; the waypoint is not a spawn sample.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_doorway.svg
+    finding_type: endpoint
+    route_kind: robot
+    label: robot_route_0_0
+    end: end
+    zone_kind: robot_goal_zone
+    zone_index: 0
+    expected_offset_to_centre_m: 2.49
+    rationale: Accepted interaction-segment route anchor; the waypoint is not a goal sample.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_doorway.svg
+    finding_type: fragment
+    route_kind: robot
+    label: robot_route_0_0
+    first_disconnected_segment: 0
+    expected_disconnected_fragment_count: 1
+    rationale: Expected checker signal for an interaction-segment route, not proof of an SVG topology defect.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+
+  - map: maps/svg_maps/classic_head_on_corridor.svg
+    finding_type: endpoint
+    route_kind: robot
+    label: robot_route_0_0
+    end: start
+    zone_kind: robot_spawn_zone
+    zone_index: 0
+    expected_offset_to_centre_m: 3.464
+    rationale: Accepted interaction-segment route anchor; the waypoint is not a spawn sample.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_head_on_corridor.svg
+    finding_type: endpoint
+    route_kind: robot
+    label: robot_route_0_0
+    end: end
+    zone_kind: robot_goal_zone
+    zone_index: 0
+    expected_offset_to_centre_m: 3.219
+    rationale: Accepted interaction-segment route anchor; the waypoint is not a goal sample.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_head_on_corridor.svg
+    finding_type: endpoint
+    route_kind: ped
+    label: ped_route_0_0
+    end: start
+    zone_kind: ped_spawn_zone
+    zone_index: 0
+    expected_offset_to_centre_m: 3.043
+    rationale: Accepted interaction-segment route anchor; the waypoint is not a spawn sample.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_head_on_corridor.svg
+    finding_type: endpoint
+    route_kind: ped
+    label: ped_route_0_0
+    end: end
+    zone_kind: ped_goal_zone
+    zone_index: 0
+    expected_offset_to_centre_m: 3.745
+    rationale: Accepted interaction-segment route anchor; the waypoint is not a goal sample.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_head_on_corridor.svg
+    finding_type: fragment
+    route_kind: robot
+    label: robot_route_0_0
+    first_disconnected_segment: 0
+    expected_disconnected_fragment_count: 1
+    rationale: Expected checker signal for an interaction-segment route, not proof of an SVG topology defect.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_head_on_corridor.svg
+    finding_type: fragment
+    route_kind: ped
+    label: ped_route_0_0
+    first_disconnected_segment: 0
+    expected_disconnected_fragment_count: 1
+    rationale: Expected checker signal for an interaction-segment route, not proof of an SVG topology defect.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+
+  - map: maps/svg_maps/classic_group_crossing.svg
+    finding_type: endpoint
+    route_kind: robot
+    label: robot_route_0_0
+    end: start
+    zone_kind: robot_spawn_zone
+    zone_index: 0
+    expected_offset_to_centre_m: 4.061
+    rationale: Accepted interaction-segment route anchor; the waypoint is not a spawn sample.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_group_crossing.svg
+    finding_type: endpoint
+    route_kind: robot
+    label: robot_route_0_0
+    end: end
+    zone_kind: robot_goal_zone
+    zone_index: 0
+    expected_offset_to_centre_m: 2.814
+    rationale: Accepted interaction-segment route anchor; the waypoint is not a goal sample.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_group_crossing.svg
+    finding_type: endpoint
+    route_kind: ped
+    label: ped_route_0_0
+    end: start
+    zone_kind: ped_spawn_zone
+    zone_index: 0
+    expected_offset_to_centre_m: 4.016
+    rationale: Accepted interaction-segment route anchor; the waypoint is not a spawn sample.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_group_crossing.svg
+    finding_type: endpoint
+    route_kind: ped
+    label: ped_route_0_0
+    end: end
+    zone_kind: ped_goal_zone
+    zone_index: 0
+    expected_offset_to_centre_m: 4.106
+    rationale: Accepted interaction-segment route anchor; the waypoint is not a goal sample.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_group_crossing.svg
+    finding_type: fragment
+    route_kind: robot
+    label: robot_route_0_0
+    first_disconnected_segment: 0
+    expected_disconnected_fragment_count: 1
+    rationale: Expected checker signal for an interaction-segment route, not proof of an SVG topology defect.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_group_crossing.svg
+    finding_type: fragment
+    route_kind: ped
+    label: ped_route_0_0
+    first_disconnected_segment: 0
+    expected_disconnected_fragment_count: 1
+    rationale: Expected checker signal for an interaction-segment route, not proof of an SVG topology defect.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+
+  - map: maps/svg_maps/classic_crossing.svg
+    finding_type: endpoint
+    route_kind: robot
+    label: robot_route_0_0
+    end: start
+    zone_kind: robot_spawn_zone
+    zone_index: 0
+    expected_offset_to_centre_m: 15.821
+    rationale: Accepted interaction-segment route anchor; the waypoint is not a spawn sample.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_crossing.svg
+    finding_type: endpoint
+    route_kind: robot
+    label: robot_route_0_0
+    end: end
+    zone_kind: robot_goal_zone
+    zone_index: 0
+    expected_offset_to_centre_m: 15.806
+    rationale: Accepted interaction-segment route anchor; the waypoint is not a goal sample.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_crossing.svg
+    finding_type: fragment
+    route_kind: robot
+    label: robot_route_0_0
+    first_disconnected_segment: 0
+    expected_disconnected_fragment_count: 1
+    rationale: Expected checker signal for an interaction-segment route, not proof of an SVG topology defect.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_crossing.svg
+    finding_type: fragment
+    route_kind: ped
+    label: ped_route
+    first_disconnected_segment: 1
+    expected_disconnected_fragment_count: 1
+    rationale: Expected checker signal for a route-only pedestrian path, not proof of an SVG topology defect.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - map: maps/svg_maps/classic_crossing.svg
+    finding_type: missing_zone
+    route_kind: ped
+    expected_route_count: 1
+    rationale: Intentional pedestrian route-only mode with synthetic endpoint zones.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+
+parameters:
+  - source: configs/scenarios/archetypes/classic_group_crossing.yaml
+    scenario: classic_group_crossing_low
+    parameter: groups
+    expected_driver: unresolved
+    expected_declared_value: 0.5
+    expected_runtime_value: null
+    rationale: Intentional external benchmark-driver parameter; this checker does not own its runtime resolution.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - source: configs/scenarios/archetypes/classic_group_crossing.yaml
+    scenario: classic_group_crossing_medium
+    parameter: groups
+    expected_driver: unresolved
+    expected_declared_value: 0.5
+    expected_runtime_value: null
+    rationale: Intentional external benchmark-driver parameter; this checker does not own its runtime resolution.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262
+  - source: configs/scenarios/archetypes/classic_group_crossing.yaml
+    scenario: classic_group_crossing_high
+    parameter: groups
+    expected_driver: unresolved
+    expected_declared_value: 0.5
+    expected_runtime_value: null
+    rationale: Intentional external benchmark-driver parameter; this checker does not own its runtime resolution.
+    decision_ref: https://github.com/ll7/robot_sf_ll7/issues/7709#issuecomment-5381550262

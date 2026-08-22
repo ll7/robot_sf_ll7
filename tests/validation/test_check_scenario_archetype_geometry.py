@@ -149,6 +149,6 @@ def test_cli_default_exit_zero_and_fail_flag(tmp_path: Path, capsys) -> None:
     if not svg.exists():
         pytest.skip("pinned archetype maps not present")
     assert main(["--map", str(svg)]) == 0
-    assert main(["--map", str(svg), "--fail-on-violation"]) == 1
+    assert main(["--map", str(svg), "--fail-on-violation"]) == 2
     out = capsys.readouterr().out
     assert "[MISS]" in out or "all checks informational-clean" in out

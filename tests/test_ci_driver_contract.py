@@ -31,6 +31,7 @@ CI_JOB_TIMEOUTS = {
     "compat-matrix": 30,
     "fast-pysf-compat": 10,
     "smoke-artifacts": 30,
+    "scenario-validation": 15,
     "reproducibility-check": 20,
     "reproducibility-check-reconciliation": 5,
     "xdist-scratch-isolation": 15,
@@ -616,6 +617,37 @@ def test_ci_workflow_wheel_smoke_is_independent_and_required_by_aggregate() -> N
     assert any("wheel_install_smoke.sh" in run_block for run_block in wheel_smoke_run_blocks)
     assert "needs" not in workflow["jobs"]["wheel-smoke-install"]
     assert "wheel-smoke-install" in workflow["jobs"]["ci"]["needs"]
+
+
+def test_ci_workflow_scenario_validation_is_exact_and_blocking() -> None:
+    """Require both pinned scenario checks and their aggregate gate dependency."""
+
+    workflow = yaml.safe_load(_workflow_text())
+    job = workflow["jobs"]["scenario-validation"]
+    run_blocks = [step.get("run", "") for step in job["steps"]]
+
+    assert job["timeout-minutes"] == 15
+    checkout = next(
+        step for step in job["steps"] if step.get("name") == "Checkout exact evaluated head"
+    )
+    assert "github.event.pull_request.head.sha" in checkout["with"]["ref"]
+    assert any(
+        "check_scenario_archetype_geometry.py" in run
+        and "--fail-on-violation" in run
+        and "archetype_validation_waivers.yaml" in run
+        for run in run_blocks
+    )
+    assert any(
+        "check_scenario_archetype_parameters.py" in run
+        and "--fail-on-violation" in run
+        and "archetype_validation_waivers.yaml" in run
+        for run in run_blocks
+    )
+    assert "scenario-validation" in workflow["jobs"]["ci"]["needs"]
+    aggregate_steps = [step.get("run", "") for step in workflow["jobs"]["ci"]["steps"]]
+    assert any(
+        'needs.scenario-validation.result }}" != "success"' in step for step in aggregate_steps
+    )
 
 
 def test_wheel_install_smoke_uses_dependency_resolution_and_runtime_env_step() -> None:

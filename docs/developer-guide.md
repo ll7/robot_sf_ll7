@@ -48,6 +48,8 @@ than running experiments (see the [Research & Benchmark Guide](./research-guide.
 ## 3. Validation gates and CI
 
 - [Coverage Guide](./coverage_guide.md) — coverage collection, baseline tracking, CI integration.
+- [Pinned Scenario-Archetype Validation](./dev/scenario_archetype_validation.md) — exact waivers,
+  fail-closed geometry/parameter checks, and the evidence boundary.
 - [Per-Test Performance Budget](./dev_guide_reference.md#per-test-performance-budget) — soft/hard
   test timeouts.
 - [Code Review Guide](./code_review.md) — benchmark-facing review criteria and regression traps.

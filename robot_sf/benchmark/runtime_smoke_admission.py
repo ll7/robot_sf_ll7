@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -305,9 +306,38 @@ def _is_campaign_preflight_unknown(path: str, value: Any) -> bool:
     Returns:
         Whether the field is a canonical campaign-manifest preflight placeholder.
     """
-    if not path.startswith("campaign_manifest.planners[") or ".checkpoint_provenance." not in path:
+    match = re.fullmatch(
+        r"campaign_manifest\.planners\[\d+\]\.checkpoint_provenance\."
+        r"(status|load_succeeded|fallback_triggered)",
+        path,
+    )
+    if match is None:
         return False
-    return value is None or str(value).strip().lower().replace(" ", "_") == "not_run"
+    field = match.group(1)
+    if field in {"load_succeeded", "fallback_triggered"}:
+        return value is None
+    return str(value).strip().lower().replace(" ", "_") in {
+        "not_applicable",
+        "not_run",
+    }
+
+
+def _is_canonical_not_applicable_status(path: str, key: str, value: Any) -> bool:
+    """Allow only exact non-learned status fields emitted by the smoke producer.
+
+    Returns:
+        Whether this is a canonical non-applicable producer status.
+    """
+    if key != "status" or str(value).strip().lower().replace(" ", "_") != "not_applicable":
+        return False
+    patterns = (
+        r"runs\[\d+\]\.summary(?:_artifact)?\.preflight\.learned_policy_contract\.status",
+        r"runs\[\d+\]\.summary(?:_artifact)?(?:\.preflight)?\.algorithm_metadata_contract\."
+        r"learned_checkpoint_observation_contract\.status",
+        r"runs\[\d+\]\.rows\[\d+\]\.algorithm_metadata\."
+        r"learned_checkpoint_observation_contract\.status",
+    )
+    return any(re.fullmatch(pattern, path) is not None for pattern in patterns)
 
 
 def _is_allowed_runtime_marker(path: str, key: str, value: Any) -> bool:
@@ -316,15 +346,22 @@ def _is_allowed_runtime_marker(path: str, key: str, value: Any) -> bool:
     Returns:
         Whether the marker is an explicitly allowed producer representation.
     """
-    normalized = str(value).strip().lower().replace(" ", "_")
     if _is_campaign_preflight_unknown(path, value):
         return True
     if path.startswith("planner_rows[") and key == "benchmark_success":
-        return normalized == "true"
-    return "learned_policy_contract" in path and normalized in {
-        "not_applicable",
-        "not-applicable",
-    }
+        return str(value).strip().lower() == "true"
+    return _is_canonical_not_applicable_status(path, key, value)
+
+
+def _contains_symlink_component(path: Path) -> bool:
+    """Return whether any existing lexical component of ``path`` is a symlink."""
+    absolute = path.absolute()
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current /= part
+        if current.is_symlink():
+            return True
+    return False
 
 
 def _forbidden_status_markers(  # noqa: C901
@@ -406,7 +443,7 @@ def _resolve_campaign_artifact(  # noqa: C901, PLR0912
     raw = Path(raw_path)
     candidates = [raw] if raw.is_absolute() else [campaign_root / raw, repo_root / raw]
     for candidate in candidates:
-        if candidate.is_symlink():
+        if _contains_symlink_component(candidate):
             continue
         resolved = candidate.resolve(strict=False)
         if resolved == expected and resolved.is_file():

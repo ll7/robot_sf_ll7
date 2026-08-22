@@ -520,13 +520,15 @@ def test_runtime_smoke_rejects_malformed_or_false_runtime_markers(
         _admit(result, planners, tmp_path)
 
 
-def test_runtime_smoke_allows_nonlearned_policy_contract_not_applicable(
+def test_runtime_smoke_allows_nonlearned_checkpoint_observation_status(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     result, planners = _fixture(tmp_path, monkeypatch)
     episode_path = result.parent.parent / "runs/goal__differential_drive/episodes.jsonl"
     row = json.loads(episode_path.read_text(encoding="utf-8"))
-    row["algorithm_metadata"]["learned_policy_contract"] = {"status": "not_applicable"}
+    row["algorithm_metadata"]["learned_checkpoint_observation_contract"] = {
+        "status": "not_applicable"
+    }
     _write_json(episode_path, row)
     sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
     sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
@@ -534,6 +536,54 @@ def test_runtime_smoke_allows_nonlearned_policy_contract_not_applicable(
     _write_json(sidecar_path, sidecar)
 
     assert _admit(result, planners, tmp_path)["status"] == "admitted"
+
+
+@pytest.mark.parametrize("field", ["benchmark_success", "availability_status", "nested"])
+def test_runtime_smoke_rejects_not_applicable_outside_exact_learned_policy_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    summary_path = result.parent.parent / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    contract = (
+        summary["runs"][0]["summary"]
+        .setdefault("preflight", {})
+        .setdefault("learned_policy_contract", {})
+    )
+    if field == "nested":
+        contract["nested"] = {"status": "not_applicable"}
+    else:
+        contract[field] = "not_applicable"
+    _write_json(summary_path, summary)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match="fallback or degraded"):
+        _admit(result, planners, tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("benchmark_success", None),
+        ("availability_status", "not_run"),
+        ("execution_mode", "not_run"),
+    ],
+)
+def test_runtime_smoke_rejects_noncanonical_checkpoint_preflight_placeholders(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+    value: object,
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    manifest_path = result.parent.parent / "campaign_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["planners"][0]["checkpoint_provenance"][field] = value
+    _write_json(manifest_path, manifest)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match="forbidden status marker"):
+        _admit(result, planners, tmp_path)
 
 
 def test_runtime_smoke_allows_declarative_guarded_ppo_fallback_config(
@@ -675,6 +725,23 @@ def test_runtime_smoke_rejects_parent_directory_symlink(
     runs.symlink_to(relocated, target_is_directory=True)
 
     with pytest.raises(RuntimeSmokeAdmissionError, match="path contains a symlink"):
+        _admit(result, planners, tmp_path)
+
+
+def test_runtime_smoke_rejects_raw_artifact_path_with_intermediate_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    campaign_root = result.parent.parent
+    alias = campaign_root / "alias-runs"
+    alias.symlink_to(campaign_root / "runs", target_is_directory=True)
+    summary_path = campaign_root / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    raw = Path(summary["runs"][0]["episodes_path"])
+    summary["runs"][0]["episodes_path"] = str(alias / raw.relative_to(campaign_root / "runs"))
+    _write_json(summary_path, summary)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match="episode artifact rejected"):
         _admit(result, planners, tmp_path)
 
 

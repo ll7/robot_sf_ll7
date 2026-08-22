@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import json
 import os
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -242,6 +243,8 @@ def test_in_process_and_subprocess_arms_execute_identical_episode_set(tmp_path: 
     )
     in_process_root = Path(in_process_result["campaign_root"])
     subprocess_root = Path(subprocess_result["campaign_root"])
+    expected_matrix_path = (config_path.parent / "arm_parity_matrix.yaml").resolve()
+    expected_matrix_sha256 = sha256(expected_matrix_path.read_bytes()).hexdigest()
 
     in_matrix = _load_matrix_summary_rows(in_process_root)
     sub_matrix = _load_matrix_summary_rows(subprocess_root)
@@ -300,6 +303,17 @@ def test_in_process_and_subprocess_arms_execute_identical_episode_set(tmp_path: 
         assert in_row["scenario_matrix"] == sub_row["scenario_matrix"], (
             f"arm '{arm}' scenario_matrix differs between modes"
         )
+
+        # Runtime map resolution and provenance binding are separate concerns
+        # for the subprocess's already-scoped scenario list. Both modes must
+        # still bind their sidecars to the canonical matrix bytes.
+        for campaign_root in (in_process_root, subprocess_root):
+            sidecar_path = campaign_root / "runs" / arm / "episodes.jsonl.provenance.json"
+            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            matrix_input = sidecar["inputs"]["scenario_matrix"]
+            assert Path(matrix_input["path"]).resolve() == expected_matrix_path
+            assert matrix_input["sha256"] == expected_matrix_sha256
+            assert matrix_input["artifact_status"] == "available"
 
     # Both campaign-level summaries report total_episodes > 0. This is the
     # campaign-result counter; the 0-episode failure class (#5270 dropped

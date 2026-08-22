@@ -527,6 +527,7 @@ def _execute_campaign_planner_batch(
             run.scoped_scenarios,
             out_path=run.episodes_path,
             schema_path=DEFAULT_EPISODE_SCHEMA_PATH,
+            provenance_scenario_path=cfg.scenario_matrix_path,
             horizon=run.effective_horizon if run.effective_horizon is not None else 0,
             dt=run.effective_dt if run.effective_dt is not None else 0.0,
             record_forces=cfg.record_forces,

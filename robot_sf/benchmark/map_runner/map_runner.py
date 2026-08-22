@@ -2704,6 +2704,7 @@ class _BatchContext:
     # Raw parameters forwarded from the public signature.
     scenarios_or_path: list[dict[str, object]] | str | Path
     scenario_path_arg: str | Path | None
+    provenance_scenario_path_arg: str | Path | None
     out_path_arg: str | Path
     schema_path: str | Path
     horizon: int | None
@@ -2740,6 +2741,7 @@ class _BatchContext:
     # Resolved during _init_batch_context.
     scenarios: list[dict[str, Any]] = field(default_factory=list)
     scenario_path: Path = field(default_factory=lambda: Path("."))
+    provenance_scenario_path: Path = field(default_factory=lambda: Path("."))
     suite_seeds: dict[str, list[int]] = field(default_factory=dict)
     suite_key: str = ""
     noise_spec: dict[str, Any] | None = None
@@ -2777,6 +2779,7 @@ class _BatchContext:
 def _init_batch_context(  # noqa: PLR0913
     scenarios_or_path: list[dict[str, object]] | str | Path,
     scenario_path_arg: str | Path | None,
+    provenance_scenario_path_arg: str | Path | None,
     out_path_arg: str | Path,
     schema_path: str | Path,
     *,
@@ -2819,6 +2822,7 @@ def _init_batch_context(  # noqa: PLR0913
     ctx = _BatchContext(
         scenarios_or_path=scenarios_or_path,
         scenario_path_arg=scenario_path_arg,
+        provenance_scenario_path_arg=provenance_scenario_path_arg,
         out_path_arg=out_path_arg,
         schema_path=schema_path,
         horizon=horizon,
@@ -2890,6 +2894,11 @@ def _load_and_filter_scenarios(ctx: _BatchContext) -> None:
             Path(ctx.scenario_path_arg) if ctx.scenario_path_arg is not None else Path(".")
         )
         ctx.scenarios = list(ctx.scenarios_or_path)
+    ctx.provenance_scenario_path = (
+        Path(ctx.provenance_scenario_path_arg)
+        if ctx.provenance_scenario_path_arg is not None
+        else ctx.scenario_path
+    )
 
     if ctx.telemetry is not None:
         profile = normalize_telemetry_profile(ctx.telemetry)
@@ -2905,7 +2914,7 @@ def _load_and_filter_scenarios(ctx: _BatchContext) -> None:
         raise ValueError(f"Scenario validation failed: {errors[:3]} (total {len(errors)})")
 
     ctx.suite_seeds = _resolve_seed_list(Path("configs/benchmarks/seed_list_v1.yaml"))
-    ctx.suite_key = _suite_key(ctx.scenario_path)
+    ctx.suite_key = _suite_key(ctx.provenance_scenario_path)
     _normalize_batch_specs(ctx)
 
     filtered: list[dict[str, Any]] = []
@@ -3148,7 +3157,7 @@ def _build_skipped_summary(ctx: _BatchContext) -> dict[str, Any]:
         summary["track_schema_version"] = ctx.track_schema_version
     summary["provenance"] = _map_result_provenance(
         schema_path=ctx.schema_path,
-        scenario_path=ctx.scenario_path,
+        scenario_path=ctx.provenance_scenario_path,
         scenarios=ctx.filtered,
         algo=ctx.algo,
         algo_config_path=ctx.algo_config_path,
@@ -3165,7 +3174,7 @@ def _build_skipped_summary(ctx: _BatchContext) -> dict[str, Any]:
         out_path=ctx.out_path,
         episode_records=[],
         schema_path=ctx.schema_path,
-        scenario_path=ctx.scenario_path,
+        scenario_path=ctx.provenance_scenario_path,
         scenarios=ctx.filtered,
         algo=ctx.algo,
         algo_config_path=ctx.algo_config_path,
@@ -3393,7 +3402,7 @@ def _build_final_summary(ctx: _BatchContext, batch_execution: Any) -> dict[str, 
         benchmark_track=ctx.benchmark_track,
         track_schema_version=ctx.track_schema_version,
         schema_path=ctx.schema_path,
-        scenario_path=ctx.scenario_path,
+        scenario_path=ctx.provenance_scenario_path,
         scenarios=ctx.filtered,
         algo_config_path=ctx.algo_config_path,
         suite_key=ctx.suite_key,
@@ -3406,7 +3415,7 @@ def _build_final_summary(ctx: _BatchContext, batch_execution: Any) -> dict[str, 
         out_path=ctx.out_path,
         episode_records=batch_execution.episode_records,
         schema_path=ctx.schema_path,
-        scenario_path=ctx.scenario_path,
+        scenario_path=ctx.provenance_scenario_path,
         scenarios=ctx.filtered,
         algo=ctx.algo,
         algo_config_path=ctx.algo_config_path,
@@ -3442,6 +3451,7 @@ def run_map_batch(  # noqa: PLR0913
     *,
     batch_config: MapBatchConfig | None = None,
     scenario_path: str | Path | None = None,
+    provenance_scenario_path: str | Path | None = None,
     horizon: int | None = None,
     dt: float | None = None,
     record_forces: bool = True,
@@ -3513,7 +3523,7 @@ def run_map_batch(  # noqa: PLR0913
 
     # fmt: off
     ctx = _init_batch_context(
-        scenarios_or_path, scenario_path, out_path, schema_path,
+        scenarios_or_path, scenario_path, provenance_scenario_path, out_path, schema_path,
         horizon=horizon, dt=dt, record_forces=record_forces,
         snqi_weights=snqi_weights, snqi_baseline=snqi_baseline,
         algo=algo, algo_config_path=algo_config_path,

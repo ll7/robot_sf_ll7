@@ -241,7 +241,7 @@ def _run_single_arm_subprocess(params: _SubprocessArmParams) -> dict[str, Any]:
             scoped_scenarios,
             out_path=params.episodes_path,
             schema_path=Path("robot_sf/benchmark/schemas/episode.schema.v1.json"),
-            scenario_path=params.scenario_matrix_path,
+            provenance_scenario_path=params.scenario_matrix_path,
             horizon=params.horizon if params.horizon is not None else 0,
             dt=params.dt if params.dt is not None else 0.0,
             record_forces=params.record_forces,

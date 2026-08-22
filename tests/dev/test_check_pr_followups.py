@@ -856,8 +856,26 @@ def test_v2_exact_head_carrier_is_checked() -> None:
     rejected = analyze_sha_carriers(body, source="fixture", head_sha="b" * 40)
 
     assert accepted.status == "ok"
+    assert accepted.message == "pr-contract:v2 exact_head matches the PR head."
     assert rejected.status == "invalid_sha_carrier"
     assert "pr-contract:v2 exact_head" in rejected.invalid[0]
+
+
+def test_sha_carrier_report_keeps_no_carrier_status_distinct_from_v2_match() -> None:
+    """A valid v2 carrier must not be reported as if the body had no carrier."""
+    head = "a" * 40
+
+    no_carrier = analyze_sha_carriers(
+        "## Summary\nNo machine carrier.\n", source="fixture", head_sha=head
+    )
+    v2_match = analyze_sha_carriers(
+        _v2_body(V2_TOOLING_PAYLOAD + f"\nexact_head: {head}"),
+        source="fixture",
+        head_sha=head,
+    )
+
+    assert no_carrier.message == "No exact-head SHA carriers present."
+    assert v2_match.message == "pr-contract:v2 exact_head matches the PR head."
 
 
 def test_default_template_emits_a_valid_v2_contract() -> None:

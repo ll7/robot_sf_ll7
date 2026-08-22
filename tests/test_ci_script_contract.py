@@ -432,7 +432,7 @@ def test_ci_aggregate_uses_declarative_needs_checker() -> None:
     assert "--event-name" in result_step["run"]
     assert "${{ github.event_name }}" in result_step["run"]
     assert "--results" in result_step["run"]
-    assert "toJSON(needs)" in result_step["run"]
+    assert result_step.get("env", {}).get("CI_NEEDS_JSON") == "${{ toJSON(needs) }}"
     # The handwritten per-dependency if-blocks are gone.
     assert 'needs.fast-feedback.result"' not in result_step["run"]
     assert "needs.determinism-gate.result" not in result_step["run"]

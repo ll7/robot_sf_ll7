@@ -14,6 +14,7 @@ from robot_sf.benchmark.camera_ready._preflight import prepare_campaign_prefligh
 from robot_sf.benchmark.camera_ready.campaign import (
     _checkpoint_fallback_detected,
     _finalize_checkpoint_provenance,
+    _summarize_checkpoint_runtime,
 )
 from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
@@ -452,3 +453,39 @@ def test_campaign_manifest_folds_nested_foresight_checkpoint_status() -> None:
     assert provenance["fallback_triggered"] is False
     assert provenance["runtime"][0]["hash_source"] == "runtime_observed"
     assert provenance["references"][0]["load_status"] == "loaded"
+
+
+def test_campaign_manifest_keeps_mixed_known_unknown_runtime_unresolved() -> None:
+    """A partial runtime observation must never be filtered into a loaded aggregate."""
+    model_id = "predictive_proxy_selected_v1"
+    provenance = {
+        "references": [
+            {
+                "model_id": model_id,
+                "load_succeeded": None,
+                "fallback_triggered": None,
+                "load_status": "not_run",
+            }
+        ],
+        "runtime": [
+            {
+                "model_id": model_id,
+                "load_succeeded": True,
+                "fallback_triggered": False,
+            },
+            {
+                "model_id": model_id,
+                "load_succeeded": None,
+                "fallback_triggered": None,
+            },
+        ],
+    }
+
+    _summarize_checkpoint_runtime(provenance)
+
+    assert provenance["status"] == "runtime_not_observed"
+    assert provenance["load_succeeded"] is None
+    assert provenance["fallback_triggered"] is None
+    assert provenance["references"][0]["load_status"] == "runtime_not_observed"
+    assert provenance["references"][0]["load_succeeded"] is None
+    assert provenance["references"][0]["fallback_triggered"] is None

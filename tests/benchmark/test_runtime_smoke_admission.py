@@ -40,6 +40,32 @@ def _write_yaml(path: Path, payload: dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
+def _fixture_checkpoint_provenance(planner: str, index: int) -> dict[str, object]:
+    """Return complete learned-arm runtime evidence or a non-learned marker."""
+    learned = {"prediction_planner", "ppo", "sacadrl", "guarded_ppo", "predictive_mppi"}
+    if planner not in learned:
+        return {
+            "status": "not_applicable",
+            "load_succeeded": None,
+            "fallback_triggered": None,
+        }
+    model_id = f"runtime-smoke-model-{index}"
+    checkpoint_hash = f"{index + 1:064x}"
+    record = {
+        "model_id": model_id,
+        "checkpoint_sha256": checkpoint_hash,
+        "load_succeeded": True,
+        "fallback_triggered": False,
+        "load_status": "loaded",
+    }
+    return {
+        **record,
+        "status": "loaded",
+        "references": [dict(record)],
+        "runtime": [{**record, "kinematics": "differential_drive", "run_status": "ok"}],
+    }
+
+
 def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tuple[str, ...]]:
     planners = RUNTIME_SMOKE_PLANNER_KEYS
     manifest = tmp_path / RUNTIME_SMOKE_MANIFEST
@@ -223,11 +249,7 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tup
                     "key": planner,
                     "algo": f"algo-{index}",
                     "algo_config_path": planner_configs[planner],
-                    "checkpoint_provenance": {
-                        "status": "not_run",
-                        "load_succeeded": None,
-                        "fallback_triggered": None,
-                    },
+                    "checkpoint_provenance": _fixture_checkpoint_provenance(planner, index),
                 }
                 for index, planner in enumerate(planners)
             ],
@@ -728,6 +750,26 @@ def test_runtime_smoke_rejects_noncanonical_checkpoint_preflight_placeholders(
     _write_json(manifest_path, manifest)
 
     with pytest.raises(RuntimeSmokeAdmissionError, match="forbidden status marker"):
+        _admit(result, planners, tmp_path)
+
+
+def test_runtime_smoke_rejects_mixed_known_unknown_checkpoint_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    manifest_path = result.parent.parent / "campaign_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    provenance = manifest["planners"][0]["checkpoint_provenance"]
+    provenance["runtime"].append(
+        {
+            "model_id": provenance["model_id"],
+            "checkpoint_sha256": provenance["checkpoint_sha256"],
+            "load_status": "loaded",
+        }
+    )
+    _write_json(manifest_path, manifest)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match=r"runtime\[1\] load mismatch"):
         _admit(result, planners, tmp_path)
 
 

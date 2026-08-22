@@ -51,6 +51,9 @@ RUNTIME_SMOKE_PLANNER_KEYS = (
     "predictive_mppi",
     "risk_dwa",
 )
+_RUNTIME_SMOKE_CHECKPOINT_PLANNER_KEYS = frozenset(
+    {"prediction_planner", "ppo", "sacadrl", "guarded_ppo", "predictive_mppi"}
+)
 _FORBIDDEN_RUNTIME_STATUSES = frozenset(
     {
         "degraded",
@@ -1019,6 +1022,12 @@ def _validate_campaign_metadata(  # noqa: PLR0913
             algorithm_configs.get(key),
             f"campaign manifest planner {index} config",
         )
+        if key in _RUNTIME_SMOKE_CHECKPOINT_PLANNER_KEYS:
+            _validate_loaded_checkpoint_provenance(
+                planner.get("checkpoint_provenance"),
+                label=f"campaign manifest planner {index} checkpoint",
+                problems=problems,
+            )
         markers = _forbidden_status_markers(planner, f"campaign_manifest.planners[{index}]")
         if markers:
             problems.append(
@@ -1038,6 +1047,59 @@ def _validate_campaign_metadata(  # noqa: PLR0913
             release.get("release_id"),
             "run manifest release identity",
         )
+
+
+def _validate_loaded_checkpoint_record(
+    record: Any,
+    *,
+    label: str,
+    problems: list[str],
+    require_hash: bool,
+) -> None:
+    """Require one explicit successful checkpoint runtime observation."""
+    if not isinstance(record, dict):
+        problems.append(f"{label} is missing")
+        return
+    _require_equal(problems, record.get("load_succeeded"), True, f"{label} load")
+    _require_equal(problems, record.get("fallback_triggered"), False, f"{label} fallback")
+    _require_equal(problems, record.get("load_status"), "loaded", f"{label} status")
+    if not str(record.get("model_id") or "").strip():
+        problems.append(f"{label} model id is missing")
+    checkpoint_hash = str(record.get("checkpoint_sha256") or "").strip().lower()
+    if require_hash and re.fullmatch(r"[0-9a-f]{64}", checkpoint_hash) is None:
+        problems.append(f"{label} checkpoint hash is missing or invalid")
+
+
+def _validate_loaded_checkpoint_provenance(
+    provenance: Any,
+    *,
+    label: str,
+    problems: list[str],
+) -> None:
+    """Require complete loaded reference and runtime evidence for one learned arm."""
+    if not isinstance(provenance, dict):
+        problems.append(f"{label} provenance is missing")
+        return
+    _require_equal(problems, provenance.get("status"), "loaded", f"{label} aggregate status")
+    _require_equal(problems, provenance.get("load_succeeded"), True, f"{label} aggregate load")
+    _require_equal(
+        problems,
+        provenance.get("fallback_triggered"),
+        False,
+        f"{label} aggregate fallback",
+    )
+    for field in ("references", "runtime"):
+        records = provenance.get(field)
+        if not isinstance(records, list) or not records:
+            problems.append(f"{label} {field} are missing")
+            continue
+        for record_index, record in enumerate(records):
+            _validate_loaded_checkpoint_record(
+                record,
+                label=f"{label} {field}[{record_index}]",
+                problems=problems,
+                require_hash=field == "references",
+            )
 
 
 def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915

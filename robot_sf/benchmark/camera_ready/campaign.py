@@ -1471,7 +1471,10 @@ def _runtime_checkpoint_record(
 
 
 def _update_checkpoint_reference_runtime(
-    provenance: dict[str, Any], runtime_records: list[dict[str, Any]]
+    provenance: dict[str, Any],
+    runtime_records: list[dict[str, Any]],
+    *,
+    runtime_complete: bool,
 ) -> None:
     """Fold matching runtime outcomes into preflight checkpoint references."""
     references = provenance.get("references")
@@ -1488,26 +1491,46 @@ def _update_checkpoint_reference_runtime(
         ]
         if not matching:
             continue
-        reference_loads = [
-            item.get("load_succeeded")
-            for item in matching
-            if isinstance(item.get("load_succeeded"), bool)
-        ]
-        reference_fallbacks = [
-            item.get("fallback_triggered")
-            for item in matching
-            if isinstance(item.get("fallback_triggered"), bool)
-        ]
-        reference["load_succeeded"] = all(reference_loads) if reference_loads else None
-        reference["fallback_triggered"] = any(reference_fallbacks) if reference_fallbacks else None
+        if not runtime_complete:
+            matching.append({})
+        reference["load_succeeded"] = _aggregate_load_succeeded(matching)
+        reference["fallback_triggered"] = _aggregate_fallback_triggered(matching)
         if reference["fallback_triggered"] is True:
             reference["load_status"] = "fallback"
-        elif reference["load_succeeded"] is True:
-            reference["load_status"] = "loaded"
         elif reference["load_succeeded"] is False:
             reference["load_status"] = "load_failed"
+        elif reference["load_succeeded"] is True and reference["fallback_triggered"] is False:
+            reference["load_status"] = "loaded"
         else:
             reference["load_status"] = "runtime_not_observed"
+
+
+def _aggregate_load_succeeded(runtime_records: list[dict[str, Any]]) -> bool | None:
+    """Aggregate load observations without discarding unknown or malformed values.
+
+    Returns:
+        True for all-loaded, False for an observed failure, or None when unresolved.
+    """
+    values = [item.get("load_succeeded") for item in runtime_records]
+    if any(value is False for value in values):
+        return False
+    if values and all(value is True for value in values):
+        return True
+    return None
+
+
+def _aggregate_fallback_triggered(runtime_records: list[dict[str, Any]]) -> bool | None:
+    """Aggregate fallback observations without discarding unknown or malformed values.
+
+    Returns:
+        True for an observed fallback, False for all-clear, or None when unresolved.
+    """
+    values = [item.get("fallback_triggered") for item in runtime_records]
+    if any(value is True for value in values):
+        return True
+    if values and all(value is False for value in values):
+        return False
+    return None
 
 
 def _summarize_checkpoint_runtime(provenance: dict[str, Any]) -> None:
@@ -1516,18 +1539,10 @@ def _summarize_checkpoint_runtime(provenance: dict[str, Any]) -> None:
     if not isinstance(raw_runtime_records, list) or not raw_runtime_records:
         return
     runtime_records = [item for item in raw_runtime_records if isinstance(item, dict)]
-    load_values = [
-        item["load_succeeded"]
-        for item in runtime_records
-        if isinstance(item.get("load_succeeded"), bool)
-    ]
-    fallback_values = [
-        item["fallback_triggered"]
-        for item in runtime_records
-        if isinstance(item.get("fallback_triggered"), bool)
-    ]
-    provenance["load_succeeded"] = all(load_values) if load_values else None
-    provenance["fallback_triggered"] = any(fallback_values) if fallback_values else None
+    runtime_complete = len(runtime_records) == len(raw_runtime_records)
+    aggregate_records = runtime_records if runtime_complete else [*runtime_records, {}]
+    provenance["load_succeeded"] = _aggregate_load_succeeded(aggregate_records)
+    provenance["fallback_triggered"] = _aggregate_fallback_triggered(aggregate_records)
     runtime_hashes = {
         str(item["checkpoint_sha256"])
         for item in runtime_records
@@ -1537,13 +1552,17 @@ def _summarize_checkpoint_runtime(provenance: dict[str, Any]) -> None:
         provenance["checkpoint_sha256"] = runtime_hashes.pop()
     if provenance["fallback_triggered"] is True:
         provenance["status"] = "fallback"
-    elif provenance["load_succeeded"] is True:
-        provenance["status"] = "loaded"
     elif provenance["load_succeeded"] is False:
         provenance["status"] = "load_failed"
+    elif provenance["load_succeeded"] is True and provenance["fallback_triggered"] is False:
+        provenance["status"] = "loaded"
     else:
         provenance["status"] = "runtime_not_observed"
-    _update_checkpoint_reference_runtime(provenance, runtime_records)
+    _update_checkpoint_reference_runtime(
+        provenance,
+        runtime_records,
+        runtime_complete=runtime_complete,
+    )
 
 
 def _finalize_checkpoint_provenance(

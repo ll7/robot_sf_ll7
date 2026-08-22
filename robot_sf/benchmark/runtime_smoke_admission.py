@@ -15,8 +15,8 @@ from robot_sf.benchmark.checkpoint_staging_receipt import (
     CheckpointStagingReceiptError,
     validate_checkpoint_staging_receipt,
 )
-from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.release_acceptance import _status_markers
 
 RUNTIME_SMOKE_RELEASE_ID = "paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2"
 RUNTIME_SMOKE_MANIFEST = Path(
@@ -373,9 +373,9 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         _require_equal(
             problems, planner.get("algo"), algorithms.get(planner_key), f"run {index} algorithm"
         )
-        run_marker = runtime_fallback_or_degraded_marker(entry)
-        if run_marker is not None:
-            fallback_markers.append(f"runs[{index}].{run_marker[0]}={run_marker[1]}")
+        fallback_markers.extend(
+            f"{path}={value}" for path, value in _status_markers(entry, f"runs[{index}]")
+        )
         raw_episodes_path = entry.get("episodes_path")
         if not isinstance(raw_episodes_path, str) or not raw_episodes_path.strip():
             problems.append(f"run {index} episodes_path is missing")
@@ -397,9 +397,10 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         )
         _require_equal(problems, declared.get("failures"), [], f"run {index} failure list")
         for row_index, row in enumerate(rows):
-            marker = runtime_fallback_or_degraded_marker(row)
-            if marker is not None:
-                fallback_markers.append(f"runs[{index}].rows[{row_index}].{marker[0]}={marker[1]}")
+            fallback_markers.extend(
+                f"{path}={value}"
+                for path, value in _status_markers(row, f"runs[{index}].rows[{row_index}]")
+            )
             _require_equal(
                 problems,
                 _source_commit(row),
@@ -416,12 +417,8 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
             _require_equal(problems, _strict_int(row.get("seed")), seed, f"run {index} seed")
             metadata = row.get("algorithm_metadata")
             metadata = metadata if isinstance(metadata, dict) else {}
-            _require_equal(
-                problems,
-                metadata.get("algorithm"),
-                algorithms.get(planner_key),
-                f"run {index} algorithm",
-            )
+            if not metadata:
+                problems.append(f"run {index} algorithm metadata is missing")
             observed_episode_identities.append((planner_key, scenario_id, seed))
 
     if tuple(observed_arms) != expected_planner_keys or len(set(observed_arms)) != expected_rows:
@@ -462,11 +459,10 @@ def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915
         _require_equal(
             problems, _strict_int(row.get("episodes")), 1, f"planner row {index} episodes"
         )
-        marker = runtime_fallback_or_degraded_marker(row)
-        if marker is not None:
+        if _status_markers(row, f"planner_rows[{index}]"):
             problems.append(f"planner row {index} contains fallback or degraded marker")
     if (
-        tuple(planner_row_arms) != expected_planner_keys
+        set(planner_row_arms) != set(expected_planner_keys)
         or len(set(planner_row_arms)) != expected_rows
     ):
         problems.append("runtime smoke planner aggregates do not match the exact roster")

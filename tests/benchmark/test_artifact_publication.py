@@ -1,5 +1,8 @@
 """Tests for benchmark publication bundle helpers."""
 
+# evidence-writer-exempt: these tests write only synthetic pytest tmp_path fixtures, never
+# tracked or durable benchmark evidence.
+
 from __future__ import annotations
 
 import json

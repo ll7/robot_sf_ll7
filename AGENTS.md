@@ -215,7 +215,7 @@ no research claim may use `NA` and explain why.
 
 Because repository merges default to squash, the final PR title and body are part of the delivered
 change. After every revision or fix push, rebuild the body from the final diff, validation, claims,
-and follow-ups and run `scripts/dev/gh_pr_body_rest.py --reconcile` with the final title. The helper
+and follow-ups and run `uv run python scripts/dev/gh_pr_body_rest.py --reconcile` with the final title. The helper
 is idempotent; change the title only when final scope, intent, type, or issue linkage changed. A
 trusted exact-head review must carry `pr-metadata: reconciled @ <digest>` for the resulting title/body,
 and direct or native queue admission must fail closed when that evidence is missing or stale.

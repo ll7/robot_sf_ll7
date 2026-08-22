@@ -160,7 +160,7 @@ def test_snapshot_metadata_drift_resume_suggests_reconcile_with_desired_pair() -
     assert result["metadata"]["desired_digest"] == DIGEST
     resume = result["resume"]
     assert resume["reason"] == "reconcile_metadata_then_rerun"
-    assert "gh_pr_body_rest.py 42 --reconcile" in resume["command"]
+    assert "uv run python scripts/dev/gh_pr_body_rest.py 42 --reconcile" in resume["command"]
     assert "--body-file body.md" in resume["command"]
     assert "&&" in resume["command"]
     assert "check_pr_ci_status.py 42 --stability-snapshot" in resume["command"]
@@ -508,7 +508,7 @@ def test_fetch_snapshot_metadata_drift_resume_command(
     assert result["metadata"]["desired_digest"] == metadata_digest("fix: final title", "new body")
     resume = result["resume"]
     assert resume["reason"] == "reconcile_metadata_then_rerun"
-    assert "gh_pr_body_rest.py 42 --reconcile" in resume["command"]
+    assert "uv run python scripts/dev/gh_pr_body_rest.py 42 --reconcile" in resume["command"]
     assert str(body_file) in resume["command"]
 
 

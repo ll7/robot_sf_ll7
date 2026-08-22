@@ -1579,7 +1579,7 @@ def _format_summary(audit: MergeGateAudit) -> str:
     if audit.body_not_ready_sentinels:
         lines.append(
             f"- stale body sentinels: `{', '.join(audit.body_not_ready_sentinels)}` "
-            "(run `gh_pr_body_rest.py --reconcile` to update)"
+            "(run `uv run python scripts/dev/gh_pr_body_rest.py --reconcile` to update)"
         )
     if audit.reasons:
         lines.append(f"- fail-closed reasons: `{', '.join(audit.reasons)}`")

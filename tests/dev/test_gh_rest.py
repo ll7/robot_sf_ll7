@@ -188,3 +188,24 @@ def test_rest_tools_import_shared_transport_without_local_duplicates(relative_pa
         "scripts/dev/blocked_queue_watcher.py",
     }:
         assert "subprocess.run" not in source
+
+
+def test_pr_body_rest_invocations_use_uv_and_preserve_script_mode() -> None:
+    """Invocation guidance must match the tracked non-executable helper contract."""
+    root = Path(__file__).parents[2]
+    script_path = root / "scripts/dev/gh_pr_body_rest.py"
+    assert script_path.stat().st_mode & 0o111 == 0
+
+    canonical = "uv run python scripts/dev/gh_pr_body_rest.py"
+    script_name = "scripts/dev/gh_pr_body_rest.py"
+    invocation_surfaces = (
+        "AGENTS.md",
+        ".agents/skills/goal-pr-review/SKILL.md",
+        "docs/dev_guide_reference.md",
+        "scripts/dev/check_pr_ci_status.py",
+        "scripts/dev/merge_queue_gate.py",
+    )
+    for relative_path in invocation_surfaces:
+        source = (root / relative_path).read_text(encoding="utf-8")
+        assert canonical in source, relative_path
+        assert script_name not in source.replace(canonical, ""), relative_path

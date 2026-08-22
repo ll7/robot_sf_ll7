@@ -25,46 +25,30 @@ def test_pull_request_template_includes_proof_and_follow_up_sections() -> None:
     for section in (
         "## Summary",
         "## Linked Issues",
+        "## Stack / Dependency",
         "## What Changed",
         "## Why It Matters",
+        "## Research / Evidence Notes",
         "## Validation / Proof",
-        "## Domain-Aware Approval",
-        "## Risks / Rollout",
+        "## Risks / Rollback",
         "## Docs / Provenance",
         "## Downstream Propagation",
-        "## Follow-Up Issues",
+        "## Follow-Up / Residual Scope",
         "## Reviewer Notes",
     ):
         assert section in text
 
-    assert "Commands run:" in text
-    assert "Evidence that the change works here:" in text
-    assert "Required for this PR:" in text
-    assert "Domains reviewed:" in text
-    assert "Approver/review source or waiver:" in text
-    assert "Keep these machine-detected labels unchanged:" in text
-    assert "Target claim/hypothesis:" in text
-    assert "Comparator or split/evidence validity:" in text
-    assert "Fallback/degraded exclusions:" in text
-    assert "Claim boundary:" in text
-    assert "Implementation integrity vs experimental validity:" in text
-    assert "Deferred work:" in text
-    assert "Issues opened for follow-up:" in text
-    assert "Parent issue updated (yes/no/NA):" in text
-    assert "Claim map / benchmark report updated (yes/no/NA):" in text
-    assert "Leaderboard / artifact catalog updated (yes/no/NA):" in text
-    assert "Registry or config index updated (yes/no/NA):" in text
-    assert "Context index / memory note updated (yes/no/NA):" in text
-    assert "Follow-up issue opened for deferred propagation (yes/no/NA):" in text
-    assert "Not applicable because:" in text
-    assert "docs/context/issue_1512_issue_archetypes.md" in text
-    assert (
-        "Evidence tier: idea / launch_packet / preflight_valid / smoke / nominal / stress / "
-        "full_matrix / analysis_only / synthesis / paper_grade / blocked"
-    ) in text
-    assert "Evidence applicability: evidence-bearing / docs-only / NA" in text
-    assert (
-        "Evidence tier: full benchmark / targeted smoke / diagnostic probe / launch packet"
-        not in text
-    )
-    assert "`docs-only` and `NA` are no-claim PR exceptions" in text
+    # The v2 metadata block carries the machine-enforced approval, evidence,
+    # performance, and follow-up fields that the old Markdown headings held.
+    for field in (
+        "<!-- pr-contract:v2",
+        "change_class: tooling",
+        "linked_issues:",
+        "deferred_work:",
+        "evidence:",
+        "domain_approval:",
+        "performance:",
+    ):
+        assert field in text
+
+    assert "## Domain-Aware Approval" not in text

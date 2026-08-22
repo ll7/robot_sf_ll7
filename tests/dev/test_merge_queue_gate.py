@@ -679,6 +679,7 @@ def test_workflow_keeps_merge_group_hard_and_source_pr_advisory() -> None:
     assert "persist-credentials: false" in workflow
     assert "statuses: read" in workflow
     assert "Trusted base does not contain scripts/dev/merge_queue_gate.py" in workflow
+    assert "python -m pip install --quiet pyyaml==6.0.3" in workflow
     assert "conversation resolution before merging" in workflow
     assert "exit 0" in workflow
 

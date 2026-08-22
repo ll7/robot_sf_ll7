@@ -84,7 +84,9 @@ optional proof lane directly, run `ROBOT_SF_TEST_LANE=optional scripts/dev/run_t
 --lane optional`.
 This lane split was introduced for issue #3301 and PR #3314; the executable source of truth is
 `scripts/dev/pr_ready_check.sh` dispatching to `scripts/dev/run_tests_parallel.sh`.
-When readiness dispatches the optional lane, it first runs
+Before resolving workers or starting pytest, `scripts/dev/run_tests_parallel.sh` runs the same
+dependency-only preflight: the core lane checks `core`, while the optional and all lanes check
+`all-extras`. When readiness dispatches the optional lane, it first runs
 `scripts/dev/check_worktree_optional_deps.py --profile all-extras --json`. Missing extras are
 reported as structured setup evidence and stop that lane with an actionable `uv sync --all-extras`
 message; they are not reported as changed-code failures. The core lane remains dependency-minimal
@@ -201,11 +203,12 @@ when the command needs optional packages:
 scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- pytest tests/benchmark -q
 ```
 
-If a current-worktree `.venv` is missing or incomplete, both entry points fail before starting
-`uv` and print the single recovery command `scripts/dev/bootstrap_worktree.sh`. This prevents a
-lightweight Python-only environment from being reused as if it were a synchronized dependency
-profile. `--standalone` remains available only for commands whose no-project-import boundary is
-verified.
+If a current-worktree `.venv` is missing or incomplete, the docs-proof and shared-venv entry points
+fail before starting `uv` and print the recovery command `scripts/dev/bootstrap_worktree.sh`.
+`run_tests_parallel.sh` likewise stops before worker resolution or pytest, identifies the selected
+profile, and prints `uv sync --all-extras` as the direct repair command. This prevents a lightweight
+Python-only environment from being reused as if it were a synchronized dependency profile.
+`--standalone` remains available only for commands whose no-project-import boundary is verified.
 
 When the host is under pressure, inspect reclaim candidates without deleting anything:
 

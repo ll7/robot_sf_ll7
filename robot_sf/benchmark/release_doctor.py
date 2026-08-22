@@ -61,6 +61,7 @@ _REQUIRED_PACKET_HASH_FIELDS = (
     "canonical_config_sha256",
     "scenario_matrix_sha256",
     "checkpoint_receipt_sha256",
+    "runtime_smoke_receipt_sha256",
     "public_entrypoint_sha256",
     "private_wrapper_sha256",
     "startup_sentinel_sha256",
@@ -78,6 +79,8 @@ _REQUIRED_PACKET_TRACE_FIELDS = {
     "packet_sha256",
     "checkpoint_receipt_path",
     "checkpoint_receipt_sha256",
+    "runtime_smoke_receipt_path",
+    "runtime_smoke_receipt_sha256",
     "release_label",
 }
 _REQUIRED_PACKET_INPUT_NAMES = (
@@ -86,6 +89,7 @@ _REQUIRED_PACKET_INPUT_NAMES = (
     "scenario_matrix",
     "public_single_node_entrypoint",
     "checkpoint_staging_receipt",
+    "runtime_smoke_receipt",
     "private_wrapper",
     "release_runner",
 )
@@ -445,6 +449,7 @@ def _validate_packet_hash_binding(packet: dict[str, Any]) -> list[str]:
         "canonical_campaign_config": "canonical_config_sha256",
         "scenario_matrix": "scenario_matrix_sha256",
         "checkpoint_staging_receipt": "checkpoint_receipt_sha256",
+        "runtime_smoke_receipt": "runtime_smoke_receipt_sha256",
         "public_single_node_entrypoint": "public_entrypoint_sha256",
         "private_wrapper": "private_wrapper_sha256",
     }
@@ -547,6 +552,29 @@ def _validate_packet_execution_contract(packet: dict[str, Any]) -> list[str]:
         problems.append("startup sentinel is not required")
     if "$SLURM_STARTUP_SENTINEL" not in str(contract.get("startup_prefix") or ""):
         problems.append("startup sentinel is not sourced before launch")
+    problems.extend(_validate_runtime_smoke_contract(packet, contract))
+    return problems
+
+
+def _validate_runtime_smoke_contract(packet: dict[str, Any], contract: dict[str, Any]) -> list[str]:
+    """Validate the fresh exact-source smoke hand-off contract.
+
+    Returns:
+        Sanitized smoke-contract problems.
+    """
+    problems: list[str] = []
+    try:
+        smoke_max_age_matches = int(contract.get("runtime_smoke_receipt_max_age_hours") or 0) == 24
+    except (TypeError, ValueError):
+        smoke_max_age_matches = False
+    if not smoke_max_age_matches:
+        problems.append("runtime smoke receipt freshness contract is not 24 hours")
+    inputs = packet.get("inputs")
+    entrypoint = inputs.get("public_single_node_entrypoint") if isinstance(inputs, dict) else None
+    if not isinstance(entrypoint, dict) or entrypoint.get("interface_arity") != 5:
+        problems.append("public release entrypoint does not require five arguments")
+    elif entrypoint.get("fifth_argument") != "exact_source_runtime_smoke_result":
+        problems.append("public release entrypoint does not require exact-source runtime smoke")
     return problems
 
 
@@ -645,6 +673,7 @@ def _validate_queue_identity_args(submit_args: str, packet: dict[str, Any]) -> l
             "RELEASE_CONFIG_SHA256": "canonical_config_sha256",
             "RELEASE_SCENARIO_SHA256": "scenario_matrix_sha256",
             "RELEASE_CHECKPOINT_RECEIPT_SHA256": "checkpoint_receipt_sha256",
+            "RELEASE_RUNTIME_SMOKE_RECEIPT_SHA256": "runtime_smoke_receipt_sha256",
             "RELEASE_PUBLIC_SCRIPT_SHA256": "public_entrypoint_sha256",
         }
         for queue_field, identity_field in queue_to_identity.items():
@@ -654,6 +683,7 @@ def _validate_queue_identity_args(submit_args: str, packet: dict[str, Any]) -> l
             "RELEASE_MANIFEST_PATH": "release_manifest",
             "RELEASE_SCENARIO_PATH": "scenario_matrix",
             "RELEASE_CHECKPOINT_RECEIPT_PATH": "checkpoint_staging_receipt",
+            "RELEASE_RUNTIME_SMOKE_RECEIPT_PATH": "runtime_smoke_receipt",
         }
         for queue_field, input_name in input_paths.items():
             item = inputs.get(input_name)
@@ -692,6 +722,7 @@ def _validate_queue_submit_args(
         "RELEASE_CONFIG_SHA256",
         "RELEASE_SCENARIO_SHA256",
         "RELEASE_CHECKPOINT_RECEIPT_SHA256",
+        "RELEASE_RUNTIME_SMOKE_RECEIPT_SHA256",
         "RELEASE_PUBLIC_SCRIPT_SHA256",
     ):
         value = _submit_arg_value(submit_args, field)

@@ -211,6 +211,7 @@ def _write_final_packet_fixture(
         "scenario_matrix",
         "public_single_node_entrypoint",
         "checkpoint_staging_receipt",
+        "runtime_smoke_receipt",
         "private_wrapper",
         "release_runner",
     )
@@ -226,6 +227,7 @@ def _write_final_packet_fixture(
         "canonical_config_sha256": input_digests["canonical_campaign_config"],
         "scenario_matrix_sha256": input_digests["scenario_matrix"],
         "checkpoint_receipt_sha256": input_digests["checkpoint_staging_receipt"],
+        "runtime_smoke_receipt_sha256": input_digests["runtime_smoke_receipt"],
         "public_entrypoint_sha256": input_digests["public_single_node_entrypoint"],
         "private_wrapper_sha256": input_digests["private_wrapper"],
         "startup_sentinel_sha256": "b" * 64,
@@ -253,13 +255,26 @@ def _write_final_packet_fixture(
             "release_tag": tag,
             "startup_sentinel_required": True,
             "startup_prefix": 'source "$SLURM_STARTUP_SENTINEL"',
+            "runtime_smoke_receipt_max_age_hours": 24,
         },
         "identity": {
             "public_source_commit": source_sha,
             **identity_fields,
         },
         "inputs": {
-            name: {"path": f"configs/{name}", "sha256": input_digests[name]} for name in input_names
+            name: {
+                "path": f"configs/{name}",
+                "sha256": input_digests[name],
+                **(
+                    {
+                        "interface_arity": 5,
+                        "fifth_argument": "exact_source_runtime_smoke_result",
+                    }
+                    if name == "public_single_node_entrypoint"
+                    else {}
+                ),
+            }
+            for name in input_names
         }
         | {
             "source": {
@@ -287,6 +302,7 @@ def _write_final_packet_fixture(
             "RELEASE_MANIFEST_PATH=configs/release_manifest",
             "RELEASE_SCENARIO_PATH=configs/scenario_matrix",
             "RELEASE_CHECKPOINT_RECEIPT_PATH=configs/checkpoint_staging_receipt",
+            "RELEASE_RUNTIME_SMOKE_RECEIPT_PATH=configs/runtime_smoke_receipt",
             "RELEASE_EXPECTED_CPUS=36",
             "RELEASE_EXPECTED_GPUS=1",
             "RELEASE_EXPECTED_MEM_GB=256",
@@ -300,6 +316,10 @@ def _write_final_packet_fixture(
                     (
                         "RELEASE_CHECKPOINT_RECEIPT_SHA256",
                         identity_fields["checkpoint_receipt_sha256"],
+                    ),
+                    (
+                        "RELEASE_RUNTIME_SMOKE_RECEIPT_SHA256",
+                        identity_fields["runtime_smoke_receipt_sha256"],
                     ),
                     ("RELEASE_PUBLIC_SCRIPT_SHA256", identity_fields["public_entrypoint_sha256"]),
                 )
@@ -377,3 +397,22 @@ def test_final_cluster_check_rejects_missing_public_input(tmp_path: Path) -> Non
     )
     assert rejected.status == "fail"
     assert "release_manifest file is missing" in rejected.summary
+
+
+def test_final_cluster_check_rejects_runtime_smoke_identity_drift(tmp_path: Path) -> None:
+    """Final admission binds the queue and packet to one exact smoke result."""
+    packet, queue = _write_final_packet_fixture(tmp_path)
+    payload = json.loads(packet.read_text(encoding="utf-8"))
+    payload["identity"]["runtime_smoke_receipt_sha256"] = "c" * 64
+    packet.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert "runtime_smoke_receipt hash is not bound" in rejected.summary

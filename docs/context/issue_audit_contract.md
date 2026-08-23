@@ -55,7 +55,10 @@ The core inventories, with bounded pagination:
 An inventory page cap, failed read, unavailable SLURM query for a
 resource:slurm issue, or failed readback is an uncertainty. The plan records it
 and the apply path fails closed. A partial inventory is never evidence that an
-issue is ready or complete.
+issue is ready or complete. Ordinary REST collections use `--max-pages`; the
+larger repository-wide closed-PR history uses the independent
+`--max-closed-pr-pages` budget (default 50) so increasing history coverage does
+not silently widen issue, open-PR, label, or timeline reads.
 
 When the bounded global closed-PR history is partial, the core may also read
 each currently open issue's bounded REST timeline. A `cross-referenced` event

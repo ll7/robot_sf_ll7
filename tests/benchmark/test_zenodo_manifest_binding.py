@@ -18,10 +18,13 @@ from robot_sf.benchmark.zenodo_publisher import (
     _seal_state,
     build_release_binding,
     load_dataset_metadata,
+    load_state,
     publish,
+    recover,
     reserve,
     upload,
     verify,
+    write_state,
 )
 
 _MANIFEST_PATH = Path("configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml")
@@ -195,6 +198,97 @@ def test_all_zenodo_modes_preserve_manifest_binding(tmp_path: Path) -> None:
     assert state["release_binding"]["version_doi"] == binding["version_doi"]
 
 
+def test_recover_restores_manifest_bound_state_for_upload_and_verify(tmp_path: Path) -> None:
+    """A read-only draft lookup restores the same state contract as reserve."""
+    binding, metadata = _binding_and_metadata()
+    draft = _deposition_payload(binding)
+    draft["metadata"] = {**metadata, "prereserve_doi": {"doi": binding["version_doi"]}}
+    session = _Session()
+    session.gets = [_Response(draft)]
+
+    state = recover(
+        session,
+        22053133,
+        metadata,
+        release_binding=binding,
+    )
+
+    assert session.posts == []
+    assert state["deposition_id"] == 22053133
+    assert state["submitted"] is False
+    assert state["files"] == []
+    assert state["release_binding"]["metadata_sha256"] == binding["metadata_sha256"]
+    state_path = tmp_path / "recovered-state.json"
+    write_state(state_path, state)
+    assert state_path.stat().st_mode & 0o777 == 0o600
+    state = load_state(state_path)
+
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"recovered draft bundle")
+    session.gets = [_Response(draft)]
+    session.puts = [_Response({"checksum": "md5:fixture"})]
+    state = upload(session, state, [bundle], release_binding=binding)
+
+    remote_draft = dict(draft)
+    remote_draft["files"] = [
+        {
+            "filename": bundle.name,
+            "size": bundle.stat().st_size,
+            "links": {"download": "https://zenodo.org/api/records/22053133/files/bundle"},
+        }
+    ]
+    session.gets = [
+        _Response(remote_draft),
+        _Response({}, content=bundle.read_bytes()),
+    ]
+    report = verify(session, state, metadata, release_binding=binding)
+    assert report["status"] == "pass", report
+
+
+@pytest.mark.parametrize(
+    ("drift", "error"),
+    [
+        ("deposition", "requested deposition ID"),
+        ("concept", "concept DOI"),
+        ("version", "version DOI"),
+        ("source", "metadata.related_identifiers"),
+        ("metadata", "metadata.title"),
+        ("published", "unpublished draft"),
+    ],
+)
+def test_recover_rejects_draft_identity_metadata_and_state_drift(drift: str, error: str) -> None:
+    """Recovery fails closed before writing state when the remote draft drifts."""
+    binding, metadata = _binding_and_metadata()
+    draft = _deposition_payload(binding)
+    draft["metadata"] = {**metadata, "prereserve_doi": {"doi": binding["version_doi"]}}
+    if drift == "deposition":
+        draft["id"] = 22053134
+    elif drift == "concept":
+        draft["conceptrecid"] = "999999"
+    elif drift == "version":
+        draft["metadata"]["prereserve_doi"] = {"doi": "10.5281/zenodo.999999"}
+    elif drift == "source":
+        draft["metadata"]["related_identifiers"] = [
+            {
+                "identifier": "https://github.com/ll7/robot_sf_ll7/releases/tag/other",
+                "relation": "isSupplementTo",
+                "scheme": "url",
+            }
+        ]
+    elif drift == "metadata":
+        draft["metadata"]["title"] = "Different release"
+    else:
+        draft["submitted"] = True
+        draft["state"] = "done"
+        draft["doi"] = binding["version_doi"]
+    session = _Session()
+    session.gets = [_Response(draft)]
+
+    with pytest.raises(ZenodoPublisherError, match=error):
+        recover(session, 22053133, metadata, release_binding=binding)
+    assert session.posts == []
+
+
 def test_bound_zenodo_operation_rejects_metadata_checksum_mismatch() -> None:
     """A binding with a stale checksum cannot reach the Zenodo API."""
     binding, metadata = _binding_and_metadata()
@@ -203,7 +297,10 @@ def test_bound_zenodo_operation_rejects_metadata_checksum_mismatch() -> None:
 
     with pytest.raises(ZenodoPublisherError, match="metadata file SHA-256"):
         reserve(session, metadata, release_binding=binding)
+    with pytest.raises(ZenodoPublisherError, match="metadata file SHA-256"):
+        recover(session, 22053133, metadata, release_binding=binding)
     assert session.posts == []
+    assert session.gets == []
 
 
 def test_bound_reserve_rejects_concept_or_version_identity_drift() -> None:

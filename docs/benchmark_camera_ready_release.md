@@ -91,12 +91,23 @@ reserved deposition after the bundle has passed the independent cold check:
 # Keep this file outside Git with mode 0600; never print its contents.
 ZENODO_TOKEN_FILE=/home/<user>/.config/robot-sf/zenodo.token
 ZENODO_STATE=output/release/zenodo-deposition.json
+ZENODO_MANIFEST=configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml
 ZENODO_METADATA=configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.json
 
 uv run robot-sf release zenodo reserve \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
   --metadata "$ZENODO_METADATA"
+
+# If this unpublished draft still exists but its local state was lost, recover
+# that exact deposition instead of reserving a second DOI. This performs one
+# authenticated read and fails closed on any manifest, metadata, DOI, or state drift.
+uv run robot-sf release zenodo recover \
+  --token-file "$ZENODO_TOKEN_FILE" \
+  --state "$ZENODO_STATE" \
+  --manifest "$ZENODO_MANIFEST" \
+  --metadata "$ZENODO_METADATA" \
+  --deposition-id <existing-unpublished-deposition-id>
 
 uv run robot-sf release zenodo upload \
   --token-file "$ZENODO_TOKEN_FILE" \
@@ -116,7 +127,10 @@ uv run robot-sf release zenodo publish \
 ```
 
 `reserve` must return a fresh concept and version DOI; freeze those values in
-the release manifest before the immutable execution point. `upload` must send
+the release manifest before the immutable execution point. Use `recover` only
+when that exact unpublished draft still exists and the credential-free local
+state was lost; it never reserves or mutates a deposition and refuses published
+or mismatched drafts. `upload` must send
 the byte-identical bundle used for GitHub. `verify` is read-only and must check
 the title, dataset type, GPL-3.0-only license, creator union, exact source tag,
 and concept/version DOI distinction. `publish` is irreversible; never run it

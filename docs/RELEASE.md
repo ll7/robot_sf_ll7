@@ -156,6 +156,23 @@ uv run robot-sf release zenodo reserve \
   --metadata configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.json
 ```
 
+If the exact unpublished draft still exists but this credential-free state file
+is lost, do not run `reserve` again. Recover the draft only after its frozen
+concept/version DOI and metadata are present in the validated manifest:
+
+```bash
+uv run robot-sf release zenodo recover \
+  --token-file /home/luttkule/.config/robot-sf/zenodo.token \
+  --state <credential-free-zenodo-state.json> \
+  --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
+  --metadata configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.json \
+  --deposition-id <existing-unpublished-deposition-id>
+```
+
+Recovery is authenticated but read-only. It refuses a published deposition,
+any identity/source/metadata mismatch, and overwriting a state file for another
+deposition; its output remains credential-free and mode `0600`.
+
 Keep the token file outside Git with mode `0600`. The state file contains no
 credential and binds subsequent `upload`, `verify`, and irreversible `publish`
 operations to the same deposition. Do not run `publish` until the accepted

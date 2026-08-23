@@ -244,6 +244,12 @@ fi
 
 export UV_PROJECT_ENVIRONMENT="$venv_path"
 export UV_NO_SYNC=1
+# An explicit shared --venv override must stay authoritative across nested
+# common_setup.sh consumers: pin VIRTUAL_ENV so an incomplete worktree-local
+# .venv cannot shadow the shared environment (issue #7823).
+if [[ -n "$venv_override" ]]; then
+  export VIRTUAL_ENV="$venv_path"
+fi
 if [[ -z "$standalone" ]]; then
   export PYTHONPATH="$repo_root:$repo_root/fast-pysf${PYTHONPATH:+:$PYTHONPATH}"
 fi

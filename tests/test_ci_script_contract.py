@@ -1618,6 +1618,43 @@ def test_worktree_shared_venv_prefers_initialized_local_env(tmp_path: Path) -> N
     assert "Shared virtualenv is stale" not in result.stderr
 
 
+def test_worktree_shared_venv_explicit_override_shadows_incomplete_local_env(
+    tmp_path: Path,
+) -> None:
+    """Issue #7823: an explicit --venv stays authoritative over an incomplete local .venv."""
+    matching_scene = "def normalize_integration_scheme(value=None):\n    return value\n"
+    repo, main_venv, env = _make_freshness_fixture_repo(tmp_path, installed_scene=matching_scene)
+    worktree = tmp_path / "worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree)],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    # An incomplete worktree-local .venv must not shadow the explicit shared override.
+    incomplete_local_venv = worktree / ".venv"
+    (incomplete_local_venv / "bin").mkdir(parents=True)
+    (incomplete_local_venv / "bin" / "python").write_text("not executable\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(main_venv), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert f"venv={main_venv}" in result.stderr
+    assert "Virtualenv not found or incomplete" not in result.stderr
+    # The explicit shared override is authoritative: the command ran with the
+    # shared env (uv-reached exit 7) rather than failing on the incomplete local.
+    assert "uv-reached" in result.stderr
+
+
 def test_worktree_shared_venv_falls_back_to_main_env_without_local_env(tmp_path: Path) -> None:
     """A linked worktree without an executable local env selects the fresh main env (issue #5984)."""
     matching_scene = "def normalize_integration_scheme(value=None):\n    return value\n"

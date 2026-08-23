@@ -8,6 +8,8 @@ from pathlib import Path
 
 import yaml
 
+from robot_sf import cli as robot_sf_cli
+from robot_sf import release_cli
 from robot_sf.benchmark import release_doctor
 from robot_sf.benchmark.release_doctor import ReleaseDoctorCheck
 from robot_sf.cli import main as robot_sf_main
@@ -199,6 +201,39 @@ def test_top_level_cli_registers_release_doctor(capsys) -> None:
     assert "--expected-release-sha" in output
     assert "--expected-base-sha" in output
     assert "--expected-campaign-id" in output
+    assert "--checkpoint-path-map" in output
+
+
+def test_cli_checkpoint_path_map_reaches_doctor_with_repo_root(monkeypatch, tmp_path: Path) -> None:
+    """The repeatable CLI mapping is passed with the selected repository root."""
+    args = robot_sf_cli._build_parser().parse_args(
+        [
+            "release",
+            "doctor",
+            "--repo",
+            str(tmp_path),
+            "--manifest",
+            str(tmp_path / "manifest.yaml"),
+            "--expected-release-sha",
+            "a" * 40,
+            "--expected-base-sha",
+            "b" * 40,
+            "--tag",
+            "release",
+            "--checkpoint-path-map",
+            "/hpc/source.zip=checkpoints/model.zip",
+        ]
+    )
+    captured: dict[str, object] = {}
+
+    def fake_report(**kwargs):
+        captured.update(kwargs)
+        return {"status": "pass"}
+
+    monkeypatch.setattr(release_cli, "collect_release_doctor_report", fake_report)
+    assert release_cli.handle(args) == 0
+    assert captured["checkpoint_path_map"] == ["/hpc/source.zip=checkpoints/model.zip"]
+    assert captured["repo"] == tmp_path.resolve()
 
 
 def _write_final_packet_fixture(

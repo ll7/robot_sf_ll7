@@ -257,6 +257,31 @@ def test_checkpoint_check_reports_missing_and_validator_errors(
     assert "1 checkpoint" in admitted.summary
 
 
+def test_checkpoint_check_forwards_remap_and_repo_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Doctor passes the explicit map and containment root to receipt validation."""
+    captured: dict[str, object] = {}
+
+    def fake_validate(*args, **kwargs):
+        captured.update(kwargs)
+        return {"arms": [{"planner_key": "ppo"}]}
+
+    monkeypatch.setattr(release_doctor, "validate_checkpoint_staging_receipt", fake_validate)
+    manifest = SimpleNamespace(canonical_campaign_config_path=tmp_path / "campaign.yaml")
+    mapping = ["/hpc/source.zip=checkpoints/model.zip"]
+    check = release_doctor._checkpoint_check(
+        object(),
+        manifest,
+        tmp_path / "receipt.json",
+        repo_root=tmp_path,
+        checkpoint_path_map=mapping,
+    )
+    assert check.status == "pass"
+    assert captured["checkpoint_path_map"] == mapping
+    assert captured["repo_root"] == tmp_path
+
+
 def test_release_identity_check_reports_each_mismatch() -> None:
     """The final manifest must match schema, latest-main base, and tag."""
     rejected = release_doctor._release_identity_check(

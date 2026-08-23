@@ -138,6 +138,13 @@ uv run robot-sf release doctor \
   --token-file /home/luttkule/.config/robot-sf/zenodo.token
 ```
 
+For diagnostic local validation of an exact receipt whose checkpoint paths belong to another
+host, repeat `--checkpoint-path-map RECEIPT_PATH=LOCAL_PATH`. The source is matched as the exact
+`resolved_path` string recorded in the receipt, while the destination must be a regular file under
+the selected `--repo`; the validator recomputes its digest and still requires the receipt and model
+registry bindings. This option does not rewrite the receipt and does not authorize publication or
+turn a diagnostic remap into benchmark evidence.
+
 The report must be `pass`. It prints stable status and identity data, never the
 credential. For a future release, reserve a fresh benchmark-data
 concept/version before freezing the DOI into its v0.2 manifest:

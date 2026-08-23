@@ -11,7 +11,7 @@ release_tag: paper-matrix-v2-h600-s30-hybrid-stress-smoke
 maturity: diagnostic
 release_kind: benchmark-stress-smoke
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_hybrid_stress_smoke.yaml
-campaign_config_sha256: "2c671c1a390dd99cf4a822fdb64ff9ecea9ce05ac0f4e72d320d06a38da562a7"
+campaign_config_sha256: "b046b4298be25c9144c91db218749d3a08310aeabc54d8e0fd7f0f46cd52ae49"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: diagnostic-stress-no-ranking
 
@@ -45,7 +45,7 @@ planners:
     - ppo
     - socnav_sampling
     - sacadrl
-    - scenario_adaptive_hybrid_orca_v1
+    - scenario_adaptive_hybrid_orca_v2_bottleneck_yield
     - scenario_adaptive_hybrid_orca_v2_collision_guard
     - hybrid_rule_v3_fast_progress_static_escape
     - hybrid_rule_v3_fast_progress_static_escape_continuous
@@ -60,7 +60,7 @@ planners:
     ppo: experimental
     socnav_sampling: experimental
     sacadrl: experimental
-    scenario_adaptive_hybrid_orca_v1: experimental
+    scenario_adaptive_hybrid_orca_v2_bottleneck_yield: experimental
     scenario_adaptive_hybrid_orca_v2_collision_guard: experimental
     hybrid_rule_v3_fast_progress_static_escape: experimental
     hybrid_rule_v3_fast_progress_static_escape_continuous: experimental
@@ -88,7 +88,7 @@ stress_smoke_contract:
   expected_dt: 0.1
   expected_kinematics: differential_drive
   required_hybrid_arms:
-    - scenario_adaptive_hybrid_orca_v1
+    - scenario_adaptive_hybrid_orca_v2_bottleneck_yield
     - scenario_adaptive_hybrid_orca_v2_collision_guard
     - hybrid_rule_v3_fast_progress_static_escape
     - hybrid_rule_v3_fast_progress_static_escape_continuous
@@ -142,9 +142,9 @@ stress_smoke_contract:
     - path: ../../scenarios/single/francis2023_robot_crowding.yaml
       sha256: "a6da0946bbdae3d5818efb15d7148d313252e8ff477f1bbeaa88097520223de7"
   hybrid_configs:
-    - planner_key: scenario_adaptive_hybrid_orca_v1
-      path: ../../policy_search/candidates/scenario_adaptive_hybrid_orca_v1_s30_h600_release.yaml
-      sha256: "e3ddcdd559e27861e58d7f2a6f1f4adbb8a87fe5ba5bf8d9db6fd170c2c8cd87"
+    - planner_key: scenario_adaptive_hybrid_orca_v2_bottleneck_yield
+      path: ../../policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml
+      sha256: "895cd46ff26c0b03fd51d5e5fb6e77f16ad2c6f6cd1fcead7089c8dda8c7966d"
     - planner_key: scenario_adaptive_hybrid_orca_v2_collision_guard
       path: ../../policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml
       sha256: "90bc08cffe40e7f5b38c371db7c2a22790970c6817792dc7865686686c0a7dc3"

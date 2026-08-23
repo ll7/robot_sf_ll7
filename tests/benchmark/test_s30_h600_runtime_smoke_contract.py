@@ -32,7 +32,7 @@ EXPECTED_PLANNER_KEYS = [
     "ppo",
     "socnav_sampling",
     "sacadrl",
-    "scenario_adaptive_hybrid_orca_v1",
+    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield",
     "scenario_adaptive_hybrid_orca_v2_collision_guard",
     "hybrid_rule_v3_fast_progress_static_escape",
     "hybrid_rule_v3_fast_progress_static_escape_continuous",
@@ -41,7 +41,8 @@ EXPECTED_PLANNER_KEYS = [
     "risk_dwa",
 ]
 BLIND_CORNER_HYBRID_CONFIGS = [
-    "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1_s30_h600_release.yaml",
+    "configs/policy_search/candidates/"
+    "scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml",
     "configs/policy_search/candidates/"
     "scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml",
     "configs/policy_search/candidates/"

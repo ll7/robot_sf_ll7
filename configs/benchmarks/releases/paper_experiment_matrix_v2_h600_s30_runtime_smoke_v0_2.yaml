@@ -8,7 +8,7 @@ release_id: paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2
 release_tag: paper-matrix-v2-h600-s30-runtime-smoke
 maturity: pre-1.0
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml
-campaign_config_sha256: "ec91cdbd6fdfba51e28c1a65d52f7c316af64ddfa62eaa73beb624ca6aaa7046"
+campaign_config_sha256: "293a8c44fe73e8bfc0e7afb32004917996b7340d7e54ef21a7a247c92e31f75f"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: runtime-smoke-advisory-no-ranking
 
@@ -16,7 +16,7 @@ release_kind: benchmark-data
 release_status: runtime-smoke-only
 derived_from:
   config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml
-  config_sha256: "613f52a305333e20af90367a75de1ae35874a2a279ff8d09f0df69bcaad07843"
+  config_sha256: "e8b431e91ef22b20ebe7555a630cc7d5b3c0410c9aaaf06cd733b049ce3643d1"
 claim_boundary:
   evidence_class: runtime-smoke
   snqi: advisory-no-ranking
@@ -62,7 +62,7 @@ planners:
     - ppo
     - socnav_sampling
     - sacadrl
-    - scenario_adaptive_hybrid_orca_v1
+    - scenario_adaptive_hybrid_orca_v2_bottleneck_yield
     - scenario_adaptive_hybrid_orca_v2_collision_guard
     - hybrid_rule_v3_fast_progress_static_escape
     - hybrid_rule_v3_fast_progress_static_escape_continuous
@@ -77,7 +77,7 @@ planners:
     ppo: experimental
     socnav_sampling: experimental
     sacadrl: experimental
-    scenario_adaptive_hybrid_orca_v1: experimental
+    scenario_adaptive_hybrid_orca_v2_bottleneck_yield: experimental
     scenario_adaptive_hybrid_orca_v2_collision_guard: experimental
     hybrid_rule_v3_fast_progress_static_escape: experimental
     hybrid_rule_v3_fast_progress_static_escape_continuous: experimental

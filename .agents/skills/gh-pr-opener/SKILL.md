@@ -40,8 +40,9 @@ Freshness check:
 - Use plain `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` only for interim dirty-tree
   feedback before PR handoff.
 
-Remote-state check (issue #6916):
-- Capture a baseline before the expensive readiness run with:
+Remote-state check (issues #6916 and #7515):
+- Capture and check the intended branch head before merging or rebasing a newer `origin/main`.
+  Integrating main first can hide inherited parent commits. Capture with:
 
   ```bash
   uv run python scripts/dev/check_prepublication_state.py capture --repo <owner/repo> \
@@ -78,8 +79,7 @@ Remote-state check (issue #6916):
 
 1. Confirm branch/issue alignment.
 2. Verify scope completion and linked issue status.
-3. Sync latest `origin/main`, then rebase/merge according to repo policy.
-4. Build PR body from `.github/PULL_REQUEST_TEMPLATE/pr_default.md` before final readiness so the
+3. Build PR body from `.github/PULL_REQUEST_TEMPLATE/pr_default.md` before final readiness so the
    PR contract gate can read it.
    - For evidence-producing PRs, fill `Downstream Propagation` instead of leaving it implicit.
      Check the parent issue, claim map or benchmark report, leaderboard or artifact catalog,
@@ -88,14 +88,17 @@ Remote-state check (issue #6916):
      omission is intentional and reviewable.
    - Recent example: PR #2044 promoted compact trace-viewer screenshot evidence and updated the
      context index/catalog so the visual proof survived worktree cleanup.
-5. Classify generated artifacts from `output/` (discard/ignored/cache/durable evidence).
-6. Run the review audit checklist for the changed workflow/skill area.
-7. Push the clean committed head that will become the PR head.
-8. Capture the remote-state baseline from that synchronized local/remote head.
-9. Run final readiness with `PR_READY_PR_BODY_FILE="$pr_body_file"`, then run the remote-state
-   check immediately before publication. If sync integrates drift, rerun readiness, push the
-   integrated head, recapture the baseline, and check again.
-10. Open a ready PR by default using
+4. Classify generated artifacts from `output/` (discard/ignored/cache/durable evidence).
+5. Run the review audit checklist for the changed workflow/skill area.
+6. Commit and push the intended head without first merging or rebasing a newer `origin/main`.
+7. Capture the remote-state baseline from that synchronized local/remote head, then immediately run
+   `check`. A clean result already proves the merge base is current main. If ancestry is blocked,
+   reconstruct only the intended commits on current `origin/main`, push that replacement head, and
+   restart from capture; do not merge main into the blocked branch.
+8. Run final readiness with `PR_READY_PR_BODY_FILE="$pr_body_file"`, then run the remote-state
+   check immediately before publication. If sync integrates an authorized refresh, rerun readiness,
+   push the integrated head, recapture the baseline, and check again.
+9. Open a ready PR by default using
    `gh pr create --base main --head <branch> --title "<type>: <summary> (#<n>)" --body-file <prepared_body.md>`.
    Use `--draft` only when the user explicitly requests draft status or when the branch is an
    intentional handoff with incomplete validation, unresolved scope, or another clearly documented
@@ -113,7 +116,7 @@ Remote-state check (issue #6916):
     `uv run python scripts/dev/gh_pr_label_rest.py remove <number> --label <name> --repo ll7/robot_sf_ll7`
     instead of `gh pr edit --add-label` / `gh issue edit --label` which route through the same
     deprecated Projects Classic GraphQL path.
-11. Keep parent issue open unless repository policy indicates closure wording in PR description.
+10. Keep parent issue open unless repository policy indicates closure wording in PR description.
 
 ## Proof and Artifact Rules
 

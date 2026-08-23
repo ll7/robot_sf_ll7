@@ -775,6 +775,49 @@ def test_inventory_uses_timeline_fallback_for_partial_closed_history(
     assert inventory["inventory"]["closed_prs"]["truncated"] is True
 
 
+def test_inventory_uses_an_independent_closed_pr_page_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Closed-PR history can outgrow the smaller ordinary inventory page budget."""
+    observed: list[tuple[str, int]] = []
+
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_open_issues",
+        lambda *args, **kwargs: ([], {"truncated": False, "errors": []}),
+    )
+
+    def discover_prs(_repo: str, *, state: str, max_pages: int, runner: object) -> tuple:
+        observed.append((state, max_pages))
+        return [], {"truncated": False, "errors": []}
+
+    monkeypatch.setattr(issue_audit_core, "discover_pull_requests", discover_prs)
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_repository_labels",
+        lambda *args, **kwargs: (set(), {"truncated": False, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_claims",
+        lambda *args, **kwargs: ({}, {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_worktrees",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_jobs",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+
+    issue_audit_core.discover_inventory("ll7/robot_sf_ll7", max_pages=2, max_closed_pr_pages=47)
+
+    assert observed == [("open", 2), ("closed", 47)]
+
+
 def test_closure_evidence_preserves_targeted_timeline_provenance() -> None:
     """Closure evidence distinguishes targeted timeline coverage from global rows."""
     issue = _issue(110, body="Completion condition: merged PR #901")
@@ -934,6 +977,47 @@ def test_plan_writes_fail_closed_artifact_when_wall_budget_is_zero(
     assert plan["mutations"] == []
     assert plan["truncation_or_errors"]
     assert "wall-time budget exhausted" in json.dumps(plan["inventory"])
+
+
+def test_plan_cli_accepts_a_separate_closed_pr_page_budget(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Operators can raise closed-history coverage without widening every REST source."""
+    observed: dict[str, object] = {}
+
+    def discover(_repo: str, **kwargs: object) -> dict[str, object]:
+        observed.update(kwargs)
+        return {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [],
+            "open_prs": [],
+            "merged_prs": [],
+            "labels": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "inventory": {},
+        }
+
+    monkeypatch.setattr(issue_audit_core, "discover_inventory", discover)
+    output = tmp_path / "issue-audit-plan.json"
+
+    result = main(
+        [
+            "plan",
+            "--max-pages",
+            "2",
+            "--max-closed-pr-pages",
+            "47",
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert result == 0
+    assert observed["max_pages"] == 2
+    assert observed["max_closed_pr_pages"] == 47
 
 
 def test_decision_queue_is_machine_readable_and_project_free() -> None:

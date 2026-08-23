@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shlex
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass
@@ -45,16 +46,21 @@ _HARDCODED_ROBOT_SF_PATH_RE = re.compile(
     re.IGNORECASE,
 )
 
-_RELEASE_RESOURCES = {
-    "cluster": "licca",
-    "partition": "epyc-gpu",
-    "route_id": "licca:epyc-gpu",
-    "cpus": 36,
-    "gpus": 1,
-    "gpu_type": "a100",
-    "mem_gb": 256,
-    "wall_clock": "36:00:00",
-}
+# Resource values are part of the immutable private launch packet and its
+# matching queue row.  They must not be hard-coded here: the release route may
+# be LiCCA/epyc-gpu or another admitted site such as imech192/l40s.
+_RESOURCE_FIELDS = (
+    "cluster",
+    "partition",
+    "route_id",
+    "cpus",
+    "gpus",
+    "gpu_type",
+    "mem_gb",
+    "wall_clock",
+)
+_QUEUE_RESOURCE_FIELDS = ("cluster", "partition", "route_id", "cpus", "gpus", "mem_gb")
+_RESOURCE_STRING_FIELDS = {"cluster", "partition", "route_id", "gpu_type", "wall_clock", "qos"}
 
 _REQUIRED_PACKET_HASH_FIELDS = (
     "release_manifest_sha256",
@@ -402,6 +408,53 @@ def _is_concrete(value: Any) -> bool:
     return bool(text) and _PLACEHOLDER_RE.search(text) is None
 
 
+def _strict_int(value: Any) -> int | None:
+    """Parse a non-fractional integer without Python coercion surprises.
+
+    Returns:
+        An integer value, or ``None`` for booleans, floats, fractional strings,
+        and other non-integral values.
+    """
+    if isinstance(value, bool) or isinstance(value, float):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and re.fullmatch(r"[0-9]+", value.strip()):
+        return int(value.strip())
+    return None
+
+
+def _resource_values_match(field: str, actual: Any, expected: Any) -> bool:
+    """Compare two resource values using the packet's typed contract.
+
+    Returns:
+        ``True`` when the values are equal under the field's type semantics.
+    """
+    if field in _RESOURCE_STRING_FIELDS:
+        return str(actual or "").strip().lower() == str(expected or "").strip().lower()
+    actual_int = _strict_int(actual)
+    expected_int = _strict_int(expected)
+    return actual_int is not None and expected_int is not None and actual_int == expected_int
+
+
+def _wall_clock_seconds(value: Any) -> int | None:
+    """Convert a ``HH:MM:SS`` wall-clock value to seconds.
+
+    Returns:
+        The number of seconds, or ``None`` for an invalid value.
+    """
+    parts = str(value or "").strip().split(":")
+    if len(parts) != 3:
+        return None
+    parsed = [_strict_int(part) for part in parts]
+    if any(part is None for part in parsed):
+        return None
+    hours, minutes, seconds = parsed
+    if hours < 0 or not 0 <= minutes < 60 or not 0 <= seconds < 60:
+        return None
+    return hours * 3600 + minutes * 60 + seconds
+
+
 def _validate_identity_hashes(packet: dict[str, Any]) -> list[str]:
     """Validate required packet identity hash syntax.
 
@@ -499,10 +552,16 @@ def _validate_packet_state(packet: dict[str, Any]) -> list[str]:
     if packet.get("state") not in {"admitted", "ready", "queued"}:
         problems.append("launch packet is not in a dispatchable state")
     admission = packet.get("admission")
-    if not isinstance(admission, dict) or admission.get("status") not in {"admitted", "ready"}:
+    if isinstance(admission, dict):
+        if admission.get("status") not in {"admitted", "ready"}:
+            problems.append("launch packet admission status is not admitted")
+        elif admission.get("dispatchable") is not True:
+            problems.append("launch packet admission is not dispatchable")
+    elif packet.get("status") != "admitted_frozen":
+        # The private queue's frozen packet contract uses a top-level status
+        # instead of duplicating an admission submapping.  Accept only that
+        # exact frozen status; an absent or arbitrary status remains blocked.
         problems.append("launch packet admission status is not admitted")
-    elif admission.get("dispatchable") is not True:
-        problems.append("launch packet admission is not dispatchable")
     if packet.get("dispatchable") is not True:
         problems.append("launch packet is not dispatchable")
 
@@ -538,8 +597,44 @@ def _validate_packet_identity(
     return problems
 
 
+def _validate_packet_resource_contract(contract: dict[str, Any]) -> list[str]:
+    """Validate resource completeness and internal route/time consistency.
+
+    Returns:
+        Sanitized resource-contract problems.
+    """
+    problems: list[str] = []
+    for field in _RESOURCE_FIELDS:
+        actual = contract.get(field)
+        if field in _RESOURCE_STRING_FIELDS:
+            valid = _is_concrete(actual)
+        else:
+            parsed = _strict_int(actual)
+            valid = parsed is not None and parsed > 0
+        if not valid:
+            problems.append(f"launch packet resource contract is invalid: {field}")
+    if _is_concrete(contract.get("cluster")) and _is_concrete(contract.get("partition")):
+        expected_route = f"{contract['cluster']}:{contract['partition']}"
+        if not _resource_values_match("route_id", contract.get("route_id"), expected_route):
+            problems.append("launch packet route_id does not match cluster and partition")
+    wall_clock_seconds = _wall_clock_seconds(contract.get("wall_clock"))
+    if wall_clock_seconds is None:
+        problems.append("launch packet wall_clock is not a valid HH:MM:SS value")
+    elif wall_clock_seconds <= 0:
+        problems.append("launch packet wall_clock must be positive")
+    elif "wall_clock_seconds" in contract and not _resource_values_match(
+        "wall_clock_seconds", contract.get("wall_clock_seconds"), wall_clock_seconds
+    ):
+        problems.append("launch packet wall_clock_seconds does not match wall_clock")
+    return problems
+
+
 def _validate_packet_execution_contract(packet: dict[str, Any]) -> list[str]:
-    """Validate the fixed LiCCA route and startup-source contract.
+    """Validate the frozen route and startup-source contract.
+
+    Resource values are validated for completeness and internal consistency
+    here.  Final admission compares them with the exact matching private queue
+    row in :func:`_validate_packet_queue`.
 
     Returns:
         Sanitized route and startup-contract problems.
@@ -549,21 +644,13 @@ def _validate_packet_execution_contract(packet: dict[str, Any]) -> list[str]:
     if not isinstance(contract, dict):
         problems.append("launch packet execution contract is missing")
         contract = {}
-    for field, expected in _RELEASE_RESOURCES.items():
-        actual = contract.get(field)
-        if field in {"cluster", "partition", "route_id", "wall_clock"}:
-            matches = str(actual or "").strip().lower() == str(expected).lower()
-        elif field == "gpu_type":
-            matches = str(actual or "").strip().lower() == str(expected).lower()
-        else:
-            try:
-                matches = int(actual) == int(expected)
-            except (TypeError, ValueError):
-                matches = False
-        if not matches:
-            problems.append(f"launch packet resource contract mismatch: {field}")
+    problems.extend(_validate_packet_resource_contract(contract))
     if contract.get("resources_exact") is not True:
         problems.append("launch packet resources_exact is not true")
+    if not _is_concrete(contract.get("release_label")):
+        problems.append("launch packet release_label is not concrete")
+    if not isinstance(contract.get("force_cpu"), bool):
+        problems.append("launch packet force_cpu is not boolean")
     if contract.get("startup_sentinel_required") is not True:
         problems.append("startup sentinel is not required")
     if "$SLURM_STARTUP_SENTINEL" not in str(contract.get("startup_prefix") or ""):
@@ -579,10 +666,8 @@ def _validate_runtime_smoke_contract(packet: dict[str, Any], contract: dict[str,
         Sanitized smoke-contract problems.
     """
     problems: list[str] = []
-    try:
-        smoke_max_age_matches = int(contract.get("runtime_smoke_receipt_max_age_hours") or 0) == 24
-    except (TypeError, ValueError):
-        smoke_max_age_matches = False
+    smoke_max_age = _strict_int(contract.get("runtime_smoke_receipt_max_age_hours"))
+    smoke_max_age_matches = smoke_max_age == 24
     if not smoke_max_age_matches:
         problems.append("runtime smoke receipt freshness contract is not 24 hours")
     inputs = packet.get("inputs")
@@ -664,23 +749,332 @@ def _validate_packet_traceability(packet: dict[str, Any]) -> list[str]:
     return problems
 
 
-def _submit_arg_value(submit_args: str, field: str) -> str | None:
-    """Extract one comma-delimited ``--export`` value from queue arguments.
+def _parse_release_exports(  # noqa: C901, PLR0912
+    submit_args: str,
+) -> tuple[dict[str, list[str]], list[str]]:
+    """Parse exact ``RELEASE_*`` assignments from Slurm ``--export`` flags.
+
+    Queue rows store the arguments passed through ``submit_and_record.sh``.
+    They may use raw scheduler options or wrap them as ``--sbatch-arg``
+    options, and Slurm's export value is itself a comma-delimited list.  A
+    substring search over the raw text would allow a key such as
+    ``XRELEASE_CAMPAIGN_ID`` to satisfy an exact identity check, while a
+    first-match parser would allow a later duplicate to change the effective
+    value.  Keep every exact key visible so callers can reject both cases.
 
     Returns:
-        The value, or ``None`` when the field is absent.
+        A mapping from exact release environment keys to all exported values,
+        plus sanitized parser problems.  Values are never included in a
+        problem message.
     """
-    match = re.search(rf"(?:^|,){field}=([^,\s]+)", submit_args)
-    return match.group(1) if match else None
+    try:
+        tokens = shlex.split(submit_args)
+    except ValueError:
+        return {}, ["private queue submit_args quoting is invalid"]
+
+    values: dict[str, list[str]] = {}
+    problems: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--sbatch-arg":
+            index += 1
+            if index >= len(tokens) or not tokens[index].startswith("--"):
+                problems.append("private queue --sbatch-arg is missing an option")
+                continue
+            token = tokens[index]
+        elif token.startswith("--sbatch-arg="):
+            token = token.split("=", 1)[1]
+
+        if not token.startswith("--"):
+            index += 1
+            continue
+        option_value = token[2:]
+        if "=" in option_value:
+            option, value = option_value.split("=", 1)
+        else:
+            option, value = option_value, None
+        if option != "export":
+            index += 1
+            continue
+        if value is None:
+            next_index = index + 1
+            if next_index >= len(tokens) or tokens[next_index].startswith("--"):
+                problems.append("private queue --export is missing a value")
+                index += 1
+                continue
+            value = tokens[next_index]
+            index = next_index
+
+        for assignment in value.split(","):
+            if assignment in {"ALL", "NONE"} or not assignment:
+                continue
+            if "=" not in assignment:
+                if assignment.startswith("RELEASE_"):
+                    problems.append("private queue RELEASE export is missing a value")
+                continue
+            field, field_value = assignment.split("=", 1)
+            if not field.startswith("RELEASE_"):
+                continue
+            if not re.fullmatch(r"RELEASE_[A-Za-z0-9_]+", field):
+                problems.append("private queue RELEASE export key is invalid")
+                continue
+            values.setdefault(field, []).append(field_value)
+        index += 1
+
+    for field, matching in values.items():
+        if len(matching) > 1:
+            problems.append(f"private queue {field} is duplicated")
+    return values, problems
 
 
-def _validate_queue_identity_args(submit_args: str, packet: dict[str, Any]) -> list[str]:
+def _release_export_value(
+    values: dict[str, list[str]], field: str, problems: list[str]
+) -> str | None:
+    """Return one exact release export value, rejecting missing/duplicate keys."""
+    matching = values.get(field, [])
+    if not matching:
+        problems.append(f"private queue {field} is missing")
+        return None
+    if len(matching) != 1:
+        # The parser already records a sanitized duplicate diagnostic.  Do not
+        # select a value from an ambiguous assignment list.
+        return None
+    return matching[0]
+
+
+_SCHEDULER_OPTIONS = (
+    "partition",
+    "gres",
+    "cpus-per-task",
+    "mem",
+    "time",
+    "qos",
+)
+
+
+def _parse_scheduler_args(  # noqa: C901
+    submit_args: str,
+) -> tuple[dict[str, list[str]], list[str]]:
+    """Parse scheduler flags from raw or ``--sbatch-arg`` submit arguments.
+
+    Returns:
+        A mapping of recognized option names to values and sanitized parser
+        problems.  Duplicate options remain visible for fail-closed checks.
+    """
+    try:
+        tokens = shlex.split(submit_args)
+    except ValueError:
+        return {}, ["scheduler submit_args quoting is invalid"]
+    values: dict[str, list[str]] = {}
+    problems: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--sbatch-arg":
+            index += 1
+            if index >= len(tokens) or not tokens[index].startswith("--"):
+                problems.append("scheduler --sbatch-arg is missing an option")
+                continue
+            token = tokens[index]
+        elif token.startswith("--sbatch-arg="):
+            token = token.split("=", 1)[1]
+        if not token.startswith("--"):
+            index += 1
+            continue
+        option_value = token[2:]
+        if "=" in option_value:
+            option, value = option_value.split("=", 1)
+        else:
+            option, value = option_value, None
+        if option not in _SCHEDULER_OPTIONS:
+            index += 1
+            continue
+        if value is None:
+            next_index = index + 1
+            if next_index >= len(tokens) or tokens[next_index].startswith("--"):
+                problems.append(f"scheduler --{option} is missing a value")
+                index += 1
+                continue
+            value = tokens[next_index]
+            index = next_index
+        values.setdefault(option, []).append(value)
+        index += 1
+    return values, problems
+
+
+def _scheduler_option_value(
+    values: dict[str, list[str]], option: str, problems: list[str]
+) -> str | None:
+    """Return one scheduler option value, rejecting missing or duplicate flags."""
+    matching = values.get(option, [])
+    if not matching:
+        problems.append(f"scheduler --{option} is missing")
+        return None
+    if len(matching) != 1:
+        problems.append(f"scheduler --{option} is duplicated")
+        return None
+    return matching[0]
+
+
+def _scheduler_memory_mib(value: str) -> int | None:
+    """Normalize an integer Slurm memory value to mebibytes.
+
+    Returns:
+        The normalized mebibytes, or ``None`` for malformed/non-integral input.
+    """
+    match = re.fullmatch(r"([0-9]+)([kmgt]?i?b?)?", value.strip(), re.IGNORECASE)
+    if match is None:
+        return None
+    amount = _strict_int(match.group(1))
+    if amount is None:
+        return None
+    suffix = (match.group(2) or "m").lower()
+    suffix = suffix.removesuffix("ib").removesuffix("b")
+    if suffix == "k":
+        return amount // 1024 if amount % 1024 == 0 else None
+    if suffix == "m":
+        return amount
+    if suffix == "g":
+        return amount * 1024
+    if suffix == "t":
+        return amount * 1024 * 1024
+    return None
+
+
+def _scheduler_time_seconds(value: str) -> int | None:
+    """Normalize Slurm ``D-HH:MM:SS`` or ``HH:MM:SS`` time values.
+
+    Returns:
+        The normalized seconds, or ``None`` for malformed/non-integral input.
+    """
+    raw = value.strip()
+    days = 0
+    if "-" in raw:
+        day_text, raw = raw.split("-", 1)
+        days = _strict_int(day_text)
+        if days is None:
+            return None
+    parts = raw.split(":")
+    parsed = [_strict_int(part) for part in parts]
+    if any(part is None for part in parsed) or len(parsed) not in {2, 3}:
+        return None
+    if len(parsed) == 2:
+        hours, minutes, seconds = 0, parsed[0], parsed[1]
+    else:
+        hours, minutes, seconds = parsed
+    if hours is None or minutes is None or seconds is None:
+        return None
+    if hours < 0 or not 0 <= minutes < 60 or not 0 <= seconds < 60:
+        return None
+    total_seconds = days * 86400 + hours * 3600 + minutes * 60 + seconds
+    return total_seconds if total_seconds > 0 else None
+
+
+def _scheduler_gres(value: str) -> tuple[int, str | None] | None:
+    """Parse one GPU GRES entry into count and optional type.
+
+    Returns:
+        A ``(count, type)`` pair, or ``None`` for malformed GRES input.
+    """
+    entries = [entry for entry in value.split(",") if entry.lower().startswith("gpu:")]
+    if len(entries) != 1:
+        return None
+    parts = entries[0].split(":")
+    if len(parts) == 2:
+        gpu_type, count_text = None, parts[1]
+    elif len(parts) == 3:
+        gpu_type, count_text = parts[1], parts[2]
+    else:
+        return None
+    count = _strict_int(count_text)
+    if count is None or count <= 0 or (gpu_type is not None and not _is_concrete(gpu_type)):
+        return None
+    return count, gpu_type
+
+
+def _validate_scheduler_submit_args(  # noqa: C901
+    submit_args: str, packet: dict[str, Any]
+) -> list[str]:
+    """Validate scheduler flags against the frozen packet execution contract.
+
+    Returns:
+        Sanitized scheduler-contract problems.
+    """
+    contract = packet.get("execution_contract")
+    if not isinstance(contract, dict):
+        return ["launch packet execution contract is missing"]
+    values, problems = _parse_scheduler_args(submit_args)
+    partition = _scheduler_option_value(values, "partition", problems)
+    if partition is not None and not _resource_values_match(
+        "partition", partition, contract.get("partition")
+    ):
+        problems.append("scheduler --partition does not match packet")
+    gres = _scheduler_option_value(values, "gres", problems)
+    if gres is not None:
+        parsed_gres = _scheduler_gres(gres)
+        expected_gpus = _strict_int(contract.get("gpus"))
+        if parsed_gres is None or expected_gpus is None:
+            problems.append("scheduler --gres is invalid")
+        else:
+            gpu_count, gpu_type = parsed_gres
+            if gpu_count != expected_gpus:
+                problems.append("scheduler --gres GPU count does not match packet")
+            expected_gpu_type = contract.get("gpu_type")
+            if (
+                _is_concrete(expected_gpu_type)
+                and gpu_type is not None
+                and not _resource_values_match("gpu_type", gpu_type, expected_gpu_type)
+            ):
+                problems.append("scheduler --gres GPU type does not match packet")
+    cpus = _scheduler_option_value(values, "cpus-per-task", problems)
+    if cpus is not None and not _resource_values_match("cpus", cpus, contract.get("cpus")):
+        problems.append("scheduler --cpus-per-task does not match packet")
+    memory = _scheduler_option_value(values, "mem", problems)
+    expected_mem_gb = _strict_int(contract.get("mem_gb"))
+    if memory is not None and (
+        expected_mem_gb is None or _scheduler_memory_mib(memory) != expected_mem_gb * 1024
+    ):
+        problems.append("scheduler --mem does not match packet")
+    scheduler_time = _scheduler_option_value(values, "time", problems)
+    expected_time = contract.get("wall_clock_seconds")
+    if expected_time is None:
+        expected_time = _wall_clock_seconds(contract.get("wall_clock"))
+    if scheduler_time is not None and (
+        expected_time is None or _scheduler_time_seconds(scheduler_time) != expected_time
+    ):
+        problems.append("scheduler --time does not match packet")
+    expected_qos = contract.get("qos")
+    if _is_concrete(expected_qos):
+        qos = _scheduler_option_value(values, "qos", problems)
+        if qos is not None and not _resource_values_match("qos", qos, expected_qos):
+            problems.append("scheduler --qos does not match packet")
+    return problems
+
+
+def _has_exact_scheduler_time(submit_args: str, packet: dict[str, Any]) -> bool:
+    """Return whether submit args provide exact packet-bound scheduler time."""
+    contract = packet.get("execution_contract")
+    if not isinstance(contract, dict):
+        return False
+    values, problems = _parse_scheduler_args(submit_args)
+    if problems or len(values.get("time", [])) != 1:
+        return False
+    expected = contract.get("wall_clock_seconds")
+    if expected is None:
+        expected = _wall_clock_seconds(contract.get("wall_clock"))
+    actual = _scheduler_time_seconds(values["time"][0])
+    return expected is not None and actual == expected
+
+
+def _validate_queue_identity_args(
+    exports: dict[str, list[str]], packet: dict[str, Any], problems: list[str]
+) -> list[str]:
     """Validate queue environment values against packet identity.
 
     Returns:
         Sanitized queue identity problems.
     """
-    problems: list[str] = []
     identity = packet.get("identity")
     inputs = packet.get("inputs")
     if isinstance(identity, dict) and isinstance(inputs, dict):
@@ -693,7 +1087,9 @@ def _validate_queue_identity_args(submit_args: str, packet: dict[str, Any]) -> l
             "RELEASE_PUBLIC_SCRIPT_SHA256": "public_entrypoint_sha256",
         }
         for queue_field, identity_field in queue_to_identity.items():
-            if _submit_arg_value(submit_args, queue_field) != identity.get(identity_field):
+            if _release_export_value(exports, queue_field, problems) != identity.get(
+                identity_field
+            ):
                 problems.append(f"private queue {queue_field} is not bound to packet identity")
         input_paths = {
             "RELEASE_MANIFEST_PATH": "release_manifest",
@@ -704,17 +1100,23 @@ def _validate_queue_identity_args(submit_args: str, packet: dict[str, Any]) -> l
         for queue_field, input_name in input_paths.items():
             item = inputs.get(input_name)
             expected_path = item.get("path") if isinstance(item, dict) else None
-            if _submit_arg_value(submit_args, queue_field) != expected_path:
+            if _release_export_value(exports, queue_field, problems) != expected_path:
                 problems.append(f"private queue {queue_field} is not bound to packet inputs")
+    contract = packet.get("execution_contract")
+    if not isinstance(contract, dict):
+        problems.append("launch packet execution contract is missing")
+        contract = {}
     expected_identity = {
         "RELEASE_CAMPAIGN_ID": packet.get("campaign_id"),
-        "RELEASE_EXPECTED_CPUS": "36",
-        "RELEASE_EXPECTED_GPUS": "1",
-        "RELEASE_EXPECTED_MEM_GB": "256",
-        "RELEASE_EXPECTED_WALLTIME": "36:00:00",
+        "RELEASE_LABEL": contract.get("release_label"),
+        "RELEASE_EXPECTED_CPUS": contract.get("cpus"),
+        "RELEASE_EXPECTED_GPUS": contract.get("gpus"),
+        "RELEASE_EXPECTED_MEM_GB": contract.get("mem_gb"),
+        "RELEASE_EXPECTED_WALLTIME": contract.get("wall_clock"),
+        "RELEASE_FORCE_CPU": "1" if contract.get("force_cpu") is True else "0",
     }
     for field, expected in expected_identity.items():
-        if _submit_arg_value(submit_args, field) != str(expected):
+        if _release_export_value(exports, field, problems) != str(expected):
             problems.append(f"private queue {field} is not bound to packet identity")
     return problems
 
@@ -730,9 +1132,18 @@ def _validate_queue_submit_args(
     if not _is_concrete(submit_args):
         return ["private queue submit arguments are not frozen"]
     problems: list[str] = []
+    exports, export_problems = _parse_release_exports(submit_args)
+    problems.extend(export_problems)
     expected_packet_hash = _sha256(packet_path)
-    if f"RELEASE_LAUNCH_PACKET_SHA256={expected_packet_hash}" not in submit_args:
+    packet_hash = _release_export_value(exports, "RELEASE_LAUNCH_PACKET_SHA256", problems)
+    if packet_hash != expected_packet_hash:
         problems.append("private queue packet hash is not bound")
+    packet_path_export = _release_export_value(exports, "RELEASE_LAUNCH_PACKET_PATH", problems)
+    if (
+        not _is_concrete(packet_path_export)
+        or Path(str(packet_path_export)).name != packet_path.name
+    ):
+        problems.append("private queue packet path is not bound")
     for field in (
         "RELEASE_MANIFEST_SHA256",
         "RELEASE_CONFIG_SHA256",
@@ -741,45 +1152,66 @@ def _validate_queue_submit_args(
         "RELEASE_RUNTIME_SMOKE_RECEIPT_SHA256",
         "RELEASE_PUBLIC_SCRIPT_SHA256",
     ):
-        value = _submit_arg_value(submit_args, field)
+        value = _release_export_value(exports, field, problems)
         if value is None or not _SHA256_RE.fullmatch(value):
             problems.append(f"private queue {field} is not a concrete SHA-256")
-    problems.extend(_validate_queue_identity_args(submit_args, packet))
+    problems.extend(_validate_scheduler_submit_args(submit_args, packet))
+    identity_problems: list[str] = []
+    problems.extend(_validate_queue_identity_args(exports, packet, identity_problems))
     return problems
 
 
-def _validate_queue_resources(row: dict[str, Any]) -> list[str]:
-    """Validate queue resource values when present.
+def _validate_queue_resources(  # noqa: C901
+    row: dict[str, Any], packet: dict[str, Any]
+) -> list[str]:
+    """Validate queue resources against the exact packet execution contract.
 
     Returns:
         Sanitized resource problems.
     """
     problems: list[str] = []
-    for field, expected in _RELEASE_RESOURCES.items():
+    contract = packet.get("execution_contract")
+    if not isinstance(contract, dict):
+        return ["launch packet execution contract is missing"]
+    for field in _QUEUE_RESOURCE_FIELDS:
         if field not in row:
+            problems.append(f"private queue resource contract is missing: {field}")
             continue
-        if field in {"cluster", "partition", "route_id", "gpu_type", "wall_clock"}:
-            matches = str(row[field]).lower() == str(expected).lower()
-        else:
-            try:
-                matches = int(row[field]) == int(expected)
-            except (TypeError, ValueError):
-                matches = False
-        if not matches:
+        if not _resource_values_match(field, row[field], contract.get(field)):
             problems.append(f"private queue resource contract mismatch: {field}")
+    # Queue rows encode wall-clock limits as seconds, while the launch packet
+    # carries the scheduler-facing HH:MM:SS value.  Accept the explicit packet
+    # seconds when present and otherwise derive them from the frozen string.
+    expected_wall_clock_seconds = contract.get("wall_clock_seconds")
+    if expected_wall_clock_seconds is None:
+        expected_wall_clock_seconds = _wall_clock_seconds(contract.get("wall_clock"))
     if "estimated_elapsed_sec" in row:
-        try:
-            if int(row["estimated_elapsed_sec"]) != 129600:
-                problems.append("private queue resource contract mismatch: wall_clock")
-        except (TypeError, ValueError):
+        estimated_elapsed_sec = _strict_int(row["estimated_elapsed_sec"])
+        if estimated_elapsed_sec is None or estimated_elapsed_sec <= 0:
+            problems.append("private queue estimated_elapsed_sec must be positive")
+        elif expected_wall_clock_seconds is None or not _resource_values_match(
+            "estimated_elapsed_sec", estimated_elapsed_sec, expected_wall_clock_seconds
+        ):
             problems.append("private queue resource contract mismatch: wall_clock")
+    elif not _has_exact_scheduler_time(str(row.get("submit_args") or ""), packet):
+        problems.append("private queue estimated_elapsed_sec or exact scheduler --time is required")
+    if "gpu_type" in row and not _resource_values_match(
+        "gpu_type", row["gpu_type"], contract.get("gpu_type")
+    ):
+        problems.append("private queue resource contract mismatch: gpu_type")
+    if "wall_clock" in row and not _resource_values_match(
+        "wall_clock", row["wall_clock"], contract.get("wall_clock")
+    ):
+        problems.append("private queue resource contract mismatch: wall_clock")
+    if "qos" in row and not _resource_values_match("qos", row["qos"], contract.get("qos")):
+        problems.append("private queue resource contract mismatch: qos")
     return problems
 
 
-def _validate_packet_queue(
+def _validate_packet_queue(  # noqa: C901
     packet: dict[str, Any], packet_path: Path, queue_path: Path | None, expected_sha: str
 ) -> list[str]:
-    """Validate private queue identity, hashes, and fixed resource values.
+    """Validate private queue identity, hashes, and packet-bound resources.
 
     Returns:
         Sanitized queue admission problems.
@@ -792,10 +1224,19 @@ def _validate_packet_queue(
     except (OSError, ValueError, yaml.YAMLError):
         return ["private queue is missing or invalid"]
     queue_id = packet.get("queue_id")
+    if not isinstance(queue_id, str) or not _is_concrete(queue_id):
+        return ["launch packet queue_id is missing or not concrete"]
+    if any(
+        not isinstance(row.get("queue_id"), str) or not _is_concrete(row.get("queue_id"))
+        for row in rows
+    ):
+        return ["private queue row queue_id is missing or not concrete"]
     matching = [row for row in rows if row.get("queue_id") == queue_id]
     if len(matching) != 1:
         return ["private queue does not contain exactly one packet row"]
     row = matching[0]
+    if not isinstance(row.get("queue_id"), str) or not _is_concrete(row.get("queue_id")):
+        return ["private queue row queue_id is missing or not concrete"]
     if row.get("campaign") != packet.get("campaign_id"):
         problems.append("private queue campaign identity does not match")
     if row.get("expected_public_commit") != expected_sha:
@@ -806,11 +1247,17 @@ def _validate_packet_queue(
     # machines.  Compare the stable packet filename while the submit-args
     # digest binds the exact bytes.
     artifact_manifest = str(row.get("artifact_manifest") or "")
-    if not artifact_manifest.endswith(packet_path.name):
+    artifact_path, separator, artifact_digest = artifact_manifest.partition(" sha256:")
+    if not artifact_path.endswith(packet_path.name):
         problems.append("private queue artifact manifest does not match packet")
+    if separator and (
+        not _SHA256_RE.fullmatch(artifact_digest)
+        or artifact_digest.lower() != _sha256(packet_path).lower()
+    ):
+        problems.append("private queue artifact manifest hash does not match packet")
     submit_args = str(row.get("submit_args") or "")
     problems.extend(_validate_queue_submit_args(submit_args, packet_path, packet))
-    problems.extend(_validate_queue_resources(row))
+    problems.extend(_validate_queue_resources(row, packet))
     return list(dict.fromkeys(problems))
 
 
@@ -867,9 +1314,11 @@ def _cluster_check(
     except (OSError, ValueError, json.JSONDecodeError, yaml.YAMLError):
         return ReleaseDoctorCheck("cluster_admission", "fail", "private launch packet is invalid")
     admission = packet.get("admission")
-    admitted = isinstance(admission, dict) and admission.get("status") in {"admitted", "ready"}
-    dispatchable = bool(packet.get("dispatchable")) and (
-        not isinstance(admission, dict) or bool(admission.get("dispatchable", True))
+    admitted = (
+        isinstance(admission, dict) and admission.get("status") in {"admitted", "ready"}
+    ) or packet.get("status") == "admitted_frozen"
+    dispatchable = packet.get("dispatchable") is True and (
+        not isinstance(admission, dict) or admission.get("dispatchable", True) is True
     )
     identity = packet.get("identity")
     identity_source_sha = (

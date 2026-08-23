@@ -34,10 +34,20 @@ REQUIRED_JOBS = (
     "determinism-gate",
     "exact-repeat-model-preflight",
 )
-EVENT_REQUIRED = {
-    "coverage-gate": ("push", "schedule", "workflow_dispatch"),
-    "changed-coverage-gate": ("pull_request", "merge_group"),
-}
+CHANGED_COVERAGE_EVENTS = ("pull_request", "merge_group")
+
+
+def normalize_needs(raw_results: dict[str, Any]) -> dict[str, Any]:
+    """Normalize GitHub's ``toJSON(needs)`` object to a job-result mapping.
+
+    GitHub serializes each dependency as an object containing ``result`` and
+    ``outputs``. Accept the already-flat mapping too so the helper remains easy
+    to call and test outside Actions.
+    """
+    return {
+        job: payload.get("result") if isinstance(payload, dict) else payload
+        for job, payload in raw_results.items()
+    }
 
 
 def evaluate_needs(results: dict[str, Any], event_name: str) -> list[str]:
@@ -50,11 +60,13 @@ def evaluate_needs(results: dict[str, Any], event_name: str) -> list[str]:
     for job in REQUIRED_JOBS:
         if results.get(job) != "success":
             failures.append(job)
-    for job, events in EVENT_REQUIRED.items():
-        if event_name not in events:
-            continue
-        if results.get(job) != "success":
-            failures.append(job)
+    # Preserve the former workflow's fail-closed expression exactly:
+    # coverage-gate applies to every event except pull_request, including
+    # merge_group and any future/unknown event name.
+    if event_name != "pull_request" and results.get("coverage-gate") != "success":
+        failures.append("coverage-gate")
+    if event_name in CHANGED_COVERAGE_EVENTS and results.get("changed-coverage-gate") != "success":
+        failures.append("changed-coverage-gate")
     return failures
 
 
@@ -78,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         print("ERROR: --results must be a JSON object", file=sys.stderr)
         return 2
 
+    results = normalize_needs(results)
     failures = evaluate_needs(results, args.event_name)
     for job in failures:
         print(f"{job} finished with {results.get(job, 'missing')}", file=sys.stderr)

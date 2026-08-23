@@ -196,6 +196,26 @@ def test_needs_changed_coverage_gate_required_on_pull_request() -> None:
     assert check_ci_needs.evaluate_needs(results, "push") == []
 
 
+def test_needs_merge_group_requires_both_coverage_gates() -> None:
+    """Match the former workflow: merge groups require both coverage gates."""
+    results = {
+        **_all_success(),
+        "coverage-gate": "failure",
+        "changed-coverage-gate": "success",
+    }
+    assert check_ci_needs.evaluate_needs(results, "merge_group") == ["coverage-gate"]
+
+
+def test_needs_unknown_event_fails_closed_on_coverage_gate() -> None:
+    """Future event types must retain the non-pull-request coverage requirement."""
+    results = {
+        **_all_success(),
+        "coverage-gate": "missing",
+        "changed-coverage-gate": "skipped",
+    }
+    assert check_ci_needs.evaluate_needs(results, "future_event") == ["coverage-gate"]
+
+
 def test_needs_fails_on_skipped_cancelled_failed_missing() -> None:
     """Any non-success required result or a missing job must be reported."""
     for bad in ("skipped", "cancelled", "failure", "missing-key"):
@@ -212,3 +232,15 @@ def test_needs_main_requires_every_required_job() -> None:
     """Every job in REQUIRED_JOBS must appear in a passing main run."""
     results = {**_all_success(), "coverage-gate": "success", "changed-coverage-gate": "skipped"}
     assert check_ci_needs.evaluate_needs(results, "push") == []
+
+
+def test_needs_normalizes_github_needs_objects() -> None:
+    """The raw ``toJSON(needs)`` shape must expose each nested result."""
+    raw = {
+        "fast-feedback": {"result": "success", "outputs": {}},
+        "coverage-gate": {"result": "skipped", "outputs": {}},
+    }
+    assert check_ci_needs.normalize_needs(raw) == {
+        "fast-feedback": "success",
+        "coverage-gate": "skipped",
+    }

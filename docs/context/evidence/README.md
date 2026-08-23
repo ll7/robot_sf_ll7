@@ -131,10 +131,15 @@ Policy caveats:
   package. It binds the canonical source/tool/environment inputs and two independent output-tree
   hashes; it is explicitly not an admission receipt or benchmark/paper evidence.
 
-- `issue_6102_robot_speed_tier_recovery/`: compact recovery receipt for the
-  structurally complete local copy of job 13828 (2,160 native cells). The recorded
-  independent result root is missing, so this packet remains `durable-required`,
-  provenance-unresolved, and not benchmark or paper-facing evidence.
+- `issue_6102_robot_speed_tier_recovery/`: reviewed recovery receipt for the complete
+  job 13828 campaign (2,160 native cells). Its 76-source copy is preserved in the immutable
+  Weights & Biases (W&B) artifact
+  `ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0` and passed stored-object and
+  decompressed-source verification. The reviewed
+  [packet](issue_6102_robot_speed_tier_recovery/result_interpretation_packet.v1.json)
+  remains `smoke_diagnostic` / `diagnostic_only`: it closes custody and reconstruction gaps but
+  is not benchmark, planner-ranking, causal, safety, dissertation, release, or paper-facing
+  admission evidence.
 
 - `issue_5602_scenario_evidence_crosswalk_release_0_0_3_2026-07-17/`: generated
   `scenario_evidence_crosswalk.v1` instance (issue #5602 tooling) over the full

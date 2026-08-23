@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / (
     "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml"
 )
-SOURCE_COMMIT = "3651b343ecb4b56f7723a08c16e8b12d8dbd5080"
+SOURCE_COMMIT = "bc1294a19a837c4d4b9ef9086a2be4ca42dd85f3"
 EXPECTED_SCENARIOS = (
     "classic_urban_crossing_medium",
     "classic_cross_trap_high",

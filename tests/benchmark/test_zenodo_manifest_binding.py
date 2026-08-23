@@ -253,6 +253,8 @@ def test_recover_restores_manifest_bound_state_for_upload_and_verify(tmp_path: P
         ("version", "version DOI"),
         ("source", "metadata.related_identifiers"),
         ("metadata", "metadata.title"),
+        ("missing_submitted", "submitted state"),
+        ("invalid_submitted", "submitted state"),
         ("published", "unpublished draft"),
     ],
 )
@@ -277,6 +279,10 @@ def test_recover_rejects_draft_identity_metadata_and_state_drift(drift: str, err
         ]
     elif drift == "metadata":
         draft["metadata"]["title"] = "Different release"
+    elif drift == "missing_submitted":
+        draft.pop("submitted")
+    elif drift == "invalid_submitted":
+        draft["submitted"] = "false"
     else:
         draft["submitted"] = True
         draft["state"] = "done"

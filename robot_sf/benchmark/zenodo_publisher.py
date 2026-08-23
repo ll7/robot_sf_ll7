@@ -664,6 +664,9 @@ def recover(
         ),
         "recover draft",
     )
+    submitted = payload.get("submitted")
+    if not isinstance(submitted, bool):
+        raise ZenodoPublisherError("Zenodo recovery response omitted or invalid submitted state")
     state = _public_state(payload)
     if state.get("deposition_id") != deposition_id:
         raise ZenodoPublisherError("Zenodo recovery response changed the requested deposition ID")

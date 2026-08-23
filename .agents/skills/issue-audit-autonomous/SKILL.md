@@ -32,15 +32,18 @@ issue_audit_plan.v1.
 
        uv run python scripts/dev/issue_audit_core.py plan \
          --mode autonomous --include-comments \
-         --max-wall-seconds 120 \
+         --max-closed-pr-pages 50 \
+         --max-wall-seconds 420 \
          --output output/issue_audit_plan.json
 
    Do not use Project #5 as a mutex or as a source of readiness evidence.
 2. Inspect schema, counts, and truncation_or_errors. The command has a
    fail-closed aggregate REST wall-time budget in addition to each individual
-   gh command timeout. If the budget expires, preserve affected issues and
-   stop mutation application; the emitted partial inventory is not a complete
-   audit.
+   gh command timeout. Closed-PR history has an independent 50-page budget so
+   repository growth does not widen every other REST source. If either budget
+   expires, preserve affected issues and stop mutation application; the emitted
+   partial inventory is not a complete audit. Increase a bounded source budget
+   only when current repository counts justify it.
 3. Apply only the mutations already present in the plan:
 
        uv run python scripts/dev/issue_audit_core.py apply \

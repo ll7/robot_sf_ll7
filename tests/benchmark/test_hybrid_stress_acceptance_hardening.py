@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from robot_sf.benchmark import release_acceptance
 from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
 from robot_sf.benchmark.camera_ready._preflight import _config_hash_payload, _scenario_matrix_hash
 from robot_sf.benchmark.camera_ready._run_state import validate_campaign_integrity
@@ -321,6 +322,54 @@ def test_stress_provenance_and_integrity_bypasses_fail_closed(
     assert report["diagnostic_success"] is False
 
 
+def test_sidecar_runtime_identity_and_input_aliases_fail_closed_together(
+    stress_fixture: tuple[Path, Any, Any],
+) -> None:
+    """A coherent-looking sidecar still fails when its independent aliases drift."""
+    root, manifest, campaign_config = stress_fixture
+    episodes_path = _first_row_path(root, "prediction_planner")
+    sidecar_path = episodes_path.with_name(f"{episodes_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["run"].update({"repo_commit": "b" * 40, "runner": "other.runner"})
+    sidecar["completeness"]["status"] = "partial"
+    sidecar["campaign_identity"].update(
+        {
+            "algorithm": "goal",
+            "suite_key": "other",
+            "scenario_matrix_hash": "wrong",
+            "total_jobs": 4,
+            "written": 4,
+        }
+    )
+    sidecar["inputs"]["schema_path"].update({"path": "wrong/schema.json", "sha256": "wrong"})
+    sidecar["inputs"]["scenario_matrix"].update({"path": "wrong/scenarios.yaml", "sha256": "wrong"})
+    sidecar["raw_artifacts"] = []
+    sidecar["rows"] = sidecar["rows"][:-1]
+    _write_json(sidecar_path, sidecar)
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "invalid"
+    assert any("sidecar source commit" in item for item in report["blockers"])
+    assert any("sidecar must bind every episode row" in item for item in report["blockers"])
+
+
+@pytest.mark.parametrize("payload", ("{bad\n", "[]\n"))
+def test_malformed_sidecar_payload_fails_closed(
+    stress_fixture: tuple[Path, Any, Any], payload: str
+) -> None:
+    """Unreadable and non-object provenance sidecars are rejected explicitly."""
+    root, manifest, campaign_config = stress_fixture
+    episodes_path = _first_row_path(root, "prediction_planner")
+    sidecar_path = episodes_path.with_name(f"{episodes_path.name}.provenance.json")
+    sidecar_path.write_text(payload, encoding="utf-8")
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "invalid"
+    assert any("sidecar" in item for item in report["blockers"])
+
+
 @pytest.mark.parametrize(
     "field",
     (
@@ -357,6 +406,201 @@ def test_campaign_bindings_cannot_be_repointed(
     report = _acceptance(root, manifest, campaign_config)
 
     assert report["status"] == "invalid", report["blockers"]
+
+
+def test_all_campaign_metadata_aliases_fail_closed_together(
+    stress_fixture: tuple[Path, Any, Any],
+) -> None:
+    """Exercise every campaign-level alias instead of relying on one happy-path source."""
+    root, manifest, campaign_config = stress_fixture
+    campaign_manifest_path = root / "campaign_manifest.json"
+    campaign_manifest = json.loads(campaign_manifest_path.read_text(encoding="utf-8"))
+    campaign_manifest["git"]["commit"] = "b" * 40
+    campaign_manifest["config_hash"] = "wrong"
+    campaign_manifest["scenario_matrix"] = "wrong/scenarios.yaml"
+    campaign_manifest["scenario_matrix_hash"] = "wrong"
+    campaign_manifest["seed_policy"].update(
+        {
+            "mode": "random",
+            "seed_set": "wrong",
+            "seeds": [999],
+            "resolved_seeds": [999],
+            "seed_sets_path": "wrong/seed_sets.yaml",
+        }
+    )
+    campaign_manifest["route_clearance_certifications_path"] = "wrong/routes.yaml"
+    campaign_manifest["snqi_weights_path"] = "wrong/weights.yaml"
+    campaign_manifest["snqi_baseline_path"] = "wrong/baseline.yaml"
+    _write_json(campaign_manifest_path, campaign_manifest)
+
+    run_meta_path = root / "run_meta.json"
+    run_meta = json.loads(run_meta_path.read_text(encoding="utf-8"))
+    run_meta["repo"]["commit"] = "b" * 40
+    run_meta["matrix_path"] = "wrong/scenarios.yaml"
+    run_meta["scenario_matrix_hash"] = "wrong"
+    run_meta["seed_policy"].update(
+        {
+            "mode": "random",
+            "seed_set": "wrong",
+            "seeds": [999],
+            "resolved_seeds": [999],
+            "seed_sets_path": "wrong/seed_sets.yaml",
+        }
+    )
+    _write_json(run_meta_path, run_meta)
+
+    run_manifest_path = root / "manifest.json"
+    run_manifest = json.loads(run_manifest_path.read_text(encoding="utf-8"))
+    run_manifest.update({"git_hash": "b" * 40, "scenario_matrix_hash": "wrong"})
+    _write_json(run_manifest_path, run_manifest)
+
+    summary_path = root / "reports" / "campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["campaign"].update(
+        {
+            "git_hash": "b" * 40,
+            "scenario_matrix": "wrong/scenarios.yaml",
+            "scenario_matrix_hash": "wrong",
+            "kinematics_matrix": ["holonomic"],
+            "snqi_weights_sha256": "wrong",
+            "snqi_baseline_sha256": "wrong",
+        }
+    )
+    _write_json(summary_path, summary)
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "invalid"
+    assert len(report["blockers"]) >= 20
+
+
+def test_missing_campaign_metadata_objects_fail_closed(
+    stress_fixture: tuple[Path, Any, Any],
+) -> None:
+    """Every required campaign metadata object is independently mandatory."""
+    root, manifest, campaign_config = stress_fixture
+    for path in (
+        root / "campaign_manifest.json",
+        root / "run_meta.json",
+        root / "manifest.json",
+    ):
+        path.unlink()
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "invalid"
+    assert any("campaign_manifest.json" in item for item in report["blockers"])
+    assert any("run_meta.json" in item for item in report["blockers"])
+
+    (root / "reports" / "campaign_summary.json").unlink()
+    missing_summary = _acceptance(root, manifest, campaign_config)
+    assert missing_summary["status"] == "invalid"
+    assert any("campaign_summary.json" in item for item in missing_summary["blockers"])
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "root_missing",
+        "empty",
+        "traversal",
+        "incomplete_arm",
+        "absolute_outside",
+        "absolute_not_run",
+        "absolute_wrong_arm",
+        "missing_runs",
+        "wrong_arm",
+        "wrong_shape",
+        "symlink_artifact",
+        "missing_file",
+    ),
+)
+def test_stress_artifact_path_rejects_ambiguous_or_escaping_inputs(  # noqa: C901
+    tmp_path: Path, case: str
+) -> None:
+    """Artifact resolution accepts only the exact campaign arm file."""
+    root = tmp_path / "campaign"
+    root.mkdir()
+    expected = root / "runs" / "planner__differential_drive" / "episodes.jsonl"
+    expected.parent.mkdir(parents=True)
+    expected.write_text("{}\n", encoding="utf-8")
+    raw_path: str = "runs/planner__differential_drive/episodes.jsonl"
+    arm: tuple[str, str] | None = ("planner", "differential_drive")
+
+    if case == "root_missing":
+        root = tmp_path / "missing"
+    elif case == "empty":
+        raw_path = ""
+    elif case == "traversal":
+        raw_path = "runs/../planner__differential_drive/episodes.jsonl"
+    elif case == "incomplete_arm":
+        arm = ("", "differential_drive")
+    elif case == "absolute_outside":
+        outside = tmp_path / "outside" / "episodes.jsonl"
+        outside.parent.mkdir()
+        outside.write_text("{}\n", encoding="utf-8")
+        raw_path, arm = str(outside), None
+    elif case == "absolute_not_run":
+        wrong = root / "other" / "episodes.jsonl"
+        wrong.parent.mkdir()
+        wrong.write_text("{}\n", encoding="utf-8")
+        raw_path, arm = str(wrong), None
+    elif case == "absolute_wrong_arm":
+        wrong = root / "runs" / "other__differential_drive" / "episodes.jsonl"
+        wrong.parent.mkdir()
+        wrong.write_text("{}\n", encoding="utf-8")
+        raw_path = str(wrong)
+    elif case == "missing_runs":
+        raw_path = "planner__differential_drive/episodes.jsonl"
+    elif case == "wrong_arm":
+        raw_path = "runs/other__differential_drive/episodes.jsonl"
+    elif case == "wrong_shape":
+        raw_path, arm = "runs/planner__differential_drive/nested/episodes.jsonl", None
+    elif case == "symlink_artifact":
+        target = tmp_path / "target.jsonl"
+        target.write_text("{}\n", encoding="utf-8")
+        expected.unlink()
+        expected.symlink_to(target)
+    elif case == "missing_file":
+        expected.unlink()
+
+    with pytest.raises(ValueError):
+        release_acceptance._resolve_stress_artifact_path(root, raw_path, arm=arm)
+
+
+def test_stress_metadata_readers_reject_malformed_inputs(tmp_path: Path) -> None:
+    """Malformed JSONL and metadata objects cannot enter stress acceptance."""
+    invalid_jsonl = tmp_path / "invalid.jsonl"
+    invalid_jsonl.write_text("{bad\n", encoding="utf-8")
+    rows, error = release_acceptance._read_episode_rows(invalid_jsonl)
+    assert rows == [] and "invalid JSON" in str(error)
+
+    list_jsonl = tmp_path / "list.jsonl"
+    list_jsonl.write_text("[]\n", encoding="utf-8")
+    rows, error = release_acceptance._read_episode_rows(list_jsonl)
+    assert rows == [] and "must be an object" in str(error)
+
+    rows, error = release_acceptance._read_episode_rows(tmp_path / "missing.jsonl")
+    assert rows == [] and "cannot read" in str(error)
+
+    (tmp_path / "metadata.json").write_text("[]\n", encoding="utf-8")
+    payload, error = release_acceptance._read_campaign_object(tmp_path, "metadata.json")
+    assert payload is None and "must contain a JSON object" in str(error)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        {"planner_runtime": {"emergency_stop_count": -1}},
+        {"planner_runtime": {"emergency_stop": True}},
+        {"algorithm_metadata": {"history": [{"planner_mode": "emergency_stop"}]}},
+    ),
+)
+def test_emergency_marker_rejects_invalid_counter_boolean_and_nested_list(
+    payload: dict[str, Any],
+) -> None:
+    """All legacy emergency marker shapes are detected."""
+    assert release_acceptance._emergency_stop_marker(payload) is not None
 
 
 def test_real_episode_schema_may_omit_repeated_kinematics_aliases(

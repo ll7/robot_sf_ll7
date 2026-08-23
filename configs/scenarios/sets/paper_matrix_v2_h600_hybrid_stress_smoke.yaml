@@ -1,0 +1,23 @@
+# Pre-release stress smoke for the S30/H600 hybrid-arm recovery.
+#
+# The selected cells are a deliberately small, predeclared diagnostic slice.  They
+# were chosen from cells that reported a positive native hybrid fallback counter in
+# all four hybrid arms in issue4365/job13376-original and, where available, in the
+# rejected issue7742 job14730.  The campaign config fixes the common seed to 116.
+# This file selects scenario definitions only; the campaign config owns the seed
+# override and production horizon.
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - ../archetypes/classic_cross_trap.yaml
+  - ../archetypes/classic_doorway.yaml
+  - ../archetypes/classic_urban_crossing.yaml
+  - ../single/francis2023_exiting_elevator.yaml
+  - ../single/francis2023_robot_crowding.yaml
+select_scenarios:
+  - classic_urban_crossing_medium
+  - classic_cross_trap_high
+  - classic_doorway_high
+  - francis2023_exiting_elevator
+  - francis2023_robot_crowding
+map_search_paths:
+  - ../../../maps/svg_maps

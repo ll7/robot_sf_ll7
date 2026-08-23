@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -39,6 +40,20 @@ _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 DIAGNOSTIC_STRESS_RELEASE_KIND = "benchmark-stress-smoke"
 STRESS_SMOKE_CONTRACT_SCHEMA_VERSION = "hybrid-release-stress-smoke.v1"
 STRESS_SMOKE_SOURCE_POLICY = "exact-immutable-worktree-sha-required"
+STRESS_SMOKE_EXPECTED_PLANNER_ARMS = 14
+STRESS_SMOKE_EXPECTED_SCENARIO_COUNT = 5
+STRESS_SMOKE_EXPECTED_SEED = 116
+STRESS_SMOKE_EXPECTED_EPISODE_CELLS = 70
+STRESS_SMOKE_EXPECTED_HORIZON_STEPS = 600
+STRESS_SMOKE_EXPECTED_DT = 0.1
+STRESS_SMOKE_EXPECTED_KINEMATICS = "differential_drive"
+STRESS_SMOKE_EXPECTED_SCENARIO_IDS = (
+    "classic_urban_crossing_medium",
+    "classic_cross_trap_high",
+    "classic_doorway_high",
+    "francis2023_exiting_elevator",
+    "francis2023_robot_crowding",
+)
 
 
 def _load_mapping(path: Path) -> dict[str, Any]:
@@ -75,6 +90,17 @@ def _resolve_manifest_side_path(manifest_path: Path, value: Any) -> Path:
     """
     candidate = Path(str(value))
     return candidate if candidate.is_absolute() else (manifest_path.parent / candidate).resolve()
+
+
+def _has_symlink_component(path: Path) -> bool:
+    """Return whether a lexical path contains a symlink component."""
+    lexical = Path(path.absolute())
+    current = Path(lexical.anchor)
+    for part in lexical.parts[1:]:
+        current /= part
+        if current.is_symlink():
+            return True
+    return False
 
 
 @dataclass(frozen=True)
@@ -134,6 +160,17 @@ class BenchmarkReleaseManifest:
     metadata_sha256: str | None = None
     stress_smoke_review_base_commit: str | None = None
     stress_smoke_source_policy: str | None = None
+    stress_smoke_expected_episode_cells: int | None = None
+    stress_smoke_expected_horizon_steps: int | None = None
+    stress_smoke_expected_dt: float | None = None
+    stress_smoke_expected_kinematics: str | None = None
+    stress_smoke_required_hybrid_arms: tuple[str, ...] = ()
+    stress_smoke_suite_policy_path: Path | None = None
+    stress_smoke_suite_policy_sha256: str | None = None
+    stress_smoke_seed_sets_path: Path | None = None
+    stress_smoke_seed_sets_sha256: str | None = None
+    stress_smoke_route_certification_path: Path | None = None
+    stress_smoke_route_certification_sha256: str | None = None
     stress_smoke_scenario_source_pins: tuple[StressSmokeAssetPin, ...] = ()
     stress_smoke_hybrid_config_pins: tuple[StressSmokeAssetPin, ...] = ()
 
@@ -151,6 +188,32 @@ def _resolve_required_file(manifest_path: Path, value: Any, field_name: str) -> 
         raise FileNotFoundError(f"{field_name} not found: {resolved}")
     if not resolved.is_file():
         raise ValueError(f"{field_name} must be a file path, got non-file path: {resolved}")
+    return resolved
+
+
+def _resolve_stress_contract_file(manifest_path: Path, value: Any, field_name: str) -> Path:
+    """Resolve one stress asset inside this checkout, rejecting symlink escapes.
+
+    Returns:
+        Existing repository-contained asset path.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty path string")
+    candidate = Path(value)
+    candidate = candidate if candidate.is_absolute() else manifest_path.parent / candidate
+    if _has_symlink_component(candidate):
+        raise ValueError(f"{field_name} must not contain symlink components: {candidate}")
+    resolved = candidate.resolve()
+    if not resolved.exists():
+        raise FileNotFoundError(f"{field_name} not found: {resolved}")
+    if not resolved.is_file():
+        raise ValueError(f"{field_name} must be a file path, got non-file path: {resolved}")
+    repository_root = get_repository_root().resolve()
+    try:
+        resolved.relative_to(repository_root)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be contained by the repository checkout") from exc
+
     return resolved
 
 
@@ -370,7 +433,7 @@ def _load_manifest_release_metadata(payload: dict[str, Any]) -> dict[str, str | 
     }
 
 
-def _load_stress_smoke_contract(  # noqa: C901
+def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
     manifest_path: Path, payload: dict[str, Any]
 ) -> dict[str, Any]:
     """Load the diagnostic stress contract without pretending to pin its own commit.
@@ -386,6 +449,17 @@ def _load_stress_smoke_contract(  # noqa: C901
     defaults: dict[str, Any] = {
         "stress_smoke_review_base_commit": None,
         "stress_smoke_source_policy": None,
+        "stress_smoke_expected_episode_cells": None,
+        "stress_smoke_expected_horizon_steps": None,
+        "stress_smoke_expected_dt": None,
+        "stress_smoke_expected_kinematics": None,
+        "stress_smoke_required_hybrid_arms": (),
+        "stress_smoke_suite_policy_path": None,
+        "stress_smoke_suite_policy_sha256": None,
+        "stress_smoke_seed_sets_path": None,
+        "stress_smoke_seed_sets_sha256": None,
+        "stress_smoke_route_certification_path": None,
+        "stress_smoke_route_certification_sha256": None,
         "stress_smoke_scenario_source_pins": (),
         "stress_smoke_hybrid_config_pins": (),
     }
@@ -409,6 +483,146 @@ def _load_stress_smoke_contract(  # noqa: C901
         raise ValueError(
             f"stress_smoke_contract.source_commit_policy must be {STRESS_SMOKE_SOURCE_POLICY}"
         )
+
+    def _required_int(field_name: str, expected: int) -> int:
+        value = contract.get(field_name)
+        if isinstance(value, bool) or not isinstance(value, int) or value != expected:
+            raise ValueError(
+                f"stress_smoke_contract.{field_name} must be the fixed value {expected}"
+            )
+        return value
+
+    def _required_float(field_name: str, expected: float) -> float:
+        value = contract.get(field_name)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(
+                f"stress_smoke_contract.{field_name} must be the fixed value {expected}"
+            )
+        normalized = float(value)
+        if not math.isfinite(normalized) or normalized != expected:
+            raise ValueError(
+                f"stress_smoke_contract.{field_name} must be the fixed value {expected}"
+            )
+        return normalized
+
+    expected_episode_cells = _required_int(
+        "expected_episode_cells", STRESS_SMOKE_EXPECTED_EPISODE_CELLS
+    )
+    expected_horizon_steps = _required_int(
+        "expected_horizon_steps", STRESS_SMOKE_EXPECTED_HORIZON_STEPS
+    )
+    expected_dt = _required_float("expected_dt", STRESS_SMOKE_EXPECTED_DT)
+    expected_kinematics = str(contract.get("expected_kinematics", "")).strip().lower()
+    if expected_kinematics != STRESS_SMOKE_EXPECTED_KINEMATICS:
+        raise ValueError(
+            "stress_smoke_contract.expected_kinematics must be "
+            f"{STRESS_SMOKE_EXPECTED_KINEMATICS!r}"
+        )
+    raw_hybrid_arms = contract.get("required_hybrid_arms")
+    if not isinstance(raw_hybrid_arms, list) or not raw_hybrid_arms:
+        raise ValueError("stress_smoke_contract.required_hybrid_arms must be a non-empty list")
+    required_hybrid_arms = tuple(str(value).strip() for value in raw_hybrid_arms)
+    if any(not value for value in required_hybrid_arms) or len(set(required_hybrid_arms)) != len(
+        required_hybrid_arms
+    ):
+        raise ValueError("stress_smoke_contract.required_hybrid_arms must be unique non-empty keys")
+
+    scenario_section = payload.get("scenario")
+    if not isinstance(scenario_section, Mapping):
+        raise ValueError("scenario must be a mapping for diagnostic stress smoke")
+    seed_policy = payload.get("seed_policy")
+    if not isinstance(seed_policy, Mapping):
+        raise ValueError("seed_policy must be a mapping for diagnostic stress smoke")
+
+    suite_policy_path = _resolve_stress_contract_file(
+        manifest_path,
+        scenario_section.get("suite_policy_path"),
+        "scenario.suite_policy_path",
+    )
+    suite_policy_sha256 = str(scenario_section.get("suite_policy_sha256", "")).strip().lower()
+    if _SHA256_RE.fullmatch(suite_policy_sha256) is None:
+        raise ValueError("scenario.suite_policy_sha256 must be a 64-character SHA-256")
+    seed_sets_path = _resolve_stress_contract_file(
+        manifest_path,
+        seed_policy.get("seed_sets_path"),
+        "seed_policy.seed_sets_path",
+    )
+    seed_sets_sha256 = str(seed_policy.get("seed_sets_sha256", "")).strip().lower()
+    if _SHA256_RE.fullmatch(seed_sets_sha256) is None:
+        raise ValueError("seed_policy.seed_sets_sha256 must be a 64-character SHA-256")
+    route_certification_path = _resolve_stress_contract_file(
+        manifest_path,
+        scenario_section.get("route_certification_path"),
+        "scenario.route_certification_path",
+    )
+    route_certification_sha256 = str(
+        scenario_section.get("route_certification_sha256", "")
+    ).strip().lower()
+    if _SHA256_RE.fullmatch(route_certification_sha256) is None:
+        raise ValueError("scenario.route_certification_sha256 must be a 64-character SHA-256")
+
+    pinned_assets = contract.get("pinned_assets")
+    if not isinstance(pinned_assets, Mapping):
+        raise ValueError("stress_smoke_contract.pinned_assets must be a mapping")
+
+    def _pinned_asset(name: str) -> tuple[Path, str]:
+        raw_asset = pinned_assets.get(name)
+        if not isinstance(raw_asset, Mapping):
+            raise ValueError(f"stress_smoke_contract.pinned_assets.{name} must be a mapping")
+        path = _resolve_stress_contract_file(
+            manifest_path,
+            raw_asset.get("path")
+            or raw_asset.get(f"{name}_path"),
+            f"stress_smoke_contract.pinned_assets.{name}_path",
+        )
+        sha256 = str(
+            raw_asset.get("sha256") or raw_asset.get(f"{name}_sha256") or ""
+        ).strip().lower()
+        if _SHA256_RE.fullmatch(sha256) is None:
+            raise ValueError(
+                f"stress_smoke_contract.pinned_assets.{name}_sha256 must be a 64-character SHA-256"
+            )
+        return path, sha256
+
+    # The checked-in contract currently uses flattened keys.  Accepting a
+    # mapping form here would make the schema unnecessarily ambiguous, so
+    # normalize both forms through one explicit path/hash pair and compare it
+    # with the top-level campaign inputs below.
+    seed_pin_raw = pinned_assets.get("seed_sets")
+    route_pin_raw = pinned_assets.get("route_certification")
+    if isinstance(seed_pin_raw, Mapping):
+        seed_pin_path, seed_pin_sha256 = _pinned_asset("seed_sets")
+    else:
+        seed_pin_path = _resolve_stress_contract_file(
+            manifest_path,
+            pinned_assets.get("seed_sets_path"),
+            "stress_smoke_contract.pinned_assets.seed_sets_path",
+        )
+        seed_pin_sha256 = str(pinned_assets.get("seed_sets_sha256", "")).strip().lower()
+        if _SHA256_RE.fullmatch(seed_pin_sha256) is None:
+            raise ValueError(
+                "stress_smoke_contract.pinned_assets.seed_sets_sha256 must be a 64-character SHA-256"
+            )
+    if isinstance(route_pin_raw, Mapping):
+        route_pin_path, route_pin_sha256 = _pinned_asset("route_certification")
+    else:
+        route_pin_path = _resolve_stress_contract_file(
+            manifest_path,
+            pinned_assets.get("route_certification_path"),
+            "stress_smoke_contract.pinned_assets.route_certification_path",
+        )
+        route_pin_sha256 = str(pinned_assets.get("route_certification_sha256", "")).strip().lower()
+        if _SHA256_RE.fullmatch(route_pin_sha256) is None:
+            raise ValueError(
+                "stress_smoke_contract.pinned_assets.route_certification_sha256 must be a 64-character SHA-256"
+            )
+    if (seed_pin_path, seed_pin_sha256) != (seed_sets_path, seed_sets_sha256):
+        raise ValueError("stress_smoke_contract seed-set pin must match seed_policy")
+    if (route_pin_path, route_pin_sha256) != (
+        route_certification_path,
+        route_certification_sha256,
+    ):
+        raise ValueError("stress_smoke_contract route-certification pin must match scenario")
 
     def _asset_pins(
         field_name: str, *, planner_key_required: bool
@@ -463,6 +677,17 @@ def _load_stress_smoke_contract(  # noqa: C901
     return {
         "stress_smoke_review_base_commit": review_base_commit,
         "stress_smoke_source_policy": source_policy,
+        "stress_smoke_expected_episode_cells": expected_episode_cells,
+        "stress_smoke_expected_horizon_steps": expected_horizon_steps,
+        "stress_smoke_expected_dt": expected_dt,
+        "stress_smoke_expected_kinematics": expected_kinematics,
+        "stress_smoke_required_hybrid_arms": required_hybrid_arms,
+        "stress_smoke_suite_policy_path": suite_policy_path,
+        "stress_smoke_suite_policy_sha256": suite_policy_sha256,
+        "stress_smoke_seed_sets_path": seed_sets_path,
+        "stress_smoke_seed_sets_sha256": seed_sets_sha256,
+        "stress_smoke_route_certification_path": route_certification_path,
+        "stress_smoke_route_certification_sha256": route_certification_sha256,
         "stress_smoke_scenario_source_pins": _asset_pins(
             "scenario_sources", planner_key_required=False
         ),
@@ -708,7 +933,7 @@ def validate_release_manifest(
     }
 
 
-def _scenario_matrix_include_paths(
+def _scenario_matrix_include_paths(  # noqa: C901
     path: Path, *, visited: set[Path] | None = None
 ) -> tuple[Path, ...]:
     """Resolve scenario matrix include files for stress-contract binding.
@@ -717,7 +942,13 @@ def _scenario_matrix_include_paths(
         Included scenario source paths in deterministic traversal order.
     """
     seen = visited if visited is not None else set()
+    if _has_symlink_component(path):
+        raise ValueError(f"scenario matrix include path contains a symlink: {path}")
     resolved = path.resolve()
+    try:
+        resolved.relative_to(get_repository_root().resolve())
+    except ValueError as exc:
+        raise ValueError(f"scenario matrix include escapes repository: {resolved}") from exc
     if resolved in seen:
         raise ValueError(f"scenario matrix include cycle detected at {resolved}")
     seen.add(resolved)
@@ -736,7 +967,10 @@ def _scenario_matrix_include_paths(
         for raw_include in raw_includes:
             include = Path(str(raw_include))
             if not include.is_absolute():
-                include = (resolved.parent / include).resolve()
+                include = resolved.parent / include
+            if _has_symlink_component(include):
+                raise ValueError(f"scenario matrix include path contains a symlink: {include}")
+            include = include.resolve()
             includes.append(include)
         nested: list[Path] = []
         for include in includes:
@@ -747,7 +981,7 @@ def _scenario_matrix_include_paths(
         seen.remove(resolved)
 
 
-def _validate_stress_smoke_contract(  # noqa: C901
+def _validate_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
     manifest: BenchmarkReleaseManifest,
     cfg: CampaignConfig,
     problems: list[str],
@@ -757,6 +991,89 @@ def _validate_stress_smoke_contract(  # noqa: C901
         return
     if manifest.stress_smoke_review_base_commit is None:
         problems.append("stress_smoke_contract.review_base_commit is missing")
+    if manifest.stress_smoke_expected_episode_cells != STRESS_SMOKE_EXPECTED_EPISODE_CELLS:
+        problems.append("stress_smoke_contract.expected_episode_cells must be 70")
+    if manifest.stress_smoke_expected_horizon_steps != STRESS_SMOKE_EXPECTED_HORIZON_STEPS:
+        problems.append("stress_smoke_contract.expected_horizon_steps must be 600")
+    if manifest.stress_smoke_expected_dt != STRESS_SMOKE_EXPECTED_DT:
+        problems.append("stress_smoke_contract.expected_dt must be 0.1")
+    if manifest.stress_smoke_expected_kinematics != STRESS_SMOKE_EXPECTED_KINEMATICS:
+        problems.append(
+            "stress_smoke_contract.expected_kinematics must be 'differential_drive'"
+        )
+
+    enabled_planners = tuple(planner for planner in cfg.planners if planner.enabled)
+    if len(enabled_planners) != STRESS_SMOKE_EXPECTED_PLANNER_ARMS:
+        problems.append("stress smoke campaign must enable exactly 14 planner arms")
+    if tuple(str(value).strip().lower() for value in cfg.kinematics_matrix) != (
+        STRESS_SMOKE_EXPECTED_KINEMATICS,
+    ):
+        problems.append("stress smoke campaign kinematics must be differential_drive only")
+    try:
+        scenarios = _load_campaign_scenarios(cfg)
+        scenario_ids = tuple(
+            str(
+                scenario.get("id")
+                or scenario.get("scenario_id")
+                or scenario.get("name")
+                or ""
+            ).strip()
+            for scenario in scenarios
+        )
+        if scenario_ids != STRESS_SMOKE_EXPECTED_SCENARIO_IDS:
+            problems.append("stress smoke campaign scenarios do not match the fixed five-cell roster")
+        resolved_seeds = tuple(_resolved_seed_inventory(scenarios))
+        if resolved_seeds != (STRESS_SMOKE_EXPECTED_SEED,):
+            problems.append("stress smoke campaign must resolve exactly seed 116")
+    except (OSError, TypeError, ValueError, KeyError, yaml.YAMLError) as exc:
+        problems.append(f"stress smoke campaign axes cannot be resolved: {exc}")
+
+    if manifest.stress_smoke_required_hybrid_arms != tuple(
+        pin.planner_key for pin in manifest.stress_smoke_hybrid_config_pins
+    ):
+        problems.append("stress_smoke_contract.required_hybrid_arms does not match hybrid pins")
+    for label, path, sha256 in (
+        (
+            "suite_policy",
+            manifest.stress_smoke_suite_policy_path,
+            manifest.stress_smoke_suite_policy_sha256,
+        ),
+        (
+            "seed_sets",
+            manifest.stress_smoke_seed_sets_path,
+            manifest.stress_smoke_seed_sets_sha256,
+        ),
+        (
+            "route_certification",
+            manifest.stress_smoke_route_certification_path,
+            manifest.stress_smoke_route_certification_sha256,
+        ),
+    ):
+        if path is None or sha256 is None:
+            problems.append(f"stress_smoke_contract.{label} pin is missing")
+            continue
+        if not path.is_file():
+            problems.append(f"stress_smoke_contract.{label} asset is missing")
+            continue
+        try:
+            observed = _sha256_file(path)
+        except OSError:
+            problems.append(f"stress_smoke_contract.{label} asset cannot be read")
+        else:
+            if observed != sha256:
+                problems.append(f"stress_smoke_contract.{label} hash does not match pinned asset")
+
+    if manifest.stress_smoke_seed_sets_path is not None:
+        if cfg.seed_policy.seed_sets_path.resolve() != manifest.stress_smoke_seed_sets_path.resolve():
+            problems.append("stress smoke seed-set path does not match campaign config")
+    if manifest.stress_smoke_route_certification_path is not None:
+        if cfg.route_clearance_certifications_path is None:
+            problems.append("stress smoke route-certification asset is missing from campaign config")
+        elif (
+            cfg.route_clearance_certifications_path.resolve()
+            != manifest.stress_smoke_route_certification_path.resolve()
+        ):
+            problems.append("stress smoke route-certification path does not match campaign config")
     for field_name, pins in (
         ("scenario_sources", manifest.stress_smoke_scenario_source_pins),
         ("hybrid_configs", manifest.stress_smoke_hybrid_config_pins),
@@ -1058,6 +1375,9 @@ def validate_stress_smoke_runtime_identity(
     *,
     current_source_commit: str,
     launch_expected_source_commit: str | None = None,
+    require_launch_pin: bool = False,
+    worktree_clean: bool | None = None,
+    require_clean_worktree: bool = False,
 ) -> dict[str, Any]:
     """Bind a diagnostic smoke to one exact runtime HEAD and optional launch pin.
 
@@ -1082,6 +1402,8 @@ def validate_stress_smoke_runtime_identity(
     if _GIT_SHA_RE.fullmatch(runtime_commit) is None:
         blockers.append("checked-out runtime source commit is not an exact 40-character SHA")
     launch_commit = None
+    if require_launch_pin and launch_expected_source_commit is None:
+        blockers.append("private/SLURM stress smoke requires SLURM_EXPECTED_PUBLIC_COMMIT")
     if launch_expected_source_commit is not None:
         launch_commit = str(launch_expected_source_commit).strip().lower()
         if _GIT_SHA_RE.fullmatch(launch_commit) is None:
@@ -1090,12 +1412,16 @@ def validate_stress_smoke_runtime_identity(
             blockers.append(
                 "checked-out runtime source commit does not match launch expected commit"
             )
+    if require_clean_worktree and worktree_clean is not True:
+        blockers.append("private/SLURM stress smoke requires a clean source worktree")
 
     return {
         "schema_version": "benchmark-stress-smoke-runtime-identity.v1",
         "status": "valid" if not blockers else "invalid",
         "runtime_source_commit": runtime_commit or None,
         "launch_expected_source_commit": launch_commit,
+        "worktree_clean": worktree_clean,
+        "private_launch_contract": bool(require_launch_pin or require_clean_worktree),
         "review_base_commit": getattr(manifest, "stress_smoke_review_base_commit", None),
         "source_commit_policy": getattr(manifest, "stress_smoke_source_policy", None),
         "blockers": blockers,
@@ -1148,6 +1474,41 @@ def build_release_provenance(
         payload["stress_smoke_contract"] = {
             "review_base_commit": manifest.stress_smoke_review_base_commit,
             "source_commit_policy": manifest.stress_smoke_source_policy,
+            "expected_episode_cells": manifest.stress_smoke_expected_episode_cells,
+            "expected_horizon_steps": manifest.stress_smoke_expected_horizon_steps,
+            "expected_dt": manifest.stress_smoke_expected_dt,
+            "expected_kinematics": manifest.stress_smoke_expected_kinematics,
+            "required_hybrid_arms": list(manifest.stress_smoke_required_hybrid_arms),
+            "suite_policy": {
+                "path": _repo_relative(manifest.stress_smoke_suite_policy_path)
+                if manifest.stress_smoke_suite_policy_path is not None
+                else None,
+                "sha256": manifest.stress_smoke_suite_policy_sha256,
+            },
+            "seed_sets": {
+                "path": _repo_relative(manifest.stress_smoke_seed_sets_path)
+                if manifest.stress_smoke_seed_sets_path is not None
+                else None,
+                "sha256": manifest.stress_smoke_seed_sets_sha256,
+            },
+            "route_certification": {
+                "path": _repo_relative(manifest.stress_smoke_route_certification_path)
+                if manifest.stress_smoke_route_certification_path is not None
+                else None,
+                "sha256": manifest.stress_smoke_route_certification_sha256,
+            },
+            "pinned_assets": {
+                "seed_sets_path": _repo_relative(manifest.stress_smoke_seed_sets_path)
+                if manifest.stress_smoke_seed_sets_path is not None
+                else None,
+                "seed_sets_sha256": manifest.stress_smoke_seed_sets_sha256,
+                "route_certification_path": _repo_relative(
+                    manifest.stress_smoke_route_certification_path
+                )
+                if manifest.stress_smoke_route_certification_path is not None
+                else None,
+                "route_certification_sha256": manifest.stress_smoke_route_certification_sha256,
+            },
             "scenario_sources": [
                 {
                     "path": _repo_relative(pin.path),
@@ -1268,6 +1629,41 @@ def build_resolved_release_manifest(
         payload["provenance"]["stress_smoke_contract"] = {
             "review_base_commit": manifest.stress_smoke_review_base_commit,
             "source_commit_policy": manifest.stress_smoke_source_policy,
+            "expected_episode_cells": manifest.stress_smoke_expected_episode_cells,
+            "expected_horizon_steps": manifest.stress_smoke_expected_horizon_steps,
+            "expected_dt": manifest.stress_smoke_expected_dt,
+            "expected_kinematics": manifest.stress_smoke_expected_kinematics,
+            "required_hybrid_arms": list(manifest.stress_smoke_required_hybrid_arms),
+            "suite_policy": {
+                "path": _repo_relative(manifest.stress_smoke_suite_policy_path)
+                if manifest.stress_smoke_suite_policy_path is not None
+                else None,
+                "sha256": manifest.stress_smoke_suite_policy_sha256,
+            },
+            "seed_sets": {
+                "path": _repo_relative(manifest.stress_smoke_seed_sets_path)
+                if manifest.stress_smoke_seed_sets_path is not None
+                else None,
+                "sha256": manifest.stress_smoke_seed_sets_sha256,
+            },
+            "route_certification": {
+                "path": _repo_relative(manifest.stress_smoke_route_certification_path)
+                if manifest.stress_smoke_route_certification_path is not None
+                else None,
+                "sha256": manifest.stress_smoke_route_certification_sha256,
+            },
+            "pinned_assets": {
+                "seed_sets_path": _repo_relative(manifest.stress_smoke_seed_sets_path)
+                if manifest.stress_smoke_seed_sets_path is not None
+                else None,
+                "seed_sets_sha256": manifest.stress_smoke_seed_sets_sha256,
+                "route_certification_path": _repo_relative(
+                    manifest.stress_smoke_route_certification_path
+                )
+                if manifest.stress_smoke_route_certification_path is not None
+                else None,
+                "route_certification_sha256": manifest.stress_smoke_route_certification_sha256,
+            },
             "scenario_sources": [
                 {
                     "path": _repo_relative(pin.path),
@@ -1377,6 +1773,14 @@ __all__ = [
     "HISTORICAL_ZENODO_CONCEPT_DOIS",
     "RELEASE_MANIFEST_SCHEMA_VERSION",
     "RELEASE_MANIFEST_SCHEMA_VERSION_V0_2",
+    "STRESS_SMOKE_EXPECTED_DT",
+    "STRESS_SMOKE_EXPECTED_EPISODE_CELLS",
+    "STRESS_SMOKE_EXPECTED_HORIZON_STEPS",
+    "STRESS_SMOKE_EXPECTED_KINEMATICS",
+    "STRESS_SMOKE_EXPECTED_PLANNER_ARMS",
+    "STRESS_SMOKE_EXPECTED_SCENARIO_COUNT",
+    "STRESS_SMOKE_EXPECTED_SCENARIO_IDS",
+    "STRESS_SMOKE_EXPECTED_SEED",
     "SUPPORTED_RELEASE_MANIFEST_SCHEMA_VERSIONS",
     "BenchmarkReleaseManifest",
     "StressSmokeAssetPin",

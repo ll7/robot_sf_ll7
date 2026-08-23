@@ -128,6 +128,30 @@ def _current_source_commit() -> str:
     return commit
 
 
+def _current_worktree_clean() -> bool:
+    """Return whether the release checkout has no tracked or untracked changes."""
+    completed = subprocess.run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+        cwd=get_repository_root(),
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise ReleaseResumeAdmissionError("unable to inspect release source worktree state")
+    return not bool(completed.stdout.strip())
+
+
+def _private_stress_launch() -> bool:
+    """Identify private/SLURM execution without treating local tests as cluster launches."""
+    return bool(
+        os.environ.get("SLURM_JOB_ID")
+        or "SLURM_EXPECTED_PUBLIC_COMMIT" in os.environ
+        or os.environ.get("RELEASE_PRIVATE_LAUNCH")
+    )
+
+
 def _fixed_campaign_root(*, output_root: Path | None, campaign_id: str) -> Path:
     """Resolve a fixed campaign directory without allowing path traversal."""
     base = (
@@ -405,6 +429,8 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     if stress_smoke:
         try:
             runtime_source_commit = _current_source_commit()
+            private_launch = _private_stress_launch()
+            worktree_clean = _current_worktree_clean() if private_launch else None
         except (ReleaseResumeAdmissionError, ValueError) as exc:
             runtime_source_admission = {
                 "schema_version": "benchmark-stress-smoke-runtime-identity.v1",
@@ -417,6 +443,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
                 manifest,
                 current_source_commit=runtime_source_commit,
                 launch_expected_source_commit=os.environ.get("SLURM_EXPECTED_PUBLIC_COMMIT"),
+                require_launch_pin=private_launch,
+                worktree_clean=worktree_clean,
+                require_clean_worktree=private_launch,
             )
         if runtime_source_admission["status"] != "valid":
             result = {
@@ -633,14 +662,26 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     result.update(run_payload)
     campaign_root = Path(str(run_payload["campaign_root"])).resolve()
 
+    post_manifest_validation: dict[str, Any] | None = None
+    if stress_smoke:
+        # Re-hash every stress input after execution.  A clean HEAD alone does
+        # not protect a long campaign from an asset being replaced in-place.
+        post_manifest_validation = validate_release_manifest(manifest, campaign_config=cfg)
+        result["post_run_manifest_validation"] = post_manifest_validation
+
     post_runtime_source_admission = runtime_source_admission
     if stress_smoke:
         try:
             post_runtime_source_commit = _current_source_commit()
+            private_launch = _private_stress_launch()
+            post_worktree_clean = _current_worktree_clean() if private_launch else None
             post_runtime_source_admission = validate_stress_smoke_runtime_identity(
                 manifest,
                 current_source_commit=post_runtime_source_commit,
                 launch_expected_source_commit=os.environ.get("SLURM_EXPECTED_PUBLIC_COMMIT"),
+                require_launch_pin=private_launch,
+                worktree_clean=post_worktree_clean,
+                require_clean_worktree=private_launch,
             )
             if post_runtime_source_commit != runtime_source_commit:
                 post_runtime_source_admission["status"] = "invalid"
@@ -714,6 +755,13 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
             diagnostic_acceptance.setdefault("blockers", []).append(
                 "required campaign artifacts are missing: " + ", ".join(missing)
             )
+        if post_manifest_validation is not None and post_manifest_validation["status"] != "valid":
+            diagnostic_acceptance["status"] = "invalid"
+            diagnostic_acceptance["diagnostic_success"] = False
+            for problem in post_manifest_validation.get("problems", []):
+                diagnostic_acceptance.setdefault("blockers", []).append(
+                    f"post-run manifest validation: {problem}"
+                )
         _record_diagnostic_stress_smoke_acceptance(campaign_root, diagnostic_acceptance)
         result["stress_smoke_runtime_identity"] = post_runtime_source_admission
         result["diagnostic_stress_smoke_acceptance"] = diagnostic_acceptance

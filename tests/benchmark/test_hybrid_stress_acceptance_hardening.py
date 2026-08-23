@@ -412,6 +412,26 @@ def test_row_alias_and_runtime_bypasses_fail_closed(
     assert report["diagnostic_success"] is False
 
 
+@pytest.mark.parametrize("trace_hash_matches", (True, False))
+def test_analysis_trace_config_hash_keeps_legacy_trace_binding(
+    stress_fixture: tuple[Path, Any, Any], trace_hash_matches: bool
+) -> None:
+    """Trace-mode provenance retains its trace hash without weakening row identity."""
+    root, manifest, campaign_config = stress_fixture
+    path = _first_row_path(root, "prediction_planner")
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    row = rows[0]
+    trace_hash = "trace-config-hash"
+    row["algorithm_metadata"]["analysis_trace"] = {"config_hash": trace_hash}
+    row["provenance"]["config_hash"] = trace_hash if trace_hash_matches else "wrong-trace-hash"
+    path.write_text("".join(json.dumps(item) + "\n" for item in rows), encoding="utf-8")
+    _refresh_sidecar_raw_hash(path)
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == ("valid" if trace_hash_matches else "invalid"), report["blockers"]
+
+
 def test_external_and_cross_campaign_paths_fail_closed(
     stress_fixture: tuple[Path, Any, Any], tmp_path: Path
 ) -> None:

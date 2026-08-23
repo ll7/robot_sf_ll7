@@ -1156,7 +1156,7 @@ def _stress_row_contract_blockers(  # noqa: C901, PLR0912, PLR0915
         )
     )
 
-    config_aliases = _alias_values(
+    row_config_aliases = _alias_values(
         row,
         (
             ("config_hash", row.get("config_hash", _MISSING)),
@@ -1164,7 +1164,6 @@ def _stress_row_contract_blockers(  # noqa: C901, PLR0912, PLR0915
                 "result_provenance.config_hash",
                 _nested_value(row, "result_provenance", "config_hash"),
             ),
-            ("provenance.config_hash", _nested_value(row, "provenance", "config_hash")),
         ),
     )
     scenario_params = row.get("scenario_params")
@@ -1176,11 +1175,45 @@ def _stress_row_contract_blockers(  # noqa: C901, PLR0912, PLR0915
     blockers.extend(
         f"{prefix}: {blocker}"
         for blocker in _alias_blockers(
-            config_aliases,
-            label="config",
+            row_config_aliases,
+            label="row config",
             expected=expected_row_config_hash,
         )
     )
+    provenance_config_hash = _nested_value(row, "provenance", "config_hash")
+    analysis_trace = _nested_value(row, "algorithm_metadata", "analysis_trace")
+    if isinstance(analysis_trace, Mapping):
+        trace_config_aliases = _alias_values(
+            row,
+            (
+                ("provenance.config_hash", provenance_config_hash),
+                (
+                    "algorithm_metadata.analysis_trace.config_hash",
+                    analysis_trace.get("config_hash", _MISSING),
+                ),
+            ),
+        )
+        blockers.extend(
+            f"{prefix}: {blocker}"
+            for blocker in _alias_blockers(
+                trace_config_aliases,
+                label="analysis trace config",
+            )
+        )
+    else:
+        if analysis_trace is not _MISSING and analysis_trace is not None:
+            blockers.append(f"{prefix}: algorithm_metadata.analysis_trace must be a mapping")
+        blockers.extend(
+            f"{prefix}: {blocker}"
+            for blocker in _alias_blockers(
+                _alias_values(
+                    row,
+                    (("provenance.config_hash", provenance_config_hash),),
+                ),
+                label="provenance config",
+                expected=expected_row_config_hash,
+            )
+        )
 
     algo_aliases = _alias_values(
         row,

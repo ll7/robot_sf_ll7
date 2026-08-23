@@ -79,6 +79,7 @@ from robot_sf.benchmark.map_runner.map_runner_trace import _trace_pedestrians
 from robot_sf.benchmark.map_runner_policies import safety_barrier as safety_barrier_policy_builder
 from robot_sf.benchmark.map_runner_policies.registry import build_registered_policy
 from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_spec
+from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
@@ -6013,6 +6014,11 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
     assert "simulation_step_trace" not in off["algorithm_metadata"]
     assert "simulation_step_trace" in on["algorithm_metadata"]
     assert on["algorithm_metadata"]["analysis_trace"]["steps"][0]["time_s"] == 0.0
+    assert on["config_hash"] == _config_hash(on["scenario_params"])
+    assert on["result_provenance"]["config_hash"] == on["config_hash"]
+    assert (
+        on["provenance"]["config_hash"] == on["algorithm_metadata"]["analysis_trace"]["config_hash"]
+    )
     # Compare the actual commands passed to env.step, not only the terminal
     # result. This catches profile-induced control changes.
     assert action_sequences[0] == action_sequences[1]

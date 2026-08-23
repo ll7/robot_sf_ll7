@@ -261,6 +261,7 @@ def _write_final_packet_fixture(
             "mem_gb": 256,
             "wall_clock": "36:00:00",
             "wall_clock_seconds": 129600,
+            "qos": "l40s-gpu",
         },
     }[resource_profile]
     packet = {
@@ -321,37 +322,49 @@ def _write_final_packet_fixture(
     packet_path.write_text(json.dumps(packet, sort_keys=True), encoding="utf-8")
     packet_hash = release_doctor._sha256(packet_path)
     queue_path = tmp_path / "queue.yaml"
-    submit_args = ",".join(
-        [
-            f"RELEASE_LAUNCH_PACKET_SHA256={packet_hash}",
-            f"RELEASE_CAMPAIGN_ID={campaign}",
-            "RELEASE_MANIFEST_PATH=configs/release_manifest",
-            "RELEASE_SCENARIO_PATH=configs/scenario_matrix",
-            "RELEASE_CHECKPOINT_RECEIPT_PATH=configs/checkpoint_staging_receipt",
-            "RELEASE_RUNTIME_SMOKE_RECEIPT_PATH=configs/runtime_smoke_receipt",
-            f"RELEASE_EXPECTED_CPUS={resources['cpus']}",
-            f"RELEASE_EXPECTED_GPUS={resources['gpus']}",
-            f"RELEASE_EXPECTED_MEM_GB={resources['mem_gb']}",
-            f"RELEASE_EXPECTED_WALLTIME={resources['wall_clock']}",
-            *(
-                f"{field}={value}"
-                for field, value in (
-                    ("RELEASE_MANIFEST_SHA256", identity_fields["release_manifest_sha256"]),
-                    ("RELEASE_CONFIG_SHA256", identity_fields["canonical_config_sha256"]),
-                    ("RELEASE_SCENARIO_SHA256", identity_fields["scenario_matrix_sha256"]),
-                    (
-                        "RELEASE_CHECKPOINT_RECEIPT_SHA256",
-                        identity_fields["checkpoint_receipt_sha256"],
-                    ),
-                    (
-                        "RELEASE_RUNTIME_SMOKE_RECEIPT_SHA256",
-                        identity_fields["runtime_smoke_receipt_sha256"],
-                    ),
-                    ("RELEASE_PUBLIC_SCRIPT_SHA256", identity_fields["public_entrypoint_sha256"]),
-                )
-            ),
-        ]
-    )
+    submit_identity = [
+        f"RELEASE_LAUNCH_PACKET_SHA256={packet_hash}",
+        f"RELEASE_CAMPAIGN_ID={campaign}",
+        "RELEASE_MANIFEST_PATH=configs/release_manifest",
+        "RELEASE_SCENARIO_PATH=configs/scenario_matrix",
+        "RELEASE_CHECKPOINT_RECEIPT_PATH=configs/checkpoint_staging_receipt",
+        "RELEASE_RUNTIME_SMOKE_RECEIPT_PATH=configs/runtime_smoke_receipt",
+        f"RELEASE_EXPECTED_CPUS={resources['cpus']}",
+        f"RELEASE_EXPECTED_GPUS={resources['gpus']}",
+        f"RELEASE_EXPECTED_MEM_GB={resources['mem_gb']}",
+        f"RELEASE_EXPECTED_WALLTIME={resources['wall_clock']}",
+        *(
+            f"{field}={value}"
+            for field, value in (
+                ("RELEASE_MANIFEST_SHA256", identity_fields["release_manifest_sha256"]),
+                ("RELEASE_CONFIG_SHA256", identity_fields["canonical_config_sha256"]),
+                ("RELEASE_SCENARIO_SHA256", identity_fields["scenario_matrix_sha256"]),
+                (
+                    "RELEASE_CHECKPOINT_RECEIPT_SHA256",
+                    identity_fields["checkpoint_receipt_sha256"],
+                ),
+                (
+                    "RELEASE_RUNTIME_SMOKE_RECEIPT_SHA256",
+                    identity_fields["runtime_smoke_receipt_sha256"],
+                ),
+                ("RELEASE_PUBLIC_SCRIPT_SHA256", identity_fields["public_entrypoint_sha256"]),
+            )
+        ),
+    ]
+    scheduler_args = [
+        "--sbatch-arg",
+        f"--partition={resources['partition']}",
+        "--sbatch-arg",
+        f"--gres=gpu:{resources['gpu_type'].lower()}:{resources['gpus']}",
+        "--sbatch-arg",
+        f"--cpus-per-task={resources['cpus']}",
+        "--sbatch-arg",
+        f"--mem={resources['mem_gb']}G",
+        "--sbatch-arg",
+        f"--time={resources['wall_clock']}",
+        *(["--sbatch-arg", f"--qos={resources['qos']}"] if resources.get("qos") else []),
+    ]
+    submit_args = ",".join(submit_identity) + " " + " ".join(scheduler_args)
     queue_path.write_text(
         yaml.safe_dump(
             [
@@ -425,6 +438,28 @@ def test_final_cluster_check_accepts_frozen_imech192_packet(tmp_path: Path) -> N
     assert check.status == "pass", check.summary
 
 
+def test_final_cluster_check_accepts_count_only_gpu_gres(tmp_path: Path) -> None:
+    """A partition-bound Slurm GRES may omit a redundant GPU type."""
+    packet, queue = _write_final_packet_fixture(
+        tmp_path, resource_profile="imech192", frozen_status=True
+    )
+    queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+    queue_payload[0]["submit_args"] = queue_payload[0]["submit_args"].replace(
+        "--gres=gpu:l40s:1", "--gres=gpu:1"
+    )
+    queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+    check = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert check.status == "pass", check.summary
+
+
 @pytest.mark.parametrize(
     ("drift_target", "drift_value", "summary"),
     [
@@ -459,6 +494,113 @@ def test_final_cluster_check_rejects_imech192_resource_drift(
     )
     assert rejected.status == "fail"
     assert summary in rejected.summary
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement", "summary"),
+    [
+        ("--partition=l40s", "--partition=epyc-gpu", "scheduler --partition"),
+        ("--gres=gpu:l40s:1", "--gres=gpu:l40s:2", "scheduler --gres GPU count"),
+        ("--gres=gpu:l40s:1", "--gres=gpu:a100:1", "scheduler --gres GPU type"),
+        ("--cpus-per-task=36", "--cpus-per-task=32", "scheduler --cpus-per-task"),
+        ("--mem=256G", "--mem=128G", "scheduler --mem"),
+        ("--time=36:00:00", "--time=12:00:00", "scheduler --time"),
+        ("--qos=l40s-gpu", "--qos=other", "scheduler --qos"),
+    ],
+)
+def test_final_cluster_check_rejects_imech192_scheduler_arg_drift(
+    tmp_path: Path, original: str, replacement: str, summary: str
+) -> None:
+    """Actual scheduler flags cannot bypass the packet-bound route contract."""
+    packet, queue = _write_final_packet_fixture(
+        tmp_path, resource_profile="imech192", frozen_status=True
+    )
+    queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+    queue_payload[0]["submit_args"] = queue_payload[0]["submit_args"].replace(original, replacement)
+    queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert summary in rejected.summary
+
+
+@pytest.mark.parametrize("value", [True, 36.0, "36.5"])
+def test_final_cluster_check_rejects_non_strict_integer_queue_resource(
+    tmp_path: Path, value: object
+) -> None:
+    """Boolean, float, and fractional resource values cannot be truncated."""
+    packet, queue = _write_final_packet_fixture(
+        tmp_path, resource_profile="imech192", frozen_status=True
+    )
+    queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+    queue_payload[0]["cpus"] = value
+    queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert "private queue resource contract mismatch: cpus" in rejected.summary
+
+
+def test_final_cluster_check_accepts_exact_scheduler_time_as_duration_evidence(
+    tmp_path: Path,
+) -> None:
+    """A valid scheduler time can stand in for a legacy missing duration field."""
+    packet, queue = _write_final_packet_fixture(
+        tmp_path, resource_profile="imech192", frozen_status=True
+    )
+    queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+    queue_payload[0].pop("estimated_elapsed_sec")
+    queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+    check = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert check.status == "pass", check.summary
+
+
+def test_final_cluster_check_rejects_missing_duration_without_exact_scheduler_time(
+    tmp_path: Path,
+) -> None:
+    """A queue row must retain duration evidence when scheduler time drifts."""
+    packet, queue = _write_final_packet_fixture(
+        tmp_path, resource_profile="imech192", frozen_status=True
+    )
+    queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+    queue_payload[0].pop("estimated_elapsed_sec")
+    queue_payload[0]["submit_args"] = queue_payload[0]["submit_args"].replace(
+        "--time=36:00:00", "--time=12:00:00"
+    )
+    queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert "estimated_elapsed_sec or exact scheduler --time is required" in rejected.summary
 
 
 def test_final_cluster_check_rejects_missing_public_input(tmp_path: Path) -> None:

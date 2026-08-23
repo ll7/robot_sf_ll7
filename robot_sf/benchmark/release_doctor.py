@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shlex
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass
@@ -59,7 +60,7 @@ _RESOURCE_FIELDS = (
     "wall_clock",
 )
 _QUEUE_RESOURCE_FIELDS = ("cluster", "partition", "route_id", "cpus", "gpus", "mem_gb")
-_RESOURCE_STRING_FIELDS = {"cluster", "partition", "route_id", "gpu_type", "wall_clock"}
+_RESOURCE_STRING_FIELDS = {"cluster", "partition", "route_id", "gpu_type", "wall_clock", "qos"}
 
 _REQUIRED_PACKET_HASH_FIELDS = (
     "release_manifest_sha256",
@@ -391,6 +392,22 @@ def _is_concrete(value: Any) -> bool:
     return bool(text) and _PLACEHOLDER_RE.search(text) is None
 
 
+def _strict_int(value: Any) -> int | None:
+    """Parse a non-fractional integer without Python coercion surprises.
+
+    Returns:
+        An integer value, or ``None`` for booleans, floats, fractional strings,
+        and other non-integral values.
+    """
+    if isinstance(value, bool) or isinstance(value, float):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and re.fullmatch(r"[0-9]+", value.strip()):
+        return int(value.strip())
+    return None
+
+
 def _resource_values_match(field: str, actual: Any, expected: Any) -> bool:
     """Compare two resource values using the packet's typed contract.
 
@@ -399,10 +416,9 @@ def _resource_values_match(field: str, actual: Any, expected: Any) -> bool:
     """
     if field in _RESOURCE_STRING_FIELDS:
         return str(actual or "").strip().lower() == str(expected or "").strip().lower()
-    try:
-        return int(actual) == int(expected)
-    except (TypeError, ValueError):
-        return False
+    actual_int = _strict_int(actual)
+    expected_int = _strict_int(expected)
+    return actual_int is not None and expected_int is not None and actual_int == expected_int
 
 
 def _wall_clock_seconds(value: Any) -> int | None:
@@ -414,10 +430,10 @@ def _wall_clock_seconds(value: Any) -> int | None:
     parts = str(value or "").strip().split(":")
     if len(parts) != 3:
         return None
-    try:
-        hours, minutes, seconds = (int(part) for part in parts)
-    except (TypeError, ValueError):
+    parsed = [_strict_int(part) for part in parts]
+    if any(part is None for part in parsed):
         return None
+    hours, minutes, seconds = parsed
     if hours < 0 or not 0 <= minutes < 60 or not 0 <= seconds < 60:
         return None
     return hours * 3600 + minutes * 60 + seconds
@@ -577,10 +593,8 @@ def _validate_packet_resource_contract(contract: dict[str, Any]) -> list[str]:
         if field in _RESOURCE_STRING_FIELDS:
             valid = _is_concrete(actual)
         else:
-            try:
-                valid = int(actual) > 0
-            except (TypeError, ValueError):
-                valid = False
+            parsed = _strict_int(actual)
+            valid = parsed is not None and parsed > 0
         if not valid:
             problems.append(f"launch packet resource contract is invalid: {field}")
     if _is_concrete(contract.get("cluster")) and _is_concrete(contract.get("partition")):
@@ -725,6 +739,229 @@ def _submit_arg_value(submit_args: str, field: str) -> str | None:
     return match.group(1) if match else None
 
 
+_SCHEDULER_OPTIONS = (
+    "partition",
+    "gres",
+    "cpus-per-task",
+    "mem",
+    "time",
+    "qos",
+)
+
+
+def _parse_scheduler_args(  # noqa: C901
+    submit_args: str,
+) -> tuple[dict[str, list[str]], list[str]]:
+    """Parse scheduler flags from raw or ``--sbatch-arg`` submit arguments.
+
+    Returns:
+        A mapping of recognized option names to values and sanitized parser
+        problems.  Duplicate options remain visible for fail-closed checks.
+    """
+    try:
+        tokens = shlex.split(submit_args)
+    except ValueError:
+        return {}, ["scheduler submit_args quoting is invalid"]
+    values: dict[str, list[str]] = {}
+    problems: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--sbatch-arg":
+            index += 1
+            if index >= len(tokens) or not tokens[index].startswith("--"):
+                problems.append("scheduler --sbatch-arg is missing an option")
+                continue
+            token = tokens[index]
+        elif token.startswith("--sbatch-arg="):
+            token = token.split("=", 1)[1]
+        if not token.startswith("--"):
+            index += 1
+            continue
+        option_value = token[2:]
+        if "=" in option_value:
+            option, value = option_value.split("=", 1)
+        else:
+            option, value = option_value, None
+        if option not in _SCHEDULER_OPTIONS:
+            index += 1
+            continue
+        if value is None:
+            next_index = index + 1
+            if next_index >= len(tokens) or tokens[next_index].startswith("--"):
+                problems.append(f"scheduler --{option} is missing a value")
+                index += 1
+                continue
+            value = tokens[next_index]
+            index = next_index
+        values.setdefault(option, []).append(value)
+        index += 1
+    return values, problems
+
+
+def _scheduler_option_value(
+    values: dict[str, list[str]], option: str, problems: list[str]
+) -> str | None:
+    """Return one scheduler option value, rejecting missing or duplicate flags."""
+    matching = values.get(option, [])
+    if not matching:
+        problems.append(f"scheduler --{option} is missing")
+        return None
+    if len(matching) != 1:
+        problems.append(f"scheduler --{option} is duplicated")
+        return None
+    return matching[0]
+
+
+def _scheduler_memory_mib(value: str) -> int | None:
+    """Normalize an integer Slurm memory value to mebibytes.
+
+    Returns:
+        The normalized mebibytes, or ``None`` for malformed/non-integral input.
+    """
+    match = re.fullmatch(r"([0-9]+)([kmgt]?i?b?)?", value.strip(), re.IGNORECASE)
+    if match is None:
+        return None
+    amount = _strict_int(match.group(1))
+    if amount is None:
+        return None
+    suffix = (match.group(2) or "m").lower()
+    suffix = suffix.removesuffix("ib").removesuffix("b")
+    if suffix == "k":
+        return amount // 1024 if amount % 1024 == 0 else None
+    if suffix == "m":
+        return amount
+    if suffix == "g":
+        return amount * 1024
+    if suffix == "t":
+        return amount * 1024 * 1024
+    return None
+
+
+def _scheduler_time_seconds(value: str) -> int | None:
+    """Normalize Slurm ``D-HH:MM:SS`` or ``HH:MM:SS`` time values.
+
+    Returns:
+        The normalized seconds, or ``None`` for malformed/non-integral input.
+    """
+    raw = value.strip()
+    days = 0
+    if "-" in raw:
+        day_text, raw = raw.split("-", 1)
+        days = _strict_int(day_text)
+        if days is None:
+            return None
+    parts = raw.split(":")
+    parsed = [_strict_int(part) for part in parts]
+    if any(part is None for part in parsed) or len(parsed) not in {2, 3}:
+        return None
+    if len(parsed) == 2:
+        hours, minutes, seconds = 0, parsed[0], parsed[1]
+    else:
+        hours, minutes, seconds = parsed
+    if hours is None or minutes is None or seconds is None:
+        return None
+    if hours < 0 or not 0 <= minutes < 60 or not 0 <= seconds < 60:
+        return None
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds
+
+
+def _scheduler_gres(value: str) -> tuple[int, str | None] | None:
+    """Parse one GPU GRES entry into count and optional type.
+
+    Returns:
+        A ``(count, type)`` pair, or ``None`` for malformed GRES input.
+    """
+    entries = [entry for entry in value.split(",") if entry.lower().startswith("gpu:")]
+    if len(entries) != 1:
+        return None
+    parts = entries[0].split(":")
+    if len(parts) == 2:
+        gpu_type, count_text = None, parts[1]
+    elif len(parts) == 3:
+        gpu_type, count_text = parts[1], parts[2]
+    else:
+        return None
+    count = _strict_int(count_text)
+    if count is None or count <= 0 or (gpu_type is not None and not _is_concrete(gpu_type)):
+        return None
+    return count, gpu_type
+
+
+def _validate_scheduler_submit_args(  # noqa: C901
+    submit_args: str, packet: dict[str, Any]
+) -> list[str]:
+    """Validate scheduler flags against the frozen packet execution contract.
+
+    Returns:
+        Sanitized scheduler-contract problems.
+    """
+    contract = packet.get("execution_contract")
+    if not isinstance(contract, dict):
+        return ["launch packet execution contract is missing"]
+    values, problems = _parse_scheduler_args(submit_args)
+    partition = _scheduler_option_value(values, "partition", problems)
+    if partition is not None and not _resource_values_match(
+        "partition", partition, contract.get("partition")
+    ):
+        problems.append("scheduler --partition does not match packet")
+    gres = _scheduler_option_value(values, "gres", problems)
+    if gres is not None:
+        parsed_gres = _scheduler_gres(gres)
+        expected_gpus = _strict_int(contract.get("gpus"))
+        if parsed_gres is None or expected_gpus is None:
+            problems.append("scheduler --gres is invalid")
+        else:
+            gpu_count, gpu_type = parsed_gres
+            if gpu_count != expected_gpus:
+                problems.append("scheduler --gres GPU count does not match packet")
+            expected_gpu_type = contract.get("gpu_type")
+            if (
+                _is_concrete(expected_gpu_type)
+                and gpu_type is not None
+                and not _resource_values_match("gpu_type", gpu_type, expected_gpu_type)
+            ):
+                problems.append("scheduler --gres GPU type does not match packet")
+    cpus = _scheduler_option_value(values, "cpus-per-task", problems)
+    if cpus is not None and not _resource_values_match("cpus", cpus, contract.get("cpus")):
+        problems.append("scheduler --cpus-per-task does not match packet")
+    memory = _scheduler_option_value(values, "mem", problems)
+    expected_mem_gb = _strict_int(contract.get("mem_gb"))
+    if memory is not None and (
+        expected_mem_gb is None or _scheduler_memory_mib(memory) != expected_mem_gb * 1024
+    ):
+        problems.append("scheduler --mem does not match packet")
+    scheduler_time = _scheduler_option_value(values, "time", problems)
+    expected_time = contract.get("wall_clock_seconds")
+    if expected_time is None:
+        expected_time = _wall_clock_seconds(contract.get("wall_clock"))
+    if scheduler_time is not None and (
+        expected_time is None or _scheduler_time_seconds(scheduler_time) != expected_time
+    ):
+        problems.append("scheduler --time does not match packet")
+    expected_qos = contract.get("qos")
+    if _is_concrete(expected_qos):
+        qos = _scheduler_option_value(values, "qos", problems)
+        if qos is not None and not _resource_values_match("qos", qos, expected_qos):
+            problems.append("scheduler --qos does not match packet")
+    return problems
+
+
+def _has_exact_scheduler_time(submit_args: str, packet: dict[str, Any]) -> bool:
+    """Return whether submit args provide exact packet-bound scheduler time."""
+    contract = packet.get("execution_contract")
+    if not isinstance(contract, dict):
+        return False
+    values, problems = _parse_scheduler_args(submit_args)
+    if problems or len(values.get("time", [])) != 1:
+        return False
+    expected = contract.get("wall_clock_seconds")
+    if expected is None:
+        expected = _wall_clock_seconds(contract.get("wall_clock"))
+    actual = _scheduler_time_seconds(values["time"][0])
+    return expected is not None and actual == expected
+
+
 def _validate_queue_identity_args(submit_args: str, packet: dict[str, Any]) -> list[str]:
     """Validate queue environment values against packet identity.
 
@@ -799,11 +1036,14 @@ def _validate_queue_submit_args(
         value = _submit_arg_value(submit_args, field)
         if value is None or not _SHA256_RE.fullmatch(value):
             problems.append(f"private queue {field} is not a concrete SHA-256")
+    problems.extend(_validate_scheduler_submit_args(submit_args, packet))
     problems.extend(_validate_queue_identity_args(submit_args, packet))
     return problems
 
 
-def _validate_queue_resources(row: dict[str, Any], packet: dict[str, Any]) -> list[str]:
+def _validate_queue_resources(  # noqa: C901
+    row: dict[str, Any], packet: dict[str, Any]
+) -> list[str]:
     """Validate queue resources against the exact packet execution contract.
 
     Returns:
@@ -830,6 +1070,8 @@ def _validate_queue_resources(row: dict[str, Any], packet: dict[str, Any]) -> li
             "estimated_elapsed_sec", row["estimated_elapsed_sec"], expected_wall_clock_seconds
         ):
             problems.append("private queue resource contract mismatch: wall_clock")
+    elif not _has_exact_scheduler_time(str(row.get("submit_args") or ""), packet):
+        problems.append("private queue estimated_elapsed_sec or exact scheduler --time is required")
     if "gpu_type" in row and not _resource_values_match(
         "gpu_type", row["gpu_type"], contract.get("gpu_type")
     ):
@@ -844,7 +1086,7 @@ def _validate_queue_resources(row: dict[str, Any], packet: dict[str, Any]) -> li
 def _validate_packet_queue(
     packet: dict[str, Any], packet_path: Path, queue_path: Path | None, expected_sha: str
 ) -> list[str]:
-    """Validate private queue identity, hashes, and fixed resource values.
+    """Validate private queue identity, hashes, and packet-bound resources.
 
     Returns:
         Sanitized queue admission problems.

@@ -1014,6 +1014,21 @@ def test_pr_ready_check_exposes_final_committed_head_mode() -> None:
     assert "pr_ready_freshness.py" in script_text
 
 
+def test_pr_ready_check_final_mode_runs_evidence_hygiene_contract() -> None:
+    """Final local readiness must invoke the hosted evidence-hygiene contract (issue #7812)."""
+    script_text = PR_READY_CHECK.read_text(encoding="utf-8")
+
+    assert "pr_contract_check.py" in script_text
+    assert "--changed-files-file" in script_text
+    assert "Issue #7812" in script_text
+    # The gate is bound to final readiness only.
+    assert 'if [[ "$pr_ready_final" == "1" ]]; then' in script_text
+    # The evidence-hygiene invocation must appear after the followups gate.
+    followups_index = script_text.find("check_pr_followups.py")
+    contract_index = script_text.find("pr_contract_check.py")
+    assert 0 < followups_index < contract_index
+
+
 def test_pr_body_contracts_workflow_runs_strict_pr_body_checker() -> None:
     """The live PR workflow should enforce body, follow-up, and domain-review contracts."""
     workflow_text = PR_BODY_CONTRACTS_WORKFLOW.read_text(encoding="utf-8")

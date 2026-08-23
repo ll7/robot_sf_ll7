@@ -157,6 +157,37 @@ def test_markerless_new_evidence_accepts_valid_same_pr_review_sidecar(tmp_path: 
     assert not blockers
 
 
+def test_markerless_json_evidence_is_rejected(tmp_path: Path) -> None:
+    """Issue #7812: a marker-less new JSON evidence artifact is a hosted-policy blocker."""
+    artifact = tmp_path / "docs/context/evidence/result_interpretation_review.json"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text(json.dumps({"status": "ok"}), encoding="utf-8")
+    added_files = {str(artifact)}
+
+    blockers = pr_contract_check.check_evidence_tree_hygiene(
+        [str(artifact)], "origin/main", added_files
+    )
+
+    assert any("marker convention" in b for b in blockers)
+
+
+def test_markerless_json_evidence_passes_with_valid_sidecar(tmp_path: Path) -> None:
+    """Issue #7812: an exact-hash review sidecar repairs a marker-less JSON artifact."""
+    artifact = tmp_path / "docs/context/evidence/result_interpretation_review.json"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text(json.dumps({"status": "ok"}), encoding="utf-8")
+    artifact_path = "docs/context/evidence/result_interpretation_review.json"
+    sidecar = Path(f"{artifact}.review.json")
+    sidecar.write_text(json.dumps(_valid_review_sidecar(artifact, artifact_path)), encoding="utf-8")
+    added_files = {str(artifact), str(sidecar)}
+
+    blockers = pr_contract_check.check_evidence_tree_hygiene(
+        [str(artifact), str(sidecar)], "origin/main", added_files
+    )
+
+    assert not blockers
+
+
 @pytest.mark.parametrize(
     ("case", "expected_message"),
     [

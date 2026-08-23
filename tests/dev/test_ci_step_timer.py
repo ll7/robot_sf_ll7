@@ -14,6 +14,8 @@ from pathlib import Path
 import pytest
 
 _HAS_TIMEOUT = shutil.which("timeout") is not None
+_SIGNAL_CONTRACT_TIMEOUT_SECONDS = 12
+_SIGNAL_CONTRACT_XDIST_TIMEOUT_SECONDS = 30
 
 _NORMALIZE_SIGNALS_AND_EXEC = textwrap.dedent(
     """
@@ -65,6 +67,27 @@ def _kill_process_group(process_group_id: int) -> None:
         os.killpg(process_group_id, signal.SIGKILL)
     except ProcessLookupError:
         pass
+
+
+def _signal_contract_timeout_seconds() -> int:
+    """Return a finite outer deadline with room for xdist scheduling contention."""
+    if os.environ.get("PYTEST_XDIST_WORKER"):
+        return _SIGNAL_CONTRACT_XDIST_TIMEOUT_SECONDS
+    return _SIGNAL_CONTRACT_TIMEOUT_SECONDS
+
+
+def test_signal_contract_timeout_budget_expands_under_xdist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep nested signal tests bounded while allowing normal xdist scheduling delay."""
+    monkeypatch.delenv("PYTEST_XDIST_WORKER", raising=False)
+    serial_budget = _signal_contract_timeout_seconds()
+    monkeypatch.setenv("PYTEST_XDIST_WORKER", "gw0")
+    xdist_budget = _signal_contract_timeout_seconds()
+
+    assert serial_budget == 12
+    assert xdist_budget == 30
+    assert 0 < serial_budget < xdist_budget <= 60
 
 
 def _timeout_fallback_env(tmp_path: Path, *, include_python: bool = True) -> dict[str, str]:
@@ -556,7 +579,7 @@ def test_ci_step_timer_python_fallback_forwards_wrapper_signal_and_reaps_tree(
             )
             descendant_pid = int(_wait_for_nonempty_file(descendant_pid_path))
             os.kill(wrapper.pid, signum)
-            returncode = wrapper.wait(timeout=12)
+            returncode = wrapper.wait(timeout=_signal_contract_timeout_seconds())
 
         stdout = stdout_path.read_text(encoding="utf-8")
         assert returncode == expected_status
@@ -711,7 +734,7 @@ def test_ci_step_timer_signal_contract_survives_runner_ignored_sigint() -> None:
         capture_output=True,
         text=True,
         check=False,
-        timeout=12,
+        timeout=_signal_contract_timeout_seconds(),
     )
 
     assert result.returncode == 0, result.stdout + result.stderr

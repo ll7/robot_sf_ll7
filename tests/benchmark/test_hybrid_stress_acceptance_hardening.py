@@ -30,7 +30,6 @@ MANIFEST_PATH = REPO_ROOT / (
     "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml"
 )
 SOURCE_COMMIT = "a" * 40
-CONFIG_HASH = "c" * 16
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -44,18 +43,22 @@ def _repo_relative(path: Path) -> str:
 
 
 def _row(*, algo: str, scenario_id: str, seed: int) -> dict[str, Any]:
+    scenario_params = {
+        "algo": algo,
+        "id": scenario_id,
+        "robot_config": {"type": "differential_drive"},
+        "run_dt": 0.1,
+    }
+    config_hash = _config_hash(scenario_params)
     return {
         "algo": algo,
-        "config_hash": CONFIG_HASH,
+        "config_hash": config_hash,
         "episode_id": f"{scenario_id}--{seed}",
         "event_ledger": {"software_commit": SOURCE_COMMIT},
         "git_hash": SOURCE_COMMIT,
         "horizon": 600,
         "scenario_id": scenario_id,
-        "scenario_params": {
-            "robot_config": {"type": "differential_drive"},
-            "run_dt": 0.1,
-        },
+        "scenario_params": scenario_params,
         "seed": seed,
         "status": "success",
         "algorithm_metadata": {
@@ -72,11 +75,11 @@ def _row(*, algo: str, scenario_id: str, seed: int) -> dict[str, Any]:
         },
         "provenance": {
             "git_hash": SOURCE_COMMIT,
-            "config_hash": CONFIG_HASH,
+            "config_hash": config_hash,
             "config_identity": {"algo": algo},
         },
         "result_provenance": {
-            "config_hash": CONFIG_HASH,
+            "config_hash": config_hash,
             "repo_commit": SOURCE_COMMIT,
             "scenario_id": scenario_id,
             "seed": seed,
@@ -266,7 +269,15 @@ def test_complete_stress_campaign_is_admitted(stress_fixture: tuple[Path, Any, A
 
 @pytest.mark.parametrize(
     "mutation",
-    ("missing_sidecar", "sidecar_config", "integrity", "event_source", "robot_type", "run_dt"),
+    (
+        "missing_sidecar",
+        "sidecar_config",
+        "integrity",
+        "event_source",
+        "robot_type",
+        "run_dt",
+        "row_config",
+    ),
 )
 def test_stress_provenance_and_integrity_bypasses_fail_closed(
     stress_fixture: tuple[Path, Any, Any], mutation: str
@@ -292,8 +303,15 @@ def test_stress_provenance_and_integrity_bypasses_fail_closed(
             rows[0]["event_ledger"]["software_commit"] = "b" * 40
         elif mutation == "robot_type":
             rows[0]["scenario_params"]["robot_config"]["type"] = "holonomic"
-        else:
+        elif mutation == "run_dt":
             rows[0]["scenario_params"]["run_dt"] = 0.2
+        else:
+            rows[0]["config_hash"] = "deadbeefdeadbeef"
+            rows[0]["provenance"]["config_hash"] = "deadbeefdeadbeef"
+            rows[0]["result_provenance"]["config_hash"] = "deadbeefdeadbeef"
+            sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            sidecar["rows"][0]["config_hash"] = "deadbeefdeadbeef"
+            sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
         episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
         _refresh_sidecar_raw_hash(episodes_path)
 
@@ -419,7 +437,15 @@ def test_unrelated_nested_business_metadata_does_not_trigger_emergency_marker(
         "planner_mode": "REORIENT",
         "selected_source": "static_reorient",
     }
+    config_hash = _config_hash(rows[0]["scenario_params"])
+    rows[0]["config_hash"] = config_hash
+    rows[0]["provenance"]["config_hash"] = config_hash
+    rows[0]["result_provenance"]["config_hash"] = config_hash
     path.write_text("".join(json.dumps(item) + "\n" for item in rows), encoding="utf-8")
+    sidecar_path = path.with_name(f"{path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["rows"][0]["config_hash"] = config_hash
+    sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
     _refresh_sidecar_raw_hash(path)
 
     report = _acceptance(root, manifest, campaign_config)

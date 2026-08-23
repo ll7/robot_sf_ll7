@@ -40,6 +40,7 @@ DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_REMOTE = "origin"
 PER_PAGE = 100
 DEFAULT_MAX_PAGES = 10
+DEFAULT_MAX_CLOSED_PR_PAGES = 50
 DEFAULT_MAX_COMMENT_PAGES = 3
 DEFAULT_MAX_TIMELINE_PAGES = 3
 DEFAULT_MAX_MUTATIONS = 250
@@ -848,6 +849,7 @@ def discover_inventory(
     *,
     remote: str = DEFAULT_REMOTE,
     max_pages: int = DEFAULT_MAX_PAGES,
+    max_closed_pr_pages: int = DEFAULT_MAX_CLOSED_PR_PAGES,
     include_comments: bool = False,
     max_comment_pages: int = DEFAULT_MAX_COMMENT_PAGES,
     max_wall_seconds: float | None = None,
@@ -871,7 +873,7 @@ def discover_inventory(
         repo, state="open", max_pages=max_pages, runner=rest_runner
     )
     closed_prs, closed_pr_meta = discover_pull_requests(
-        repo, state="closed", max_pages=max_pages, runner=rest_runner
+        repo, state="closed", max_pages=max_closed_pr_pages, runner=rest_runner
     )
     merged_prs = [pr for pr in closed_prs if pr.get("merged_at")]
     timeline_prs: list[dict[str, Any]] = []
@@ -2481,6 +2483,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     plan_parser.add_argument("--mode", choices=("autonomous", "interactive"), default="autonomous")
     plan_parser.add_argument("--max-pages", type=int, default=DEFAULT_MAX_PAGES)
     plan_parser.add_argument(
+        "--max-closed-pr-pages",
+        type=int,
+        default=DEFAULT_MAX_CLOSED_PR_PAGES,
+        help="independent page budget for repository-wide closed-PR history",
+    )
+    plan_parser.add_argument(
         "--include-comments",
         action="store_true",
         help="include bounded REST comment threads in the issue evidence inventory",
@@ -2513,6 +2521,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.repo,
                 remote=args.remote,
                 max_pages=args.max_pages,
+                max_closed_pr_pages=args.max_closed_pr_pages,
                 include_comments=args.include_comments,
                 max_comment_pages=args.max_comment_pages,
                 max_wall_seconds=args.max_wall_seconds,

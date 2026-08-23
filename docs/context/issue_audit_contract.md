@@ -274,6 +274,20 @@ interactive skill without guessing:
     documented_options: []
     safe_mutations_applied: []
 
+Every planned mutation also carries the issue snapshot used by classification:
+
+    expected_issue:
+      state: open
+      updated_at: "2026-08-23T00:00:00Z"
+
+The plan digest binds this state/version snapshot. Apply rejects missing or inconsistent snapshots
+before any REST read or write. Immediately before the first mutation for an issue, apply reads the
+live issue once and compares both fields. A mismatch skips the complete per-issue mutation batch,
+records a machine-readable `stale_state` disposition with expected and observed values, and does
+not count the issue as successfully applied. After admitted writes, readback verifies the expected
+issue state as well as requested label additions/removals; `close_issue` expects `closed`, while a
+label-only batch must retain its planned state.
+
 The plan is deterministic for a fixed inventory. It contains evidence and
 reasons for every safe mutation. apply_mutations refuses incomplete plans,
 enforces a mutation budget, uses REST for issue/label writes, and reads every

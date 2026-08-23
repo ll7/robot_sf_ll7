@@ -1624,6 +1624,16 @@ def test_worktree_shared_venv_explicit_override_shadows_incomplete_local_env(
     """Issue #7823: an explicit --venv stays authoritative over an incomplete local .venv."""
     matching_scene = "def normalize_integration_scheme(value=None):\n    return value\n"
     repo, main_venv, env = _make_freshness_fixture_repo(tmp_path, installed_scene=matching_scene)
+    # Add a diagnostic only for this precedence assertion; other freshness fixtures stay unchanged.
+    fake_uv = repo / "fake-bin" / "uv"
+    fake_uv.write_text(
+        fake_uv.read_text(encoding="utf-8").replace(
+            "exit 7",
+            'echo "virtual_env=${VIRTUAL_ENV-}" >&2; exit 7',
+            1,
+        ),
+        encoding="utf-8",
+    )
     worktree = tmp_path / "worktree"
     subprocess.run(
         ["git", "worktree", "add", "--detach", str(worktree)],
@@ -1649,6 +1659,14 @@ def test_worktree_shared_venv_explicit_override_shadows_incomplete_local_env(
 
     assert result.returncode == 7
     assert f"venv={main_venv}" in result.stderr
+    assert f"virtual_env={main_venv}" in result.stderr
+    assert f"pythonpath={worktree}:{worktree / 'fast-pysf'}" in result.stderr
+    wrapper_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
+    assert 'export VIRTUAL_ENV="$venv_path"' in wrapper_text
+    assert (
+        'export PYTHONPATH="$repo_root:$repo_root/fast-pysf${PYTHONPATH:+:$PYTHONPATH}"'
+        in wrapper_text
+    )
     assert "Virtualenv not found or incomplete" not in result.stderr
     # The explicit shared override is authoritative: the command ran with the
     # shared env (uv-reached exit 7) rather than failing on the incomplete local.

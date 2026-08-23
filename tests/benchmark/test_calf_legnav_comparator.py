@@ -394,6 +394,20 @@ def test_horizon_exhaustion_is_recorded_as_timeout() -> None:
     assert report["paired_metrics"]["timeout_rate"]["sensor_limited"]["value"] == 1.0
 
 
+def test_terminal_horizon_episode_is_not_counted_as_timeout() -> None:
+    """A terminated full-horizon episode is distinct from horizon truncation."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [1.0, 1.0, 2.0])
+    perfect["done_info"] = {"success": False, "terminated": True, "truncated": False}
+    perfect["steps"][-1]["terminated"] = True
+
+    report = build_calf_legnav_comparator_report(perfect, sensor, config=_config())
+
+    timeout = report["conditions"]["perfect_perception"]["metrics"]["timeout_rate"]
+    assert timeout["status"] == "available"
+    assert timeout["value"] == 0.0
+
+
 def test_mismatched_pair_is_rejected() -> None:
     """A paired comparison cannot mix scenario or seed provenance."""
     sensor = _trace("perception_limited", [1.0, 1.0, 2.0])
@@ -405,6 +419,16 @@ def test_mismatched_pair_is_rejected() -> None:
             sensor,
             config=_config(),
         )
+
+
+def test_mismatched_algorithm_is_rejected() -> None:
+    """A paired report cannot mix different effective planner algorithms."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [1.0, 1.0, 2.0])
+    sensor["algo"] = "different_algo"
+
+    with pytest.raises(ValueError, match="algo"):
+        build_calf_legnav_comparator_report(perfect, sensor, config=_config())
 
 
 def test_trace_identity_must_match_config() -> None:
@@ -445,6 +469,11 @@ def test_swapped_observation_contract_fails_closed() -> None:
     assert ideal["observation_contract"]["status"] == "unavailable"
     assert ideal["status"] == "blocked"
     assert report["status"] == "blocked"
+    for row in report["paired_metrics"].values():
+        assert row["delta_status"] == "unavailable"
+        assert row["perfect_perception"]["status"] == "blocked"
+        assert row["sensor_limited"]["status"] == "available"
+        assert row["sensor_minus_perfect"] is None
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     Draft202012Validator(schema).validate(report)
 

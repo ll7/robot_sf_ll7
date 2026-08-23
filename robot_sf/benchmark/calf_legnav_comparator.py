@@ -461,15 +461,27 @@ def _condition_metrics(
     )
     horizon = _integer_value(trace.get("horizon"))
     horizon_reached = horizon is not None and horizon > 0 and len(rows) >= horizon
+    row_terminated_values, malformed_row_terminated = _boolean_values(rows, "terminated")
+    done_terminated, malformed_done_terminated = _optional_boolean(done_info, "terminated")
+    terminated = (
+        None
+        if malformed_row_terminated or malformed_done_terminated
+        else bool(done_terminated) or any(row_terminated_values)
+    )
     row_truncated_values, malformed_row_truncated = _boolean_values(rows, "truncated")
     done_truncated, malformed_done_truncated = _optional_boolean(done_info, "truncated")
     truncated = (
         None
-        if success is None or malformed_row_truncated or malformed_done_truncated
+        if (
+            success is None
+            or terminated is None
+            or malformed_row_truncated
+            or malformed_done_truncated
+        )
         else float(
             bool(done_truncated)
             or any(row_truncated_values)
-            or (horizon_reached and not bool(success))
+            or (horizon_reached and not bool(success) and not bool(terminated))
         )
     )
     distances, malformed_distances = _distance_values(rows)
@@ -551,7 +563,10 @@ def _condition_metrics(
                 else None
             ),
             units="fraction",
-            source="trace.done_info.truncated|trace.truncated|trace.horizon",
+            source=(
+                "trace.done_info.truncated|trace.truncated|trace.done_info.terminated|"
+                "trace.terminated|trace.horizon"
+            ),
             mapping="exact_local",
             reason=boolean_reason if truncated is None else None,
         ),
@@ -640,7 +655,7 @@ def build_calf_legnav_comparator_report(
     Returns:
         A schema-shaped diagnostic report with explicit proxy and unavailable fields.
     """
-    identity_fields = ("candidate", "scenario_id", "seed", "horizon")
+    identity_fields = ("candidate", "scenario_id", "seed", "horizon", "algo")
     mismatches = [
         field for field in identity_fields if perfect_trace.get(field) != sensor_trace.get(field)
     ]
@@ -682,6 +697,15 @@ def build_calf_legnav_comparator_report(
             dt_s=dt_s,
         ),
     }
+    for condition in conditions.values():
+        observation = condition["observation_contract"]
+        if observation["status"] == "available":
+            continue
+        reason = str(observation.get("reason") or "observation contract is unavailable")
+        for metric in condition["metrics"].values():
+            metric["value"] = None
+            metric["status"] = "blocked"
+            metric["reason"] = reason
     metric_names = sorted(
         set(conditions[CONDITION_IDEAL]["metrics"]) | set(conditions[CONDITION_SENSOR]["metrics"])
     )

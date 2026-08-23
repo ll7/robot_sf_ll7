@@ -71,6 +71,8 @@ the condition or materialize a schema-valid blocked handoff.
 One paired episode has no uncertainty estimate. Missing observations, runner errors,
 fallback/degraded execution, or an unrecognized observation contract produce `blocked`
 or `unavailable` fields rather than fabricated zeros.
+An unavailable or mislabelled observation contract also blocks that condition's metric
+values and paired deltas, so a failed contrast cannot be read as a valid comparison.
 
 ## Evidence and next proof
 

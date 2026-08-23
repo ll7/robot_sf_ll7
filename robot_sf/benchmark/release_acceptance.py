@@ -37,6 +37,7 @@ from robot_sf.benchmark.release_protocol import (
     STRESS_SMOKE_EXPECTED_PLANNER_ARMS,
     STRESS_SMOKE_EXPECTED_SCENARIO_IDS,
     STRESS_SMOKE_EXPECTED_SEED,
+    resolve_campaign_artifact_path,
 )
 from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
 from robot_sf.benchmark.utils import _config_hash
@@ -160,13 +161,18 @@ def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:  # noqa: C90
                     ):
                         return nested_path, normalized_value
                 elif inspect_marker and normalized_key == "emergency_stop_count":
-                    parsed_counter = _strict_int(nested)
+                    parsed_counter = (
+                        nested if isinstance(nested, int) and not isinstance(nested, bool) else None
+                    )
                     if parsed_counter is None or parsed_counter < 0:
                         return nested_path, "invalid"
                     if parsed_counter > 0:
                         return nested_path, str(nested)
-                elif inspect_marker and normalized_key == "emergency_stop" and nested is True:
-                    return nested_path, "true"
+                elif inspect_marker and normalized_key == "emergency_stop":
+                    if not isinstance(nested, bool):
+                        return nested_path, "invalid"
+                    if nested is True:
+                        return nested_path, "true"
                 found = _walk(
                     nested,
                     nested_path,
@@ -184,7 +190,7 @@ def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:  # noqa: C90
     return _walk(payload, "")
 
 
-def _status_markers(  # noqa: C901, PLR0912
+def _status_markers(  # noqa: C901, PLR0912, PLR0915
     payload: Mapping[str, Any], prefix: str
 ) -> list[tuple[str, str]]:
     """Extract only execution/evidence status markers from one structured row.
@@ -214,8 +220,19 @@ def _status_markers(  # noqa: C901, PLR0912
     ):
         markers.append((f"{prefix}.benchmark_success", "false"))
 
-    for field in ("fallback_triggered", "degraded", "fallback_or_degraded"):
-        if payload.get(field) is True:
+    for field in (
+        "fallback",
+        "fallback_triggered",
+        "degraded",
+        "fallback_or_degraded",
+        "fallback_used",
+    ):
+        if field not in payload:
+            continue
+        value = payload[field]
+        if not isinstance(value, bool):
+            markers.append((f"{prefix}.{field}", "invalid"))
+        elif value is True:
             markers.append((f"{prefix}.{field}", "true"))
     emergency_marker = _emergency_stop_marker(payload)
     if emergency_marker is not None:
@@ -232,8 +249,20 @@ def _status_markers(  # noqa: C901, PLR0912
         if not isinstance(metadata, Mapping):
             continue
         _add(f"{field}.status", metadata.get("status"))
-        if metadata.get("fallback_or_degraded") is True:
-            markers.append((f"{prefix}.{field}.fallback_or_degraded", "true"))
+        for marker_field in (
+            "fallback",
+            "fallback_triggered",
+            "degraded",
+            "fallback_or_degraded",
+            "fallback_used",
+        ):
+            if marker_field not in metadata:
+                continue
+            marker_value = metadata[marker_field]
+            if not isinstance(marker_value, bool):
+                markers.append((f"{prefix}.{field}.{marker_field}", "invalid"))
+            elif marker_value is True:
+                markers.append((f"{prefix}.{field}.{marker_field}", "true"))
         planner_kinematics = metadata.get("planner_kinematics")
         if isinstance(planner_kinematics, Mapping):
             _add(
@@ -269,7 +298,10 @@ def _read_campaign_summary(campaign_root: Path) -> tuple[dict[str, Any] | None, 
     Returns:
         The parsed summary and an optional human-readable read error.
     """
-    path = campaign_root / "reports" / "campaign_summary.json"
+    try:
+        path = resolve_campaign_artifact_path(campaign_root, "reports/campaign_summary.json")
+    except (OSError, ValueError) as exc:
+        return None, f"campaign summary cannot be read: {exc}"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:

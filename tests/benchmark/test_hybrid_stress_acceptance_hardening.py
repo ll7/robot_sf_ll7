@@ -588,6 +588,31 @@ def test_stress_metadata_readers_reject_malformed_inputs(tmp_path: Path) -> None
     assert payload is None and "must contain a JSON object" in str(error)
 
 
+@pytest.mark.parametrize("kind", ("symlink", "directory"))
+def test_campaign_summary_reader_requires_campaign_contained_regular_file(
+    tmp_path: Path, kind: str
+) -> None:
+    """Summary reads fail closed before following links or opening directories."""
+    root = tmp_path / "campaign"
+    reports = root / "reports"
+    reports.mkdir(parents=True)
+    outside = tmp_path / "outside-summary.json"
+    outside.write_text("{}\n", encoding="utf-8")
+    summary_path = reports / "campaign_summary.json"
+    if kind == "symlink":
+        summary_path.symlink_to(outside)
+    else:
+        summary_path.mkdir()
+
+    payload, error = release_acceptance._read_campaign_summary(root)
+
+    assert payload is None
+    assert error is not None
+    assert "campaign summary cannot be read" in error
+    if kind == "symlink":
+        assert "symlink" in error
+
+
 @pytest.mark.parametrize(
     "payload",
     (

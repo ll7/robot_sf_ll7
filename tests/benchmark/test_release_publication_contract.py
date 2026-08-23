@@ -144,6 +144,23 @@ def test_consistency_mismatch_blocks_publication(tmp_path: Path) -> None:
     assert any("total_episodes" in blocker for blocker in report["blockers"])
 
 
+def test_symlink_campaign_summary_blocks_publication_before_read(tmp_path: Path) -> None:
+    """Publication contract validation never follows a campaign summary link."""
+    campaign_root, bundle_dir = _build_fixture(tmp_path)
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    outside = tmp_path / "outside-summary.json"
+    outside.write_text(summary_path.read_text(encoding="utf-8"), encoding="utf-8")
+    summary_path.unlink()
+    summary_path.symlink_to(outside)
+
+    report = validate_release_publication_contract(
+        campaign_root, bundle_dir, expected_release_tag="v1"
+    )
+
+    assert report["status"] == "blocked"
+    assert any("symlink" in blocker for blocker in report["blockers"])
+
+
 def test_explained_commit_drift_and_excluded_boundary_can_pass(tmp_path: Path) -> None:
     """Explicit provenance metadata resolves otherwise blocking release differences."""
     campaign_root, bundle_dir = _build_fixture(tmp_path, mismatch=False, boundary=True)

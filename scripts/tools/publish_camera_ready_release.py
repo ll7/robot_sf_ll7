@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+from robot_sf.benchmark.release_protocol import resolve_campaign_artifact_path
 from robot_sf.benchmark.release_publication_contract import (
     validate_release_publication_contract,
 )
@@ -68,9 +69,7 @@ def _validate_prerequisites(
     campaign_root: Path, *, expected_release_tag: str
 ) -> tuple[Path, Path, Path, dict[str, object]]:
     """Validate campaign publication artifacts and return core paths plus campaign summary."""
-    summary_path = campaign_root / "reports" / "campaign_summary.json"
-    if not summary_path.exists():
-        raise FileNotFoundError(f"Missing campaign summary: {summary_path}")
+    summary_path = resolve_campaign_artifact_path(campaign_root, "reports/campaign_summary.json")
 
     summary = _load_json(summary_path)
     publication = summary.get("publication_bundle")

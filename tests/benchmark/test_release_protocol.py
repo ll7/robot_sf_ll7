@@ -360,6 +360,43 @@ def test_load_release_manifest_rejects_non_file_required_path(tmp_path: Path) ->
         load_release_manifest(manifest_path)
 
 
+def test_manifest_side_inputs_are_repository_contained_and_not_symlinked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every manifest-side input must be a real file in the repository scope."""
+    repo = tmp_path / "repo"
+    manifest_dir = repo / "configs" / "releases"
+    manifest_dir.mkdir(parents=True)
+    monkeypatch.setattr(release_protocol, "get_repository_root", lambda: repo)
+    manifest_path = manifest_dir / "manifest.yaml"
+    safe_path = manifest_dir / "safe.yaml"
+    safe_path.write_text("safe\n", encoding="utf-8")
+
+    assert release_protocol._resolve_required_file(manifest_path, "safe.yaml", "input") == safe_path
+
+    outside = tmp_path / "outside.yaml"
+    outside.write_text("outside\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="repository"):
+        release_protocol._resolve_required_file(manifest_path, "../../../outside.yaml", "input")
+    with pytest.raises(ValueError, match="repository"):
+        release_protocol._resolve_required_file(manifest_path, str(outside), "input")
+
+    escaped = repo / "inputs" / "escaped.yaml"
+    escaped.parent.mkdir()
+    escaped.symlink_to(outside)
+    with pytest.raises(ValueError, match="symlink"):
+        release_protocol._resolve_required_file(manifest_path, "../../inputs/escaped.yaml", "input")
+
+
+def test_manifest_required_artifact_paths_are_campaign_relative() -> None:
+    """Manifest artifact declarations cannot escape the runtime campaign root."""
+    for value in ("/tmp/campaign/report.json", "../report.json", "reports/../report.json"):
+        with pytest.raises(ValueError, match="campaign-relative"):
+            release_protocol._load_manifest_artifacts_section(
+                {"artifacts": {"required_paths": [value]}}
+            )
+
+
 def test_load_release_manifest_rejects_empty_required_artifact_path(tmp_path: Path) -> None:
     """Required artifact lists should reject empty or whitespace-only entries."""
     template_path = Path(

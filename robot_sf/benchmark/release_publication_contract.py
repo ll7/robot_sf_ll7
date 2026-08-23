@@ -15,6 +15,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.release_protocol import resolve_campaign_artifact_path
+
 CONTRACT_SCHEMA_VERSION = "benchmark-release-publication-contract.v1"
 
 _CONSISTENCY_FIELDS = (
@@ -273,13 +275,15 @@ def validate_release_publication_contract(  # noqa: C901
         Contract report with ``pass`` or ``blocked`` status and blockers.
     """
     blockers: list[str] = []
-    campaign_root = campaign_root.resolve()
+    campaign_root = Path(campaign_root).absolute()
     bundle_dir = bundle_dir.resolve()
-    summary_path = campaign_root / "reports" / "campaign_summary.json"
     release_result_path = campaign_root / "release" / "release_result.json"
     manifest_path = bundle_dir / "publication_manifest.json"
     checksums_path = bundle_dir / "checksums.sha256"
     try:
+        summary_path = resolve_campaign_artifact_path(
+            campaign_root, "reports/campaign_summary.json"
+        )
         summary = _read_json(summary_path)
         release_result = _read_json(release_result_path)
         publication = _read_json(manifest_path)

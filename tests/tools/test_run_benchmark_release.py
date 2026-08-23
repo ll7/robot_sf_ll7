@@ -11,7 +11,7 @@ import pytest
 
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec, SeedPolicy
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
-from scripts.tools import run_benchmark_release
+from scripts.tools import rebuild_campaign_reports_from_rows, run_benchmark_release
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -66,6 +66,58 @@ def _manifest_fixture() -> SimpleNamespace:
         doi="10.5281/zenodo.<record-id>",
         repository_url="https://github.com/ll7/robot_sf_ll7",
     )
+
+
+def test_required_artifact_check_is_campaign_contained_and_regular(tmp_path: Path) -> None:
+    """Runtime artifact admission rejects escapes, links, and non-files."""
+    campaign_root = tmp_path / "campaign"
+    (campaign_root / "reports").mkdir(parents=True)
+    (campaign_root / "reports" / "safe.json").write_text("{}\n", encoding="utf-8")
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}\n", encoding="utf-8")
+    (campaign_root / "reports" / "escape.json").symlink_to(outside)
+
+    required = (
+        "reports/safe.json",
+        "reports/escape.json",
+        "../outside.json",
+        str(outside),
+        "reports",
+    )
+
+    expected_missing = [
+        "reports/escape.json",
+        "../outside.json",
+        str(outside),
+        "reports",
+    ]
+    assert run_benchmark_release._required_artifacts_missing(campaign_root, required) == (
+        expected_missing
+    )
+    assert (
+        rebuild_campaign_reports_from_rows._required_artifacts_missing(campaign_root, required)
+        == expected_missing
+    )
+
+
+@pytest.mark.parametrize(
+    "record",
+    (
+        run_benchmark_release._record_publication_payload,
+        rebuild_campaign_reports_from_rows._record_publication_payload,
+    ),
+)
+def test_campaign_summary_record_rejects_symlink_before_merge(tmp_path: Path, record) -> None:
+    """Release summary writes do not follow a symlink before reading or merging."""
+    campaign_root = _make_campaign_tree(tmp_path)
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    outside = tmp_path / "outside-summary.json"
+    outside.write_text(summary_path.read_text(encoding="utf-8"), encoding="utf-8")
+    summary_path.unlink()
+    summary_path.symlink_to(outside)
+
+    with pytest.raises(ValueError, match="symlink"):
+        record(campaign_root, {"bundle_dir": "outside"})
 
 
 def _admit_checkpoint_receipt(monkeypatch, tmp_path: Path) -> Path:

@@ -14,7 +14,7 @@ It retains the 14-arm production roster so the existing checkpoint-staging and
 release-runner path is exercised. The required recovery targets are the four
 hybrid arms:
 
-- scenario_adaptive_hybrid_orca_v1
+- scenario_adaptive_hybrid_orca_v2_bottleneck_yield
 - scenario_adaptive_hybrid_orca_v2_collision_guard
 - hybrid_rule_v3_fast_progress_static_escape
 - hybrid_rule_v3_fast_progress_static_escape_continuous

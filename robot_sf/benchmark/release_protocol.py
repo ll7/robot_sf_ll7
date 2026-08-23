@@ -83,13 +83,13 @@ def _repo_relative(path: Path) -> str:
 
 
 def _resolve_manifest_side_path(manifest_path: Path, value: Any) -> Path:
-    """Resolve a manifest-relative path value to an absolute path.
+    """Build a manifest-relative path candidate without following links.
 
     Returns:
-        Absolute path resolved relative to the manifest location.
+        Absolute or manifest-relative path candidate for later validation.
     """
     candidate = Path(str(value))
-    return candidate if candidate.is_absolute() else (manifest_path.parent / candidate).resolve()
+    return candidate if candidate.is_absolute() else manifest_path.parent / candidate
 
 
 def _has_symlink_component(path: Path) -> bool:
@@ -183,11 +183,18 @@ def _resolve_required_file(manifest_path: Path, value: Any, field_name: str) -> 
     """
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty path string")
-    resolved = _resolve_manifest_side_path(manifest_path, value)
+    candidate = _resolve_manifest_side_path(manifest_path, value.strip())
+    if _has_symlink_component(candidate):
+        raise ValueError(f"{field_name} must not contain symlink components: {candidate}")
+    resolved = candidate.resolve()
     if not resolved.exists():
         raise FileNotFoundError(f"{field_name} not found: {resolved}")
     if not resolved.is_file():
         raise ValueError(f"{field_name} must be a file path, got non-file path: {resolved}")
+    try:
+        resolved.relative_to(get_repository_root().resolve())
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be contained by the repository checkout") from exc
     return resolved
 
 
@@ -199,16 +206,16 @@ def _resolve_stress_contract_file(manifest_path: Path, value: Any, field_name: s
     """
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty path string")
-    candidate = Path(value)
+    candidate = Path(value.strip())
     candidate = candidate if candidate.is_absolute() else manifest_path.parent / candidate
     if _has_symlink_component(candidate):
         raise ValueError(f"{field_name} must not contain symlink components: {candidate}")
     resolved = candidate.resolve()
+    repository_root = get_repository_root().resolve()
     if not resolved.exists():
         raise FileNotFoundError(f"{field_name} not found: {resolved}")
     if not resolved.is_file():
         raise ValueError(f"{field_name} must be a file path, got non-file path: {resolved}")
-    repository_root = get_repository_root().resolve()
     try:
         resolved.relative_to(repository_root)
     except ValueError as exc:
@@ -383,10 +390,57 @@ def _load_manifest_artifacts_section(payload: dict[str, Any]) -> tuple[str, ...]
     required_artifact_paths_raw = artifacts.get("required_paths")
     if not isinstance(required_artifact_paths_raw, list) or not required_artifact_paths_raw:
         raise ValueError("artifacts.required_paths must be a non-empty list")
-    required_artifact_paths = tuple(str(item).strip() for item in required_artifact_paths_raw)
-    if any(not path for path in required_artifact_paths):
-        raise ValueError("artifacts.required_paths must not contain empty values")
-    return required_artifact_paths
+    required_artifact_paths: list[str] = []
+    for index, item in enumerate(required_artifact_paths_raw):
+        if isinstance(item, str) and not item.strip():
+            raise ValueError("artifacts.required_paths must not contain empty values")
+        if not isinstance(item, str):
+            raise ValueError("artifacts.required_paths must contain non-empty path strings")
+        path = item.strip()
+        candidate = Path(path)
+        if candidate.is_absolute() or any(part == ".." for part in candidate.parts):
+            raise ValueError(
+                f"artifacts.required_paths[{index}] must be campaign-relative without parent traversal"
+            )
+        required_artifact_paths.append(path)
+    return tuple(required_artifact_paths)
+
+
+def resolve_campaign_artifact_path(campaign_root: Path, raw_path: str) -> Path:
+    """Resolve one required artifact as a contained, regular campaign file.
+
+    Required artifact declarations are campaign-relative.  This check is used
+    immediately before reading or writing release-owned artifacts so an
+    absolute path, traversal, symlink component, outside resolution, directory,
+    or missing file cannot be mistaken for a valid publication input.
+
+    Returns:
+        Existing regular file under ``campaign_root``.
+    """
+    root = Path(campaign_root).absolute()
+    if _has_symlink_component(root):
+        raise ValueError("campaign root must not contain symlink components")
+    root = root.resolve()
+    if not root.is_dir():
+        raise ValueError(f"campaign root is not a directory: {root}")
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise ValueError("campaign artifact path must be a non-empty string")
+    candidate_raw = Path(raw_path.strip())
+    if candidate_raw.is_absolute():
+        raise ValueError("campaign artifact path must be campaign-relative")
+    if any(part == ".." for part in candidate_raw.parts):
+        raise ValueError("campaign artifact path may not contain parent traversal")
+    candidate = root / candidate_raw
+    if _has_symlink_component(candidate):
+        raise ValueError("campaign artifact path must not contain symlink components")
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("campaign artifact path resolves outside campaign root") from exc
+    if not resolved.is_file():
+        raise ValueError(f"campaign artifact path is not a regular file: {resolved}")
+    return resolved
 
 
 def _load_manifest_provenance_section(payload: dict[str, Any]) -> tuple[str, str]:
@@ -845,14 +899,20 @@ def load_release_manifest(path: str | Path) -> BenchmarkReleaseManifest:
     payload = _load_mapping(manifest_path)
     identity = _load_manifest_identity(payload)
     release_metadata = _load_manifest_release_metadata(payload)
-    path_section = _load_manifest_paths_section(manifest_path, payload)
+    # Check top-level shapes before resolving any filesystem-backed side input.
+    # This keeps malformed manifests diagnostic even when a synthetic fixture
+    # lives outside the checkout; real side inputs are still resolved fail closed
+    # below.
+    scenario_payload = payload.get("scenario")
+    if not isinstance(scenario_payload, dict):
+        raise ValueError("scenario must be a mapping")
+    if not str(scenario_payload.get("matrix_sha256", "")).strip():
+        raise ValueError("scenario.matrix_sha256 must be a non-empty string")
+    for field in ("seed_policy", "planners", "kinematics", "artifacts", "provenance"):
+        if not isinstance(payload.get(field), dict):
+            raise ValueError(f"{field} must be a mapping")
     v02_contract = _load_v02_contract(manifest_path, payload)
     stress_contract = _load_stress_smoke_contract(manifest_path, payload)
-
-    scenario_matrix_path, scenario_matrix_sha256 = _load_manifest_scenario_section(
-        manifest_path,
-        payload,
-    )
 
     config_sha256 = str(release_metadata["campaign_config_sha256"] or "").strip()
     if not config_sha256:
@@ -868,6 +928,11 @@ def load_release_manifest(path: str | Path) -> BenchmarkReleaseManifest:
     )
     required_artifact_paths = _load_manifest_artifacts_section(payload)
     repository_url, doi = _load_manifest_provenance_section(payload)
+    scenario_matrix_path, scenario_matrix_sha256 = _load_manifest_scenario_section(
+        manifest_path,
+        payload,
+    )
+    path_section = _load_manifest_paths_section(manifest_path, payload)
 
     return BenchmarkReleaseManifest(
         path=manifest_path,

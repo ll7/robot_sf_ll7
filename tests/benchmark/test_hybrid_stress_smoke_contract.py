@@ -343,6 +343,47 @@ def test_unwrapped_planner_runtime_fallback_marker_is_never_admitted() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    "payload",
+    (
+        {"planner_runtime": {"fallback_count": "1"}},
+        {"planner_runtime": {"fallback_count": "not-a-number"}},
+        {"planner_runtime": {"fallback_triggered": "true"}},
+        {"planner_runtime": {"degraded": "false"}},
+        {"planner_runtime": {"fallback_or_degraded": 1}},
+        {"planner_runtime": {"emergency_stop": "true"}},
+        {"planner_runtime": {"emergency_stop_count": "0"}},
+        {"fallback": "true"},
+        {"fallback_used": "false"},
+    ),
+)
+def test_malformed_runtime_marker_encodings_are_never_admitted(
+    payload: dict[str, Any],
+) -> None:
+    """String and non-boolean marker encodings fail closed instead of disappearing."""
+    assert _status_markers(payload, "stress-row")
+
+
+def test_native_rows_preserve_metric_level_missing_values() -> None:
+    """Metric availability values are not runtime fallback/degraded markers."""
+    payload = {
+        "status": "success",
+        "metrics": {
+            "route_efficiency": "unavailable",
+            "snqi": None,
+            "availability_status": "missing",
+        },
+        "planner_runtime": {
+            "fallback_count": 0,
+            "fallback_triggered": False,
+            "degraded": False,
+            "fallback_or_degraded": False,
+        },
+    }
+
+    assert _status_markers(payload, "stress-row") == []
+
+
 def test_stress_runtime_identity_uses_launch_pin_not_review_base() -> None:
     manifest = load_release_manifest(MANIFEST_PATH)
     runtime_commit = "a" * 40

@@ -197,6 +197,24 @@ def test_publish_camera_ready_release_rejects_missing_checksums(
         )
 
 
+def test_publish_camera_ready_release_rejects_symlink_campaign_summary(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Publication validation rejects a summary link before reading it."""
+    campaign_root = _make_campaign_tree(tmp_path, tag="v1.0.4")
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    outside = tmp_path / "outside-summary.json"
+    outside.write_text(summary_path.read_text(encoding="utf-8"), encoding="utf-8")
+    summary_path.unlink()
+    summary_path.symlink_to(outside)
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="symlink"):
+        publish_camera_ready_release._validate_prerequisites(
+            campaign_root, expected_release_tag="v1.0.4"
+        )
+
+
 def test_publish_camera_ready_release_rejects_empty_publication_path(
     tmp_path: Path, monkeypatch
 ) -> None:

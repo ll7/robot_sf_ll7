@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -82,7 +83,7 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
         ``(path, normalized_value)`` for the first forbidden marker, otherwise ``None``.
     """
 
-    def _visit(value: Any, path: str) -> tuple[str, str] | None:  # noqa: C901
+    def _visit(value: Any, path: str) -> tuple[str, str] | None:  # noqa: C901, PLR0912
         if isinstance(value, dict):
             for raw_key, item in value.items():
                 key = str(raw_key)
@@ -96,13 +97,26 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
                         return item_path, normalized
                 if key in _RUNTIME_BOOLEAN_MARKERS and item is True:
                     return item_path, "true"
-                if (
-                    "fallback" in key
-                    and isinstance(item, (int, float))
-                    and not isinstance(item, bool)
-                    and item > 0
-                ):
-                    return item_path, str(item)
+                if key in _RUNTIME_BOOLEAN_MARKERS:
+                    if not isinstance(item, bool):
+                        return item_path, "invalid"
+                elif "fallback" in key:
+                    if isinstance(item, (int, float)) and not isinstance(item, bool):
+                        try:
+                            finite = math.isfinite(float(item))
+                        except (OverflowError, ValueError):
+                            finite = False
+                        if not finite or item < 0:
+                            return item_path, "invalid"
+                        if item > 0:
+                            return item_path, str(item)
+                    else:
+                        # Runtime marker fields are intentionally type-strict:
+                        # accepting JSON strings such as ``"1"`` or ``"false"``
+                        # would let malformed producer output disappear from the
+                        # release gate.  Descriptive text is not inspected unless
+                        # it is attached to a key containing ``fallback``.
+                        return item_path, "invalid"
                 nested = _visit(item, item_path)
                 if nested is not None:
                     return nested

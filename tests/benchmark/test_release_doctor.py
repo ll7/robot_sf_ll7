@@ -364,7 +364,9 @@ def _write_final_packet_fixture(
         f"--time={resources['wall_clock']}",
         *(["--sbatch-arg", f"--qos={resources['qos']}"] if resources.get("qos") else []),
     ]
-    submit_args = ",".join(submit_identity) + " " + " ".join(scheduler_args)
+    submit_args = (
+        "--sbatch-arg --export=ALL," + ",".join(submit_identity) + " " + " ".join(scheduler_args)
+    )
     queue_path.write_text(
         yaml.safe_dump(
             [
@@ -373,11 +375,14 @@ def _write_final_packet_fixture(
                     "campaign": campaign,
                     "state": "ready",
                     "expected_public_commit": source_sha,
-                    "artifact_manifest": "ops/jobs/launch_packets/packet.json",
+                    "artifact_manifest": (
+                        f"ops/jobs/launch_packets/{packet_path.name} sha256:{packet_hash}"
+                    ),
                     "submit_args": submit_args,
                     "cluster": resources["cluster"],
                     "partition": resources["partition"],
                     "route_id": resources["route_id"],
+                    **({"qos": resources["qos"]} if resources.get("qos") else {}),
                     "cpus": str(resources["cpus"]),
                     "gpus": str(resources["gpus"]),
                     "mem_gb": str(resources["mem_gb"]),
@@ -531,6 +536,117 @@ def test_final_cluster_check_rejects_imech192_scheduler_arg_drift(
     assert summary in rejected.summary
 
 
+def test_final_cluster_check_rejects_substring_packet_hash_binding(tmp_path: Path) -> None:
+    """A similarly named export key cannot satisfy packet hash binding."""
+    packet, queue = _write_final_packet_fixture(
+        tmp_path, resource_profile="imech192", frozen_status=True
+    )
+    queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+    queue_payload[0]["submit_args"] = queue_payload[0]["submit_args"].replace(
+        "RELEASE_LAUNCH_PACKET_SHA256=", "XRELEASE_LAUNCH_PACKET_SHA256=", 1
+    )
+    queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert "RELEASE_LAUNCH_PACKET_SHA256 is missing" in rejected.summary
+
+
+def test_final_cluster_check_rejects_artifact_manifest_hash_drift(tmp_path: Path) -> None:
+    """A queue artifact-manifest digest cannot describe different packet bytes."""
+    packet, queue = _write_final_packet_fixture(tmp_path)
+    queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+    artifact_manifest = queue_payload[0]["artifact_manifest"]
+    artifact_path = artifact_manifest.split(" sha256:", 1)[0]
+    queue_payload[0]["artifact_manifest"] = f"{artifact_path} sha256:{'0' * 64}"
+    queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert "artifact manifest hash does not match packet" in rejected.summary
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "RELEASE_LAUNCH_PACKET_SHA256",
+        "RELEASE_MANIFEST_SHA256",
+        "RELEASE_CONFIG_SHA256",
+        "RELEASE_SCENARIO_SHA256",
+        "RELEASE_CHECKPOINT_RECEIPT_SHA256",
+        "RELEASE_RUNTIME_SMOKE_RECEIPT_SHA256",
+        "RELEASE_PUBLIC_SCRIPT_SHA256",
+        "RELEASE_MANIFEST_PATH",
+        "RELEASE_SCENARIO_PATH",
+        "RELEASE_CHECKPOINT_RECEIPT_PATH",
+        "RELEASE_RUNTIME_SMOKE_RECEIPT_PATH",
+        "RELEASE_CAMPAIGN_ID",
+        "RELEASE_EXPECTED_CPUS",
+        "RELEASE_EXPECTED_GPUS",
+        "RELEASE_EXPECTED_MEM_GB",
+        "RELEASE_EXPECTED_WALLTIME",
+    ],
+)
+def test_final_cluster_check_rejects_duplicate_release_export(tmp_path: Path, field: str) -> None:
+    """Every exported release identity must have one effective value."""
+    packet, queue = _write_final_packet_fixture(
+        tmp_path, resource_profile="imech192", frozen_status=True
+    )
+    queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+    submit_args = queue_payload[0]["submit_args"]
+    duplicate = "wrong" if not field.endswith("_SHA256") else "0" * 64
+    queue_payload[0]["submit_args"] = submit_args.replace(
+        "--export=ALL,", f"--export=ALL,{field}={duplicate},", 1
+    )
+    queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert f"private queue {field} is duplicated" in rejected.summary
+
+
+def test_final_cluster_check_rejects_queue_qos_drift(tmp_path: Path) -> None:
+    """A queue-level QoS, when recorded, must match the packet route."""
+    packet, queue = _write_final_packet_fixture(
+        tmp_path, resource_profile="imech192", frozen_status=True
+    )
+    queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+    queue_payload[0]["qos"] = "other-qos"
+    queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert "resource contract mismatch: qos" in rejected.summary
+
+
 @pytest.mark.parametrize("value", [True, 36.0, "36.5"])
 def test_final_cluster_check_rejects_non_strict_integer_queue_resource(
     tmp_path: Path, value: object
@@ -553,6 +669,71 @@ def test_final_cluster_check_rejects_non_strict_integer_queue_resource(
     )
     assert rejected.status == "fail"
     assert "private queue resource contract mismatch: cpus" in rejected.summary
+
+
+@pytest.mark.parametrize("value", [True, 0, -1, 0.0, "0", "0.5"])
+def test_final_cluster_check_rejects_nonpositive_estimated_elapsed(
+    tmp_path: Path, value: object
+) -> None:
+    """Queue duration evidence must be a strict positive integer."""
+    packet, queue = _write_final_packet_fixture(
+        tmp_path, resource_profile="imech192", frozen_status=True
+    )
+    queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+    queue_payload[0]["estimated_elapsed_sec"] = value
+    queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert "estimated_elapsed_sec must be positive" in rejected.summary
+
+
+def test_final_cluster_check_rejects_nonpositive_packet_wall_clock(tmp_path: Path) -> None:
+    """The frozen packet cannot admit a zero-duration wall clock."""
+    packet, queue = _write_final_packet_fixture(
+        tmp_path, resource_profile="imech192", frozen_status=True
+    )
+    packet_payload = json.loads(packet.read_text(encoding="utf-8"))
+    packet_payload["execution_contract"]["wall_clock"] = "00:00:00"
+    packet_payload["execution_contract"]["wall_clock_seconds"] = 0
+    packet.write_text(json.dumps(packet_payload, sort_keys=True), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert "wall_clock must be positive" in rejected.summary
+
+
+def test_final_cluster_check_rejects_fractional_runtime_smoke_max_age(tmp_path: Path) -> None:
+    """Runtime-smoke freshness limits cannot use int() truncation."""
+    packet, queue = _write_final_packet_fixture(tmp_path)
+    packet_payload = json.loads(packet.read_text(encoding="utf-8"))
+    packet_payload["execution_contract"]["runtime_smoke_receipt_max_age_hours"] = 24.9
+    packet.write_text(json.dumps(packet_payload, sort_keys=True), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert "freshness contract is not 24 hours" in rejected.summary
 
 
 def test_final_cluster_check_accepts_exact_scheduler_time_as_duration_evidence(
@@ -618,6 +799,60 @@ def test_final_cluster_check_rejects_missing_public_input(tmp_path: Path) -> Non
     )
     assert rejected.status == "fail"
     assert "release_manifest file is missing" in rejected.summary
+
+
+@pytest.mark.parametrize("input_name", release_doctor._PUBLIC_PACKET_INPUT_NAMES)
+def test_final_cluster_check_rejects_each_undeclared_public_input(
+    tmp_path: Path, input_name: str
+) -> None:
+    """The canonical packet cannot omit any declared public input."""
+    packet, queue = _write_final_packet_fixture(tmp_path)
+    payload = json.loads(packet.read_text(encoding="utf-8"))
+    del payload["inputs"][input_name]
+    packet.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert f"inputs.{input_name} is missing" in rejected.summary
+
+
+@pytest.mark.parametrize(
+    ("packet_queue_id", "row_queue_id", "summary"),
+    [
+        ("", "queue-1", "launch packet queue_id is missing or not concrete"),
+        ("pending-queue", "pending-queue", "launch packet queue_id is missing or not concrete"),
+        ("queue-1", "", "private queue row queue_id is missing or not concrete"),
+    ],
+)
+def test_final_cluster_check_requires_concrete_packet_and_row_queue_ids(
+    tmp_path: Path, packet_queue_id: str, row_queue_id: str, summary: str
+) -> None:
+    """Queue identity cannot be inferred from an empty or placeholder ID."""
+    packet, queue = _write_final_packet_fixture(tmp_path)
+    packet_payload = json.loads(packet.read_text(encoding="utf-8"))
+    packet_payload["queue_id"] = packet_queue_id
+    packet.write_text(json.dumps(packet_payload, sort_keys=True), encoding="utf-8")
+    queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+    queue_payload[0]["queue_id"] = row_queue_id
+    queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert summary in rejected.summary
 
 
 def test_final_cluster_check_rejects_runtime_smoke_identity_drift(tmp_path: Path) -> None:

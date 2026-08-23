@@ -239,3 +239,48 @@ def test_checkpoint_receipt_rejects_missing_receipt(tmp_path: Path) -> None:
             tmp_path / "missing.json",
             campaign_config_path=tmp_path / "campaign.yaml",
         )
+
+
+def test_checkpoint_receipt_unavailable_bytes_name_verifier_location(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #7819: missing staged bytes must be diagnosed as a verifier-location condition."""
+    cfg, config, registry, receipt, payload = _receipt_fixture(tmp_path)
+    payload["arms"][0]["resolved_path"] = str(tmp_path / "not-on-this-host.zip")
+    _write(receipt, payload)
+    _patch_references(monkeypatch)
+
+    with pytest.raises(
+        staging.CheckpointStagingReceiptError,
+        match="verifier-location condition",
+    ):
+        staging.validate_checkpoint_staging_receipt(
+            cfg,
+            receipt,
+            campaign_config_path=config,
+            registry_path=registry,
+            now=datetime(2026, 8, 21, 13, tzinfo=UTC),
+        )
+
+
+def test_checkpoint_receipt_mismatch_stays_distinct_from_verifier_location(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Issue #7819: a checksum mismatch remains a distinct fail-closed diagnostic."""
+    cfg, config, registry, receipt, payload = _receipt_fixture(tmp_path)
+    payload["arms"][0]["checkpoint_sha256"] = "a" * 64
+    _write(receipt, payload)
+    _patch_references(monkeypatch)
+
+    with pytest.raises(
+        staging.CheckpointStagingReceiptError,
+        match="checksum changed",
+    ) as exc_info:
+        staging.validate_checkpoint_staging_receipt(
+            cfg,
+            receipt,
+            campaign_config_path=config,
+            registry_path=registry,
+            now=datetime(2026, 8, 21, 13, tzinfo=UTC),
+        )
+    assert "verifier-location" not in str(exc_info.value)

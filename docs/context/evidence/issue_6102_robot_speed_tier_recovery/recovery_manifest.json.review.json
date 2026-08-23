@@ -1,7 +1,7 @@
 {
   "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_6102_robot_speed_tier_recovery/recovery_manifest.json",
-  "artifact_sha256": "e541d75d0bb5583a2d48ab710894ea85788a99be88e410c1a798b4778af36601",
+  "artifact_sha256": "e1c514744f4b81a1947c35c2096ced7250fa0346c2cbecca242a90a75d29a1b8",
   "preserved_exact_bytes": true,
   "review_marker": [
     "AI-GENERATED",

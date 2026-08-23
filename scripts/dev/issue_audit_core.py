@@ -2044,11 +2044,16 @@ def _mutation_issue_preconditions(
         if not isinstance(mutation, Mapping):
             errors.append({"index": index, "error": "mutation is not an object"})
             continue
-        try:
-            number = int(mutation["issue"])
-        except (KeyError, TypeError, ValueError) as exc:
-            errors.append({"index": index, "error": f"invalid mutation issue: {exc}"})
+        raw_issue = mutation.get("issue")
+        if isinstance(raw_issue, bool) or not isinstance(raw_issue, int):
+            errors.append(
+                {
+                    "index": index,
+                    "error": "mutation issue must be an exact positive integer",
+                }
+            )
             continue
+        number = raw_issue
         if number <= 0:
             errors.append({"index": index, "issue": number, "error": "issue must be positive"})
             continue
@@ -2071,6 +2076,16 @@ def _mutation_issue_preconditions(
                     "issue": number,
                     "operation": operation,
                     "error": f"{operation} requires a non-empty string value",
+                }
+            )
+            continue
+        if operation == "close_issue" and value is not None:
+            errors.append(
+                {
+                    "index": index,
+                    "issue": number,
+                    "operation": operation,
+                    "error": "close_issue requires a null value",
                 }
             )
             continue
@@ -2124,8 +2139,6 @@ def apply_mutations(
     only executes explicit operations in the plan and refuses a truncated plan,
     missing repository, or unsupported operation.
     """
-    if plan.get("schema") != PLAN_SCHEMA:
-        raise ValueError(f"expected {PLAN_SCHEMA}")
     raw_mutations = plan.get("mutations")
     planned_count = len(raw_mutations) if isinstance(raw_mutations, list) else 0
 
@@ -2139,6 +2152,27 @@ def apply_mutations(
             "stale_state_issues": 0,
             "skipped_stale_mutations": 0,
         }
+
+    def refuse(reason: str, *, failed: int = 1) -> dict[str, Any]:
+        """Return a stable structured refusal without attempting a write."""
+        return {
+            "schema": "issue_audit_apply.v1",
+            "ok": False,
+            "reason": reason,
+            "applied": [],
+            "already_applied": [],
+            "stale_states": [],
+            "failures": [reason],
+            "readback": [],
+            "counts": empty_counts(failed),
+        }
+
+    if plan.get("schema") != PLAN_SCHEMA:
+        return refuse(f"expected {PLAN_SCHEMA}")
+    if not isinstance(raw_mutations, list):
+        return refuse("plan mutations must be a list")
+    if len(raw_mutations) > max_mutations:
+        return refuse("plan exceeds mutation budget")
 
     recorded_digest = str(plan.get("plan_digest") or "")
     if not recorded_digest:
@@ -2192,10 +2226,6 @@ def apply_mutations(
             "counts": empty_counts(len(plan["truncation_or_errors"])),
         }
     mutations = raw_mutations
-    if not isinstance(mutations, list):
-        raise ValueError("plan mutations must be a list")
-    if len(mutations) > max_mutations:
-        raise ValueError("plan exceeds mutation budget")
     blocked_label_errors = _blocked_label_plan_errors(mutations)
     if blocked_label_errors:
         return {
@@ -2256,13 +2286,9 @@ def apply_mutations(
         if not isinstance(mutation, Mapping):
             failures.append({"mutation": mutation, "error": "mutation is not an object"})
             continue
-        try:
-            number = int(mutation["issue"])
-            operation = str(mutation["operation"])
-            value = mutation.get("value")
-        except (KeyError, TypeError, ValueError) as exc:
-            failures.append({"mutation": dict(mutation), "error": f"invalid mutation: {exc}"})
-            continue
+        number = mutation["issue"]
+        operation = str(mutation["operation"])
+        value = mutation.get("value")
         if number not in preflighted:
             preflighted.add(number)
             expected_issue = preconditions[number]
@@ -2293,8 +2319,7 @@ def apply_mutations(
                         "skipped_mutations": sum(
                             1
                             for candidate in mutations
-                            if isinstance(candidate, Mapping)
-                            and str(candidate.get("issue")) == str(number)
+                            if isinstance(candidate, Mapping) and candidate.get("issue") == number
                         ),
                     }
                     stale_states.append(stale)

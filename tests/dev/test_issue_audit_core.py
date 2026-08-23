@@ -1576,6 +1576,24 @@ def test_apply_rejects_missing_state_version_precondition_before_reads() -> None
         "not-an-object",
         {"operation": "add_label", "issue": "bad", "value": "state:ready"},
         {
+            "operation": "add_label",
+            "issue": True,
+            "value": "state:ready",
+            "expected_issue": _expected_issue(),
+        },
+        {
+            "operation": "add_label",
+            "issue": 1.9,
+            "value": "state:ready",
+            "expected_issue": _expected_issue(),
+        },
+        {
+            "operation": "add_label",
+            "issue": "001",
+            "value": "state:ready",
+            "expected_issue": _expected_issue(),
+        },
+        {
             "operation": "unsupported",
             "issue": 109,
             "expected_issue": _expected_issue(),
@@ -1584,6 +1602,12 @@ def test_apply_rejects_missing_state_version_precondition_before_reads() -> None
             "operation": "add_label",
             "issue": 109,
             "value": "",
+            "expected_issue": _expected_issue(),
+        },
+        {
+            "operation": "close_issue",
+            "issue": 109,
+            "value": "closed",
             "expected_issue": _expected_issue(),
         },
     ],
@@ -1621,6 +1645,54 @@ def test_apply_rejects_mixed_invalid_and_valid_plan_before_any_rest_call(
     assert result["counts"]["planned"] == 2
     assert result["counts"]["applied"] == 0
     assert result["counts"]["failed"] == 1
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("plan", "max_mutations", "reason", "planned"),
+    [
+        ({"schema": "wrong", "mutations": []}, 10, "expected issue_audit_plan.v1", 0),
+        ({"schema": "issue_audit_plan.v1", "mutations": {}}, 10, "must be a list", 0),
+        (
+            {
+                "schema": "issue_audit_plan.v1",
+                "mutations": [
+                    {"operation": "close_issue", "issue": 1, "value": None},
+                    {"operation": "close_issue", "issue": 2, "value": None},
+                ],
+            },
+            1,
+            "exceeds mutation budget",
+            2,
+        ),
+    ],
+)
+def test_apply_contract_refusals_return_stable_counts_without_rest_calls(
+    plan: dict[str, object],
+    max_mutations: int,
+    reason: str,
+    planned: int,
+) -> None:
+    """Top-level plan contract failures use the stable no-write result shape."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        raise AssertionError("contract refusal must happen before any REST call")
+
+    result = apply_mutations(plan, max_mutations=max_mutations, runner=runner)
+
+    assert result["ok"] is False
+    assert reason in result["reason"]
+    assert result["applied"] == []
+    assert result["counts"] == {
+        "planned": planned,
+        "applied": 0,
+        "already_applied": 0,
+        "failed": 1,
+        "stale_state_issues": 0,
+        "skipped_stale_mutations": 0,
+    }
     assert calls == []
 
 

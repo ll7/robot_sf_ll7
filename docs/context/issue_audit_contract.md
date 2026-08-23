@@ -280,7 +280,8 @@ Every planned mutation also carries the issue snapshot used by classification:
       state: open
       updated_at: "2026-08-23T00:00:00Z"
 
-The plan digest binds this state/version snapshot. Apply rejects missing or inconsistent snapshots
+The plan digest binds this state/version snapshot. Apply rejects missing or inconsistent snapshots,
+issue identifiers that are not exact positive JSON integers, and non-null `close_issue` values
 before any REST read or write. Immediately before the first mutation for an issue, apply reads the
 live issue once and compares both fields. A mismatch skips the complete per-issue mutation batch,
 records a machine-readable `stale_state` disposition with expected and observed values, and does

@@ -414,9 +414,6 @@ class ResultInterpretationPacket:
         payload = asdict(self)
         if self.estimand.comparator is None:
             payload["estimand"].pop("comparator")
-        for source, source_payload in zip(self.sources, payload["sources"], strict=True):
-            if source.direction is None:
-                source_payload.pop("direction")
         return payload
 
 

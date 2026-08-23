@@ -1204,6 +1204,9 @@ class TestCLI:
         output_file = tmp_path / "output.json"
 
         assert main(["--input", str(input_file), "--output", str(output_file)]) == 0
+        output = json.loads(output_file.read_text(encoding="utf-8"))
+        assert "comparator" not in output["estimand"]
+        assert all(source["direction"] is None for source in output["sources"])
         assert load_result_interpretation_packet(output_file).packet_id == _VALID_6944["packet_id"]
 
     def test_cli_show_digest(self, tmp_path: Path) -> None:

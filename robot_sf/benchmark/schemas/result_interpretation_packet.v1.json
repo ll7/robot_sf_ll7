@@ -254,8 +254,19 @@
           "minLength": 1
         },
         "direction": {
-          "type": "string",
-          "enum": ["comparison_minus_reference", "reference_minus_comparison", "not_applicable"]
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "comparison_minus_reference",
+                "reference_minus_comparison",
+                "not_applicable"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "description": {
           "type": "string",

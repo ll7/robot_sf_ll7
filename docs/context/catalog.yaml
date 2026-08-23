@@ -285,22 +285,6 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
-- path: docs/context/evidence/issue_6102_robot_speed_tier_recovery/README.md
-  status: evidence
-  freshness: evidence
-  area: benchmark_evidence
-- path: docs/context/evidence/issue_6102_robot_speed_tier_recovery/README.md.review.json
-  status: evidence
-  freshness: evidence
-  area: benchmark_evidence
-- path: docs/context/evidence/issue_6102_robot_speed_tier_recovery/recovery_manifest.json
-  status: evidence
-  freshness: evidence
-  area: benchmark_evidence
-- path: docs/context/evidence/issue_6102_robot_speed_tier_recovery/recovery_manifest.json.review.json
-  status: evidence
-  freshness: evidence
-  area: benchmark_evidence
 - path: docs/context/issue_6008_state.yaml
   status: current
   freshness: maintained
@@ -5313,6 +5297,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/diss_613_collision_pressure_release_0_0_3_post1
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6102_robot_speed_tier_recovery
   status: evidence
   freshness: evidence
   area: benchmark_evidence

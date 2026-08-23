@@ -1196,8 +1196,9 @@ def _rest_pull_core(
     """Fetch the REST pull payload and validate its gate-critical fields.
 
     Returns ``(normalized_core, error)`` where ``normalized_core`` carries the
-    pull number, title, body, draft state, exact head SHA, and labels in the
-    ``gh pr view`` shape. Fails closed on any missing gate-critical field.
+    pull number, title, body, lifecycle state, merge timestamp, draft state,
+    exact head SHA, and labels in the ``gh pr view`` shape. Fails closed on any
+    missing gate-critical field.
     """
     pull_result = _gh(["api", f"repos/{owner}/{name}/pulls/{pr_number}"], timeout=45)
     if pull_result.returncode != 0:
@@ -1216,11 +1217,19 @@ def _rest_pull_core(
     body = pull.get("body")
     if not isinstance(title, str) or body is None or not isinstance(body, str):
         return {}, "REST pull title or body is missing or malformed"
+    state = pull.get("state")
+    if not isinstance(state, str) or not state.strip():
+        return {}, "REST pull state is missing or malformed"
+    merged_at = pull.get("merged_at")
+    if merged_at is not None and (not isinstance(merged_at, str) or not merged_at.strip()):
+        return {}, "REST pull merged_at is malformed"
 
     return {
         "number": pull.get("number"),
         "title": title,
         "body": body,
+        "state": state,
+        "mergedAt": merged_at,
         "isDraft": draft_value,
         "headRefOid": head_sha,
         "labels": _rest_labels(pull.get("labels")),
@@ -1271,7 +1280,7 @@ def _rest_pr_view_payload(pr_number: str | int, *, repo: str) -> tuple[dict[str,
     }, None
 
 
-def fetch_pr_snapshot(  # noqa: C901 - validates several independent live API fields fail-closed.
+def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent live API fields fail-closed.
     pr_number: str | int, *, repo: str
 ) -> tuple[dict[str, Any], str | None]:
     """Fetch a compact PR snapshot via ``gh pr view`` for gate evaluation.
@@ -1290,7 +1299,7 @@ def fetch_pr_snapshot(  # noqa: C901 - validates several independent live API fi
             "--repo",
             repo,
             "--json",
-            "number,title,body,isDraft,headRefOid,labels,statusCheckRollup,comments,reviews,reviewRequests",
+            "number,title,body,state,mergedAt,isDraft,headRefOid,labels,statusCheckRollup,comments,reviews,reviewRequests",
         ],
         timeout=30,
     )
@@ -1324,6 +1333,18 @@ def fetch_pr_snapshot(  # noqa: C901 - validates several independent live API fi
         body = ""
     if not isinstance(body, str):
         return {}, "gh pr view body field is malformed"
+
+    raw_state = payload.get("state")
+    if not isinstance(raw_state, str) or not raw_state.strip():
+        return {}, "gh pr view state field is missing or malformed"
+    merged_at = payload.get("mergedAt")
+    if merged_at is not None and (not isinstance(merged_at, str) or not merged_at.strip()):
+        return {}, "gh pr view mergedAt field is malformed"
+    pr_state = raw_state.upper()
+    if merged_at:
+        pr_state = "MERGED"
+    elif pr_state not in {"OPEN", "CLOSED"}:
+        return {}, f"gh pr view state field is unsupported: {pr_state}"
 
     review_requests = payload.get("reviewRequests")
     if not isinstance(review_requests, list):
@@ -1366,6 +1387,8 @@ def fetch_pr_snapshot(  # noqa: C901 - validates several independent live API fi
 
     snapshot: dict[str, Any] = {
         "number": payload.get("number"),
+        "pr_state": pr_state,
+        "pr_merged_at": merged_at,
         "draft": draft_value,
         "head_sha": head_sha,
         "metadata_digest": current_metadata_digest,

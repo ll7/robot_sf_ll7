@@ -135,6 +135,8 @@ def _raw_pr(
         "number": 42,
         "title": "merge queue test PR",
         "body": "final body",
+        "state": "OPEN",
+        "mergedAt": None,
         "isDraft": False,
         "headRefOid": FULL_SHA,
         "labels": [{"name": "merge-ready"}],
@@ -209,6 +211,8 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
 
     assert error is None
     assert snapshot["base_sha"] == "base_sha"
+    assert snapshot["pr_state"] == "OPEN"
+    assert snapshot["pr_merged_at"] is None
     first_call = mock_gh.call_args_list[0].args[0]
     assert first_call[:3] == ["pr", "view", "42"]
     fields = first_call[first_call.index("--json") + 1]
@@ -217,12 +221,31 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
     assert mock_gh.call_args_list[1].args[0] == ["api", "repos/owner/repo/pulls/42"]
 
 
+def test_fetch_pr_snapshot_preserves_terminal_merged_state() -> None:
+    raw_pr = _raw_pr()
+    raw_pr["state"] = "CLOSED"
+    raw_pr["mergedAt"] = "2026-08-23T19:28:15Z"
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(raw_pr)),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["pr_state"] == "MERGED"
+    assert snapshot["pr_merged_at"] == "2026-08-23T19:28:15Z"
+
+
 def _rest_pull_response(*, head_sha: str = FULL_SHA, body: str = "") -> MagicMock:
     """Build a REST ``pulls/{n}`` response carrying the gate-critical fields."""
     payload = {
         "number": 42,
         "title": "merge queue test PR",
         "body": body or "final body",
+        "state": "open",
+        "merged_at": None,
         "draft": False,
         "head": {"sha": head_sha},
         "base": {"sha": "base_sha"},
@@ -274,6 +297,8 @@ def test_fetch_pr_snapshot_rest_fallback_when_graphql_quota_exhausted() -> None:
 
     assert error is None, error
     assert snapshot["head_sha"] == FULL_SHA
+    assert snapshot["pr_state"] == "OPEN"
+    assert snapshot["pr_merged_at"] is None
     assert snapshot["base_sha"] == "base_sha"
     assert snapshot["draft"] is False
     assert snapshot["labels"] == ["merge-ready"]

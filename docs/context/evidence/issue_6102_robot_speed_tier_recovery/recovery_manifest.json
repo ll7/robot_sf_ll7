@@ -17,8 +17,8 @@
     "scheduler_state": "COMPLETED",
     "exit_code": "0:0",
     "elapsed": "04:35:46",
-    "recorded_remote_results": "/home/luttkule/external_data_hub/benchmark-results/robot_sf_ll7/issue5578/native-speed-tier/job-13828",
-    "recorded_local_results": "/home/luttkule/git/robot_sf_ll7/output/issue5578-native-speed-tier/13828"
+    "recorded_remote_results": "external_data_hub/benchmark-results/robot_sf_ll7/issue5578/native-speed-tier/job-13828",
+    "recorded_local_results": "output/issue5578-native-speed-tier/13828"
   },
   "source_availability": {
     "local_recovery_root": "output/issue5578-native-speed-tier/13828",

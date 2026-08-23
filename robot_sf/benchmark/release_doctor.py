@@ -298,7 +298,14 @@ def _manifest_check(
     )
 
 
-def _checkpoint_check(cfg: Any, manifest: Any, receipt: Path | None) -> ReleaseDoctorCheck:
+def _checkpoint_check(
+    cfg: Any,
+    manifest: Any,
+    receipt: Path | None,
+    *,
+    repo_root: Path | None = None,
+    checkpoint_path_map: Any = None,
+) -> ReleaseDoctorCheck:
     """Validate exact staged-checkpoint admission.
 
     Returns:
@@ -307,10 +314,19 @@ def _checkpoint_check(cfg: Any, manifest: Any, receipt: Path | None) -> ReleaseD
     if cfg is None or manifest is None or receipt is None:
         return ReleaseDoctorCheck("checkpoints", "fail", "staged-checkpoint receipt is missing")
     try:
+        mapping_kwargs = (
+            {
+                "checkpoint_path_map": checkpoint_path_map,
+                "repo_root": repo_root,
+            }
+            if checkpoint_path_map
+            else {}
+        )
         payload = validate_checkpoint_staging_receipt(
             cfg,
             receipt,
             campaign_config_path=manifest.canonical_campaign_config_path,
+            **mapping_kwargs,
         )
     except CheckpointStagingReceiptError as exc:
         return ReleaseDoctorCheck("checkpoints", "fail", str(exc))
@@ -1462,6 +1478,7 @@ def collect_release_doctor_report(  # noqa: PLR0913
     private_launch_packet: Path | None,
     dissertation: Path | None,
     token_file: Path | None,
+    checkpoint_path_map: Any = None,
     expected_cells: int = 20160,
     minimum_free_gib: float = 100.0,
     require_zenodo_webhook_disabled: bool = False,
@@ -1506,13 +1523,35 @@ def collect_release_doctor_report(  # noqa: PLR0913
         # Preserve the lightweight preparation-mode contract for callers that
         # only have a draft packet and no queue row yet.
         cluster_check = _cluster_check(private_launch_packet, expected_release_sha)
+    if final and checkpoint_path_map:
+        checkpoint_check = ReleaseDoctorCheck(
+            "checkpoints",
+            "fail",
+            "checkpoint path remaps are diagnostic-only and cannot satisfy final publication "
+            "admission",
+        )
+    else:
+        checkpoint_kwargs = (
+            {
+                "repo_root": repo,
+                "checkpoint_path_map": checkpoint_path_map,
+            }
+            if checkpoint_path_map
+            else {}
+        )
+        checkpoint_check = _checkpoint_check(
+            cfg,
+            manifest,
+            checkpoint_receipt,
+            **checkpoint_kwargs,
+        )
     checks = [
         _git_check(repo, expected_release_sha),
         _ci_check(repo, expected_release_sha),
         _tag_check(repo, tag),
         manifest_check,
         _release_identity_check(manifest, expected_base_sha, tag),
-        _checkpoint_check(cfg, manifest, checkpoint_receipt),
+        checkpoint_check,
         cluster_check,
         _disk_check(repo, minimum_free_gib),
         *_zenodo_check(

@@ -46,6 +46,16 @@ def build_subparser(subparsers: Any) -> None:
         help="Require the admitted private packet and queue row to use this fixed campaign ID.",
     )
     doctor.add_argument("--checkpoint-receipt", type=Path)
+    doctor.add_argument(
+        "--checkpoint-path-map",
+        action="append",
+        default=[],
+        metavar="RECEIPT_PATH=LOCAL_PATH",
+        help=(
+            "Explicitly remap an exact receipt resolved_path to a local checkpoint; repeatable. "
+            "The local path must be a regular file beneath --repo."
+        ),
+    )
     doctor.add_argument("--private-launch-packet", type=Path)
     doctor.add_argument("--private-queue", type=Path)
     doctor.add_argument("--dissertation", type=Path)
@@ -110,6 +120,7 @@ def handle(args: argparse.Namespace) -> int:
             tag=args.tag,
             expected_campaign_id=getattr(args, "expected_campaign_id", None),
             checkpoint_receipt=args.checkpoint_receipt,
+            checkpoint_path_map=getattr(args, "checkpoint_path_map", None),
             private_launch_packet=args.private_launch_packet,
             private_queue=getattr(args, "private_queue", None),
             dissertation=args.dissertation,

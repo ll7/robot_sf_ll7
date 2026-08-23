@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -133,7 +134,115 @@ def _validate_receipt_registry(payload: dict[str, Any], registry_path: Path) -> 
         raise CheckpointStagingReceiptError("checkpoint receipt model registry hash does not match")
 
 
-def _validated_arm_file(arm: dict[str, Any]) -> tuple[str, Path, str]:
+def _normalize_checkpoint_path_map(  # noqa: C901
+    checkpoint_path_map: Mapping[Any, Any] | Sequence[Any] | None,
+) -> dict[str, str]:
+    """Normalize explicit receipt-path mappings without normalizing source keys.
+
+    Returns:
+        A mapping keyed by the exact receipt ``resolved_path`` strings.
+    """
+    if checkpoint_path_map is None:
+        return {}
+    if isinstance(checkpoint_path_map, Mapping):
+        entries = list(checkpoint_path_map.items())
+    elif isinstance(checkpoint_path_map, Sequence) and not isinstance(
+        checkpoint_path_map, (str, bytes, bytearray)
+    ):
+        entries = []
+        for entry in checkpoint_path_map:
+            if isinstance(entry, str):
+                source, separator, destination = entry.partition("=")
+                if not separator:
+                    raise CheckpointStagingReceiptError(
+                        "checkpoint path mapping must be RECEIPT_PATH=LOCAL_PATH"
+                    )
+                entries.append((source, destination))
+            elif isinstance(entry, (tuple, list)) and len(entry) == 2:
+                entries.append((entry[0], entry[1]))
+            else:
+                raise CheckpointStagingReceiptError(
+                    "checkpoint path mapping must be RECEIPT_PATH=LOCAL_PATH"
+                )
+    else:
+        raise CheckpointStagingReceiptError(
+            "checkpoint path mapping must be a mapping or repeatable path pairs"
+        )
+
+    normalized: dict[str, str] = {}
+    for source, destination in entries:
+        if not isinstance(source, str) or not source:
+            raise CheckpointStagingReceiptError("checkpoint path mapping source is malformed")
+        if not isinstance(destination, (str, Path)) or not str(destination):
+            raise CheckpointStagingReceiptError("checkpoint path mapping destination is malformed")
+        if source in normalized:
+            raise CheckpointStagingReceiptError(
+                "checkpoint path mapping is duplicated or conflicting"
+            )
+        normalized[source] = str(destination)
+    return normalized
+
+
+def _resolve_checkpoint_path_map(
+    checkpoint_path_map: Mapping[Any, Any] | Sequence[Any] | None,
+    *,
+    receipt_arms: list[dict[str, Any]],
+    repo_root: str | Path | None,
+) -> dict[str, Path]:
+    """Validate mapped destinations and bind every map entry to one receipt source.
+
+    Returns:
+        Validated local checkpoint paths keyed by exact receipt source path.
+    """
+    raw_mapping = _normalize_checkpoint_path_map(checkpoint_path_map)
+    if not raw_mapping:
+        return {}
+    if repo_root is None:
+        raise CheckpointStagingReceiptError(
+            "checkpoint path mapping requires an explicit repository root"
+        )
+    root = Path(repo_root).resolve()
+    if not root.is_dir():
+        raise CheckpointStagingReceiptError(
+            "checkpoint path mapping repository root is unavailable"
+        )
+    receipt_paths = {
+        arm.get("resolved_path")
+        for arm in receipt_arms
+        if isinstance(arm, dict) and isinstance(arm.get("resolved_path"), str)
+    }
+    unknown = [source for source in raw_mapping if source not in receipt_paths]
+    if unknown:
+        raise CheckpointStagingReceiptError("checkpoint path mapping is unknown or unused")
+
+    resolved_mapping: dict[str, Path] = {}
+    for source, destination in raw_mapping.items():
+        candidate = Path(destination)
+        if not candidate.is_absolute():
+            candidate = root / candidate
+        try:
+            resolved = candidate.resolve(strict=False)
+        except (OSError, RuntimeError) as exc:
+            raise CheckpointStagingReceiptError(
+                "checkpoint path mapping destination could not be resolved"
+            ) from exc
+        if not resolved.is_relative_to(root):
+            raise CheckpointStagingReceiptError(
+                "checkpoint path mapping destination is outside the repository root"
+            )
+        if not resolved.is_file():
+            raise CheckpointStagingReceiptError(
+                "checkpoint path mapping destination is not a regular file"
+            )
+        resolved_mapping[source] = resolved
+    return resolved_mapping
+
+
+def _validated_arm_file(
+    arm: dict[str, Any],
+    *,
+    checkpoint_path_map: Mapping[str, Path] | None = None,
+) -> tuple[str, Path, str]:
     """Validate one materialized receipt arm.
 
     Returns:
@@ -146,7 +255,10 @@ def _validated_arm_file(arm: dict[str, Any]) -> tuple[str, Path, str]:
         )
     resolved_path = arm.get("resolved_path")
     expected_sha = arm.get("checkpoint_sha256")
-    if not isinstance(resolved_path, str) or not Path(resolved_path).is_file():
+    mapped_path = checkpoint_path_map.get(resolved_path) if checkpoint_path_map else None
+    if not isinstance(resolved_path, str) or (
+        mapped_path is None and not Path(resolved_path).is_file()
+    ):
         raise CheckpointStagingReceiptError(
             f"checkpoint receipt arm {planner_key} no longer resolves to a file"
         )
@@ -154,7 +266,7 @@ def _validated_arm_file(arm: dict[str, Any]) -> tuple[str, Path, str]:
         raise CheckpointStagingReceiptError(
             f"checkpoint receipt arm {planner_key} has no valid SHA-256"
         )
-    resolved = Path(resolved_path).resolve()
+    resolved = mapped_path or Path(resolved_path).resolve()
     observed_sha = sha256_file(resolved)
     if observed_sha != expected_sha.lower():
         raise CheckpointStagingReceiptError(
@@ -174,6 +286,7 @@ def _validate_model_id_digest(
     resolved: Path,
     observed_sha: str,
     registry_path: Path,
+    receipt_path: str | None = None,
 ) -> None:
     """Require a materialized model-id checkpoint to match its registry pin."""
     try:
@@ -182,7 +295,9 @@ def _validate_model_id_digest(
         raise CheckpointStagingReceiptError(
             f"checkpoint receipt arm {planner_key} model_id is absent from the registry"
         ) from exc
-    registry_sha = _registry_checkpoint_sha256(entry, resolved)
+    registry_sha = _registry_checkpoint_sha256(
+        entry, Path(receipt_path) if receipt_path else resolved
+    )
     if registry_sha is None:
         raise CheckpointStagingReceiptError(
             f"checkpoint receipt arm {planner_key} has no registry-pinned SHA-256"
@@ -193,12 +308,19 @@ def _validate_model_id_digest(
         )
 
 
-def _validate_direct_checkpoint_path(reference: Any, *, planner_key: str, resolved: Path) -> None:
+def _validate_direct_checkpoint_path(
+    reference: Any,
+    *,
+    planner_key: str,
+    resolved: Path,
+    receipt_path: str | None = None,
+) -> None:
     """Require a direct model-path receipt to resolve the path bound by the campaign config."""
     configured_path = Path(reference.value)
     if not configured_path.is_absolute():
         configured_path = (Path.cwd() / configured_path).resolve()
-    if resolved != configured_path:
+    identity_path = Path(receipt_path).resolve() if receipt_path is not None else resolved
+    if identity_path != configured_path:
         raise CheckpointStagingReceiptError(
             f"checkpoint receipt arm {planner_key} resolved a different configured path"
         )
@@ -209,6 +331,7 @@ def _validate_receipt_arms(
     payload: dict[str, Any],
     *,
     registry_path: Path,
+    checkpoint_path_map: Mapping[str, Path] | None = None,
 ) -> None:
     """Validate arm coverage, statuses, materialized files, and checksums."""
     arms = payload.get("arms")
@@ -230,7 +353,11 @@ def _validate_receipt_arms(
         sorted(arms, key=_receipt_arm_identity),
         strict=True,
     ):
-        planner_key, resolved, observed_sha = _validated_arm_file(arm)
+        planner_key, resolved, observed_sha = _validated_arm_file(
+            arm,
+            checkpoint_path_map=checkpoint_path_map,
+        )
+        receipt_path = arm.get("resolved_path")
         if reference.kind == "model_id":
             _validate_model_id_digest(
                 reference,
@@ -238,12 +365,14 @@ def _validate_receipt_arms(
                 resolved=resolved,
                 observed_sha=observed_sha,
                 registry_path=registry_path,
+                receipt_path=receipt_path if isinstance(receipt_path, str) else None,
             )
         else:
             _validate_direct_checkpoint_path(
                 reference,
                 planner_key=planner_key,
                 resolved=resolved,
+                receipt_path=receipt_path if isinstance(receipt_path, str) else None,
             )
 
 
@@ -255,6 +384,8 @@ def validate_checkpoint_staging_receipt(
     max_age_hours: float = 24.0,
     now: datetime | None = None,
     registry_path: str | Path | None = None,
+    checkpoint_path_map: Mapping[Any, Any] | Sequence[Any] | None = None,
+    repo_root: str | Path | None = None,
 ) -> dict[str, Any]:
     """Validate a staged-checkpoint receipt against current config and files.
 
@@ -275,6 +406,11 @@ def validate_checkpoint_staging_receipt(
         ) from exc
     if not isinstance(payload, dict):
         raise CheckpointStagingReceiptError("checkpoint staging receipt must be a JSON object")
+    resolved_path_map = _resolve_checkpoint_path_map(
+        checkpoint_path_map,
+        receipt_arms=payload.get("arms", []) if isinstance(payload.get("arms"), list) else [],
+        repo_root=repo_root,
+    )
     config_path = Path(campaign_config_path).resolve()
     _validate_receipt_header(
         payload,
@@ -287,7 +423,12 @@ def validate_checkpoint_staging_receipt(
         reference.kind == "model_id" for reference in iter_campaign_arm_checkpoint_references(cfg)
     ):
         _validate_receipt_registry(payload, resolved_registry_path)
-    _validate_receipt_arms(cfg, payload, registry_path=resolved_registry_path)
+    _validate_receipt_arms(
+        cfg,
+        payload,
+        registry_path=resolved_registry_path,
+        checkpoint_path_map=resolved_path_map,
+    )
     return payload
 
 

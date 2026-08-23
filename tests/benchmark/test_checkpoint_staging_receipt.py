@@ -194,3 +194,205 @@ def test_receipt_rejects_registry_drift(tmp_path: Path, monkeypatch) -> None:
             registry_path=registry,
             now=datetime(2026, 8, 21, 13, tzinfo=UTC),
         )
+
+
+def test_receipt_accepts_exact_remote_path_map_without_rewriting_payload(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A mapped local file retains the receipt path and both checksum bindings."""
+    cfg, config, registry, receipt, payload = _fixture(tmp_path)
+    remote_path = "/hpc/gpfs2/licca/checkpoints/model.zip"
+    payload["arms"][0]["resolved_path"] = remote_path
+    _write_receipt(receipt, payload)
+    receipt_bytes = receipt.read_bytes()
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda _cfg: _cfg.references,
+    )
+    result = validate_checkpoint_staging_receipt(
+        cfg,
+        receipt,
+        campaign_config_path=config,
+        registry_path=registry,
+        checkpoint_path_map=[f"{remote_path}=model.zip"],
+        repo_root=tmp_path,
+        now=datetime(2026, 8, 21, 13, tzinfo=UTC),
+    )
+    assert result["arms"][0]["resolved_path"] == remote_path
+    assert receipt.read_bytes() == receipt_bytes
+
+
+def test_receipt_remap_preserves_direct_checkpoint_config_identity(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A direct model path is checked against the receipt source, not the local destination."""
+    cfg, config, registry, receipt, payload = _fixture(tmp_path)
+    remote_path = "/hpc/gpfs2/licca/checkpoints/model.zip"
+    cfg.references[0] = cfg.references[0].__class__(
+        planner_key="ppo",
+        algo="ppo",
+        kind="model_path",
+        value=remote_path,
+        implicit=False,
+    )
+    payload["arms"][0].update(kind="model_path", value=remote_path, resolved_path=remote_path)
+    _write_receipt(receipt, payload)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda _cfg: _cfg.references,
+    )
+    result = validate_checkpoint_staging_receipt(
+        cfg,
+        receipt,
+        campaign_config_path=config,
+        registry_path=registry,
+        checkpoint_path_map={remote_path: tmp_path / "model.zip"},
+        repo_root=tmp_path,
+        now=datetime(2026, 8, 21, 13, tzinfo=UTC),
+    )
+    assert result["arms"][0]["value"] == remote_path
+
+
+@pytest.mark.parametrize(
+    ("mapping", "match"),
+    [
+        (["/unknown/source.zip=model.zip"], "unknown or unused"),
+        (["/hpc/source.zip=../outside.zip"], "outside the repository root"),
+        (["/hpc/source.zip=missing.zip"], "not a regular file"),
+        (["/hpc/source.zip="], "destination is malformed"),
+        (["=model.zip"], "source is malformed"),
+        (["malformed"], "RECEIPT_PATH=LOCAL_PATH"),
+        (["/hpc/source.zip=model.zip", "/hpc/source.zip=model.zip"], "duplicated"),
+    ],
+)
+def test_receipt_rejects_invalid_checkpoint_path_maps(
+    tmp_path: Path, monkeypatch, mapping: list[str], match: str
+) -> None:
+    """Explicit mappings fail closed before they can weaken receipt admission."""
+    cfg, config, registry, receipt, payload = _fixture(tmp_path)
+    payload["arms"][0]["resolved_path"] = "/hpc/source.zip"
+    _write_receipt(receipt, payload)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda _cfg: _cfg.references,
+    )
+    with pytest.raises(CheckpointStagingReceiptError, match=match):
+        validate_checkpoint_staging_receipt(
+            cfg,
+            receipt,
+            campaign_config_path=config,
+            registry_path=registry,
+            checkpoint_path_map=mapping,
+            repo_root=tmp_path,
+            now=datetime(2026, 8, 21, 13, tzinfo=UTC),
+        )
+
+
+def test_receipt_rejects_remap_without_explicit_repo_root(tmp_path: Path, monkeypatch) -> None:
+    """Mapped validation cannot silently select the process working directory."""
+    cfg, config, registry, receipt, payload = _fixture(tmp_path)
+    remote_path = "/hpc/source.zip"
+    payload["arms"][0]["resolved_path"] = remote_path
+    _write_receipt(receipt, payload)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda _cfg: _cfg.references,
+    )
+    with pytest.raises(CheckpointStagingReceiptError, match="explicit repository root"):
+        validate_checkpoint_staging_receipt(
+            cfg,
+            receipt,
+            campaign_config_path=config,
+            registry_path=registry,
+            checkpoint_path_map=[f"{remote_path}=model.zip"],
+            now=datetime(2026, 8, 21, 13, tzinfo=UTC),
+        )
+
+
+def test_receipt_rejects_mapped_checksum_mismatch(tmp_path: Path, monkeypatch) -> None:
+    """The mapped local bytes remain independently bound to the receipt digest."""
+    cfg, config, registry, receipt, payload = _fixture(tmp_path)
+    remote_path = "/hpc/source.zip"
+    payload["arms"][0]["resolved_path"] = remote_path
+    (tmp_path / "model.zip").write_bytes(b"changed-local-bytes")
+    _write_receipt(receipt, payload)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda _cfg: _cfg.references,
+    )
+    with pytest.raises(CheckpointStagingReceiptError, match="checksum changed"):
+        validate_checkpoint_staging_receipt(
+            cfg,
+            receipt,
+            campaign_config_path=config,
+            registry_path=registry,
+            checkpoint_path_map=[f"{remote_path}=model.zip"],
+            repo_root=tmp_path,
+            now=datetime(2026, 8, 21, 13, tzinfo=UTC),
+        )
+
+
+def test_receipt_rejects_symlink_escape_and_directory_destination(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Mapped paths cannot escape the selected root or point at a directory."""
+    cfg, config, registry, receipt, payload = _fixture(tmp_path)
+    remote_path = "/hpc/source.zip"
+    payload["arms"][0]["resolved_path"] = remote_path
+    _write_receipt(receipt, payload)
+    outside = tmp_path.parent / "outside-checkpoint.zip"
+    outside.write_bytes(b"checkpoint")
+    escaped = tmp_path / "escaped.zip"
+    escaped.symlink_to(outside)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda _cfg: _cfg.references,
+    )
+    for destination, match in ((escaped, "outside"), (tmp_path, "regular file")):
+        with pytest.raises(CheckpointStagingReceiptError, match=match):
+            validate_checkpoint_staging_receipt(
+                cfg,
+                receipt,
+                campaign_config_path=config,
+                registry_path=registry,
+                checkpoint_path_map=[f"{remote_path}={destination}"],
+                repo_root=tmp_path,
+                now=datetime(2026, 8, 21, 13, tzinfo=UTC),
+            )
+
+
+def test_receipt_rejects_mapped_registry_pin_mismatch(tmp_path: Path, monkeypatch) -> None:
+    """The mapped bytes must also match the model-registry pin."""
+    cfg, config, registry, receipt, payload = _fixture(tmp_path)
+    remote_path = "/hpc/source.zip"
+    payload["arms"][0]["resolved_path"] = remote_path
+    registry.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "models": [
+                    {
+                        "model_id": "ppo_release",
+                        "github_release": {"sha256": "0" * 64},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    payload["checkpoint_registry_sha256"] = sha256_file(registry)
+    _write_receipt(receipt, payload)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda _cfg: _cfg.references,
+    )
+    with pytest.raises(CheckpointStagingReceiptError, match="registry-pinned"):
+        validate_checkpoint_staging_receipt(
+            cfg,
+            receipt,
+            campaign_config_path=config,
+            registry_path=registry,
+            checkpoint_path_map=[f"{remote_path}=model.zip"],
+            repo_root=tmp_path,
+            now=datetime(2026, 8, 21, 13, tzinfo=UTC),
+        )

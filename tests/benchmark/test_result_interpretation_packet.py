@@ -1194,6 +1194,18 @@ class TestCLI:
         assert rc == 0
         assert output_file.exists()
 
+    def test_cli_output_without_comparator_can_be_reloaded(self, tmp_path: Path) -> None:
+        from robot_sf.benchmark.result_interpretation_packet import main
+
+        input_file = tmp_path / "diagnostic.json"
+        input_file.write_text(
+            json.dumps(_VALID_6944, sort_keys=True, separators=(",", ":")), encoding="utf-8"
+        )
+        output_file = tmp_path / "output.json"
+
+        assert main(["--input", str(input_file), "--output", str(output_file)]) == 0
+        assert load_result_interpretation_packet(output_file).packet_id == _VALID_6944["packet_id"]
+
     def test_cli_show_digest(self, tmp_path: Path) -> None:
         from robot_sf.benchmark.result_interpretation_packet import main
 

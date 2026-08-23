@@ -1,7 +1,7 @@
 {
   "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_6102_robot_speed_tier_recovery/README.md",
-  "artifact_sha256": "2b7a80af3eb6e03e9adf5e006a32763e5ea9365283e85d650553a9b39a85fdae",
+  "artifact_sha256": "fef604d806ceaf099cccbc6dbed75dfc4d4a38f456eaced74e7d5297c0e2bc1a",
   "preserved_exact_bytes": true,
   "review_marker": [
     "AI-GENERATED",

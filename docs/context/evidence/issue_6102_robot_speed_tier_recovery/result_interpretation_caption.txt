@@ -1,0 +1,4 @@
+issue_6102_robot_speed_tier_campaign_diagnostic.
+Question: What does the durably preserved native speed-tier campaign establish about robot speed-cap effects under the registered simulator design?
+Evidence: smoke_diagnostic; admission=diagnostic_only
+Claim boundary: Planner ranking or planner superiority claim. General safety, realism, causal, or population claim. Claim that prediction_planner is insensitive to the speed cap. Dissertation, release, or paper-facing admission claim.

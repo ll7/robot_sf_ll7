@@ -44,6 +44,12 @@ surface, manifest identity hash, artifact receipt, full verification result, and
 canonical synthesis parity. This tracked projection is review metadata, not a
 replacement for the raw artifact and not an admission receipt.
 
+The result packet is `result_interpretation_packet.v1.json`. Its deterministic
+caption, pending-review report, and source/output checksums are recorded in
+`result_interpretation_caption.txt`, `result_interpretation_review.v1.json`, and
+`SHA256SUMS`. No figure is emitted because this diagnostic packet has no controlled
+visual assertion.
+
 ## Re-check commands
 
 From a checkout containing a verified artifact hydration:

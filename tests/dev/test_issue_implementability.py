@@ -65,6 +65,25 @@ def test_complete_ready_issue_is_admitted() -> None:
     assert report["contract"]["missing_fields"] == []
 
 
+def test_goal_problem_template_heading_is_admitted() -> None:
+    """The canonical `Goal / Problem` template heading must satisfy the objective field."""
+    body = COMPLETE_BODY.replace("## Objective", "## Goal / Problem")
+    report = evaluate_issue(_issue(body=body), _claim())
+
+    assert report["classification"] == "ready"
+    assert report["contract"]["missing_fields"] == []
+    assert "goal problem" in report["contract"]["fields"]["objective"]["matched_headings"]
+
+
+def test_goal_problem_prefixed_heading_still_rejected() -> None:
+    """A retrospective `Goal / Problem history` heading must not satisfy the objective field."""
+    body = COMPLETE_BODY.replace("## Objective", "## Goal / Problem history")
+    report = evaluate_issue(_issue(body=body), _claim())
+
+    assert report["classification"] == "needs_spec"
+    assert "objective" in report["contract"]["missing_fields"]
+
+
 def test_state_ready_is_required() -> None:
     report = evaluate_issue(_issue(labels=["type:workflow"]), _claim())
 

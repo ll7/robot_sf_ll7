@@ -66,6 +66,7 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "ask",
         "current failure mode",
         "goal",
+        "goal problem",
         "objective",
         "plain language summary",
         "problem",

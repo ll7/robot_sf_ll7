@@ -555,9 +555,9 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
         scenario_section.get("route_certification_path"),
         "scenario.route_certification_path",
     )
-    route_certification_sha256 = str(
-        scenario_section.get("route_certification_sha256", "")
-    ).strip().lower()
+    route_certification_sha256 = (
+        str(scenario_section.get("route_certification_sha256", "")).strip().lower()
+    )
     if _SHA256_RE.fullmatch(route_certification_sha256) is None:
         raise ValueError("scenario.route_certification_sha256 must be a 64-character SHA-256")
 
@@ -571,13 +571,12 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
             raise ValueError(f"stress_smoke_contract.pinned_assets.{name} must be a mapping")
         path = _resolve_stress_contract_file(
             manifest_path,
-            raw_asset.get("path")
-            or raw_asset.get(f"{name}_path"),
+            raw_asset.get("path") or raw_asset.get(f"{name}_path"),
             f"stress_smoke_contract.pinned_assets.{name}_path",
         )
-        sha256 = str(
-            raw_asset.get("sha256") or raw_asset.get(f"{name}_sha256") or ""
-        ).strip().lower()
+        sha256 = (
+            str(raw_asset.get("sha256") or raw_asset.get(f"{name}_sha256") or "").strip().lower()
+        )
         if _SHA256_RE.fullmatch(sha256) is None:
             raise ValueError(
                 f"stress_smoke_contract.pinned_assets.{name}_sha256 must be a 64-character SHA-256"
@@ -998,9 +997,7 @@ def _validate_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
     if manifest.stress_smoke_expected_dt != STRESS_SMOKE_EXPECTED_DT:
         problems.append("stress_smoke_contract.expected_dt must be 0.1")
     if manifest.stress_smoke_expected_kinematics != STRESS_SMOKE_EXPECTED_KINEMATICS:
-        problems.append(
-            "stress_smoke_contract.expected_kinematics must be 'differential_drive'"
-        )
+        problems.append("stress_smoke_contract.expected_kinematics must be 'differential_drive'")
 
     enabled_planners = tuple(planner for planner in cfg.planners if planner.enabled)
     if len(enabled_planners) != STRESS_SMOKE_EXPECTED_PLANNER_ARMS:
@@ -1013,15 +1010,14 @@ def _validate_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
         scenarios = _load_campaign_scenarios(cfg)
         scenario_ids = tuple(
             str(
-                scenario.get("id")
-                or scenario.get("scenario_id")
-                or scenario.get("name")
-                or ""
+                scenario.get("id") or scenario.get("scenario_id") or scenario.get("name") or ""
             ).strip()
             for scenario in scenarios
         )
         if scenario_ids != STRESS_SMOKE_EXPECTED_SCENARIO_IDS:
-            problems.append("stress smoke campaign scenarios do not match the fixed five-cell roster")
+            problems.append(
+                "stress smoke campaign scenarios do not match the fixed five-cell roster"
+            )
         resolved_seeds = tuple(_resolved_seed_inventory(scenarios))
         if resolved_seeds != (STRESS_SMOKE_EXPECTED_SEED,):
             problems.append("stress smoke campaign must resolve exactly seed 116")
@@ -1064,11 +1060,16 @@ def _validate_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
                 problems.append(f"stress_smoke_contract.{label} hash does not match pinned asset")
 
     if manifest.stress_smoke_seed_sets_path is not None:
-        if cfg.seed_policy.seed_sets_path.resolve() != manifest.stress_smoke_seed_sets_path.resolve():
+        if (
+            cfg.seed_policy.seed_sets_path.resolve()
+            != manifest.stress_smoke_seed_sets_path.resolve()
+        ):
             problems.append("stress smoke seed-set path does not match campaign config")
     if manifest.stress_smoke_route_certification_path is not None:
         if cfg.route_clearance_certifications_path is None:
-            problems.append("stress smoke route-certification asset is missing from campaign config")
+            problems.append(
+                "stress smoke route-certification asset is missing from campaign config"
+            )
         elif (
             cfg.route_clearance_certifications_path.resolve()
             != manifest.stress_smoke_route_certification_path.resolve()

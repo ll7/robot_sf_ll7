@@ -90,9 +90,7 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
             for scenario_id in scenario_ids
         ]
         episodes_path.parent.mkdir(parents=True, exist_ok=True)
-        episodes_path.write_text(
-            "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
-        )
+        episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
         _write_json(summary_path, {"status": "ok"})
         runs.append(
             {
@@ -168,7 +166,7 @@ def test_complete_stress_campaign_is_admitted(stress_fixture: tuple[Path, Any, A
 
 
 def test_real_episode_schema_may_omit_repeated_kinematics_aliases(
-    stress_fixture: tuple[Path, Any, Any]
+    stress_fixture: tuple[Path, Any, Any],
 ) -> None:
     root, manifest, campaign_config = stress_fixture
     path = _first_row_path(root, "prediction_planner")
@@ -204,9 +202,7 @@ def test_row_alias_and_runtime_bypasses_fail_closed(
     elif mutation == "source":
         row["provenance"]["git_hash"] = "b" * 40
     elif mutation == "emergency":
-        row["algorithm_metadata"]["runtime"] = {
-            "last_decision": {"planner_mode": "EMERGENCY_STOP"}
-        }
+        row["algorithm_metadata"]["runtime"] = {"last_decision": {"planner_mode": "EMERGENCY_STOP"}}
     elif mutation == "horizon":
         row["result_provenance"]["simulator_settings"]["horizon"] = 599
     elif mutation == "dt":
@@ -237,7 +233,7 @@ def test_external_and_cross_campaign_paths_fail_closed(
 
 
 def test_unrelated_nested_business_metadata_does_not_trigger_emergency_marker(
-    stress_fixture: tuple[Path, Any, Any]
+    stress_fixture: tuple[Path, Any, Any],
 ) -> None:
     root, manifest, campaign_config = stress_fixture
     path = _first_row_path(root, "prediction_planner")

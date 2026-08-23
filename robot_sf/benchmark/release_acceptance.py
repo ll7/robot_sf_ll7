@@ -138,9 +138,15 @@ def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:  # noqa: C90
                     "selected_source",
                 }:
                     normalized_value = _normalized(nested)
-                    if normalized_key == "selected_source" and normalized_value in _LEGACY_EMERGENCY_SOURCES:
+                    if (
+                        normalized_key == "selected_source"
+                        and normalized_value in _LEGACY_EMERGENCY_SOURCES
+                    ):
                         return nested_path, normalized_value
-                    if normalized_key in {"mode", "planner_mode"} and normalized_value in _LEGACY_EMERGENCY_MODES:
+                    if (
+                        normalized_key in {"mode", "planner_mode"}
+                        and normalized_value in _LEGACY_EMERGENCY_MODES
+                    ):
                         return nested_path, normalized_value
                 elif inspect_marker and normalized_key == "emergency_stop_count":
                     parsed_counter = _strict_int(nested)
@@ -390,7 +396,9 @@ def _nested_value(payload: Mapping[str, Any], *keys: str) -> Any:
     return current
 
 
-def _alias_values(payload: Mapping[str, Any], aliases: tuple[tuple[str, Any], ...]) -> list[tuple[str, str]]:
+def _alias_values(
+    payload: Mapping[str, Any], aliases: tuple[tuple[str, Any], ...]
+) -> list[tuple[str, str]]:
     """Return non-empty normalized aliases, retaining their source labels."""
     values: list[tuple[str, str]] = []
     for label, value in aliases:
@@ -677,8 +685,7 @@ def _stress_row_contract_blockers(  # noqa: C901, PLR0912
         ),
     )
     blockers.extend(
-        f"{prefix}: {blocker}"
-        for blocker in _alias_blockers(config_aliases, label="config")
+        f"{prefix}: {blocker}" for blocker in _alias_blockers(config_aliases, label="config")
     )
 
     algo_aliases = _alias_values(
@@ -710,7 +717,9 @@ def _stress_row_contract_blockers(  # noqa: C901, PLR0912
     )
     blockers.extend(
         f"{prefix}: {blocker}"
-        for blocker in _alias_blockers(algo_aliases, label="planner algorithm", expected=expected_algo)
+        for blocker in _alias_blockers(
+            algo_aliases, label="planner algorithm", expected=expected_algo
+        )
     )
 
     planner_key_aliases = _alias_values(
@@ -776,7 +785,10 @@ def _stress_row_contract_blockers(  # noqa: C901, PLR0912
             blockers.append(f"{prefix}: scenario kinematics alias is malformed")
         else:
             kinematics_aliases.extend(
-                ("algorithm_metadata.planner_kinematics.scenario_kinematics", str(value).strip().lower())
+                (
+                    "algorithm_metadata.planner_kinematics.scenario_kinematics",
+                    str(value).strip().lower(),
+                )
                 for value in scenario_kinematics
             )
     # The current episode-row producer binds the arm through the strict run
@@ -952,7 +964,10 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
         _append_blocker(blockers, "diagnostic stress smoke must resolve exactly seed 116")
     if expected_cells != STRESS_SMOKE_EXPECTED_EPISODE_CELLS:
         _append_blocker(blockers, "diagnostic stress smoke must resolve exactly 70 episode cells")
-    if _strict_int(getattr(campaign_config, "horizon", None)) != STRESS_SMOKE_EXPECTED_HORIZON_STEPS:
+    if (
+        _strict_int(getattr(campaign_config, "horizon", None))
+        != STRESS_SMOKE_EXPECTED_HORIZON_STEPS
+    ):
         _append_blocker(blockers, "campaign config horizon must be 600")
     try:
         campaign_dt = float(getattr(campaign_config, "dt", float("nan")))
@@ -961,8 +976,7 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
     if campaign_dt != STRESS_SMOKE_EXPECTED_DT:
         _append_blocker(blockers, "campaign config dt must be 0.1")
     if tuple(
-        str(value).strip().lower()
-        for value in getattr(campaign_config, "kinematics_matrix", ())
+        str(value).strip().lower() for value in getattr(campaign_config, "kinematics_matrix", ())
     ) != (STRESS_SMOKE_EXPECTED_KINEMATICS,):
         _append_blocker(blockers, "campaign config kinematics must be differential_drive only")
 
@@ -979,7 +993,9 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
         if campaign.get("evidence_status") != "valid":
             _append_blocker(blockers, "campaign summary evidence_status must be valid")
         if campaign.get("campaign_execution_status") != "completed":
-            _append_blocker(blockers, "campaign summary campaign_execution_status must be completed")
+            _append_blocker(
+                blockers, "campaign summary campaign_execution_status must be completed"
+            )
     if isinstance(campaign, Mapping):
         for marker_path, marker in _status_markers(campaign, "campaign_summary.campaign"):
             _append_blocker(blockers, f"forbidden {marker_path}={marker}")
@@ -1015,9 +1031,9 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
         if not _status_is(run.get("status"), _STRESS_RUN_SUCCESS_STATUSES):
             _append_blocker(blockers, f"runs[{run_index}] status is not ok")
         planner_spec = planner_specs.get(arm[0])
-        expected_algo = str(
-            getattr(planner_spec, "algo", planner.get("algo", arm[0]))
-        ).strip().lower()
+        expected_algo = (
+            str(getattr(planner_spec, "algo", planner.get("algo", arm[0]))).strip().lower()
+        )
         if arm not in expected_arms:
             _append_blocker(blockers, f"runs[{run_index}] declares an unexpected planner arm")
         if str(planner.get("algo", expected_algo)).strip().lower() != expected_algo:
@@ -1033,7 +1049,9 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
         if planner_dt != STRESS_SMOKE_EXPECTED_DT:
             _append_blocker(blockers, f"runs[{run_index}] planner dt is not 0.1")
         if "benchmark_success" in run and not _explicit_success(run.get("benchmark_success")):
-            _append_blocker(blockers, f"runs[{run_index}] benchmark_success must be explicitly true")
+            _append_blocker(
+                blockers, f"runs[{run_index}] benchmark_success must be explicitly true"
+            )
         for marker_path, marker in _status_markers(run, f"runs[{run_index}]"):
             _append_blocker(blockers, f"forbidden {marker_path}={marker}")
         run_summary = run.get("summary")

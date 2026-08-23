@@ -2173,6 +2173,9 @@ def apply_mutations(
         return refuse("plan mutations must be a list")
     if len(raw_mutations) > max_mutations:
         return refuse("plan exceeds mutation budget")
+    raw_truncation_errors = plan.get("truncation_or_errors", [])
+    if not isinstance(raw_truncation_errors, list):
+        return refuse("plan truncation_or_errors must be a list")
 
     recorded_digest = str(plan.get("plan_digest") or "")
     if not recorded_digest:
@@ -2213,7 +2216,7 @@ def apply_mutations(
             "readback": [],
             "counts": empty_counts(1),
         }
-    if plan.get("truncation_or_errors"):
+    if raw_truncation_errors:
         return {
             "schema": "issue_audit_apply.v1",
             "ok": False,
@@ -2221,9 +2224,9 @@ def apply_mutations(
             "applied": [],
             "already_applied": [],
             "stale_states": [],
-            "failures": list(plan["truncation_or_errors"]),
+            "failures": list(raw_truncation_errors),
             "readback": [],
-            "counts": empty_counts(len(plan["truncation_or_errors"])),
+            "counts": empty_counts(len(raw_truncation_errors)),
         }
     mutations = raw_mutations
     blocked_label_errors = _blocked_label_plan_errors(mutations)

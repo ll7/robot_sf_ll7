@@ -1656,6 +1656,16 @@ def test_apply_rejects_mixed_invalid_and_valid_plan_before_any_rest_call(
         (
             {
                 "schema": "issue_audit_plan.v1",
+                "mutations": [],
+                "truncation_or_errors": 1,
+            },
+            10,
+            "truncation_or_errors must be a list",
+            0,
+        ),
+        (
+            {
+                "schema": "issue_audit_plan.v1",
                 "mutations": [
                     {"operation": "close_issue", "issue": 1, "value": None},
                     {"operation": "close_issue", "issue": 2, "value": None},

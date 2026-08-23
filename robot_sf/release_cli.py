@@ -105,6 +105,24 @@ def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]
     return manifest, binding
 
 
+def _repo_relative_path(path: Path | None, repo: Path) -> Path | None:
+    """Resolve a doctor argument against the explicit ``--repo`` root when relative.
+
+    The doctor may run from a separate tooling worktree while ``--repo`` names the
+    exact release checkout; a relative manifest/config path must then resolve
+    against ``--repo``, not the process working directory, so every manifest,
+    config, and scenario lookup reads the intended checkout (issue #7794).
+
+    Returns:
+        The absolute resolved path, or ``None`` when the input path is ``None``.
+    """
+    if path is None:
+        return None
+    if path.is_absolute():
+        return path
+    return (repo / path).resolve()
+
+
 def handle(args: argparse.Namespace) -> int:
     """Dispatch release operations and return a process exit code.
 
@@ -112,19 +130,20 @@ def handle(args: argparse.Namespace) -> int:
         Zero for success and two for a blocked or failed publication operation.
     """
     if args.release_cmd == "doctor":
+        repo_root = args.repo.resolve()
         report = collect_release_doctor_report(
-            repo=args.repo.resolve(),
-            manifest_path=args.manifest.resolve(),
+            repo=repo_root,
+            manifest_path=_repo_relative_path(args.manifest, repo_root),
             expected_release_sha=args.expected_release_sha,
             expected_base_sha=args.expected_base_sha,
             tag=args.tag,
             expected_campaign_id=getattr(args, "expected_campaign_id", None),
-            checkpoint_receipt=args.checkpoint_receipt,
+            checkpoint_receipt=_repo_relative_path(args.checkpoint_receipt, repo_root),
             checkpoint_path_map=getattr(args, "checkpoint_path_map", None),
-            private_launch_packet=args.private_launch_packet,
-            private_queue=getattr(args, "private_queue", None),
-            dissertation=args.dissertation,
-            token_file=args.token_file,
+            private_launch_packet=_repo_relative_path(args.private_launch_packet, repo_root),
+            private_queue=_repo_relative_path(getattr(args, "private_queue", None), repo_root),
+            dissertation=_repo_relative_path(args.dissertation, repo_root),
+            token_file=_repo_relative_path(args.token_file, repo_root),
             expected_cells=args.expected_cells,
             minimum_free_gib=args.minimum_free_gib,
             require_zenodo_webhook_disabled=args.require_zenodo_webhook_disabled,

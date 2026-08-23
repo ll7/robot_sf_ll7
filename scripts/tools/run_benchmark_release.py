@@ -430,7 +430,10 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         try:
             runtime_source_commit = _current_source_commit()
             private_launch = _private_stress_launch()
-            worktree_clean = _current_worktree_clean() if private_launch else None
+            # A stress result is evidence about the exact checked-out source even
+            # when it is run locally.  Never allow local edits to become part of
+            # an apparently immutable stress campaign.
+            worktree_clean = _current_worktree_clean()
         except (ReleaseResumeAdmissionError, ValueError) as exc:
             runtime_source_admission = {
                 "schema_version": "benchmark-stress-smoke-runtime-identity.v1",
@@ -445,7 +448,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
                 launch_expected_source_commit=os.environ.get("SLURM_EXPECTED_PUBLIC_COMMIT"),
                 require_launch_pin=private_launch,
                 worktree_clean=worktree_clean,
-                require_clean_worktree=private_launch,
+                require_clean_worktree=True,
             )
         if runtime_source_admission["status"] != "valid":
             result = {
@@ -674,14 +677,14 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         try:
             post_runtime_source_commit = _current_source_commit()
             private_launch = _private_stress_launch()
-            post_worktree_clean = _current_worktree_clean() if private_launch else None
+            post_worktree_clean = _current_worktree_clean()
             post_runtime_source_admission = validate_stress_smoke_runtime_identity(
                 manifest,
                 current_source_commit=post_runtime_source_commit,
                 launch_expected_source_commit=os.environ.get("SLURM_EXPECTED_PUBLIC_COMMIT"),
                 require_launch_pin=private_launch,
                 worktree_clean=post_worktree_clean,
-                require_clean_worktree=private_launch,
+                require_clean_worktree=True,
             )
             if post_runtime_source_commit != runtime_source_commit:
                 post_runtime_source_admission["status"] = "invalid"

@@ -635,7 +635,7 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
         for index, raw_asset in enumerate(raw_assets):
             if not isinstance(raw_asset, Mapping):
                 raise ValueError(f"stress_smoke_contract.{field_name}[{index}] must be a mapping")
-            path = _resolve_required_file(
+            path = _resolve_stress_contract_file(
                 manifest_path,
                 raw_asset.get("path"),
                 f"stress_smoke_contract.{field_name}[{index}].path",

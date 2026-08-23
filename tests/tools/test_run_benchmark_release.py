@@ -101,6 +101,43 @@ def test_release_input_path_rejects_external_location_without_leaking_it(
         raise AssertionError("external release input was not rejected")
 
 
+def test_local_stress_run_rejects_dirty_worktree(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """The runner applies the exact-source clean-worktree gate outside SLURM too."""
+    manifest = SimpleNamespace(
+        schema_version="benchmark-release-manifest.v0.1",
+        release_kind="benchmark-stress-smoke",
+        maturity="diagnostic",
+        canonical_campaign_config_path=Path("campaign.yaml"),
+    )
+    observed: dict[str, object] = {}
+
+    def _fake_identity(*args, **kwargs):
+        observed.update(kwargs)
+        return {
+            "status": "invalid",
+            "runtime_source_commit": "a" * 40,
+            "blockers": ["dirty worktree"],
+        }
+
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: object())
+    monkeypatch.setattr(run_benchmark_release, "_current_source_commit", lambda: "a" * 40)
+    monkeypatch.setattr(run_benchmark_release, "_current_worktree_clean", lambda: False)
+    monkeypatch.setattr(run_benchmark_release, "_private_stress_launch", lambda: False)
+    monkeypatch.setattr(
+        run_benchmark_release, "validate_stress_smoke_runtime_identity", _fake_identity
+    )
+
+    exit_code = run_benchmark_release.main(["--manifest", "manifest.yaml"])
+
+    assert exit_code == 2
+    assert observed["worktree_clean"] is False
+    assert observed["require_clean_worktree"] is True
+    assert json.loads(capsys.readouterr().out)["status"] == "stress_smoke_source_rejected"
+
+
 def test_release_run_rejects_historical_campaign_artifact_identity(
     monkeypatch, capsys, tmp_path: Path
 ) -> None:
@@ -751,6 +788,7 @@ def test_diagnostic_stress_success_is_never_release_success(
         },
     )
     monkeypatch.setattr(run_benchmark_release, "_current_source_commit", lambda: runtime_commit)
+    monkeypatch.setattr(run_benchmark_release, "_current_worktree_clean", lambda: True)
     monkeypatch.setattr(
         run_benchmark_release,
         "run_campaign",

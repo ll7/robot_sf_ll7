@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Issue #7742 differential-drive benchmark command repair.** Planner velocity
+  commands are now converted to linear/angular accelerations by dividing the
+  velocity error by the simulation timestep before the differential-drive
+  action limits are applied. This restores the command semantics after the
+  simulator made acceleration integration timestep-aware in #3711. A pinned
+  `classic_bottleneck_high` seed-114 reproducer and a release-successor hybrid
+  configuration provide a fail-closed regression surface; on the exact H600
+  reproducer the successor completes with zero collisions and zero planner
+  fallback. This changes current-code benchmark trajectories, so older release
+  comparisons remain valid only where the command-response contract is stated.
+
 * **Issue #5409 horizon-ablation launch packet.** Added a machine-checkable launch
   contract for the roster-matched, seed-matched h500-vs-h600 comparison, pinning the
   per-horizon results directory, the pre-`sbatch` checkpoint-gate receipt path, the

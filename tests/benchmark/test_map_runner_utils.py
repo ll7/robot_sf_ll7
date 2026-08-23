@@ -2200,7 +2200,7 @@ def test_policy_command_to_env_action_passthroughs_world_velocity_for_holonomic_
 
 
 def test_policy_command_to_env_action_converts_world_velocity_for_differential_drive() -> None:
-    """Structured world velocities should reuse the differential-drive adapter path."""
+    """Structured world velocities should become timestep-scaled drive accelerations."""
     config = SimpleNamespace(
         robot_config=DifferentialDriveSettings(
             radius=0.3,
@@ -2227,8 +2227,22 @@ def test_policy_command_to_env_action_converts_world_velocity_for_differential_d
     )
     assert np.allclose(
         action,
-        np.array([expected_vw[0] - 0.3, expected_vw[1] + 0.1], dtype=float),
+        np.array([(expected_vw[0] - 0.3) / 0.1, (expected_vw[1] + 0.1) / 0.1], dtype=float),
     )
+
+
+def test_policy_command_to_env_action_scales_unicycle_velocity_error_by_timestep() -> None:
+    """A differential-drive velocity command must be converted to acceleration units."""
+    config = SimpleNamespace(
+        robot_config=DifferentialDriveSettings(),
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.2),
+    )
+    robot = SimpleNamespace(pose=((0.0, 0.0), 0.0), current_speed=(0.4, -0.2))
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[robot]))
+
+    action = _policy_command_to_env_action(env=env, config=config, command=(0.8, 0.4))
+
+    assert np.allclose(action, np.array([2.0, 3.0], dtype=float))
 
 
 def test_velocity_and_ped_stack_helpers() -> None:

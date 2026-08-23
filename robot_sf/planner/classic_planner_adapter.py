@@ -133,10 +133,10 @@ class PlannerActionAdapter:
         return np.clip(action, self.action_space.low, self.action_space.high)
 
     def _differential_action(self, linear_target: float, angular_target: float) -> np.ndarray:
-        """Compute linear/angular deltas for a differential-drive robot.
+        """Compute linear/angular accelerations for a differential-drive robot.
 
         Returns:
-            np.ndarray: Clipped delta-linear and delta-angular command.
+            np.ndarray: Clipped linear and angular acceleration command.
         """
         config = self.robot.config
         current_linear, current_angular = self.robot.current_speed
@@ -146,9 +146,10 @@ class PlannerActionAdapter:
         target_angular = float(
             np.clip(angular_target, -config.max_angular_speed, config.max_angular_speed)
         )
-        d_linear = target_linear - current_linear
-        d_angular = target_angular - current_angular
-        action = np.array([d_linear, d_angular], dtype=np.float32)
+        dt = max(float(self.time_step), 1e-6)
+        linear_accel = (target_linear - current_linear) / dt
+        angular_accel = (target_angular - current_angular) / dt
+        action = np.array([linear_accel, angular_accel], dtype=np.float32)
         return np.clip(action, self.action_space.low, self.action_space.high)
 
 

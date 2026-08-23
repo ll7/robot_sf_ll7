@@ -181,9 +181,10 @@ def policy_command_to_env_action(  # noqa: C901
                 adapter.from_velocity_command(tuple(command_vw.tolist())), dtype=float
             )
         current_linear, current_angular = robot.current_speed
-        d_linear = float(command_vw[0]) - float(current_linear)
-        d_angular = float(command_vw[1]) - float(current_angular)
-        return np.array([d_linear, d_angular], dtype=float)
+        step_dt = max(float(config.sim_config.time_per_step_in_secs), 1e-6)
+        linear_accel = (float(command_vw[0]) - float(current_linear)) / step_dt
+        angular_accel = (float(command_vw[1]) - float(current_angular)) / step_dt
+        return np.array([linear_accel, angular_accel], dtype=float)
 
     if "bicycle" in cls_name:
         adapter = PlannerActionAdapter(
@@ -206,6 +207,7 @@ def policy_command_to_env_action(  # noqa: C901
         return np.array([linear, angular], dtype=float)
 
     current_linear, current_angular = robot.current_speed
-    d_linear = float(command[0]) - float(current_linear)
-    d_angular = float(command[1]) - float(current_angular)
-    return np.array([d_linear, d_angular], dtype=float)
+    step_dt = max(float(config.sim_config.time_per_step_in_secs), 1e-6)
+    linear_accel = (float(command[0]) - float(current_linear)) / step_dt
+    angular_accel = (float(command[1]) - float(current_angular)) / step_dt
+    return np.array([linear_accel, angular_accel], dtype=float)

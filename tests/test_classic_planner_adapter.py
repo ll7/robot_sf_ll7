@@ -72,7 +72,7 @@ def test_planner_action_adapter_bicycle_conversion(tmp_path):
 
 
 def test_planner_action_adapter_differential_conversion():
-    """Differential action adapter should return velocity deltas clipped to space."""
+    """Differential adapter should convert velocity error to timestep-scaled acceleration."""
     robot = DifferentialDriveRobot(
         DifferentialDriveSettings(max_linear_speed=1.0, max_angular_speed=0.5)
     )
@@ -86,13 +86,17 @@ def test_planner_action_adapter_differential_conversion():
     action = adapter.from_velocity_command((0.6, -0.4))
 
     assert action.shape == (2,)
-    # Deltas respect current speed; no bound clipping is needed for this command.
-    assert action[0] == pytest.approx(0.3)
-    assert action[1] == pytest.approx(-0.5)
+    # Reaching either target in one 0.1 s step would require (target-current)/dt.
+    # The resulting 3.0/-5.0 accelerations are clipped to the robot's +/-1 limits.
+    assert action[0] == pytest.approx(1.0)
+    assert action[1] == pytest.approx(-1.0)
     assert np.all(action <= robot.action_space.high)
     assert np.all(action >= robot.action_space.low)
     assert adapter.last_kinematics_diagnostics is not None
     assert adapter.last_kinematics_diagnostics["kinematics_model"] == "differential_drive"
+
+    robot.apply_action(tuple(action), 0.1)
+    assert robot.current_speed == pytest.approx((0.4, 0.0))
 
 
 def test_differential_kinematics_model_projection_and_feasibility() -> None:

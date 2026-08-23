@@ -249,6 +249,7 @@ export UV_NO_SYNC=1
 # .venv cannot shadow the shared environment (issue #7823).
 if [[ -n "$venv_override" ]]; then
   export VIRTUAL_ENV="$venv_path"
+  export ROBOT_SF_EXPLICIT_VENV_OVERRIDE="$venv_path"
 fi
 if [[ -z "$standalone" ]]; then
   export PYTHONPATH="$repo_root:$repo_root/fast-pysf${PYTHONPATH:+:$PYTHONPATH}"

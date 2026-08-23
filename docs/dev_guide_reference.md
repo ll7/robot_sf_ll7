@@ -324,6 +324,11 @@ The helper runs from `git rev-parse --show-toplevel`, sets `UV_PROJECT_ENVIRONME
 This is intended for fast local feedback when dependencies are already current. It should fail if
 the selected `.venv` is missing instead of silently installing into the wrong checkout.
 
+An explicit `--venv` also marks that exact environment for nested helpers that source
+`scripts/dev/common_setup.sh`; both `VIRTUAL_ENV` and `UV_PROJECT_ENVIRONMENT` remain bound to the
+selected path. An unrelated inherited `VIRTUAL_ENV` is not an override and does not suppress the
+repository-local activation policy.
+
 Use `--standalone` for a dependency-light command whose tests verify that it does not import
 `robot_sf` or other project packages. This mode still reuses third-party dependencies from the
 shared environment, but it skips the project-source freshness check and does not add the worktree

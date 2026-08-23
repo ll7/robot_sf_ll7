@@ -788,6 +788,42 @@ def _ancestry_blocking_state(current: dict[str, Any]) -> str | None:
     return None
 
 
+def _is_main_only_drift_from_clean_baseline(
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+    drift: dict[str, dict[str, str | None]],
+) -> bool:
+    """Return whether live main movement alone caused a transient stack classification.
+
+    A captured clean branch remains safe to integrate when neither its local nor remote head moved
+    and the old main tip is still its merge base. Any head movement or different ancestry continues
+    through the normal fail-closed stack gate.
+    """
+    if set(drift) != {"base_sha"}:
+        return False
+    baseline_ancestry = baseline.get("ancestry")
+    current_ancestry = current.get("ancestry")
+    if not isinstance(baseline_ancestry, dict) or not isinstance(current_ancestry, dict):
+        return False
+    baseline_base = baseline.get("base_sha")
+    current_base = current.get("base_sha")
+    if not all(isinstance(value, str) and value for value in (baseline_base, current_base)):
+        return False
+    if any(
+        baseline.get(field) != current.get(field)
+        for field in ("repo", "issue", "branch", "remote", "base_ref")
+    ):
+        return False
+    return bool(
+        baseline_ancestry.get("state") == "clean"
+        and current_ancestry.get("state") == "undeclared_stack"
+        and baseline_ancestry.get("main_tip_sha") == baseline_base
+        and baseline_ancestry.get("merge_base_sha") == baseline_base
+        and current_ancestry.get("main_tip_sha") == current_base
+        and current_ancestry.get("merge_base_sha") == baseline_base
+    )
+
+
 def _record_ancestry(snapshot: dict[str, Any]) -> dict[str, Any]:
     """Populate (or refresh) the snapshot's ``ancestry`` block from local git.
 
@@ -899,6 +935,16 @@ def evaluate_state(baseline: dict[str, Any], current: dict[str, Any]) -> dict[st
     if current.get("tree_state") != "clean":
         return _decision(baseline, current, decision="blocked", reason="dirty_worktree")
 
+    drift = _sha_drift(baseline, current)
+    if _is_main_only_drift_from_clean_baseline(baseline, current, drift):
+        return _decision(
+            baseline,
+            current,
+            decision="refresh-required",
+            reason="base_changed",
+            extra={"drift": drift},
+        )
+
     ancestry_state_value = _ancestry_blocking_state(current)
     if ancestry_state_value is not None:
         return _decision(
@@ -909,7 +955,6 @@ def evaluate_state(baseline: dict[str, Any], current: dict[str, Any]) -> dict[st
             extra={"ancestry": current.get("ancestry")},
         )
 
-    drift = _sha_drift(baseline, current)
     if drift:
         return _decision(
             baseline,

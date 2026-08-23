@@ -101,9 +101,7 @@ def test_release_input_path_rejects_external_location_without_leaking_it(
         raise AssertionError("external release input was not rejected")
 
 
-def test_local_stress_run_rejects_dirty_worktree(
-    monkeypatch, capsys, tmp_path: Path
-) -> None:
+def test_local_stress_run_rejects_dirty_worktree(monkeypatch, capsys, tmp_path: Path) -> None:
     """The runner applies the exact-source clean-worktree gate outside SLURM too."""
     manifest = SimpleNamespace(
         schema_version="benchmark-release-manifest.v0.1",

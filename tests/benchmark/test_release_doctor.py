@@ -290,6 +290,66 @@ def test_cli_checkpoint_path_map_reaches_doctor_with_repo_root(monkeypatch, tmp_
     assert captured["repo"] == tmp_path.resolve()
 
 
+def test_cli_relative_manifest_resolves_against_repo_root(monkeypatch, tmp_path: Path) -> None:
+    """Issue #7794: a relative --manifest must resolve against --repo, not cwd."""
+    args = robot_sf_cli._build_parser().parse_args(
+        [
+            "release",
+            "doctor",
+            "--repo",
+            str(tmp_path),
+            "--manifest",
+            "configs/release_manifest.yaml",
+            "--expected-release-sha",
+            "a" * 40,
+            "--expected-base-sha",
+            "b" * 40,
+            "--tag",
+            "release",
+        ]
+    )
+    captured: dict[str, object] = {}
+
+    def fake_report(**kwargs):
+        captured.update(kwargs)
+        return {"status": "pass"}
+
+    monkeypatch.setattr(release_cli, "collect_release_doctor_report", fake_report)
+    assert release_cli.handle(args) == 0
+    assert captured["manifest_path"] == (tmp_path / "configs/release_manifest.yaml").resolve()
+    assert captured["repo"] == tmp_path.resolve()
+
+
+def test_cli_absolute_manifest_stays_absolute(monkeypatch, tmp_path: Path) -> None:
+    """An absolute --manifest is honored verbatim even when --repo differs."""
+    manifest = tmp_path / "manifest.yaml"
+    args = robot_sf_cli._build_parser().parse_args(
+        [
+            "release",
+            "doctor",
+            "--repo",
+            str(tmp_path),
+            "--manifest",
+            str(manifest),
+            "--expected-release-sha",
+            "a" * 40,
+            "--expected-base-sha",
+            "b" * 40,
+            "--tag",
+            "release",
+        ]
+    )
+    captured: dict[str, object] = {}
+
+    def fake_report(**kwargs):
+        captured.update(kwargs)
+        return {"status": "pass"}
+
+    monkeypatch.setattr(release_cli, "collect_release_doctor_report", fake_report)
+    assert release_cli.handle(args) == 0
+    assert captured["manifest_path"] == manifest.resolve()
+
+
 def test_cli_checkpoint_path_map_runs_real_collector_and_receipt_validator(
     monkeypatch, tmp_path: Path, capsys
 ) -> None:

@@ -411,7 +411,10 @@ class ResultInterpretationPacket:
         Returns:
             A JSON-compatible dictionary representation.
         """
-        return asdict(self)
+        payload = asdict(self)
+        if self.estimand.comparator is None:
+            payload["estimand"].pop("comparator")
+        return payload
 
 
 # ---------------------------------------------------------------------------

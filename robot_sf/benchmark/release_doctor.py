@@ -974,11 +974,15 @@ def _scheduler_time_seconds(value: str) -> int | None:
 def _scheduler_gres(value: str) -> tuple[int, str | None] | None:
     """Parse one GPU GRES entry into count and optional type.
 
+    A composite GRES value (e.g. ``gpu:l40s:1,mps:1``) is rejected because the
+    effective submitted job would carry scheduler resources the frozen packet
+    did not declare; extra entries cannot be silently discarded.
+
     Returns:
-        A ``(count, type)`` pair, or ``None`` for malformed GRES input.
+        A ``(count, type)`` pair, or ``None`` for malformed or composite GRES input.
     """
     entries = [entry for entry in value.split(",") if entry.lower().startswith("gpu:")]
-    if len(entries) != 1:
+    if len(entries) != 1 or len(value.split(",")) != 1:
         return None
     parts = entries[0].split(":")
     if len(parts) == 2:
@@ -1045,7 +1049,10 @@ def _validate_scheduler_submit_args(  # noqa: C901
     ):
         problems.append("scheduler --time does not match packet")
     expected_qos = contract.get("qos")
-    if _is_concrete(expected_qos):
+    if expected_qos is None or not _is_concrete(expected_qos):
+        if values.get("qos"):
+            problems.append("scheduler --qos is undeclared by the packet")
+    else:
         qos = _scheduler_option_value(values, "qos", problems)
         if qos is not None and not _resource_values_match("qos", qos, expected_qos):
             problems.append("scheduler --qos does not match packet")

@@ -1167,8 +1167,19 @@ def _stress_row_contract_blockers(  # noqa: C901, PLR0912, PLR0915
             ("provenance.config_hash", _nested_value(row, "provenance", "config_hash")),
         ),
     )
+    scenario_params = row.get("scenario_params")
+    if isinstance(scenario_params, Mapping):
+        expected_row_config_hash = _config_hash(dict(scenario_params))
+    else:
+        expected_row_config_hash = None
+        blockers.append(f"{prefix}: scenario_params is missing")
     blockers.extend(
-        f"{prefix}: {blocker}" for blocker in _alias_blockers(config_aliases, label="config")
+        f"{prefix}: {blocker}"
+        for blocker in _alias_blockers(
+            config_aliases,
+            label="config",
+            expected=expected_row_config_hash,
+        )
     )
 
     algo_aliases = _alias_values(

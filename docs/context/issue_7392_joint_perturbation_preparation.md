@@ -54,8 +54,10 @@ does not imply admission to a future joint vector.
   construction.
 - `robot_sf/adversarial/archive.py` curates failure representatives only from executed search
   records. Preparation cannot populate an archive.
-- `robot_sf/adversarial/disjoint_evaluation.py` and `held_out_preflight.py` provide existing
-  disjoint-family/seed and independent-outcome gates. They do not define the #7392 held-out count,
+- `robot_sf/adversarial/independent_outcomes.py` owns independent outcome rows and their gating;
+  `robot_sf/adversarial/disjoint_evaluation.py` owns held-out eligibility and disjoint-family/seed
+  gating. `robot_sf/adversarial/held_out_preflight.py` remains an outcome-free preflight and does
+  not establish independent outcomes. None of these surfaces defines the #7392 held-out count,
   seed set, or re-evaluation rule.
 
 The adjacent [Issue #4360 search-harness note](issue_4360_search_harness.md) remains the context
@@ -166,12 +168,10 @@ The intended low-risk proof path is:
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q \
   tests/adversarial/test_issue_7809_joint_preparation.py \
-  tests/adversarial/test_search_harness.py \
-  tests/adversarial/test_adversarial_search.py
+  tests/adversarial/test_search_harness.py
 scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check \
   tests/adversarial/test_issue_7809_joint_preparation.py \
-  tests/adversarial/test_search_harness.py \
-  tests/adversarial/test_adversarial_search.py robot_sf/adversarial
+  tests/adversarial/test_search_harness.py robot_sf/adversarial
 scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_docs_evidence_integrity.py
 scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_docs_evidence_integrity.py --full
 ```

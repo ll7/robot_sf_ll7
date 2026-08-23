@@ -11,7 +11,7 @@ release_tag: paper-matrix-v2-h600-s30-hybrid-stress-smoke
 maturity: diagnostic
 release_kind: benchmark-stress-smoke
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_hybrid_stress_smoke.yaml
-campaign_config_sha256: "388542d412ac138feeadb6357bd4e2abf6d2515a9304eac4bd649c83fb1f24ba"
+campaign_config_sha256: "1d9ff7e723a4553f22cb3192c1b1af7e405b3df3c21acf820a68cbd1853e0050"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: diagnostic-stress-no-ranking
 
@@ -81,7 +81,7 @@ matrix:
 
 stress_smoke_contract:
   schema_version: hybrid-release-stress-smoke.v1
-  source_commit: 859d232e7fa4b2a35aafecd8fc05640aa66cd661
+  source_commit: 3651b343ecb4b56f7723a08c16e8b12d8dbd5080
   source_commit_policy: exact-immutable-worktree-sha-required
   expected_episode_cells: 70
   expected_horizon_steps: 600
@@ -179,7 +179,7 @@ provenance:
   repository_url: https://github.com/ll7/robot_sf_ll7
   doi: 10.5281/zenodo.<stress-smoke-not-published>
   source_commit_policy: exact-immutable-worktree-sha-required
-  source_commit: 859d232e7fa4b2a35aafecd8fc05640aa66cd661
+  source_commit: 3651b343ecb4b56f7723a08c16e8b12d8dbd5080
   result_policy: require-one-exact-source-sha
   publication_authorized: false
 

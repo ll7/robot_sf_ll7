@@ -1715,7 +1715,7 @@ def test_common_setup_restores_local_env_for_unmarked_foreign_virtualenv(tmp_pat
     """Issue #7830: an unrelated active env must not override repository-local setup."""
     repo, env = _make_common_setup_venv_fixture(tmp_path)
     env["VIRTUAL_ENV"] = "/tmp/unrelated-foreign-venv"
-    env.pop("UV_PROJECT_ENVIRONMENT", None)
+    env["UV_PROJECT_ENVIRONMENT"] = "/tmp/unrelated-foreign-venv"
     env.pop("ROBOT_SF_EXPLICIT_VENV_OVERRIDE", None)
 
     result = subprocess.run(

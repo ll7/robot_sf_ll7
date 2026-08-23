@@ -22,6 +22,9 @@ if [[ -n "${ROBOT_SF_EXPLICIT_VENV_OVERRIDE:-}" \
 fi
 
 if [[ -f "$REPO_ROOT/.venv/bin/activate" && -z "$preserve_explicit_venv" ]]; then
+  # Do not let an invalid or unmarked uv override outlive the foreign
+  # VIRTUAL_ENV that triggered this repository-local recovery path.
+  unset VIRTUAL_ENV UV_PROJECT_ENVIRONMENT ROBOT_SF_EXPLICIT_VENV_OVERRIDE
   # shellcheck source=/dev/null
   source "$REPO_ROOT/.venv/bin/activate"
 fi

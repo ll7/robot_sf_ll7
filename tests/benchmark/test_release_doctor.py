@@ -6,6 +6,7 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 from robot_sf.benchmark import release_doctor
@@ -202,7 +203,12 @@ def test_top_level_cli_registers_release_doctor(capsys) -> None:
 
 
 def _write_final_packet_fixture(
-    tmp_path: Path, *, source_sha: str = "a" * 40, tag: str = "release-tag"
+    tmp_path: Path,
+    *,
+    source_sha: str = "a" * 40,
+    tag: str = "release-tag",
+    resource_profile: str = "licca",
+    frozen_status: bool = False,
 ) -> tuple[Path, Path]:
     """Write a minimal but complete final packet/queue pair for doctor tests."""
     input_names = (
@@ -233,16 +239,8 @@ def _write_final_packet_fixture(
         "startup_sentinel_sha256": "b" * 64,
         "admission_helper_sha256": "b" * 64,
     }
-    packet = {
-        "schema": "robot-sf-launch-packet.v1",
-        "packet_version": 1,
-        "queue_id": "queue-1",
-        "campaign_id": campaign,
-        "campaign": campaign,
-        "state": "ready",
-        "dispatchable": True,
-        "admission": {"status": "admitted", "dispatchable": True},
-        "execution_contract": {
+    resources = {
+        "licca": {
             "cluster": "licca",
             "partition": "epyc-gpu",
             "route_id": "licca:epyc-gpu",
@@ -251,6 +249,30 @@ def _write_final_packet_fixture(
             "gpu_type": "A100",
             "mem_gb": 256,
             "wall_clock": "36:00:00",
+            "wall_clock_seconds": 129600,
+        },
+        "imech192": {
+            "cluster": "imech192",
+            "partition": "l40s",
+            "route_id": "imech192:l40s",
+            "cpus": 36,
+            "gpus": 1,
+            "gpu_type": "L40S",
+            "mem_gb": 256,
+            "wall_clock": "36:00:00",
+            "wall_clock_seconds": 129600,
+        },
+    }[resource_profile]
+    packet = {
+        "schema": "robot-sf-launch-packet.v1",
+        "packet_version": 1,
+        "queue_id": "queue-1",
+        "campaign_id": campaign,
+        "campaign": campaign,
+        "state": "ready",
+        "dispatchable": True,
+        "execution_contract": {
+            **resources,
             "resources_exact": True,
             "release_tag": tag,
             "startup_sentinel_required": True,
@@ -291,6 +313,10 @@ def _write_final_packet_fixture(
             "required_identity_fields": sorted(release_doctor._REQUIRED_PACKET_TRACE_FIELDS),
         },
     }
+    if frozen_status:
+        packet["status"] = "admitted_frozen"
+    else:
+        packet["admission"] = {"status": "admitted", "dispatchable": True}
     packet_path = tmp_path / "packet.json"
     packet_path.write_text(json.dumps(packet, sort_keys=True), encoding="utf-8")
     packet_hash = release_doctor._sha256(packet_path)
@@ -303,10 +329,10 @@ def _write_final_packet_fixture(
             "RELEASE_SCENARIO_PATH=configs/scenario_matrix",
             "RELEASE_CHECKPOINT_RECEIPT_PATH=configs/checkpoint_staging_receipt",
             "RELEASE_RUNTIME_SMOKE_RECEIPT_PATH=configs/runtime_smoke_receipt",
-            "RELEASE_EXPECTED_CPUS=36",
-            "RELEASE_EXPECTED_GPUS=1",
-            "RELEASE_EXPECTED_MEM_GB=256",
-            "RELEASE_EXPECTED_WALLTIME=36:00:00",
+            f"RELEASE_EXPECTED_CPUS={resources['cpus']}",
+            f"RELEASE_EXPECTED_GPUS={resources['gpus']}",
+            f"RELEASE_EXPECTED_MEM_GB={resources['mem_gb']}",
+            f"RELEASE_EXPECTED_WALLTIME={resources['wall_clock']}",
             *(
                 f"{field}={value}"
                 for field, value in (
@@ -336,13 +362,13 @@ def _write_final_packet_fixture(
                     "expected_public_commit": source_sha,
                     "artifact_manifest": "ops/jobs/launch_packets/packet.json",
                     "submit_args": submit_args,
-                    "cluster": "licca",
-                    "partition": "epyc-gpu",
-                    "route_id": "licca:epyc-gpu",
-                    "cpus": "36",
-                    "gpus": "1",
-                    "mem_gb": "256",
-                    "estimated_elapsed_sec": "129600",
+                    "cluster": resources["cluster"],
+                    "partition": resources["partition"],
+                    "route_id": resources["route_id"],
+                    "cpus": str(resources["cpus"]),
+                    "gpus": str(resources["gpus"]),
+                    "mem_gb": str(resources["mem_gb"]),
+                    "estimated_elapsed_sec": str(resources["wall_clock_seconds"]),
                 }
             ],
             sort_keys=False,
@@ -380,6 +406,59 @@ def test_final_cluster_check_validates_packet_queue_and_launch_contract(tmp_path
     )
     assert rejected.status == "fail"
     assert "resource contract mismatch" in rejected.summary
+
+
+def test_final_cluster_check_accepts_frozen_imech192_packet(tmp_path: Path) -> None:
+    """The doctor admits the exact imech192/L40S route without LiCCA defaults."""
+    packet, queue = _write_final_packet_fixture(
+        tmp_path, resource_profile="imech192", frozen_status=True
+    )
+    check = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert check.status == "pass", check.summary
+
+
+@pytest.mark.parametrize(
+    ("drift_target", "drift_value", "summary"),
+    [
+        ("packet_partition", "epyc-gpu", "resource contract mismatch: partition"),
+        ("queue_route_id", "licca:epyc-gpu", "resource contract mismatch: route_id"),
+        ("queue_cpus", "32", "resource contract mismatch: cpus"),
+    ],
+)
+def test_final_cluster_check_rejects_imech192_resource_drift(
+    tmp_path: Path, drift_target: str, drift_value: str, summary: str
+) -> None:
+    """A route/resource mismatch remains blocked in either frozen store."""
+    packet, queue = _write_final_packet_fixture(
+        tmp_path, resource_profile="imech192", frozen_status=True
+    )
+    if drift_target == "packet_partition":
+        packet_payload = json.loads(packet.read_text(encoding="utf-8"))
+        packet_payload["execution_contract"]["partition"] = drift_value
+        packet.write_text(json.dumps(packet_payload, sort_keys=True), encoding="utf-8")
+    else:
+        queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+        queue_payload[0]["route_id" if drift_target == "queue_route_id" else "cpus"] = drift_value
+        queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert summary in rejected.summary
 
 
 def test_final_cluster_check_rejects_missing_public_input(tmp_path: Path) -> None:

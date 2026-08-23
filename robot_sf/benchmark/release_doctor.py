@@ -45,16 +45,21 @@ _HARDCODED_ROBOT_SF_PATH_RE = re.compile(
     re.IGNORECASE,
 )
 
-_RELEASE_RESOURCES = {
-    "cluster": "licca",
-    "partition": "epyc-gpu",
-    "route_id": "licca:epyc-gpu",
-    "cpus": 36,
-    "gpus": 1,
-    "gpu_type": "a100",
-    "mem_gb": 256,
-    "wall_clock": "36:00:00",
-}
+# Resource values are part of the immutable private launch packet and its
+# matching queue row.  They must not be hard-coded here: the release route may
+# be LiCCA/epyc-gpu or another admitted site such as imech192/l40s.
+_RESOURCE_FIELDS = (
+    "cluster",
+    "partition",
+    "route_id",
+    "cpus",
+    "gpus",
+    "gpu_type",
+    "mem_gb",
+    "wall_clock",
+)
+_QUEUE_RESOURCE_FIELDS = ("cluster", "partition", "route_id", "cpus", "gpus", "mem_gb")
+_RESOURCE_STRING_FIELDS = {"cluster", "partition", "route_id", "gpu_type", "wall_clock"}
 
 _REQUIRED_PACKET_HASH_FIELDS = (
     "release_manifest_sha256",
@@ -386,6 +391,38 @@ def _is_concrete(value: Any) -> bool:
     return bool(text) and _PLACEHOLDER_RE.search(text) is None
 
 
+def _resource_values_match(field: str, actual: Any, expected: Any) -> bool:
+    """Compare two resource values using the packet's typed contract.
+
+    Returns:
+        ``True`` when the values are equal under the field's type semantics.
+    """
+    if field in _RESOURCE_STRING_FIELDS:
+        return str(actual or "").strip().lower() == str(expected or "").strip().lower()
+    try:
+        return int(actual) == int(expected)
+    except (TypeError, ValueError):
+        return False
+
+
+def _wall_clock_seconds(value: Any) -> int | None:
+    """Convert a ``HH:MM:SS`` wall-clock value to seconds.
+
+    Returns:
+        The number of seconds, or ``None`` for an invalid value.
+    """
+    parts = str(value or "").strip().split(":")
+    if len(parts) != 3:
+        return None
+    try:
+        hours, minutes, seconds = (int(part) for part in parts)
+    except (TypeError, ValueError):
+        return None
+    if hours < 0 or not 0 <= minutes < 60 or not 0 <= seconds < 60:
+        return None
+    return hours * 3600 + minutes * 60 + seconds
+
+
 def _validate_identity_hashes(packet: dict[str, Any]) -> list[str]:
     """Validate required packet identity hash syntax.
 
@@ -483,10 +520,16 @@ def _validate_packet_state(packet: dict[str, Any]) -> list[str]:
     if packet.get("state") not in {"admitted", "ready", "queued"}:
         problems.append("launch packet is not in a dispatchable state")
     admission = packet.get("admission")
-    if not isinstance(admission, dict) or admission.get("status") not in {"admitted", "ready"}:
+    if isinstance(admission, dict):
+        if admission.get("status") not in {"admitted", "ready"}:
+            problems.append("launch packet admission status is not admitted")
+        elif admission.get("dispatchable") is not True:
+            problems.append("launch packet admission is not dispatchable")
+    elif packet.get("status") != "admitted_frozen":
+        # The private queue's frozen packet contract uses a top-level status
+        # instead of duplicating an admission submapping.  Accept only that
+        # exact frozen status; an absent or arbitrary status remains blocked.
         problems.append("launch packet admission status is not admitted")
-    elif admission.get("dispatchable") is not True:
-        problems.append("launch packet admission is not dispatchable")
     if packet.get("dispatchable") is not True:
         problems.append("launch packet is not dispatchable")
 
@@ -522,8 +565,44 @@ def _validate_packet_identity(
     return problems
 
 
+def _validate_packet_resource_contract(contract: dict[str, Any]) -> list[str]:
+    """Validate resource completeness and internal route/time consistency.
+
+    Returns:
+        Sanitized resource-contract problems.
+    """
+    problems: list[str] = []
+    for field in _RESOURCE_FIELDS:
+        actual = contract.get(field)
+        if field in _RESOURCE_STRING_FIELDS:
+            valid = _is_concrete(actual)
+        else:
+            try:
+                valid = int(actual) > 0
+            except (TypeError, ValueError):
+                valid = False
+        if not valid:
+            problems.append(f"launch packet resource contract is invalid: {field}")
+    if _is_concrete(contract.get("cluster")) and _is_concrete(contract.get("partition")):
+        expected_route = f"{contract['cluster']}:{contract['partition']}"
+        if not _resource_values_match("route_id", contract.get("route_id"), expected_route):
+            problems.append("launch packet route_id does not match cluster and partition")
+    wall_clock_seconds = _wall_clock_seconds(contract.get("wall_clock"))
+    if wall_clock_seconds is None:
+        problems.append("launch packet wall_clock is not a valid HH:MM:SS value")
+    elif "wall_clock_seconds" in contract and not _resource_values_match(
+        "wall_clock_seconds", contract.get("wall_clock_seconds"), wall_clock_seconds
+    ):
+        problems.append("launch packet wall_clock_seconds does not match wall_clock")
+    return problems
+
+
 def _validate_packet_execution_contract(packet: dict[str, Any]) -> list[str]:
-    """Validate the fixed LiCCA route and startup-source contract.
+    """Validate the frozen route and startup-source contract.
+
+    Resource values are validated for completeness and internal consistency
+    here.  Final admission compares them with the exact matching private queue
+    row in :func:`_validate_packet_queue`.
 
     Returns:
         Sanitized route and startup-contract problems.
@@ -533,19 +612,7 @@ def _validate_packet_execution_contract(packet: dict[str, Any]) -> list[str]:
     if not isinstance(contract, dict):
         problems.append("launch packet execution contract is missing")
         contract = {}
-    for field, expected in _RELEASE_RESOURCES.items():
-        actual = contract.get(field)
-        if field in {"cluster", "partition", "route_id", "wall_clock"}:
-            matches = str(actual or "").strip().lower() == str(expected).lower()
-        elif field == "gpu_type":
-            matches = str(actual or "").strip().lower() == str(expected).lower()
-        else:
-            try:
-                matches = int(actual) == int(expected)
-            except (TypeError, ValueError):
-                matches = False
-        if not matches:
-            problems.append(f"launch packet resource contract mismatch: {field}")
+    problems.extend(_validate_packet_resource_contract(contract))
     if contract.get("resources_exact") is not True:
         problems.append("launch packet resources_exact is not true")
     if contract.get("startup_sentinel_required") is not True:
@@ -690,12 +757,16 @@ def _validate_queue_identity_args(submit_args: str, packet: dict[str, Any]) -> l
             expected_path = item.get("path") if isinstance(item, dict) else None
             if _submit_arg_value(submit_args, queue_field) != expected_path:
                 problems.append(f"private queue {queue_field} is not bound to packet inputs")
+    contract = packet.get("execution_contract")
+    if not isinstance(contract, dict):
+        problems.append("launch packet execution contract is missing")
+        contract = {}
     expected_identity = {
         "RELEASE_CAMPAIGN_ID": packet.get("campaign_id"),
-        "RELEASE_EXPECTED_CPUS": "36",
-        "RELEASE_EXPECTED_GPUS": "1",
-        "RELEASE_EXPECTED_MEM_GB": "256",
-        "RELEASE_EXPECTED_WALLTIME": "36:00:00",
+        "RELEASE_EXPECTED_CPUS": contract.get("cpus"),
+        "RELEASE_EXPECTED_GPUS": contract.get("gpus"),
+        "RELEASE_EXPECTED_MEM_GB": contract.get("mem_gb"),
+        "RELEASE_EXPECTED_WALLTIME": contract.get("wall_clock"),
     }
     for field, expected in expected_identity.items():
         if _submit_arg_value(submit_args, field) != str(expected):
@@ -732,31 +803,41 @@ def _validate_queue_submit_args(
     return problems
 
 
-def _validate_queue_resources(row: dict[str, Any]) -> list[str]:
-    """Validate queue resource values when present.
+def _validate_queue_resources(row: dict[str, Any], packet: dict[str, Any]) -> list[str]:
+    """Validate queue resources against the exact packet execution contract.
 
     Returns:
         Sanitized resource problems.
     """
     problems: list[str] = []
-    for field, expected in _RELEASE_RESOURCES.items():
+    contract = packet.get("execution_contract")
+    if not isinstance(contract, dict):
+        return ["launch packet execution contract is missing"]
+    for field in _QUEUE_RESOURCE_FIELDS:
         if field not in row:
+            problems.append(f"private queue resource contract is missing: {field}")
             continue
-        if field in {"cluster", "partition", "route_id", "gpu_type", "wall_clock"}:
-            matches = str(row[field]).lower() == str(expected).lower()
-        else:
-            try:
-                matches = int(row[field]) == int(expected)
-            except (TypeError, ValueError):
-                matches = False
-        if not matches:
+        if not _resource_values_match(field, row[field], contract.get(field)):
             problems.append(f"private queue resource contract mismatch: {field}")
+    # Queue rows encode wall-clock limits as seconds, while the launch packet
+    # carries the scheduler-facing HH:MM:SS value.  Accept the explicit packet
+    # seconds when present and otherwise derive them from the frozen string.
+    expected_wall_clock_seconds = contract.get("wall_clock_seconds")
+    if expected_wall_clock_seconds is None:
+        expected_wall_clock_seconds = _wall_clock_seconds(contract.get("wall_clock"))
     if "estimated_elapsed_sec" in row:
-        try:
-            if int(row["estimated_elapsed_sec"]) != 129600:
-                problems.append("private queue resource contract mismatch: wall_clock")
-        except (TypeError, ValueError):
+        if expected_wall_clock_seconds is None or not _resource_values_match(
+            "estimated_elapsed_sec", row["estimated_elapsed_sec"], expected_wall_clock_seconds
+        ):
             problems.append("private queue resource contract mismatch: wall_clock")
+    if "gpu_type" in row and not _resource_values_match(
+        "gpu_type", row["gpu_type"], contract.get("gpu_type")
+    ):
+        problems.append("private queue resource contract mismatch: gpu_type")
+    if "wall_clock" in row and not _resource_values_match(
+        "wall_clock", row["wall_clock"], contract.get("wall_clock")
+    ):
+        problems.append("private queue resource contract mismatch: wall_clock")
     return problems
 
 
@@ -794,7 +875,7 @@ def _validate_packet_queue(
         problems.append("private queue artifact manifest does not match packet")
     submit_args = str(row.get("submit_args") or "")
     problems.extend(_validate_queue_submit_args(submit_args, packet_path, packet))
-    problems.extend(_validate_queue_resources(row))
+    problems.extend(_validate_queue_resources(row, packet))
     return list(dict.fromkeys(problems))
 
 
@@ -851,9 +932,11 @@ def _cluster_check(
     except (OSError, ValueError, json.JSONDecodeError, yaml.YAMLError):
         return ReleaseDoctorCheck("cluster_admission", "fail", "private launch packet is invalid")
     admission = packet.get("admission")
-    admitted = isinstance(admission, dict) and admission.get("status") in {"admitted", "ready"}
-    dispatchable = bool(packet.get("dispatchable")) and (
-        not isinstance(admission, dict) or bool(admission.get("dispatchable", True))
+    admitted = (
+        isinstance(admission, dict) and admission.get("status") in {"admitted", "ready"}
+    ) or packet.get("status") == "admitted_frozen"
+    dispatchable = packet.get("dispatchable") is True and (
+        not isinstance(admission, dict) or admission.get("dispatchable", True) is True
     )
     identity = packet.get("identity")
     identity_source_sha = (

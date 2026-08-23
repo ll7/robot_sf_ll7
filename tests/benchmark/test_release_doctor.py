@@ -7,6 +7,7 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 import yaml
@@ -649,6 +650,48 @@ def test_final_cluster_check_accepts_count_only_gpu_gres(tmp_path: Path) -> None
         repo=tmp_path,
     )
     assert check.status == "pass", check.summary
+
+
+def test_scheduler_gres_rejects_composite_extra_resources() -> None:
+    """A composite GRES carrying undeclared resources must be rejected."""
+    assert release_doctor._scheduler_gres("gpu:l40s:1,mps:1") is None
+    assert release_doctor._scheduler_gres("gpu:l40s:1") == (1, "l40s")
+    assert release_doctor._scheduler_gres("gpu:1") == (1, None)
+
+
+def test_scheduler_qos_undeclared_by_packet_is_rejected() -> None:
+    """A --qos value the packet contract never declared must fail admission."""
+    packet: dict[str, Any] = {
+        "execution_contract": {
+            "partition": "l40s",
+            "gpus": 1,
+            "gpu_type": "l40s",
+            "cpus": 36,
+            "mem_gb": 256,
+        }
+    }
+    problems = release_doctor._validate_scheduler_submit_args(
+        "--qos=other --gres=gpu:l40s:1 --cpus-per-task=36 --mem=256G", packet
+    )
+    assert any("scheduler --qos is undeclared by the packet" in p for p in problems)
+
+
+def test_scheduler_qos_matching_packet_still_accepted() -> None:
+    """A --qos value exactly matching the packet's concrete qos passes."""
+    packet: dict[str, Any] = {
+        "execution_contract": {
+            "partition": "l40s",
+            "gpus": 1,
+            "gpu_type": "l40s",
+            "cpus": 36,
+            "mem_gb": 256,
+            "qos": "l40s-gpu",
+        }
+    }
+    problems = release_doctor._validate_scheduler_submit_args(
+        "--qos=l40s-gpu --gres=gpu:l40s:1 --cpus-per-task=36 --mem=256G", packet
+    )
+    assert not any("scheduler --qos" in p for p in problems)
 
 
 @pytest.mark.parametrize(

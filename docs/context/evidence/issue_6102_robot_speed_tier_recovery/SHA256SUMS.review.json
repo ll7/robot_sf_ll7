@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_6102_robot_speed_tier_recovery/SHA256SUMS",
-  "artifact_sha256": "2f80ebdfab96e50957d3a1f7d66066906f5f95dcd1b546838428eeacb89ef82b",
+  "artifact_sha256": "37c4cddd86bcf1bd015bce2efda6866c6e58e7ba553a60ab56fada295a8648aa",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

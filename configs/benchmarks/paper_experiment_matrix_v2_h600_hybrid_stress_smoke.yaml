@@ -82,7 +82,7 @@ stress_smoke_contract:
   expected_dt: 0.1
   expected_kinematics: differential_drive
   required_hybrid_arms:
-    - scenario_adaptive_hybrid_orca_v1
+    - scenario_adaptive_hybrid_orca_v2_bottleneck_yield
     - scenario_adaptive_hybrid_orca_v2_collision_guard
     - hybrid_rule_v3_fast_progress_static_escape
     - hybrid_rule_v3_fast_progress_static_escape_continuous
@@ -163,10 +163,10 @@ planners:
     benchmark_profile: experimental
     socnav_missing_prereq_policy: fail-fast
 
-  - key: scenario_adaptive_hybrid_orca_v1
+  - key: scenario_adaptive_hybrid_orca_v2_bottleneck_yield
     algo: hybrid_rule_local_planner
     planner_group: experimental
-    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1_s30_h600_release.yaml
+    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml
     benchmark_profile: experimental
 
   - key: scenario_adaptive_hybrid_orca_v2_collision_guard

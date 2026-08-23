@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 import matplotlib.image as mpimg
@@ -243,6 +244,28 @@ def test_contrast_renderer_uses_exposure_label_in_both_layouts() -> None:
     assert "A 13 / B 78" in strip_text
     assert not any("near-miss steps" in text for text in strip_text)
     assert gutter["near_miss_steps"] == {"episode_a": 13, "episode_b": 78}
+
+    episode_a = SimpleNamespace(
+        metadata={
+            "planner": "ppo",
+            "scenario_id": "classic_doorway_medium",
+            "seed": 113,
+            "episode_status": "success",
+        }
+    )
+    episode_b = SimpleNamespace(
+        metadata={
+            "planner": "ppo",
+            "scenario_id": "classic_doorway_medium",
+            "seed": 114,
+            "episode_status": "collision",
+        }
+    )
+    headline = hinge._compose_contrast_headline(episode_a, episode_b, gutter, 0.4)
+    assert "13 exposure steps" in headline
+    assert "78 exposure steps" in headline
+    assert "near-miss steps" not in headline
+
     plt.close(vertical_fig)
     plt.close(strip_fig)
 

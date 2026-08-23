@@ -40,6 +40,32 @@ def _write_yaml(path: Path, payload: dict) -> None:
     path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
 
 
+def _fixture_checkpoint_provenance(planner: str, index: int) -> dict[str, object]:
+    """Return complete learned-arm runtime evidence or a non-learned marker."""
+    learned = {"prediction_planner", "ppo", "sacadrl", "guarded_ppo", "predictive_mppi"}
+    if planner not in learned:
+        return {
+            "status": "not_applicable",
+            "load_succeeded": None,
+            "fallback_triggered": None,
+        }
+    model_id = f"runtime-smoke-model-{index}"
+    checkpoint_hash = f"{index + 1:064x}"
+    record = {
+        "model_id": model_id,
+        "checkpoint_sha256": checkpoint_hash,
+        "load_succeeded": True,
+        "fallback_triggered": False,
+        "load_status": "loaded",
+    }
+    return {
+        **record,
+        "status": "loaded",
+        "references": [dict(record)],
+        "runtime": [{**record, "kinematics": "differential_drive", "run_status": "ok"}],
+    }
+
+
 def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tuple[str, ...]]:
     planners = RUNTIME_SMOKE_PLANNER_KEYS
     manifest = tmp_path / RUNTIME_SMOKE_MANIFEST
@@ -125,7 +151,7 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tup
             algo=f"algo-{index}",
             algo_config_path=tmp_path / planner_configs[planner],
             benchmark_profile="baseline-safe",
-            suite_key="default",
+            suite_key="francis2023",
             total_jobs=1,
             written=1,
             horizon=600,
@@ -223,11 +249,7 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, tup
                     "key": planner,
                     "algo": f"algo-{index}",
                     "algo_config_path": planner_configs[planner],
-                    "checkpoint_provenance": {
-                        "status": "not_run",
-                        "load_succeeded": None,
-                        "fallback_triggered": None,
-                    },
+                    "checkpoint_provenance": _fixture_checkpoint_provenance(planner, index),
                 }
                 for index, planner in enumerate(planners)
             ],
@@ -290,6 +312,21 @@ def _admit(result: Path, planners: tuple[str, ...], tmp_path: Path) -> dict:
         expected_source_commit="a" * 40,
         expected_planner_keys=planners,
     )
+
+
+def _set_episode_runtime(result: Path, planner: str, runtime: dict[str, object]) -> None:
+    """Update one fixture row and its provenance-sidecar byte hash."""
+    episodes_path = result.parent.parent / "runs" / f"{planner}__differential_drive/episodes.jsonl"
+    row = json.loads(episodes_path.read_text(encoding="utf-8"))
+    row["algorithm_metadata"]["planner_runtime"] = runtime
+    _write_json(episodes_path, row)
+    sidecar_path = episodes_path.with_name(f"{episodes_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    artifact = next(
+        item for item in sidecar["raw_artifacts"] if item.get("kind") == "episodes_jsonl"
+    )
+    artifact["sha256"] = sha256_file(episodes_path)
+    _write_json(sidecar_path, sidecar)
 
 
 def test_runtime_smoke_parsers_reject_malformed_or_wrong_shaped_inputs(tmp_path: Path) -> None:
@@ -515,6 +552,85 @@ def test_runtime_smoke_allows_empty_foresight_fallback_reason_when_unused(
     assert _admit(result, planners, tmp_path)["status"] == "admitted"
 
 
+@pytest.mark.parametrize("reason", [None, ""])
+def test_runtime_smoke_allows_empty_summary_foresight_reason_when_unused(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reason: object,
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    summary_path = result.parent.parent / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["runs"][0]["summary"]["algorithm_metadata_contract"] = {
+        "planner_runtime": {
+            "foresight_prediction": {
+                "fallback_used": False,
+                "fallback_reason": reason,
+            }
+        }
+    }
+    _write_json(summary_path, summary)
+
+    assert _admit(result, planners, tmp_path)["status"] == "admitted"
+
+
+def test_runtime_smoke_allows_planner_aggregate_not_applicable_learned_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    summary_path = result.parent.parent / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["planner_rows"][0]["learned_policy_contract_status"] = "not_applicable"
+    _write_json(summary_path, summary)
+
+    assert _admit(result, planners, tmp_path)["status"] == "admitted"
+
+
+@pytest.mark.parametrize("reason", [None, ""])
+@pytest.mark.parametrize("surface", ["summary", "row"])
+def test_runtime_smoke_allows_empty_generic_runtime_reason_when_unused(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    reason: object,
+    surface: str,
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    summary_path = result.parent.parent / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    runtime = {
+        "fallback_triggered": False,
+        "fallback_reason": reason,
+    }
+    if surface == "summary":
+        summary["runs"][0]["summary"]["algorithm_metadata_contract"] = {"planner_runtime": runtime}
+        _write_json(summary_path, summary)
+    else:
+        _set_episode_runtime(result, planners[0], runtime)
+
+    assert _admit(result, planners, tmp_path)["status"] == "admitted"
+
+
+@pytest.mark.parametrize("surface", ["summary", "row"])
+def test_runtime_smoke_rejects_nonempty_generic_runtime_reason_when_unused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, surface: str
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    summary_path = result.parent.parent / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    runtime = {
+        "fallback_triggered": False,
+        "fallback_reason": "unexpected runtime fallback",
+    }
+    if surface == "summary":
+        summary["runs"][0]["summary"]["algorithm_metadata_contract"] = {"planner_runtime": runtime}
+        _write_json(summary_path, summary)
+    else:
+        _set_episode_runtime(result, planners[0], runtime)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match="fallback or degraded"):
+        _admit(result, planners, tmp_path)
+
+
 @pytest.mark.parametrize("nested", [False, True])
 def test_runtime_smoke_rejects_nonempty_foresight_fallback_reason_when_unused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, nested: bool
@@ -637,6 +753,67 @@ def test_runtime_smoke_rejects_noncanonical_checkpoint_preflight_placeholders(
         _admit(result, planners, tmp_path)
 
 
+def test_runtime_smoke_rejects_mixed_known_unknown_checkpoint_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    manifest_path = result.parent.parent / "campaign_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    provenance = manifest["planners"][0]["checkpoint_provenance"]
+    provenance["runtime"].append(
+        {
+            "model_id": provenance["model_id"],
+            "checkpoint_sha256": provenance["checkpoint_sha256"],
+            "load_status": "loaded",
+        }
+    )
+    _write_json(manifest_path, manifest)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match=r"runtime\[1\] load mismatch"):
+        _admit(result, planners, tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("defect", "expected"),
+    [
+        ("missing_provenance", "checkpoint provenance is missing"),
+        ("missing_references", "checkpoint references are missing"),
+        ("missing_runtime", "checkpoint runtime are missing"),
+        ("invalid_reference_record", r"checkpoint references\[0\] is missing"),
+        ("missing_model_id", r"checkpoint references\[0\] model id is missing"),
+        ("invalid_reference_hash", r"checkpoint references\[0\] checkpoint hash is missing"),
+    ],
+)
+def test_runtime_smoke_rejects_incomplete_checkpoint_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    defect: str,
+    expected: str,
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    manifest_path = result.parent.parent / "campaign_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    provenance = manifest["planners"][0]["checkpoint_provenance"]
+    if defect == "missing_provenance":
+        manifest["planners"][0]["checkpoint_provenance"] = None
+    elif defect == "missing_references":
+        provenance["references"] = []
+    elif defect == "missing_runtime":
+        provenance["runtime"] = []
+    elif defect == "invalid_reference_record":
+        provenance["references"] = [None]
+    elif defect == "missing_model_id":
+        provenance["references"][0]["model_id"] = ""
+    elif defect == "invalid_reference_hash":
+        provenance["references"][0]["checkpoint_sha256"] = "not-a-sha256"
+    else:  # pragma: no cover - guarded by the parameter table
+        raise AssertionError(f"unknown defect: {defect}")
+    _write_json(manifest_path, manifest)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match=expected):
+        _admit(result, planners, tmp_path)
+
+
 def test_runtime_smoke_allows_declarative_guarded_ppo_fallback_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -655,13 +832,48 @@ def test_runtime_smoke_allows_declarative_guarded_ppo_fallback_config(
     assert admitted["status"] == "admitted"
 
 
-def test_runtime_smoke_rejects_positive_runtime_fallback_counter(
+def test_runtime_smoke_allows_guarded_ppo_intrinsic_safe_shield_counter(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     result, planners = _fixture(tmp_path, monkeypatch)
     episode_path = result.parent.parent / "runs/guarded_ppo__differential_drive/episodes.jsonl"
     row = json.loads(episode_path.read_text(encoding="utf-8"))
     row["algorithm_metadata"]["guard_stats"] = {"fallback_safe": 1}
+    row["algorithm_metadata"]["shield_stats"] = {
+        "decision_counts": {"fallback_safe": 1},
+        "last_decision": {
+            "fallback_controller_state": {
+                "policy": "RiskDWAPlannerAdapter",
+                "prior_available": False,
+            }
+        },
+    }
+    _write_json(episode_path, row)
+    sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
+    _write_json(sidecar_path, sidecar)
+
+    assert _admit(result, planners, tmp_path)["status"] == "admitted"
+
+
+@pytest.mark.parametrize(
+    ("planner", "guard_stats"),
+    [
+        ("guarded_ppo", {"fallback_best_effort": 1}),
+        ("prediction_planner", {"fallback_safe": 1}),
+    ],
+)
+def test_runtime_smoke_rejects_noncanonical_guard_fallback_counter(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    planner: str,
+    guard_stats: dict[str, int],
+) -> None:
+    result, planners = _fixture(tmp_path, monkeypatch)
+    episode_path = result.parent.parent / "runs" / f"{planner}__differential_drive/episodes.jsonl"
+    row = json.loads(episode_path.read_text(encoding="utf-8"))
+    row["algorithm_metadata"]["guard_stats"] = guard_stats
     _write_json(episode_path, row)
     sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
     sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))

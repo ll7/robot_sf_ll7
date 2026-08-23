@@ -14,6 +14,7 @@ from robot_sf.benchmark.camera_ready._preflight import prepare_campaign_prefligh
 from robot_sf.benchmark.camera_ready.campaign import (
     _checkpoint_fallback_detected,
     _finalize_checkpoint_provenance,
+    _summarize_checkpoint_runtime,
 )
 from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     CampaignCheckpointPreflightError,
@@ -176,6 +177,46 @@ def test_generic_learned_planner_stats_capture_runtime_fallback() -> None:
     )
 
 
+def test_predictive_mppi_policy_exposes_nested_checkpoint_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The dedicated Predictive MPPI builder attaches its nested predictor diagnostics."""
+
+    class Adapter:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def diagnostics(self) -> dict[str, object]:
+            return {"planner_type": "PredictiveMPPIAdapter"}
+
+        def foresight_diagnostics(self) -> dict[str, object]:
+            return {
+                "foresight_prediction": {
+                    "requested_model_id": "predictive_proxy_selected_v1",
+                    "load_status": "loaded",
+                    "fallback_used": False,
+                }
+            }
+
+    monkeypatch.setattr(map_runner, "PredictiveMPPIAdapter", Adapter)
+    policy, _meta = map_runner._build_predictive_mppi_policy(
+        "predictive_mppi",
+        {},
+        meta={},
+        robot_kinematics="differential_drive",
+        normalized_robot_command_mode=None,
+    )
+
+    assert policy._planner_stats() == {
+        "planner_type": "PredictiveMPPIAdapter",
+        "foresight_prediction": {
+            "requested_model_id": "predictive_proxy_selected_v1",
+            "load_status": "loaded",
+            "fallback_used": False,
+        },
+    }
+
+
 def test_batch_summary_bridges_runtime_checkpoint_provenance() -> None:
     """Per-episode planner diagnostics reach the batch contract consumed by campaigns."""
     runtime = {
@@ -312,6 +353,14 @@ def test_campaign_manifest_folds_runtime_checkpoint_status_per_kinematics() -> N
                     "checkpoint_sha256": "a" * 64,
                     "load_succeeded": None,
                     "fallback_triggered": None,
+                    "references": [
+                        {
+                            "model_id": "ga3c_cadrl_iros18",
+                            "load_succeeded": None,
+                            "fallback_triggered": None,
+                            "load_status": "not_run",
+                        }
+                    ],
                     "runtime": [],
                 },
             }
@@ -343,4 +392,100 @@ def test_campaign_manifest_folds_runtime_checkpoint_status_per_kinematics() -> N
     assert provenance["fallback_triggered"] is False
     assert provenance["checkpoint_sha256"] == "b" * 64
     assert provenance["runtime"][0]["kinematics"] == "differential_drive"
+    assert provenance["references"][0]["load_succeeded"] is True
+    assert provenance["references"][0]["fallback_triggered"] is False
+    assert provenance["references"][0]["load_status"] == "loaded"
     assert runs[0]["planner"]["checkpoint_provenance"]["load_status"] == "loaded"
+
+
+def test_campaign_manifest_folds_nested_foresight_checkpoint_status() -> None:
+    """Predictive adapters bind their nested learned predictor to the final manifest."""
+    model_id = "predictive_proxy_selected_v1"
+    manifest = {
+        "planners": [
+            {
+                "key": "predictive_mppi",
+                "checkpoint_provenance": {
+                    "status": "not_run",
+                    "model_id": model_id,
+                    "checkpoint_sha256": "a" * 64,
+                    "load_succeeded": None,
+                    "fallback_triggered": None,
+                    "references": [
+                        {
+                            "model_id": model_id,
+                            "load_succeeded": None,
+                            "fallback_triggered": None,
+                            "load_status": "not_run",
+                        }
+                    ],
+                    "runtime": [],
+                },
+            }
+        ]
+    }
+    runs = [
+        {
+            "planner": {"key": "predictive_mppi", "kinematics": "differential_drive"},
+            "status": "ok",
+            "summary": {
+                "algorithm_metadata_contract": {
+                    "planner_runtime": {
+                        "foresight_prediction": {
+                            "requested_model_id": model_id,
+                            "requested_checkpoint_sha256": "a" * 64,
+                            "observed_checkpoint_sha256": "a" * 64,
+                            "load_status": "loaded",
+                            "fallback_used": False,
+                            "load_error": None,
+                        }
+                    }
+                }
+            },
+        }
+    ]
+
+    _finalize_checkpoint_provenance(manifest, runs)
+
+    provenance = manifest["planners"][0]["checkpoint_provenance"]
+    assert provenance["status"] == "loaded"
+    assert provenance["load_succeeded"] is True
+    assert provenance["fallback_triggered"] is False
+    assert provenance["runtime"][0]["hash_source"] == "runtime_observed"
+    assert provenance["references"][0]["load_status"] == "loaded"
+
+
+def test_campaign_manifest_keeps_mixed_known_unknown_runtime_unresolved() -> None:
+    """A partial runtime observation must never be filtered into a loaded aggregate."""
+    model_id = "predictive_proxy_selected_v1"
+    provenance = {
+        "references": [
+            {
+                "model_id": model_id,
+                "load_succeeded": None,
+                "fallback_triggered": None,
+                "load_status": "not_run",
+            }
+        ],
+        "runtime": [
+            {
+                "model_id": model_id,
+                "load_succeeded": True,
+                "fallback_triggered": False,
+            },
+            {
+                "model_id": model_id,
+                "load_succeeded": None,
+                "fallback_triggered": None,
+            },
+        ],
+    }
+
+    _summarize_checkpoint_runtime(provenance)
+
+    assert provenance["status"] == "runtime_not_observed"
+    assert provenance["load_succeeded"] is None
+    assert provenance["fallback_triggered"] is None
+    assert provenance["references"][0]["load_status"] == "runtime_not_observed"
+    assert provenance["references"][0]["load_succeeded"] is None
+    assert provenance["references"][0]["fallback_triggered"] is None

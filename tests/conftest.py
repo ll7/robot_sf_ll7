@@ -413,6 +413,10 @@ _FAST_FILES = {
     "test_artifact_publication.py",
     "test_camera_ready_checkpoint_submit_preflight.py",
     "test_camera_ready_subprocess_isolation.py",
+    # Checkpoint provenance and Predictive MPPI adapter tests are deterministic
+    # contract coverage for release-smoke producer changes; keep them in the
+    # exact-head changed-coverage shards.
+    "test_checkpoint_provenance_issue_4970.py",
     "test_checkpoint_staging_receipt.py",
     "test_fallback_policy.py",
     "test_release_acceptance.py",
@@ -425,6 +429,7 @@ _FAST_FILES = {
     "test_release_protocol_edge_cases.py",
     "test_release_resume_admission.py",
     "test_runtime_smoke_admission.py",
+    "test_predictive_mppi_planner.py",
     "test_s30_h600_runtime_smoke_contract.py",
     "test_submit_release_single_node_contract.py",
     "test_trace_dossier_package.py",

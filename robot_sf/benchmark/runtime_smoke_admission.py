@@ -33,7 +33,7 @@ RUNTIME_SMOKE_CONFIG = Path(
 RUNTIME_SMOKE_HORIZON = 600
 RUNTIME_SMOKE_KINEMATICS = "differential_drive"
 RUNTIME_SMOKE_MAX_AGE_HOURS = 24.0
-RUNTIME_SMOKE_SUITE_KEY = "default"
+RUNTIME_SMOKE_SUITE_KEY = "francis2023"
 RUNTIME_SMOKE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 RUNTIME_SMOKE_PLANNER_KEYS = (
     "prediction_planner",
@@ -50,6 +50,9 @@ RUNTIME_SMOKE_PLANNER_KEYS = (
     "guarded_ppo",
     "predictive_mppi",
     "risk_dwa",
+)
+_RUNTIME_SMOKE_CHECKPOINT_PLANNER_KEYS = frozenset(
+    {"prediction_planner", "ppo", "sacadrl", "guarded_ppo", "predictive_mppi"}
 )
 _FORBIDDEN_RUNTIME_STATUSES = frozenset(
     {
@@ -348,16 +351,61 @@ def _is_allowed_runtime_marker(path: str, key: str, value: Any, *, parent: dict[
     """
     if _is_campaign_preflight_unknown(path, value):
         return True
+    # Guarded PPO is the fixed arm at index 11 in the canonical roster. Its
+    # Risk-DWA safety-shield intervention is part of the declared composite
+    # planner, not a missing-policy or degraded-runtime fallback. Keep the
+    # exception exact: best-effort/uncertainty fallbacks and every other arm
+    # continue to fail closed.
+    if (
+        re.fullmatch(
+            r"runs\[11\]\.rows\[0\]\.algorithm_metadata\."
+            r"(?:guard_stats|shield_stats\.decision_counts)\.fallback_safe",
+            path,
+        )
+        and isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 0
+    ):
+        return True
+    if (
+        path
+        == "runs[11].rows[0].algorithm_metadata.shield_stats.last_decision."
+        "fallback_controller_state"
+        and isinstance(value, dict)
+    ):
+        return True
     if path.startswith("planner_rows[") and key == "benchmark_success":
         return str(value).strip().lower() == "true"
     if (
         re.fullmatch(
-            r"runs\[\d+\]\.rows\[\d+\]\.algorithm_metadata\."
-            r"(?:planner_runtime\.)?foresight_prediction\.fallback_reason",
+            r"runs\[\d+\]\.(?:"
+            r"rows\[\d+\]\.algorithm_metadata\."
+            r"|summary(?:_artifact)?\.(?:preflight\.)?algorithm_metadata_contract\."
+            r")(?:(?:planner_runtime)\.)?foresight_prediction\.fallback_reason",
             path,
         )
         and (value is None or value == "")
         and parent.get("fallback_used") is False
+    ):
+        return True
+    if (
+        re.fullmatch(
+            r"runs\[\d+\]\.(?:"
+            r"rows\[\d+\]\.algorithm_metadata\.planner_runtime"
+            r"|summary(?:_artifact)?\.(?:preflight\.)?"
+            r"algorithm_metadata_contract\.planner_runtime"
+            r")\.fallback_reason",
+            path,
+        )
+        and (value is None or value == "")
+        and parent.get("fallback_triggered") is False
+    ):
+        return True
+    if (
+        key == "learned_policy_contract_status"
+        and re.fullmatch(r"planner_rows\[\d+\]\.learned_policy_contract_status", path)
+        and str(value).strip().lower().replace(" ", "_") == "not_applicable"
     ):
         return True
     return _is_canonical_not_applicable_status(path, key, value)
@@ -974,6 +1022,12 @@ def _validate_campaign_metadata(  # noqa: PLR0913
             algorithm_configs.get(key),
             f"campaign manifest planner {index} config",
         )
+        if key in _RUNTIME_SMOKE_CHECKPOINT_PLANNER_KEYS:
+            _validate_loaded_checkpoint_provenance(
+                planner.get("checkpoint_provenance"),
+                label=f"campaign manifest planner {index} checkpoint",
+                problems=problems,
+            )
         markers = _forbidden_status_markers(planner, f"campaign_manifest.planners[{index}]")
         if markers:
             problems.append(
@@ -993,6 +1047,59 @@ def _validate_campaign_metadata(  # noqa: PLR0913
             release.get("release_id"),
             "run manifest release identity",
         )
+
+
+def _validate_loaded_checkpoint_record(
+    record: Any,
+    *,
+    label: str,
+    problems: list[str],
+    require_hash: bool,
+) -> None:
+    """Require one explicit successful checkpoint runtime observation."""
+    if not isinstance(record, dict):
+        problems.append(f"{label} is missing")
+        return
+    _require_equal(problems, record.get("load_succeeded"), True, f"{label} load")
+    _require_equal(problems, record.get("fallback_triggered"), False, f"{label} fallback")
+    _require_equal(problems, record.get("load_status"), "loaded", f"{label} status")
+    if not str(record.get("model_id") or "").strip():
+        problems.append(f"{label} model id is missing")
+    checkpoint_hash = str(record.get("checkpoint_sha256") or "").strip().lower()
+    if require_hash and re.fullmatch(r"[0-9a-f]{64}", checkpoint_hash) is None:
+        problems.append(f"{label} checkpoint hash is missing or invalid")
+
+
+def _validate_loaded_checkpoint_provenance(
+    provenance: Any,
+    *,
+    label: str,
+    problems: list[str],
+) -> None:
+    """Require complete loaded reference and runtime evidence for one learned arm."""
+    if not isinstance(provenance, dict):
+        problems.append(f"{label} provenance is missing")
+        return
+    _require_equal(problems, provenance.get("status"), "loaded", f"{label} aggregate status")
+    _require_equal(problems, provenance.get("load_succeeded"), True, f"{label} aggregate load")
+    _require_equal(
+        problems,
+        provenance.get("fallback_triggered"),
+        False,
+        f"{label} aggregate fallback",
+    )
+    for field in ("references", "runtime"):
+        records = provenance.get(field)
+        if not isinstance(records, list) or not records:
+            problems.append(f"{label} {field} are missing")
+            continue
+        for record_index, record in enumerate(records):
+            _validate_loaded_checkpoint_record(
+                record,
+                label=f"{label} {field}[{record_index}]",
+                problems=problems,
+                require_hash=field == "references",
+            )
 
 
 def validate_runtime_smoke_result(  # noqa: C901, PLR0912, PLR0915

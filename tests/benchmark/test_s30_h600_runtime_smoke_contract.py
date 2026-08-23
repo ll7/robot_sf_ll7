@@ -76,7 +76,7 @@ def test_runtime_smoke_is_one_scenario_one_seed_at_h600() -> None:
     assert config["route_clearance_certifications"] == source["route_clearance_certifications"]
     assert cfg.horizon == 600
     assert cfg.dt == 0.1
-    assert cfg.workers == 1
+    assert cfg.workers == 32
     assert cfg.kinematics_matrix == ("differential_drive",)
     assert cfg.resume is False
     assert cfg.stop_on_failure is True
@@ -103,6 +103,29 @@ def test_runtime_smoke_preserves_all_fourteen_source_arms_without_fallback() -> 
             assert (REPO_ROOT / smoke_row["algo_config"]).is_file()
         assert smoke_row.get("socnav_missing_prereq_policy") != "fallback"
         assert source_row.get("socnav_missing_prereq_policy", "fail-fast") == "fail-fast"
+
+
+def test_release_learned_ppo_arms_use_parallel_safe_cpu_profiles() -> None:
+    """Forked release workers must not initialize one CUDA policy per episode process."""
+    for campaign_path in (SOURCE_CONFIG_PATH, SMOKE_CONFIG_PATH):
+        campaign = _load_yaml(campaign_path)
+        planners = {row["key"]: row for row in campaign["planners"]}
+
+        ppo_path = REPO_ROOT / planners["ppo"]["algo_config"]
+        ppo = _load_yaml(ppo_path)
+        assert ppo["model_id"] == (
+            "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
+        )
+        assert ppo["device"] == "cpu"
+        assert ppo["predictive_foresight_device"] == "cpu"
+        assert ppo["fallback_to_goal"] is False
+
+        guarded_path = REPO_ROOT / planners["guarded_ppo"]["algo_config"]
+        guarded = _load_yaml(guarded_path)
+        assert guarded["model_id"] == ("ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200")
+        assert guarded["device"] == "cpu"
+        assert guarded["predictive_foresight_device"] == "cpu"
+        assert guarded["fallback_to_goal"] is True
 
 
 def test_blind_corner_hybrid_arms_yield_before_the_release_smoke_conflict() -> None:

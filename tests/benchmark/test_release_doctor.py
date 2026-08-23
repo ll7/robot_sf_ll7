@@ -496,6 +496,138 @@ def test_cli_checkpoint_path_map_runs_real_collector_and_receipt_validator(
     assert "1 checkpoint" in checkpoint_checks[0]["summary"]
 
 
+def _cross_checkout_checkpoint_doctor_args(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    mapped_checkpoint_bytes: bytes | None,
+) -> list[str]:
+    """Build a tooling-checkout doctor invocation against a separate release checkout."""
+    tooling_root = tmp_path / "tooling-worktree"
+    release_root = tmp_path / "release-worktree"
+    tooling_root.mkdir()
+    (release_root / "configs").mkdir(parents=True)
+    (release_root / "receipts").mkdir()
+    monkeypatch.chdir(tooling_root)
+
+    config = release_root / "configs" / "campaign.yaml"
+    config.write_text("name: release\n", encoding="utf-8")
+    remote_path = "/execution-host/checkpoints/model.zip"
+    reference = SimpleNamespace(
+        planner_key="ppo",
+        algo="ppo",
+        kind="model_path",
+        value=remote_path,
+        implicit=False,
+    )
+    cfg = SimpleNamespace(references=[reference])
+    manifest = SimpleNamespace(canonical_campaign_config_path=config)
+    expected_checkpoint = release_root / "expected-model.zip"
+    expected_checkpoint.write_bytes(b"expected-checkpoint")
+    receipt = release_root / "receipts" / "checkpoint.json"
+    receipt.write_text(
+        json.dumps(
+            {
+                "schema_version": "campaign-checkpoint-staging-receipt.v1",
+                "status": "ok",
+                "mode": "enforced_staged",
+                "stage": True,
+                "submit_safe": True,
+                "generated_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                "campaign_config_sha256": release_doctor._sha256(config),
+                "checkpoint_registry_sha256": "0" * 64,
+                "arms": [
+                    {
+                        "planner_key": "ppo",
+                        "algo": "ppo",
+                        "kind": "model_path",
+                        "value": remote_path,
+                        "implicit": False,
+                        "status": "staged",
+                        "resolved_path": remote_path,
+                        "checkpoint_sha256": release_doctor._sha256(expected_checkpoint),
+                        "hash_source": "computed_file",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    passed = ReleaseDoctorCheck("fixture", "pass", "safe")
+    monkeypatch.setattr(release_doctor, "_manifest_check", lambda *args: (passed, manifest, cfg))
+    monkeypatch.setattr(release_doctor, "_git_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_ci_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_tag_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_release_identity_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_cluster_check", lambda *args, **kwargs: passed)
+    monkeypatch.setattr(release_doctor, "_disk_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_zenodo_check", lambda *args, **kwargs: [passed])
+    monkeypatch.setattr(release_doctor, "_dissertation_check", lambda *args: passed)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda fixture_cfg: fixture_cfg.references,
+    )
+    argv = [
+        "release",
+        "doctor",
+        "--repo",
+        str(release_root),
+        "--manifest",
+        "configs/manifest.yaml",
+        "--expected-release-sha",
+        "a" * 40,
+        "--expected-base-sha",
+        "b" * 40,
+        "--tag",
+        "release",
+        "--checkpoint-receipt",
+        "receipts/checkpoint.json",
+    ]
+    if mapped_checkpoint_bytes is not None:
+        mapped_checkpoint = release_root / "checkpoints" / "model.zip"
+        mapped_checkpoint.parent.mkdir()
+        mapped_checkpoint.write_bytes(mapped_checkpoint_bytes)
+        argv.extend(("--checkpoint-path-map", f"{remote_path}=checkpoints/model.zip"))
+    return argv
+
+
+def test_cross_checkout_doctor_names_verifier_location_remediation(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    """Issue #7819: the public doctor directs missing bytes to the verification host."""
+    argv = _cross_checkout_checkpoint_doctor_args(
+        monkeypatch,
+        tmp_path,
+        mapped_checkpoint_bytes=None,
+    )
+
+    args = robot_sf_cli._build_parser().parse_args(argv)
+    assert release_cli.handle(args) == 2
+    report = json.loads(capsys.readouterr().out)
+    summary = next(check["summary"] for check in report["checks"] if check["name"] == "checkpoints")
+    assert "verifier-location condition, not an input mismatch" in summary
+    assert "remap it with --checkpoint-path-map on this verification host" in summary
+    assert "run the doctor on the execution host" in summary
+
+
+def test_cross_checkout_doctor_keeps_mapped_checksum_mismatch_distinct(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys
+) -> None:
+    """Issue #7819: mapped bytes with the wrong digest remain a checksum failure."""
+    argv = _cross_checkout_checkpoint_doctor_args(
+        monkeypatch,
+        tmp_path,
+        mapped_checkpoint_bytes=b"wrong-checkpoint",
+    )
+
+    args = robot_sf_cli._build_parser().parse_args(argv)
+    assert release_cli.handle(args) == 2
+    report = json.loads(capsys.readouterr().out)
+    summary = next(check["summary"] for check in report["checks"] if check["name"] == "checkpoints")
+    assert "checksum changed" in summary
+    assert "verifier-location" not in summary
+
+
 def _write_final_packet_fixture(
     tmp_path: Path,
     *,

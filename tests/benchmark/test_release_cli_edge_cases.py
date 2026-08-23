@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -23,6 +24,8 @@ def _args(mode: str, tmp_path: Path) -> argparse.Namespace:
         metadata=tmp_path / "metadata.json",
         api_base="https://example.test/api",
         files=[tmp_path / "bundle.tar.gz"],
+        manifest=None,
+        deposition_id=7,
     )
 
 
@@ -77,6 +80,55 @@ def test_release_cli_dispatches_each_zenodo_mode(
     result = release_cli.handle(_args(mode, tmp_path))
     assert result == 0
     assert calls[0][0] == mode
+    assert "secret" not in capsys.readouterr().out
+
+
+def test_release_cli_recovers_without_loading_state_or_reserving(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The recovery mode performs one bound read and writes sanitized state."""
+    calls: list[tuple[str, object]] = []
+    state = {"schema_version": "robot-sf-zenodo-deposition.v1", "deposition_id": 7}
+    manifest = SimpleNamespace(release_tag="v1", metadata_sha256="a" * 64)
+    binding = {"release_tag": "v1"}
+    args = _args("recover", tmp_path)
+    args.manifest = tmp_path / "release.yaml"
+    monkeypatch.setattr(release_cli, "_load_release_binding", lambda value: (manifest, binding))
+    monkeypatch.setattr(release_cli.zenodo_publisher, "build_session", lambda path: object())
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "load_dataset_metadata",
+        lambda path, **kwargs: {"upload_type": "dataset"},
+    )
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "load_state",
+        lambda path: (_ for _ in ()).throw(AssertionError("recovery must not load missing state")),
+    )
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "reserve",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("recovery must not reserve a deposition")
+        ),
+    )
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "recover",
+        lambda session, deposition_id, metadata, **kwargs: (
+            calls.append(("recover", deposition_id)) or state
+        ),
+    )
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "write_state",
+        lambda path, value: calls.append(("write_state", value)),
+    )
+
+    assert release_cli.handle(args) == 0
+    assert calls == [("recover", 7), ("write_state", state)]
     assert "secret" not in capsys.readouterr().out
 
 

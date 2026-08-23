@@ -634,6 +634,68 @@ def reserve(
     return _seal_state(state)
 
 
+def recover(
+    session: _Session,
+    deposition_id: int,
+    metadata: Mapping[str, Any],
+    *,
+    api_base: str = ZENODO_API_BASE,
+    release_binding: Any,
+) -> dict[str, Any]:
+    """Recover sealed state for one manifest-bound unpublished deposition.
+
+    Recovery is deliberately read-only: it retrieves the exact deposition ID,
+    validates the remote identity and metadata against the frozen release
+    binding, and reconstructs only the credential-free state emitted by
+    :func:`reserve`.
+
+    Returns:
+        Credential-free sealed deposition state.
+    """
+    if isinstance(deposition_id, bool) or not isinstance(deposition_id, int) or deposition_id <= 0:
+        raise ZenodoPublisherError("Zenodo recovery deposition ID must be a positive integer")
+    normalized_metadata = _validate_metadata(metadata)
+    binding = _normalize_release_binding(release_binding)
+    file_metadata = _validate_release_binding_metadata(normalized_metadata, binding)
+    payload = _json_object(
+        session.get(
+            f"{api_base.rstrip('/')}/deposit/depositions/{deposition_id}",
+            timeout=60,
+        ),
+        "recover draft",
+    )
+    submitted = payload.get("submitted")
+    if not isinstance(submitted, bool):
+        raise ZenodoPublisherError("Zenodo recovery response omitted or invalid submitted state")
+    state = _public_state(payload)
+    if state.get("deposition_id") != deposition_id:
+        raise ZenodoPublisherError("Zenodo recovery response changed the requested deposition ID")
+    if not state.get("record_id") or not state.get("concept_record_id") or not state.get("doi"):
+        raise ZenodoPublisherError(
+            "Zenodo recovery response omitted deposition/concept/DOI identity"
+        )
+    if state.get("submitted") is not False or state.get("state") != "unsubmitted":
+        raise ZenodoPublisherError("Zenodo recovery requires an unpublished draft deposition")
+    _assert_deposition_identity(state, binding)
+
+    remote_metadata = payload.get("metadata")
+    if not isinstance(remote_metadata, Mapping):
+        raise ZenodoPublisherError("Zenodo recovery response omitted deposition metadata")
+    for key, value in _metadata_contract(normalized_metadata).items():
+        if _canonical_metadata_value_for_comparison(
+            key, remote_metadata.get(key)
+        ) != _canonical_metadata_value_for_comparison(key, value):
+            raise ZenodoPublisherError(
+                f"Zenodo recovered draft metadata.{key} does not match release metadata"
+            )
+
+    state["release_binding"] = _state_release_binding(
+        binding,
+        metadata_contract_sha256=_metadata_sha256(file_metadata),
+    )
+    return _seal_state(state)
+
+
 def upload(
     session: _Session,
     state: dict[str, Any],
@@ -1002,6 +1064,7 @@ __all__ = [
     "load_state",
     "publish",
     "read_token_file",
+    "recover",
     "reserve",
     "upload",
     "verify",

@@ -28,38 +28,59 @@ classified.
 
 Freshness check:
 - `uv run python scripts/dev/pr_ready_freshness.py status --base-ref origin/main --require-clean-tree`
-- If stale/failing, rerun
-  `PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh`; the wrapper records
-  clean committed-HEAD freshness after all gates pass.
+- If stale/failing, prepare the PR body first, then rerun:
+
+  ```bash
+  pr_body_file=/absolute/path/to/prepared-pr-body.md
+  PR_READY_MODE=final BASE_REF=origin/main \
+    PR_READY_PR_BODY_FILE="$pr_body_file" scripts/dev/pr_ready_check.sh
+  ```
+
+  The wrapper records clean committed-HEAD freshness after all gates pass.
 - Use plain `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` only for interim dirty-tree
   feedback before PR handoff.
 
-Remote-state check (issue #6916):
-- Capture a baseline before the expensive readiness run with:
+Remote-state check (issues #6916 and #7515):
+- Capture and check the intended branch head before merging or rebasing a newer `origin/main`.
+  Integrating main first can hide inherited parent commits. Capture with:
 
   ```bash
   uv run python scripts/dev/check_prepublication_state.py capture --repo <owner/repo> \
     --issue <number> --branch <head-branch> \
     --snapshot-path output/validation/prepublication/<head>.json
   ```
-- Immediately before opening or updating the PR, run `check` against that snapshot.  Exit 0
-  means `ready`; exit 2 means `refresh-required`; exit 3 means `superseded`; exit 4 means the
-  state could not be established.  A superseded or blocked result must stop publication.
-- When a remote base or branch tip moved, run `sync --integrate` from a clean worktree.  It
-  fetches the current refs and uses ordinary Git merge operations without resetting or deleting
-  local state; resolve any conflict, rerun readiness, recapture the snapshot, and check again.
+- Immediately before opening or updating the PR, run:
+
+  ```bash
+  uv run python scripts/dev/check_prepublication_state.py check \
+    --snapshot-path output/validation/prepublication/<head>.json
+  ```
+
+  Exit 0 means `ready`; exit 2 means `refresh-required`; exit 3 means `superseded`; exit 4 means
+  the state could not be established. A superseded or blocked result must stop publication. Only
+  exit 2 authorizes the synchronization path below; do not use it to bypass blocked undeclared or
+  mismatched ancestry.
+- When `check` returns exit 2 for a moved remote base or branch tip, run the following from a clean
+  worktree:
+
+  ```bash
+  uv run python scripts/dev/check_prepublication_state.py sync \
+    --snapshot-path output/validation/prepublication/<head>.json --integrate
+  ```
+
+  It fetches the current refs and uses ordinary Git merge operations without resetting or deleting
+  local state. Resolve any conflict, rerun readiness for the integrated head, push that exact head,
+  capture a new baseline, and run the final check again. Do not treat sync's self-comparison receipt
+  as publication proof. If `check` instead reports blocked ancestry, preserve that signal and
+  reconstruct only the intended commits on current `origin/main`; merging main can hide inherited
+  parent commits and is not valid remediation.
 
 ## Workflow
 
 1. Confirm branch/issue alignment.
-2. Capture and verify the remote-state baseline before spending readiness/CI time.
-3. Verify scope completion and linked issue status.
-4. Sync latest `origin/main`, then rebase/merge according to repo policy.
-5. Recheck readiness freshness post-sync and rerun the remote-state check immediately before
-   publication.
-6. Classify generated artifacts from `output/` (discard/ignored/cache/durable evidence).
-7. Run the review audit checklist for changed workflow/skill area.
-8. Build PR body from `.github/PULL_REQUEST_TEMPLATE/pr_default.md`.
+2. Verify scope completion and linked issue status.
+3. Build PR body from `.github/PULL_REQUEST_TEMPLATE/pr_default.md` before final readiness so the
+   PR contract gate can read it.
    - For evidence-producing PRs, fill `Downstream Propagation` instead of leaving it implicit.
      Check the parent issue, claim map or benchmark report, leaderboard or artifact catalog,
      registry or config index, context index or memory note, and follow-up issue rows.
@@ -67,6 +88,16 @@ Remote-state check (issue #6916):
      omission is intentional and reviewable.
    - Recent example: PR #2044 promoted compact trace-viewer screenshot evidence and updated the
      context index/catalog so the visual proof survived worktree cleanup.
+4. Classify generated artifacts from `output/` (discard/ignored/cache/durable evidence).
+5. Run the review audit checklist for the changed workflow/skill area.
+6. Commit and push the intended head without first merging or rebasing a newer `origin/main`.
+7. Capture the remote-state baseline from that synchronized local/remote head, then immediately run
+   `check`. A clean result already proves the merge base is current main. If ancestry is blocked,
+   reconstruct only the intended commits on current `origin/main`, push that replacement head, and
+   restart from capture; do not merge main into the blocked branch.
+8. Run final readiness with `PR_READY_PR_BODY_FILE="$pr_body_file"`, then run the remote-state
+   check immediately before publication. If sync integrates an authorized refresh, rerun readiness,
+   push the integrated head, recapture the baseline, and check again.
 9. Open a ready PR by default using
    `gh pr create --base main --head <branch> --title "<type>: <summary> (#<n>)" --body-file <prepared_body.md>`.
    Use `--draft` only when the user explicitly requests draft status or when the branch is an

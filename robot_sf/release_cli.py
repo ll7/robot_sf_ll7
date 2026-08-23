@@ -21,7 +21,7 @@ def build_subparser(subparsers: Any) -> None:
     modes = release.add_subparsers(dest="release_cmd", required=True)
     zenodo = modes.add_parser("zenodo", help="Direct Zenodo benchmark-dataset publisher.")
     zenodo_modes = zenodo.add_subparsers(dest="zenodo_mode", required=True)
-    for mode in ("reserve", "upload", "publish", "verify"):
+    for mode in ("reserve", "recover", "upload", "publish", "verify"):
         parser = zenodo_modes.add_parser(mode)
         parser.add_argument("--token-file", type=Path, required=True)
         parser.add_argument("--state", type=Path, required=True)
@@ -29,10 +29,13 @@ def build_subparser(subparsers: Any) -> None:
         parser.add_argument(
             "--manifest",
             type=Path,
+            required=mode == "recover",
             help="Validated benchmark release manifest to bind Zenodo operations to.",
         )
-        if mode in {"reserve", "publish", "verify"}:
+        if mode in {"reserve", "recover", "publish", "verify"}:
             parser.add_argument("--metadata", type=Path, required=True)
+        if mode == "recover":
+            parser.add_argument("--deposition-id", type=int, required=True)
         if mode == "upload":
             parser.add_argument("files", nargs="+", type=Path)
     doctor = modes.add_parser("doctor", help="Fail-closed full benchmark-release diagnostics.")
@@ -160,7 +163,7 @@ def handle(args: argparse.Namespace) -> int:
         release_manifest = release_context[0] if release_context is not None else None
         release_binding = release_context[1] if release_context is not None else None
         session = zenodo_publisher.build_session(args.token_file)
-        if args.zenodo_mode == "reserve":
+        if args.zenodo_mode in {"reserve", "recover"}:
             metadata_kwargs = (
                 {
                     "expected_source_tag": release_manifest.release_tag,
@@ -173,9 +176,22 @@ def handle(args: argparse.Namespace) -> int:
             operation_kwargs = (
                 {"release_binding": release_binding} if release_binding is not None else {}
             )
-            state = zenodo_publisher.reserve(
-                session, metadata, api_base=args.api_base, **operation_kwargs
-            )
+            if args.zenodo_mode == "recover":
+                if release_binding is None:
+                    raise zenodo_publisher.ZenodoPublisherError(
+                        "Zenodo recovery requires a validated release manifest"
+                    )
+                state = zenodo_publisher.recover(
+                    session,
+                    args.deposition_id,
+                    metadata,
+                    api_base=args.api_base,
+                    release_binding=release_binding,
+                )
+            else:
+                state = zenodo_publisher.reserve(
+                    session, metadata, api_base=args.api_base, **operation_kwargs
+                )
             zenodo_publisher.write_state(args.state, state)
             _print(state)
             return 0

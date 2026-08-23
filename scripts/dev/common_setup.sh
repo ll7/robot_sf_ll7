@@ -11,7 +11,17 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 export REPO_ROOT
 cd "$REPO_ROOT"
 
-if [ -f "$REPO_ROOT/.venv/bin/activate" ] && [ -z "${VIRTUAL_ENV:-}" ]; then
+# Preserve a non-local environment only when the shared wrapper bound all three
+# carriers to the same explicit path. An arbitrary inherited VIRTUAL_ENV keeps
+# the historical repository-local activation behavior.
+preserve_explicit_venv=""
+if [[ -n "${ROBOT_SF_EXPLICIT_VENV_OVERRIDE:-}" \
+  && "${VIRTUAL_ENV:-}" == "$ROBOT_SF_EXPLICIT_VENV_OVERRIDE" \
+  && "${UV_PROJECT_ENVIRONMENT:-}" == "$ROBOT_SF_EXPLICIT_VENV_OVERRIDE" ]]; then
+  preserve_explicit_venv=1
+fi
+
+if [[ -f "$REPO_ROOT/.venv/bin/activate" && -z "$preserve_explicit_venv" ]]; then
   # shellcheck source=/dev/null
   source "$REPO_ROOT/.venv/bin/activate"
 fi

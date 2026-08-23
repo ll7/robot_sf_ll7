@@ -47,6 +47,8 @@ LOCAL_SIGNOFF = ROOT / "scripts" / "dev" / "local_signoff.sh"
 PR_READY_CHECK = ROOT / "scripts" / "dev" / "pr_ready_check.sh"
 PR_BODY_CONTRACTS_WORKFLOW = ROOT / ".github" / "workflows" / "pr-body-contracts.yml"
 RUN_WORKTREE_SHARED_VENV = ROOT / "scripts" / "dev" / "run_worktree_shared_venv.sh"
+COMMON_SETUP = ROOT / "scripts" / "dev" / "common_setup.sh"
+RUFF_FIX_FORMAT = ROOT / "scripts" / "dev" / "ruff_fix_format.sh"
 BOOTSTRAP_WORKTREE = ROOT / "scripts" / "dev" / "bootstrap_worktree.sh"
 CHECK_RUNTIME_REQUIREMENTS = ROOT / "scripts" / "dev" / "check_runtime_requirements.sh"
 CHECK_CARLA_RUNTIME = ROOT / "scripts" / "dev" / "check_carla_runtime.sh"
@@ -1653,6 +1655,94 @@ def test_worktree_shared_venv_explicit_override_shadows_incomplete_local_env(
     # The explicit shared override is authoritative: the command ran with the
     # shared env (uv-reached exit 7) rather than failing on the incomplete local.
     assert "uv-reached" in result.stderr
+
+
+def _make_common_setup_venv_fixture(tmp_path: Path) -> tuple[Path, dict[str, str]]:
+    """Build a tiny Git repo whose public Ruff helper exposes selected virtualenv state."""
+    repo = tmp_path / "repo"
+    script_dir = repo / "scripts" / "dev"
+    fake_bin = repo / "fake-bin"
+    local_venv = repo / ".venv"
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+    (local_venv / "bin").mkdir(parents=True)
+
+    (script_dir / "common_setup.sh").write_text(
+        COMMON_SETUP.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (script_dir / "ruff_fix_format.sh").write_text(
+        RUFF_FIX_FORMAT.read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (local_venv / "bin" / "activate").write_text(
+        'export VIRTUAL_ENV="$REPO_ROOT/.venv"\n', encoding="utf-8"
+    )
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ -n "${VIRTUAL_ENV:-}" && -n "${UV_PROJECT_ENVIRONMENT:-}" '
+        '&& "$VIRTUAL_ENV" != "$UV_PROJECT_ENVIRONMENT" ]]; then\n'
+        '  printf "virtualenv mismatch warning\\n" >&2\n'
+        "fi\n"
+        'printf "virtual_env=%s uv_project_environment=%s\\n" '
+        '"${VIRTUAL_ENV:-}" "${UV_PROJECT_ENVIRONMENT:-}"\n',
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    env = {**os.environ, "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}"}
+    return repo, env
+
+
+def test_common_setup_restores_local_env_for_unmarked_foreign_virtualenv(tmp_path: Path) -> None:
+    """Issue #7830: an unrelated active env must not override repository-local setup."""
+    repo, env = _make_common_setup_venv_fixture(tmp_path)
+    env["VIRTUAL_ENV"] = "/tmp/unrelated-foreign-venv"
+    env.pop("UV_PROJECT_ENVIRONMENT", None)
+    env.pop("ROBOT_SF_EXPLICIT_VENV_OVERRIDE", None)
+
+    result = subprocess.run(
+        ["bash", str(repo / "scripts" / "dev" / "ruff_fix_format.sh")],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert f"virtual_env={repo / '.venv'} uv_project_environment=" in result.stdout
+    assert "mismatch warning" not in result.stderr
+
+
+def test_common_setup_preserves_marked_explicit_shared_override(tmp_path: Path) -> None:
+    """Issue #7830: a marked explicit override survives a real nested helper without warnings."""
+    repo, env = _make_common_setup_venv_fixture(tmp_path)
+    shared_venv = tmp_path / "shared-venv"
+    env["VIRTUAL_ENV"] = str(shared_venv)
+    env["UV_PROJECT_ENVIRONMENT"] = str(shared_venv)
+    env["ROBOT_SF_EXPLICIT_VENV_OVERRIDE"] = str(shared_venv)
+
+    result = subprocess.run(
+        ["bash", str(repo / "scripts" / "dev" / "ruff_fix_format.sh")],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert f"virtual_env={shared_venv} uv_project_environment={shared_venv}" in result.stdout
+    assert result.stderr == ""
+
+
+def test_worktree_shared_venv_marks_explicit_override_for_nested_helpers() -> None:
+    """The wrapper must bind the preservation marker to the exact selected environment."""
+    script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
+
+    assert 'export ROBOT_SF_EXPLICIT_VENV_OVERRIDE="$venv_path"' in script_text
 
 
 def test_worktree_shared_venv_falls_back_to_main_env_without_local_env(tmp_path: Path) -> None:

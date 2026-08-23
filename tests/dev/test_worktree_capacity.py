@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
 import sys
+import tempfile
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,11 +23,101 @@ def _unique_branch(tmp_path: Path, name: str) -> str:
     """Return a repository-global branch name unique to this test invocation.
 
     Concurrent readiness runs or xdist workers each get a distinct process id,
-    and every invocation gets its own ``tmp_path``; combining both yields a
-    collision-free ref that one invocation owns and cleans up (issue #7804).
+    and every invocation gets its own ``tmp_path``.  Hashing the complete
+    resolved path avoids collisions from truncated temporary-directory names
+    or PID reuse across PID namespaces (issue #7804).
     """
-    path_part = tmp_path.name.replace("-", "").replace("_", "")[:10] or "default"
-    return f"test/{name}-{path_part}-{os.getpid()}"
+    path_digest = hashlib.sha256(str(tmp_path.resolve()).encode("utf-8")).hexdigest()[:10]
+    return f"test/{name}-{path_digest}-{os.getpid()}"
+
+
+def _cleanup_owned_worktree(target: Path, branch: str) -> None:
+    """Remove only the worktree, ref, and config entries owned by a fixture."""
+    subprocess.run(
+        ["git", "worktree", "remove", "--force", str(target)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=False,
+    )
+    subprocess.run(["git", "branch", "-D", branch], cwd=REPO_ROOT, capture_output=True, check=False)
+    for suffix in ("remote", "merge"):
+        subprocess.run(
+            ["git", "config", "--unset-all", f"branch.{branch}.{suffix}"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            check=False,
+        )
+
+
+def _create_orphan_branch(branch: str) -> None:
+    """Create the orphan fixture without writing implicit upstream config."""
+    subprocess.run(
+        ["git", "branch", "--no-track", "-f", branch, "origin/main"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+    )
+
+
+def _assert_no_branch_upstream(branch: str) -> None:
+    """Ensure the test fixture did not add branch-specific config entries."""
+    for suffix in ("remote", "merge"):
+        result = subprocess.run(
+            ["git", "config", "--get", f"branch.{branch}.{suffix}"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 1, (
+            f"unexpected upstream config for {branch}: "
+            f"branch.{branch}.{suffix}={result.stdout.strip()!r} {result.stderr.strip()!r}"
+        )
+
+
+def _run_orphan_recovery_child() -> None:
+    """Exercise the real orphan-recovery path from an independent process."""
+    with tempfile.TemporaryDirectory(prefix="robot-sf-worktree-child-") as temp_dir:
+        temp_root = Path(temp_dir)
+        branch = _unique_branch(temp_root, "orphan-recover")
+        target = temp_root / "new-worktree"
+        print(json.dumps({"branch": branch, "target": str(target)}), flush=True)
+        try:
+            _create_orphan_branch(branch)
+            _assert_no_branch_upstream(branch)
+            if os.environ.get("ROBOT_SF_TEST_CHILD_EXIT_AFTER_SETUP") == "1":
+                os._exit(17)
+            if os.environ.get("ROBOT_SF_TEST_CHILD_PAUSE_AFTER_SETUP") == "1":
+                time.sleep(60)
+            result = subprocess.run(
+                [
+                    str(CREATE_WORKTREE),
+                    "--path",
+                    str(target),
+                    "--branch",
+                    branch,
+                    "--minimum-free-bytes",
+                    "0",
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert result.returncode == 0, result.stderr
+            assert target.is_dir()
+            assert (
+                f"[{branch}]"
+                in subprocess.run(
+                    ["git", "worktree", "list"],
+                    cwd=REPO_ROOT,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                ).stdout
+            )
+        finally:
+            _cleanup_owned_worktree(target, branch)
 
 
 def test_capacity_inspects_existing_parent_without_creating_target(tmp_path: Path) -> None:
@@ -245,18 +338,7 @@ def test_create_worktree_executes_command_inside_new_worktree(tmp_path: Path) ->
         assert upstream.returncode != 0
         assert "no upstream configured" in upstream.stderr
     finally:
-        subprocess.run(
-            ["git", "worktree", "remove", "--force", str(target)],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            check=False,
-        )
-        subprocess.run(
-            ["git", "worktree", "prune"], cwd=REPO_ROOT, capture_output=True, check=False
-        )
-        subprocess.run(
-            ["git", "branch", "-D", branch], cwd=REPO_ROOT, capture_output=True, check=False
-        )
+        _cleanup_owned_worktree(target, branch)
 
 
 def test_create_worktree_exec_requires_command(tmp_path: Path) -> None:
@@ -321,17 +403,11 @@ def test_create_worktree_scripts_are_shell_valid_and_executable() -> None:
 def test_create_worktree_recovers_orphan_branch_before_add(tmp_path: Path) -> None:
     """An unregistered branch at the target path is removed before worktree add."""
     branch = _unique_branch(tmp_path, "orphan-recover")
-    # Create the orphan branch at origin/main (ref exists, no registered worktree);
-    # -f keeps the test idempotent across partial runs. Pointing at origin/main
-    # guarantees the branch is an ancestor of the default base ref.
-    subprocess.run(
-        ["git", "branch", "-f", branch, "origin/main"],
-        cwd=REPO_ROOT,
-        check=True,
-        capture_output=True,
-    )
-
     try:
+        # --no-track keeps this fixture from writing shared upstream config;
+        # origin/main remains the base commit and guarantees ancestor recovery.
+        _create_orphan_branch(branch)
+        _assert_no_branch_upstream(branch)
         target = tmp_path / "new-worktree"
         result = subprocess.run(
             [
@@ -362,18 +438,7 @@ def test_create_worktree_recovers_orphan_branch_before_add(tmp_path: Path) -> No
             ).stdout
         )
     finally:
-        subprocess.run(
-            ["git", "worktree", "remove", "--force", str(tmp_path / "new-worktree")],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            check=False,
-        )
-        subprocess.run(
-            ["git", "worktree", "prune"], cwd=REPO_ROOT, capture_output=True, check=False
-        )
-        subprocess.run(
-            ["git", "branch", "-D", branch], cwd=REPO_ROOT, capture_output=True, check=False
-        )
+        _cleanup_owned_worktree(tmp_path / "new-worktree", branch)
 
 
 def test_create_worktree_hints_when_orphan_branch_diverged(tmp_path: Path) -> None:
@@ -440,9 +505,11 @@ def test_create_worktree_hints_when_orphan_branch_diverged(tmp_path: Path) -> No
 
 def test_unique_branch_names_differ_per_invocation(tmp_path: Path) -> None:
     """Two independent invocations must never share or delete a branch ref."""
-    first = _unique_branch(tmp_path, "isolation")
-    second_tmp = tmp_path / "another-invocation"
+    first_tmp = tmp_path / "abcdefghij-first"
+    second_tmp = tmp_path / "abcdefghij-second"
+    first_tmp.mkdir()
     second_tmp.mkdir()
+    first = _unique_branch(first_tmp, "isolation")
     second = _unique_branch(second_tmp, "isolation")
 
     assert first != second
@@ -450,6 +517,149 @@ def test_unique_branch_names_differ_per_invocation(tmp_path: Path) -> None:
     assert second.startswith("test/isolation-")
     assert first.endswith(str(os.getpid()))
     assert second.endswith(str(os.getpid()))
+    first_digest = hashlib.sha256(str(first_tmp.resolve()).encode("utf-8")).hexdigest()[:10]
+    assert first == f"test/isolation-{first_digest}-{os.getpid()}"
+
+
+def test_owned_cleanup_does_not_prune_unrelated_worktrees(monkeypatch, tmp_path: Path) -> None:
+    """Fixture cleanup must address exact paths and refs, never repository-global state."""
+    calls: list[list[str]] = []
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    target = tmp_path / "owned-worktree"
+    branch = "test/owned-cleanup"
+
+    _cleanup_owned_worktree(target, branch)
+
+    assert calls == [
+        ["git", "worktree", "remove", "--force", str(target)],
+        ["git", "branch", "-D", branch],
+        ["git", "config", "--unset-all", f"branch.{branch}.remote"],
+        ["git", "config", "--unset-all", f"branch.{branch}.merge"],
+    ]
+
+
+def _run_child_and_cleanup(
+    env_overrides: dict[str, str], *, timeout: float
+) -> tuple[dict[str, str], int, str]:
+    child_code = (
+        "from tests.dev.test_worktree_capacity import _run_orphan_recovery_child; "
+        "_run_orphan_recovery_child()"
+    )
+    process = subprocess.Popen(
+        [sys.executable, "-c", child_code],
+        cwd=REPO_ROOT,
+        env={**os.environ, **env_overrides},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    timed_out = False
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        process.kill()
+        stdout, stderr = process.communicate()
+
+    assert stdout, f"child did not publish owned-artifact identity: {stderr}"
+    record = json.loads(stdout.splitlines()[0])
+    _cleanup_owned_worktree(Path(record["target"]), record["branch"])
+    ref = subprocess.run(
+        ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{record['branch']}"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=False,
+    )
+    assert ref.returncode == 1, f"leaked child branch: {record['branch']}"
+    _assert_no_branch_upstream(record["branch"])
+    worktree_list = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert record["target"] not in worktree_list
+    assert timed_out or process.returncode != 0, "child unexpectedly completed successfully"
+    return record, process.returncode, stderr
+
+
+def test_parent_cleanup_handles_failed_child_without_finally() -> None:
+    """A child exiting after setup cannot leak its exact branch or config."""
+    _run_child_and_cleanup({"ROBOT_SF_TEST_CHILD_EXIT_AFTER_SETUP": "1"}, timeout=60)
+
+
+def test_parent_cleanup_handles_timed_out_child_without_finally() -> None:
+    """A timed-out child is killed, then its parent removes the owned artifacts."""
+    _run_child_and_cleanup({"ROBOT_SF_TEST_CHILD_PAUSE_AFTER_SETUP": "1"}, timeout=5)
+
+
+def test_concurrent_orphan_recovery_uses_independent_processes() -> None:
+    """Two real child processes must recover and clean up distinct orphan branches."""
+    child_code = (
+        "from tests.dev.test_worktree_capacity import _run_orphan_recovery_child; "
+        "_run_orphan_recovery_child()"
+    )
+    processes = [
+        subprocess.Popen(
+            [sys.executable, "-c", child_code],
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for _ in range(2)
+    ]
+    results: list[tuple[str, str, int]] = []
+    for process in processes:
+        try:
+            stdout, stderr = process.communicate(timeout=60)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate()
+        results.append((stdout, stderr, process.returncode))
+
+    records: list[dict[str, str]] = []
+    missing_output: list[str] = []
+    for stdout, stderr, returncode in results:
+        if stdout:
+            records.append(json.loads(stdout.splitlines()[0]))
+        else:
+            missing_output.append(stderr)
+
+    for record in records:
+        _cleanup_owned_worktree(Path(record["target"]), record["branch"])
+
+    assert not missing_output, f"child did not publish cleanup identity: {missing_output}"
+
+    for stdout, stderr, returncode in results:
+        assert returncode == 0, f"child failed with stdout={stdout!r} stderr={stderr!r}"
+
+    branches = [record["branch"] for record in records]
+    assert len(set(branches)) == 2, records
+    worktree_list = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    for record in records:
+        branch = record["branch"]
+        ref = subprocess.run(
+            ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            check=False,
+        )
+        assert ref.returncode == 1, f"leaked branch ref: {branch}"
+        _assert_no_branch_upstream(branch)
+        assert record["target"] not in worktree_list
 
 
 def test_unique_branch_names_are_clean_git_refs(tmp_path: Path) -> None:

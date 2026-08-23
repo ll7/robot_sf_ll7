@@ -14,6 +14,9 @@ concept DOI `10.5281/zenodo.22053132` and reserved version DOI
 `10.5281/zenodo.22053133`.
 The bounded one-scenario/one-seed preflight and runtime smoke is tracked by
 `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`.
+The separate fallback-prone hybrid stress gate is tracked by
+`configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml`
+and documented in [`benchmark_release_hybrid_stress_smoke.md`](./benchmark_release_hybrid_stress_smoke.md).
 The smoke is execution evidence only: the Social Navigation Quality Index
 (SNQI) remains advisory and has no planner-ranking authority.
 
@@ -25,6 +28,8 @@ The smoke is execution evidence only: the Social Navigation Quality Index
   substitute the historical v1 seven-planner/S3 manifest
 - confirm the bounded smoke manifest is correct:
   - `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`
+- confirm the fallback-prone hybrid stress manifest is correct:
+  - `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml`
 - confirm manifest hashes still match referenced config and assets
 - confirm benchmark fallback policy is fail-closed for benchmark mode
 - confirm a fresh Zenodo concept is reserved for the benchmark-data record; the
@@ -75,8 +80,10 @@ uv run python scripts/benchmark/preflight_campaign_checkpoints.py \
 Require `submit_safe=true`. Before this v0.2 full-release launch, run the
 canonical 14-arm runtime smoke at the exact release source commit and retain its
 successful `release/release_result.json` (for example,
-`output/benchmarks/camera_ready/<smoke_id>/release/release_result.json`). Then
-run:
+`output/benchmarks/camera_ready/<smoke_id>/release/release_result.json`). Also run
+the hybrid stress gate at the same exact source commit and require zero fallback,
+degraded, unavailable, failed, legacy emergency-stop, or all-candidates-rejected
+markers. A benign one-cell runtime smoke does not replace this stress gate. Then run:
 
 ```bash
 uv run python scripts/tools/run_benchmark_release.py \

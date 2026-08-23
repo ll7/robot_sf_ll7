@@ -40,6 +40,8 @@ is documented in
 [`docs/benchmark_release_reproducibility.md`](docs/benchmark_release_reproducibility.md)
 and uses
 [`configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`](configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml).
+Before a full campaign, the four hybrid arms must also pass the predeclared
+[fallback-prone stress smoke](docs/benchmark_release_hybrid_stress_smoke.md).
 The old DOI above is historical; a fresh Zenodo concept is required for the
 current benchmark-data record. Social Navigation Quality Index (SNQI) is
 advisory/no-ranking, and the benchmark-data release remains separate from the

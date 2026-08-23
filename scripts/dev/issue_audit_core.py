@@ -2037,15 +2037,42 @@ def _is_absent_label_delete(result: subprocess.CompletedProcess[str]) -> bool:
 def _mutation_issue_preconditions(
     mutations: Sequence[object],
 ) -> tuple[dict[int, dict[str, str]], list[dict[str, Any]]]:
-    """Validate one state/version snapshot for every issue mutation batch."""
+    """Validate mutation shape and one state/version snapshot per issue batch."""
     preconditions: dict[int, dict[str, str]] = {}
     errors: list[dict[str, Any]] = []
     for index, mutation in enumerate(mutations):
         if not isinstance(mutation, Mapping):
+            errors.append({"index": index, "error": "mutation is not an object"})
             continue
         try:
             number = int(mutation["issue"])
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError) as exc:
+            errors.append({"index": index, "error": f"invalid mutation issue: {exc}"})
+            continue
+        if number <= 0:
+            errors.append({"index": index, "issue": number, "error": "issue must be positive"})
+            continue
+        operation = str(mutation.get("operation") or "")
+        value = mutation.get("value")
+        if operation not in {"add_label", "remove_label", "close_issue"}:
+            errors.append(
+                {
+                    "index": index,
+                    "issue": number,
+                    "operation": operation,
+                    "error": f"unsupported mutation: {operation}",
+                }
+            )
+            continue
+        if operation in {"add_label", "remove_label"} and not (isinstance(value, str) and value):
+            errors.append(
+                {
+                    "index": index,
+                    "issue": number,
+                    "operation": operation,
+                    "error": f"{operation} requires a non-empty string value",
+                }
+            )
             continue
         raw_expected = mutation.get("expected_issue")
         if not isinstance(raw_expected, Mapping):
@@ -2099,6 +2126,20 @@ def apply_mutations(
     """
     if plan.get("schema") != PLAN_SCHEMA:
         raise ValueError(f"expected {PLAN_SCHEMA}")
+    raw_mutations = plan.get("mutations")
+    planned_count = len(raw_mutations) if isinstance(raw_mutations, list) else 0
+
+    def empty_counts(failed: int) -> dict[str, int]:
+        """Return the stable no-write count shape for an early refusal."""
+        return {
+            "planned": planned_count,
+            "applied": 0,
+            "already_applied": 0,
+            "failed": failed,
+            "stale_state_issues": 0,
+            "skipped_stale_mutations": 0,
+        }
+
     recorded_digest = str(plan.get("plan_digest") or "")
     if not recorded_digest:
         return {
@@ -2110,6 +2151,7 @@ def apply_mutations(
             "stale_states": [],
             "failures": ["missing plan_digest"],
             "readback": [],
+            "counts": empty_counts(1),
         }
     try:
         current_digest = compute_plan_digest(plan)
@@ -2123,6 +2165,7 @@ def apply_mutations(
             "stale_states": [],
             "failures": [str(exc)],
             "readback": [],
+            "counts": empty_counts(1),
         }
     if recorded_digest != current_digest:
         return {
@@ -2134,6 +2177,7 @@ def apply_mutations(
             "stale_states": [],
             "failures": ["stale plan_digest"],
             "readback": [],
+            "counts": empty_counts(1),
         }
     if plan.get("truncation_or_errors"):
         return {
@@ -2145,8 +2189,9 @@ def apply_mutations(
             "stale_states": [],
             "failures": list(plan["truncation_or_errors"]),
             "readback": [],
+            "counts": empty_counts(len(plan["truncation_or_errors"])),
         }
-    mutations = plan.get("mutations")
+    mutations = raw_mutations
     if not isinstance(mutations, list):
         raise ValueError("plan mutations must be a list")
     if len(mutations) > max_mutations:
@@ -2162,18 +2207,20 @@ def apply_mutations(
             "stale_states": [],
             "failures": blocked_label_errors,
             "readback": [],
+            "counts": empty_counts(len(blocked_label_errors)),
         }
     preconditions, precondition_plan_errors = _mutation_issue_preconditions(mutations)
     if precondition_plan_errors:
         return {
             "schema": "issue_audit_apply.v1",
             "ok": False,
-            "reason": "plan contains missing or inconsistent issue mutation preconditions",
+            "reason": "plan contains invalid mutations or issue mutation preconditions",
             "applied": [],
             "already_applied": [],
             "stale_states": [],
             "failures": precondition_plan_errors,
             "readback": [],
+            "counts": empty_counts(len(precondition_plan_errors)),
         }
     repo = str(plan.get("repo") or DEFAULT_REPO)
     run = _runner_or_default(runner)
@@ -2345,6 +2392,10 @@ def apply_mutations(
             "applied": len(applied),
             "already_applied": len(already_applied),
             "failed": len(failures),
+            "stale_state_issues": len(stale_states),
+            "skipped_stale_mutations": sum(
+                int(row.get("skipped_mutations", 0)) for row in stale_states
+            ),
         },
     }
 

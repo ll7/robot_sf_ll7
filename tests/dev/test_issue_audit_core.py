@@ -1411,6 +1411,8 @@ def test_apply_treats_absent_label_delete_as_idempotent() -> None:
         "applied": 0,
         "already_applied": 1,
         "failed": 0,
+        "stale_state_issues": 0,
+        "skipped_stale_mutations": 0,
     }
     assert result["readback"][0]["verified"]["missing_removals"] == []
     assert len(calls) == 3
@@ -1461,6 +1463,8 @@ def test_apply_keeps_unrelated_label_404_as_failure() -> None:
         "applied": 0,
         "already_applied": 0,
         "failed": 1,
+        "stale_state_issues": 0,
+        "skipped_stale_mutations": 0,
     }
 
 
@@ -1523,6 +1527,14 @@ def test_apply_skips_entire_issue_batch_when_state_or_version_is_stale(
         }
     ]
     assert result["failures"] == result["stale_states"]
+    assert result["counts"] == {
+        "planned": 2,
+        "applied": 0,
+        "already_applied": 0,
+        "failed": 1,
+        "stale_state_issues": 1,
+        "skipped_stale_mutations": 2,
+    }
     assert calls == [["api", "repos/ll7/robot_sf_ll7/issues/109"]]
 
 
@@ -1547,6 +1559,68 @@ def test_apply_rejects_missing_state_version_precondition_before_reads() -> None
     assert result["ok"] is False
     assert "preconditions" in result["reason"]
     assert result["applied"] == []
+    assert result["counts"] == {
+        "planned": 1,
+        "applied": 0,
+        "already_applied": 0,
+        "failed": 1,
+        "stale_state_issues": 0,
+        "skipped_stale_mutations": 0,
+    }
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "bad_mutation",
+    [
+        "not-an-object",
+        {"operation": "add_label", "issue": "bad", "value": "state:ready"},
+        {
+            "operation": "unsupported",
+            "issue": 109,
+            "expected_issue": _expected_issue(),
+        },
+        {
+            "operation": "add_label",
+            "issue": 109,
+            "value": "",
+            "expected_issue": _expected_issue(),
+        },
+    ],
+)
+def test_apply_rejects_mixed_invalid_and_valid_plan_before_any_rest_call(
+    bad_mutation: object,
+) -> None:
+    """One malformed row prevents a sibling valid row from writing."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        raise AssertionError("mixed invalid plan must fail before any REST call")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            bad_mutation,
+            {
+                "operation": "add_label",
+                "issue": 110,
+                "value": "state:running",
+                "expected_issue": _expected_issue(),
+            },
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert result["counts"]["planned"] == 2
+    assert result["counts"]["applied"] == 0
+    assert result["counts"]["failed"] == 1
     assert calls == []
 
 

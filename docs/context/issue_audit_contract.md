@@ -286,7 +286,9 @@ live issue once and compares both fields. A mismatch skips the complete per-issu
 records a machine-readable `stale_state` disposition with expected and observed values, and does
 not count the issue as successfully applied. After admitted writes, readback verifies the expected
 issue state as well as requested label additions/removals; `close_issue` expects `closed`, while a
-label-only batch must retain its planned state.
+label-only batch must retain its planned state. Apply results report `stale_state_issues` separately
+from `skipped_stale_mutations`, so one stale issue containing several planned writes is not
+misrepresented as one skipped mutation; every early refusal returns the same count shape.
 
 The plan is deterministic for a fixed inventory. It contains evidence and
 reasons for every safe mutation. apply_mutations refuses incomplete plans,

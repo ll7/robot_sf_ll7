@@ -71,6 +71,8 @@ def _receipt(*, holds: dict[str, dict[str, Any]] | None = None, **overrides: Any
         "holds": holds or _clear_holds(),
         "observed_at": OBSERVED_AT,
         "gate_audit": {"schema": "merge_queue_gate.v1", "passed": True},
+        "pr_state": "OPEN",
+        "pr_merged_at": None,
     }
     values.update(overrides)
     return build_receipt(**values)
@@ -85,12 +87,15 @@ def _live_evidence(receipt: dict[str, Any]) -> dict[str, Any]:
         "base_sha": receipt["base_sha"],
         "current_base_sha": receipt["current_base_sha"],
         "metadata_digest": receipt["metadata_digest"],
+        "pr_state": receipt["pr_state"],
+        "pr_merged_at": receipt["pr_merged_at"],
         "required_checks": copy.deepcopy(receipt["required_checks"]),
         "review_source": copy.deepcopy(receipt["implementation_review"]),
         "thread_resolution": copy.deepcopy(receipt["thread_resolution"]),
         "requested_reviewers": copy.deepcopy(receipt["requested_reviewers"]),
         "requested_teams": copy.deepcopy(receipt["requested_teams"]),
         "holds": copy.deepcopy(receipt["holds"]),
+        "gate_audit": copy.deepcopy(receipt["gate_audit"]),
     }
 
 
@@ -115,6 +120,37 @@ def test_each_hold_dimension_blocks_independently() -> None:
         assert f"hold_{key}_held" in blocked["reason_codes"]
 
 
+@pytest.mark.parametrize(
+    ("pr_state", "pr_merged_at", "expected_reason"),
+    [
+        ("CLOSED", None, "pr_not_open"),
+        ("MERGED", "2026-08-23T19:28:15Z", "pr_already_merged"),
+    ],
+)
+def test_terminal_pr_state_blocks_ready_receipts(
+    pr_state: str, pr_merged_at: str | None, expected_reason: str
+) -> None:
+    blocked = _receipt(pr_state=pr_state, pr_merged_at=pr_merged_at)
+
+    assert blocked["status"] == "blocked"
+    assert "pr_not_open" in blocked["reason_codes"]
+    assert expected_reason in blocked["reason_codes"]
+
+
+def test_non_passing_gate_audit_blocks_ready_receipts() -> None:
+    blocked = _receipt(
+        gate_audit={
+            "schema": "merge_queue_gate.v1",
+            "passed": False,
+            "reasons": ["stale_merge_base"],
+        }
+    )
+
+    assert blocked["status"] == "blocked"
+    assert "merge_queue_gate_not_passed" in blocked["reason_codes"]
+    assert "merge_queue_gate_stale_merge_base" in blocked["reason_codes"]
+
+
 def test_live_head_metadata_and_check_changes_block_without_reconstructing_receipt() -> None:
     receipt = _receipt()
 
@@ -135,6 +171,23 @@ def test_live_head_metadata_and_check_changes_block_without_reconstructing_recei
     assert (
         "live_required_checks_changed"
         in verify_receipt(receipt, live_evidence=changed_checks)["reasons"]
+    )
+
+    changed_lifecycle = _live_evidence(receipt)
+    changed_lifecycle["pr_state"] = "CLOSED"
+    assert (
+        "live_pr_state_changed"
+        in verify_receipt(receipt, live_evidence=changed_lifecycle)["reasons"]
+    )
+
+    changed_gate = _live_evidence(receipt)
+    changed_gate["gate_audit"] = {
+        "schema": "merge_queue_gate.v1",
+        "passed": False,
+        "reasons": ["stale_merge_base"],
+    }
+    assert (
+        "live_gate_audit_changed" in verify_receipt(receipt, live_evidence=changed_gate)["reasons"]
     )
 
 

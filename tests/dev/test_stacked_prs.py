@@ -76,6 +76,7 @@ def _ready_entry(number: int, *, head_ref: str, head_sha: str, base_ref: str) ->
     }
     return {
         "pr": number,
+        "state": "open",
         "head_ref": head_ref,
         "head_sha": head_sha,
         "base_ref": base_ref,

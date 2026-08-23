@@ -768,6 +768,8 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
     waiver: Any = None,
     expected_head_cas: Any = None,
     gate_audit: Mapping[str, Any] | None = None,
+    pr_state: str | None = None,
+    pr_merged_at: str | None = None,
     observed_at: str | None = None,
 ) -> dict[str, Any]:
     """Produce one deterministic receipt, including blocked evidence states."""
@@ -801,6 +803,8 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
         "waiver": normalized_waiver,
         "expected_head_cas": {"request": cas, "status": "not_applied"},
         "gate_audit": copy.deepcopy(dict(gate_audit)) if gate_audit is not None else None,
+        "pr_state": _string(pr_state).upper() or None,
+        "pr_merged_at": pr_merged_at,
         "observed_at": timestamp,
         "merge_result": {"status": "not_applied", "returned_merged_sha": None},
     }
@@ -824,6 +828,32 @@ def _premerge_reasons(  # noqa: C901, PLR0912, PLR0915 - every waiver/hold dimen
         reasons.append("current_base_sha_missing_or_malformed")
     if not _digest(_string(receipt.get("metadata_digest"))):
         reasons.append("metadata_digest_missing_or_malformed")
+
+    pr_state = _string(receipt.get("pr_state")).upper()
+    pr_merged_at = receipt.get("pr_merged_at")
+    if pr_state not in {"OPEN", "CLOSED", "MERGED"}:
+        reasons.append("pr_state_unavailable")
+    if pr_merged_at is not None and (not isinstance(pr_merged_at, str) or not pr_merged_at.strip()):
+        reasons.append("pr_merged_at_malformed")
+    if pr_state != "OPEN" or pr_merged_at:
+        reasons.append("pr_not_open")
+    if pr_state == "MERGED" or pr_merged_at:
+        reasons.append("pr_already_merged")
+
+    gate_audit = receipt.get("gate_audit")
+    if not isinstance(gate_audit, Mapping):
+        reasons.append("merge_queue_gate_unavailable")
+    elif not (
+        gate_audit.get("passed") is True or _string(gate_audit.get("status")).lower() == "success"
+    ):
+        reasons.append("merge_queue_gate_not_passed")
+        raw_gate_reasons = gate_audit.get("reasons")
+        if isinstance(raw_gate_reasons, list):
+            reasons.extend(
+                f"merge_queue_gate_{reason}"
+                for reason in raw_gate_reasons
+                if isinstance(reason, str) and reason
+            )
 
     checks = (
         receipt.get("required_checks")
@@ -1011,6 +1041,13 @@ def verify_receipt(  # noqa: C901, PLR0912 - revalidation compares every immutab
             != _string(receipt.get("metadata_digest")).lower()
         ):
             reasons.append("live_metadata_digest_changed")
+        if (
+            _string(live_evidence.get("pr_state")).upper()
+            != _string(receipt.get("pr_state")).upper()
+        ):
+            reasons.append("live_pr_state_changed")
+        if live_evidence.get("pr_merged_at") != receipt.get("pr_merged_at"):
+            reasons.append("live_pr_merged_at_changed")
         fresh_checks = normalize_required_checks(
             live_evidence.get("required_checks"), head_sha=_string(live_evidence.get("head_sha"))
         )
@@ -1036,6 +1073,10 @@ def verify_receipt(  # noqa: C901, PLR0912 - revalidation compares every immutab
             reasons.append("live_requested_reviewers_changed")
         if fresh_teams.get("status") != (receipt.get("requested_teams") or {}).get("status"):
             reasons.append("live_requested_teams_changed")
+        if _canonical_json(live_evidence.get("gate_audit")) != _canonical_json(
+            receipt.get("gate_audit")
+        ):
+            reasons.append("live_gate_audit_changed")
         fresh_holds = derive_holds(live_evidence)
         if _canonical_json(fresh_holds) != _canonical_json(receipt.get("holds")):
             reasons.append("live_hold_disposition_changed")
@@ -1220,6 +1261,8 @@ def build_live_evidence(
         "head_sha": snapshot.get("head_sha"),
         "base_sha": snapshot.get("base_sha"),
         "current_base_sha": current_base_sha,
+        "pr_state": snapshot.get("pr_state"),
+        "pr_merged_at": snapshot.get("pr_merged_at"),
         "metadata_digest": snapshot.get("metadata_digest"),
         "required_checks": snapshot.get("required_checks"),
         "review_source": review_source,
@@ -1268,6 +1311,8 @@ def build_receipt_from_stack_entry(
         waiver=waiver,
         expected_head_cas={"expected_base_sha": current_base_sha},
         gate_audit=entry.get("merge_queue_gate"),
+        pr_state=_string(entry.get("state")) or None,
+        pr_merged_at=entry.get("merged_at"),
         observed_at=observed_at,
     )
 

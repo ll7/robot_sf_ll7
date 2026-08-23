@@ -41,7 +41,10 @@ snqi_contract:
   calibration_seed: 123
   calibration_trials: 600
 
-workers: 1
+# Match the production process-pool width. Even with one scenario/seed, this
+# exercises the fork boundary after per-arm CUDA cleanup instead of silently
+# taking the serial path that missed the release failure.
+workers: 32
 horizon: 600
 dt: 0.1
 record_forces: true
@@ -69,7 +72,7 @@ release_kind: benchmark-data
 release_status: runtime-smoke-only
 derived_from:
   config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml
-  config_sha256: 5a955a433643b34f6e34f92e2a3cdf8d88936168ae8abfbe18d75fab935040c1
+  config_sha256: 613f52a305333e20af90367a75de1ae35874a2a279ff8d09f0df69bcaad07843
 claim_boundary:
   evidence_class: runtime-smoke
   benchmark_data_release: true
@@ -122,7 +125,7 @@ planners:
   - key: ppo
     algo: ppo
     planner_group: experimental
-    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+    algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
     benchmark_profile: experimental
     adapter_impact_eval: true
 
@@ -169,7 +172,7 @@ planners:
   - key: guarded_ppo
     algo: guarded_ppo
     planner_group: experimental
-    algo_config: configs/algos/guarded_ppo_camera_ready.yaml
+    algo_config: configs/algos/guarded_ppo_camera_ready_cpu.yaml
     benchmark_profile: experimental
 
   - key: predictive_mppi

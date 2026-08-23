@@ -90,7 +90,9 @@ planners:
   - key: ppo
     algo: ppo
     planner_group: experimental
-    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+    # CPU inference is the established parallel-matrix profile. GPU-backed
+    # model loading in forked workers failed closed on both imech192 and LiCCA.
+    algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
     benchmark_profile: experimental
     adapter_impact_eval: true
 
@@ -137,7 +139,7 @@ planners:
   - key: guarded_ppo
     algo: guarded_ppo
     planner_group: experimental
-    algo_config: configs/algos/guarded_ppo_camera_ready.yaml
+    algo_config: configs/algos/guarded_ppo_camera_ready_cpu.yaml
     benchmark_profile: experimental
 
   - key: predictive_mppi

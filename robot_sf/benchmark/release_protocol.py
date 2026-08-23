@@ -443,6 +443,21 @@ def resolve_campaign_artifact_path(campaign_root: Path, raw_path: str) -> Path:
     return resolved
 
 
+def resolve_regular_directory_path(path: Path, *, field_name: str) -> Path:
+    """Resolve one directory only after rejecting lexical symlink components.
+
+    Returns:
+        Existing regular directory with its resolved absolute path.
+    """
+    candidate = Path(path).absolute()
+    if _has_symlink_component(candidate):
+        raise ValueError(f"{field_name} must not contain symlink components")
+    resolved = candidate.resolve()
+    if not resolved.is_dir():
+        raise ValueError(f"{field_name} must be a regular directory: {resolved}")
+    return resolved
+
+
 def _load_manifest_provenance_section(payload: dict[str, Any]) -> tuple[str, str]:
     """Load and validate the provenance section.
 

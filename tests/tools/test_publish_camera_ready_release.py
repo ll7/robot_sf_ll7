@@ -167,6 +167,87 @@ def test_publish_camera_ready_release_executes_upload(tmp_path: Path, monkeypatc
     assert calls[0][0:4] == ["gh", "release", "upload", "v1.0.1"]
 
 
+@pytest.mark.parametrize("field", ("archive_path", "checksums_path", "manifest_path"))
+def test_publish_camera_ready_release_rejects_absolute_bundle_descriptor_path(
+    tmp_path: Path, monkeypatch, field: str
+) -> None:
+    """Every publication descriptor must remain a repository-relative path."""
+    campaign_root = _make_campaign_tree(tmp_path, tag="v1.0.2")
+    absolute_path = tmp_path / f"absolute-{field}.dat"
+    absolute_path.write_text("archive\n", encoding="utf-8")
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["publication_bundle"][field] = str(absolute_path)
+    _write_json(summary_path, summary)
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="relative"):
+        publish_camera_ready_release._validate_prerequisites(
+            campaign_root, expected_release_tag="v1.0.2"
+        )
+
+
+def test_publish_camera_ready_release_rejects_parent_traversal_bundle_path(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Publication descriptors cannot escape the repository with parent traversal."""
+    campaign_root = _make_campaign_tree(tmp_path, tag="v1.0.3")
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["publication_bundle"]["checksums_path"] = "../outside/checksums.sha256"
+    _write_json(summary_path, summary)
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="parent traversal"):
+        publish_camera_ready_release._validate_prerequisites(
+            campaign_root, expected_release_tag="v1.0.3"
+        )
+
+
+@pytest.mark.parametrize("field", ("archive_path", "checksums_path", "manifest_path"))
+def test_publish_camera_ready_release_rejects_symlinked_bundle_descriptor_path(
+    tmp_path: Path, monkeypatch, field: str
+) -> None:
+    """Publication descriptors must not follow symlink components."""
+    campaign_root = _make_campaign_tree(tmp_path, tag="v1.0.4")
+    target = tmp_path / f"target-{field}.dat"
+    target.write_text("payload\n", encoding="utf-8")
+    link = tmp_path / f"link-{field}.dat"
+    link.symlink_to(target)
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["publication_bundle"][field] = link.name
+    _write_json(summary_path, summary)
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="symlink"):
+        publish_camera_ready_release._validate_prerequisites(
+            campaign_root, expected_release_tag="v1.0.4"
+        )
+
+
+def test_publish_camera_ready_release_rejects_incoherent_bundle_descriptor_paths(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Checksums and archive paths must belong to the declared publication bundle."""
+    campaign_root = _make_campaign_tree(tmp_path, tag="v1.0.5")
+    other_bundle = tmp_path / "output" / "benchmarks" / "other_bundle"
+    other_bundle.mkdir(parents=True)
+    (other_bundle / "checksums.sha256").write_text("placeholder\n", encoding="utf-8")
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["publication_bundle"]["checksums_path"] = (
+        "output/benchmarks/other_bundle/checksums.sha256"
+    )
+    _write_json(summary_path, summary)
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="bundle directory"):
+        publish_camera_ready_release._validate_prerequisites(
+            campaign_root, expected_release_tag="v1.0.5"
+        )
+
+
 def test_publish_camera_ready_release_rejects_missing_checksums(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -212,6 +293,21 @@ def test_publish_camera_ready_release_rejects_symlink_campaign_summary(
     with pytest.raises(ValueError, match="symlink"):
         publish_camera_ready_release._validate_prerequisites(
             campaign_root, expected_release_tag="v1.0.4"
+        )
+
+
+def test_publish_camera_ready_release_rejects_symlink_campaign_root(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """CLI validation must inspect the lexical campaign root before resolving it."""
+    campaign_root = _make_campaign_tree(tmp_path, tag="v1.0.6")
+    linked_campaign_root = tmp_path / "linked-campaign"
+    linked_campaign_root.symlink_to(campaign_root, target_is_directory=True)
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="symlink"):
+        publish_camera_ready_release.main(
+            ["--campaign-root", str(linked_campaign_root), "--tag", "v1.0.6"]
         )
 
 

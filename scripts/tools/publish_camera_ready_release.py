@@ -62,7 +62,20 @@ def _resolve_publication_path(publication: dict[str, object], key: str, repo_roo
         raise ValueError(
             f"publication_bundle.{key} must be a non-empty string path in campaign_summary.json."
         )
-    return repo_root / raw_value
+    relative = raw_value.strip()
+    try:
+        return resolve_campaign_artifact_path(repo_root, relative)
+    except ValueError as exc:
+        # Preserve the command's established missing-artifact error while still
+        # routing every candidate through the fail-closed path validator first.
+        candidate = Path(repo_root).absolute() / relative
+        if (
+            "not a regular file" in str(exc)
+            and not candidate.exists()
+            and not candidate.is_symlink()
+        ):
+            raise FileNotFoundError(f"Missing required publication artifact: {candidate}") from exc
+        raise
 
 
 def _validate_prerequisites(
@@ -79,10 +92,17 @@ def _validate_prerequisites(
             "Run the campaign with publication bundle export enabled."
         )
 
-    repo_root = get_repository_root().resolve()
+    repo_root = get_repository_root()
     archive_path = _resolve_publication_path(publication, "archive_path", repo_root)
     checksums_path = _resolve_publication_path(publication, "checksums_path", repo_root)
     manifest_path = _resolve_publication_path(publication, "manifest_path", repo_root)
+    bundle_dir = manifest_path.parent
+    if not bundle_dir.is_dir():
+        raise ValueError("publication bundle path must name a regular directory")
+    if checksums_path.parent != bundle_dir:
+        raise ValueError("publication bundle checksums must be in the manifest bundle directory")
+    if archive_path.parent != bundle_dir.parent:
+        raise ValueError("publication bundle archive must be beside the manifest bundle directory")
 
     for path in (archive_path, checksums_path, manifest_path):
         if not path.exists():
@@ -158,7 +178,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    campaign_root = args.campaign_root.resolve()
+    campaign_root = Path(args.campaign_root).absolute()
     archive_path, checksums_path, manifest_path, summary = _validate_prerequisites(
         campaign_root, expected_release_tag=str(args.tag)
     )

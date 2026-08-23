@@ -15,7 +15,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.release_protocol import resolve_campaign_artifact_path
+from robot_sf.benchmark.release_protocol import (
+    resolve_campaign_artifact_path,
+    resolve_regular_directory_path,
+)
 
 CONTRACT_SCHEMA_VERSION = "benchmark-release-publication-contract.v1"
 
@@ -169,7 +172,17 @@ def _episode_provenance(
     """Return episode software commits and unresolved goal+timeout row count."""
     commits: set[str] = set()
     goal_timeout_rows = 0
-    for episodes_path in sorted((campaign_root / "runs").glob("*/episodes.jsonl")):
+    runs_path = campaign_root / "runs"
+    if runs_path.is_symlink():
+        raise ValueError("campaign runs directory must not contain symlink components")
+    if not runs_path.exists():
+        return commits, goal_timeout_rows
+    runs_path = resolve_regular_directory_path(runs_path, field_name="campaign runs directory")
+    for episodes_path in sorted(runs_path.glob("*/episodes.jsonl")):
+        episodes_path = resolve_campaign_artifact_path(
+            campaign_root,
+            episodes_path.relative_to(campaign_root).as_posix(),
+        )
         with episodes_path.open(encoding="utf-8") as handle:
             for line_number, raw_line in enumerate(handle, 1):
                 if not raw_line.strip():
@@ -275,15 +288,19 @@ def validate_release_publication_contract(  # noqa: C901
         Contract report with ``pass`` or ``blocked`` status and blockers.
     """
     blockers: list[str] = []
-    campaign_root = Path(campaign_root).absolute()
-    bundle_dir = bundle_dir.resolve()
-    release_result_path = campaign_root / "release" / "release_result.json"
-    manifest_path = bundle_dir / "publication_manifest.json"
-    checksums_path = bundle_dir / "checksums.sha256"
     try:
+        campaign_root = resolve_regular_directory_path(campaign_root, field_name="campaign root")
+        bundle_dir = resolve_regular_directory_path(
+            bundle_dir, field_name="publication bundle directory"
+        )
         summary_path = resolve_campaign_artifact_path(
             campaign_root, "reports/campaign_summary.json"
         )
+        release_result_path = resolve_campaign_artifact_path(
+            campaign_root, "release/release_result.json"
+        )
+        manifest_path = resolve_campaign_artifact_path(bundle_dir, "publication_manifest.json")
+        checksums_path = resolve_campaign_artifact_path(bundle_dir, "checksums.sha256")
         summary = _read_json(summary_path)
         release_result = _read_json(release_result_path)
         publication = _read_json(manifest_path)
@@ -302,10 +319,12 @@ def validate_release_publication_contract(  # noqa: C901
         checksums = {}
 
     for relative, expected_digest in checksums.items():
-        path = bundle_dir / relative
-        if not path.is_file():
-            blockers.append(f"checksum entry points to missing file: {relative}")
-        elif _sha256(path) != expected_digest:
+        try:
+            path = resolve_campaign_artifact_path(bundle_dir, relative)
+        except (OSError, ValueError) as exc:
+            blockers.append(f"checksum entry is unsafe: {relative}: {exc}")
+            continue
+        if _sha256(path) != expected_digest:
             blockers.append(f"checksum mismatch: {relative}")
 
     manifest_files = publication.get("files")
@@ -326,8 +345,25 @@ def validate_release_publication_contract(  # noqa: C901
     provenance = publication.get("provenance")
     provenance = provenance if isinstance(provenance, Mapping) else {}
     release_manifest = {}
-    release_manifest_path = bundle_dir / "payload" / "release" / "release_manifest.resolved.json"
-    if release_manifest_path.exists():
+    release_manifest_candidate = (
+        bundle_dir / "payload" / "release" / "release_manifest.resolved.json"
+    )
+    try:
+        release_manifest_path = resolve_campaign_artifact_path(
+            bundle_dir, "payload/release/release_manifest.resolved.json"
+        )
+    except (OSError, ValueError) as exc:
+        optional_missing = (
+            isinstance(exc, ValueError)
+            and "not a regular file" in str(exc)
+            and "symlink components" not in str(exc)
+            and not release_manifest_candidate.exists()
+            and not release_manifest_candidate.is_symlink()
+        )
+        if not optional_missing:
+            blockers.append(f"release manifest path is unsafe: {exc}")
+        release_manifest_path = None
+    if release_manifest_path is not None:
         try:
             release_manifest = _read_json(release_manifest_path)
         except ValueError as exc:

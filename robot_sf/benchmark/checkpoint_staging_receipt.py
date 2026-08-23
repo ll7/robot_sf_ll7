@@ -260,7 +260,10 @@ def _validated_arm_file(
         mapped_path is None and not Path(resolved_path).is_file()
     ):
         raise CheckpointStagingReceiptError(
-            f"checkpoint receipt arm {planner_key} no longer resolves to a file"
+            f"checkpoint receipt arm {planner_key} no longer resolves to a file; "
+            f"staged bytes are unavailable on this verification host (verifier-location "
+            f"condition, not an input mismatch); remap via --checkpoint-path-map on the "
+            f"execution host or run the doctor there"
         )
     if not isinstance(expected_sha, str) or _SHA256_PATTERN.fullmatch(expected_sha.lower()) is None:
         raise CheckpointStagingReceiptError(

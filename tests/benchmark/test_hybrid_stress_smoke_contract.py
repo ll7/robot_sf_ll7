@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Any
 import pytest
 import yaml
 
+from robot_sf.benchmark import release_protocol
 from robot_sf.benchmark.camera_ready._config import (
     _load_campaign_scenarios,
     _resolved_seed_inventory,
@@ -16,8 +18,18 @@ from robot_sf.benchmark.camera_ready._config import (
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.identity.hash_utils import sha256_file
-from robot_sf.benchmark.release_acceptance import _emergency_stop_marker, _status_markers
-from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
+from robot_sf.benchmark.release_acceptance import (
+    _emergency_stop_marker,
+    _status_markers,
+    validate_diagnostic_stress_smoke_source_provenance,
+)
+from robot_sf.benchmark.release_protocol import (
+    build_release_provenance,
+    build_resolved_release_manifest,
+    load_release_manifest,
+    validate_release_manifest,
+    validate_stress_smoke_runtime_identity,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_PATH = REPO_ROOT / (
@@ -93,8 +105,8 @@ def test_stress_contract_pins_source_axes_and_fail_closed_policy() -> None:
     contract = payload["stress_smoke_contract"]
 
     assert contract["schema_version"] == "hybrid-release-stress-smoke.v1"
-    assert re.fullmatch(r"[0-9a-f]{40}", contract["source_commit"])
-    assert contract["source_commit"] == SOURCE_COMMIT
+    assert re.fullmatch(r"[0-9a-f]{40}", contract["review_base_commit"])
+    assert contract["review_base_commit"] == SOURCE_COMMIT
     assert contract["source_commit_policy"] == "exact-immutable-worktree-sha-required"
     assert contract["expected_episode_cells"] == 70
     assert contract["expected_horizon_steps"] == 600
@@ -160,6 +172,29 @@ def test_all_manifest_and_stress_asset_hashes_are_exact() -> None:
         assert sha256_file(path) == asset["sha256"]
         observed_hybrid_keys.append(asset["planner_key"])
     assert tuple(observed_hybrid_keys) == EXPECTED_HYBRID_ARMS
+
+
+def test_release_validation_rejects_stress_asset_hash_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = load_release_manifest(MANIFEST_PATH)
+    campaign_config = load_campaign_config(manifest.canonical_campaign_config_path)
+    original_sha256_file = release_protocol._sha256_file
+    target = manifest.stress_smoke_scenario_source_pins[0].path.resolve()
+
+    def _tampered_hash(path: Path) -> str:
+        if path.resolve() == target:
+            return "0" * 64
+        return original_sha256_file(path)
+
+    monkeypatch.setattr(release_protocol, "_sha256_file", _tampered_hash)
+    report = validate_release_manifest(manifest, campaign_config=campaign_config)
+
+    assert report["status"] == "invalid"
+    assert any(
+        "stress_smoke_contract.scenario_sources hash does not match pinned asset" in problem
+        for problem in report["problems"]
+    )
 
 
 @pytest.mark.parametrize("status_field", ("status", "readiness_status", "availability_status"))
@@ -244,3 +279,129 @@ def test_positive_fallback_count_remains_forbidden() -> None:
         {"status": "ok", "algorithm_metadata": {"planner_runtime": runtime}},
         "stress-row",
     )
+
+
+def test_nested_emergency_stop_count_is_never_admitted() -> None:
+    runtime = {
+        "fallback_count": 0,
+        "last_decision": {
+            "planner_mode": "NORMAL",
+            "selected_source": "dynamic_window",
+            "emergency_stop_count": 1,
+        },
+    }
+
+    assert _emergency_stop_marker(runtime) == ("last_decision.emergency_stop_count", "1")
+    assert _status_markers(
+        {"status": "ok", "algorithm_metadata": {"planner_runtime": runtime}},
+        "stress-row",
+    )
+
+
+def test_unwrapped_planner_runtime_emergency_marker_is_never_admitted() -> None:
+    payload = {
+        "status": "ok",
+        "planner_runtime": {
+            "last_decision": {
+                "planner_mode": "NORMAL",
+                "selected_source": "dynamic_window",
+                "emergency_stop_count": 1,
+            }
+        },
+    }
+
+    assert _emergency_stop_marker(payload) == (
+        "planner_runtime.last_decision.emergency_stop_count",
+        "1",
+    )
+    assert _status_markers(payload, "stress-row")
+
+
+def test_unwrapped_planner_runtime_fallback_marker_is_never_admitted() -> None:
+    payload = {"status": "ok", "planner_runtime": {"fallback_count": 1}}
+
+    assert _status_markers(payload, "stress-row") == [
+        ("stress-row.planner_runtime.fallback_count", "1")
+    ]
+
+
+def test_stress_runtime_identity_uses_launch_pin_not_review_base() -> None:
+    manifest = load_release_manifest(MANIFEST_PATH)
+    runtime_commit = "a" * 40
+    admitted = validate_stress_smoke_runtime_identity(
+        manifest,
+        current_source_commit=runtime_commit,
+        launch_expected_source_commit=runtime_commit,
+    )
+    assert admitted["status"] == "valid"
+    assert admitted["runtime_source_commit"] == runtime_commit
+    assert admitted["review_base_commit"] == SOURCE_COMMIT
+
+    rejected = validate_stress_smoke_runtime_identity(
+        manifest,
+        current_source_commit=runtime_commit,
+        launch_expected_source_commit="b" * 40,
+    )
+    assert rejected["status"] == "invalid"
+
+
+def test_stress_resolved_provenance_contains_pinned_assets_and_runtime_commit() -> None:
+    manifest = load_release_manifest(MANIFEST_PATH)
+    runtime_commit = "a" * 40
+    resolved = build_resolved_release_manifest(
+        manifest,
+        source_commit=runtime_commit,
+    )
+    contract = resolved["provenance"]["stress_smoke_contract"]
+    assert resolved["provenance"]["source_commit"] == runtime_commit
+    assert contract["review_base_commit"] == SOURCE_COMMIT
+    assert len(contract["scenario_sources"]) == 5
+    assert len(contract["hybrid_configs"]) == 4
+
+    provenance = build_release_provenance(
+        manifest,
+        campaign_root=REPO_ROOT / "output" / "stress-smoke",
+        invoked_command="test",
+        source_commit=runtime_commit,
+    )
+    assert provenance["source_commit"] == runtime_commit
+    assert provenance["stress_smoke_contract"] == contract
+
+
+def test_stress_source_provenance_rejects_mixed_campaign_rows(tmp_path: Path) -> None:
+    root = tmp_path / "campaign"
+    (root / "reports").mkdir(parents=True)
+    (root / "runs" / "goal__differential_drive").mkdir(parents=True)
+    commit = "a" * 40
+    wrong = "b" * 40
+    for name, payload in (
+        ("campaign_manifest.json", {"git": {"commit": commit}}),
+        ("manifest.json", {"git_hash": commit}),
+        ("run_meta.json", {"repo": {"commit": commit}}),
+    ):
+        (root / name).write_text(json.dumps(payload), encoding="utf-8")
+    episodes = root / "runs" / "goal__differential_drive" / "episodes.jsonl"
+    episodes.write_text(
+        json.dumps({"git_hash": wrong, "scenario_id": "s", "seed": 116}) + "\n",
+        encoding="utf-8",
+    )
+    (root / "reports" / "campaign_summary.json").write_text(
+        json.dumps(
+            {
+                "campaign": {"git_hash": commit},
+                "runs": [
+                    {
+                        "episodes_path": "runs/goal__differential_drive/episodes.jsonl",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = validate_diagnostic_stress_smoke_source_provenance(
+        root,
+        expected_source_commit=commit,
+    )
+    assert report["status"] == "invalid"
+    assert any("campaign provenance" in blocker for blocker in report["blockers"])
+    assert report["observed_source_commits"] == [commit, wrong]

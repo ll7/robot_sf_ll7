@@ -39,10 +39,12 @@ diagnostic selection evidence only and must never be reused as release evidence.
 
 A stress smoke is admissible only when the final campaign artifacts bind all
 rows to one exact checked-out source SHA and the manifest/config/scenario hashes
-match the launch packet. The source pin in the manifest is the review-time
-freeze (bc1294a19a837c4d4b9ef9086a2be4ca42dd85f3); when a corrected runtime
-commit is merged, update that pin and all dependent hashes before submission.
-Do not submit a packet with a stale source pin.
+match the launch packet. The tracked `review_base_commit` is audit context only;
+it cannot be the final commit containing the manifest without creating a
+self-reference loop. The runner records the exact checked-out `HEAD`, compares
+it with `SLURM_EXPECTED_PUBLIC_COMMIT` when the private launch supplies that
+pin, and rejects campaign metadata or rows with a different or mixed commit.
+Do not submit a packet whose launch/runtime source identity is not exact.
 
 The result must be rejected if any declared row, planner summary, or campaign
 summary contains:
@@ -73,8 +75,9 @@ or run an ad-hoc shell command that bypasses the wrapper.
 
 Before admission:
 
-1. Check out the exact source worktree SHA named by the manifest.
-2. Recompute and verify the campaign-config and scenario-matrix SHA-256 values.
+1. Check out the exact source worktree SHA named by the private launch packet.
+2. Recompute and verify the campaign-config, scenario-matrix, scenario-source,
+   and hybrid-config SHA-256 values.
 3. Stage the checkpoint receipt against the stress campaign config and require
    submit_safe: true; the receipt must be fresh and config-bound even though
    only the hybrid arms are under test.
@@ -83,8 +86,10 @@ Before admission:
 5. Bind the same source/config/scenario/manifest hashes into the private launch
    packet. Record the exact module setup and startup sentinel in the private
    receipt.
-6. Submit through submit_and_record.sh on imech192. A non-zero release exit
-   or any forbidden marker rejects the smoke; do not reuse its campaign ID.
+6. Submit through submit_and_record.sh on imech192. A non-zero diagnostic
+   admission exit or any forbidden marker rejects the smoke; do not reuse its
+   campaign ID. A zero smoke exit is `diagnostic_stress_smoke_passed`, never
+   `release_benchmark_success` or `release_status: ok`.
 
 A canonical local command shape is:
 

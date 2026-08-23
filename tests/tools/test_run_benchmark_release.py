@@ -716,6 +716,139 @@ def test_runtime_smoke_skips_publication_when_config_disables_export(
     assert payload["publication_preflight_status"] == "not_requested"
 
 
+def test_diagnostic_stress_success_is_never_release_success(
+    monkeypatch,
+    capsys,
+    tmp_path: Path,
+) -> None:
+    """A valid stress smoke uses diagnostic status fields and never release success."""
+    campaign_root = _make_campaign_tree(tmp_path)
+    base_manifest = _manifest_fixture()
+    manifest = SimpleNamespace(
+        **base_manifest.__dict__,
+        schema_version="benchmark-release-manifest.v0.1",
+        release_kind="benchmark-stress-smoke",
+        maturity="diagnostic",
+        stress_smoke_review_base_commit="b" * 40,
+        stress_smoke_source_policy="exact-immutable-worktree-sha-required",
+    )
+    cfg = SimpleNamespace(export_publication_bundle=False)
+    runtime_commit = "a" * 40
+
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: {"status": "valid", "problem_count": 0, "problems": []},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_resolved_release_manifest",
+        lambda *args, source_commit=None, **kwargs: {
+            "provenance": {"source_commit": source_commit}
+        },
+    )
+    monkeypatch.setattr(run_benchmark_release, "_current_source_commit", lambda: runtime_commit)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *args, **kwargs: {
+            "campaign_root": str(campaign_root),
+            "benchmark_success": True,
+            "status": "benchmark_success",
+            "status_reason": "all rows succeeded",
+            "campaign_execution_status": "completed",
+            "evidence_status": "valid",
+            "exit_code": 0,
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_release_provenance",
+        lambda *args, source_commit=None, **kwargs: {
+            "benchmark_protocol_version": "0.1.0",
+            "release_id": "stress",
+            "release_tag": manifest.release_tag,
+            "manifest_path": "manifest.yaml",
+            "manifest_sha256": "a" * 64,
+            "canonical_campaign_config": "campaign.yaml",
+            "source_commit": source_commit,
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_diagnostic_stress_smoke_acceptance",
+        lambda *args, **kwargs: {
+            "status": "valid",
+            "diagnostic_success": True,
+            "blockers": [],
+            "source_provenance": {"status": "valid"},
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_full_benchmark_release_acceptance",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("diagnostic stress must not use full-release acceptance")
+        ),
+    )
+    receipt = _admit_checkpoint_receipt(monkeypatch, tmp_path)
+
+    exit_code = run_benchmark_release.main(
+        ["--manifest", "manifest.yaml", "--checkpoint-receipt", str(receipt)]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["campaign_benchmark_success"] is True
+    assert payload["benchmark_success"] is False
+    assert payload["diagnostic_success"] is True
+    assert payload["release_benchmark_success"] is False
+    assert payload["release_status"] == "diagnostic_stress_smoke_passed"
+    assert payload["release_status"] != "ok"
+    assert payload["status"] == "diagnostic_stress_smoke_passed"
+    assert payload["publication_bundle"] is None
+
+
+def test_diagnostic_stress_rejects_launch_source_mismatch(
+    monkeypatch,
+    capsys,
+    tmp_path: Path,
+) -> None:
+    """A private launch pin that differs from checked-out HEAD blocks execution."""
+    manifest = SimpleNamespace(
+        **_manifest_fixture().__dict__,
+        schema_version="benchmark-release-manifest.v0.1",
+        release_kind="benchmark-stress-smoke",
+        maturity="diagnostic",
+        stress_smoke_review_base_commit="c" * 40,
+        stress_smoke_source_policy="exact-immutable-worktree-sha-required",
+    )
+    cfg = SimpleNamespace()
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "_current_source_commit", lambda: "a" * 40)
+    monkeypatch.setenv("SLURM_EXPECTED_PUBLIC_COMMIT", "b" * 40)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("source mismatch must block campaign execution")
+        ),
+    )
+
+    exit_code = run_benchmark_release.main(["--manifest", "manifest.yaml"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "stress_smoke_source_rejected"
+    assert payload["release_benchmark_success"] is False
+    assert payload["diagnostic_success"] is False
+    assert payload["stress_smoke_runtime_identity"]["status"] == "invalid"
+
+
 def test_full_release_acceptance_failure_blocks_publication(
     monkeypatch,
     capsys,

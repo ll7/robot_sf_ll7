@@ -82,7 +82,7 @@ def _append_blocker(blockers: list[str], message: str) -> None:
         blockers.append(message)
 
 
-def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:
+def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:  # noqa: C901
     """Reject legacy emergency-stop paths without changing fallback counters.
 
     Any positive ``emergency_stop_count`` is forbidden for this release.  The
@@ -117,14 +117,26 @@ def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:
         if path.endswith("planner_mode") and normalized_source in _LEGACY_EMERGENCY_MODES:
             return path, normalized_source
 
-    counter = payload.get("emergency_stop_count")
-    if counter is None:
-        return None
-    parsed_counter = _strict_int(counter)
-    if parsed_counter is None or parsed_counter < 0:
-        return "emergency_stop_count", "invalid"
-    if parsed_counter > 0:
-        return "emergency_stop_count", str(counter)
+    counters = [("emergency_stop_count", payload.get("emergency_stop_count"))]
+    if isinstance(decision, Mapping):
+        counters.append(
+            ("last_decision.emergency_stop_count", decision.get("emergency_stop_count"))
+        )
+    for path, counter in counters:
+        if counter is None:
+            continue
+        parsed_counter = _strict_int(counter)
+        if parsed_counter is None or parsed_counter < 0:
+            return path, "invalid"
+        if parsed_counter > 0:
+            return path, str(counter)
+
+    planner_runtime = payload.get("planner_runtime")
+    if isinstance(planner_runtime, Mapping):
+        nested = _emergency_stop_marker(planner_runtime)
+        if nested is not None:
+            path, value = nested
+            return f"planner_runtime.{path}", value
     return None
 
 
@@ -161,12 +173,24 @@ def _status_markers(  # noqa: C901, PLR0912
     for field in ("fallback_triggered", "degraded", "fallback_or_degraded"):
         if payload.get(field) is True:
             markers.append((f"{prefix}.{field}", "true"))
-    runtime_fields = {"selected_source", "planner_mode", "emergency_stop_count", "last_decision"}
+    runtime_fields = {
+        "selected_source",
+        "planner_mode",
+        "emergency_stop_count",
+        "last_decision",
+        "planner_runtime",
+    }
     if runtime_fields.intersection(payload):
         emergency_marker = _emergency_stop_marker(payload)
         if emergency_marker is not None:
             marker_path, marker_value = emergency_marker
             markers.append((f"{prefix}.{marker_path}", marker_value))
+    planner_runtime = payload.get("planner_runtime")
+    if isinstance(planner_runtime, Mapping):
+        runtime_marker = runtime_fallback_or_degraded_marker(planner_runtime)
+        if runtime_marker is not None:
+            marker_path, marker_value = runtime_marker
+            markers.append((f"{prefix}.planner_runtime.{marker_path}", marker_value))
     for field in ("algorithm_metadata", "algorithm_metadata_contract"):
         metadata = payload.get(field)
         if not isinstance(metadata, Mapping):
@@ -255,6 +279,116 @@ def _source_commit(row: Mapping[str, Any]) -> str:
     return str(row.get("git_hash", "")).strip().lower()
 
 
+def validate_diagnostic_stress_smoke_source_provenance(  # noqa: C901, PLR0912
+    campaign_root: Path,
+    *,
+    expected_source_commit: str,
+) -> dict[str, Any]:
+    """Require campaign metadata and every episode row to name one runtime HEAD.
+
+    Returns:
+        JSON-safe source provenance admission report.
+    """
+    expected = str(expected_source_commit or "").strip().lower()
+    blockers: list[str] = []
+    if _GIT_SHA_RE.fullmatch(expected) is None:
+        blockers.append("expected runtime source commit is not an exact 40-character SHA")
+
+    observed: set[str] = set()
+    observations: dict[str, str] = {}
+
+    def _record(label: str, value: Any) -> None:
+        normalized = str(value or "").strip().lower()
+        if _GIT_SHA_RE.fullmatch(normalized) is None:
+            blockers.append(f"{label} is missing or not an exact 40-character SHA")
+            return
+        observations[label] = normalized
+        observed.add(normalized)
+
+    root = campaign_root.resolve()
+    for filename, label, path_getter in (
+        (
+            "campaign_manifest.json",
+            "campaign_manifest.git.commit",
+            lambda payload: (
+                payload.get("git", {}).get("commit")
+                if isinstance(payload.get("git"), Mapping)
+                else payload.get("git_hash")
+            ),
+        ),
+        ("manifest.json", "manifest.git_hash", lambda payload: payload.get("git_hash")),
+        (
+            "run_meta.json",
+            "run_meta.repo.commit",
+            lambda payload: (
+                payload.get("repo", {}).get("commit")
+                if isinstance(payload.get("repo"), Mapping)
+                else None
+            ),
+        ),
+    ):
+        path = root / filename
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            blockers.append(f"{label} cannot be read: {exc}")
+            continue
+        if not isinstance(payload, Mapping):
+            blockers.append(f"{filename} must contain a JSON object")
+            continue
+        _record(label, path_getter(payload))
+
+    summary, summary_error = _read_campaign_summary(root)
+    if summary_error is not None or summary is None:
+        blockers.append(summary_error or "campaign summary cannot be read")
+    else:
+        campaign = summary.get("campaign")
+        if not isinstance(campaign, Mapping):
+            blockers.append("campaign summary campaign block is missing")
+        else:
+            _record("campaign_summary.campaign.git_hash", campaign.get("git_hash"))
+
+        runs = summary.get("runs")
+        if not isinstance(runs, list):
+            blockers.append("campaign summary runs list is missing")
+            runs = []
+        for run_index, run in enumerate(runs):
+            if not isinstance(run, Mapping):
+                blockers.append(f"runs[{run_index}] must be an object")
+                continue
+            raw_path = str(run.get("episodes_path", "")).strip()
+            if not raw_path:
+                blockers.append(f"runs[{run_index}] is missing episodes_path")
+                continue
+            try:
+                episodes_path = _resolve_integrity_artifact_path(root, raw_path)
+            except (OSError, ValueError) as exc:
+                blockers.append(f"runs[{run_index}] episodes_path rejected: {exc}")
+                continue
+            rows, error = _read_episode_rows(episodes_path)
+            if error:
+                blockers.append(error)
+                continue
+            for row_index, row in enumerate(rows):
+                _record(
+                    f"runs[{run_index}].rows[{row_index}].source_commit",
+                    _source_commit(row),
+                )
+
+    if observed != {expected}:
+        blockers.append(
+            "campaign provenance must contain exactly the checked-out runtime source commit"
+        )
+    return {
+        "schema_version": "benchmark-stress-smoke-source-provenance.v1",
+        "status": "valid" if not blockers else "invalid",
+        "expected_source_commit": expected or None,
+        "observed_source_commits": sorted(observed),
+        "observations": dict(sorted(observations.items())),
+        "blockers": list(dict.fromkeys(blockers)),
+    }
+
+
 def _episode_horizon(row: Mapping[str, Any]) -> tuple[int | None, bool]:
     """Resolve an episode horizon and whether an authoritative value was present.
 
@@ -282,7 +416,7 @@ def _scenario_id(scenario: Mapping[str, Any]) -> str:
     ).strip()
 
 
-def _resolve_expected_matrix_axes(
+def _resolve_expected_matrix_axes(  # noqa: C901
     manifest: Any,
     campaign_config: Any | None,
 ) -> tuple[tuple[str, ...], tuple[int, ...], list[str]]:
@@ -311,10 +445,13 @@ def _resolve_expected_matrix_axes(
             blockers.append("resolved campaign matrix contains an empty scenario identifier")
         if len(set(scenario_ids)) != len(scenario_ids):
             blockers.append("resolved campaign matrix contains duplicate scenario identifiers")
+        raw_manifest_seeds = getattr(manifest, "resolved_seeds", ())
+        if not raw_manifest_seeds:
+            seed_policy = getattr(manifest, "seed_policy", None)
+            if isinstance(seed_policy, Mapping):
+                raw_manifest_seeds = seed_policy.get("seeds", ())
         manifest_seeds = tuple(
-            seed
-            for raw_seed in getattr(manifest, "resolved_seeds", ())
-            if (seed := _strict_int(raw_seed)) is not None
+            seed for raw_seed in raw_manifest_seeds if (seed := _strict_int(raw_seed)) is not None
         )
         if manifest_seeds != seeds:
             blockers.append("manifest resolved seeds do not match campaign config")
@@ -333,6 +470,201 @@ def _resolve_expected_matrix_axes(
     if not scenario_ids or not seeds:
         blockers.append("resolved campaign scenario/seed axes are unavailable")
     return scenario_ids, seeds, blockers
+
+
+def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
+    campaign_root: Path,
+    *,
+    manifest: Any,
+    campaign_config: Any,
+    expected_source_commit: str,
+) -> dict[str, Any]:
+    """Validate the bounded 14-arm stress smoke without granting release success.
+
+    Returns:
+        Diagnostic-only admission report; it never grants release success.
+    """
+    if getattr(manifest, "release_kind", None) != "benchmark-stress-smoke":
+        return {
+            "schema_version": "benchmark-stress-smoke-acceptance.v1",
+            "status": "not_applicable",
+            "diagnostic_success": False,
+            "claim_boundary": "not a diagnostic stress-smoke manifest",
+            "blockers": [],
+        }
+
+    blockers: list[str] = []
+    summary, summary_error = _read_campaign_summary(campaign_root.resolve())
+    if summary_error is not None or summary is None:
+        return {
+            "schema_version": "benchmark-stress-smoke-acceptance.v1",
+            "status": "invalid",
+            "diagnostic_success": False,
+            "claim_boundary": "diagnostic execution evidence only; no benchmark or ranking claim",
+            "blockers": [summary_error or "campaign summary cannot be read"],
+        }
+
+    scenario_ids, seeds, axis_blockers = _resolve_expected_matrix_axes(manifest, campaign_config)
+    blockers.extend(axis_blockers)
+    planner_keys = tuple(str(key).strip() for key in getattr(manifest, "planner_keys", ()))
+    kinematics = tuple(
+        str(value).strip() for value in getattr(manifest, "expected_kinematics_matrix", ())
+    )
+    expected_kinematics = kinematics[0] if len(kinematics) == 1 else "differential_drive"
+    expected_arms = {(key, expected_kinematics) for key in planner_keys}
+    expected_ids = {
+        (planner_key, expected_kinematics, scenario_id, seed)
+        for planner_key in planner_keys
+        for scenario_id in scenario_ids
+        for seed in seeds
+    }
+    expected_per_arm = len(scenario_ids) * len(seeds)
+    expected_cells = len(expected_ids)
+    if expected_cells != 70:
+        _append_blocker(blockers, "diagnostic stress smoke must resolve exactly 70 episode cells")
+
+    for marker_path, marker in _status_markers(summary, "campaign_summary"):
+        _append_blocker(blockers, f"forbidden {marker_path}={marker}")
+    campaign = summary.get("campaign")
+    if not isinstance(campaign, Mapping):
+        _append_blocker(blockers, "campaign summary campaign block is missing")
+    elif campaign.get("benchmark_success") is not True:
+        _append_blocker(blockers, "campaign summary benchmark_success must be true")
+    if isinstance(campaign, Mapping):
+        for marker_path, marker in _status_markers(campaign, "campaign_summary.campaign"):
+            _append_blocker(blockers, f"forbidden {marker_path}={marker}")
+
+    runs = summary.get("runs")
+    if not isinstance(runs, list):
+        runs = []
+        _append_blocker(blockers, "campaign summary must contain a runs list")
+    planner_rows = summary.get("planner_rows")
+    if not isinstance(planner_rows, list):
+        planner_rows = []
+        _append_blocker(blockers, "campaign summary must contain a planner_rows list")
+    observed_arms: set[tuple[str, str]] = set()
+    observed_planner_row_arms: set[tuple[str, str]] = set()
+    identities: set[tuple[str, str, str, int]] = set()
+    duplicate_identities: set[tuple[str, str, str, int]] = set()
+    observed_rows = 0
+    for run_index, run in enumerate(runs):
+        if not isinstance(run, Mapping):
+            _append_blocker(blockers, f"runs[{run_index}] must be an object")
+            continue
+        planner = run.get("planner")
+        planner = planner if isinstance(planner, Mapping) else {}
+        arm = (
+            str(planner.get("key", "")).strip(),
+            str(planner.get("kinematics", "")).strip(),
+        )
+        observed_arms.add(arm)
+        if str(run.get("status", "")).strip().lower() != "ok":
+            _append_blocker(blockers, f"runs[{run_index}] status is not ok")
+        for marker_path, marker in _status_markers(run, f"runs[{run_index}]"):
+            _append_blocker(blockers, f"forbidden {marker_path}={marker}")
+        run_summary = run.get("summary")
+        if isinstance(run_summary, Mapping):
+            for marker_path, marker in _status_markers(run_summary, f"runs[{run_index}].summary"):
+                _append_blocker(blockers, f"forbidden {marker_path}={marker}")
+        raw_path = str(run.get("episodes_path", "")).strip()
+        if not raw_path:
+            _append_blocker(blockers, f"runs[{run_index}] is missing episodes_path")
+            continue
+        try:
+            episodes_path = _resolve_integrity_artifact_path(campaign_root.resolve(), raw_path)
+        except (OSError, ValueError) as exc:
+            _append_blocker(blockers, f"runs[{run_index}] episodes_path rejected: {exc}")
+            continue
+        rows, error = _read_episode_rows(episodes_path)
+        if error:
+            _append_blocker(blockers, error)
+            continue
+        observed_rows += len(rows)
+        if len(rows) != expected_per_arm:
+            _append_blocker(
+                blockers,
+                f"runs[{run_index}] contains {len(rows)} rows; expected {expected_per_arm}",
+            )
+        for row_index, row in enumerate(rows):
+            for marker_path, marker in _status_markers(row, f"runs[{run_index}].rows[{row_index}]"):
+                _append_blocker(blockers, f"forbidden {marker_path}={marker}")
+            scenario_id = str(row.get("scenario_id", "")).strip()
+            seed = _strict_int(row.get("seed"))
+            if not scenario_id or seed is None:
+                _append_blocker(
+                    blockers, f"runs[{run_index}].rows[{row_index}] has invalid identity"
+                )
+                continue
+            identity = (arm[0], arm[1], scenario_id, seed)
+            if identity in identities:
+                duplicate_identities.add(identity)
+            identities.add(identity)
+
+    for planner_row_index, planner_row in enumerate(planner_rows):
+        if not isinstance(planner_row, Mapping):
+            _append_blocker(blockers, f"planner_rows[{planner_row_index}] must be an object")
+            continue
+        planner_row_arm = (
+            str(planner_row.get("planner_key", "")).strip(),
+            str(planner_row.get("kinematics", "")).strip(),
+        )
+        observed_planner_row_arms.add(planner_row_arm)
+        if str(planner_row.get("status", "")).strip().lower() != "ok":
+            _append_blocker(blockers, f"planner_rows[{planner_row_index}] status is not ok")
+        for marker_path, marker in _status_markers(
+            planner_row, f"planner_rows[{planner_row_index}]"
+        ):
+            _append_blocker(blockers, f"forbidden {marker_path}={marker}")
+
+    if len(planner_rows) != len(expected_arms):
+        _append_blocker(
+            blockers,
+            f"stress smoke must contain exactly {len(expected_arms)} planner aggregate rows",
+        )
+    if observed_planner_row_arms != expected_arms:
+        _append_blocker(
+            blockers,
+            "stress-smoke planner aggregate rows do not match the manifest roster",
+        )
+
+    if duplicate_identities:
+        _append_blocker(blockers, f"duplicate episode identities: {sorted(duplicate_identities)!r}")
+    if observed_arms != expected_arms:
+        _append_blocker(blockers, "successful stress-smoke arms do not match the manifest roster")
+    if len(runs) != len(expected_arms):
+        _append_blocker(
+            blockers, f"stress smoke must contain exactly {len(expected_arms)} planner runs"
+        )
+    if observed_rows != expected_cells:
+        _append_blocker(blockers, f"observed stress-smoke rows must be {expected_cells}")
+    missing = expected_ids - identities
+    unexpected = identities - expected_ids
+    if missing or unexpected:
+        _append_blocker(
+            blockers, "stress-smoke episode identities do not match the exact manifest product"
+        )
+
+    source_report = validate_diagnostic_stress_smoke_source_provenance(
+        campaign_root,
+        expected_source_commit=expected_source_commit,
+    )
+    if source_report["status"] != "valid":
+        for blocker in source_report["blockers"]:
+            _append_blocker(blockers, f"source provenance: {blocker}")
+
+    status = "valid" if not blockers else "invalid"
+    return {
+        "schema_version": "benchmark-stress-smoke-acceptance.v1",
+        "status": status,
+        "diagnostic_success": status == "valid",
+        "expected_planner_arms": len(expected_arms),
+        "expected_episode_cells": expected_cells,
+        "observed_episode_rows": observed_rows,
+        "unique_episode_identities": len(identities),
+        "source_provenance": source_report,
+        "claim_boundary": "diagnostic execution evidence only; no benchmark, ranking, or SNQI claim",
+        "blockers": blockers,
+    }
 
 
 def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
@@ -647,5 +979,7 @@ __all__ = [
     "FULL_RELEASE_EXPECTED_EPISODE_CELLS",
     "FULL_RELEASE_EXPECTED_HORIZON_STEPS",
     "FULL_RELEASE_EXPECTED_PLANNER_ARMS",
+    "validate_diagnostic_stress_smoke_acceptance",
+    "validate_diagnostic_stress_smoke_source_provenance",
     "validate_full_benchmark_release_acceptance",
 ]

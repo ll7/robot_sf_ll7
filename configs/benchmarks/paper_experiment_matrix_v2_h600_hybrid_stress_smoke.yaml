@@ -69,12 +69,13 @@ claim_boundary:
     - planner ranking or SNQI ranking
     - reuse of this stress slice as full-release evidence
 
-# This block is descriptive metadata retained in the resolved campaign config
-# and checked by tests.  The release runner still records the actual checked-out
-# commit in campaign_manifest and every episode row.
+# This block records the review/base commit for audit context.  A tracked config
+# cannot name the final commit that contains it without a self-reference loop.
+# The release runner records and validates the actual checked-out commit in the
+# resolved release result, campaign manifest, and every episode row.
 stress_smoke_contract:
   schema_version: hybrid-release-stress-smoke.v1
-  source_commit: bc1294a19a837c4d4b9ef9086a2be4ca42dd85f3
+  review_base_commit: bc1294a19a837c4d4b9ef9086a2be4ca42dd85f3
   source_commit_policy: exact-immutable-worktree-sha-required
   expected_episode_cells: 70
   expected_horizon_steps: 600

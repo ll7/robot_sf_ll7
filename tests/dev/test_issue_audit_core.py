@@ -33,6 +33,13 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+EXPECTED_ISSUE_UPDATED_AT = "2026-08-23T00:00:00Z"
+
+
+def _expected_issue(state: str = "open") -> dict[str, str]:
+    return {"state": state, "updated_at": EXPECTED_ISSUE_UPDATED_AT}
+
+
 def _issue(
     number: int,
     *,
@@ -44,6 +51,7 @@ def _issue(
         "number": number,
         "title": title,
         "state": "open",
+        "updated_at": EXPECTED_ISSUE_UPDATED_AT,
         "url": f"https://github.com/ll7/robot_sf_ll7/issues/{number}",
         "author": "maintainer",
         "labels": labels or [],
@@ -564,6 +572,7 @@ def test_audit_plan_reports_blocked_label_decision() -> None:
         }
     ]
     assert plan["counts"]["blocked_label_decisions"] == 1
+    assert all(mutation["expected_issue"] == _expected_issue() for mutation in plan["mutations"])
 
 
 def test_type_mirror_requires_complete_valid_archetype_metadata() -> None:
@@ -1295,7 +1304,13 @@ def test_apply_uses_encoded_delete_and_reads_back() -> None:
             return subprocess.CompletedProcess(
                 args,
                 0,
-                json.dumps({"state": "open", "labels": [{"name": "state:running"}]}),
+                json.dumps(
+                    {
+                        "state": "open",
+                        "updated_at": EXPECTED_ISSUE_UPDATED_AT,
+                        "labels": [{"name": "state:running"}],
+                    }
+                ),
                 "",
             )
         raise AssertionError(f"unexpected command: {args}")
@@ -1310,6 +1325,7 @@ def test_apply_uses_encoded_delete_and_reads_back() -> None:
                 "value": "state:ready",
                 "reason": "active work selects running",
                 "evidence": ["open PR #903"],
+                "expected_issue": _expected_issue(),
             },
             {
                 "operation": "add_label",
@@ -1317,6 +1333,7 @@ def test_apply_uses_encoded_delete_and_reads_back() -> None:
                 "value": "state:running",
                 "reason": "active work observed",
                 "evidence": ["open PR #903"],
+                "expected_issue": _expected_issue(),
             },
         ],
         "truncation_or_errors": [],
@@ -1355,7 +1372,13 @@ def test_apply_treats_absent_label_delete_as_idempotent() -> None:
             return subprocess.CompletedProcess(
                 args,
                 0,
-                json.dumps({"state": "open", "labels": [{"name": "state:running"}]}),
+                json.dumps(
+                    {
+                        "state": "open",
+                        "updated_at": EXPECTED_ISSUE_UPDATED_AT,
+                        "labels": [{"name": "state:running"}],
+                    }
+                ),
                 "",
             )
         raise AssertionError(f"unexpected command: {args}")
@@ -1370,6 +1393,7 @@ def test_apply_treats_absent_label_delete_as_idempotent() -> None:
                 "value": "state:ready",
                 "reason": "active work selects running",
                 "evidence": ["open PR #904"],
+                "expected_issue": _expected_issue(),
             }
         ],
         "truncation_or_errors": [],
@@ -1387,15 +1411,30 @@ def test_apply_treats_absent_label_delete_as_idempotent() -> None:
         "applied": 0,
         "already_applied": 1,
         "failed": 0,
+        "stale_state_issues": 0,
+        "skipped_stale_mutations": 0,
     }
     assert result["readback"][0]["verified"]["missing_removals"] == []
-    assert len(calls) == 2
+    assert len(calls) == 3
 
 
 def test_apply_keeps_unrelated_label_404_as_failure() -> None:
     """An issue or endpoint 404 must not be mistaken for an absent label."""
 
     def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["api", "repos/ll7/robot_sf_ll7/issues/108"]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                json.dumps(
+                    {
+                        "state": "open",
+                        "updated_at": EXPECTED_ISSUE_UPDATED_AT,
+                        "labels": [{"name": "state:ready"}],
+                    }
+                ),
+                "",
+            )
         assert args[:3] == ["api", "-X", "DELETE"]
         return subprocess.CompletedProcess(args, 1, "", "gh: Not Found (HTTP 404)")
 
@@ -1407,6 +1446,7 @@ def test_apply_keeps_unrelated_label_404_as_failure() -> None:
                 "operation": "remove_label",
                 "issue": 108,
                 "value": "state:ready",
+                "expected_issue": _expected_issue(),
             }
         ],
         "truncation_or_errors": [],
@@ -1423,7 +1463,296 @@ def test_apply_keeps_unrelated_label_404_as_failure() -> None:
         "applied": 0,
         "already_applied": 0,
         "failed": 1,
+        "stale_state_issues": 0,
+        "skipped_stale_mutations": 0,
     }
+
+
+@pytest.mark.parametrize(
+    "observed_issue",
+    [
+        {"state": "closed", "updated_at": "2026-08-23T00:01:00Z"},
+        {"state": "open", "updated_at": "2026-08-23T00:01:00Z"},
+    ],
+)
+def test_apply_skips_entire_issue_batch_when_state_or_version_is_stale(
+    observed_issue: dict[str, str],
+) -> None:
+    """A stale live issue produces zero writes for every mutation in its batch."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        assert args == ["api", "repos/ll7/robot_sf_ll7/issues/109"]
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            json.dumps({**observed_issue, "labels": [{"name": "state:ready"}]}),
+            "",
+        )
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "remove_label",
+                "issue": 109,
+                "value": "state:ready",
+                "expected_issue": _expected_issue(),
+            },
+            {
+                "operation": "add_label",
+                "issue": 109,
+                "value": "state:running",
+                "expected_issue": _expected_issue(),
+            },
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert result["already_applied"] == []
+    assert result["stale_states"] == [
+        {
+            "issue": 109,
+            "disposition": "stale_state",
+            "expected_issue": _expected_issue(),
+            "observed_issue": observed_issue,
+            "skipped_mutations": 2,
+        }
+    ]
+    assert result["failures"] == result["stale_states"]
+    assert result["counts"] == {
+        "planned": 2,
+        "applied": 0,
+        "already_applied": 0,
+        "failed": 1,
+        "stale_state_issues": 1,
+        "skipped_stale_mutations": 2,
+    }
+    assert calls == [["api", "repos/ll7/robot_sf_ll7/issues/109"]]
+
+
+def test_apply_rejects_missing_state_version_precondition_before_reads() -> None:
+    """A hand-built plan cannot omit the plan-time state/version binding."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        raise AssertionError("invalid plan must fail before any REST call")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [{"operation": "add_label", "issue": 109, "value": "state:running"}],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert "preconditions" in result["reason"]
+    assert result["applied"] == []
+    assert result["counts"] == {
+        "planned": 1,
+        "applied": 0,
+        "already_applied": 0,
+        "failed": 1,
+        "stale_state_issues": 0,
+        "skipped_stale_mutations": 0,
+    }
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "bad_mutation",
+    [
+        "not-an-object",
+        {"operation": "add_label", "issue": "bad", "value": "state:ready"},
+        {
+            "operation": "add_label",
+            "issue": True,
+            "value": "state:ready",
+            "expected_issue": _expected_issue(),
+        },
+        {
+            "operation": "add_label",
+            "issue": 1.9,
+            "value": "state:ready",
+            "expected_issue": _expected_issue(),
+        },
+        {
+            "operation": "add_label",
+            "issue": "001",
+            "value": "state:ready",
+            "expected_issue": _expected_issue(),
+        },
+        {
+            "operation": "unsupported",
+            "issue": 109,
+            "expected_issue": _expected_issue(),
+        },
+        {
+            "operation": "add_label",
+            "issue": 109,
+            "value": "",
+            "expected_issue": _expected_issue(),
+        },
+        {
+            "operation": "close_issue",
+            "issue": 109,
+            "value": "closed",
+            "expected_issue": _expected_issue(),
+        },
+    ],
+)
+def test_apply_rejects_mixed_invalid_and_valid_plan_before_any_rest_call(
+    bad_mutation: object,
+) -> None:
+    """One malformed row prevents a sibling valid row from writing."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        raise AssertionError("mixed invalid plan must fail before any REST call")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            bad_mutation,
+            {
+                "operation": "add_label",
+                "issue": 110,
+                "value": "state:running",
+                "expected_issue": _expected_issue(),
+            },
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert result["counts"]["planned"] == 2
+    assert result["counts"]["applied"] == 0
+    assert result["counts"]["failed"] == 1
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    ("plan", "max_mutations", "reason", "planned"),
+    [
+        ({"schema": "wrong", "mutations": []}, 10, "expected issue_audit_plan.v1", 0),
+        ({"schema": "issue_audit_plan.v1", "mutations": {}}, 10, "must be a list", 0),
+        (
+            {
+                "schema": "issue_audit_plan.v1",
+                "mutations": [],
+                "truncation_or_errors": 1,
+            },
+            10,
+            "truncation_or_errors must be a list",
+            0,
+        ),
+        (
+            {
+                "schema": "issue_audit_plan.v1",
+                "mutations": [
+                    {"operation": "close_issue", "issue": 1, "value": None},
+                    {"operation": "close_issue", "issue": 2, "value": None},
+                ],
+            },
+            1,
+            "exceeds mutation budget",
+            2,
+        ),
+    ],
+)
+def test_apply_contract_refusals_return_stable_counts_without_rest_calls(
+    plan: dict[str, object],
+    max_mutations: int,
+    reason: str,
+    planned: int,
+) -> None:
+    """Top-level plan contract failures use the stable no-write result shape."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        raise AssertionError("contract refusal must happen before any REST call")
+
+    result = apply_mutations(plan, max_mutations=max_mutations, runner=runner)
+
+    assert result["ok"] is False
+    assert reason in result["reason"]
+    assert result["applied"] == []
+    assert result["counts"] == {
+        "planned": planned,
+        "applied": 0,
+        "already_applied": 0,
+        "failed": 1,
+        "stale_state_issues": 0,
+        "skipped_stale_mutations": 0,
+    }
+    assert calls == []
+
+
+def test_apply_readback_rejects_state_change_after_label_write() -> None:
+    """Readback verifies issue state in addition to the requested label effect."""
+    issue_reads = 0
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        nonlocal issue_reads
+        if args[:3] == ["api", "-X", "POST"]:
+            return subprocess.CompletedProcess(args, 0, "[]", "")
+        if args == ["api", "repos/ll7/robot_sf_ll7/issues/109"]:
+            issue_reads += 1
+            state = "open" if issue_reads == 1 else "closed"
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                json.dumps(
+                    {
+                        "state": state,
+                        "updated_at": EXPECTED_ISSUE_UPDATED_AT,
+                        "labels": [{"name": "state:running"}],
+                    }
+                ),
+                "",
+            )
+        raise AssertionError(f"unexpected command: {args}")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "add_label",
+                "issue": 109,
+                "value": "state:running",
+                "expected_issue": _expected_issue(),
+            }
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["applied"][0]["value"] == "state:running"
+    assert result["readback"][0]["ok"] is False
+    assert result["readback"][0]["verified"]["expected_state"] == "open"
+    assert result["readback"][0]["verified"]["state_matches"] is False
 
 
 def test_incomplete_plan_fails_closed_before_mutation() -> None:
@@ -1516,7 +1845,13 @@ def test_apply_accepts_reasoned_blocked_label() -> None:
             return subprocess.CompletedProcess(
                 args,
                 0,
-                json.dumps({"state": "open", "labels": [{"name": "state:blocked"}]}),
+                json.dumps(
+                    {
+                        "state": "open",
+                        "updated_at": EXPECTED_ISSUE_UPDATED_AT,
+                        "labels": [{"name": "state:blocked"}],
+                    }
+                ),
                 "",
             )
         raise AssertionError(f"unexpected command: {args}")
@@ -1532,6 +1867,7 @@ def test_apply_accepts_reasoned_blocked_label() -> None:
                 "reason": "record a proven blocker",
                 "evidence": ["blocked evidence"],
                 "blocked_reason": ["Blocked-by reference present: Blocked-by: #902"],
+                "expected_issue": _expected_issue(),
             }
         ],
         "truncation_or_errors": [],
@@ -1542,7 +1878,7 @@ def test_apply_accepts_reasoned_blocked_label() -> None:
 
     assert result["ok"] is True
     assert result["readback"][0]["verified"]["missing_additions"] == []
-    assert len(calls) == 2
+    assert len(calls) == 3
 
 
 def test_pending_queue_can_record_readback_confirmed_safe_mutations() -> None:

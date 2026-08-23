@@ -40,7 +40,7 @@ diagnostic selection evidence only and must never be reused as release evidence.
 A stress smoke is admissible only when the final campaign artifacts bind all
 rows to one exact checked-out source SHA and the manifest/config/scenario hashes
 match the launch packet. The source pin in the manifest is the review-time
-freeze (859d232e7fa4b2a35aafecd8fc05640aa66cd661); when a corrected runtime
+freeze (3651b343ecb4b56f7723a08c16e8b12d8dbd5080); when a corrected runtime
 commit is merged, update that pin and all dependent hashes before submission.
 Do not submit a packet with a stale source pin.
 

@@ -74,7 +74,7 @@ claim_boundary:
 # commit in campaign_manifest and every episode row.
 stress_smoke_contract:
   schema_version: hybrid-release-stress-smoke.v1
-  source_commit: 859d232e7fa4b2a35aafecd8fc05640aa66cd661
+  source_commit: 3651b343ecb4b56f7723a08c16e8b12d8dbd5080
   source_commit_policy: exact-immutable-worktree-sha-required
   expected_episode_cells: 70
   expected_horizon_steps: 600

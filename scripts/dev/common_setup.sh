@@ -11,7 +11,7 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 export REPO_ROOT
 cd "$REPO_ROOT"
 
-if [ -f "$REPO_ROOT/.venv/bin/activate" ]; then
+if [ -f "$REPO_ROOT/.venv/bin/activate" ] && [ -z "${VIRTUAL_ENV:-}" ]; then
   # shellcheck source=/dev/null
   source "$REPO_ROOT/.venv/bin/activate"
 fi

@@ -3,14 +3,14 @@
   "issue": 6102,
   "campaign_issue": 5578,
   "job_id": "13828",
-  "classification": "durable-required",
-  "status": "local_recovery_verified_provenance_unresolved",
-  "evidence_status": "native_grid_synthesis_complete_provenance_unverified",
+  "classification": "durable-promoted",
+  "status": "durable_artifact_verified_interpretation_pending",
+  "evidence_status": "native_grid_synthesis_complete_provenance_verified_not_admitted",
   "benchmark_claim_eligible": false,
   "paper_facing_eligible": false,
   "decision_required": true,
-  "decision_question": "Should an independently recoverable artifact copy be restored or promoted, and after separate review may this synthesis feed the result-interpretation packet?",
-  "recommendation": "Do not rerun yet. Recover or restore the recorded result root first; retain the decision-required gate for artifact promotion and interpretation.",
+  "decision_question": "After exact-digest independent review, which bounded simulator-defined speed-tier claims, if any, may be admitted?",
+  "recommendation": "Do not rerun. Review the result-interpretation packet against the durable artifact and retain the six non-activated prediction-planner contrasts as invalid for speed-effect interpretation.",
   "private_ops_receipt": {
     "metrics_path": "ops/jobs/metrics/13828.json",
     "ledger_campaign": "2026-07-issue5578-authorized-native-speed-tier",
@@ -23,14 +23,30 @@
   "source_availability": {
     "local_recovery_root": "output/issue5578-native-speed-tier/13828",
     "recorded_external_root_exists": false,
-    "independent_copy_available": false,
-    "public_artifact_uri": null,
+    "independent_copy_available": true,
+    "public_artifact_uri": "wandb-artifact://ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0",
     "raw_output_gitignored": true,
     "local_tree_file_count": 76,
     "local_tree_bytes": 1851603308,
     "recorded_checksum_entry_count": 74,
     "local_rebased_checksum_verification": "pass",
-    "verification_scope": "The recorded checksum paths were rebased from the absent external root to the local recovery root; this proves local byte consistency with the recorded digests, not independent custody."
+    "verification_scope": "The immutable W&B v0 artifact was downloaded independently; all compressed object bytes, decompressed source bytes, manifest paths, SHA-256 digests, and sizes match the preservation manifest."
+  },
+  "durable_artifact": {
+    "artifact_name": "ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0",
+    "version": "v0",
+    "source_file_count": 76,
+    "source_bytes": 1851582828,
+    "stored_bytes": 284913756,
+    "manifest_sha256": "c7b3bff1f13f456c0f11e5af5de8624fc550ebfb48af31392513c513daa7ef0d",
+    "receipt_sha256": "3eee70f5d63a3f7abd38d69de6c9ae6d03f16efae7e9a1dfbfcdeaadc4c48cfa",
+    "remote_manifest_round_trip": "pass",
+    "stored_object_verification": "76_of_76_pass",
+    "decompressed_source_verification": "76_of_76_pass",
+    "missing_objects": 0,
+    "unexpected_objects": 0,
+    "digest_mismatches": 0,
+    "size_mismatches": 0
   },
   "execution_provenance": {
     "authorization_issue": 6102,
@@ -65,7 +81,8 @@
     "synthesis_adapter_recheck": {
       "all_native": true,
       "grid_complete": true,
-      "evidence_status": "native_grid_synthesis_complete_provenance_unverified"
+      "evidence_status": "native_grid_synthesis_complete_provenance_unverified",
+      "note": "The canonical synthesizer's status predates artifact verification; admission remains external to synthesis generation."
     }
   },
   "descriptive_synthesis": {
@@ -86,7 +103,19 @@
       "inconclusive": 8,
       "intervention_not_activated": 6
     },
-    "non_activated_rows": "All six prediction-planner rows; they do not support a speed-effect interpretation for that planner."
+    "non_activated_rows": [
+      "prediction_planner__cap_3_0__collision_rate",
+      "prediction_planner__cap_3_0__near_miss_rate",
+      "prediction_planner__cap_3_0__success_rate",
+      "prediction_planner__cap_4_0__collision_rate",
+      "prediction_planner__cap_4_0__near_miss_rate",
+      "prediction_planner__cap_4_0__success_rate"
+    ],
+    "canonical_synthesis_parity": {
+      "comparison": "semantic equality after normalizing only source_path",
+      "normalized_sha256": "9483dda5fb3021a207a5f3e4f9d447bf891da79ec62aaa4d7ad93ca7fea6502a",
+      "result": "pass"
+    }
   },
   "local_artifact_sha256": {
     "campaign_run_report.json": "3df64d2c068bba57fa943ee04ac45263aef1fd782d439e73de308ddf23922535",
@@ -101,12 +130,13 @@
     "contains_raw_rows": false,
     "contains_compact_recovery_metadata": true,
     "is_durable_raw_copy": false,
+    "durable_raw_dependency": "wandb-artifact://ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0",
     "is_benchmark_admission": false
   },
   "limitations": [
-    "The independent external result root recorded by the job is absent on this machine.",
-    "The local output tree is ignored scratch storage and cannot be the sole durable dependency.",
-    "The synthesis is pre-aggregated and explicitly provenance-unverified.",
+    "The external filesystem result root recorded by the job is absent on this machine; the immutable W&B artifact is now the durable dependency.",
+    "The local output tree is ignored scratch storage and is not a durable dependency.",
+    "The canonical synthesizer retains its historical provenance-unverified status string; independent artifact verification is recorded separately and does not imply admission.",
     "No inferential, dissertation, release, or paper-facing claim is admitted by this packet.",
     "The six prediction-planner rows did not activate the speed intervention and remain unsuitable for a speed-effect conclusion."
   ]

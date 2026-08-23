@@ -1,14 +1,15 @@
 # Issue #6102 robot speed-tier campaign recovery
 
-> **RECOVERED LOCALLY — NOT DURABLE BENCHMARK EVIDENCE AND NOT PAPER-FACING**
+> **DURABLY PRESERVED — INTERPRETATION NOT YET ADMITTED OR PAPER-FACING**
 
-This packet records the recovery of the existing job `13828` result tree for the
-native issue #5578 robot speed-tier campaign. The local copy is structurally
-complete and passes the campaign synthesizer and its recorded file checksums after
-rebasing the recorded paths to the local `output/` tree. The independent result
-root named by the execution receipt is absent on this machine, however. The packet
-therefore preserves a compact, reviewable recovery record without promoting the
-local raw output to benchmark or dissertation evidence.
+This packet records the recovery of job `13828` for the native issue #5578
+robot-speed-tier campaign. The recovered copy is structurally complete and passes
+the campaign synthesizer and recorded file checksums. The same 76 source files are
+now preserved in the immutable W&B artifact
+`ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0`. The artifact
+manifest and every stored and decompressed source object were checked against
+SHA-256 and byte-size records. This closes the custody gap, but does not by itself
+admit a benchmark, planner-ranking, causal, dissertation, or paper claim.
 
 ## What was verified
 
@@ -18,49 +19,47 @@ local raw output to benchmark or dissertation evidence.
 | Producing commit | `481164b08d861e4af9777fe35734f88bda2754e9` with a clean worktree recorded |
 | Frozen grid | 6 scenarios × 3 speed tiers × 4 planners × 30 seeds = 2,160 cells |
 | Recorded execution status | `complete_native`; 2,160 native, 0 excluded |
-| Local raw batches | 12 batches × 180 rows; 2,160 cell-summary rows |
+| Raw batches | 12 batches × 180 rows; 2,160 cell-summary rows |
 | Campaign synthesis re-check | `grid_complete=true`, `all_native=true`, 2,160 cells |
-| Local checksum re-check | 74/74 recorded files verified after path rebasing |
-| Independent source copy | **missing**; the recorded external root does not exist locally |
-| Admission | **not admitted**; `decision-required` remains open |
+| Independent source copy | W&B artifact `ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0` |
+| Artifact verification | 76/76 stored objects and 76/76 decompressed sources match manifest digests and sizes |
+| Canonical synthesis parity | Stored and current outputs match after normalizing only `source_path` |
+| Admission | **not admitted**; independent interpretation review remains required |
 
 The descriptive synthesis reports the same planner ordering at all three speed
 tiers (`scenario_adaptive_hybrid_orca_v2_collision_guard`, `orca`, `ppo`,
 `prediction_planner`), with zero rank flips. This is descriptive only and is not a
-planner-ranking claim. Of the 24 non-nominal planner-by-tier-by-metric rows, 10 are
+planner-ranking claim. Of the 24 registered non-nominal contrasts, 10 are
 classified `no_material_shift`, 8 `inconclusive`, and 6
-`intervention_not_activated`; the latter are all the prediction-planner rows and
-cannot answer a speed-effect question for that planner. These classifications are
-retained as a synthesis diagnostic, not as an inferential result.
+`intervention_not_activated`. The latter are the prediction-planner contrasts at
+the two non-nominal tiers for collision, near-miss, and success rate. They cannot
+answer a speed-effect question for that planner.
 
 ## Provenance boundary
 
-The complete raw tree remains at the ignored local path recorded in
-`recovery_manifest.json`. It is approximately 1.85 GB and is intentionally not
-copied into Git. The compact manifest records the source commit, frozen command,
-configuration, seed surface, manifest identity hash, local artifact hashes, and
-the exact missing-copy condition. The tracked packet is metadata and a bounded
-recovery summary; it is not a substitute for an independently recoverable raw
-artifact or a reviewed result-interpretation packet.
+The task-local hydration remains under ignored `output/` and is intentionally not
+copied into Git. The durable dependency is the immutable W&B artifact above. The
+compact manifest records the source commit, frozen command, configuration, seed
+surface, manifest identity hash, artifact receipt, full verification result, and
+canonical synthesis parity. This tracked projection is review metadata, not a
+replacement for the raw artifact and not an admission receipt.
 
 ## Re-check commands
 
-From a checkout containing the local recovery output:
+From a checkout containing a verified artifact hydration:
 
 ```bash
-uv run python -c 'from scripts.benchmark.run_issue_5578_speed_tier_campaign import synthesize_from_cell_summaries; import json; r=synthesize_from_cell_summaries("output/issue5578-native-speed-tier/13828/cell_summaries.jsonl"); print(json.dumps({k:r[k] for k in ("evidence_status","per_cell_count","native_cell_count","excluded_cell_count","all_native","grid_complete")}, sort_keys=True))'
-sed 's#/home/luttkule/external_data_hub/benchmark-results/robot_sf_ll7/issue5578/native-speed-tier/job-13828#output/issue5578-native-speed-tier/13828#' output/issue5578-native-speed-tier/13828/sha256sums.txt | sha256sum -c -
+uv run python scripts/benchmark/run_issue_5578_speed_tier_campaign.py --synthesize output/issue_7792/job13828_wandb_v0/cell_summaries.jsonl --synthesis-out output/issue_7792/current_synthesis.json --json
+uv run python scripts/analysis/build_result_interpretation_packet.py --input docs/context/evidence/issue_6102_robot_speed_tier_recovery/result_interpretation_packet.v1.json --validate-only
 ```
 
-Both commands are validation of the local recovery only. They do not establish an
-independent copy, public availability, or paper-facing eligibility.
+The first command reproduces the compact synthesis; the second validates the
+tracked interpretation boundary. Neither command grants paper-facing eligibility.
 
 ## Next decision
 
-`decision-required`: choose an independently recoverable artifact location and
-owner, then re-run the promotion and interpretation gates against that copy. The
-recommended action is **do not rerun the 2,160-cell campaign yet**: recover or
-restore the missing result root first, because the local result already contains a
-complete native grid and a rerun would create a second lineage without resolving
-the custody gap. Any later admission must remain separate from this recovery
-packet and must explicitly address the six non-activated prediction-planner rows.
+Do not rerun the 2,160-cell campaign: the native grid and durable raw lineage are
+complete. Review the exact digest of the bounded interpretation packet next. Any
+later admission must explicitly address the six non-activated prediction-planner
+contrasts and must not promote the descriptive planner ordering into a ranking
+claim.

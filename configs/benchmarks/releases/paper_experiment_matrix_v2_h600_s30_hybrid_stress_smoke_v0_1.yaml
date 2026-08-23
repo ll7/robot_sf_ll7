@@ -1,0 +1,187 @@
+# Diagnostic pre-release stress smoke for the 2026-08 S30/H600 release.
+#
+# This manifest is deliberately schema v0.1: it is a bounded execution gate,
+# not a publication-grade benchmark-data release.  It retains all 14 production
+# arms so the existing checkpoint receipt and release runner can be reused while
+# the campaign axis is reduced to five predeclared stress cells x one seed.
+schema_version: benchmark-release-manifest.v0.1
+benchmark_protocol_version: 0.1.0
+release_id: paper_matrix_v2_h600_s30_hybrid_stress_smoke_v1
+release_tag: paper-matrix-v2-h600-s30-hybrid-stress-smoke
+maturity: diagnostic
+release_kind: benchmark-stress-smoke
+canonical_campaign_config: ../paper_experiment_matrix_v2_h600_hybrid_stress_smoke.yaml
+campaign_config_sha256: "388542d412ac138feeadb6357bd4e2abf6d2515a9304eac4bd649c83fb1f24ba"
+expected_paper_profile_version: paper-matrix-v1
+expected_paper_interpretation_profile: diagnostic-stress-no-ranking
+
+scenario:
+  matrix_path: ../../scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke.yaml
+  matrix_sha256: "5eba52486609b45960469ff13f4e2c2530c54aa7c93bf4690f4e3e6706e63f9b"
+  suite_policy_path: paper_experiment_matrix_v1_release_v0_1_suite_policy.yaml
+  suite_policy_sha256: "b5eb0a0cd6e07c7ef285781adcda207457e423f3bfb381cc78cd313c62dd6395"
+  route_certification_path: ../route_clearance_certifications_v1.yaml
+  route_certification_sha256: "8923d0560d17e92133e74792931539bd9a650629ae94d57798adb809046c567a"
+
+seed_policy:
+  mode: fixed-list
+  seeds: [116]
+  seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
+  seed_sets_sha256: "3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6"
+
+metrics:
+  snqi_weights_path: ../snqi_weights_camera_ready_v3.json
+  snqi_weights_sha256: "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
+  snqi_baseline_path: ../snqi_baseline_camera_ready_v3.json
+  snqi_baseline_sha256: "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a"
+  snqi_claim_policy: advisory_no_ranking
+
+planners:
+  keys:
+    - prediction_planner
+    - goal
+    - social_force
+    - orca
+    - ppo
+    - socnav_sampling
+    - sacadrl
+    - scenario_adaptive_hybrid_orca_v1
+    - scenario_adaptive_hybrid_orca_v2_collision_guard
+    - hybrid_rule_v3_fast_progress_static_escape
+    - hybrid_rule_v3_fast_progress_static_escape_continuous
+    - guarded_ppo
+    - predictive_mppi
+    - risk_dwa
+  groups:
+    prediction_planner: experimental
+    goal: core
+    social_force: core
+    orca: core
+    ppo: experimental
+    socnav_sampling: experimental
+    sacadrl: experimental
+    scenario_adaptive_hybrid_orca_v1: experimental
+    scenario_adaptive_hybrid_orca_v2_collision_guard: experimental
+    hybrid_rule_v3_fast_progress_static_escape: experimental
+    hybrid_rule_v3_fast_progress_static_escape_continuous: experimental
+    guarded_ppo: experimental
+    predictive_mppi: experimental
+    risk_dwa: experimental
+
+kinematics:
+  matrix: [differential_drive]
+
+matrix:
+  planner_arms: 14
+  scenarios: 5
+  seeds: 1
+  expected_episode_cells: 70
+  horizon_steps: 600
+  dt: 0.1
+
+stress_smoke_contract:
+  schema_version: hybrid-release-stress-smoke.v1
+  source_commit: 859d232e7fa4b2a35aafecd8fc05640aa66cd661
+  source_commit_policy: exact-immutable-worktree-sha-required
+  expected_episode_cells: 70
+  expected_horizon_steps: 600
+  expected_dt: 0.1
+  expected_kinematics: differential_drive
+  required_hybrid_arms:
+    - scenario_adaptive_hybrid_orca_v1
+    - scenario_adaptive_hybrid_orca_v2_collision_guard
+    - hybrid_rule_v3_fast_progress_static_escape
+    - hybrid_rule_v3_fast_progress_static_escape_continuous
+  forbidden_row_markers:
+    - fallback
+    - degraded
+    - unavailable
+    - failed
+  forbidden_runtime_markers:
+    - selected_source=all_candidates_rejected
+    - selected_source=static_reorient
+    - planner_mode=EMERGENCY_STOP
+    - planner_mode=REORIENT
+    - fallback_count>0
+    - emergency_stop_count>0
+  fail_closed: true
+  historical_sources:
+    - issue7742/job14730
+    - issue4365/job13376-original
+    - issue4365/job13378-original
+  representative_cells:
+    - scenario_id: classic_urban_crossing_medium
+      seed: 116
+      mechanism: urban-crossing
+    - scenario_id: classic_cross_trap_high
+      seed: 116
+      mechanism: cross-trap
+    - scenario_id: classic_doorway_high
+      seed: 116
+      mechanism: doorway
+    - scenario_id: francis2023_exiting_elevator
+      seed: 116
+      mechanism: elevator-exit
+    - scenario_id: francis2023_robot_crowding
+      seed: 116
+      mechanism: robot-crowding
+  pinned_assets:
+    seed_sets_path: ../../benchmarks/seed_sets_v1.yaml
+    seed_sets_sha256: "3aaab9171517b8d33bafc679d4a2c740864db0f96650e24d75c4c7e927d239e6"
+    route_certification_path: ../route_clearance_certifications_v1.yaml
+    route_certification_sha256: "8923d0560d17e92133e74792931539bd9a650629ae94d57798adb809046c567a"
+  scenario_sources:
+    - path: ../../scenarios/archetypes/classic_cross_trap.yaml
+      sha256: "2a49503a93741009dc2a1462b7641c77ec1128420cacd8861cf64b0e44a6d060"
+    - path: ../../scenarios/archetypes/classic_doorway.yaml
+      sha256: "2b68b827ba83bbe56e7ddfe3e34cb642ee67202097c970cb7eadc466cc7ff7b0"
+    - path: ../../scenarios/archetypes/classic_urban_crossing.yaml
+      sha256: "ea65d720fd8765bb725fedba0f50ccc9bbd1e609aa24a80c8ad9711666550161"
+    - path: ../../scenarios/single/francis2023_exiting_elevator.yaml
+      sha256: "d4b59fcc296e09352f5166fda1c03aea21caebcd78644539f738c50fe4e30a68"
+    - path: ../../scenarios/single/francis2023_robot_crowding.yaml
+      sha256: "a6da0946bbdae3d5818efb15d7148d313252e8ff477f1bbeaa88097520223de7"
+  hybrid_configs:
+    - planner_key: scenario_adaptive_hybrid_orca_v1
+      path: ../../policy_search/candidates/scenario_adaptive_hybrid_orca_v1_s30_h600_release.yaml
+      sha256: "e3ddcdd559e27861e58d7f2a6f1f4adbb8a87fe5ba5bf8d9db6fd170c2c8cd87"
+    - planner_key: scenario_adaptive_hybrid_orca_v2_collision_guard
+      path: ../../policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml
+      sha256: "90bc08cffe40e7f5b38c371db7c2a22790970c6817792dc7865686686c0a7dc3"
+    - planner_key: hybrid_rule_v3_fast_progress_static_escape
+      path: ../../policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml
+      sha256: "905ec25e24b3d5cedee1508ac6ad20a09f913d368c99d4329c839bc359640935"
+    - planner_key: hybrid_rule_v3_fast_progress_static_escape_continuous
+      path: ../../policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml
+      sha256: "8ed0a4048cba78f70abf37effaf8b93fe7cbb9de25897d4f65008adcb6e91ecd"
+
+artifacts:
+  required_paths:
+    - campaign_manifest.json
+    - manifest.json
+    - run_meta.json
+    - preflight/validate_config.json
+    - preflight/preview_scenarios.json
+    - reports/campaign_summary.json
+    - reports/campaign_report.md
+    - reports/matrix_summary.json
+    - reports/campaign_table.md
+    - reports/snqi_diagnostics.json
+
+claim_boundary:
+  evidence_class: diagnostic-runtime-stress-smoke
+  benchmark_data_release: false
+  software_release: false
+  snqi: advisory-no-ranking
+  fallback_or_degraded_evidence: prohibited
+
+provenance:
+  repository_url: https://github.com/ll7/robot_sf_ll7
+  doi: 10.5281/zenodo.<stress-smoke-not-published>
+  source_commit_policy: exact-immutable-worktree-sha-required
+  source_commit: 859d232e7fa4b2a35aafecd8fc05640aa66cd661
+  result_policy: require-one-exact-source-sha
+  publication_authorized: false
+
+citation_path: ../../../CITATION.cff
+release_checklist_path: ../../../docs/RELEASE.md

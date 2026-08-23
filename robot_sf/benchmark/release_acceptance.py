@@ -48,6 +48,8 @@ _FORBIDDEN_STATUSES = frozenset(
 )
 _FORBIDDEN_STATUS_PREFIXES = ("predictive_foresight_model_fallback",)
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_LEGACY_EMERGENCY_MODES = frozenset({"emergency_stop", "reorient"})
+_LEGACY_EMERGENCY_SOURCES = frozenset({"all_candidates_rejected", "static_reorient"})
 
 
 def _normalized_status(value: Any) -> str:
@@ -78,6 +80,52 @@ def _append_blocker(blockers: list[str], message: str) -> None:
     """Add a deterministic blocker while bounding pathological row-level output."""
     if message not in blockers and len(blockers) < 100:
         blockers.append(message)
+
+
+def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:
+    """Reject legacy emergency-stop paths without changing fallback counters.
+
+    Any positive ``emergency_stop_count`` is forbidden for this release.  The
+    generic fallback marker remains responsible for ``fallback_count`` so its
+    semantics do not change as this stricter release gate evolves.
+
+    Returns:
+        Path/value pair for the first legacy or insufficient emergency marker.
+    """
+    if not isinstance(payload, Mapping):
+        return None
+
+    def _normalized(value: Any) -> str:
+        return str(value).strip().lower().replace("-", "_")
+
+    fields = [
+        ("selected_source", payload.get("selected_source")),
+        ("planner_mode", payload.get("planner_mode")),
+    ]
+    decision = payload.get("last_decision")
+    if isinstance(decision, Mapping):
+        fields.extend(
+            [
+                ("last_decision.selected_source", decision.get("selected_source")),
+                ("last_decision.planner_mode", decision.get("planner_mode")),
+            ]
+        )
+    for path, value in fields:
+        normalized_source = _normalized(value)
+        if path.endswith("selected_source") and normalized_source in _LEGACY_EMERGENCY_SOURCES:
+            return path, normalized_source
+        if path.endswith("planner_mode") and normalized_source in _LEGACY_EMERGENCY_MODES:
+            return path, normalized_source
+
+    counter = payload.get("emergency_stop_count")
+    if counter is None:
+        return None
+    parsed_counter = _strict_int(counter)
+    if parsed_counter is None or parsed_counter < 0:
+        return "emergency_stop_count", "invalid"
+    if parsed_counter > 0:
+        return "emergency_stop_count", str(counter)
+    return None
 
 
 def _status_markers(  # noqa: C901, PLR0912
@@ -113,6 +161,12 @@ def _status_markers(  # noqa: C901, PLR0912
     for field in ("fallback_triggered", "degraded", "fallback_or_degraded"):
         if payload.get(field) is True:
             markers.append((f"{prefix}.{field}", "true"))
+    runtime_fields = {"selected_source", "planner_mode", "emergency_stop_count", "last_decision"}
+    if runtime_fields.intersection(payload):
+        emergency_marker = _emergency_stop_marker(payload)
+        if emergency_marker is not None:
+            marker_path, marker_value = emergency_marker
+            markers.append((f"{prefix}.{marker_path}", marker_value))
     for field in ("algorithm_metadata", "algorithm_metadata_contract"):
         metadata = payload.get(field)
         if not isinstance(metadata, Mapping):
@@ -132,6 +186,10 @@ def _status_markers(  # noqa: C901, PLR0912
         runtime_marker = runtime_fallback_or_degraded_marker(metadata.get("planner_runtime"))
         if runtime_marker is not None:
             marker_path, marker_value = runtime_marker
+            markers.append((f"{prefix}.{field}.planner_runtime.{marker_path}", marker_value))
+        emergency_marker = _emergency_stop_marker(metadata.get("planner_runtime"))
+        if emergency_marker is not None:
+            marker_path, marker_value = emergency_marker
             markers.append((f"{prefix}.{field}.planner_runtime.{marker_path}", marker_value))
         foresight_marker = runtime_fallback_or_degraded_marker(metadata.get("foresight_prediction"))
         if foresight_marker is not None:

@@ -1,0 +1,205 @@
+# Bounded, diagnostic-only stress smoke for the 2026-08 S30/H600 release.
+#
+# This is intentionally not the publication matrix.  It exercises the complete
+# release roster on five predeclared fallback-prone scenario cells so the four
+# hybrid arms can be checked after a runtime fix and before a 20,160-cell rerun.
+# A pass is execution evidence only: it permits the next release preflight but
+# cannot establish planner performance, ranking, or an SNQI claim.
+name: paper_experiment_matrix_v2_h600_hybrid_stress_smoke
+paper_facing: false
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/sets/paper_matrix_v2_h600_hybrid_stress_smoke.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
+
+seed_policy:
+  mode: fixed-list
+  seeds: [116]
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: true
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 123
+  calibration_trials: 600
+
+workers: 32
+horizon: 600
+dt: 0.1
+record_forces: true
+checkpoint_provenance_enforcement: error
+resume: false
+stop_on_failure: true
+bootstrap_samples: 100
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+
+kinematics_matrix:
+  - differential_drive
+
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: false
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: paper-matrix-v2-h600-s30-hybrid-stress-smoke
+doi: 10.5281/zenodo.<stress-smoke-not-published>
+paper_interpretation_profile: diagnostic-stress-no-ranking
+
+release_kind: benchmark-stress-smoke
+release_status: pre-release-stress-smoke-only
+claim_boundary:
+  evidence_class: diagnostic-runtime-stress-smoke
+  benchmark_data_release: false
+  software_release: false
+  snqi: advisory-no-ranking
+  allowed:
+    - exact-source construction and runtime compatibility
+    - fail-closed detection of fallback, degraded, unavailable, or failed rows
+    - pre-release recovery evidence for the four hybrid arms
+  prohibited:
+    - full benchmark or paper-facing performance claim
+    - planner ranking or SNQI ranking
+    - reuse of this stress slice as full-release evidence
+
+# This block is descriptive metadata retained in the resolved campaign config
+# and checked by tests.  The release runner still records the actual checked-out
+# commit in campaign_manifest and every episode row.
+stress_smoke_contract:
+  schema_version: hybrid-release-stress-smoke.v1
+  source_commit: 859d232e7fa4b2a35aafecd8fc05640aa66cd661
+  source_commit_policy: exact-immutable-worktree-sha-required
+  expected_episode_cells: 70
+  expected_horizon_steps: 600
+  expected_dt: 0.1
+  expected_kinematics: differential_drive
+  required_hybrid_arms:
+    - scenario_adaptive_hybrid_orca_v1
+    - scenario_adaptive_hybrid_orca_v2_collision_guard
+    - hybrid_rule_v3_fast_progress_static_escape
+    - hybrid_rule_v3_fast_progress_static_escape_continuous
+  forbidden_row_markers:
+    - fallback
+    - degraded
+    - unavailable
+    - failed
+  forbidden_runtime_markers:
+    - selected_source=all_candidates_rejected
+    - selected_source=static_reorient
+    - planner_mode=EMERGENCY_STOP
+    - planner_mode=REORIENT
+    - fallback_count>0
+    - emergency_stop_count>0
+  fail_closed: true
+  evidence_class: diagnostic-runtime-stress-smoke
+  historical_sources:
+    - issue7742/job14730
+    - issue4365/job13376-original
+    - issue4365/job13378-original
+  representative_cells:
+    - scenario_id: classic_urban_crossing_medium
+      seed: 116
+      mechanism: urban-crossing
+    - scenario_id: classic_cross_trap_high
+      seed: 116
+      mechanism: cross-trap
+    - scenario_id: classic_doorway_high
+      seed: 116
+      mechanism: doorway
+    - scenario_id: francis2023_exiting_elevator
+      seed: 116
+      mechanism: elevator-exit
+    - scenario_id: francis2023_robot_crowding
+      seed: 116
+      mechanism: robot-crowding
+
+planners:
+  - key: prediction_planner
+    algo: prediction_planner
+    planner_group: experimental
+    algo_config: configs/algos/prediction_planner_camera_ready.yaml
+    benchmark_profile: experimental
+
+  - key: goal
+    algo: goal
+    planner_group: core
+    benchmark_profile: baseline-safe
+
+  - key: social_force
+    algo: social_force
+    planner_group: core
+    benchmark_profile: baseline-safe
+
+  - key: orca
+    algo: orca
+    planner_group: core
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fail-fast
+
+  - key: ppo
+    algo: ppo
+    planner_group: experimental
+    algo_config: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+    benchmark_profile: experimental
+    adapter_impact_eval: true
+
+  - key: socnav_sampling
+    algo: socnav_sampling
+    planner_group: experimental
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fail-fast
+
+  - key: sacadrl
+    algo: sacadrl
+    planner_group: experimental
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fail-fast
+
+  - key: scenario_adaptive_hybrid_orca_v1
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1_s30_h600_release.yaml
+    benchmark_profile: experimental
+
+  - key: scenario_adaptive_hybrid_orca_v2_collision_guard
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml
+    benchmark_profile: experimental
+
+  - key: hybrid_rule_v3_fast_progress_static_escape
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_s30_h600_release.yaml
+    benchmark_profile: experimental
+
+  - key: hybrid_rule_v3_fast_progress_static_escape_continuous
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous_s30_h600_release.yaml
+    benchmark_profile: experimental
+
+  - key: guarded_ppo
+    algo: guarded_ppo
+    planner_group: experimental
+    algo_config: configs/algos/guarded_ppo_camera_ready_cpu.yaml
+    benchmark_profile: experimental
+
+  - key: predictive_mppi
+    algo: predictive_mppi
+    planner_group: experimental
+    algo_config: configs/algos/predictive_mppi_camera_ready.yaml
+    benchmark_profile: experimental
+
+  - key: risk_dwa
+    algo: risk_dwa
+    planner_group: experimental
+    algo_config: configs/algos/risk_dwa_camera_ready.yaml
+    benchmark_profile: experimental

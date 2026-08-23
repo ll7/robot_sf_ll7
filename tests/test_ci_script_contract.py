@@ -1635,9 +1635,7 @@ def test_worktree_shared_venv_explicit_override_shadows_incomplete_local_env(
     # An incomplete worktree-local .venv must not shadow the explicit shared override.
     incomplete_local_venv = worktree / ".venv"
     (incomplete_local_venv / "bin").mkdir(parents=True)
-    (incomplete_local_venv / "bin" / "python").write_text(
-        "not executable\n", encoding="utf-8"
-    )
+    (incomplete_local_venv / "bin" / "python").write_text("not executable\n", encoding="utf-8")
 
     result = subprocess.run(
         [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(main_venv), "--", "python", "-V"],

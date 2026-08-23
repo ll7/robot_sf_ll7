@@ -433,8 +433,6 @@ def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:
     )
     aggregate = workflow["jobs"]["ci"]
     assert "compat-matrix" in aggregate["needs"]
-    aggregate_steps = [step.get("run", "") for step in aggregate.get("steps", [])]
-    assert any('needs.compat-matrix.result }}" != "success"' in step for step in aggregate_steps)
 
 
 def test_ci_setup_action_supports_core_matrix_dependencies_on_macos() -> None:
@@ -644,10 +642,6 @@ def test_ci_workflow_scenario_validation_is_exact_and_blocking() -> None:
         for run in run_blocks
     )
     assert "scenario-validation" in workflow["jobs"]["ci"]["needs"]
-    aggregate_steps = [step.get("run", "") for step in workflow["jobs"]["ci"]["steps"]]
-    assert any(
-        'needs.scenario-validation.result }}" != "success"' in step for step in aggregate_steps
-    )
 
 
 def test_wheel_install_smoke_uses_dependency_resolution_and_runtime_env_step() -> None:

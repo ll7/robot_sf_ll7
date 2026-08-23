@@ -141,7 +141,7 @@ def handle(args: argparse.Namespace) -> int:
             checkpoint_receipt=_repo_relative_path(args.checkpoint_receipt, repo_root),
             checkpoint_path_map=getattr(args, "checkpoint_path_map", None),
             private_launch_packet=_repo_relative_path(args.private_launch_packet, repo_root),
-            private_queue=_repo_relative_path(args.private_queue, repo_root),
+            private_queue=_repo_relative_path(getattr(args, "private_queue", None), repo_root),
             dissertation=_repo_relative_path(args.dissertation, repo_root),
             token_file=_repo_relative_path(args.token_file, repo_root),
             expected_cells=args.expected_cells,

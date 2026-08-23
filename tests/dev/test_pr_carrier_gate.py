@@ -86,6 +86,22 @@ def test_pure_review_carrier_matches_live_state() -> None:
     )
 
 
+def test_pure_review_carrier_accepts_exact_head_implementation_review() -> None:
+    """Explicit implementation-review wording is equivalent to the canonical self-review."""
+    comment = _review_comment().replace(
+        "Exact-head self-review", "Exact-head implementation review"
+    )
+
+    assert review_comment_covers(comment, live_head=HEAD_SHA, live_base=BASE_SHA)
+
+
+def test_pure_review_carrier_rejects_ambiguous_exact_head_review() -> None:
+    """A generic review heading cannot become a merge-ready carrier by naming one SHA."""
+    comment = _review_comment().replace("Exact-head self-review", "Exact-head review")
+
+    assert not review_comment_covers(comment, live_head=HEAD_SHA, live_base=BASE_SHA)
+
+
 def test_pure_review_carrier_rejects_foreign_head() -> None:
     """A review of a different head never covers the live state."""
     assert not review_comment_covers(

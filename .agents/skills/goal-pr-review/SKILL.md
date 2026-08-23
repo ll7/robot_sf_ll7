@@ -370,6 +370,10 @@ stops after advancing the child until fresh CI and exact-head evidence are curre
    review event refreshes the source-head queue gate after the verdict. If review submission is
    unavailable, a matching top-level compatibility carrier may be used only when the guarded label
    gate can read it; otherwise record the gate-refresh blocker.
+
+   Start the review body with `## Exact-head self-review` (canonical) or
+   `## Exact-head implementation review`. The guarded carrier parser requires one of these explicit
+   headings plus the live full head SHA; generic review prose does not satisfy the merge-ready gate.
 9. When CI is the only remaining external gate, put the PR in `awaiting_ci` and use compact,
    bounded one-shot polling in non-TTY agent sessions instead of `gh pr checks --watch`:
    `uv run python scripts/dev/watch_pr_ci_status.py <number> --once --json --expected-head-sha <sha>`.

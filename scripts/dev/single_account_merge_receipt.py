@@ -843,17 +843,21 @@ def _premerge_reasons(  # noqa: C901, PLR0912, PLR0915 - every waiver/hold dimen
     gate_audit = receipt.get("gate_audit")
     if not isinstance(gate_audit, Mapping):
         reasons.append("merge_queue_gate_unavailable")
-    elif not (
-        gate_audit.get("passed") is True or _string(gate_audit.get("status")).lower() == "success"
-    ):
-        reasons.append("merge_queue_gate_not_passed")
-        raw_gate_reasons = gate_audit.get("reasons")
-        if isinstance(raw_gate_reasons, list):
-            reasons.extend(
-                f"merge_queue_gate_{reason}"
-                for reason in raw_gate_reasons
-                if isinstance(reason, str) and reason
-            )
+    else:
+        gate_passed = (
+            gate_audit.get("passed") is True
+            if "passed" in gate_audit
+            else _string(gate_audit.get("status")).lower() == "success"
+        )
+        if not gate_passed:
+            reasons.append("merge_queue_gate_not_passed")
+            raw_gate_reasons = gate_audit.get("reasons")
+            if isinstance(raw_gate_reasons, list):
+                reasons.extend(
+                    f"merge_queue_gate_{reason}"
+                    for reason in raw_gate_reasons
+                    if isinstance(reason, str) and reason
+                )
 
     checks = (
         receipt.get("required_checks")

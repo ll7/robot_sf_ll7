@@ -151,6 +151,21 @@ def test_non_passing_gate_audit_blocks_ready_receipts() -> None:
     assert "merge_queue_gate_stale_merge_base" in blocked["reason_codes"]
 
 
+def test_explicit_non_passing_gate_audit_cannot_be_overridden_by_legacy_status() -> None:
+    blocked = _receipt(
+        gate_audit={
+            "schema": "merge_queue_gate.v1",
+            "passed": False,
+            "status": "success",
+            "reasons": ["stale_merge_base"],
+        }
+    )
+
+    assert blocked["status"] == "blocked"
+    assert "merge_queue_gate_not_passed" in blocked["reason_codes"]
+    assert "merge_queue_gate_stale_merge_base" in blocked["reason_codes"]
+
+
 def test_live_head_metadata_and_check_changes_block_without_reconstructing_receipt() -> None:
     receipt = _receipt()
 

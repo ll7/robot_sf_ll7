@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import yaml
 
@@ -152,6 +154,56 @@ def test_final_doctor_rejects_unsafe_cardinality_override(monkeypatch, tmp_path:
     assert manifest_checks and "unsafe override rejected" in manifest_checks[0]["summary"]
 
 
+def test_final_doctor_rejects_diagnostic_checkpoint_path_map(monkeypatch, tmp_path: Path) -> None:
+    """Invocation-local checkpoint substitutes cannot satisfy final publication admission."""
+    passed = ReleaseDoctorCheck("fixture", "pass", "safe")
+    monkeypatch.setattr(
+        release_doctor,
+        "_manifest_check",
+        lambda *args: (passed, object(), object()),
+    )
+    monkeypatch.setattr(release_doctor, "_git_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_ci_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_tag_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_release_identity_check", lambda *args: passed)
+    monkeypatch.setattr(
+        release_doctor,
+        "_checkpoint_check",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("must not validate remap")),
+    )
+    monkeypatch.setattr(release_doctor, "_cluster_check", lambda *args, **kwargs: passed)
+    monkeypatch.setattr(release_doctor, "_disk_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_zenodo_check", lambda *args, **kwargs: [passed])
+    monkeypatch.setattr(release_doctor, "_dissertation_check", lambda *args: passed)
+
+    report = release_doctor.collect_release_doctor_report(
+        repo=tmp_path,
+        manifest_path=tmp_path / "manifest.yaml",
+        expected_release_sha="a" * 40,
+        expected_base_sha="b" * 40,
+        tag="release",
+        checkpoint_receipt=tmp_path / "receipt.json",
+        checkpoint_path_map=["/remote/model.zip=checkpoints/model.zip"],
+        private_launch_packet=None,
+        dissertation=None,
+        token_file=None,
+        final=True,
+    )
+
+    assert report["status"] == "blocked"
+    checkpoint_checks = [check for check in report["checks"] if check["name"] == "checkpoints"]
+    assert checkpoint_checks == [
+        {
+            "name": "checkpoints",
+            "status": "fail",
+            "summary": (
+                "checkpoint path remaps are diagnostic-only and cannot satisfy final publication "
+                "admission"
+            ),
+        }
+    ]
+
+
 def test_zenodo_hook_check_does_not_surface_hook_config(monkeypatch, tmp_path: Path) -> None:
     """Hook inspection reports active state without echoing private configuration."""
     secret = "private-receiver-token"
@@ -234,6 +286,100 @@ def test_cli_checkpoint_path_map_reaches_doctor_with_repo_root(monkeypatch, tmp_
     assert release_cli.handle(args) == 0
     assert captured["checkpoint_path_map"] == ["/hpc/source.zip=checkpoints/model.zip"]
     assert captured["repo"] == tmp_path.resolve()
+
+
+def test_cli_checkpoint_path_map_runs_real_collector_and_receipt_validator(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    """The public CLI validates an exact remote receipt against byte-identical local data."""
+    config = tmp_path / "campaign.yaml"
+    config.write_text("name: release\n", encoding="utf-8")
+    checkpoint = tmp_path / "checkpoints" / "model.zip"
+    checkpoint.parent.mkdir()
+    checkpoint.write_bytes(b"checkpoint")
+    remote_path = "/hpc/gpfs2/licca/checkpoints/model.zip"
+    reference = SimpleNamespace(
+        planner_key="ppo",
+        algo="ppo",
+        kind="model_path",
+        value=remote_path,
+        implicit=False,
+    )
+    cfg = SimpleNamespace(references=[reference])
+    manifest = SimpleNamespace(canonical_campaign_config_path=config)
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text(
+        json.dumps(
+            {
+                "schema_version": "campaign-checkpoint-staging-receipt.v1",
+                "status": "ok",
+                "mode": "enforced_staged",
+                "stage": True,
+                "submit_safe": True,
+                "generated_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                "campaign_config_sha256": release_doctor._sha256(config),
+                "checkpoint_registry_sha256": "0" * 64,
+                "arms": [
+                    {
+                        "planner_key": "ppo",
+                        "algo": "ppo",
+                        "kind": "model_path",
+                        "value": remote_path,
+                        "implicit": False,
+                        "status": "staged",
+                        "resolved_path": remote_path,
+                        "checkpoint_sha256": release_doctor._sha256(checkpoint),
+                        "hash_source": "computed_file",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    passed = ReleaseDoctorCheck("fixture", "pass", "safe")
+    monkeypatch.setattr(
+        release_doctor,
+        "_manifest_check",
+        lambda *args: (passed, manifest, cfg),
+    )
+    monkeypatch.setattr(release_doctor, "_git_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_ci_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_tag_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_release_identity_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_cluster_check", lambda *args, **kwargs: passed)
+    monkeypatch.setattr(release_doctor, "_disk_check", lambda *args: passed)
+    monkeypatch.setattr(release_doctor, "_zenodo_check", lambda *args, **kwargs: [passed])
+    monkeypatch.setattr(release_doctor, "_dissertation_check", lambda *args: passed)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda fixture_cfg: fixture_cfg.references,
+    )
+    args = robot_sf_cli._build_parser().parse_args(
+        [
+            "release",
+            "doctor",
+            "--repo",
+            str(tmp_path),
+            "--manifest",
+            str(tmp_path / "manifest.yaml"),
+            "--expected-release-sha",
+            "a" * 40,
+            "--expected-base-sha",
+            "b" * 40,
+            "--tag",
+            "release",
+            "--checkpoint-receipt",
+            str(receipt),
+            "--checkpoint-path-map",
+            f"{remote_path}=checkpoints/model.zip",
+        ]
+    )
+
+    assert release_cli.handle(args) == 0
+    report = json.loads(capsys.readouterr().out)
+    checkpoint_checks = [check for check in report["checks"] if check["name"] == "checkpoints"]
+    assert checkpoint_checks[0]["status"] == "pass"
+    assert "1 checkpoint" in checkpoint_checks[0]["summary"]
 
 
 def _write_final_packet_fixture(

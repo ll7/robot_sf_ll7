@@ -1074,21 +1074,35 @@ def collect_release_doctor_report(  # noqa: PLR0913
         # Preserve the lightweight preparation-mode contract for callers that
         # only have a draft packet and no queue row yet.
         cluster_check = _cluster_check(private_launch_packet, expected_release_sha)
-    checkpoint_kwargs = (
-        {
-            "repo_root": repo,
-            "checkpoint_path_map": checkpoint_path_map,
-        }
-        if checkpoint_path_map
-        else {}
-    )
+    if final and checkpoint_path_map:
+        checkpoint_check = ReleaseDoctorCheck(
+            "checkpoints",
+            "fail",
+            "checkpoint path remaps are diagnostic-only and cannot satisfy final publication "
+            "admission",
+        )
+    else:
+        checkpoint_kwargs = (
+            {
+                "repo_root": repo,
+                "checkpoint_path_map": checkpoint_path_map,
+            }
+            if checkpoint_path_map
+            else {}
+        )
+        checkpoint_check = _checkpoint_check(
+            cfg,
+            manifest,
+            checkpoint_receipt,
+            **checkpoint_kwargs,
+        )
     checks = [
         _git_check(repo, expected_release_sha),
         _ci_check(repo, expected_release_sha),
         _tag_check(repo, tag),
         manifest_check,
         _release_identity_check(manifest, expected_base_sha, tag),
-        _checkpoint_check(cfg, manifest, checkpoint_receipt, **checkpoint_kwargs),
+        checkpoint_check,
         cluster_check,
         _disk_check(repo, minimum_free_gib),
         *_zenodo_check(

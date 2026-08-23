@@ -77,7 +77,9 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
     The traversal is deliberately key-aware: descriptive strings such as an
     implementation-mode label are not failures by substring.  Only canonical
     status fields (including the predictive-foresight fallback prefix), explicit
-    boolean markers, and positive fallback counters fail closed.
+    boolean markers, and positive fallback counters fail closed.  An empty
+    ``fallback_reason`` is tolerated only beside an explicit false
+    ``fallback_used`` or ``fallback_triggered`` flag.
 
     Returns:
         ``(path, normalized_value)`` for the first forbidden marker, otherwise ``None``.
@@ -99,6 +101,17 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
                     return item_path, "true"
                 if key in _RUNTIME_BOOLEAN_MARKERS:
                     if not isinstance(item, bool):
+                        return item_path, "invalid"
+                elif key == "fallback_reason":
+                    if item is None or item == "":
+                        if (
+                            value.get("fallback_used") is False
+                            or value.get("fallback_triggered") is False
+                        ):
+                            pass
+                        else:
+                            return item_path, "invalid"
+                    else:
                         return item_path, "invalid"
                 elif "fallback" in key:
                     if isinstance(item, (int, float)) and not isinstance(item, bool):

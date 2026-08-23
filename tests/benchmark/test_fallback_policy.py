@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from robot_sf.benchmark.fallback_policy import (
     availability_payload,
     benchmark_run_exit_code,
@@ -355,6 +357,63 @@ def test_runtime_fallback_marker_is_key_aware_and_traverses_lists() -> None:
     assert (
         runtime_fallback_or_degraded_marker(
             {"description": "fallback", "planner_runtime": {"status": "ok"}}
+        )
+        is None
+    )
+
+
+def test_runtime_fallback_marker_allows_empty_reason_with_explicit_false_sibling() -> None:
+    """Unused fallback reasons may be empty only beside an explicit false flag."""
+    for reason in (None, ""):
+        assert (
+            runtime_fallback_or_degraded_marker({"fallback_used": False, "fallback_reason": reason})
+            is None
+        )
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ({"fallback_reason": None}, ("fallback_reason", "invalid")),
+        (
+            {"fallback_used": "false", "fallback_reason": None},
+            ("fallback_used", "invalid"),
+        ),
+        ({"fallback_used": True, "fallback_reason": None}, ("fallback_used", "true")),
+        (
+            {"fallback_used": False, "fallback_reason": "unexpected runtime fallback"},
+            ("fallback_reason", "invalid"),
+        ),
+        ({"fallback_used": False, "fallback_reason": " "}, ("fallback_reason", "invalid")),
+        ({"fallback_used": False, "fallback_reason": 0}, ("fallback_reason", "invalid")),
+        (
+            {"fallback_used": False, "fallback_reason": None, "fallback_count": 1},
+            ("fallback_count", "1"),
+        ),
+    ],
+)
+def test_runtime_fallback_marker_rejects_missing_invalid_or_positive_reason_state(
+    payload: dict[str, object], expected: tuple[str, str]
+) -> None:
+    """Empty reasons never mask malformed flags, non-empty reasons, or positive counters."""
+    assert runtime_fallback_or_degraded_marker(payload) == expected
+
+
+@pytest.mark.parametrize("reason", [None, ""])
+def test_runtime_fallback_marker_allows_nested_empty_reason_with_explicit_false_sibling(
+    reason: object,
+) -> None:
+    """The empty-reason exception applies inside canonical runtime containers too."""
+    assert (
+        runtime_fallback_or_degraded_marker(
+            {
+                "planner_runtime": {
+                    "foresight_prediction": {
+                        "fallback_used": False,
+                        "fallback_reason": reason,
+                    }
+                }
+            }
         )
         is None
     )

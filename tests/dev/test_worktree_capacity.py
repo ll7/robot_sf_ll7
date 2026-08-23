@@ -16,6 +16,17 @@ CHECK_CAPACITY = REPO_ROOT / "scripts" / "dev" / "check_worktree_capacity.py"
 CREATE_WORKTREE = REPO_ROOT / "scripts" / "dev" / "create_worktree.sh"
 
 
+def _unique_branch(tmp_path: Path, name: str) -> str:
+    """Return a repository-global branch name unique to this test invocation.
+
+    Concurrent readiness runs or xdist workers each get a distinct process id,
+    and every invocation gets its own ``tmp_path``; combining both yields a
+    collision-free ref that one invocation owns and cleans up (issue #7804).
+    """
+    path_part = tmp_path.name.replace("-", "").replace("_", "")[:10] or "default"
+    return f"test/{name}-{path_part}-{os.getpid()}"
+
+
 def test_capacity_inspects_existing_parent_without_creating_target(tmp_path: Path) -> None:
     target = tmp_path / "new-worktree"
     result = capacity.inspect_capacity(
@@ -192,7 +203,7 @@ def test_create_worktree_dry_run_does_not_invoke_git(tmp_path: Path) -> None:
 
 def test_create_worktree_executes_command_inside_new_worktree(tmp_path: Path) -> None:
     target = tmp_path / "new-worktree"
-    branch = "test/exec-in-worktree"
+    branch = _unique_branch(tmp_path, "exec-in-worktree")
     try:
         result = subprocess.run(
             [
@@ -256,7 +267,7 @@ def test_create_worktree_exec_requires_command(tmp_path: Path) -> None:
             "--path",
             str(target),
             "--branch",
-            "test/exec-missing-command",
+            _unique_branch(tmp_path, "exec-missing-command"),
             "--minimum-free-bytes",
             "0",
             "--exec",
@@ -309,7 +320,7 @@ def test_create_worktree_scripts_are_shell_valid_and_executable() -> None:
 
 def test_create_worktree_recovers_orphan_branch_before_add(tmp_path: Path) -> None:
     """An unregistered branch at the target path is removed before worktree add."""
-    branch = "test/orphan-recover"
+    branch = _unique_branch(tmp_path, "orphan-recover")
     # Create the orphan branch at origin/main (ref exists, no registered worktree);
     # -f keeps the test idempotent across partial runs. Pointing at origin/main
     # guarantees the branch is an ancestor of the default base ref.
@@ -367,7 +378,7 @@ def test_create_worktree_recovers_orphan_branch_before_add(tmp_path: Path) -> No
 
 def test_create_worktree_hints_when_orphan_branch_diverged(tmp_path: Path) -> None:
     """An orphan branch that is not an ancestor of the base gets a recovery hint."""
-    branch = "test/orphan-diverged"
+    branch = _unique_branch(tmp_path, "orphan-diverged")
     # Create a synthetic root commit that cannot be an ancestor of the base ref.
     tree = subprocess.run(
         ["git", "mktree"],
@@ -421,6 +432,48 @@ def test_create_worktree_hints_when_orphan_branch_diverged(tmp_path: Path) -> No
         assert "recover manually with" in result.stderr
         assert "git branch -D" in result.stderr
         assert not target.exists()
+    finally:
+        subprocess.run(
+            ["git", "branch", "-D", branch], cwd=REPO_ROOT, capture_output=True, check=False
+        )
+
+
+def test_unique_branch_names_differ_per_invocation(tmp_path: Path) -> None:
+    """Two independent invocations must never share or delete a branch ref."""
+    first = _unique_branch(tmp_path, "isolation")
+    second_tmp = tmp_path / "another-invocation"
+    second_tmp.mkdir()
+    second = _unique_branch(second_tmp, "isolation")
+
+    assert first != second
+    assert first.startswith("test/isolation-")
+    assert second.startswith("test/isolation-")
+    assert first.endswith(str(os.getpid()))
+    assert second.endswith(str(os.getpid()))
+
+
+def test_unique_branch_names_are_clean_git_refs(tmp_path: Path) -> None:
+    """Per-invocation branch names must be valid, branchable git refs."""
+    branch = _unique_branch(tmp_path, "ref-validity")
+    created = subprocess.run(
+        ["git", "check-ref-format", "--branch", branch],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert created.returncode == 0, branch
+
+    subprocess.run(["git", "branch", branch], cwd=REPO_ROOT, check=True, capture_output=True)
+    try:
+        listed = subprocess.run(
+            ["git", "branch", "--list", branch],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        assert branch in listed
     finally:
         subprocess.run(
             ["git", "branch", "-D", branch], cwd=REPO_ROOT, capture_output=True, check=False

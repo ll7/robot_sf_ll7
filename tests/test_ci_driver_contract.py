@@ -13,6 +13,8 @@ from typing import Any
 import yaml
 from packaging.requirements import Requirement
 
+from scripts.dev import check_ci_needs
+
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
@@ -434,7 +436,9 @@ def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:
     aggregate = workflow["jobs"]["ci"]
     assert "compat-matrix" in aggregate["needs"]
     aggregate_steps = [step.get("run", "") for step in aggregate.get("steps", [])]
-    assert any('needs.compat-matrix.result }}" != "success"' in step for step in aggregate_steps)
+    assert any("check_ci_needs.py" in step for step in aggregate_steps)
+    # The declarative needs checker must keep compat-matrix in its required set.
+    assert "compat-matrix" in check_ci_needs.REQUIRED_JOBS
 
 
 def test_ci_setup_action_supports_core_matrix_dependencies_on_macos() -> None:
@@ -645,9 +649,9 @@ def test_ci_workflow_scenario_validation_is_exact_and_blocking() -> None:
     )
     assert "scenario-validation" in workflow["jobs"]["ci"]["needs"]
     aggregate_steps = [step.get("run", "") for step in workflow["jobs"]["ci"]["steps"]]
-    assert any(
-        'needs.scenario-validation.result }}" != "success"' in step for step in aggregate_steps
-    )
+    assert any("check_ci_needs.py" in step for step in aggregate_steps)
+    # The declarative needs checker must keep scenario-validation in its required set.
+    assert "scenario-validation" in check_ci_needs.REQUIRED_JOBS
 
 
 def test_wheel_install_smoke_uses_dependency_resolution_and_runtime_env_step() -> None:

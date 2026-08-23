@@ -626,6 +626,42 @@ def test_final_cluster_check_rejects_duplicate_release_export(tmp_path: Path, fi
     assert f"private queue {field} is duplicated" in rejected.summary
 
 
+@pytest.mark.parametrize(
+    ("submit_args", "expected_problem"),
+    [
+        ("'", "private queue submit_args quoting is invalid"),
+        ("--sbatch-arg", "private queue --sbatch-arg is missing an option"),
+        ("plain --export", "private queue --export is missing a value"),
+        (
+            "--sbatch-arg=--export=ALL,RELEASE_MISSING",
+            "private queue RELEASE export is missing a value",
+        ),
+        (
+            "--export=ALL,RELEASE_BAD-NAME=value",
+            "private queue RELEASE export key is invalid",
+        ),
+    ],
+)
+def test_release_export_parser_rejects_malformed_arguments(
+    submit_args: str, expected_problem: str
+) -> None:
+    """Malformed Slurm export forms must fail closed without exposing values."""
+    values, problems = release_doctor._parse_release_exports(submit_args)
+
+    assert values == {}
+    assert expected_problem in problems
+
+
+def test_release_export_parser_accepts_separate_export_value() -> None:
+    """The parser supports Slurm's ``--export VALUE`` spelling exactly."""
+    values, problems = release_doctor._parse_release_exports(
+        "ignored --export ALL,RELEASE_CAMPAIGN_ID=campaign-1 --partition=l40s"
+    )
+
+    assert problems == []
+    assert values == {"RELEASE_CAMPAIGN_ID": ["campaign-1"]}
+
+
 def test_final_cluster_check_rejects_queue_qos_drift(tmp_path: Path) -> None:
     """A queue-level QoS, when recorded, must match the packet route."""
     packet, queue = _write_final_packet_fixture(

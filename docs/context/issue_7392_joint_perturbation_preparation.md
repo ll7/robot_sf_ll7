@@ -2,7 +2,7 @@
 
 Issue: <https://github.com/ll7/robot_sf_ll7/issues/7809><br>
 Parent: <https://github.com/ll7/robot_sf_ll7/issues/7392><br>
-Preparation base: `origin/main` / `bc1294a19a837c4d4b9ef9086a2be4ca42dd85f3`
+Preparation base: `origin/main` / `f8ed55074fdf9178cfaa3edcc533986f337e2218`
 
 ## Status and claim boundary
 

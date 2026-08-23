@@ -31,8 +31,9 @@ Freshness check:
 - If stale/failing, prepare the PR body first, then rerun:
 
   ```bash
+  pr_body_file=/absolute/path/to/prepared-pr-body.md
   PR_READY_MODE=final BASE_REF=origin/main \
-    PR_READY_PR_BODY_FILE=<prepared_body.md> scripts/dev/pr_ready_check.sh
+    PR_READY_PR_BODY_FILE="$pr_body_file" scripts/dev/pr_ready_check.sh
   ```
 
   The wrapper records clean committed-HEAD freshness after all gates pass.
@@ -55,8 +56,11 @@ Remote-state check (issue #6916):
   ```
 
   Exit 0 means `ready`; exit 2 means `refresh-required`; exit 3 means `superseded`; exit 4 means
-  the state could not be established. A superseded or blocked result must stop publication.
-- When a remote base or branch tip moved, run the following from a clean worktree:
+  the state could not be established. A superseded or blocked result must stop publication. Only
+  exit 2 authorizes the synchronization path below; do not use it to bypass blocked undeclared or
+  mismatched ancestry.
+- When `check` returns exit 2 for a moved remote base or branch tip, run the following from a clean
+  worktree:
 
   ```bash
   uv run python scripts/dev/check_prepublication_state.py sync \
@@ -64,8 +68,11 @@ Remote-state check (issue #6916):
   ```
 
   It fetches the current refs and uses ordinary Git merge operations without resetting or deleting
-  local state. Resolve any conflict, rerun readiness for the integrated head, and check the
-  refreshed snapshot again.
+  local state. Resolve any conflict, rerun readiness for the integrated head, push that exact head,
+  capture a new baseline, and run the final check again. Do not treat sync's self-comparison receipt
+  as publication proof. If `check` instead reports blocked ancestry, preserve that signal and
+  reconstruct only the intended commits on current `origin/main`; merging main can hide inherited
+  parent commits and is not valid remediation.
 
 ## Workflow
 
@@ -81,12 +88,14 @@ Remote-state check (issue #6916):
      omission is intentional and reviewable.
    - Recent example: PR #2044 promoted compact trace-viewer screenshot evidence and updated the
      context index/catalog so the visual proof survived worktree cleanup.
-5. Capture the remote-state baseline from the clean, committed, synchronized feature head.
-6. Run final readiness with `PR_READY_PR_BODY_FILE=<prepared_body.md>`, then run the remote-state
-   check immediately before publication. If sync integrates drift, rerun readiness for that head.
-7. Classify generated artifacts from `output/` (discard/ignored/cache/durable evidence).
-8. Run the review audit checklist for changed workflow/skill area.
-9. Open a ready PR by default using
+5. Classify generated artifacts from `output/` (discard/ignored/cache/durable evidence).
+6. Run the review audit checklist for the changed workflow/skill area.
+7. Push the clean committed head that will become the PR head.
+8. Capture the remote-state baseline from that synchronized local/remote head.
+9. Run final readiness with `PR_READY_PR_BODY_FILE="$pr_body_file"`, then run the remote-state
+   check immediately before publication. If sync integrates drift, rerun readiness, push the
+   integrated head, recapture the baseline, and check again.
+10. Open a ready PR by default using
    `gh pr create --base main --head <branch> --title "<type>: <summary> (#<n>)" --body-file <prepared_body.md>`.
    Use `--draft` only when the user explicitly requests draft status or when the branch is an
    intentional handoff with incomplete validation, unresolved scope, or another clearly documented
@@ -104,7 +113,7 @@ Remote-state check (issue #6916):
     `uv run python scripts/dev/gh_pr_label_rest.py remove <number> --label <name> --repo ll7/robot_sf_ll7`
     instead of `gh pr edit --add-label` / `gh issue edit --label` which route through the same
     deprecated Projects Classic GraphQL path.
-10. Keep parent issue open unless repository policy indicates closure wording in PR description.
+11. Keep parent issue open unless repository policy indicates closure wording in PR description.
 
 ## Proof and Artifact Rules
 

@@ -631,6 +631,10 @@ def _validate_packet_execution_contract(packet: dict[str, Any]) -> list[str]:
     problems.extend(_validate_packet_resource_contract(contract))
     if contract.get("resources_exact") is not True:
         problems.append("launch packet resources_exact is not true")
+    if not _is_concrete(contract.get("release_label")):
+        problems.append("launch packet release_label is not concrete")
+    if not isinstance(contract.get("force_cpu"), bool):
+        problems.append("launch packet force_cpu is not boolean")
     if contract.get("startup_sentinel_required") is not True:
         problems.append("startup sentinel is not required")
     if "$SLURM_STARTUP_SENTINEL" not in str(contract.get("startup_prefix") or ""):
@@ -1088,10 +1092,12 @@ def _validate_queue_identity_args(
         contract = {}
     expected_identity = {
         "RELEASE_CAMPAIGN_ID": packet.get("campaign_id"),
+        "RELEASE_LABEL": contract.get("release_label"),
         "RELEASE_EXPECTED_CPUS": contract.get("cpus"),
         "RELEASE_EXPECTED_GPUS": contract.get("gpus"),
         "RELEASE_EXPECTED_MEM_GB": contract.get("mem_gb"),
         "RELEASE_EXPECTED_WALLTIME": contract.get("wall_clock"),
+        "RELEASE_FORCE_CPU": "1" if contract.get("force_cpu") is True else "0",
     }
     for field, expected in expected_identity.items():
         if _release_export_value(exports, field, problems) != str(expected):
@@ -1116,6 +1122,12 @@ def _validate_queue_submit_args(
     packet_hash = _release_export_value(exports, "RELEASE_LAUNCH_PACKET_SHA256", problems)
     if packet_hash != expected_packet_hash:
         problems.append("private queue packet hash is not bound")
+    packet_path_export = _release_export_value(exports, "RELEASE_LAUNCH_PACKET_PATH", problems)
+    if (
+        not _is_concrete(packet_path_export)
+        or Path(str(packet_path_export)).name != packet_path.name
+    ):
+        problems.append("private queue packet path is not bound")
     for field in (
         "RELEASE_MANIFEST_SHA256",
         "RELEASE_CONFIG_SHA256",

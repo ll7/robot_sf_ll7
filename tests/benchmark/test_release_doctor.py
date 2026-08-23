@@ -275,6 +275,8 @@ def _write_final_packet_fixture(
         "execution_contract": {
             **resources,
             "resources_exact": True,
+            "release_label": "release-label",
+            "force_cpu": True,
             "release_tag": tag,
             "startup_sentinel_required": True,
             "startup_prefix": 'source "$SLURM_STARTUP_SENTINEL"',
@@ -324,7 +326,10 @@ def _write_final_packet_fixture(
     queue_path = tmp_path / "queue.yaml"
     submit_identity = [
         f"RELEASE_LAUNCH_PACKET_SHA256={packet_hash}",
+        f"RELEASE_LAUNCH_PACKET_PATH={packet_path}",
         f"RELEASE_CAMPAIGN_ID={campaign}",
+        "RELEASE_LABEL=release-label",
+        "RELEASE_FORCE_CPU=1",
         "RELEASE_MANIFEST_PATH=configs/release_manifest",
         "RELEASE_SCENARIO_PATH=configs/scenario_matrix",
         "RELEASE_CHECKPOINT_RECEIPT_PATH=configs/checkpoint_staging_receipt",
@@ -584,6 +589,7 @@ def test_final_cluster_check_rejects_artifact_manifest_hash_drift(tmp_path: Path
     "field",
     [
         "RELEASE_LAUNCH_PACKET_SHA256",
+        "RELEASE_LAUNCH_PACKET_PATH",
         "RELEASE_MANIFEST_SHA256",
         "RELEASE_CONFIG_SHA256",
         "RELEASE_SCENARIO_SHA256",
@@ -595,6 +601,8 @@ def test_final_cluster_check_rejects_artifact_manifest_hash_drift(tmp_path: Path
         "RELEASE_CHECKPOINT_RECEIPT_PATH",
         "RELEASE_RUNTIME_SMOKE_RECEIPT_PATH",
         "RELEASE_CAMPAIGN_ID",
+        "RELEASE_LABEL",
+        "RELEASE_FORCE_CPU",
         "RELEASE_EXPECTED_CPUS",
         "RELEASE_EXPECTED_GPUS",
         "RELEASE_EXPECTED_MEM_GB",
@@ -624,6 +632,79 @@ def test_final_cluster_check_rejects_duplicate_release_export(tmp_path: Path, fi
     )
     assert rejected.status == "fail"
     assert f"private queue {field} is duplicated" in rejected.summary
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["RELEASE_LABEL", "RELEASE_LAUNCH_PACKET_PATH", "RELEASE_FORCE_CPU"],
+)
+def test_final_cluster_check_requires_wrapper_identity_exports(tmp_path: Path, field: str) -> None:
+    """Every identity required by the private wrapper must be present at admission."""
+    packet, queue = _write_final_packet_fixture(
+        tmp_path, resource_profile="imech192", frozen_status=True
+    )
+    queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+    assignments = queue_payload[0]["submit_args"].split(",")
+    queue_payload[0]["submit_args"] = ",".join(
+        assignment for assignment in assignments if not assignment.startswith(f"{field}=")
+    )
+    queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+
+    assert rejected.status == "fail"
+    assert f"private queue {field} is missing" in rejected.summary
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement", "expected_problem"),
+    [
+        ("RELEASE_LABEL=release-label", "RELEASE_LABEL=other", "RELEASE_LABEL is not bound"),
+        ("RELEASE_FORCE_CPU=1", "RELEASE_FORCE_CPU=0", "RELEASE_FORCE_CPU is not bound"),
+        (
+            "RELEASE_LAUNCH_PACKET_PATH=",
+            "RELEASE_LAUNCH_PACKET_PATH=/wrong/other-packet.yaml",
+            "packet path is not bound",
+        ),
+    ],
+)
+def test_final_cluster_check_rejects_wrapper_identity_drift(
+    tmp_path: Path, original: str, replacement: str, expected_problem: str
+) -> None:
+    """Wrapper-required exports must remain bound to the frozen packet."""
+    packet, queue = _write_final_packet_fixture(
+        tmp_path, resource_profile="imech192", frozen_status=True
+    )
+    queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+    submit_args = queue_payload[0]["submit_args"]
+    if original.endswith("="):
+        matching = next(item for item in submit_args.split(",") if item.startswith(original))
+        submit_args = submit_args.replace(matching, replacement, 1)
+    else:
+        submit_args = submit_args.replace(original, replacement, 1)
+    queue_payload[0]["submit_args"] = submit_args
+    queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+
+    assert rejected.status == "fail"
+    assert expected_problem in rejected.summary
 
 
 @pytest.mark.parametrize(

@@ -58,6 +58,36 @@ dimension is unsatisfied or unverifiable. It performs no ruleset, branch,
 queue, PR, issue, or workflow mutation, and it cannot claim that a real
 `merge_group` run exists unless GitHub provides that evidence.
 
+## CI inline-logic helpers
+
+The CI aggregate workflow extracts its reusable executable logic into tested
+helpers (issue #7666):
+
+- [`model_cache_key.py`](model_cache_key.py) derives the exact-repeat model-cache
+  key from registry-pinned digests:
+
+  ```bash
+  uv run python scripts/dev/model_cache_key.py --config <ppo-config.yaml> --machine
+  ```
+
+- [`merge_test_durations.py`](merge_test_durations.py) validates and merges the four
+  pytest-split duration shard stores:
+
+  ```bash
+  uv run python scripts/dev/merge_test_durations.py \
+    --artifact-dir .duration-artifacts --output .test_durations
+  ```
+
+- [`check_ci_needs.py`](check_ci_needs.py) evaluates the aggregate job's required
+  needs results with event-specific coverage rules:
+
+  ```bash
+  uv run python scripts/dev/check_ci_needs.py --event-name pull_request --results '{"fast-feedback": "success"}'
+  ```
+
+Focused tests live in `tests/dev/test_ci_helpers.py`; the workflow-contract parity
+checks live in `tests/test_ci_script_contract.py`.
+
 ## Classification rule
 
 - Required automatic enforcement belongs in an explicit workflow or readiness

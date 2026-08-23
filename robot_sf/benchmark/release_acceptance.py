@@ -17,10 +17,18 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
-from robot_sf.benchmark.camera_ready._preflight import _resolved_seed_inventory
-from robot_sf.benchmark.camera_ready._run_state import _resolve_integrity_artifact_path
+from robot_sf.benchmark.camera_ready._preflight import (
+    _config_hash_payload,
+    _resolved_seed_inventory,
+    _scenario_matrix_hash,
+)
+from robot_sf.benchmark.camera_ready._run_state import (
+    _resolve_integrity_artifact_path,
+    validate_campaign_integrity,
+)
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
+from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.release_protocol import (
     STRESS_SMOKE_EXPECTED_DT,
     STRESS_SMOKE_EXPECTED_EPISODE_CELLS,
@@ -30,6 +38,9 @@ from robot_sf.benchmark.release_protocol import (
     STRESS_SMOKE_EXPECTED_SCENARIO_IDS,
     STRESS_SMOKE_EXPECTED_SEED,
 )
+from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
+from robot_sf.benchmark.utils import _config_hash
+from robot_sf.common.artifact_paths import get_repository_root
 
 FULL_RELEASE_SCHEMA_VERSION = "benchmark-release-manifest.v0.2"
 FULL_RELEASE_EXPECTED_PLANNER_ARMS = 14
@@ -292,6 +303,463 @@ def _read_episode_rows(path: Path) -> tuple[list[dict[str, Any]], str | None]:
     return rows, None
 
 
+def _read_campaign_object(
+    campaign_root: Path, filename: str
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Read one fixed campaign metadata object without following symlink escapes.
+
+    Returns:
+        Parsed object and an optional shaped error.
+    """
+    path = campaign_root / filename
+    if _path_has_symlink_component(path):
+        return None, f"{filename} contains a symlink component"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, f"{filename} cannot be read: {exc}"
+    if not isinstance(payload, dict):
+        return None, f"{filename} must contain a JSON object"
+    return payload, None
+
+
+def _declared_path_matches(raw_path: Any, *, expected_path: Path, campaign_root: Path) -> bool:
+    """Match a producer path against a trusted repository asset.
+
+    Returns:
+        Whether the path resolves exactly to the expected asset.
+    """
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        return False
+    candidate = Path(raw_path.strip())
+    expected = expected_path.resolve()
+    candidates = (
+        (candidate.resolve(),)
+        if candidate.is_absolute()
+        else (
+            (get_repository_root() / candidate).resolve(),
+            (campaign_root / candidate).resolve(),
+        )
+    )
+    return any(item == expected for item in candidates)
+
+
+def _stress_seed_policy_payload(
+    campaign_config: Any, resolved_seeds: tuple[int, ...]
+) -> dict[str, Any]:
+    """Return the canonical seed-policy fields emitted by camera-ready runs."""
+    seed_policy = getattr(campaign_config, "seed_policy", None)
+    return {
+        "mode": getattr(seed_policy, "mode", None),
+        "seed_set": getattr(seed_policy, "seed_set", None),
+        "seeds": list(getattr(seed_policy, "seeds", ()) or ()),
+        "resolved_seeds": list(resolved_seeds),
+        "seed_sets_path": getattr(seed_policy, "seed_sets_path", None),
+    }
+
+
+def _stress_metadata_contract_blockers(  # noqa: C901, PLR0912, PLR0915
+    campaign_root: Path,
+    *,
+    manifest: Any,
+    campaign_config: Any,
+    expected_source_commit: str,
+    scenarios: list[dict[str, Any]],
+    resolved_seeds: tuple[int, ...],
+) -> tuple[list[str], dict[str, Any] | None]:
+    """Bind campaign-level metadata to the release manifest and campaign config.
+
+    Returns:
+        Blockers and the parsed campaign manifest payload.
+    """
+    blockers: list[str] = []
+    root = campaign_root.resolve()
+    expected_scenario_path = Path(getattr(manifest, "scenario_matrix_path", "")).resolve()
+    expected_scenario_hash = str(getattr(manifest, "scenario_matrix_sha256", "")).strip().lower()
+    expected_scenario_identity = _scenario_matrix_hash(scenarios)
+    expected_config_identity = _config_hash(_config_hash_payload(campaign_config))
+    expected_config_path = Path(
+        getattr(campaign_config, "source_config_path", None)
+        or getattr(manifest, "canonical_campaign_config_path", "")
+    ).resolve()
+    expected_config_hash = str(getattr(manifest, "campaign_config_sha256", "")).strip().lower()
+    expected_route_path = getattr(campaign_config, "route_clearance_certifications_path", None)
+    expected_weights_path = getattr(campaign_config, "snqi_weights_path", None)
+    expected_baseline_path = getattr(campaign_config, "snqi_baseline_path", None)
+    expected_seed_policy = _stress_seed_policy_payload(campaign_config, resolved_seeds)
+    expected_seed_path = Path(expected_seed_policy["seed_sets_path"]).resolve()
+
+    if expected_scenario_path != Path(campaign_config.scenario_matrix_path).resolve():
+        blockers.append("release manifest and campaign config scenario paths differ")
+    try:
+        observed_config_hash = sha256_file(expected_config_path)
+    except OSError:
+        observed_config_hash = ""
+    if expected_config_hash and observed_config_hash.lower() != expected_config_hash:
+        blockers.append("release manifest campaign config hash does not match the pinned file")
+    if expected_scenario_hash != sha256_file(expected_scenario_path):
+        blockers.append("release manifest scenario matrix hash does not match the pinned file")
+    for label, path, expected_hash in (
+        (
+            "seed-set",
+            expected_seed_path,
+            getattr(manifest, "stress_smoke_seed_sets_sha256", None)
+            or getattr(manifest, "seed_sets_sha256", None),
+        ),
+        (
+            "route-certification",
+            expected_route_path,
+            getattr(manifest, "stress_smoke_route_certification_sha256", None)
+            or getattr(manifest, "route_certification_sha256", None),
+        ),
+        ("SNQI weights", expected_weights_path, getattr(manifest, "snqi_weights_sha256", None)),
+        ("SNQI baseline", expected_baseline_path, getattr(manifest, "snqi_baseline_sha256", None)),
+    ):
+        if path is None or not expected_hash:
+            continue
+        try:
+            observed_hash = sha256_file(Path(path))
+        except OSError:
+            observed_hash = ""
+        if observed_hash.lower() != str(expected_hash).strip().lower():
+            blockers.append(f"release manifest {label} hash does not match the pinned file")
+
+    campaign_manifest, error = _read_campaign_object(root, "campaign_manifest.json")
+    if error or campaign_manifest is None:
+        blockers.append(error or "campaign_manifest.json cannot be read")
+    else:
+        git = campaign_manifest.get("git")
+        git_commit = git.get("commit") if isinstance(git, Mapping) else None
+        if str(git_commit or "").strip().lower() != expected_source_commit:
+            blockers.append("campaign_manifest.git.commit does not match the runtime source commit")
+        if (
+            str(campaign_manifest.get("config_hash", "")).strip().lower()
+            != expected_config_identity
+        ):
+            blockers.append("campaign_manifest.config_hash does not match the campaign config")
+        if not _declared_path_matches(
+            campaign_manifest.get("scenario_matrix"),
+            expected_path=expected_scenario_path,
+            campaign_root=root,
+        ):
+            blockers.append("campaign_manifest.scenario_matrix is not the pinned scenario matrix")
+        if (
+            str(campaign_manifest.get("scenario_matrix_hash", "")).strip()
+            != expected_scenario_identity
+        ):
+            blockers.append(
+                "campaign_manifest.scenario_matrix_hash does not match resolved scenarios"
+            )
+
+        seed_block = campaign_manifest.get("seed_policy")
+        if not isinstance(seed_block, Mapping):
+            blockers.append("campaign_manifest.seed_policy is missing")
+        else:
+            for field in ("mode", "seed_set", "seeds", "resolved_seeds"):
+                if seed_block.get(field) != expected_seed_policy[field]:
+                    blockers.append(f"campaign_manifest.seed_policy.{field} does not match config")
+            if not _declared_path_matches(
+                seed_block.get("seed_sets_path"),
+                expected_path=expected_seed_path,
+                campaign_root=root,
+            ):
+                blockers.append("campaign_manifest.seed_policy.seed_sets_path is not pinned")
+
+        if expected_route_path is not None and not _declared_path_matches(
+            campaign_manifest.get("route_clearance_certifications_path"),
+            expected_path=Path(expected_route_path),
+            campaign_root=root,
+        ):
+            blockers.append("campaign_manifest route certification path is not pinned")
+        for field, expected_path in (
+            ("snqi_weights_path", expected_weights_path),
+            ("snqi_baseline_path", expected_baseline_path),
+        ):
+            if expected_path is not None and not _declared_path_matches(
+                campaign_manifest.get(field),
+                expected_path=Path(expected_path),
+                campaign_root=root,
+            ):
+                blockers.append(f"campaign_manifest.{field} is not pinned")
+
+    run_meta, error = _read_campaign_object(root, "run_meta.json")
+    if error or run_meta is None:
+        blockers.append(error or "run_meta.json cannot be read")
+    else:
+        repo = run_meta.get("repo")
+        repo_commit = repo.get("commit") if isinstance(repo, Mapping) else None
+        if str(repo_commit or "").strip().lower() != expected_source_commit:
+            blockers.append("run_meta.repo.commit does not match the runtime source commit")
+        if not _declared_path_matches(
+            run_meta.get("matrix_path"), expected_path=expected_scenario_path, campaign_root=root
+        ):
+            blockers.append("run_meta.matrix_path is not the pinned scenario matrix")
+        if str(run_meta.get("scenario_matrix_hash", "")).strip() != expected_scenario_identity:
+            blockers.append("run_meta.scenario_matrix_hash does not match resolved scenarios")
+        seed_block = run_meta.get("seed_policy")
+        if not isinstance(seed_block, Mapping):
+            blockers.append("run_meta.seed_policy is missing")
+        else:
+            for field in ("mode", "seed_set", "seeds", "resolved_seeds"):
+                if seed_block.get(field) != expected_seed_policy[field]:
+                    blockers.append(f"run_meta.seed_policy.{field} does not match config")
+            if not _declared_path_matches(
+                seed_block.get("seed_sets_path"),
+                expected_path=expected_seed_path,
+                campaign_root=root,
+            ):
+                blockers.append("run_meta.seed_policy.seed_sets_path is not pinned")
+
+    run_manifest, error = _read_campaign_object(root, "manifest.json")
+    if error or run_manifest is None:
+        blockers.append(error or "manifest.json cannot be read")
+    else:
+        if str(run_manifest.get("git_hash", "")).strip().lower() != expected_source_commit:
+            blockers.append("manifest.git_hash does not match the runtime source commit")
+        if str(run_manifest.get("scenario_matrix_hash", "")).strip() != expected_scenario_identity:
+            blockers.append("manifest.scenario_matrix_hash does not match resolved scenarios")
+
+    summary, error = _read_campaign_summary(root)
+    if error or summary is None:
+        blockers.append(error or "campaign summary cannot be read")
+    else:
+        campaign = summary.get("campaign")
+        if not isinstance(campaign, Mapping):
+            blockers.append("campaign summary campaign block is missing")
+        else:
+            if str(campaign.get("git_hash", "")).strip().lower() != expected_source_commit:
+                blockers.append("campaign.git_hash does not match the runtime source commit")
+            if not _declared_path_matches(
+                campaign.get("scenario_matrix"),
+                expected_path=expected_scenario_path,
+                campaign_root=root,
+            ):
+                blockers.append("campaign.scenario_matrix is not the pinned scenario matrix")
+            if str(campaign.get("scenario_matrix_hash", "")).strip() != expected_scenario_identity:
+                blockers.append("campaign.scenario_matrix_hash does not match resolved scenarios")
+            if tuple(campaign.get("kinematics_matrix", ())) != (STRESS_SMOKE_EXPECTED_KINEMATICS,):
+                blockers.append("campaign.kinematics_matrix is not differential_drive-only")
+            for field, expected_path, expected_hash in (
+                (
+                    "snqi_weights_sha256",
+                    expected_weights_path,
+                    getattr(manifest, "snqi_weights_sha256", None),
+                ),
+                (
+                    "snqi_baseline_sha256",
+                    expected_baseline_path,
+                    getattr(manifest, "snqi_baseline_sha256", None),
+                ),
+            ):
+                if (
+                    expected_path is not None
+                    and str(campaign.get(field, "")).strip().lower()
+                    != str(expected_hash or "").strip().lower()
+                ):
+                    blockers.append(f"campaign.{field} does not match the release manifest")
+
+    return blockers, campaign_manifest
+
+
+def _stress_episode_provenance_blockers(  # noqa: C901, PLR0912, PLR0913, PLR0915
+    episodes_path: Path,
+    *,
+    campaign_root: Path,
+    planner_key: str,
+    expected_algo: str,
+    expected_source_commit: str,
+    expected_scenario_path: Path,
+    expected_scenario_hash: str,
+    expected_scenario_identity: str,
+    expected_algo_config_path: Path | None,
+    expected_rows: list[dict[str, Any]],
+) -> list[str]:
+    """Require one complete, input-bound result-provenance sidecar per stress arm.
+
+    Returns:
+        Blockers for missing, stale, or mismatched sidecar bindings.
+    """
+    blockers: list[str] = []
+    sidecar_path = episodes_path.with_name(f"{episodes_path.name}.provenance.json")
+    if _path_has_symlink_component(sidecar_path) or not sidecar_path.is_file():
+        return [f"planner {planner_key} episode provenance sidecar is missing"]
+    try:
+        payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"planner {planner_key} episode provenance sidecar cannot be read: {exc}"]
+    if not isinstance(payload, Mapping):
+        return [f"planner {planner_key} episode provenance sidecar must be an object"]
+    try:
+        validate_result_provenance_manifest(payload)
+    except (TypeError, ValueError) as exc:
+        blockers.append(f"planner {planner_key} episode provenance schema rejected: {exc}")
+
+    run = payload.get("run")
+    run = run if isinstance(run, Mapping) else {}
+    if str(run.get("repo_commit", "")).strip().lower() != expected_source_commit:
+        blockers.append(f"planner {planner_key} sidecar source commit is not the runtime commit")
+    if run.get("runner") != "map_runner.run_map_batch":
+        blockers.append(f"planner {planner_key} sidecar runner is not map_runner.run_map_batch")
+    completeness = payload.get("completeness")
+    completeness = completeness if isinstance(completeness, Mapping) else {}
+    if completeness.get("status") != "complete":
+        blockers.append(f"planner {planner_key} sidecar completeness is not complete")
+
+    identity = payload.get("campaign_identity")
+    identity = identity if isinstance(identity, Mapping) else {}
+    if str(identity.get("algorithm", "")).strip().lower() != expected_algo.lower():
+        blockers.append(f"planner {planner_key} sidecar algorithm is not bound to its arm")
+    if identity.get("suite_key") != "default":
+        blockers.append(f"planner {planner_key} sidecar suite key must be default")
+    if identity.get("scenario_matrix_hash") != expected_scenario_identity:
+        blockers.append(f"planner {planner_key} sidecar scenario identity hash is not bound")
+    expected_identity_config = _config_hash(
+        {
+            "schema_path": str(
+                get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+            ),
+            "algo": expected_algo,
+            "algo_config_path": str(expected_algo_config_path)
+            if expected_algo_config_path is not None
+            else None,
+        }
+    )
+    if identity.get("config_hash") != expected_identity_config:
+        blockers.append(f"planner {planner_key} sidecar config identity is not bound")
+    expected_count = len(expected_rows)
+    for field in ("total_jobs", "written"):
+        if _strict_int(identity.get(field)) != expected_count:
+            blockers.append(f"planner {planner_key} sidecar {field} must be {expected_count}")
+
+    inputs = payload.get("inputs")
+    inputs = inputs if isinstance(inputs, Mapping) else {}
+    schema_path = get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+    schema_input = inputs.get("schema_path")
+    schema_input = schema_input if isinstance(schema_input, Mapping) else {}
+    if not _declared_path_matches(
+        schema_input.get("path"), expected_path=schema_path, campaign_root=campaign_root
+    ):
+        blockers.append(f"planner {planner_key} sidecar schema path is not repository-pinned")
+    try:
+        schema_hash = sha256_file(schema_path)
+    except OSError:
+        schema_hash = ""
+    if str(schema_input.get("sha256", "")).strip().lower() != schema_hash:
+        blockers.append(f"planner {planner_key} sidecar schema hash is not repository-pinned")
+
+    scenario_input = inputs.get("scenario_matrix")
+    scenario_input = scenario_input if isinstance(scenario_input, Mapping) else {}
+    if not _declared_path_matches(
+        scenario_input.get("path"),
+        expected_path=expected_scenario_path,
+        campaign_root=campaign_root,
+    ):
+        blockers.append(f"planner {planner_key} sidecar scenario path is not release-pinned")
+    if str(scenario_input.get("sha256", "")).strip().lower() != expected_scenario_hash:
+        blockers.append(f"planner {planner_key} sidecar scenario hash is not release-pinned")
+
+    config_input = inputs.get("algo_config")
+    config_input = config_input if isinstance(config_input, Mapping) else {}
+    if expected_algo_config_path is None:
+        if (
+            config_input.get("artifact_status") != "not_provided"
+            or config_input.get("path") is not None
+            or config_input.get("sha256") is not None
+        ):
+            blockers.append(
+                f"planner {planner_key} sidecar unexpectedly declares an algorithm config"
+            )
+    else:
+        if not _declared_path_matches(
+            config_input.get("path"),
+            expected_path=expected_algo_config_path,
+            campaign_root=campaign_root,
+        ):
+            blockers.append(f"planner {planner_key} sidecar algorithm config path is not pinned")
+        try:
+            config_hash = sha256_file(expected_algo_config_path)
+        except OSError:
+            config_hash = ""
+        if str(config_input.get("sha256", "")).strip().lower() != config_hash:
+            blockers.append(f"planner {planner_key} sidecar algorithm config hash is not pinned")
+
+    raw_artifacts = payload.get("raw_artifacts")
+    raw_artifacts = raw_artifacts if isinstance(raw_artifacts, list) else []
+    episode_artifacts = [
+        item
+        for item in raw_artifacts
+        if isinstance(item, Mapping) and item.get("kind") == "episodes_jsonl"
+    ]
+    if len(episode_artifacts) != 1:
+        blockers.append(f"planner {planner_key} sidecar must contain one episodes_jsonl artifact")
+    else:
+        artifact = episode_artifacts[0]
+        if not _declared_path_matches(
+            artifact.get("path"), expected_path=episodes_path, campaign_root=campaign_root
+        ):
+            blockers.append(f"planner {planner_key} sidecar raw artifact is not the run artifact")
+        try:
+            artifact_hash = sha256_file(episodes_path)
+        except OSError:
+            artifact_hash = ""
+        if str(artifact.get("sha256", "")).strip().lower() != artifact_hash:
+            blockers.append(f"planner {planner_key} sidecar raw artifact hash is stale")
+
+    sidecar_rows = payload.get("rows")
+    if not isinstance(sidecar_rows, list) or len(sidecar_rows) != expected_count:
+        blockers.append(f"planner {planner_key} sidecar must bind every episode row")
+        sidecar_rows = []
+    for row_index, (row, sidecar_row) in enumerate(zip(expected_rows, sidecar_rows, strict=False)):
+        if not isinstance(sidecar_row, Mapping):
+            blockers.append(f"planner {planner_key} sidecar row {row_index} is not an object")
+            continue
+        row_provenance = row.get("result_provenance")
+        row_provenance = row_provenance if isinstance(row_provenance, Mapping) else {}
+        row_config = str(row_provenance.get("config_hash") or row.get("config_hash") or "").strip()
+        row_commit = _source_commit(row)
+        for field, expected in (
+            ("episode_id", row.get("episode_id")),
+            ("scenario_id", row.get("scenario_id")),
+            ("seed", _strict_int(row.get("seed"))),
+            ("config_hash", row_config),
+            ("repo_commit", expected_source_commit),
+            ("jsonl_line", row_index),
+        ):
+            observed = sidecar_row.get(field)
+            if field in {"seed", "jsonl_line"}:
+                observed = _strict_int(observed)
+            elif field in {"config_hash", "repo_commit", "episode_id", "scenario_id"}:
+                observed = str(observed or "").strip().lower()
+                expected = str(expected or "").strip().lower()
+            if observed != expected:
+                blockers.append(
+                    f"planner {planner_key} sidecar row {row_index} {field} is not bound"
+                )
+        if not row.get("episode_id"):
+            blockers.append(f"planner {planner_key} episode row {row_index} has no episode_id")
+        if row_commit != expected_source_commit:
+            blockers.append(f"planner {planner_key} episode row {row_index} source is not bound")
+        sidecar_settings = sidecar_row.get("simulator_settings")
+        sidecar_settings = sidecar_settings if isinstance(sidecar_settings, Mapping) else {}
+        if _strict_int(sidecar_settings.get("horizon")) != STRESS_SMOKE_EXPECTED_HORIZON_STEPS:
+            blockers.append(f"planner {planner_key} sidecar row {row_index} horizon is not 600")
+        try:
+            sidecar_dt = float(sidecar_settings.get("dt"))
+        except (TypeError, ValueError):
+            sidecar_dt = float("nan")
+        if sidecar_dt != STRESS_SMOKE_EXPECTED_DT:
+            blockers.append(f"planner {planner_key} sidecar row {row_index} dt is not 0.1")
+        if not _declared_path_matches(
+            sidecar_row.get("raw_artifact"),
+            expected_path=episodes_path,
+            campaign_root=campaign_root,
+        ):
+            blockers.append(
+                f"planner {planner_key} sidecar row {row_index} raw artifact is not bound"
+            )
+    return blockers
+
+
 def _path_has_symlink_component(path: Path) -> bool:
     """Return whether a lexical path component is a symlink."""
     lexical = Path(path.absolute())
@@ -454,6 +922,9 @@ def _source_commit(row: Mapping[str, Any]) -> str:
     provenance = row.get("result_provenance")
     if isinstance(provenance, Mapping) and provenance.get("repo_commit"):
         return str(provenance["repo_commit"]).strip().lower()
+    event_ledger = row.get("event_ledger")
+    if isinstance(event_ledger, Mapping) and event_ledger.get("software_commit"):
+        return str(event_ledger["software_commit"]).strip().lower()
     return str(row.get("git_hash", "")).strip().lower()
 
 
@@ -568,9 +1039,15 @@ def validate_diagnostic_stress_smoke_source_provenance(  # noqa: C901, PLR0912, 
                             "result_provenance.repo_commit",
                             _nested_value(row, "result_provenance", "repo_commit"),
                         ),
+                        (
+                            "event_ledger.software_commit",
+                            _nested_value(row, "event_ledger", "software_commit"),
+                        ),
                     ),
                 )
                 row_label = f"runs[{run_index}].rows[{row_index}].source_commit"
+                if _nested_value(row, "event_ledger", "software_commit") is _MISSING:
+                    blockers.append(f"{row_label} event_ledger.software_commit is missing")
                 blockers.extend(_alias_blockers(aliases, label=row_label, expected=expected))
                 if aliases:
                     _record(row_label, aliases[0][1])
@@ -628,7 +1105,7 @@ def _episode_dt(row: Mapping[str, Any]) -> tuple[float | None, bool]:
     return None, False
 
 
-def _stress_row_contract_blockers(  # noqa: C901, PLR0912
+def _stress_row_contract_blockers(  # noqa: C901, PLR0912, PLR0915
     row: Mapping[str, Any],
     *,
     prefix: str,
@@ -662,8 +1139,14 @@ def _stress_row_contract_blockers(  # noqa: C901, PLR0912
                 "result_provenance.repo_commit",
                 _nested_value(row, "result_provenance", "repo_commit"),
             ),
+            (
+                "event_ledger.software_commit",
+                _nested_value(row, "event_ledger", "software_commit"),
+            ),
         ),
     )
+    if _nested_value(row, "event_ledger", "software_commit") is _MISSING:
+        blockers.append(f"{prefix}: event_ledger.software_commit is missing")
     blockers.extend(
         f"{prefix}: {blocker}"
         for blocker in _alias_blockers(
@@ -836,6 +1319,25 @@ def _stress_row_contract_blockers(  # noqa: C901, PLR0912
                 blockers.append(f"{prefix}: row dt must be 0.1")
         except (TypeError, ValueError):
             blockers.append(f"{prefix}: row dt is malformed")
+
+    scenario_params = row.get("scenario_params")
+    scenario_params = scenario_params if isinstance(scenario_params, Mapping) else {}
+    robot_config = scenario_params.get("robot_config")
+    robot_config = robot_config if isinstance(robot_config, Mapping) else {}
+    robot_type = robot_config.get("type", _MISSING)
+    if robot_type is _MISSING or not str(robot_type).strip():
+        blockers.append(f"{prefix}: scenario_params.robot_config.type is missing")
+    elif str(robot_type).strip().lower() != expected_kinematics.lower():
+        blockers.append(
+            f"{prefix}: scenario_params.robot_config.type must be {expected_kinematics!r}"
+        )
+    run_dt = scenario_params.get("run_dt", _MISSING)
+    try:
+        parsed_run_dt = float(run_dt) if run_dt is not _MISSING else None
+    except (TypeError, ValueError):
+        parsed_run_dt = None
+    if parsed_run_dt is None or parsed_run_dt != STRESS_SMOKE_EXPECTED_DT:
+        blockers.append(f"{prefix}: scenario_params.run_dt must be 0.1")
     return blockers
 
 
@@ -940,6 +1442,12 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
 
     scenario_ids, seeds, axis_blockers = _resolve_expected_matrix_axes(manifest, campaign_config)
     blockers.extend(axis_blockers)
+    resolved_scenarios: list[dict[str, Any]] = []
+    if campaign_config is not None:
+        try:
+            resolved_scenarios = _load_campaign_scenarios(campaign_config)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            _append_blocker(blockers, f"resolved campaign matrix cannot be loaded: {exc}")
     planner_keys = tuple(str(key).strip() for key in getattr(manifest, "planner_keys", ()))
     kinematics = tuple(
         str(value).strip() for value in getattr(manifest, "expected_kinematics_matrix", ())
@@ -979,6 +1487,27 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
         str(value).strip().lower() for value in getattr(campaign_config, "kinematics_matrix", ())
     ) != (STRESS_SMOKE_EXPECTED_KINEMATICS,):
         _append_blocker(blockers, "campaign config kinematics must be differential_drive only")
+
+    if campaign_config is None:
+        metadata_blockers, campaign_manifest_payload = (
+            ["campaign config is unavailable for metadata binding"],
+            None,
+        )
+    else:
+        metadata_blockers, campaign_manifest_payload = _stress_metadata_contract_blockers(
+            campaign_root,
+            manifest=manifest,
+            campaign_config=campaign_config,
+            expected_source_commit=str(expected_source_commit).strip().lower(),
+            scenarios=resolved_scenarios,
+            resolved_seeds=seeds,
+        )
+    for blocker in metadata_blockers:
+        _append_blocker(blockers, f"campaign metadata: {blocker}")
+    # Campaign metadata uses the camera-ready 12-character structural hash;
+    # result-provenance sidecars use the 16-character config hash over the
+    # resolved scenario payload.  Keep these identities distinct.
+    expected_scenario_identity = _config_hash(resolved_scenarios)
 
     for marker_path, marker in _status_markers(summary, "campaign_summary"):
         _append_blocker(blockers, f"forbidden {marker_path}={marker}")
@@ -1114,6 +1643,26 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
         if error:
             _append_blocker(blockers, error)
             continue
+        algorithm_config_path = getattr(planner_spec, "algo_config_path", None)
+        blockers.extend(
+            f"{blocker}"
+            for blocker in _stress_episode_provenance_blockers(
+                episodes_path,
+                campaign_root=campaign_root,
+                planner_key=arm[0],
+                expected_algo=expected_algo,
+                expected_source_commit=str(expected_source_commit).strip().lower(),
+                expected_scenario_path=Path(manifest.scenario_matrix_path),
+                expected_scenario_hash=str(getattr(manifest, "scenario_matrix_sha256", ""))
+                .strip()
+                .lower(),
+                expected_scenario_identity=expected_scenario_identity,
+                expected_algo_config_path=(
+                    Path(algorithm_config_path) if algorithm_config_path is not None else None
+                ),
+                expected_rows=rows,
+            )
+        )
         observed_rows += len(rows)
         if len(rows) != expected_per_arm:
             _append_blocker(
@@ -1209,6 +1758,42 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
     if source_report["status"] != "valid":
         for blocker in source_report["blockers"]:
             _append_blocker(blockers, f"source provenance: {blocker}")
+
+    persisted_integrity = summary.get("campaign_integrity")
+    if not isinstance(persisted_integrity, Mapping):
+        _append_blocker(blockers, "campaign_integrity block is missing")
+    elif persisted_integrity.get("status") != "valid":
+        _append_blocker(blockers, "campaign_integrity.status must be valid")
+    if campaign_manifest_payload is not None and resolved_scenarios:
+        try:
+            integrity_entries = [
+                entry
+                for entry in runs
+                if isinstance(entry, Mapping) and entry.get("status") == "ok"
+            ]
+            recomputed_integrity = validate_campaign_integrity(
+                integrity_entries,
+                scenarios=resolved_scenarios,
+                resolved_seeds=seeds,
+                campaign_root=campaign_root.resolve(),
+                campaign_manifest=campaign_manifest_payload,
+            )
+        except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            _append_blocker(blockers, f"campaign integrity recomputation failed: {exc}")
+        else:
+            if recomputed_integrity.get("status") != "valid":
+                _append_blocker(blockers, "recomputed campaign integrity is not valid")
+            if isinstance(persisted_integrity, Mapping):
+                for field in (
+                    "expected_identity_count",
+                    "checked_arm_count",
+                    "blockers",
+                ):
+                    if persisted_integrity.get(field) != recomputed_integrity.get(field):
+                        _append_blocker(
+                            blockers,
+                            f"persisted campaign_integrity.{field} does not match recomputation",
+                        )
 
     status = "valid" if not blockers else "invalid"
     return {

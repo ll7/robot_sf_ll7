@@ -197,6 +197,24 @@ def test_release_validation_rejects_stress_asset_hash_drift(
     )
 
 
+def test_stress_asset_resolver_rejects_symlink_escape(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Scenario/hybrid pins cannot escape the checkout through a symlink."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "asset.yaml").write_text("payload: outside\n", encoding="utf-8")
+    (repo / "escape").symlink_to(outside, target_is_directory=True)
+    monkeypatch.setattr(release_protocol, "get_repository_root", lambda: repo)
+
+    with pytest.raises(ValueError, match="must not contain symlink components"):
+        release_protocol._resolve_stress_contract_file(
+            repo / "manifest.yaml", "escape/asset.yaml", "scenario source"
+        )
+
+
 @pytest.mark.parametrize("status_field", ("status", "readiness_status", "availability_status"))
 @pytest.mark.parametrize("status", FORBIDDEN_STATUSES)
 def test_forbidden_row_statuses_are_never_admitted(status_field: str, status: str) -> None:

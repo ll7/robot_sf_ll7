@@ -383,6 +383,22 @@ if [[ "$pr_ready_final" == "1" ]]; then
   followup_args+=(--require-body)
 fi
 uv run python "$SCRIPT_DIR/check_pr_followups.py" "${followup_args[@]}"
+# Issue #7812: final local readiness must apply the same evidence-tree hygiene
+# contract as the hosted pr-contract-check workflow so marker-less new evidence
+# files cannot pass pre-push proof and fail the hosted gate after push.
+if [[ "$pr_ready_final" == "1" ]]; then
+  changed_files_list="$(mktemp "${TMPDIR:-/tmp}/pr-ready-changed-files.XXXXXX")"
+  printf '%s\n' "${changed_files[@]}" > "$changed_files_list"
+  contract_args=(--changed-files-file "$changed_files_list" --base-ref "$BASE_REF")
+  if [[ -n "$PR_READY_PR_BODY_FILE" ]]; then
+    contract_args+=(--pr-body-file "$PR_READY_PR_BODY_FILE")
+  fi
+  if [[ -n "${PR_READY_PR_TITLE:-}" ]]; then
+    contract_args+=(--pr-title "$PR_READY_PR_TITLE")
+  fi
+  uv run python "$SCRIPT_DIR/../ci/pr_contract_check.py" "${contract_args[@]}"
+  rm -f "$changed_files_list"
+fi
 perf_args=(--base-ref "$BASE_REF")
 if [[ "$pr_ready_final" == "1" ]]; then
   perf_args+=(--require-body)

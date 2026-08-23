@@ -474,6 +474,7 @@ def _normalize_issue(raw: Mapping[str, Any]) -> dict[str, Any]:
         "title": str(raw.get("title") or ""),
         "body": str(raw.get("body") or ""),
         "state": str(raw.get("state") or "").lower(),
+        "updated_at": str(raw.get("updated_at") or ""),
         "url": url,
         "author": author,
         "labels": _label_names(raw.get("labels")),
@@ -1884,18 +1885,27 @@ def build_audit_plan(
         issue_labels = _label_names(issue.get("labels"))
         decision_sources = _decision_source_rows(issue)
         documented_options = _documented_options(issue)
+        expected_issue = {
+            "state": str(issue.get("state") or "").lower(),
+            "updated_at": str(issue.get("updated_at") or ""),
+        }
+        issue_mutations = [
+            {**mutation, "expected_issue": expected_issue.copy()}
+            for mutation in classified.mutations
+        ]
         row = {
             "number": int(issue.get("number", 0)),
             "title": str(issue.get("title") or ""),
             "url": str(issue.get("url") or ""),
             "state": str(issue.get("state") or "").lower(),
+            "updated_at": str(issue.get("updated_at") or ""),
             "labels": issue_labels,
             "decision_sources": decision_sources,
             "documented_options": documented_options,
             **classified.to_dict(),
+            "mutations": issue_mutations,
         }
         classifications.append(row)
-        issue_mutations = list(classified.mutations)
         mutations.extend(issue_mutations)
         if classified.blocked_label_decision != "not-applicable":
             blocked_label_report.append(
@@ -2024,6 +2034,99 @@ def _is_absent_label_delete(result: subprocess.CompletedProcess[str]) -> bool:
     )
 
 
+def _mutation_issue_preconditions(
+    mutations: Sequence[object],
+) -> tuple[dict[int, dict[str, str]], list[dict[str, Any]]]:
+    """Validate mutation shape and one state/version snapshot per issue batch."""
+    preconditions: dict[int, dict[str, str]] = {}
+    errors: list[dict[str, Any]] = []
+    for index, mutation in enumerate(mutations):
+        if not isinstance(mutation, Mapping):
+            errors.append({"index": index, "error": "mutation is not an object"})
+            continue
+        raw_issue = mutation.get("issue")
+        if isinstance(raw_issue, bool) or not isinstance(raw_issue, int):
+            errors.append(
+                {
+                    "index": index,
+                    "error": "mutation issue must be an exact positive integer",
+                }
+            )
+            continue
+        number = raw_issue
+        if number <= 0:
+            errors.append({"index": index, "issue": number, "error": "issue must be positive"})
+            continue
+        operation = str(mutation.get("operation") or "")
+        value = mutation.get("value")
+        if operation not in {"add_label", "remove_label", "close_issue"}:
+            errors.append(
+                {
+                    "index": index,
+                    "issue": number,
+                    "operation": operation,
+                    "error": f"unsupported mutation: {operation}",
+                }
+            )
+            continue
+        if operation in {"add_label", "remove_label"} and not (isinstance(value, str) and value):
+            errors.append(
+                {
+                    "index": index,
+                    "issue": number,
+                    "operation": operation,
+                    "error": f"{operation} requires a non-empty string value",
+                }
+            )
+            continue
+        if operation == "close_issue" and value is not None:
+            errors.append(
+                {
+                    "index": index,
+                    "issue": number,
+                    "operation": operation,
+                    "error": "close_issue requires a null value",
+                }
+            )
+            continue
+        raw_expected = mutation.get("expected_issue")
+        if not isinstance(raw_expected, Mapping):
+            errors.append(
+                {
+                    "index": index,
+                    "issue": number,
+                    "error": "mutation requires an expected_issue state/version snapshot",
+                }
+            )
+            continue
+        expected = {
+            "state": str(raw_expected.get("state") or "").lower(),
+            "updated_at": str(raw_expected.get("updated_at") or ""),
+        }
+        if expected["state"] not in {"open", "closed"} or not expected["updated_at"]:
+            errors.append(
+                {
+                    "index": index,
+                    "issue": number,
+                    "expected_issue": expected,
+                    "error": "expected_issue requires state=open|closed and non-empty updated_at",
+                }
+            )
+            continue
+        previous = preconditions.setdefault(number, expected)
+        if previous != expected:
+            errors.append(
+                {
+                    "index": index,
+                    "issue": number,
+                    "expected_issue": expected,
+                    "first_expected_issue": previous,
+                    "error": "one issue mutation batch has inconsistent expected_issue snapshots",
+                }
+            )
+    return preconditions, errors
+
+
 def apply_mutations(
     plan: Mapping[str, Any],
     *,
@@ -2036,8 +2139,44 @@ def apply_mutations(
     only executes explicit operations in the plan and refuses a truncated plan,
     missing repository, or unsupported operation.
     """
+    raw_mutations = plan.get("mutations")
+    planned_count = len(raw_mutations) if isinstance(raw_mutations, list) else 0
+
+    def empty_counts(failed: int) -> dict[str, int]:
+        """Return the stable no-write count shape for an early refusal."""
+        return {
+            "planned": planned_count,
+            "applied": 0,
+            "already_applied": 0,
+            "failed": failed,
+            "stale_state_issues": 0,
+            "skipped_stale_mutations": 0,
+        }
+
+    def refuse(reason: str, *, failed: int = 1) -> dict[str, Any]:
+        """Return a stable structured refusal without attempting a write."""
+        return {
+            "schema": "issue_audit_apply.v1",
+            "ok": False,
+            "reason": reason,
+            "applied": [],
+            "already_applied": [],
+            "stale_states": [],
+            "failures": [reason],
+            "readback": [],
+            "counts": empty_counts(failed),
+        }
+
     if plan.get("schema") != PLAN_SCHEMA:
-        raise ValueError(f"expected {PLAN_SCHEMA}")
+        return refuse(f"expected {PLAN_SCHEMA}")
+    if not isinstance(raw_mutations, list):
+        return refuse("plan mutations must be a list")
+    if len(raw_mutations) > max_mutations:
+        return refuse("plan exceeds mutation budget")
+    raw_truncation_errors = plan.get("truncation_or_errors", [])
+    if not isinstance(raw_truncation_errors, list):
+        return refuse("plan truncation_or_errors must be a list")
+
     recorded_digest = str(plan.get("plan_digest") or "")
     if not recorded_digest:
         return {
@@ -2046,8 +2185,10 @@ def apply_mutations(
             "reason": "plan is missing plan_digest; regenerate it before applying",
             "applied": [],
             "already_applied": [],
+            "stale_states": [],
             "failures": ["missing plan_digest"],
             "readback": [],
+            "counts": empty_counts(1),
         }
     try:
         current_digest = compute_plan_digest(plan)
@@ -2058,8 +2199,10 @@ def apply_mutations(
             "reason": str(exc),
             "applied": [],
             "already_applied": [],
+            "stale_states": [],
             "failures": [str(exc)],
             "readback": [],
+            "counts": empty_counts(1),
         }
     if recorded_digest != current_digest:
         return {
@@ -2068,24 +2211,24 @@ def apply_mutations(
             "reason": "stale plan_digest does not match the plan contents; regenerate it before applying",
             "applied": [],
             "already_applied": [],
+            "stale_states": [],
             "failures": ["stale plan_digest"],
             "readback": [],
+            "counts": empty_counts(1),
         }
-    if plan.get("truncation_or_errors"):
+    if raw_truncation_errors:
         return {
             "schema": "issue_audit_apply.v1",
             "ok": False,
             "reason": "inventory or mutation plan is incomplete",
             "applied": [],
             "already_applied": [],
-            "failures": list(plan["truncation_or_errors"]),
+            "stale_states": [],
+            "failures": list(raw_truncation_errors),
             "readback": [],
+            "counts": empty_counts(len(raw_truncation_errors)),
         }
-    mutations = plan.get("mutations")
-    if not isinstance(mutations, list):
-        raise ValueError("plan mutations must be a list")
-    if len(mutations) > max_mutations:
-        raise ValueError("plan exceeds mutation budget")
+    mutations = raw_mutations
     blocked_label_errors = _blocked_label_plan_errors(mutations)
     if blocked_label_errors:
         return {
@@ -2094,23 +2237,46 @@ def apply_mutations(
             "reason": "plan contains an unreasoned blocked-label mutation",
             "applied": [],
             "already_applied": [],
+            "stale_states": [],
             "failures": blocked_label_errors,
             "readback": [],
+            "counts": empty_counts(len(blocked_label_errors)),
+        }
+    preconditions, precondition_plan_errors = _mutation_issue_preconditions(mutations)
+    if precondition_plan_errors:
+        return {
+            "schema": "issue_audit_apply.v1",
+            "ok": False,
+            "reason": "plan contains invalid mutations or issue mutation preconditions",
+            "applied": [],
+            "already_applied": [],
+            "stale_states": [],
+            "failures": precondition_plan_errors,
+            "readback": [],
+            "counts": empty_counts(len(precondition_plan_errors)),
         }
     repo = str(plan.get("repo") or DEFAULT_REPO)
     run = _runner_or_default(runner)
     applied: list[dict[str, Any]] = []
     already_applied: list[dict[str, Any]] = []
+    stale_states: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
     touched: set[int] = set()
-    expectations: dict[int, dict[str, set[str] | bool]] = {}
+    expectations: dict[int, dict[str, Any]] = {}
+    preflighted: set[int] = set()
+    skipped_batches: set[int] = set()
 
     def register_expected(number: int, operation: str, value: object) -> None:
         """Track successful and idempotent operations for the readback gate."""
         touched.add(number)
         expected = expectations.setdefault(
             number,
-            {"add_labels": set(), "remove_labels": set(), "closed": False},
+            {
+                "add_labels": set(),
+                "remove_labels": set(),
+                "closed": False,
+                "expected_state": preconditions[number]["state"],
+            },
         )
         if operation == "add_label" and isinstance(value, str):
             expected["add_labels"].add(value)  # type: ignore[union-attr]
@@ -2123,12 +2289,45 @@ def apply_mutations(
         if not isinstance(mutation, Mapping):
             failures.append({"mutation": mutation, "error": "mutation is not an object"})
             continue
-        try:
-            number = int(mutation["issue"])
-            operation = str(mutation["operation"])
-            value = mutation.get("value")
-        except (KeyError, TypeError, ValueError) as exc:
-            failures.append({"mutation": dict(mutation), "error": f"invalid mutation: {exc}"})
+        number = mutation["issue"]
+        operation = str(mutation["operation"])
+        value = mutation.get("value")
+        if number not in preflighted:
+            preflighted.add(number)
+            expected_issue = preconditions[number]
+            preflight = run(["api", f"repos/{repo}/issues/{number}"], None)
+            live_issue, preflight_error = _parse_json(preflight, what=f"pre-write issue {number}")
+            if preflight_error or not isinstance(live_issue, Mapping):
+                skipped_batches.add(number)
+                failures.append(
+                    {
+                        "issue": number,
+                        "disposition": "precondition_unavailable",
+                        "expected_issue": expected_issue,
+                        "error": preflight_error or "invalid payload",
+                    }
+                )
+            else:
+                observed_issue = {
+                    "state": str(live_issue.get("state") or "").lower(),
+                    "updated_at": str(live_issue.get("updated_at") or ""),
+                }
+                if observed_issue != expected_issue:
+                    skipped_batches.add(number)
+                    stale = {
+                        "issue": number,
+                        "disposition": "stale_state",
+                        "expected_issue": expected_issue,
+                        "observed_issue": observed_issue,
+                        "skipped_mutations": sum(
+                            1
+                            for candidate in mutations
+                            if isinstance(candidate, Mapping) and candidate.get("issue") == number
+                        ),
+                    }
+                    stale_states.append(stale)
+                    failures.append(stale)
+        if number in skipped_batches:
             continue
         if operation == "add_label" and isinstance(value, str) and value:
             endpoint = f"repos/{repo}/issues/{number}/labels"
@@ -2188,7 +2387,8 @@ def apply_mutations(
         removed = sorted(set(expected["remove_labels"]) - set(labels))  # type: ignore[arg-type]
         missing_removals = sorted(set(expected["remove_labels"]) & set(labels))  # type: ignore[arg-type]
         expected_closed = bool(expected["closed"])
-        state_ok = not expected_closed or state == "closed"
+        expected_state = "closed" if expected_closed else str(expected["expected_state"])
+        state_ok = state == expected_state
         row_ok = not missing_additions and not missing_removals and state_ok
         readback.append(
             {
@@ -2202,6 +2402,8 @@ def apply_mutations(
                     "removed": removed,
                     "missing_removals": missing_removals,
                     "closed": state == "closed" if expected_closed else None,
+                    "expected_state": expected_state,
+                    "state_matches": state_ok,
                 },
             }
         )
@@ -2210,6 +2412,7 @@ def apply_mutations(
         "ok": not failures and all(row.get("ok") for row in readback),
         "applied": applied,
         "already_applied": already_applied,
+        "stale_states": stale_states,
         "failures": failures,
         "readback": readback,
         "counts": {
@@ -2217,6 +2420,10 @@ def apply_mutations(
             "applied": len(applied),
             "already_applied": len(already_applied),
             "failed": len(failures),
+            "stale_state_issues": len(stale_states),
+            "skipped_stale_mutations": sum(
+                int(row.get("skipped_mutations", 0)) for row in stale_states
+            ),
         },
     }
 

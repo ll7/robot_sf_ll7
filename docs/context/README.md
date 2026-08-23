@@ -1635,6 +1635,11 @@ why a change was made rather than a full issue execution transcript.
 
 ## Execution Workflow Notes
 
+* Issue #7809 Joint-Perturbation Preparation Boundary:
+  [issue_7392_joint_perturbation_preparation.md](issue_7392_joint_perturbation_preparation.md) -
+  diagnostic-only field/interface inventory, immutable-overlay probes, symbolic cost accounting,
+  and fail-closed rejection boundaries for the deferred #7392 contract.
+
 * [Issue #7340 Real-Manifest Feasibility-First Diagnostic](issue_7340_real_manifest_feasibility_first.md) -
   native diagnostic over a fixed station-platform candidate pool, including route-binding
   provenance, observed event counts, and the pending budget-matched/domain-approval boundary.

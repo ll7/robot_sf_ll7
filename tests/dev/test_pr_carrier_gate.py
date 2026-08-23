@@ -86,6 +86,31 @@ def test_pure_review_carrier_matches_live_state() -> None:
     )
 
 
+def test_pure_review_carrier_accepts_exact_head_implementation_review() -> None:
+    """Explicit implementation-review wording is equivalent to the canonical self-review."""
+    comment = _review_comment().replace(
+        "Exact-head self-review", "Exact-head implementation review"
+    )
+
+    assert review_comment_covers(comment, live_head=HEAD_SHA, live_base=BASE_SHA)
+
+
+def test_pure_review_carrier_rejects_ambiguous_exact_head_review() -> None:
+    """A generic review heading cannot become a merge-ready carrier by naming one SHA."""
+    comment = _review_comment().replace("Exact-head self-review", "Exact-head review")
+
+    assert not review_comment_covers(comment, live_head=HEAD_SHA, live_base=BASE_SHA)
+
+
+def test_pure_review_carrier_rejects_implementation_review_prefixes() -> None:
+    """A longer unrelated phrase must not match the implementation-review contract."""
+    comment = _review_comment().replace(
+        "Exact-head self-review", "Exact-head implementation reviewability"
+    )
+
+    assert not review_comment_covers(comment, live_head=HEAD_SHA, live_base=BASE_SHA)
+
+
 def test_pure_review_carrier_rejects_foreign_head() -> None:
     """A review of a different head never covers the live state."""
     assert not review_comment_covers(
@@ -171,6 +196,30 @@ def test_gate_admits_review_endpoint_carrier_without_compatibility_comment() -> 
 
     assert result["status"] == "ok"
     assert result["carrier_source"] == "pull_request_review"
+
+
+def test_gate_admits_implementation_review_compatibility_comment() -> None:
+    """The documented implementation-review wording passes the real gate path."""
+    title = "fix(benchmark): gate carriers"
+    body = _body_with_carrier("### Summary\n\nBounded gate repair.", HEAD_SHA)
+    implementation_review = _review_comment().replace(
+        "Exact-head self-review", "Exact-head implementation review"
+    )
+    with patch(
+        "scripts.dev.pr_carrier_gate._gh_api_get",
+        side_effect=[
+            _proc(stdout=_pr_payload(title=title, body=body)),
+            _proc(stdout=_comments_payload(implementation_review)),
+        ],
+    ):
+        result = check_merge_ready_carriers(
+            7610,
+            live_head=HEAD_SHA,
+            live_base=BASE_SHA,
+        )
+
+    assert result["status"] == "ok"
+    assert result["carrier_source"] == "issue_comment"
 
 
 def test_gate_rejects_review_endpoint_foreign_commit() -> None:

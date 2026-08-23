@@ -1,10 +1,7 @@
 {
-  "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_6102_robot_speed_tier_recovery/README.md",
-  "artifact_sha256": "fef604d806ceaf099cccbc6dbed75dfc4d4a38f456eaced74e7d5297c0e2bc1a",
+  "artifact_sha256": "3a1295615e03574f61296d06fac519a33f172fdb404b62168a6b77ab729b83ce",
   "preserved_exact_bytes": true,
-  "review_marker": [
-    "AI-GENERATED",
-    "NEEDS-REVIEW"
-  ]
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
 }

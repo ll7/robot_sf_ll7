@@ -24,7 +24,7 @@ admit a benchmark, planner-ranking, causal, dissertation, or paper claim.
 | Independent source copy | W&B artifact `ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0` |
 | Artifact verification | 76/76 stored objects and 76/76 decompressed sources match manifest digests and sizes |
 | Canonical synthesis parity | Stored and current outputs match after normalizing only `source_path` |
-| Admission | **not admitted**; independent interpretation review remains required |
+| Admission | **not admitted**; exact-digest review is complete, but separate admission is required |
 
 The descriptive synthesis reports the same planner ordering at all three speed
 tiers (`scenario_adaptive_hybrid_orca_v2_collision_guard`, `orca`, `ppo`,
@@ -45,7 +45,7 @@ canonical synthesis parity. This tracked projection is review metadata, not a
 replacement for the raw artifact and not an admission receipt.
 
 The result packet is `result_interpretation_packet.v1.json`. Its deterministic
-caption, pending-review report, and source/output checksums are recorded in
+caption, exact-digest review report, and source/output checksums are recorded in
 `result_interpretation_caption.txt`, `result_interpretation_review.v1.json`, and
 `SHA256SUMS`. No figure is emitted because this diagnostic packet has no controlled
 visual assertion.
@@ -65,7 +65,7 @@ tracked interpretation boundary. Neither command grants paper-facing eligibility
 ## Next decision
 
 Do not rerun the 2,160-cell campaign: the native grid and durable raw lineage are
-complete. Review the exact digest of the bounded interpretation packet next. Any
+complete. The bounded interpretation packet now has an exact-digest review. Any
 later admission must explicitly address the six non-activated prediction-planner
 contrasts and must not promote the descriptive planner ordering into a ranking
 claim.

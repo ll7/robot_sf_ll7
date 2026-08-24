@@ -1336,8 +1336,13 @@ def _terminal_reason(
     attempt: int,
     attempts: int,
     local_stop: bool,
+    *,
+    pr_state: str = "",
 ) -> str | None:
     """Classify why a polling loop stopped on this iteration."""
+    normalized_state = pr_state.strip().upper()
+    if normalized_state in {"MERGED", "CLOSED"}:
+        return f"pr_{normalized_state.lower()}"
     if overall is None:
         return None
     if overall != "pending":
@@ -1358,7 +1363,14 @@ def _monitor_terminal_reason(
     local_stop: bool,
 ) -> str | None:
     """Classify a polling stop, preserving a distinct status-propagation diagnosis."""
-    terminal_reason = _terminal_reason(overall, attempt, attempts, local_stop)
+    pr_state = str(data.get("state", "") or "")
+    terminal_reason = _terminal_reason(
+        overall,
+        attempt,
+        attempts,
+        local_stop,
+        pr_state=pr_state,
+    )
     pending_reason = data.get("checks", {}).get("pending_reason")
     if terminal_reason == "attempt_exhausted" and pending_reason in {
         "status_propagation_lag",
@@ -2031,6 +2043,9 @@ def _emit_ci_result(data: dict[str, Any], args: argparse.Namespace, attempts: in
     if overall == "failure":
         return 1
     if attempts > 1 and overall == "pending":
+        pr_state = str(data.get("state", "") or "").upper()
+        if pr_state in {"MERGED", "CLOSED"}:
+            return 0
         return 2
 
     return 0

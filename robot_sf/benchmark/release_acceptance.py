@@ -1635,6 +1635,27 @@ def _full_release_planner_candidates(
     return candidates, blockers
 
 
+def _full_release_campaign_config(
+    manifest: Any, campaign_config: Any | None
+) -> tuple[Any | None, list[str]]:
+    """Resolve the canonical config required for arm-bound publication provenance.
+
+    Returns:
+        The loaded campaign config and any fail-closed resolution blockers.
+    """
+    if campaign_config is not None:
+        return campaign_config, []
+    config_path = getattr(manifest, "canonical_campaign_config_path", None)
+    if config_path is None:
+        # Lightweight unit manifests carry already-resolved axes and an explicit
+        # planner_algorithms mapping.  Real v0.2 manifests always pin this path.
+        return None, []
+    try:
+        return load_campaign_config(config_path), []
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return None, [f"canonical campaign config cannot be resolved for provenance: {exc}"]
+
+
 def _full_release_algorithm_roster(
     manifest: Any, campaign_config: Any | None, planner_keys: tuple[str, ...]
 ) -> tuple[dict[str, str], list[str]]:
@@ -2225,13 +2246,18 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             blockers,
             f"manifest kinematics must be [{FULL_RELEASE_KINEMATICS!r}]",
         )
+    resolved_campaign_config, config_resolution_blockers = _full_release_campaign_config(
+        manifest, campaign_config
+    )
+    for blocker in config_resolution_blockers:
+        _append_blocker(blockers, blocker)
     expected_algorithms, algorithm_roster_blockers = _full_release_algorithm_roster(
-        manifest, campaign_config, planner_keys
+        manifest, resolved_campaign_config, planner_keys
     )
     for blocker in algorithm_roster_blockers:
         _append_blocker(blockers, blocker)
     scenario_ids, resolved_seeds, axis_blockers = _resolve_expected_matrix_axes(
-        manifest, campaign_config
+        manifest, resolved_campaign_config
     )
     for blocker in axis_blockers:
         _append_blocker(blockers, blocker)
@@ -2243,6 +2269,29 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         _append_blocker(
             blockers, "manifest-resolved planner/scenario/seed product mismatches 20,160"
         )
+
+    planner_specs: dict[str, Any] = {}
+    expected_scenario_identity = ""
+    expected_scenario_path: Path | None = None
+    expected_scenario_hash = ""
+    if resolved_campaign_config is not None:
+        planner_specs = {
+            str(getattr(planner, "key", "")).strip(): planner
+            for planner in getattr(resolved_campaign_config, "planners", ())
+        }
+        try:
+            resolved_scenarios = _load_campaign_scenarios(resolved_campaign_config)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            _append_blocker(
+                blockers, f"campaign scenarios cannot be resolved for provenance: {exc}"
+            )
+        else:
+            expected_scenario_identity = _scenario_matrix_hash(resolved_scenarios)
+        expected_scenario_path = Path(resolved_campaign_config.scenario_matrix_path)
+        try:
+            expected_scenario_hash = sha256_file(expected_scenario_path)
+        except OSError as exc:
+            _append_blocker(blockers, f"campaign scenario matrix cannot be hashed: {exc}")
 
     summary, summary_error = _read_campaign_summary(campaign_root.resolve())
     if summary_error:
@@ -2313,6 +2362,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
     expected_per_arm = (
         FULL_RELEASE_EXPECTED_EPISODE_CELLS // len(expected_arms) if expected_arms else 0
     )
+    expected_source = str(campaign.get("git_hash", "")).strip().lower()
 
     for index, entry in enumerate(runs):
         if not isinstance(entry, Mapping):
@@ -2349,7 +2399,11 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             _append_blocker(blockers, f"runs[{index}] is missing episodes_path")
             continue
         try:
-            episodes_path = _resolve_integrity_artifact_path(campaign_root.resolve(), raw_path)
+            episodes_path = (
+                _resolve_stress_artifact_path(campaign_root, raw_path, arm=arm)
+                if resolved_campaign_config is not None
+                else _resolve_integrity_artifact_path(campaign_root.resolve(), raw_path)
+            )
         except (OSError, ValueError) as exc:
             _append_blocker(blockers, f"runs[{index}] episodes_path rejected: {exc}")
             continue
@@ -2368,6 +2422,32 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             )
         if declared_count is None or _strict_int(declared_count) != len(rows):
             _append_blocker(blockers, f"runs[{index}] declared episode count mismatches artifact")
+        if resolved_campaign_config is not None:
+            planner_spec = planner_specs.get(arm[0])
+            algo_config_path = getattr(planner_spec, "algo_config_path", None)
+            if planner_spec is None:
+                _append_blocker(blockers, f"runs[{index}] has no canonical planner specification")
+            elif expected_scenario_path is None or not expected_scenario_identity:
+                _append_blocker(
+                    blockers,
+                    f"runs[{index}] cannot validate arm-bound provenance without scenarios",
+                )
+            else:
+                for blocker in _stress_episode_provenance_blockers(
+                    episodes_path,
+                    campaign_root=campaign_root,
+                    planner_key=arm[0],
+                    expected_algo=expected_algorithms.get(arm[0], ""),
+                    expected_source_commit=expected_source,
+                    expected_scenario_path=expected_scenario_path,
+                    expected_scenario_hash=expected_scenario_hash,
+                    expected_scenario_identity=expected_scenario_identity,
+                    expected_algo_config_path=(
+                        Path(algo_config_path) if algo_config_path is not None else None
+                    ),
+                    expected_rows=rows,
+                ):
+                    _append_blocker(blockers, blocker)
         arm_identities: set[tuple[str, str, str, int]] = set()
         for row_index, row in enumerate(rows):
             expected_algo = expected_algorithms.get(arm[0], "")
@@ -2444,7 +2524,6 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
     if planner_row_arms != expected_arms:
         _append_blocker(blockers, "planner aggregate rows do not match the manifest roster")
 
-    expected_source = str(campaign.get("git_hash", "")).strip().lower()
     if not _GIT_SHA_RE.fullmatch(expected_source):
         _append_blocker(blockers, "campaign.git_hash must be an exact 40-character SHA")
     if expected_source and source_commits and source_commits != {expected_source}:

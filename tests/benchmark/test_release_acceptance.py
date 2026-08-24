@@ -184,6 +184,88 @@ def test_full_release_rejects_cross_arm_episode_algorithm_identity(tmp_path: Pat
     )
 
 
+def test_full_release_binds_same_algorithm_artifacts_to_exact_arms(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Arm-bound provenance rejects swaps between planners sharing one base algorithm."""
+    campaign_root = _write_full_campaign(tmp_path)
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    planner_specs: list[SimpleNamespace] = []
+    for run in summary["runs"]:
+        planner_key = run["planner"]["key"]
+        expected_algo = _PLANNER_ALGORITHMS[planner_key]
+        if planner_key in {"planner_00", "planner_01"}:
+            expected_algo = "hybrid_rule_local_planner"
+        planner_specs.append(
+            SimpleNamespace(key=planner_key, algo=expected_algo, algo_config_path=None)
+        )
+        old_path = campaign_root / run["episodes_path"]
+        new_path = campaign_root / "runs" / f"{planner_key}__differential_drive" / "episodes.jsonl"
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        old_path.replace(new_path)
+        old_path.parent.rmdir()
+        run["episodes_path"] = new_path.relative_to(campaign_root).as_posix()
+        if planner_key in {"planner_00", "planner_01"}:
+            rows = [json.loads(line) for line in new_path.read_text(encoding="utf-8").splitlines()]
+            for row in rows:
+                row["algo"] = expected_algo
+                row["algorithm_metadata"].update(
+                    {
+                        "algorithm": expected_algo,
+                        "canonical_algorithm": expected_algo,
+                        "planner_contract": {"planner_id": expected_algo},
+                    }
+                )
+            new_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text("scenarios: []\n", encoding="utf-8")
+    resolved_scenarios = [{"id": scenario_id} for scenario_id in _SCENARIO_IDS]
+    monkeypatch.setattr(
+        release_acceptance, "_load_campaign_scenarios", lambda _cfg: resolved_scenarios
+    )
+    monkeypatch.setattr(
+        release_acceptance, "_resolved_seed_inventory", lambda _scenarios: list(_SEEDS)
+    )
+    expected_hashes = {
+        spec.key: release_acceptance.sha256_file(
+            campaign_root / "runs" / f"{spec.key}__differential_drive" / "episodes.jsonl"
+        )
+        for spec in planner_specs
+    }
+
+    def _arm_bound_sidecar(episodes_path: Path, *, planner_key: str, **_kwargs: Any) -> list[str]:
+        if release_acceptance.sha256_file(episodes_path) == expected_hashes[planner_key]:
+            return []
+        return [f"planner {planner_key} sidecar raw artifact hash is stale"]
+
+    monkeypatch.setattr(
+        release_acceptance, "_stress_episode_provenance_blockers", _arm_bound_sidecar
+    )
+    config = SimpleNamespace(planners=tuple(planner_specs), scenario_matrix_path=scenario_path)
+    manifest = _full_manifest()
+    baseline = validate_full_benchmark_release_acceptance(
+        campaign_root, manifest=manifest, campaign_config=config
+    )
+    assert baseline["status"] == "valid"
+
+    first = campaign_root / "runs" / "planner_00__differential_drive" / "episodes.jsonl"
+    second = campaign_root / "runs" / "planner_01__differential_drive" / "episodes.jsonl"
+    first_payload = first.read_bytes()
+    second_payload = second.read_bytes()
+    first.write_bytes(second_payload)
+    second.write_bytes(first_payload)
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root, manifest=manifest, campaign_config=config
+    )
+
+    assert result["status"] == "invalid"
+    assert sum("sidecar raw artifact hash is stale" in item for item in result["blockers"]) == 2
+
+
 def test_full_release_rejects_forged_guarded_ppo_metadata_on_other_arm(tmp_path: Path) -> None:
     """Guarded PPO telemetry cannot authorize an exception on a different arm."""
     campaign_root = _write_full_campaign(tmp_path)

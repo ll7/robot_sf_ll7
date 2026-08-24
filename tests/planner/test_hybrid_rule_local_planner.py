@@ -671,6 +671,69 @@ def test_hybrid_rule_v0_protective_stop_when_all_candidates_rejected() -> None:
     assert diagnostics["rejection_counts"]["dynamic_collision"] > 0
 
 
+@pytest.mark.parametrize(
+    (
+        "rejection_counts",
+        "recovery_enabled",
+        "expected_command",
+        "expected_mode",
+        "expected_source",
+    ),
+    [
+        (
+            {"dynamic_collision": 3},
+            False,
+            (0.0, 0.0),
+            "PROTECTIVE_STOP",
+            "dynamic_protective_stop",
+        ),
+        (
+            {"static_clearance": 3},
+            False,
+            (0.0, 0.0),
+            "PROTECTIVE_STOP",
+            "static_protective_stop",
+        ),
+        (
+            {"static_collision": 3},
+            True,
+            (0.0, 0.6),
+            "PROTECTIVE_REORIENT",
+            "static_protective_reorient",
+        ),
+    ],
+)
+def test_hybrid_rule_classifies_native_protective_decisions(
+    monkeypatch: pytest.MonkeyPatch,
+    rejection_counts: dict[str, int],
+    recovery_enabled: bool,
+    expected_command: tuple[float, float],
+    expected_mode: str,
+    expected_source: str,
+) -> None:
+    """Each native hard-safety branch reports its exact non-fallback decision."""
+    planner = HybridRuleLocalPlannerAdapter(
+        HybridRuleLocalPlannerConfig(
+            recovery_enabled=recovery_enabled,
+            recovery_reorient_angular_speed=0.6,
+        )
+    )
+    monkeypatch.setattr(
+        planner,
+        "_evaluate_candidates_for_plan",
+        lambda **_kwargs: ([], rejection_counts, {}, {}, []),
+    )
+
+    command = planner.plan(_obs())
+
+    assert command == expected_command
+    diagnostics = planner.diagnostics()
+    assert diagnostics["fallback_count"] == 0
+    assert diagnostics["protective_stop_count"] == 1
+    assert diagnostics["last_decision"]["planner_mode"] == expected_mode
+    assert diagnostics["last_decision"]["selected_source"] == expected_source
+
+
 def test_hybrid_rule_v0_rejects_static_footprint_clearance(monkeypatch) -> None:
     """Static filtering should account for robot radius, not just occupied center cells."""
     cfg = HybridRuleLocalPlannerConfig(

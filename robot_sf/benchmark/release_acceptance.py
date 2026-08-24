@@ -1647,9 +1647,7 @@ def _full_release_campaign_config(
         return campaign_config, []
     config_path = getattr(manifest, "canonical_campaign_config_path", None)
     if config_path is None:
-        # Lightweight unit manifests carry already-resolved axes and an explicit
-        # planner_algorithms mapping.  Real v0.2 manifests always pin this path.
-        return None, []
+        return None, ["canonical campaign config is required for full-release provenance"]
     try:
         return load_campaign_config(config_path), []
     except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -1967,7 +1965,11 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
             _append_blocker(
                 blockers, f"runs[{run_index}] benchmark_success must be explicitly true"
             )
-        for marker_path, marker in _status_markers(run, f"runs[{run_index}]"):
+        for marker_path, marker in _status_markers(
+            run,
+            f"runs[{run_index}]",
+            expected_algorithm=expected_algo,
+        ):
             _append_blocker(blockers, f"forbidden {marker_path}={marker}")
         run_summary = run.get("summary")
         if not isinstance(run_summary, Mapping):
@@ -1997,7 +1999,11 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
             failures = run_summary.get("failures")
             if not isinstance(failures, list) or failures:
                 _append_blocker(blockers, f"runs[{run_index}].summary failures must be empty")
-            for marker_path, marker in _status_markers(run_summary, f"runs[{run_index}].summary"):
+            for marker_path, marker in _status_markers(
+                run_summary,
+                f"runs[{run_index}].summary",
+                expected_algorithm=expected_algo,
+            ):
                 _append_blocker(blockers, f"forbidden {marker_path}={marker}")
         raw_path = str(run.get("episodes_path", "")).strip()
         if not raw_path:
@@ -2056,7 +2062,11 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
                 f"runs[{run_index}] contains {len(rows)} rows; expected {expected_per_arm}",
             )
         for row_index, row in enumerate(rows):
-            for marker_path, marker in _status_markers(row, f"runs[{run_index}].rows[{row_index}]"):
+            for marker_path, marker in _status_markers(
+                row,
+                f"runs[{run_index}].rows[{row_index}]",
+                expected_algorithm=expected_algo,
+            ):
                 _append_blocker(blockers, f"forbidden {marker_path}={marker}")
             blockers.extend(
                 f"{blocker}"
@@ -2089,6 +2099,10 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
             str(planner_row.get("planner_key", "")).strip(),
             str(planner_row.get("kinematics", "")).strip(),
         )
+        planner_row_spec = planner_specs.get(planner_row_arm[0])
+        planner_row_algo = (
+            str(getattr(planner_row_spec, "algo", planner_row_arm[0])).strip().lower()
+        )
         observed_planner_row_arms.add(planner_row_arm)
         if not _status_is(planner_row.get("status"), _STRESS_RUN_SUCCESS_STATUSES):
             _append_blocker(blockers, f"planner_rows[{planner_row_index}] status is not ok")
@@ -2105,7 +2119,9 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
         if _strict_int(planner_row.get("failed_jobs", 0)) != 0:
             _append_blocker(blockers, f"planner_rows[{planner_row_index}] failed_jobs must be 0")
         for marker_path, marker in _status_markers(
-            planner_row, f"planner_rows[{planner_row_index}]"
+            planner_row,
+            f"planner_rows[{planner_row_index}]",
+            expected_algorithm=planner_row_algo,
         ):
             _append_blocker(blockers, f"forbidden {marker_path}={marker}")
 
@@ -2286,7 +2302,21 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
                 blockers, f"campaign scenarios cannot be resolved for provenance: {exc}"
             )
         else:
-            expected_scenario_identity = _scenario_matrix_hash(resolved_scenarios)
+            effective_scenarios = [
+                _scenario_with_kinematics(
+                    scenario,
+                    kinematics=FULL_RELEASE_KINEMATICS,
+                    holonomic_command_mode=str(
+                        getattr(resolved_campaign_config, "holonomic_command_mode", "vx_vy")
+                    ),
+                )
+                for scenario in resolved_scenarios
+            ]
+            telemetry = getattr(resolved_campaign_config, "telemetry", None)
+            if isinstance(telemetry, Mapping):
+                for scenario in effective_scenarios:
+                    scenario["telemetry"] = dict(telemetry)
+            expected_scenario_identity = _config_hash(effective_scenarios)
         expected_scenario_path = Path(resolved_campaign_config.scenario_matrix_path)
         try:
             expected_scenario_hash = sha256_file(expected_scenario_path)
@@ -2374,14 +2404,21 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         if arm in observed_arms:
             duplicate_arms.add(arm)
         observed_arms.add(arm)
+        expected_algo = expected_algorithms.get(arm[0], "")
         if str(entry.get("status", "")).strip().lower() != "ok":
             _append_blocker(blockers, f"runs[{index}] status is not ok")
-        for marker_path, marker in _status_markers(entry, f"runs[{index}]"):
+        for marker_path, marker in _status_markers(
+            entry, f"runs[{index}]", expected_algorithm=expected_algo
+        ):
             forbidden_status_counts[marker] += 1
             _append_blocker(blockers, f"forbidden {marker_path}={marker}")
         entry_summary = entry.get("summary")
         if isinstance(entry_summary, Mapping):
-            for marker_path, marker in _status_markers(entry_summary, f"runs[{index}].summary"):
+            for marker_path, marker in _status_markers(
+                entry_summary,
+                f"runs[{index}].summary",
+                expected_algorithm=expected_algo,
+            ):
                 forbidden_status_counts[marker] += 1
                 _append_blocker(blockers, f"forbidden {marker_path}={marker}")
             failed_jobs = _strict_int(entry_summary.get("failed_jobs"))
@@ -2450,7 +2487,6 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
                     _append_blocker(blockers, blocker)
         arm_identities: set[tuple[str, str, str, int]] = set()
         for row_index, row in enumerate(rows):
-            expected_algo = expected_algorithms.get(arm[0], "")
             for blocker in _full_release_row_contract_blockers(
                 row,
                 prefix=f"runs[{index}].rows[{row_index}]",
@@ -2503,7 +2539,11 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         if arm in planner_row_arms:
             duplicate_planner_row_arms.add(arm)
         planner_row_arms.add(arm)
-        for marker_path, marker in _status_markers(row, f"planner_rows[{index}]"):
+        for marker_path, marker in _status_markers(
+            row,
+            f"planner_rows[{index}]",
+            expected_algorithm=expected_algorithms.get(arm[0], ""),
+        ):
             forbidden_status_counts[marker] += 1
             _append_blocker(blockers, f"forbidden {marker_path}={marker}")
         if str(row.get("status", "")).strip().lower() != "ok":

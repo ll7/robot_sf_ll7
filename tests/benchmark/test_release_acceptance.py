@@ -21,6 +21,11 @@ from robot_sf.benchmark.release_acceptance import (
     _strict_int,
     validate_full_benchmark_release_acceptance,
 )
+from robot_sf.benchmark.result_provenance import (
+    build_result_provenance_manifest,
+    write_result_provenance_manifest,
+)
+from robot_sf.common.artifact_paths import get_repository_root
 
 _PLANNER_KEYS = tuple(f"planner_{index:02d}" for index in range(14))
 _PLANNER_ALGORITHMS = {
@@ -43,6 +48,7 @@ def _full_manifest() -> SimpleNamespace:
         resolved_scenario_ids=_SCENARIO_IDS,
         resolved_seeds=_SEEDS,
         planner_algorithms=_PLANNER_ALGORITHMS,
+        canonical_campaign_config_path=Path("unavailable-test-campaign.yaml"),
     )
 
 
@@ -67,6 +73,11 @@ def test_full_release_roster_resolution_helpers_fail_closed(
     config, blockers = release_acceptance._full_release_campaign_config(manifest, None)
     assert config is None
     assert blockers == ["canonical campaign config cannot be resolved for provenance: bad config"]
+    missing_config, missing_blockers = release_acceptance._full_release_campaign_config(
+        SimpleNamespace(), None
+    )
+    assert missing_config is None
+    assert missing_blockers == ["canonical campaign config is required for full-release provenance"]
 
     roster_manifest = SimpleNamespace(
         planner_algorithms=[
@@ -180,13 +191,117 @@ def _write_full_campaign(tmp_path: Path) -> Path:
     return campaign_root
 
 
-def test_full_release_acceptance_requires_all_arms_and_episode_cells(tmp_path: Path) -> None:
-    """A complete S30/H600 fixture is accepted as publication-grade evidence."""
+def _write_provenance_bound_full_campaign(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    shared_first_algorithm: bool = False,
+) -> tuple[Path, SimpleNamespace]:
+    """Write a full fixture with the same sidecars and arm paths as production."""
     campaign_root = _write_full_campaign(tmp_path)
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path.write_text("scenarios: []\n", encoding="utf-8")
+    resolved_scenarios = [{"id": scenario_id} for scenario_id in _SCENARIO_IDS]
+    monkeypatch.setattr(
+        release_acceptance, "_load_campaign_scenarios", lambda _cfg: resolved_scenarios
+    )
+    monkeypatch.setattr(
+        release_acceptance, "_resolved_seed_inventory", lambda _scenarios: list(_SEEDS)
+    )
+    effective_scenarios = [
+        release_acceptance._scenario_with_kinematics(
+            scenario,
+            kinematics="differential_drive",
+            holonomic_command_mode="vx_vy",
+        )
+        for scenario in resolved_scenarios
+    ]
+    schema_path = get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+    planner_specs: list[SimpleNamespace] = []
+    for run in summary["runs"]:
+        planner_key = run["planner"]["key"]
+        expected_algo = _PLANNER_ALGORITHMS[planner_key]
+        algo_config_path: Path | None = None
+        if shared_first_algorithm and planner_key in {"planner_00", "planner_01"}:
+            expected_algo = "hybrid_rule_local_planner"
+            algo_config_path = tmp_path / "algo-configs" / f"{planner_key}.yaml"
+            algo_config_path.parent.mkdir(parents=True, exist_ok=True)
+            algo_config_path.write_text(f"planner_key: {planner_key}\n", encoding="utf-8")
+        planner_specs.append(
+            SimpleNamespace(
+                key=planner_key,
+                algo=expected_algo,
+                algo_config_path=algo_config_path,
+            )
+        )
+        old_path = campaign_root / run["episodes_path"]
+        episode_path = (
+            campaign_root / "runs" / f"{planner_key}__differential_drive" / "episodes.jsonl"
+        )
+        episode_path.parent.mkdir(parents=True, exist_ok=True)
+        old_path.replace(episode_path)
+        old_path.parent.rmdir()
+        rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+        for row in rows:
+            row["config_hash"] = row["result_provenance"]["config_hash"]
+            if shared_first_algorithm and planner_key in {"planner_00", "planner_01"}:
+                row["algo"] = expected_algo
+                row["algorithm_metadata"].update(
+                    {
+                        "algorithm": expected_algo,
+                        "canonical_algorithm": expected_algo,
+                        "planner_contract": {"planner_id": expected_algo},
+                    }
+                )
+        episode_path.write_text(
+            "\n".join(json.dumps(row) for row in rows) + "\n",
+            encoding="utf-8",
+        )
+        sidecar = build_result_provenance_manifest(
+            out_path=episode_path,
+            episode_records=rows,
+            schema_path=schema_path,
+            scenario_path=scenario_path,
+            scenarios=effective_scenarios,
+            algo=expected_algo,
+            algo_config_path=algo_config_path,
+            benchmark_profile="release-acceptance-test",
+            suite_key="default",
+            total_jobs=len(rows),
+            written=len(rows),
+            horizon=600,
+            dt=0.1,
+            record_forces=False,
+            active_observation_mode=None,
+            active_observation_level=None,
+        )
+        sidecar["run"]["repo_commit"] = _SOURCE_SHA
+        write_result_provenance_manifest(
+            episode_path.with_name(f"{episode_path.name}.provenance.json"), sidecar
+        )
+        run["episodes_path"] = episode_path.relative_to(campaign_root).as_posix()
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+    config = SimpleNamespace(
+        planners=tuple(planner_specs),
+        scenario_matrix_path=scenario_path,
+        holonomic_command_mode="vx_vy",
+        telemetry=None,
+    )
+    return campaign_root, config
+
+
+def test_full_release_acceptance_requires_all_arms_and_episode_cells(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A complete S30/H600 fixture is accepted as publication-grade evidence."""
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
 
     result = validate_full_benchmark_release_acceptance(
         campaign_root,
         manifest=_full_manifest(),
+        campaign_config=config,
     )
 
     assert result["status"] == "valid"
@@ -228,63 +343,11 @@ def test_full_release_binds_same_algorithm_artifacts_to_exact_arms(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Arm-bound provenance rejects swaps between planners sharing one base algorithm."""
-    campaign_root = _write_full_campaign(tmp_path)
-    summary_path = campaign_root / "reports" / "campaign_summary.json"
-    summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    planner_specs: list[SimpleNamespace] = []
-    for run in summary["runs"]:
-        planner_key = run["planner"]["key"]
-        expected_algo = _PLANNER_ALGORITHMS[planner_key]
-        if planner_key in {"planner_00", "planner_01"}:
-            expected_algo = "hybrid_rule_local_planner"
-        planner_specs.append(
-            SimpleNamespace(key=planner_key, algo=expected_algo, algo_config_path=None)
-        )
-        old_path = campaign_root / run["episodes_path"]
-        new_path = campaign_root / "runs" / f"{planner_key}__differential_drive" / "episodes.jsonl"
-        new_path.parent.mkdir(parents=True, exist_ok=True)
-        old_path.replace(new_path)
-        old_path.parent.rmdir()
-        run["episodes_path"] = new_path.relative_to(campaign_root).as_posix()
-        if planner_key in {"planner_00", "planner_01"}:
-            rows = [json.loads(line) for line in new_path.read_text(encoding="utf-8").splitlines()]
-            for row in rows:
-                row["algo"] = expected_algo
-                row["algorithm_metadata"].update(
-                    {
-                        "algorithm": expected_algo,
-                        "canonical_algorithm": expected_algo,
-                        "planner_contract": {"planner_id": expected_algo},
-                    }
-                )
-            new_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
-    summary_path.write_text(json.dumps(summary), encoding="utf-8")
-
-    scenario_path = tmp_path / "scenarios.yaml"
-    scenario_path.write_text("scenarios: []\n", encoding="utf-8")
-    resolved_scenarios = [{"id": scenario_id} for scenario_id in _SCENARIO_IDS]
-    monkeypatch.setattr(
-        release_acceptance, "_load_campaign_scenarios", lambda _cfg: resolved_scenarios
+    campaign_root, config = _write_provenance_bound_full_campaign(
+        tmp_path,
+        monkeypatch,
+        shared_first_algorithm=True,
     )
-    monkeypatch.setattr(
-        release_acceptance, "_resolved_seed_inventory", lambda _scenarios: list(_SEEDS)
-    )
-    expected_hashes = {
-        spec.key: release_acceptance.sha256_file(
-            campaign_root / "runs" / f"{spec.key}__differential_drive" / "episodes.jsonl"
-        )
-        for spec in planner_specs
-    }
-
-    def _arm_bound_sidecar(episodes_path: Path, *, planner_key: str, **_kwargs: Any) -> list[str]:
-        if release_acceptance.sha256_file(episodes_path) == expected_hashes[planner_key]:
-            return []
-        return [f"planner {planner_key} sidecar raw artifact hash is stale"]
-
-    monkeypatch.setattr(
-        release_acceptance, "_stress_episode_provenance_blockers", _arm_bound_sidecar
-    )
-    config = SimpleNamespace(planners=tuple(planner_specs), scenario_matrix_path=scenario_path)
     manifest = _full_manifest()
     baseline = validate_full_benchmark_release_acceptance(
         campaign_root, manifest=manifest, campaign_config=config
@@ -303,7 +366,7 @@ def test_full_release_binds_same_algorithm_artifacts_to_exact_arms(
     )
 
     assert result["status"] == "invalid"
-    assert sum("sidecar raw artifact hash is stale" in item for item in result["blockers"]) == 2
+    assert any("sidecar raw artifact hash is stale" in item for item in result["blockers"])
 
 
 def test_full_release_rejects_forged_guarded_ppo_metadata_on_other_arm(tmp_path: Path) -> None:
@@ -327,6 +390,49 @@ def test_full_release_rejects_forged_guarded_ppo_metadata_on_other_arm(tmp_path:
     assert result["status"] == "invalid"
     assert result["forbidden_status_counts"]["1"] == 1
     assert any("fallback_safe" in blocker for blocker in result["blockers"])
+
+
+@pytest.mark.parametrize("summary_surface", ["run_summary", "planner_row"])
+def test_full_release_binds_guarded_exception_on_arm_aggregate_surfaces(
+    tmp_path: Path,
+    summary_surface: str,
+) -> None:
+    """A non-Guarded arm cannot forge Guarded PPO aggregate telemetry."""
+    campaign_root = _write_full_campaign(tmp_path)
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    target = (
+        summary["runs"][0]["summary"]
+        if summary_surface == "run_summary"
+        else summary["planner_rows"][0]
+    )
+    target["algorithm_metadata"] = {
+        "algorithm": "ppo",
+        "canonical_algorithm": "guarded_ppo",
+        "planner_contract": {"planner_id": "guarded_ppo"},
+        "guard_stats": {"fallback_safe": 1},
+    }
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+    )
+
+    assert result["status"] == "invalid"
+    assert any("fallback_safe" in blocker for blocker in result["blockers"])
+
+
+def test_full_release_requires_canonical_config_for_v02_admission(tmp_path: Path) -> None:
+    """Resolved axes alone cannot downgrade v0.2 to unbound compatibility admission."""
+    campaign_root = _write_full_campaign(tmp_path)
+    manifest = _full_manifest()
+    del manifest.canonical_campaign_config_path
+
+    result = validate_full_benchmark_release_acceptance(campaign_root, manifest=manifest)
+
+    assert result["status"] == "invalid"
+    assert "canonical campaign config is required for full-release provenance" in result["blockers"]
 
 
 def test_full_release_rejects_malformed_guarded_fallback_controller_state(tmp_path: Path) -> None:

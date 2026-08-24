@@ -282,6 +282,24 @@ def test_zero_aggregated_legacy_emergency_source_count_is_admitted() -> None:
     assert _emergency_stop_marker(runtime) is None
 
 
+@pytest.mark.parametrize(
+    "source_key",
+    ("ALL_CANDIDATES_REJECTED", "all-candidates-rejected", " all_candidates_rejected "),
+)
+def test_noncanonical_aggregated_legacy_source_aliases_fail_closed(source_key: str) -> None:
+    """Case, separator, and whitespace aliases cannot hide emergency counters."""
+    runtime = {
+        "fallback_count": 0,
+        "selected_source_counts": {source_key: 1},
+    }
+
+    assert _emergency_stop_marker(runtime) is not None
+    assert _status_markers(
+        {"status": "ok", "algorithm_metadata": {"planner_runtime": runtime}},
+        "stress-row",
+    )
+
+
 def test_native_protective_stop_is_not_execution_fallback() -> None:
     runtime = {
         "fallback_count": 0,

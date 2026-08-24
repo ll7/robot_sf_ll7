@@ -23,6 +23,10 @@ from robot_sf.benchmark.release_acceptance import (
 )
 
 _PLANNER_KEYS = tuple(f"planner_{index:02d}" for index in range(14))
+_PLANNER_ALGORITHMS = {
+    planner_key: ("guarded_ppo" if planner_key == "planner_11" else planner_key)
+    for planner_key in _PLANNER_KEYS
+}
 _SCENARIO_IDS = tuple(f"scenario_{index:02d}" for index in range(48))
 _SEEDS = tuple(range(111, 141))
 _SOURCE_SHA = "a" * 40
@@ -38,6 +42,7 @@ def _full_manifest() -> SimpleNamespace:
         expected_kinematics_matrix=("differential_drive",),
         resolved_scenario_ids=_SCENARIO_IDS,
         resolved_seeds=_SEEDS,
+        planner_algorithms=_PLANNER_ALGORITHMS,
     )
 
 
@@ -47,6 +52,8 @@ def _write_full_campaign(tmp_path: Path) -> Path:
     runs: list[dict[str, Any]] = []
     planner_rows: list[dict[str, Any]] = []
     for planner_key in _PLANNER_KEYS:
+        expected_algo = _PLANNER_ALGORITHMS[planner_key]
+        metadata_algorithm = "ppo" if expected_algo == "guarded_ppo" else expected_algo
         relative_path = Path("runs") / planner_key / "episodes.jsonl"
         episode_path = campaign_root / relative_path
         episode_path.parent.mkdir(parents=True, exist_ok=True)
@@ -61,6 +68,7 @@ def _write_full_campaign(tmp_path: Path) -> Path:
                             "seed": seed,
                             "horizon": 600,
                             "status": "success",
+                            "algo": expected_algo,
                             "git_hash": _SOURCE_SHA,
                             "result_provenance": {
                                 "repo_commit": _SOURCE_SHA,
@@ -68,6 +76,12 @@ def _write_full_campaign(tmp_path: Path) -> Path:
                                 "scenario_id": scenario_id,
                                 "seed": seed,
                                 "simulator_settings": {"horizon": 600},
+                            },
+                            "algorithm_metadata": {
+                                "algorithm": metadata_algorithm,
+                                "canonical_algorithm": expected_algo,
+                                "planner_contract": {"planner_id": expected_algo},
+                                "status": "ok",
                             },
                         }
                     )
@@ -142,6 +156,77 @@ def test_full_release_acceptance_requires_all_arms_and_episode_cells(tmp_path: P
     assert result["unique_episode_identities"] == 20_160
     assert result["source_commits"] == [_SOURCE_SHA]
     assert result["blockers"] == []
+
+
+def test_full_release_rejects_cross_arm_episode_algorithm_identity(tmp_path: Path) -> None:
+    """A row copied between planner arms cannot retain a valid full-release receipt."""
+    campaign_root = _write_full_campaign(tmp_path)
+    episode_path = campaign_root / "runs" / "planner_00" / "episodes.jsonl"
+    rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+    rows[0]["algo"] = "planner_01"
+    rows[0]["algorithm_metadata"].update(
+        {
+            "algorithm": "planner_01",
+            "canonical_algorithm": "planner_01",
+            "planner_contract": {"planner_id": "planner_01"},
+        }
+    )
+    episode_path.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    result = validate_full_benchmark_release_acceptance(campaign_root, manifest=_full_manifest())
+
+    assert result["status"] == "invalid"
+    assert any(
+        "planner algorithm aliases do not match" in blocker for blocker in result["blockers"]
+    )
+
+
+def test_full_release_rejects_forged_guarded_ppo_metadata_on_other_arm(tmp_path: Path) -> None:
+    """Guarded PPO telemetry cannot authorize an exception on a different arm."""
+    campaign_root = _write_full_campaign(tmp_path)
+    episode_path = campaign_root / "runs" / "planner_00" / "episodes.jsonl"
+    rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+    rows[0]["algorithm_metadata"] = {
+        "algorithm": "ppo",
+        "canonical_algorithm": "guarded_ppo",
+        "planner_contract": {"planner_id": "guarded_ppo"},
+        "guard_stats": {"fallback_safe": 1},
+    }
+    episode_path.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    result = validate_full_benchmark_release_acceptance(campaign_root, manifest=_full_manifest())
+
+    assert result["status"] == "invalid"
+    assert result["forbidden_status_counts"]["1"] == 1
+    assert any("fallback_safe" in blocker for blocker in result["blockers"])
+
+
+def test_full_release_rejects_malformed_guarded_fallback_controller_state(tmp_path: Path) -> None:
+    """The Guarded PPO exception requires a structured fallback-controller state."""
+    campaign_root = _write_full_campaign(tmp_path)
+    episode_path = campaign_root / "runs" / "planner_11" / "episodes.jsonl"
+    rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+    rows[0]["algorithm_metadata"].update(
+        {
+            "guard_stats": {"fallback_safe": 1},
+            "shield_stats": {"last_decision": {"fallback_controller_state": "not-a-mapping"}},
+        }
+    )
+    episode_path.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    result = validate_full_benchmark_release_acceptance(campaign_root, manifest=_full_manifest())
+
+    assert result["status"] == "invalid"
+    assert any("fallback_controller_state" in blocker for blocker in result["blockers"])
 
 
 def test_full_release_rejects_fallback_even_when_campaign_reports_success(tmp_path: Path) -> None:

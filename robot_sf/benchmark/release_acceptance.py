@@ -172,11 +172,13 @@ def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:  # noqa: C90
                 elif inspect_marker and normalized_key == "selected_source_counts":
                     if not isinstance(nested, Mapping):
                         return nested_path, "invalid"
-                    for source in _LEGACY_EMERGENCY_SOURCES:
-                        if source not in nested:
+                    for raw_source, count in nested.items():
+                        source = _normalized(raw_source)
+                        if source not in _LEGACY_EMERGENCY_SOURCES:
                             continue
-                        count = nested[source]
-                        count_path = f"{nested_path}.{source}"
+                        count_path = f"{nested_path}.{raw_source}"
+                        if str(raw_source) != source:
+                            return count_path, "invalid"
                         if not isinstance(count, (int, float)) or isinstance(count, bool):
                             return count_path, "invalid"
                         try:
@@ -217,7 +219,9 @@ def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:  # noqa: C90
     return _walk(payload, "")
 
 
-def _algorithm_metadata_runtime_marker(metadata: Mapping[str, Any]) -> tuple[str, str] | None:
+def _algorithm_metadata_runtime_marker(
+    metadata: Mapping[str, Any], *, expected_algorithm: str | None = None
+) -> tuple[str, str] | None:
     """Scan runtime-bearing algorithm metadata without treating config as execution evidence.
 
     Guarded PPO's safe Risk-DWA shield command is a declared component of that composite
@@ -248,7 +252,8 @@ def _algorithm_metadata_runtime_marker(metadata: Mapping[str, Any]) -> tuple[str
         else ""
     )
     guarded_ppo_identity = (
-        str(metadata.get("canonical_algorithm", "")).strip().lower() == "guarded_ppo"
+        (expected_algorithm is None or expected_algorithm == "guarded_ppo")
+        and str(metadata.get("canonical_algorithm", "")).strip().lower() == "guarded_ppo"
         and str(metadata.get("algorithm", "")).strip().lower() == "ppo"
         and planner_id == "guarded_ppo"
     )
@@ -275,14 +280,14 @@ def _algorithm_metadata_runtime_marker(metadata: Mapping[str, Any]) -> tuple[str
                 shield_view["last_decision"] = {
                     str(key): value
                     for key, value in last_decision.items()
-                    if key != "fallback_controller_state"
+                    if key != "fallback_controller_state" or not isinstance(value, Mapping)
                 }
             runtime_view["shield_stats"] = shield_view
     return runtime_fallback_or_degraded_marker(runtime_view)
 
 
 def _status_markers(  # noqa: C901, PLR0912, PLR0915
-    payload: Mapping[str, Any], prefix: str
+    payload: Mapping[str, Any], prefix: str, *, expected_algorithm: str | None = None
 ) -> list[tuple[str, str]]:
     """Extract only execution/evidence status markers from one structured row.
 
@@ -339,7 +344,9 @@ def _status_markers(  # noqa: C901, PLR0912, PLR0915
         metadata = payload.get(field)
         if not isinstance(metadata, Mapping):
             continue
-        metadata_marker = _algorithm_metadata_runtime_marker(metadata)
+        metadata_marker = _algorithm_metadata_runtime_marker(
+            metadata, expected_algorithm=expected_algorithm
+        )
         if metadata_marker is not None:
             marker_path, marker_value = metadata_marker
             markers.append((f"{prefix}.{field}.{marker_path}", marker_value))
@@ -1588,6 +1595,172 @@ def _resolve_expected_matrix_axes(  # noqa: C901
     return scenario_ids, seeds, blockers
 
 
+def _full_release_planner_items(candidates: Any) -> tuple[tuple[Any, Any], ...]:
+    """Return planner key/algo pairs from a config or test manifest mapping."""
+    if isinstance(candidates, Mapping):
+        return tuple(candidates.items())
+    if not isinstance(candidates, (list, tuple)):
+        return ()
+    items: list[tuple[Any, Any]] = []
+    for planner in candidates:
+        if isinstance(planner, Mapping):
+            items.append((planner.get("key"), planner.get("algo")))
+        else:
+            items.append((getattr(planner, "key", None), getattr(planner, "algo", None)))
+    return tuple(items)
+
+
+def _full_release_planner_candidates(
+    manifest: Any, campaign_config: Any | None
+) -> tuple[Any, list[str]]:
+    """Resolve the source of the publication planner roster.
+
+    Returns:
+        Candidate planner roster and resolution blockers.
+    """
+    blockers: list[str] = []
+    candidates: Any = getattr(campaign_config, "planners", None)
+    if candidates is not None:
+        return candidates, blockers
+    candidates = getattr(manifest, "planner_algorithms", None)
+    if candidates is not None:
+        return candidates, blockers
+    config_path = getattr(manifest, "canonical_campaign_config_path", None)
+    if config_path is None:
+        return None, blockers
+    try:
+        candidates = getattr(load_campaign_config(config_path), "planners", None)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        blockers.append(f"canonical campaign planner roster cannot be resolved: {exc}")
+    return candidates, blockers
+
+
+def _full_release_algorithm_roster(
+    manifest: Any, campaign_config: Any | None, planner_keys: tuple[str, ...]
+) -> tuple[dict[str, str], list[str]]:
+    """Resolve the expected algorithm for every publication-grade planner arm.
+
+    Returns:
+        An arm-to-algorithm mapping and blockers for an unavailable or conflicting roster.
+    """
+    candidates, blockers = _full_release_planner_candidates(manifest, campaign_config)
+    algorithms: dict[str, str] = {}
+    items = _full_release_planner_items(candidates)
+    for raw_key, raw_algo in items:
+        key = str(raw_key or "").strip()
+        algo = str(raw_algo or "").strip().lower()
+        if not key or not algo:
+            blockers.append("full-release planner algorithm roster contains an empty key or algo")
+            continue
+        if key in algorithms and algorithms[key] != algo:
+            blockers.append(f"full-release planner algorithm roster conflicts for {key!r}")
+            continue
+        algorithms[key] = algo
+
+    expected_keys = set(planner_keys)
+    if set(algorithms) != expected_keys:
+        missing = sorted(expected_keys - set(algorithms))
+        unexpected = sorted(set(algorithms) - expected_keys)
+        if missing:
+            blockers.append(f"full-release planner algorithm roster is missing {missing!r}")
+        if unexpected:
+            blockers.append(f"full-release planner algorithm roster has unexpected {unexpected!r}")
+    return algorithms, blockers
+
+
+def _full_release_row_contract_blockers(
+    row: Mapping[str, Any],
+    *,
+    prefix: str,
+    expected_algo: str,
+) -> list[str]:
+    """Bind one publication row's algorithm and provenance to its containing arm.
+
+    Returns:
+        Blockers for missing or conflicting arm/provenance aliases.
+    """
+    blockers: list[str] = []
+    normalized_algo = expected_algo.strip().lower()
+    metadata_algorithm = "ppo" if normalized_algo == "guarded_ppo" else normalized_algo
+    blockers.extend(
+        f"{prefix}: {blocker}"
+        for blocker in _alias_blockers(
+            _alias_values(row, (("algo", row.get("algo", _MISSING)),)),
+            label="planner algorithm",
+            expected=normalized_algo,
+        )
+    )
+
+    metadata = row.get("algorithm_metadata")
+    if not isinstance(metadata, Mapping):
+        blockers.append(f"{prefix}: algorithm_metadata is missing")
+    else:
+        blockers.extend(
+            f"{prefix}: {blocker}"
+            for blocker in _alias_blockers(
+                _alias_values(
+                    metadata,
+                    (("algorithm_metadata.algorithm", metadata.get("algorithm", _MISSING)),),
+                ),
+                label="algorithm metadata algorithm",
+                expected=metadata_algorithm,
+            )
+        )
+        blockers.extend(
+            f"{prefix}: {blocker}"
+            for blocker in _alias_blockers(
+                _alias_values(
+                    metadata,
+                    (
+                        (
+                            "algorithm_metadata.canonical_algorithm",
+                            metadata.get("canonical_algorithm", _MISSING),
+                        ),
+                    ),
+                ),
+                label="canonical algorithm",
+                expected=normalized_algo,
+            )
+        )
+        planner_contract = metadata.get("planner_contract")
+        planner_id = (
+            planner_contract.get("planner_id", _MISSING)
+            if isinstance(planner_contract, Mapping)
+            else _MISSING
+        )
+        blockers.extend(
+            f"{prefix}: {blocker}"
+            for blocker in _alias_blockers(
+                _alias_values(
+                    metadata,
+                    (("algorithm_metadata.planner_contract.planner_id", planner_id),),
+                ),
+                label="planner contract identity",
+                expected=normalized_algo,
+            )
+        )
+
+    result_provenance = row.get("result_provenance")
+    if not isinstance(result_provenance, Mapping):
+        blockers.append(f"{prefix}: result_provenance is missing")
+    else:
+        row_scenario = str(row.get("scenario_id", "")).strip()
+        provenance_scenario = str(result_provenance.get("scenario_id", "")).strip()
+        if not row_scenario or not provenance_scenario:
+            blockers.append(f"{prefix}: scenario provenance is missing")
+        elif row_scenario != provenance_scenario:
+            blockers.append(f"{prefix}: scenario provenance does not match the row")
+        row_seed = _strict_int(row.get("seed"))
+        provenance_seed = _strict_int(result_provenance.get("seed"))
+        if row_seed is None or provenance_seed is None:
+            blockers.append(f"{prefix}: seed provenance is missing or invalid")
+        elif row_seed != provenance_seed:
+            blockers.append(f"{prefix}: seed provenance does not match the row")
+        if not str(result_provenance.get("repo_commit", "")).strip():
+            blockers.append(f"{prefix}: result_provenance.repo_commit is missing")
+    return blockers
+
+
 def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
     campaign_root: Path,
     *,
@@ -2052,6 +2225,11 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             blockers,
             f"manifest kinematics must be [{FULL_RELEASE_KINEMATICS!r}]",
         )
+    expected_algorithms, algorithm_roster_blockers = _full_release_algorithm_roster(
+        manifest, campaign_config, planner_keys
+    )
+    for blocker in algorithm_roster_blockers:
+        _append_blocker(blockers, blocker)
     scenario_ids, resolved_seeds, axis_blockers = _resolve_expected_matrix_axes(
         manifest, campaign_config
     )
@@ -2192,7 +2370,18 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             _append_blocker(blockers, f"runs[{index}] declared episode count mismatches artifact")
         arm_identities: set[tuple[str, str, str, int]] = set()
         for row_index, row in enumerate(rows):
-            for marker_path, marker in _status_markers(row, f"runs[{index}].rows[{row_index}]"):
+            expected_algo = expected_algorithms.get(arm[0], "")
+            for blocker in _full_release_row_contract_blockers(
+                row,
+                prefix=f"runs[{index}].rows[{row_index}]",
+                expected_algo=expected_algo,
+            ):
+                _append_blocker(blockers, blocker)
+            for marker_path, marker in _status_markers(
+                row,
+                f"runs[{index}].rows[{row_index}]",
+                expected_algorithm=expected_algo,
+            ):
                 forbidden_status_counts[marker] += 1
                 _append_blocker(blockers, f"forbidden {marker_path}={marker}")
             scenario_id = str(row.get("scenario_id", "")).strip()

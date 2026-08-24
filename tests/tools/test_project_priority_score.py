@@ -55,7 +55,13 @@ def _healthy_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
 class FakeGhProjectClient:
     """Deterministic fake gh client for score-sync tests."""
 
-    def __init__(self, *, fields: list[dict], items: list[dict]) -> None:
+    def __init__(
+        self,
+        *,
+        fields: list[dict],
+        items: list[dict],
+        issue_snapshots: dict[int, dict] | None = None,
+    ) -> None:
         """Store fake project fields, items, and captured side effects."""
 
         self._fields = fields
@@ -66,6 +72,23 @@ class FakeGhProjectClient:
         self.targeted_limits: list[int] = []
         self.paginated_limits: list[int] = []
         self.paginated_project_ids: list[str | None] = []
+        self.issue_snapshot_calls: list[tuple[str, int]] = []
+        self.project_rechecks: list[int] = []
+        self.project_recheck_overrides: dict[int, list[dict]] = {}
+        self.last_eligibility_plan: dict | None = None
+        self._issue_snapshots = issue_snapshots or {
+            int(item["content"]["number"]): {
+                "number": int(item["content"]["number"]),
+                "title": str(item["content"]["title"]),
+                "state": "OPEN",
+                "updated_at": "2026-08-24T00:00:00Z",
+                "labels": ["state:ready"],
+            }
+            for item in items
+            if isinstance(item.get("content"), dict)
+            and isinstance(item["content"].get("number"), int)
+            and item["content"]["number"] > 0
+        }
 
     def project_id(self, *, owner: str, project_number: int) -> str:
         """Return a stable fake project ID for update calls."""
@@ -115,11 +138,25 @@ class FakeGhProjectClient:
         """Simulate an exact issue query over the fake project items."""
 
         self.targeted_limits.append(limit)
+        self.project_rechecks.append(issue_number)
+        if issue_number in self.project_recheck_overrides:
+            return self.project_recheck_overrides[issue_number]
         for item in self._items:
             content = item.get("content") or {}
             if content.get("type") == "Issue" and content.get("number") == issue_number:
                 return [item]
         return []
+
+    def issue_snapshot(self, *, repo: str, issue_number: int) -> dict:
+        """Return one deterministic REST-style issue snapshot."""
+
+        self.issue_snapshot_calls.append((repo, issue_number))
+        snapshot = self._issue_snapshots.get(issue_number)
+        if isinstance(snapshot, Exception):
+            raise snapshot
+        if snapshot is None:
+            raise RuntimeError(f"issue #{issue_number} unavailable")
+        return dict(snapshot)
 
     def update_number_field(
         self,
@@ -148,6 +185,7 @@ def _item(issue_number: int, **fields: object) -> dict:
             "type": "Issue",
             "number": issue_number,
             "title": f"Issue {issue_number}",
+            "repository": "ll7/robot_sf_ll7",
         },
     }
     payload.update(fields)
@@ -447,6 +485,296 @@ def test_sync_scores_unscoped_dry_run_does_not_write() -> None:
 
     assert [preview.issue_number for preview in previews] == [701]
     assert client.updated_numbers == []
+
+
+def test_only_empty_builds_live_eligibility_plan_and_writes_ready_issue() -> None:
+    """Auto-fill writes only after a current open state:ready REST snapshot."""
+
+    client = FakeGhProjectClient(
+        fields=[_field(name) for name in (EFFORT_FIELD, *REQUIRED_NUMBER_FIELDS)],
+        items=[_item(701, improvement=5, **{lower_first_key(EFFORT_FIELD): 8})],
+    )
+
+    previews = sync_scores(
+        client,
+        SyncOptions(
+            owner="ll7",
+            project_number=5,
+            ensure_fields=False,
+            limit=1000,
+            alpha=DEFAULT_ALPHA,
+            round_digits=6,
+            issue_number=None,
+            dry_run=False,
+            skip_statuses={"Done"},
+            only_empty=True,
+        ),
+    )
+
+    assert [preview.issue_number for preview in previews] == [701]
+    assert client.issue_snapshot_calls == [("ll7/robot_sf_ll7", 701)] * 2
+    assert client.project_rechecks == [701]
+    assert client.updated_numbers
+    assert client.last_eligibility_plan == {
+        "schema": "project_priority_eligibility_plan.v1",
+        "status": "applied",
+        "counts": {"eligible": 1, "skipped": 0, "blocked": 0},
+        "writes_performed": True,
+        "items": [
+            {
+                "issue_number": 701,
+                "project_item_id": "item-701",
+                "project_status": "Todo",
+                "decision": "eligible",
+                "reason_code": "open_ready_exact_state",
+                "issue_updated_at": "2026-08-24T00:00:00Z",
+            }
+        ],
+    }
+
+
+@pytest.mark.parametrize(
+    ("snapshot", "reason_code", "decision"),
+    [
+        (
+            {
+                "number": 701,
+                "title": "Issue 701",
+                "state": "CLOSED",
+                "updated_at": "2026-08-24T00:00:00Z",
+                "labels": ["state:done"],
+            },
+            "issue_terminal",
+            "skipped",
+        ),
+        (
+            {
+                "number": 701,
+                "title": "Issue 701",
+                "state": "OPEN",
+                "updated_at": "2026-08-24T00:00:00Z",
+                "labels": ["state:parked", "deferred"],
+            },
+            "issue_not_ready",
+            "skipped",
+        ),
+        (
+            {
+                "number": 701,
+                "title": "Issue 701",
+                "state": "OPEN",
+                "updated_at": "2026-08-24T00:00:00Z",
+                "labels": ["state:ready", "decision-required"],
+            },
+            "issue_ambiguous",
+            "blocked",
+        ),
+    ],
+)
+def test_only_empty_skips_ineligible_live_issue_states(
+    snapshot: dict, reason_code: str, decision: str
+) -> None:
+    """Terminal, parked, and decision-gated issues never receive default scores."""
+
+    client = FakeGhProjectClient(
+        fields=[_field(name) for name in (EFFORT_FIELD, *REQUIRED_NUMBER_FIELDS)],
+        items=[_item(701, improvement=5)],
+        issue_snapshots={701: snapshot},
+    )
+
+    assert (
+        sync_scores(
+            client,
+            SyncOptions(
+                owner="ll7",
+                project_number=5,
+                ensure_fields=False,
+                limit=1000,
+                alpha=DEFAULT_ALPHA,
+                round_digits=6,
+                issue_number=None,
+                dry_run=False,
+                skip_statuses={"Done"},
+                only_empty=True,
+            ),
+        )
+        == []
+    )
+    assert client.updated_numbers == []
+    assert client.last_eligibility_plan["items"][0]["reason_code"] == reason_code
+    assert client.last_eligibility_plan["items"][0]["decision"] == decision
+
+
+def test_only_empty_blocks_unavailable_issue_snapshot_without_writes() -> None:
+    """REST uncertainty is visible and fail-closed for the affected item."""
+
+    client = FakeGhProjectClient(
+        fields=[_field(name) for name in (EFFORT_FIELD, *REQUIRED_NUMBER_FIELDS)],
+        items=[_item(701, improvement=5)],
+        issue_snapshots={701: RuntimeError("REST unavailable")},
+    )
+
+    assert (
+        sync_scores(
+            client,
+            SyncOptions(
+                owner="ll7",
+                project_number=5,
+                ensure_fields=False,
+                limit=1000,
+                alpha=DEFAULT_ALPHA,
+                round_digits=6,
+                issue_number=None,
+                dry_run=False,
+                skip_statuses={"Done"},
+                only_empty=True,
+            ),
+        )
+        == []
+    )
+    assert client.updated_numbers == []
+    assert client.last_eligibility_plan["items"][0]["reason_code"] == "issue_state_unavailable"
+
+
+def test_only_empty_blocks_cross_repository_project_item() -> None:
+    """Issue numbers from another repository cannot alias Robot SF REST state."""
+
+    item = _item(701, improvement=5)
+    item["content"]["repository"] = "ll7/another-repo"
+    client = FakeGhProjectClient(
+        fields=[_field(name) for name in (EFFORT_FIELD, *REQUIRED_NUMBER_FIELDS)],
+        items=[item],
+    )
+
+    assert (
+        sync_scores(
+            client,
+            SyncOptions(
+                owner="ll7",
+                project_number=5,
+                ensure_fields=False,
+                limit=1000,
+                alpha=DEFAULT_ALPHA,
+                round_digits=6,
+                issue_number=None,
+                dry_run=False,
+                skip_statuses={"Done"},
+                only_empty=True,
+            ),
+        )
+        == []
+    )
+    assert client.issue_snapshot_calls == []
+    assert client.last_eligibility_plan["items"][0]["reason_code"] == "project_repo_mismatch"
+
+
+def test_only_empty_plan_reports_terminal_project_status_and_malformed_issue() -> None:
+    """The complete plan explains stale terminal and malformed Project rows."""
+
+    malformed = {
+        "id": "item-malformed",
+        "status": "Todo",
+        "content": {"type": "Issue", "number": "701", "title": "Malformed"},
+    }
+    client = FakeGhProjectClient(
+        fields=[_field(name) for name in (EFFORT_FIELD, *REQUIRED_NUMBER_FIELDS)],
+        items=[_item(701, status="Done", improvement=5), malformed],
+    )
+
+    assert (
+        sync_scores(
+            client,
+            SyncOptions(
+                owner="ll7",
+                project_number=5,
+                ensure_fields=False,
+                limit=1000,
+                alpha=DEFAULT_ALPHA,
+                round_digits=6,
+                issue_number=None,
+                dry_run=False,
+                skip_statuses={"Done"},
+                only_empty=True,
+            ),
+        )
+        == []
+    )
+    assert client.issue_snapshot_calls == []
+    assert client.updated_numbers == []
+    assert [row["reason_code"] for row in client.last_eligibility_plan["items"]] == [
+        "malformed_issue_number",
+        "project_status_terminal",
+    ]
+
+
+def test_only_empty_aborts_batch_when_issue_drifts_before_write() -> None:
+    """No Project write occurs when an issue changes after eligibility planning."""
+
+    class DriftingIssueClient(FakeGhProjectClient):
+        def issue_snapshot(self, *, repo: str, issue_number: int) -> dict:
+            snapshot = super().issue_snapshot(repo=repo, issue_number=issue_number)
+            if len(self.issue_snapshot_calls) > 1:
+                snapshot["labels"] = ["state:running"]
+            return snapshot
+
+    client = DriftingIssueClient(
+        fields=[_field(name) for name in (EFFORT_FIELD, *REQUIRED_NUMBER_FIELDS)],
+        items=[_item(701, improvement=5)],
+    )
+
+    assert (
+        sync_scores(
+            client,
+            SyncOptions(
+                owner="ll7",
+                project_number=5,
+                ensure_fields=False,
+                limit=1000,
+                alpha=DEFAULT_ALPHA,
+                round_digits=6,
+                issue_number=None,
+                dry_run=False,
+                skip_statuses={"Done"},
+                only_empty=True,
+            ),
+        )
+        == []
+    )
+    assert client.updated_numbers == []
+    assert client.last_eligibility_plan["status"] == "blocked_drift"
+    assert client.last_eligibility_plan["items"][0]["reason_code"] == "issue_state_drift"
+
+
+def test_only_empty_aborts_batch_when_project_item_drifts_before_write() -> None:
+    """Project item/status changes are checked before the first field mutation."""
+
+    client = FakeGhProjectClient(
+        fields=[_field(name) for name in (EFFORT_FIELD, *REQUIRED_NUMBER_FIELDS)],
+        items=[_item(701, improvement=5)],
+    )
+    client.project_recheck_overrides[701] = [_item(701, status="Done", improvement=5)]
+
+    assert (
+        sync_scores(
+            client,
+            SyncOptions(
+                owner="ll7",
+                project_number=5,
+                ensure_fields=False,
+                limit=1000,
+                alpha=DEFAULT_ALPHA,
+                round_digits=6,
+                issue_number=None,
+                dry_run=False,
+                skip_statuses={"Done"},
+                only_empty=True,
+            ),
+        )
+        == []
+    )
+    assert client.updated_numbers == []
+    assert client.last_eligibility_plan["status"] == "blocked_drift"
+    assert client.last_eligibility_plan["items"][0]["reason_code"] == "project_item_drift"
 
 
 def test_sync_scores_skips_malformed_issue_numbers_when_indexing_items() -> None:

@@ -295,3 +295,19 @@ def test_unknown_verification_variant_still_rejected() -> None:
     report = evaluate_issue(_issue(body=body), _claim())
 
     assert report["contract"]["missing_fields"] == ["verification"]
+
+
+@pytest.mark.parametrize(
+    "template_path",
+    sorted(Path(".github/ISSUE_TEMPLATE").glob("*.md")),
+    ids=lambda p: p.name,
+)
+def test_all_repository_markdown_issue_templates_satisfy_contract(template_path: Path) -> None:
+    """Issue #7793: every canonical markdown issue template must satisfy the contract."""
+    body = template_path.read_text(encoding="utf-8")
+    inspection = inspect_contract(body)
+    assert inspection["complete"] is True
+    assert inspection["missing_fields"] == []
+
+    report = evaluate_issue(_issue(body=body), _claim())
+    assert report["contract"]["missing_fields"] == []

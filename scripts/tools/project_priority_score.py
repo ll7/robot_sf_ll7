@@ -65,6 +65,27 @@ SUCCESS_PROBABILITY_PERCENT_SCALE = 100.0
 
 EFFORT_FIELD = "Expected Duration in Hours"
 PRIORITY_SCORE_FIELD = "Priority Score"
+DEFAULT_REPO = "ll7/robot_sf_ll7"
+READY_LABEL = "state:ready"
+AMBIGUOUS_OR_BLOCKING_LABELS = frozenset(
+    {
+        "blocked",
+        "decision-required",
+        "deferred",
+        "duplicate",
+        "invalid",
+        "needs-triage",
+        "state:blocked",
+        "state:blocked-external-input",
+        "state:hold",
+        "state:parked",
+        "state:review",
+        "state:running",
+        "state:working",
+        "wontfix",
+    }
+)
+TERMINAL_PROJECT_STATUSES = frozenset({"cancelled", "closed", "completed", "done"})
 REQUIRED_NUMBER_FIELDS: tuple[str, ...] = (
     "Improvement",
     "Success Probability",
@@ -91,10 +112,16 @@ query($projectId: ID!, $first: Int!, $after: String) {
             ... on Issue {
               number
               title
+              repository {
+                nameWithOwner
+              }
             }
             ... on PullRequest {
               number
               title
+              repository {
+                nameWithOwner
+              }
             }
           }
           fieldValues(first: 100) {
@@ -239,6 +266,7 @@ class SyncOptions:
     only_empty: bool = False
     min_graphql_remaining: int = DEFAULT_GRAPHQL_SAFETY_THRESHOLD
     cache_file: Path | None = Path(".github/cache/project5.json")
+    repo: str = DEFAULT_REPO
 
 
 def read_rate_limit() -> RateLimitSnapshot:
@@ -297,14 +325,17 @@ def project_quota_decision(options: SyncOptions) -> dict[str, Any]:
 
 
 def ensure_project_graphql_budget(
-    *, expected_graphql_requests: int, min_graphql_remaining: int
+    *,
+    expected_graphql_requests: int,
+    min_graphql_remaining: int,
+    expected_core_requests: int = 1,
 ) -> None:
     """Fail closed when a future Project API step would cross quota margins."""
     decision = graphql_budget_decision(
         read_rate_limit(),
         expected_graphql_requests=expected_graphql_requests,
         min_graphql_remaining=min_graphql_remaining,
-        expected_core_requests=1,
+        expected_core_requests=expected_core_requests,
         min_core_remaining=DEFAULT_CORE_SAFETY_THRESHOLD,
     )
     if decision["status"] != "ok":
@@ -465,6 +496,7 @@ class GhProjectClient:
     def __init__(self) -> None:
         """Initialize read telemetry without changing the existing CLI surface."""
         self.last_item_fetch_stats: ProjectItemFetchStats | None = None
+        self.last_eligibility_plan: dict[str, Any] | None = None
 
     def _run_completed(self, *args: str) -> subprocess.CompletedProcess[str]:
         """Run a gh command and raise a high-signal error on failure."""
@@ -518,6 +550,39 @@ class GhProjectClient:
         """Run a gh command for side effects."""
 
         self._run_completed(*args)
+
+    def issue_snapshot(self, *, repo: str, issue_number: int) -> dict[str, Any]:
+        """Return the exact REST issue fields used by score eligibility checks."""
+
+        payload = self.run_json("api", f"repos/{repo}/issues/{issue_number}")
+        if "pull_request" in payload:
+            raise RuntimeError(f"#{issue_number} resolved to a pull request, not an issue")
+        number = payload.get("number")
+        title = payload.get("title")
+        state = payload.get("state")
+        updated_at = payload.get("updated_at")
+        labels_raw = payload.get("labels")
+        if (
+            number != issue_number
+            or not isinstance(title, str)
+            or not isinstance(state, str)
+            or not isinstance(updated_at, str)
+            or not isinstance(labels_raw, list)
+        ):
+            raise RuntimeError(f"issue #{issue_number} REST snapshot is malformed")
+        labels: list[str] = []
+        for label in labels_raw:
+            name = label.get("name") if isinstance(label, dict) else label
+            if not isinstance(name, str) or not name:
+                raise RuntimeError(f"issue #{issue_number} REST labels are malformed")
+            labels.append(name)
+        return {
+            "number": number,
+            "title": title,
+            "state": state.upper(),
+            "updated_at": updated_at,
+            "labels": sorted(set(labels)),
+        }
 
     def _should_retry_with_at_me(self, *, owner: str, error: RuntimeError) -> bool:
         """Limit `@me` fallback to the known ll7 user-owner gh quirk."""
@@ -803,6 +868,11 @@ class GhProjectClient:
         for key in ("number", "title"):
             if key in content_raw:
                 content[key] = content_raw[key]
+        repository = content_raw.get("repository")
+        if isinstance(repository, dict):
+            name_with_owner = repository.get("nameWithOwner")
+            if isinstance(name_with_owner, str) and name_with_owner:
+                content["repository"] = name_with_owner
         return content
 
     @staticmethod
@@ -878,9 +948,9 @@ class GhProjectClient:
 
         Newer GitHub CLI/API combinations support a server-side Projects
         ``--query`` filter. Older CLI versions reject that flag, so the helper
-        falls back to the portable bounded list surface. Both paths exact-match
-        the issue number locally, and both fail closed when a capped result
-        could have omitted the target.
+        falls back to the script-owned cursor paginator with a per-page quota
+        guard. Both paths exact-match the issue number locally, and neither
+        treats a capped partial list as proof that the target is absent.
         """
 
         if limit <= 0:
@@ -910,19 +980,16 @@ class GhProjectClient:
                 context=f"gh project item-list query for issue #{issue_number}",
             )
 
-        payload = self._run_project_command(
-            "item-list",
+        complete_items = self.item_list_paginated(
             owner=owner,
             project_number=project_number,
-            extra_args=("--limit", str(limit)),
-            as_json=True,
-        )
-        items = list(payload["items"])
-        return self._select_exact_issue_item(
-            items,
-            issue_number=issue_number,
             limit=limit,
-            context=f"gh project item-list bounded lookup for issue #{issue_number}",
+        )
+        return self._select_exact_issue_item(
+            complete_items,
+            issue_number=issue_number,
+            limit=len(complete_items) + 1,
+            context=f"complete cursor lookup for issue #{issue_number}",
         )
 
     @staticmethod
@@ -1042,7 +1109,7 @@ def build_previews(
             continue
 
         raw_number = content.get("number")
-        if not isinstance(raw_number, int) or raw_number < 0:
+        if not isinstance(raw_number, int) or raw_number <= 0:
             continue
         number = raw_number
         if issue_number is not None and number != issue_number:
@@ -1090,7 +1157,11 @@ def _pending_score_updates(
     ]
 
 
-def write_summary(path: Path, previews: Sequence[SyncPreview]) -> None:
+def write_summary(
+    path: Path,
+    previews: Sequence[SyncPreview],
+    eligibility_plan: dict[str, Any] | None = None,
+) -> None:
     """Persist a machine-readable sync summary."""
 
     payload = {
@@ -1106,6 +1177,8 @@ def write_summary(path: Path, previews: Sequence[SyncPreview]) -> None:
             for preview in previews
         ]
     }
+    if eligibility_plan is not None:
+        payload["eligibility_plan"] = eligibility_plan
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -1138,6 +1211,391 @@ def _project_metadata(
     return fields, project_id
 
 
+def _normalized_issue_snapshot(snapshot: dict[str, Any], *, issue_number: int) -> dict[str, Any]:
+    """Validate a client-provided issue snapshot into a deterministic compare shape."""
+
+    if snapshot.get("number") != issue_number:
+        raise RuntimeError(f"issue #{issue_number} REST snapshot has a mismatched number")
+    title = snapshot.get("title")
+    state = snapshot.get("state")
+    updated_at = snapshot.get("updated_at")
+    labels_raw = snapshot.get("labels")
+    if (
+        not isinstance(title, str)
+        or not isinstance(state, str)
+        or not isinstance(updated_at, str)
+        or not isinstance(labels_raw, list)
+        or any(not isinstance(label, str) or not label for label in labels_raw)
+    ):
+        raise RuntimeError(f"issue #{issue_number} REST snapshot is malformed")
+    return {
+        "number": issue_number,
+        "title": title,
+        "state": state.upper(),
+        "updated_at": updated_at,
+        "labels": sorted(set(labels_raw)),
+    }
+
+
+def _eligibility_entry(
+    preview: SyncPreview,
+    item: dict[str, Any],
+    *,
+    decision: str,
+    reason_code: str,
+    issue_updated_at: str | None,
+) -> dict[str, Any]:
+    """Build one stable eligibility-plan row."""
+
+    return {
+        "issue_number": preview.issue_number,
+        "project_item_id": str(item.get("id", "")),
+        "project_status": str(item.get("status", "")),
+        "decision": decision,
+        "reason_code": reason_code,
+        "issue_updated_at": issue_updated_at,
+    }
+
+
+def _plan_counts(entries: Sequence[dict[str, Any]]) -> dict[str, int]:
+    """Count stable eligibility decisions."""
+
+    return {
+        decision: sum(entry.get("decision") == decision for entry in entries)
+        for decision in ("eligible", "skipped", "blocked")
+    }
+
+
+def _classify_issue_for_score(
+    snapshot: dict[str, Any],
+    *,
+    project_title: str,
+) -> tuple[str, str]:
+    """Classify one exact REST issue snapshot for default score admission."""
+
+    if snapshot["state"] != "OPEN":
+        return "skipped", "issue_terminal"
+    labels = set(snapshot["labels"])
+    conflicting_labels = labels & AMBIGUOUS_OR_BLOCKING_LABELS
+    if READY_LABEL in labels and conflicting_labels:
+        return "blocked", "issue_ambiguous"
+    if conflicting_labels:
+        if labels & {"decision-required", "needs-triage"}:
+            return "blocked", "issue_ambiguous"
+        return "skipped", "issue_not_ready"
+    if READY_LABEL not in labels:
+        return "skipped", "issue_not_ready"
+    if snapshot["title"] != project_title:
+        return "blocked", "project_issue_title_stale"
+    return "eligible", "open_ready_exact_state"
+
+
+def _malformed_issue_entries(items: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Report unscored issue-backed rows that lack a valid issue number."""
+
+    entries: list[dict[str, Any]] = []
+    for item in items:
+        content = item.get("content")
+        if not isinstance(content, dict) or content.get("type") != "Issue":
+            continue
+        if _coerce_float(field_value(item, PRIORITY_SCORE_FIELD)) is not None:
+            continue
+        raw_number = content.get("number")
+        if isinstance(raw_number, int) and raw_number > 0:
+            continue
+        entries.append(
+            {
+                "issue_number": None,
+                "project_item_id": str(item.get("id", "")),
+                "project_status": str(item.get("status", "")),
+                "decision": "blocked",
+                "reason_code": "malformed_issue_number",
+                "issue_updated_at": None,
+            }
+        )
+    return entries
+
+
+def _build_eligibility_plan(
+    client: GhProjectClient,
+    options: SyncOptions,
+    previews: Sequence[SyncPreview],
+    items_by_issue: dict[int, dict[str, Any]],
+    items: Sequence[dict[str, Any]],
+) -> tuple[list[SyncPreview], dict[int, dict[str, Any]]]:
+    """Build a complete live-state plan before guarded default-score writes."""
+
+    ensure_project_graphql_budget(
+        expected_graphql_requests=0,
+        min_graphql_remaining=options.min_graphql_remaining,
+        expected_core_requests=len(previews) + 1,
+    )
+    entries = _malformed_issue_entries(items)
+    snapshots: dict[int, dict[str, Any]] = {}
+    eligible: list[SyncPreview] = []
+    for preview in previews:
+        item = items_by_issue[preview.issue_number]
+        content = item.get("content")
+        project_repo = content.get("repository") if isinstance(content, dict) else None
+        if project_repo != options.repo:
+            entries.append(
+                _eligibility_entry(
+                    preview,
+                    item,
+                    decision="blocked",
+                    reason_code="project_repo_mismatch",
+                    issue_updated_at=None,
+                )
+            )
+            continue
+        project_status = str(item.get("status", "")).strip()
+        if not project_status:
+            entries.append(
+                _eligibility_entry(
+                    preview,
+                    item,
+                    decision="blocked",
+                    reason_code="project_status_unavailable",
+                    issue_updated_at=None,
+                )
+            )
+            continue
+        if (
+            project_status in options.skip_statuses
+            or project_status.casefold() in TERMINAL_PROJECT_STATUSES
+        ):
+            entries.append(
+                _eligibility_entry(
+                    preview,
+                    item,
+                    decision="skipped",
+                    reason_code="project_status_terminal",
+                    issue_updated_at=None,
+                )
+            )
+            continue
+        try:
+            snapshot = _normalized_issue_snapshot(
+                client.issue_snapshot(repo=options.repo, issue_number=preview.issue_number),
+                issue_number=preview.issue_number,
+            )
+        except (RuntimeError, ValueError, TypeError):
+            entries.append(
+                _eligibility_entry(
+                    preview,
+                    item,
+                    decision="blocked",
+                    reason_code="issue_state_unavailable",
+                    issue_updated_at=None,
+                )
+            )
+            continue
+        decision, reason_code = _classify_issue_for_score(
+            snapshot,
+            project_title=preview.title,
+        )
+        entries.append(
+            _eligibility_entry(
+                preview,
+                item,
+                decision=decision,
+                reason_code=reason_code,
+                issue_updated_at=snapshot["updated_at"],
+            )
+        )
+        if decision == "eligible":
+            eligible.append(preview)
+            snapshots[preview.issue_number] = snapshot
+    client.last_eligibility_plan = {
+        "schema": "project_priority_eligibility_plan.v1",
+        "status": "planned",
+        "counts": _plan_counts(entries),
+        "writes_performed": False,
+        "items": entries,
+    }
+    return eligible, snapshots
+
+
+def _project_item_compare_state(item: dict[str, Any]) -> dict[str, Any]:
+    """Return the exact Project item fields guarded before mutation."""
+
+    content = item.get("content")
+    if not isinstance(content, dict):
+        return {"malformed": True}
+    return {
+        "id": item.get("id"),
+        "status": item.get("status"),
+        "content_type": content.get("type"),
+        "repository": content.get("repository"),
+        "issue_number": content.get("number"),
+        "title": content.get("title"),
+        "priority_score": field_value(item, PRIORITY_SCORE_FIELD),
+    }
+
+
+def _mark_drift(
+    plan: dict[str, Any],
+    *,
+    issue_number: int,
+    reason_code: str,
+) -> None:
+    """Convert one planned eligible row into a fail-closed drift row."""
+
+    for entry in plan["items"]:
+        if entry["issue_number"] == issue_number:
+            entry["decision"] = "blocked"
+            entry["reason_code"] = reason_code
+            break
+    plan["status"] = "blocked_drift"
+    plan["counts"] = _plan_counts(plan["items"])
+    plan["writes_performed"] = False
+
+
+def _revalidate_guarded_updates(
+    client: GhProjectClient,
+    options: SyncOptions,
+    updates: Sequence[tuple[SyncPreview, dict[str, Any]]],
+    issue_snapshots: dict[int, dict[str, Any]],
+) -> bool:
+    """Re-read every issue and Project item before allowing the first write."""
+
+    plan = client.last_eligibility_plan
+    if plan is None:
+        raise RuntimeError("guarded score updates require an eligibility plan")
+    ensure_project_graphql_budget(
+        expected_graphql_requests=2 * len(updates),
+        min_graphql_remaining=options.min_graphql_remaining,
+        expected_core_requests=len(updates) + 1,
+    )
+    for preview, original_item in updates:
+        try:
+            current_issue = _normalized_issue_snapshot(
+                client.issue_snapshot(repo=options.repo, issue_number=preview.issue_number),
+                issue_number=preview.issue_number,
+            )
+        except (RuntimeError, ValueError, TypeError):
+            _mark_drift(plan, issue_number=preview.issue_number, reason_code="issue_state_drift")
+            return False
+        if current_issue != issue_snapshots[preview.issue_number]:
+            _mark_drift(plan, issue_number=preview.issue_number, reason_code="issue_state_drift")
+            return False
+        try:
+            current_items = client.item_list_until_issue(
+                owner=options.owner,
+                project_number=options.project_number,
+                issue_number=preview.issue_number,
+                limit=options.limit,
+            )
+        except (RuntimeError, ValueError, TypeError):
+            _mark_drift(
+                plan,
+                issue_number=preview.issue_number,
+                reason_code="project_item_unavailable",
+            )
+            return False
+        if len(current_items) != 1 or _project_item_compare_state(
+            current_items[0]
+        ) != _project_item_compare_state(original_item):
+            _mark_drift(
+                plan,
+                issue_number=preview.issue_number,
+                reason_code="project_item_drift",
+            )
+            return False
+    return True
+
+
+def _fetch_score_items(
+    client: GhProjectClient,
+    options: SyncOptions,
+    *,
+    project_id: str,
+) -> list[dict[str, Any]]:
+    """Fetch the targeted item or a proven-complete unscoped item inventory."""
+
+    if options.issue_number is not None:
+        return client.item_list_until_issue(
+            owner=options.owner,
+            project_number=options.project_number,
+            issue_number=options.issue_number,
+            limit=options.limit,
+        )
+    return client.item_list_paginated(
+        owner=options.owner,
+        project_number=options.project_number,
+        project_id=project_id,
+        limit=options.limit,
+        min_graphql_remaining=options.min_graphql_remaining,
+    )
+
+
+def _index_issue_items(items: Sequence[dict[str, Any]]) -> dict[int, dict[str, Any]]:
+    """Index valid issue-backed items without inventing malformed identifiers."""
+
+    indexed: dict[int, dict[str, Any]] = {}
+    for item in items:
+        content = item.get("content")
+        if not isinstance(content, dict) or content.get("type") != "Issue":
+            continue
+        issue_number = content.get("number")
+        if isinstance(issue_number, int) and issue_number > 0:
+            indexed[issue_number] = item
+    return indexed
+
+
+def _apply_score_updates(
+    client: GhProjectClient,
+    options: SyncOptions,
+    updates: Sequence[tuple[SyncPreview, dict[str, Any]]],
+    *,
+    issue_snapshots: dict[int, dict[str, Any]],
+    score_field_id: str,
+    project_id: str,
+) -> bool:
+    """Revalidate guarded updates and apply the complete admitted mutation set."""
+
+    if not updates:
+        return True
+    if options.only_empty:
+        if not _revalidate_guarded_updates(client, options, updates, issue_snapshots):
+            return False
+    else:
+        ensure_project_graphql_budget(
+            expected_graphql_requests=len(updates),
+            min_graphql_remaining=options.min_graphql_remaining,
+        )
+    for preview, item in updates:
+        client.update_number_field(
+            item_id=str(item["id"]),
+            field_id=score_field_id,
+            project_id=project_id,
+            number=preview.new_score,
+        )
+    return True
+
+
+def _finalize_eligibility_plan(
+    client: GhProjectClient,
+    options: SyncOptions,
+    *,
+    updates: Sequence[tuple[SyncPreview, dict[str, Any]]],
+) -> None:
+    """Record the terminal no-write, dry-run, or applied plan status."""
+
+    if not options.only_empty:
+        return
+    plan = client.last_eligibility_plan
+    if plan is None:
+        raise RuntimeError("only-empty score sync completed without an eligibility plan")
+    if options.dry_run:
+        plan["status"] = "dry_run"
+    elif updates:
+        plan["status"] = "applied"
+        plan["writes_performed"] = True
+    else:
+        plan["status"] = "no_eligible_items"
+
+
 def sync_scores(
     client: GhProjectClient,
     options: SyncOptions,
@@ -1153,45 +1611,26 @@ def sync_scores(
             + ". Re-run with --ensure-fields or create them manually."
         )
 
-    if options.issue_number is not None:
-        # Targeted sync: locate the single issue-backed item without requiring a
-        # full untruncated project page. Query before applying the cap, then verify
-        # the exact issue number so textual false positives cannot be updated
-        # (issue #5870). The original fail-closed full-project guard is preserved
-        # for unscoped sync below.
-        items = client.item_list_until_issue(
-            owner=options.owner,
-            project_number=options.project_number,
-            issue_number=options.issue_number,
-            limit=options.limit,
-        )
-    else:
-        # Unscoped sync uses the cursor-aware owner so a full page is accepted
-        # only when the Projects API proves that no continuation remains.
-        items = client.item_list_paginated(
-            owner=options.owner,
-            project_number=options.project_number,
-            project_id=project_id,
-            limit=options.limit,
-            min_graphql_remaining=options.min_graphql_remaining,
-        )
+    items = _fetch_score_items(client, options, project_id=project_id)
     previews = build_previews(
         items,
         alpha=options.alpha,
         round_digits=options.round_digits,
         issue_number=options.issue_number,
-        skip_statuses=options.skip_statuses,
+        skip_statuses=set() if options.only_empty else options.skip_statuses,
         only_empty=options.only_empty,
     )
-    items_by_issue: dict[int, dict[str, Any]] = {}
-    for item in items:
-        content = item.get("content")
-        if not isinstance(content, dict) or content.get("type") != "Issue":
-            continue
-        issue_number = content.get("number")
-        if not isinstance(issue_number, int) or issue_number < 0:
-            continue
-        items_by_issue[issue_number] = item
+    items_by_issue = _index_issue_items(items)
+
+    issue_snapshots: dict[int, dict[str, Any]] = {}
+    if options.only_empty:
+        previews, issue_snapshots = _build_eligibility_plan(
+            client,
+            options,
+            previews,
+            items_by_issue,
+            items,
+        )
 
     score_field_id = str(fields[PRIORITY_SCORE_FIELD]["id"])
     updates = _pending_score_updates(
@@ -1201,18 +1640,16 @@ def sync_scores(
         round_digits=options.round_digits,
     )
 
-    if updates:
-        ensure_project_graphql_budget(
-            expected_graphql_requests=len(updates),
-            min_graphql_remaining=options.min_graphql_remaining,
-        )
-    for preview, item in updates:
-        client.update_number_field(
-            item_id=str(item["id"]),
-            field_id=score_field_id,
-            project_id=project_id,
-            number=preview.new_score,
-        )
+    if not _apply_score_updates(
+        client,
+        options,
+        updates,
+        issue_snapshots=issue_snapshots,
+        score_field_id=score_field_id,
+        project_id=project_id,
+    ):
+        return []
+    _finalize_eligibility_plan(client, options, updates=updates)
 
     return previews
 
@@ -1228,6 +1665,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sync = subparsers.add_parser("sync", help="Compute and sync the derived Priority Score field.")
     sync.add_argument("--owner", default="ll7", help="GitHub owner of the target project.")
+    sync.add_argument(
+        "--repo",
+        default=DEFAULT_REPO,
+        help="Issue repository used for live REST eligibility verification.",
+    )
     sync.add_argument("--project-number", type=int, default=5, help="Projects v2 number.")
     sync.add_argument(
         "--limit",
@@ -1361,6 +1803,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         only_empty=args.only_empty,
         min_graphql_remaining=args.min_graphql_remaining,
         cache_file=args.cache_file,
+        repo=args.repo,
     )
     decision = project_quota_decision(options)
     if decision["status"] != "ok":
@@ -1409,7 +1852,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.summary_file is not None:
-        write_summary(args.summary_file, previews)
+        write_summary(args.summary_file, previews, client.last_eligibility_plan)
 
     print(
         json.dumps(
@@ -1420,6 +1863,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                     asdict(client.last_item_fetch_stats)
                     if client.last_item_fetch_stats is not None
                     else None
+                ),
+                "eligibility_plan": client.last_eligibility_plan,
+                "writes_performed": bool(
+                    client.last_eligibility_plan
+                    and client.last_eligibility_plan.get("writes_performed") is True
                 ),
                 "items": [
                     {

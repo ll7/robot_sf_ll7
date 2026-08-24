@@ -70,8 +70,19 @@ leaves human-set priorities stable.
   ```
 
 - `--only-empty` is the mechanical guard: it skips any item that already has a `Priority Score`.
-- Still apply the verify-before-scoring gate to each empty item; an already-merged issue is routed to
-  closure, not auto-scored.
+- `--only-empty` also emits `project_priority_eligibility_plan.v1` before writing. The auto-fill
+  path admits only an open issue in `--repo` that currently carries `state:ready`; terminal Project
+  rows, parked/deferred/working issues, malformed rows, decision gates, title drift, and unavailable
+  REST state receive stable skipped/blocked reason codes instead of a score.
+- Apply mode re-reads the exact issue state/labels and Project item/status for every eligible row
+  before the first write. Any issue or Project drift aborts the batch with `writes_performed: false`.
+  A targeted `--issue-number N --only-empty` pass uses the same verification and exact-item lookup;
+  older GitHub CLI builds fall back to proven-complete cursor pagination when their bounded query
+  surface is capped. Ordinary explicit score sync without `--only-empty` keeps its existing
+  human-directed contract.
+- Still apply the broader verify-before-scoring gate to detect merged implementation under another
+  issue or another semantic supersession that live state/labels alone cannot prove; route that work
+  to closure rather than scoring it.
 - Re-scoring a non-empty priority stays an explicit, human-requested action — auto mode must not do it.
 
 ## Guardrails

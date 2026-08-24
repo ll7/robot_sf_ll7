@@ -52,7 +52,12 @@ def _graphql_item(index: int) -> dict[str, object]:
 
     return {
         "id": f"item{index}",
-        "content": {"__typename": "Issue", "number": index, "title": f"Issue {index}"},
+        "content": {
+            "__typename": "Issue",
+            "number": index,
+            "title": f"Issue {index}",
+            "repository": {"nameWithOwner": "ll7/robot_sf_ll7"},
+        },
         "fieldValues": {
             "nodes": [],
             "pageInfo": {"hasNextPage": False, "endCursor": None},
@@ -369,6 +374,7 @@ def test_paginated_item_list_normalizes_project_field_values(
     assert found[0]["improvement"] == 5
     assert found[0]["success Probability"] == 0.8
     assert found[0]["priority Score"] == 2
+    assert found[0]["content"]["repository"] == "ll7/robot_sf_ll7"
 
 
 def test_targeted_lookup_uses_server_query_when_supported(
@@ -400,12 +406,12 @@ def test_targeted_lookup_uses_server_query_when_supported(
 def test_targeted_lookup_falls_back_when_query_flag_is_unsupported(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Older CLIs use the bounded exact-match fallback without weakening safety.
+    """Older CLIs use explicit cursor pagination without weakening safety.
 
     Issue #5870: a project with more items than the default cap must not force a
     full untruncated page for a targeted ``--issue-number`` lookup. The helper
-    first tries the newer query surface, then uses a portable bounded project
-    list when the CLI rejects ``--query``.
+    first tries the newer query surface, then uses the script-owned complete
+    cursor paginator when the CLI rejects ``--query``.
     """
 
     calls: list[list[str]] = []
@@ -428,13 +434,21 @@ def test_targeted_lookup_falls_back_when_query_flag_is_unsupported(
 
     monkeypatch.setattr(subprocess, "run", _fake_run)
     client = GhProjectClient()
+    pagination_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        client,
+        "item_list_paginated",
+        lambda **kwargs: (
+            pagination_calls.append(kwargs)
+            or [{"id": "item250", "content": {"type": "Issue", "number": 250}}]
+        ),
+    )
     found = client.item_list_until_issue(owner="ll7", project_number=5, issue_number=250, limit=25)
     assert len(found) == 1
     assert found[0]["content"]["number"] == 250
-    assert len(calls) == 2
+    assert len(calls) == 1
     assert "--query" in calls[0]
-    assert "--query" not in calls[1]
-    assert calls[1][calls[1].index("--limit") + 1] == "25"
+    assert pagination_calls == [{"owner": "ll7", "project_number": 5, "limit": 25}]
 
 
 def test_targeted_lookup_does_not_hide_non_query_failures(

@@ -46,17 +46,16 @@ execution.
    they carry unique technical state such as paths, checksums, missing-file
    specifics, asset identifiers, or per-step unblock conditions.
 6. Create issue:
-   - use GitHub MCP / GitHub app tools when available; use `gh` for deterministic fallback
-   - `gh issue create --title "<title>" --body-file <body.md> --template <template> --label "<labels>"`
+   - use GitHub REST API or `gh` for deterministic issue creation:
+     `gh issue create --title "<title>" --body-file <body.md> --label "<labels>"`
+     (do not combine `--template` with `--body` or `--body-file`, as the GitHub CLI rejects combining them)
    - prefer existing labels; avoid inventing taxonomy
-   - prefer GitHub MCP / GitHub app tools for interactive issue creation when available; keep `gh`
-     for scripted or fallback paths
 7. Project routing:
    - use `gh project item-add` when the CLI route is the active Project #5 write path
    - use `gh project item-edit` for explicit field updates when the CLI route is active
    - add issue to Project #5 and update only expected fields (`Priority`, `Expected Duration in Hours`,
      `Reviewed`) using existing field/schema IDs
-7. Batch discipline:
+8. Batch discipline:
    - for multiple issues, perform body/label cleanup first, then bulk Project #5 writes, then one sync
    - if API is rate-limited, record pending project mutations and resume later
 

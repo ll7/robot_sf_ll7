@@ -8,10 +8,14 @@ from __future__ import annotations
 import importlib
 import os
 import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 try:
     import triton  # noqa: F401
@@ -995,3 +999,198 @@ def pre_generated_grid(occupancy_grid, simple_obstacles, simple_pedestrians, rob
         ego_frame=False,
     )
     return grid
+
+
+# ============================================================================
+# Shared Subprocess Mock Fixture
+# ============================================================================
+
+
+def _build_matcher_predicate(
+    matcher: list[str] | tuple[str, ...] | str | Callable[[list[str]], bool],
+) -> Callable[[list[str], dict[str, Any]], bool]:
+    def predicate(cmd: list[str], kwargs: dict[str, Any]) -> bool:
+        del kwargs
+        if callable(matcher):
+            return bool(matcher(cmd))
+        if isinstance(matcher, (list, tuple)):
+            matcher_list = [str(x) for x in matcher]
+            return cmd == matcher_list or cmd[: len(matcher_list)] == matcher_list
+        if isinstance(matcher, str):
+            return bool(cmd and cmd[0] == matcher)
+        return False
+
+    return predicate
+
+
+def _make_exception_handler(exc: Exception) -> Callable[..., Any]:
+    def exc_handler(cmd: list[str], *args: Any, **kwargs: Any) -> Any:
+        del cmd, args, kwargs
+        raise exc
+
+    return exc_handler
+
+
+def _make_completed_process_handler(
+    result: Any,
+    stdout: str | None,
+    stderr: str,
+    returncode: int,
+) -> Callable[..., Any]:
+    if stdout is not None or returncode != 0 or stderr != "":
+        out = stdout or ""
+        code = returncode
+    elif isinstance(result, str):
+        out = result
+        code = returncode
+    elif isinstance(result, int):
+        out = ""
+        code = result
+    elif result is not None:
+
+        def obj_handler(cmd: list[str], *args: Any, **kwargs: Any) -> Any:
+            del cmd, args, kwargs
+            return result
+
+        return obj_handler
+    else:
+        out = stdout or ""
+        code = returncode
+
+    def proc_handler(cmd: list[str], *args: Any, **kwargs: Any) -> Any:
+        del args, kwargs
+        return subprocess.CompletedProcess(cmd, code, stdout=out, stderr=stderr)
+
+    return proc_handler
+
+
+def _build_result_handler(
+    result: Any,
+    stdout: str | None,
+    stderr: str,
+    returncode: int,
+) -> Callable[..., Any]:
+    if isinstance(result, Exception):
+        return _make_exception_handler(result)
+    if callable(result):
+        return result
+    if isinstance(result, subprocess.CompletedProcess):
+
+        def pass_proc(cmd: list[str], *args: Any, **kwargs: Any) -> Any:
+            del cmd, args, kwargs
+            return result
+
+        return pass_proc
+
+    return _make_completed_process_handler(result, stdout, stderr, returncode)
+
+
+class FakeSubprocess:
+    """Configurable subprocess mock for test assertions and deterministic returns."""
+
+    def __init__(self) -> None:
+        """Initialize an empty FakeSubprocess recorder."""
+        self.calls: list[list[str]] = []
+        self.kwargs_history: list[dict[str, Any]] = []
+        self._handlers: list[
+            tuple[
+                Callable[[list[str], dict[str, Any]], bool],
+                Callable[..., Any],
+            ]
+        ] = []
+        self._default_handler: Callable[..., Any] | None = None
+
+    def register(
+        self,
+        matcher: list[str] | tuple[str, ...] | str | Callable[[list[str]], bool],
+        result: Any = None,
+        *,
+        stdout: str | None = None,
+        stderr: str = "",
+        returncode: int = 0,
+    ) -> FakeSubprocess:
+        """Register a handler for matching command invocations."""
+        predicate = _build_matcher_predicate(matcher)
+        handler = _build_result_handler(result, stdout, stderr, returncode)
+        self._handlers.append((predicate, handler))
+        return self
+
+    def set_default(
+        self,
+        result: Any = None,
+        *,
+        stdout: str | None = None,
+        stderr: str = "",
+        returncode: int = 0,
+    ) -> FakeSubprocess:
+        """Set fallback result when no registered matchers match."""
+        self._default_handler = _build_result_handler(result, stdout, stderr, returncode)
+        return self
+
+    def called(
+        self, matcher: list[str] | tuple[str, ...] | str | Callable[[list[str]], bool]
+    ) -> bool:
+        """Check if any recorded call matches the matcher."""
+        for cmd in self.calls:
+            if callable(matcher) and matcher(cmd):
+                return True
+            if isinstance(matcher, (list, tuple)):
+                matcher_list = [str(x) for x in matcher]
+                if cmd == matcher_list or cmd[: len(matcher_list)] == matcher_list:
+                    return True
+            if isinstance(matcher, str) and cmd and cmd[0] == matcher:
+                return True
+        return False
+
+    @property
+    def call_count(self) -> int:
+        return len(self.calls)
+
+    @property
+    def last_call(self) -> list[str] | None:
+        return self.calls[-1] if self.calls else None
+
+    @property
+    def last_kwargs(self) -> dict[str, Any] | None:
+        return self.kwargs_history[-1] if self.kwargs_history else None
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        if args:
+            cmd_arg = args[0]
+            rest_args = args[1:]
+        elif "args" in kwargs:
+            cmd_arg = kwargs["args"]
+            rest_args = ()
+        elif "command" in kwargs:
+            cmd_arg = kwargs["command"]
+            rest_args = ()
+        elif "cmd" in kwargs:
+            cmd_arg = kwargs["cmd"]
+            rest_args = ()
+        else:
+            raise TypeError("fake_subprocess requires command arguments")
+
+        if isinstance(cmd_arg, str):
+            cmd = [cmd_arg]
+        elif isinstance(cmd_arg, (list, tuple)):
+            cmd = [str(x) for x in cmd_arg]
+        else:
+            cmd = [str(cmd_arg)]
+
+        self.calls.append(cmd)
+        self.kwargs_history.append(kwargs)
+
+        for predicate, handler in self._handlers:
+            if predicate(cmd, kwargs):
+                return handler(cmd, *rest_args, **kwargs)
+
+        if self._default_handler is not None:
+            return self._default_handler(cmd, *rest_args, **kwargs)
+
+        raise AssertionError(f"Unexpected subprocess command: {cmd} with kwargs={kwargs}")
+
+
+@pytest.fixture
+def fake_subprocess() -> FakeSubprocess:
+    """Provide a configurable FakeSubprocess instance for mocking subprocess calls."""
+    return FakeSubprocess()

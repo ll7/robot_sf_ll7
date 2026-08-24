@@ -187,50 +187,37 @@ def test_run_unknown_id_exits_nonzero(capsys: pytest.CaptureFixture[str]) -> Non
     assert "Unknown example id" in captured.err
 
 
-def test_run_uses_fast_env_vars_and_invokes_subprocess(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_uses_fast_env_vars_and_invokes_subprocess(
+    monkeypatch: pytest.MonkeyPatch, fake_subprocess
+) -> None:
     """`run --fast` sets ROBOT_SF_FAST_DEMO and launches the resolved script."""
-
-    captured: dict[str, object] = {}
-
-    class _FakeResult:
-        returncode = 0
-
-    def fake_runner(command, env, cwd, timeout):
-        captured["command"] = command
-        captured["env"] = env
-        captured["cwd"] = cwd
-        captured["timeout"] = timeout
-        return _FakeResult()
-
+    fake_subprocess.set_default(returncode=0)
     monkeypatch.setenv("HOME", str(_REPO_ROOT))
     exit_code = run_example(
         _MANIFEST,
         "quickstart/01_basic_robot",
         fast=True,
-        runner=fake_runner,
+        runner=fake_subprocess,
         timeout=30.0,
     )
     assert exit_code == 0
-    command = captured["command"]
+    command = fake_subprocess.last_call
+    assert command is not None
     assert command[1].endswith("examples/quickstart/01_basic_robot.py")
-    env = captured["env"]
+    assert fake_subprocess.last_kwargs is not None
+    env = fake_subprocess.last_kwargs["env"]
     assert env["ROBOT_SF_FAST_DEMO"] == "1"
     assert env["ROBOT_SF_EXAMPLES_MAX_STEPS"] == "64"
     assert env["MPLBACKEND"] == "Agg"
     assert env["SDL_VIDEODRIVER"] == "dummy"
-    assert str(captured["cwd"]) == str(_REPO_ROOT)
+    assert str(fake_subprocess.last_kwargs["cwd"]) == str(_REPO_ROOT)
 
 
-def test_run_fast_overrides_inherited_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_fast_overrides_inherited_environment(
+    monkeypatch: pytest.MonkeyPatch, fake_subprocess
+) -> None:
     """``--fast`` must win over inherited flags, step caps, and GUI backends."""
-    captured: dict[str, object] = {}
-
-    class _FakeResult:
-        returncode = 0
-
-    def fake_runner(command, env, cwd, timeout):
-        captured["env"] = env
-        return _FakeResult()
+    fake_subprocess.set_default(returncode=0)
 
     monkeypatch.setenv("DISPLAY", ":99")
     monkeypatch.setenv("MPLBACKEND", "TkAgg")
@@ -238,9 +225,12 @@ def test_run_fast_overrides_inherited_environment(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setenv("ROBOT_SF_FAST_DEMO", "0")
     monkeypatch.setenv("ROBOT_SF_EXAMPLES_MAX_STEPS", "4096")
 
-    assert run_example(_MANIFEST, "quickstart/01_basic_robot", fast=True, runner=fake_runner) == 0
+    assert (
+        run_example(_MANIFEST, "quickstart/01_basic_robot", fast=True, runner=fake_subprocess) == 0
+    )
 
-    env = captured["env"]
+    assert fake_subprocess.last_kwargs is not None
+    env = fake_subprocess.last_kwargs["env"]
     assert env["DISPLAY"] == ""
     assert env["MPLBACKEND"] == "Agg"
     assert env["SDL_VIDEODRIVER"] == "dummy"
@@ -248,27 +238,20 @@ def test_run_fast_overrides_inherited_environment(monkeypatch: pytest.MonkeyPatc
     assert env["ROBOT_SF_EXAMPLES_MAX_STEPS"] == "64"
 
 
-def test_run_passes_extra_args_to_script(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_passes_extra_args_to_script(monkeypatch: pytest.MonkeyPatch, fake_subprocess) -> None:
     """Extra args after the id are forwarded to the example script."""
-
-    captured: dict[str, object] = {}
-
-    class _FakeResult:
-        returncode = 0
-
-    def fake_runner(command, env, cwd, timeout):
-        captured["command"] = command
-        return _FakeResult()
+    fake_subprocess.set_default(returncode=0)
 
     exit_code = run_example(
         _MANIFEST,
         "quickstart/01_basic_robot",
         fast=False,
         extra_args=["--foo", "bar"],
-        runner=fake_runner,
+        runner=fake_subprocess,
     )
     assert exit_code == 0
-    assert captured["command"][-2:] == ["--foo", "bar"]
+    assert fake_subprocess.last_call is not None
+    assert fake_subprocess.last_call[-2:] == ["--foo", "bar"]
 
 
 @pytest.mark.slow

@@ -8,42 +8,36 @@ import subprocess
 from scripts.tools.collect_slurm_utilization import collect_job_reports, write_reports
 
 
-def test_collect_job_reports_runs_accounting_commands(monkeypatch) -> None:
+def test_collect_job_reports_runs_accounting_commands(monkeypatch, fake_subprocess) -> None:
     """Collector should query live, accounting, and efficiency views per job."""
-    calls: list[tuple[str, ...]] = []
-
-    def fake_run(command, *, capture_output, text, check):
-        """Record Slurm command invocations and return a successful result."""
-        calls.append(tuple(command))
-        return subprocess.CompletedProcess(command, 0, stdout="ok\n", stderr="")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    fake_subprocess.set_default(stdout="ok\n")
+    monkeypatch.setattr(subprocess, "run", fake_subprocess)
 
     report = collect_job_reports(["12345"], include_seff=True)
 
     assert report["jobs"][0]["job_id"] == "12345"
-    assert ("sstat", "-j", "12345.batch", "--format=JobID,AveCPU,MaxRSS,MaxVMSize,AveRSS") in calls
+    assert (
+        "sstat",
+        "-j",
+        "12345.batch",
+        "--format=JobID,AveCPU,MaxRSS,MaxVMSize,AveRSS",
+    ) in [tuple(c) for c in fake_subprocess.calls]
     assert (
         "sacct",
         "-j",
         "12345",
         "--format=JobID,JobName%40,Partition,State,Elapsed,AllocCPUS,AveCPU,TotalCPU,MaxRSS,ReqMem,MaxVMSize,ExitCode",
         "-P",
-    ) in calls
-    assert ("seff", "12345") in calls
+    ) in [tuple(c) for c in fake_subprocess.calls]
+    assert ("seff", "12345") in [tuple(c) for c in fake_subprocess.calls]
     assert all(result["returncode"] == 0 for result in report["jobs"][0]["commands"].values())
 
 
-def test_collect_job_reports_records_missing_tools(monkeypatch) -> None:
+def test_collect_job_reports_records_missing_tools(monkeypatch, fake_subprocess) -> None:
     """Missing Slurm helpers should be explicit evidence instead of hard crashes."""
-
-    def fake_run(command, *, capture_output, text, check):
-        """Raise for sstat and succeed for other Slurm commands."""
-        if command[0] == "sstat":
-            raise FileNotFoundError("sstat")
-        return subprocess.CompletedProcess(command, 0, stdout="ok\n", stderr="")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    fake_subprocess.register("sstat", FileNotFoundError("sstat"))
+    fake_subprocess.set_default(stdout="ok\n")
+    monkeypatch.setattr(subprocess, "run", fake_subprocess)
 
     report = collect_job_reports(["12345"], include_seff=False)
 

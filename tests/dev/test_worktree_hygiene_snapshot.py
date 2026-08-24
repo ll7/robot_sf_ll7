@@ -115,21 +115,18 @@ def test_run_command_preserves_timeout_result(monkeypatch) -> None:
     assert result.stderr == "command timed out after 30 seconds"
 
 
-def test_run_command_caps_subprocess_timeout_at_deadline(monkeypatch) -> None:
+def test_run_command_caps_subprocess_timeout_at_deadline(monkeypatch, fake_subprocess) -> None:
     """A retirement deadline bounds one slow subprocess, not only the row loop."""
-    calls: dict[str, object] = {}
-
-    def fake_run(args, **kwargs):
-        calls.update(kwargs)
-        return _result()
+    fake_subprocess.set_default(_result())
 
     monkeypatch.setattr(snapshot.time, "monotonic", lambda: 100.0)
-    monkeypatch.setattr(snapshot.subprocess, "run", fake_run)
+    monkeypatch.setattr(snapshot.subprocess, "run", fake_subprocess)
 
     result = snapshot._run_command(["git", "status"], timeout=30, deadline=101.5)
 
     assert result.returncode == 0
-    assert calls["timeout"] == pytest.approx(1.5)
+    assert fake_subprocess.last_kwargs is not None
+    assert fake_subprocess.last_kwargs["timeout"] == pytest.approx(1.5)
 
 
 def test_classify_issues_reports_dirty_missing_upstream_and_drift() -> None:
@@ -157,44 +154,51 @@ def test_status_paths_preserves_modified_output_path() -> None:
     )
 
 
-def test_build_snapshot_filters_and_counts(monkeypatch, tmp_path: Path) -> None:
+def test_build_snapshot_filters_and_counts(monkeypatch, tmp_path: Path, fake_subprocess) -> None:
     """Filter worktrees and aggregate issue counts in the snapshot."""
     main = tmp_path / "main"
     feature = tmp_path / "feature"
     main.mkdir()
     feature.mkdir()
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del timeout
-        if args == ["git", "worktree", "list", "--porcelain"]:
-            return _result(
-                "\n".join(
-                    [
-                        f"worktree {main}",
-                        "HEAD aaa",
-                        "branch refs/heads/main",
-                        "",
-                        f"worktree {feature}",
-                        "HEAD bbb",
-                        "branch refs/heads/feature",
-                        "",
-                    ]
-                )
+    fake_subprocess.register(
+        ["git", "worktree", "list", "--porcelain"],
+        _result(
+            "\n".join(
+                [
+                    f"worktree {main}",
+                    "HEAD aaa",
+                    "branch refs/heads/main",
+                    "",
+                    f"worktree {feature}",
+                    "HEAD bbb",
+                    "branch refs/heads/feature",
+                    "",
+                ]
             )
-        if args == ["git", "status", "--porcelain"]:
-            return _result(" M changed.py\n" if cwd == str(feature) else "")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            if cwd == str(feature):
-                return _result("origin/feature\n")
-            return _result("origin/main\n")
-        if args == ["git", "rev-list", "--left-right", "--count", "HEAD...origin/feature"]:
-            return _result("1\t2\n")
-        if args == ["git", "rev-list", "--left-right", "--count", "HEAD...origin/main"]:
-            return _result("0\t0\n")
-        raise AssertionError(f"unexpected command: {args} cwd={cwd}")
+        ),
+    )
+    fake_subprocess.register(
+        ["git", "status", "--porcelain"],
+        lambda cmd, cwd=None, **kw: _result(" M changed.py\n" if cwd == str(feature) else ""),
+    )
+    fake_subprocess.register(
+        ["git", "rev-parse", "--abbrev-ref", "@{upstream}"],
+        lambda cmd, cwd=None, **kw: _result(
+            "origin/feature\n" if cwd == str(feature) else "origin/main\n"
+        ),
+    )
+    fake_subprocess.register(
+        ["git", "rev-list", "--left-right", "--count", "HEAD...origin/feature"],
+        _result("1\t2\n"),
+    )
+    fake_subprocess.register(
+        ["git", "rev-list", "--left-right", "--count", "HEAD...origin/main"],
+        _result("0\t0\n"),
+    )
 
     monkeypatch.chdir(main)
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     result = snapshot.build_snapshot(filters=["feature"], worktree_limit=10)
 
@@ -208,27 +212,31 @@ def test_build_snapshot_filters_and_counts(monkeypatch, tmp_path: Path) -> None:
     assert result.worktrees[0].behind == 2
 
 
-def test_repo_status_is_optional(monkeypatch, tmp_path: Path) -> None:
+def test_repo_status_is_optional(monkeypatch, tmp_path: Path, fake_subprocess) -> None:
     """Include current checkout status only when requested."""
     main = tmp_path / "main"
     main.mkdir()
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del cwd, timeout
-        if args == ["git", "worktree", "list", "--porcelain"]:
-            return _result(f"worktree {main}\nHEAD aaa\nbranch refs/heads/main\n")
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "status", "--short", "--branch"]:
-            return _result("## main...origin/main\n M docs.md\n")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/main\n")
-        if args == ["git", "rev-list", "--left-right", "--count", "HEAD...origin/main"]:
-            return _result("0\t4\n")
-        raise AssertionError(f"unexpected command: {args}")
+    fake_subprocess.register(
+        ["git", "worktree", "list", "--porcelain"],
+        _result(f"worktree {main}\nHEAD aaa\nbranch refs/heads/main\n"),
+    )
+    fake_subprocess.register(["git", "status", "--porcelain"], _result(""))
+    fake_subprocess.register(
+        ["git", "status", "--short", "--branch"],
+        _result("## main...origin/main\n M docs.md\n"),
+    )
+    fake_subprocess.register(
+        ["git", "rev-parse", "--abbrev-ref", "@{upstream}"],
+        _result("origin/main\n"),
+    )
+    fake_subprocess.register(
+        ["git", "rev-list", "--left-right", "--count", "HEAD...origin/main"],
+        _result("0\t4\n"),
+    )
 
     monkeypatch.chdir(main)
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     result = snapshot.build_snapshot(include_repo_status=True)
 
@@ -238,24 +246,29 @@ def test_repo_status_is_optional(monkeypatch, tmp_path: Path) -> None:
     assert result.repo_status.behind == 4
 
 
-def test_missing_worktree_path_marks_status_failed(monkeypatch, tmp_path: Path) -> None:
+def test_missing_worktree_path_marks_status_failed(
+    monkeypatch, tmp_path: Path, fake_subprocess
+) -> None:
     """Classify missing worktree paths as status failures."""
     main = tmp_path / "main"
     missing = tmp_path / "missing"
     main.mkdir()
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del timeout
-        if args == ["git", "worktree", "list", "--porcelain"]:
-            return _result(f"worktree {missing}\nHEAD aaa\nbranch refs/heads/gone\n")
-        if args == ["git", "status", "--porcelain"]:
-            return _result(stderr="missing", returncode=127)
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result(stderr="missing", returncode=127)
-        raise AssertionError(f"unexpected command: {args} cwd={cwd}")
+    fake_subprocess.register(
+        ["git", "worktree", "list", "--porcelain"],
+        _result(f"worktree {missing}\nHEAD aaa\nbranch refs/heads/gone\n"),
+    )
+    fake_subprocess.register(
+        ["git", "status", "--porcelain"],
+        _result(stderr="missing", returncode=127),
+    )
+    fake_subprocess.register(
+        ["git", "rev-parse", "--abbrev-ref", "@{upstream}"],
+        _result(stderr="missing", returncode=127),
+    )
 
     monkeypatch.chdir(main)
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     result = snapshot.build_snapshot()
 
@@ -264,39 +277,43 @@ def test_missing_worktree_path_marks_status_failed(monkeypatch, tmp_path: Path) 
     assert result.worktrees[0].dirty_entries == -1
 
 
-def test_current_worktree_is_reported_when_truncated(monkeypatch, tmp_path: Path) -> None:
+def test_current_worktree_is_reported_when_truncated(
+    monkeypatch, tmp_path: Path, fake_subprocess
+) -> None:
     """Preserve current worktree identity even when rows are truncated."""
     first = tmp_path / "first"
     current = tmp_path / "current"
     first.mkdir()
     current.mkdir()
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del timeout
-        if args == ["git", "worktree", "list", "--porcelain"]:
-            return _result(
-                "\n".join(
-                    [
-                        f"worktree {first}",
-                        "HEAD aaa",
-                        "branch refs/heads/first",
-                        "",
-                        f"worktree {current}",
-                        "HEAD bbb",
-                        "branch refs/heads/current",
-                    ]
-                )
+    fake_subprocess.register(
+        ["git", "worktree", "list", "--porcelain"],
+        _result(
+            "\n".join(
+                [
+                    f"worktree {first}",
+                    "HEAD aaa",
+                    "branch refs/heads/first",
+                    "",
+                    f"worktree {current}",
+                    "HEAD bbb",
+                    "branch refs/heads/current",
+                ]
             )
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/first\n")
-        if args == ["git", "rev-list", "--left-right", "--count", "HEAD...origin/first"]:
-            return _result("0\t0\n")
-        raise AssertionError(f"unexpected command: {args} cwd={cwd}")
+        ),
+    )
+    fake_subprocess.register(["git", "status", "--porcelain"], _result(""))
+    fake_subprocess.register(
+        ["git", "rev-parse", "--abbrev-ref", "@{upstream}"],
+        _result("origin/first\n"),
+    )
+    fake_subprocess.register(
+        ["git", "rev-list", "--left-right", "--count", "HEAD...origin/first"],
+        _result("0\t0\n"),
+    )
 
     monkeypatch.chdir(current)
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     result = snapshot.build_snapshot(worktree_limit=1)
 
@@ -305,35 +322,39 @@ def test_current_worktree_is_reported_when_truncated(monkeypatch, tmp_path: Path
     assert result.worktrees_truncated is True
 
 
-def test_current_worktree_ignores_malformed_rows(monkeypatch, tmp_path: Path) -> None:
+def test_current_worktree_ignores_malformed_rows(
+    monkeypatch, tmp_path: Path, fake_subprocess
+) -> None:
     """Do not let rows without paths match the current checkout."""
     current = tmp_path / "current"
     current.mkdir()
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del timeout
-        if args == ["git", "worktree", "list", "--porcelain"]:
-            return _result(
-                "\n".join(
-                    [
-                        "HEAD malformed",
-                        "",
-                        f"worktree {current}",
-                        "HEAD aaa",
-                        "branch refs/heads/current",
-                    ]
-                )
+    fake_subprocess.register(
+        ["git", "worktree", "list", "--porcelain"],
+        _result(
+            "\n".join(
+                [
+                    "HEAD malformed",
+                    "",
+                    f"worktree {current}",
+                    "HEAD aaa",
+                    "branch refs/heads/current",
+                ]
             )
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/current\n")
-        if args == ["git", "rev-list", "--left-right", "--count", "HEAD...origin/current"]:
-            return _result("0\t0\n")
-        raise AssertionError(f"unexpected command: {args} cwd={cwd}")
+        ),
+    )
+    fake_subprocess.register(["git", "status", "--porcelain"], _result(""))
+    fake_subprocess.register(
+        ["git", "rev-parse", "--abbrev-ref", "@{upstream}"],
+        _result("origin/current\n"),
+    )
+    fake_subprocess.register(
+        ["git", "rev-list", "--left-right", "--count", "HEAD...origin/current"],
+        _result("0\t0\n"),
+    )
 
     monkeypatch.chdir(current)
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     result = snapshot.build_snapshot()
 
@@ -646,7 +667,7 @@ def test_build_retirement_plan_caches_fallback_branch_lookups(monkeypatch, tmp_p
 
 
 def test_include_all_retirement_plan_applies_budget_during_inventory(
-    monkeypatch, tmp_path: Path
+    monkeypatch, tmp_path: Path, fake_subprocess
 ) -> None:
     """The all-worktree path stops before constructing rows beyond its budget."""
     worktree_paths = [tmp_path / name for name in ("a", "b", "c")]
@@ -658,29 +679,32 @@ def test_include_all_retirement_plan_applies_budget_during_inventory(
     )
     seen_cwds: list[str | None] = []
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30, **kwargs):
-        del timeout, kwargs
-        if args == ["git", "worktree", "list", "--porcelain"]:
-            return _result(porcelain)
+    fake_subprocess.register(["git", "worktree", "list", "--porcelain"], _result(porcelain))
+
+    def handle_status(cmd, cwd=None, **kw):
         seen_cwds.append(cwd)
         if cwd == str(worktree_paths[2]):
             raise AssertionError("budgeted inventory inspected an unprocessed row")
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result(f"origin/feature-{Path(cwd).name}\n")
-        if args == [
-            "git",
-            "rev-list",
-            "--left-right",
-            "--count",
-            f"HEAD...origin/feature-{Path(cwd).name}",
-        ]:
-            return _result("0\t0\n")
-        raise AssertionError(f"unexpected command: {args} cwd={cwd}")
+        return _result("")
+
+    def handle_upstream(cmd, cwd=None, **kw):
+        seen_cwds.append(cwd)
+        if cwd == str(worktree_paths[2]):
+            raise AssertionError("budgeted inventory inspected an unprocessed row")
+        return _result(f"origin/feature-{Path(cwd).name}\n")
+
+    def handle_rev_list(cmd, cwd=None, **kw):
+        seen_cwds.append(cwd)
+        if cwd == str(worktree_paths[2]):
+            raise AssertionError("budgeted inventory inspected an unprocessed row")
+        return _result("0\t0\n")
+
+    fake_subprocess.register(["git", "status", "--porcelain"], handle_status)
+    fake_subprocess.register(["git", "rev-parse", "--abbrev-ref", "@{upstream}"], handle_upstream)
+    fake_subprocess.register(["git", "rev-list"], handle_rev_list)
 
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
     monkeypatch.setattr(snapshot, "_ignored_artifacts", lambda _path, **_kwargs: ([], None))
     monkeypatch.setattr(snapshot, "_tracked_durable_paths", lambda _path, **_kwargs: ([], None))
     pull_requests = [
@@ -773,27 +797,31 @@ def test_build_retirement_plan_falls_back_to_branch_pr_query(monkeypatch, tmp_pa
     assert plan.removeable == [row.path]
 
 
-def test_retirement_plan_marks_clean_merged_worktree_removable(monkeypatch, tmp_path: Path) -> None:
+def test_retirement_plan_marks_clean_merged_worktree_removable(
+    monkeypatch, tmp_path: Path, fake_subprocess
+) -> None:
     """A clean, merged, unclaimed row with no durable artifacts is removable."""
     main = tmp_path / "main"
     done = tmp_path / "done"
     main.mkdir()
     done.mkdir()
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del cwd, timeout
-        if args == ["git", "worktree", "list", "--porcelain"]:
-            return _result(f"worktree {done}\nHEAD aaa\nbranch refs/heads/done\n")
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/done\n")
-        if args == ["git", "rev-list", "--left-right", "--count", "HEAD...origin/done"]:
-            return _result("0\t0\n")
-        raise AssertionError(f"unexpected command: {args}")
+    fake_subprocess.register(
+        ["git", "worktree", "list", "--porcelain"],
+        _result(f"worktree {done}\nHEAD aaa\nbranch refs/heads/done\n"),
+    )
+    fake_subprocess.register(["git", "status", "--porcelain"], _result(""))
+    fake_subprocess.register(
+        ["git", "rev-parse", "--abbrev-ref", "@{upstream}"],
+        _result("origin/done\n"),
+    )
+    fake_subprocess.register(
+        ["git", "rev-list", "--left-right", "--count", "HEAD...origin/done"],
+        _result("0\t0\n"),
+    )
 
     monkeypatch.chdir(main)
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     result = snapshot.build_snapshot(
         include_retirement_plan=True,
@@ -806,27 +834,33 @@ def test_retirement_plan_marks_clean_merged_worktree_removable(monkeypatch, tmp_
     assert result.worktrees[0].retirement.action == snapshot.RETIREMENT_REMOVABLE
 
 
-def test_retirement_plan_preserves_dirty_worktree(monkeypatch, tmp_path: Path) -> None:
+def test_retirement_plan_preserves_dirty_worktree(
+    monkeypatch, tmp_path: Path, fake_subprocess
+) -> None:
     """Dirty tracked or untracked status fails closed to preserve."""
     main = tmp_path / "main"
     dirty = tmp_path / "dirty"
     main.mkdir()
     dirty.mkdir()
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del cwd, timeout
-        if args == ["git", "worktree", "list", "--porcelain"]:
-            return _result(f"worktree {dirty}\nHEAD aaa\nbranch refs/heads/dirty\n")
-        if args == ["git", "status", "--porcelain"]:
-            return _result(" M changed.py\n?? new.txt\n")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/dirty\n")
-        if args == ["git", "rev-list", "--left-right", "--count", "HEAD...origin/dirty"]:
-            return _result("0\t0\n")
-        raise AssertionError(f"unexpected command: {args}")
+    fake_subprocess.register(
+        ["git", "worktree", "list", "--porcelain"],
+        _result(f"worktree {dirty}\nHEAD aaa\nbranch refs/heads/dirty\n"),
+    )
+    fake_subprocess.register(
+        ["git", "status", "--porcelain"], _result(" M changed.py\n?? new.txt\n")
+    )
+    fake_subprocess.register(
+        ["git", "rev-parse", "--abbrev-ref", "@{upstream}"],
+        _result("origin/dirty\n"),
+    )
+    fake_subprocess.register(
+        ["git", "rev-list", "--left-right", "--count", "HEAD...origin/dirty"],
+        _result("0\t0\n"),
+    )
 
     monkeypatch.chdir(main)
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     result = snapshot.build_snapshot(
         include_retirement_plan=True,
@@ -840,27 +874,31 @@ def test_retirement_plan_preserves_dirty_worktree(monkeypatch, tmp_path: Path) -
     assert "tracked or untracked status is dirty" in result.worktrees[0].retirement.reasons
 
 
-def test_retirement_plan_preserves_ahead_worktree(monkeypatch, tmp_path: Path) -> None:
+def test_retirement_plan_preserves_ahead_worktree(
+    monkeypatch, tmp_path: Path, fake_subprocess
+) -> None:
     """Unpushed commits are a preservation risk even if other checks are green."""
     main = tmp_path / "main"
     ahead = tmp_path / "ahead"
     main.mkdir()
     ahead.mkdir()
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del cwd, timeout
-        if args == ["git", "worktree", "list", "--porcelain"]:
-            return _result(f"worktree {ahead}\nHEAD aaa\nbranch refs/heads/ahead\n")
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/ahead\n")
-        if args == ["git", "rev-list", "--left-right", "--count", "HEAD...origin/ahead"]:
-            return _result("2\t0\n")
-        raise AssertionError(f"unexpected command: {args}")
+    fake_subprocess.register(
+        ["git", "worktree", "list", "--porcelain"],
+        _result(f"worktree {ahead}\nHEAD aaa\nbranch refs/heads/ahead\n"),
+    )
+    fake_subprocess.register(["git", "status", "--porcelain"], _result(""))
+    fake_subprocess.register(
+        ["git", "rev-parse", "--abbrev-ref", "@{upstream}"],
+        _result("origin/ahead\n"),
+    )
+    fake_subprocess.register(
+        ["git", "rev-list", "--left-right", "--count", "HEAD...origin/ahead"],
+        _result("2\t0\n"),
+    )
 
     monkeypatch.chdir(main)
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     result = snapshot.build_snapshot(
         include_retirement_plan=True,
@@ -874,23 +912,23 @@ def test_retirement_plan_preserves_ahead_worktree(monkeypatch, tmp_path: Path) -
     assert "worktree has commits ahead of upstream" in result.worktrees[0].retirement.reasons
 
 
-def test_retirement_plan_reviews_detached_worktree(monkeypatch, tmp_path: Path) -> None:
+def test_retirement_plan_reviews_detached_worktree(
+    monkeypatch, tmp_path: Path, fake_subprocess
+) -> None:
     """Detached rows need human review because branch/upstream meaning is missing."""
     main = tmp_path / "main"
     detached = tmp_path / "detached"
     main.mkdir()
     detached.mkdir()
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del cwd, timeout
-        if args == ["git", "worktree", "list", "--porcelain"]:
-            return _result(f"worktree {detached}\nHEAD aaa\ndetached\n")
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        raise AssertionError(f"unexpected command: {args}")
+    fake_subprocess.register(
+        ["git", "worktree", "list", "--porcelain"],
+        _result(f"worktree {detached}\nHEAD aaa\ndetached\n"),
+    )
+    fake_subprocess.register(["git", "status", "--porcelain"], _result(""))
 
     monkeypatch.chdir(main)
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     result = snapshot.build_snapshot(
         include_retirement_plan=True,
@@ -904,25 +942,27 @@ def test_retirement_plan_reviews_detached_worktree(monkeypatch, tmp_path: Path) 
     assert "detached HEAD needs human review" in result.worktrees[0].retirement.reasons
 
 
-def test_retirement_plan_reviews_missing_upstream(monkeypatch, tmp_path: Path) -> None:
+def test_retirement_plan_reviews_missing_upstream(
+    monkeypatch, tmp_path: Path, fake_subprocess
+) -> None:
     """Rows without upstreams are not safe-removal recommendations."""
     main = tmp_path / "main"
     missing = tmp_path / "missing"
     main.mkdir()
     missing.mkdir()
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del cwd, timeout
-        if args == ["git", "worktree", "list", "--porcelain"]:
-            return _result(f"worktree {missing}\nHEAD aaa\nbranch refs/heads/missing\n")
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result(stderr="no upstream", returncode=128)
-        raise AssertionError(f"unexpected command: {args}")
+    fake_subprocess.register(
+        ["git", "worktree", "list", "--porcelain"],
+        _result(f"worktree {missing}\nHEAD aaa\nbranch refs/heads/missing\n"),
+    )
+    fake_subprocess.register(["git", "status", "--porcelain"], _result(""))
+    fake_subprocess.register(
+        ["git", "rev-parse", "--abbrev-ref", "@{upstream}"],
+        _result(stderr="no upstream", returncode=128),
+    )
 
     monkeypatch.chdir(main)
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     result = snapshot.build_snapshot(
         include_retirement_plan=True,
@@ -936,27 +976,31 @@ def test_retirement_plan_reviews_missing_upstream(monkeypatch, tmp_path: Path) -
     assert "upstream is missing" in result.worktrees[0].retirement.reasons
 
 
-def test_retirement_plan_reviews_unavailable_external_state(monkeypatch, tmp_path: Path) -> None:
+def test_retirement_plan_reviews_unavailable_external_state(
+    monkeypatch, tmp_path: Path, fake_subprocess
+) -> None:
     """Unavailable claim, merge, or artifact state prevents removable classification."""
     main = tmp_path / "main"
     uncertain = tmp_path / "uncertain"
     main.mkdir()
     uncertain.mkdir()
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del cwd, timeout
-        if args == ["git", "worktree", "list", "--porcelain"]:
-            return _result(f"worktree {uncertain}\nHEAD aaa\nbranch refs/heads/uncertain\n")
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/uncertain\n")
-        if args == ["git", "rev-list", "--left-right", "--count", "HEAD...origin/uncertain"]:
-            return _result("0\t0\n")
-        raise AssertionError(f"unexpected command: {args}")
+    fake_subprocess.register(
+        ["git", "worktree", "list", "--porcelain"],
+        _result(f"worktree {uncertain}\nHEAD aaa\nbranch refs/heads/uncertain\n"),
+    )
+    fake_subprocess.register(["git", "status", "--porcelain"], _result(""))
+    fake_subprocess.register(
+        ["git", "rev-parse", "--abbrev-ref", "@{upstream}"],
+        _result("origin/uncertain\n"),
+    )
+    fake_subprocess.register(
+        ["git", "rev-list", "--left-right", "--count", "HEAD...origin/uncertain"],
+        _result("0\t0\n"),
+    )
 
     monkeypatch.chdir(main)
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     result = snapshot.build_snapshot(
         include_retirement_plan=True,
@@ -972,7 +1016,9 @@ def test_retirement_plan_reviews_unavailable_external_state(monkeypatch, tmp_pat
     assert "output artifact state unavailable" in result.worktrees[0].retirement.reasons
 
 
-def test_output_root_inspection_preserves_durable_evidence(monkeypatch, tmp_path: Path) -> None:
+def test_output_root_inspection_preserves_durable_evidence(
+    monkeypatch, tmp_path: Path, fake_subprocess
+) -> None:
     """Ignored evidence-like output paths are reported and classified as durable-required."""
     worktree = tmp_path / "worktree"
     worktree.mkdir()
@@ -988,15 +1034,13 @@ def test_output_root_inspection_preserves_durable_evidence(monkeypatch, tmp_path
         behind=0,
     )
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del cwd, timeout
-        if args == ["git", "status", "--ignored", "--short", "-uall", "--", "output"]:
-            return _result("!! output/benchmarks/run/episodes.jsonl\n")
-        if args == ["git", "ls-files", "--", "output"]:
-            return _result("")
-        raise AssertionError(f"unexpected command: {args}")
+    fake_subprocess.register(
+        ["git", "status", "--ignored", "--short", "-uall", "--", "output"],
+        _result("!! output/benchmarks/run/episodes.jsonl\n"),
+    )
+    fake_subprocess.register(["git", "ls-files", "--", "output"], _result(""))
 
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     artifacts = snapshot._inspect_output_root(row)
 
@@ -1013,24 +1057,27 @@ def test_output_root_inspection_preserves_durable_evidence(monkeypatch, tmp_path
 
 
 def test_output_root_inspection_allows_clean_baseline_tracked_output(
-    monkeypatch, tmp_path: Path
+    monkeypatch, tmp_path: Path, fake_subprocess
 ) -> None:
     """Clean output files already tracked on origin/main are not local preservation risk."""
     worktree = tmp_path / "worktree"
     worktree.mkdir()
     row = _worktree_row(str(worktree))
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del cwd, timeout
-        if args == ["git", "status", "--ignored", "--short", "-uall", "--", "output"]:
-            return _result("")
-        if args == ["git", "ls-files", "--", "output"]:
-            return _result("output/fixtures/baseline.json\n")
-        if args == ["git", "ls-tree", "-r", "--name-only", "origin/main", "--", "output"]:
-            return _result("output/fixtures/baseline.json\n")
-        raise AssertionError(f"unexpected command: {args}")
+    fake_subprocess.register(
+        ["git", "status", "--ignored", "--short", "-uall", "--", "output"],
+        _result(""),
+    )
+    fake_subprocess.register(
+        ["git", "ls-files", "--", "output"],
+        _result("output/fixtures/baseline.json\n"),
+    )
+    fake_subprocess.register(
+        ["git", "ls-tree", "-r", "--name-only", "origin/main", "--", "output"],
+        _result("output/fixtures/baseline.json\n"),
+    )
 
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     artifacts = snapshot._inspect_output_root(row)
     preserve, review, reasons = snapshot._artifact_retirement_risks(artifacts)
@@ -1051,24 +1098,27 @@ def test_output_root_inspection_allows_clean_baseline_tracked_output(
 
 
 def test_output_root_inspection_preserves_mixed_baseline_and_durable_output(
-    monkeypatch, tmp_path: Path
+    monkeypatch, tmp_path: Path, fake_subprocess
 ) -> None:
     """Baseline-tracked output does not mask ignored or untracked durable evidence."""
     worktree = tmp_path / "worktree"
     worktree.mkdir()
     row = _worktree_row(str(worktree))
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del cwd, timeout
-        if args == ["git", "status", "--ignored", "--short", "-uall", "--", "output"]:
-            return _result("!! output/benchmarks/run/episodes.jsonl\n")
-        if args == ["git", "ls-files", "--", "output"]:
-            return _result("output/fixtures/baseline.json\n")
-        if args == ["git", "ls-tree", "-r", "--name-only", "origin/main", "--", "output"]:
-            return _result("output/fixtures/baseline.json\n")
-        raise AssertionError(f"unexpected command: {args}")
+    fake_subprocess.register(
+        ["git", "status", "--ignored", "--short", "-uall", "--", "output"],
+        _result("!! output/benchmarks/run/episodes.jsonl\n"),
+    )
+    fake_subprocess.register(
+        ["git", "ls-files", "--", "output"],
+        _result("output/fixtures/baseline.json\n"),
+    )
+    fake_subprocess.register(
+        ["git", "ls-tree", "-r", "--name-only", "origin/main", "--", "output"],
+        _result("output/fixtures/baseline.json\n"),
+    )
 
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     artifacts = snapshot._inspect_output_root(row)
     preserve, review, reasons = snapshot._artifact_retirement_risks(artifacts)
@@ -1086,24 +1136,27 @@ def test_output_root_inspection_preserves_mixed_baseline_and_durable_output(
 
 
 def test_output_root_inspection_preserves_modified_tracked_output(
-    monkeypatch, tmp_path: Path
+    monkeypatch, tmp_path: Path, fake_subprocess
 ) -> None:
     """Modified tracked output files remain preservation evidence."""
     worktree = tmp_path / "worktree"
     worktree.mkdir()
     row = _worktree_row(str(worktree))
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del cwd, timeout
-        if args == ["git", "status", "--ignored", "--short", "-uall", "--", "output"]:
-            return _result(" M output/fixtures/baseline.json\n")
-        if args == ["git", "ls-files", "--", "output"]:
-            return _result("output/fixtures/baseline.json\n")
-        if args == ["git", "ls-tree", "-r", "--name-only", "origin/main", "--", "output"]:
-            return _result("output/fixtures/baseline.json\n")
-        raise AssertionError(f"unexpected command: {args}")
+    fake_subprocess.register(
+        ["git", "status", "--ignored", "--short", "-uall", "--", "output"],
+        _result(" M output/fixtures/baseline.json\n"),
+    )
+    fake_subprocess.register(
+        ["git", "ls-files", "--", "output"],
+        _result("output/fixtures/baseline.json\n"),
+    )
+    fake_subprocess.register(
+        ["git", "ls-tree", "-r", "--name-only", "origin/main", "--", "output"],
+        _result("output/fixtures/baseline.json\n"),
+    )
 
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     artifacts = snapshot._inspect_output_root(row)
     preserve, review, reasons = snapshot._artifact_retirement_risks(artifacts)
@@ -1116,24 +1169,27 @@ def test_output_root_inspection_preserves_modified_tracked_output(
 
 
 def test_output_root_inspection_preserves_branch_local_tracked_output(
-    monkeypatch, tmp_path: Path
+    monkeypatch, tmp_path: Path, fake_subprocess
 ) -> None:
     """Tracked output files absent from origin/main remain preservation evidence."""
     worktree = tmp_path / "worktree"
     worktree.mkdir()
     row = _worktree_row(str(worktree))
 
-    def fake_run(args: list[str], *, cwd: str | None = None, timeout: int = 30):
-        del cwd, timeout
-        if args == ["git", "status", "--ignored", "--short", "-uall", "--", "output"]:
-            return _result("")
-        if args == ["git", "ls-files", "--", "output"]:
-            return _result("output/research_reports/local.json\n")
-        if args == ["git", "ls-tree", "-r", "--name-only", "origin/main", "--", "output"]:
-            return _result("")
-        raise AssertionError(f"unexpected command: {args}")
+    fake_subprocess.register(
+        ["git", "status", "--ignored", "--short", "-uall", "--", "output"],
+        _result(""),
+    )
+    fake_subprocess.register(
+        ["git", "ls-files", "--", "output"],
+        _result("output/research_reports/local.json\n"),
+    )
+    fake_subprocess.register(
+        ["git", "ls-tree", "-r", "--name-only", "origin/main", "--", "output"],
+        _result(""),
+    )
 
-    monkeypatch.setattr(snapshot, "_run_command", fake_run)
+    monkeypatch.setattr(snapshot, "_run_command", fake_subprocess)
 
     artifacts = snapshot._inspect_output_root(row)
     preserve, review, reasons = snapshot._artifact_retirement_risks(artifacts)

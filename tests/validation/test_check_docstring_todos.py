@@ -153,16 +153,15 @@ def test_read_backlog_baseline_fails_closed_for_missing_or_invalid_files(tmp_pat
     assert "must contain a JSON object" in capsys.readouterr().err
 
 
-def test_read_backlog_baseline_for_ref_uses_the_ref_owned_blob(monkeypatch, tmp_path):
+def test_read_backlog_baseline_for_ref_uses_the_ref_owned_blob(
+    monkeypatch, tmp_path, fake_subprocess
+):
     """The base snapshot must load its own baseline rather than the branch file."""
-    observed: dict[str, object] = {}
-
-    def fake_run(command, *, cwd=None):
-        observed["command"] = command
-        observed["cwd"] = cwd
-        return '{"files": {"scripts/tool.py": 2}}'
-
-    monkeypatch.setattr(check_docstring_todos, "_run", fake_run)
+    fake_subprocess.register(
+        ["git", "show", "origin/main:baseline.json"],
+        stdout='{"files": {"scripts/tool.py": 2}}',
+    )
+    monkeypatch.setattr(check_docstring_todos.subprocess, "run", fake_subprocess)
 
     baseline = check_docstring_todos._read_backlog_baseline_for_ref(
         tmp_path / "baseline.json",
@@ -171,10 +170,7 @@ def test_read_backlog_baseline_for_ref_uses_the_ref_owned_blob(monkeypatch, tmp_
     )
 
     assert baseline == {"files": {"scripts/tool.py": 2}}
-    assert observed == {
-        "command": ["git", "show", "origin/main:baseline.json"],
-        "cwd": tmp_path,
-    }
+    assert fake_subprocess.last_call == ["git", "show", "origin/main:baseline.json"]
 
 
 def test_read_backlog_baseline_for_ref_fails_closed(monkeypatch, tmp_path, capsys):

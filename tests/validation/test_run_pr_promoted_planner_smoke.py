@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from scripts.validation import run_pr_promoted_planner_smoke as smoke
 
@@ -26,7 +27,7 @@ def _episode(algorithm: str, *, success: bool = True) -> dict[str, object]:
     }
 
 
-def test_runner_writes_summary_and_markdown(monkeypatch, tmp_path: Path) -> None:
+def test_runner_writes_summary_and_markdown(monkeypatch, tmp_path: Path, fake_subprocess) -> None:
     """Runner writes machine and Markdown summaries for a passing planner."""
     baseline_path = tmp_path / "baseline.json"
     matrix_path = tmp_path / "matrix.yaml"
@@ -53,18 +54,8 @@ def test_runner_writes_summary_and_markdown(monkeypatch, tmp_path: Path) -> None
         encoding="utf-8",
     )
 
-    def fake_run(
-        command: list[str],
-        cwd: Path,
-        env: dict[str, str],
-        text: bool,
-        stdout: int,
-        stderr: int,
-        check: bool,
-        timeout: float,
-    ) -> subprocess.CompletedProcess[str]:
-        del cwd, env, text, stdout, stderr, check
-        assert timeout == 120.0
+    def handle_smoke(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        assert kwargs.get("timeout") == 120.0
         out_arg = command[command.index("--out") + 1]
         Path(out_arg).write_text(json.dumps(_episode("goal")) + "\n", encoding="utf-8")
         payload = {
@@ -77,7 +68,8 @@ def test_runner_writes_summary_and_markdown(monkeypatch, tmp_path: Path) -> None
         }
         return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload) + "\n")
 
-    monkeypatch.setattr(smoke.subprocess, "run", fake_run)
+    fake_subprocess.set_default(handle_smoke)
+    monkeypatch.setattr(smoke.subprocess, "run", fake_subprocess)
     monkeypatch.setattr(smoke.shutil, "which", lambda _name: "robot_sf_bench")
 
     output_root = tmp_path / "out"
@@ -105,7 +97,7 @@ def test_runner_writes_summary_and_markdown(monkeypatch, tmp_path: Path) -> None
     assert "PR promoted planner smoke" in summary_path.read_text(encoding="utf-8")
 
 
-def test_runner_fails_on_degraded_readiness(monkeypatch, tmp_path: Path) -> None:
+def test_runner_fails_on_degraded_readiness(monkeypatch, tmp_path: Path, fake_subprocess) -> None:
     """Runner fails closed when benchmark readiness is degraded."""
     baseline_path = tmp_path / "baseline.json"
     matrix_path = tmp_path / "matrix.yaml"
@@ -126,17 +118,7 @@ def test_runner_fails_on_degraded_readiness(monkeypatch, tmp_path: Path) -> None
         encoding="utf-8",
     )
 
-    def fake_run(
-        command: list[str],
-        cwd: Path,
-        env: dict[str, str],
-        text: bool,
-        stdout: int,
-        stderr: int,
-        check: bool,
-        timeout: float,
-    ) -> subprocess.CompletedProcess[str]:
-        del cwd, env, text, stdout, stderr, check, timeout
+    def handle_degraded(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
         out_arg = command[command.index("--out") + 1]
         Path(out_arg).write_text(json.dumps(_episode("goal")) + "\n", encoding="utf-8")
         payload = {
@@ -149,7 +131,8 @@ def test_runner_fails_on_degraded_readiness(monkeypatch, tmp_path: Path) -> None
         }
         return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload) + "\n")
 
-    monkeypatch.setattr(smoke.subprocess, "run", fake_run)
+    fake_subprocess.set_default(handle_degraded)
+    monkeypatch.setattr(smoke.subprocess, "run", fake_subprocess)
     monkeypatch.setattr(smoke.shutil, "which", lambda _name: "robot_sf_bench")
 
     exit_code = smoke.main(

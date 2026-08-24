@@ -946,7 +946,7 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
         in script_text
     )
     assert (
-        'PYTEST_ADDOPTS="$optional_pytest_addopts" ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=optional "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional'
+        'PYTEST_ADDOPTS="$optional_pytest_addopts" ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=optional PYTEST_XDIST_DIST="${PYTEST_XDIST_DIST:-worksteal}" "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional'
         in script_text
     )
     assert "Optional-extra changed files requiring the predictive lane" in script_text

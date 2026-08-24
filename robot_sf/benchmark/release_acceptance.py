@@ -227,6 +227,15 @@ def _algorithm_metadata_runtime_marker(metadata: Mapping[str, Any]) -> tuple[str
     Returns:
         The first forbidden runtime marker, if present.
     """
+
+    def _is_valid_native_counter(value: Any) -> bool:
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return False
+        try:
+            return math.isfinite(float(value)) and value >= 0
+        except (OverflowError, TypeError, ValueError):
+            return False
+
     runtime_view: dict[str, Any] = {
         str(key): value
         for key, value in metadata.items()
@@ -247,7 +256,9 @@ def _algorithm_metadata_runtime_marker(metadata: Mapping[str, Any]) -> tuple[str
         guard_stats = metadata.get("guard_stats")
         if isinstance(guard_stats, Mapping):
             runtime_view["guard_stats"] = {
-                str(key): value for key, value in guard_stats.items() if key != "fallback_safe"
+                str(key): value
+                for key, value in guard_stats.items()
+                if key != "fallback_safe" or not _is_valid_native_counter(value)
             }
         shield_stats = metadata.get("shield_stats")
         if isinstance(shield_stats, Mapping):
@@ -257,7 +268,7 @@ def _algorithm_metadata_runtime_marker(metadata: Mapping[str, Any]) -> tuple[str
                 shield_view["decision_counts"] = {
                     str(key): value
                     for key, value in decision_counts.items()
-                    if key != "fallback_safe"
+                    if key != "fallback_safe" or not _is_valid_native_counter(value)
                 }
             last_decision = shield_stats.get("last_decision")
             if isinstance(last_decision, Mapping):
@@ -373,7 +384,11 @@ def _status_markers(  # noqa: C901, PLR0912, PLR0915
         for field in ("status", "readiness_status", "availability_status", "execution_mode"):
             if field in availability:
                 _add(f"benchmark_availability.{field}", availability[field])
-    return markers
+    # The broad runtime metadata scan and the explicit compatibility fields above can
+    # intentionally reach the same leaf (for example
+    # ``planner_kinematics.execution_mode``).  Count each concrete marker once so the
+    # acceptance receipt reports artifact facts rather than traversal-path multiplicity.
+    return list(dict.fromkeys(markers))
 
 
 def _read_campaign_summary(campaign_root: Path) -> tuple[dict[str, Any] | None, str | None]:

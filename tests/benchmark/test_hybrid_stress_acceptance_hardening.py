@@ -400,6 +400,24 @@ def test_guarded_ppo_safe_label_requires_exact_composite_identity(
     assert any("fallback_safe" in blocker for blocker in report["blockers"])
 
 
+@pytest.mark.parametrize("value", ("1", -1, True))
+def test_guarded_ppo_safe_counter_requires_valid_numeric_telemetry(
+    stress_fixture: tuple[Path, Any, Any], value: Any
+) -> None:
+    """Malformed native-shield counters cannot bypass exact composite identity."""
+    root, manifest, campaign_config = stress_fixture
+    episodes_path = _first_row_path(root, "guarded_ppo")
+    rows = [json.loads(line) for line in episodes_path.read_text().splitlines()]
+    rows[0]["algorithm_metadata"]["guard_stats"] = {"fallback_safe": value}
+    episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    _refresh_sidecar_raw_hash(episodes_path)
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "invalid"
+    assert any("fallback_safe" in blocker for blocker in report["blockers"])
+
+
 @pytest.mark.parametrize(
     "mutation",
     (

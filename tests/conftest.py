@@ -442,8 +442,15 @@ _FAST_FILES = {
     # the planner modules without requiring an external benchmark dependency.
     "test_socnav.py",
     "test_socnav_prediction_module.py",
+    # Classic planner adapter tests are deterministic planner-contract tests for
+    # the changed classic_planner_adapter.py producer; keep in fast shards for
+    # the exact-head changed-coverage gate.
+    "test_classic_planner_adapter.py",
     # Both CLI test owners exercise deterministic release command contracts.
     "test_cli.py",
+    # The release-publication contract is deterministic schema/CLI coverage for
+    # the changed release_publication_contract.py producer.
+    "test_release_publication_contract.py",
     # Radius rank-stability schema tests exercise the changed benchmark producer;
     # keep their deterministic contract coverage in pull-request fast shards.
     "test_radius_rank_stability.py",

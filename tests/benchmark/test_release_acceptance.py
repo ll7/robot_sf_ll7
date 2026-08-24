@@ -196,6 +196,7 @@ def _write_provenance_bound_full_campaign(
     monkeypatch: pytest.MonkeyPatch,
     *,
     shared_first_algorithm: bool = False,
+    telemetry: dict[str, str] | None = None,
 ) -> tuple[Path, SimpleNamespace]:
     """Write a full fixture with the same sidecars and arm paths as production."""
     campaign_root = _write_full_campaign(tmp_path)
@@ -218,6 +219,10 @@ def _write_provenance_bound_full_campaign(
         )
         for scenario in resolved_scenarios
     ]
+    if telemetry is not None:
+        for scenario in effective_scenarios:
+            scenario["telemetry"] = dict(telemetry)
+            scenario["metadata"] = {"telemetry": dict(telemetry)}
     schema_path = get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json"
     planner_specs: list[SimpleNamespace] = []
     for run in summary["runs"]:
@@ -287,7 +292,7 @@ def _write_provenance_bound_full_campaign(
         planners=tuple(planner_specs),
         scenario_matrix_path=scenario_path,
         holonomic_command_mode="vx_vy",
-        telemetry=None,
+        telemetry=telemetry,
     )
     return campaign_root, config
 
@@ -310,6 +315,31 @@ def test_full_release_acceptance_requires_all_arms_and_episode_cells(
     assert result["observed_episode_rows"] == 20_160
     assert result["unique_episode_identities"] == 20_160
     assert result["source_commits"] == [_SOURCE_SHA]
+    assert result["blockers"] == []
+
+
+def test_full_release_sidecar_identity_matches_telemetry_enabled_producer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Telemetry-enabled admission hashes the exact map-runner scenario payload."""
+    telemetry = {
+        "schema_version": "analysis-telemetry-profile.v1",
+        "analysis_trace": "all",
+        "planner_debug_trace": "none",
+    }
+    campaign_root, config = _write_provenance_bound_full_campaign(
+        tmp_path,
+        monkeypatch,
+        telemetry=telemetry,
+    )
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+    )
+
+    assert result["status"] == "valid"
     assert result["blockers"] == []
 
 

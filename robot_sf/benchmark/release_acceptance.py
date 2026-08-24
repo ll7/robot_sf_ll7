@@ -17,6 +17,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.analysis_trace import normalize_telemetry_profile
 from robot_sf.benchmark.camera_ready._config import (
     _load_campaign_scenarios,
     _scenario_with_kinematics,
@@ -233,12 +234,9 @@ def _algorithm_metadata_runtime_marker(
     """
 
     def _is_valid_native_counter(value: Any) -> bool:
-        if not isinstance(value, (int, float)) or isinstance(value, bool):
+        if not isinstance(value, int) or isinstance(value, bool):
             return False
-        try:
-            return math.isfinite(float(value)) and value >= 0
-        except (OverflowError, TypeError, ValueError):
-            return False
+        return value >= 0
 
     runtime_view: dict[str, Any] = {
         str(key): value
@@ -1539,6 +1537,40 @@ def _scenario_id(scenario: Mapping[str, Any]) -> str:
     ).strip()
 
 
+def _result_provenance_scenarios(
+    campaign_config: Any,
+    scenarios: list[dict[str, Any]],
+    *,
+    kinematics: str,
+) -> list[dict[str, Any]]:
+    """Mirror the scenario payload hashed by map-runner result sidecars.
+
+    The campaign runner adds kinematics and top-level telemetry. Map runner then
+    adds normalized telemetry under ``metadata`` before emitting provenance.
+
+    Returns:
+        Scenarios in their producer-side result-provenance form.
+    """
+    effective_scenarios = [
+        _scenario_with_kinematics(
+            scenario,
+            kinematics=kinematics,
+            holonomic_command_mode=str(getattr(campaign_config, "holonomic_command_mode", "vx_vy")),
+        )
+        for scenario in scenarios
+    ]
+    telemetry = getattr(campaign_config, "telemetry", None)
+    if isinstance(telemetry, Mapping):
+        normalized_telemetry = normalize_telemetry_profile(dict(telemetry)).to_mapping()
+        for scenario in effective_scenarios:
+            scenario["telemetry"] = dict(telemetry)
+            metadata = scenario.get("metadata")
+            metadata = dict(metadata) if isinstance(metadata, Mapping) else {}
+            metadata["telemetry"] = dict(normalized_telemetry)
+            scenario["metadata"] = metadata
+    return effective_scenarios
+
+
 def _resolve_expected_matrix_axes(  # noqa: C901
     manifest: Any,
     campaign_config: Any | None,
@@ -1879,18 +1911,11 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
     # Campaign metadata uses the camera-ready 12-character structural hash;
     # result-provenance sidecars use the 16-character config hash over the
     # resolved scenario payload.  Keep these identities distinct.
-    effective_scenarios = [
-        _scenario_with_kinematics(
-            scenario,
-            kinematics=STRESS_SMOKE_EXPECTED_KINEMATICS,
-            holonomic_command_mode=str(getattr(campaign_config, "holonomic_command_mode", "vx_vy")),
-        )
-        for scenario in resolved_scenarios
-    ]
-    telemetry = getattr(campaign_config, "telemetry", None)
-    if isinstance(telemetry, Mapping):
-        for scenario in effective_scenarios:
-            scenario["telemetry"] = dict(telemetry)
+    effective_scenarios = _result_provenance_scenarios(
+        campaign_config,
+        resolved_scenarios,
+        kinematics=STRESS_SMOKE_EXPECTED_KINEMATICS,
+    )
     expected_scenario_identity = _config_hash(effective_scenarios)
 
     for marker_path, marker in _status_markers(summary, "campaign_summary"):
@@ -2304,20 +2329,11 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
                 blockers, f"campaign scenarios cannot be resolved for provenance: {exc}"
             )
         else:
-            effective_scenarios = [
-                _scenario_with_kinematics(
-                    scenario,
-                    kinematics=FULL_RELEASE_KINEMATICS,
-                    holonomic_command_mode=str(
-                        getattr(resolved_campaign_config, "holonomic_command_mode", "vx_vy")
-                    ),
-                )
-                for scenario in resolved_scenarios
-            ]
-            telemetry = getattr(resolved_campaign_config, "telemetry", None)
-            if isinstance(telemetry, Mapping):
-                for scenario in effective_scenarios:
-                    scenario["telemetry"] = dict(telemetry)
+            effective_scenarios = _result_provenance_scenarios(
+                resolved_campaign_config,
+                resolved_scenarios,
+                kinematics=FULL_RELEASE_KINEMATICS,
+            )
             expected_scenario_identity = _config_hash(effective_scenarios)
         expected_scenario_path = Path(resolved_campaign_config.scenario_matrix_path)
         try:

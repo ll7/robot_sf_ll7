@@ -348,9 +348,9 @@ def _is_guarded_ppo_safe_shield_marker(
 ) -> bool:
     """Allow only the canonical Guarded PPO native safe-shield counter.
 
-    ``_status_markers`` normalizes a detected numeric counter to text before the
-    runtime-smoke deep walk sees it.  Accept both the original finite number and
-    that normalized representation, while keeping malformed counter values closed.
+    ``_status_markers`` normalizes a detected integer counter to text before the
+    runtime-smoke deep walk sees it. Accept both the original integer and that
+    normalized representation, while keeping floats and malformed values closed.
 
     Returns:
         Whether ``path`` identifies the fixed Guarded PPO arm's native safe counter.
@@ -362,17 +362,14 @@ def _is_guarded_ppo_safe_shield_marker(
     ) is None or isinstance(value, bool):
         return False
     if normalized_marker:
-        if not isinstance(value, str):
+        if not isinstance(value, str) or not value.isdigit():
             return False
-        try:
-            numeric = float(value)
-        except (TypeError, ValueError, OverflowError):
-            return False
+        numeric = int(value)
     else:
-        if not isinstance(value, (int, float)):
+        if not isinstance(value, int):
             return False
-        numeric = float(value)
-    return math.isfinite(numeric) and numeric >= 0
+        numeric = value
+    return numeric >= 0
 
 
 def _is_allowed_runtime_marker(path: str, key: str, value: Any, *, parent: dict[str, Any]) -> bool:

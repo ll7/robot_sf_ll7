@@ -862,6 +862,7 @@ def test_runtime_smoke_allows_guarded_ppo_intrinsic_safe_shield_counter(
     [
         ("guarded_ppo", {"fallback_best_effort": 1}),
         ("guarded_ppo", {"fallback_safe": "1"}),
+        ("guarded_ppo", {"fallback_safe": 1.5}),
         ("guarded_ppo", {"fallback_safe": -1}),
         ("prediction_planner", {"fallback_safe": 1}),
     ],

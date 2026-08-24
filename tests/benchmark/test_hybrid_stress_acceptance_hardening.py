@@ -400,7 +400,7 @@ def test_guarded_ppo_safe_label_requires_exact_composite_identity(
     assert any("fallback_safe" in blocker for blocker in report["blockers"])
 
 
-@pytest.mark.parametrize("value", ("1", -1, True))
+@pytest.mark.parametrize("value", ("1", 1.5, -1, True))
 def test_guarded_ppo_safe_counter_requires_valid_numeric_telemetry(
     stress_fixture: tuple[Path, Any, Any], value: Any
 ) -> None:

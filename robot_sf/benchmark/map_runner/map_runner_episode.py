@@ -3468,7 +3468,48 @@ def _finalize_episode_metrics(  # noqa: PLR0913
         metrics["cbf_filter_intervention_rate"] = float(cbf_filter_summary["intervention_rate"])
         metrics["cbf_filter_qp_infeasible_rate"] = float(cbf_filter_summary["qp_infeasible_rate"])
         metrics["cbf_filter_fallback_rate"] = float(cbf_filter_summary["fallback_rate"])
+    metrics["metric_values"] = _paired_effect_metric_values(
+        metrics_raw=metrics_raw,
+        metrics=metrics,
+    )
     return metrics
+
+
+def _paired_effect_metric_values(
+    *,
+    metrics_raw: dict[str, Any],
+    metrics: dict[str, Any],
+) -> dict[str, float | None]:
+    """Emit the #6970 paired-effect retained-row ``metric_values`` mapping.
+
+    Derives the five fields whose source predicates exist on the map_runner
+    path today. A field whose source is unavailable is omitted from the mapping
+    (never a fabricated zero) so the existing #6970 gate fails closed. The
+    remaining three contract fields (``false_positive_stop_rate``,
+    ``stop_yield_latency_s``, ``progress_at_timeout``) await the versioned
+    counterfactual-window contract clarification and are not emitted here.
+
+    Returns:
+        The retained-row ``metric_values`` mapping with only the fields whose
+        sources were available, or an empty mapping when no source is present.
+    """
+    raw_success = metrics_raw.get("success")
+    raw_collisions = metrics_raw.get("collisions")
+    raw_near_misses = metrics_raw.get("near_misses")
+    raw_min_distance = metrics_raw.get("min_distance")
+
+    values: dict[str, float | None] = {}
+    if isinstance(raw_collisions, (int, float)) and not isinstance(raw_collisions, bool):
+        values["exact_collision_probability"] = 1.0 if raw_collisions > 0 else 0.0
+    if isinstance(raw_near_misses, (int, float)) and not isinstance(raw_near_misses, bool):
+        values["near_miss_probability"] = 1.0 if raw_near_misses > 0 else 0.0
+    if isinstance(raw_min_distance, (int, float)) and not isinstance(raw_min_distance, bool):
+        values["min_predicted_separation_m"] = float(raw_min_distance)
+    if isinstance(raw_success, (int, float)) and not isinstance(raw_success, bool):
+        values["completion_probability"] = 1.0 if raw_success > 0 else 0.0
+    if isinstance(metrics.get("wrapper_intervention_rate"), (int, float)):
+        values["wrapper_intervention_rate"] = float(metrics["wrapper_intervention_rate"])
+    return values
 
 
 def _build_episode_record_dict(  # noqa: PLR0913

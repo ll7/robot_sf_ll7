@@ -63,6 +63,63 @@ def test_contract_declares_exact_report_builder_roster() -> None:
     ]
 
 
+def test_metric_values_producer_derives_available_sources() -> None:
+    """The map-runner producer emits the five fields with available sources."""
+    from robot_sf.benchmark.map_runner import map_runner_episode
+
+    values = map_runner_episode._paired_effect_metric_values(
+        metrics_raw={
+            "success": 1.0,
+            "collisions": 1.0,
+            "near_misses": 2.0,
+            "min_distance": 0.42,
+        },
+        metrics={"wrapper_intervention_rate": 0.25},
+    )
+    assert values["exact_collision_probability"] == 1.0
+    assert values["near_miss_probability"] == 1.0
+    assert values["min_predicted_separation_m"] == 0.42
+    assert values["completion_probability"] == 1.0
+    assert values["wrapper_intervention_rate"] == 0.25
+
+
+def test_metric_values_producer_omits_unavailable_sources() -> None:
+    """Fields whose sources are missing are omitted, never fabricated as zero."""
+    from robot_sf.benchmark.map_runner import map_runner_episode
+
+    values = map_runner_episode._paired_effect_metric_values(
+        metrics_raw={},
+        metrics={},
+    )
+    assert values == {}
+    assert "exact_collision_probability" not in values
+
+
+def test_metric_values_producer_finalize_attaches_mapping() -> None:
+    """_finalize_episode_metrics attaches the metric_values mapping."""
+    from robot_sf.benchmark.map_runner import map_runner_episode
+
+    metrics = map_runner_episode._finalize_episode_metrics(
+        {"success": 0.0, "collisions": 1.0, "near_misses": 0.0, "min_distance": 0.5},
+        algo_meta={},
+        actuation_controller=None,
+        actuation_summary={},
+        tracking_precision_summary={
+            "min_separation_corrupted_m": 0.5,
+            "contract_honored": True,
+            "contract_honored_rate": 1.0,
+        },
+        tracking_precision_spec={"target_motp_m": 0.3},
+        safety_wrapper_summary=None,
+        cbf_filter_summary=None,
+        snqi_weights=None,
+        snqi_baseline=None,
+    )
+    assert "metric_values" in metrics
+    assert metrics["metric_values"]["exact_collision_probability"] == 1.0
+    assert metrics["metric_values"]["completion_probability"] == 0.0
+
+
 def test_valid_retained_row_passes() -> None:
     """A row with all exact finite fields passes without using legacy aliases."""
     report = validate_paired_effect_metric_record(

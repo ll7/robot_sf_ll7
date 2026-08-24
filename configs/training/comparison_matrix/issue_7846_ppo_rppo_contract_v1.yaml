@@ -1,0 +1,136 @@
+# Versioned successor comparison contract: matched PPO vs RecurrentPPO-LSTM
+#
+# Issue: 7846
+# This file is the outcome-free successor contract for the #4244 recurrent
+# arm. The historical seven-arm preregistration
+# (`configs/training/comparison_matrix/issue_4244_seven_arm_preregistration.yaml`)
+# is frozen and MUST NOT be mutated: its recurrent arm pointed at
+# `issue_4014_ppo_lstm_recurrent_smoke.yaml`, whose nested `socnav_struct`
+# observation is rejected by Stable-Baselines3 before learning (the #4014
+# closure audit). This successor fixes an executable matched recurrent arm.
+#
+# Claim boundary: pre-registration / training-contract only. This file does not
+# authorize training execution, benchmark evidence, or any paper-facing claim.
+# Training is outcome-free: no full-training outcome may be observed before this
+# contract is frozen.
+
+schema_version: training_comparison_matrix_preregistration.v1
+issue: 7846
+title: Matched feed-forward PPO versus true RecurrentPPO-LSTM contract (v1)
+successor_of_issue: 4244
+claim_boundary: >-
+  Pre-registration only. Defines a leakage-audited matched comparison between
+  feed-forward PPO and true RecurrentPPO-LSTM under identical first-stage
+  observations, reward, scenarios, seeds, action semantics, training budget,
+  evaluation surface, and checkpoint-selection rules. Execution status: NOT
+  authorized by this file; do not observe full-training outcomes before the
+  contract is frozen.
+
+comparison:
+  objective: matched_feedforward_vs_recurrent_local_planner
+  arms_expected: 2
+  safety_wrapper_enabled: false
+  observation:
+    mode: default_gym
+    required_keys: [drive_state, rays]
+    normalized_identically: true
+    notes: >-
+      No occupancy grid, privileged critic state, predictive foresight,
+      pedestrian attention, or new tracked-agent tensor in this comparison.
+  action:
+    policy_command: desired_unicycle_velocity
+    policy_command_semantics: [v, omega]
+    env_action: commanded_linear_and_angular_acceleration
+    conversion_path: canonical_policy_command_to_env_action
+    conversion_note: dt-correct velocity-error conversion; identical bounds across arms.
+  guardrails:
+    report_collision_probability_separately: true
+    report_severe_intrusion_near_miss_separately: true
+    success_improvement_cannot_compensate_collision_regression: true
+  analysis_plan:
+    rank_table: false
+    confidence_intervals: bootstrap_95
+    primary_estimand: paired_difference_in_collision_free_route_completion_probability
+  metrics:
+    primary:
+      - collision_free_route_completion_probability
+    secondary:
+      - route_completion_probability
+      - collision_probability
+      - collision_probability_by_type
+      - near_miss_exposure_probability
+      - low_progress_rate
+      - timeout_rate
+      - deadlock_rate
+      - minimum_clearance
+      - time_to_goal_conditional_on_collision_free_completion
+      - path_efficiency
+      - acceleration_jerk_action_saturation
+      - inference_latency_median
+      - inference_latency_p95
+      - inference_latency_max
+
+arms:
+  - id: ppo_default_gym_control_v1
+    display_name: Feed-forward PPO (default_gym)
+    algorithm_family: ppo
+    lineage_issue: 576
+    training_config: configs/training/ppo/issue_4014_ppo_smoke_matched.yaml
+    observation_mode: default_gym
+    budget_ref: shared_budget
+  - id: recurrent_ppo_lstm_default_gym_v1
+    display_name: RecurrentPPO-LSTM (default_gym)
+    algorithm_family: recurrent_ppo_lstm
+    lineage_issue: 4234
+    supporting_issue: 4014
+    training_config: configs/training/ppo/issue_4014_recurrent_ppo_lstm_smoke_matched.yaml
+    observation_mode: default_gym
+    recurrent_policy: MultiInputLstmPolicy
+    budget_ref: shared_budget
+
+shared_budget:
+  # Reuse the #4244 matched-budget basis; a separate outcome-free sensitivity
+  # analysis may prove a different budget infeasible, but the frozen budget is
+  # the default contract.
+  total_timesteps: 15000000
+  seeds: [123, 231, 777, 992, 1337]
+  per_seed_independent_config_and_job: true
+  seed_list_single_invocation_rejected_unless_proven_independent: true
+  num_envs: auto
+  device: cpu_or_gpu_by_private_queue
+  evaluation_episodes: 100
+  scenario_config: configs/scenarios/classic_interactions_francis2023.yaml
+  evaluation_seeds_disjoint_from_training: true
+  checkpoint_selection_rule_identical_across_arms: true
+
+eval_contract:
+  in_distribution_manifest: null # frozen scenario set resolved by the training manifest digest
+  held_out_scenario_family_manifest: null
+  disjoint_scenario_family_split_feasible: false
+  claim_limited_to: disjoint_seed_in_distribution_matching
+  notes: >-
+    If a disjoint scenario-family split is not feasible, the primary claim is
+    explicitly limited to disjoint-seed, in-distribution configured-matrix
+    performance; never imply unseen-scenario generalization.
+
+leakage_audit:
+  covers:
+    - scenario_templates
+    - seed_lineages
+    - derived_variants
+    - map_assets
+    - checkpoint_selection
+  required_before_freeze: true
+  status: pending_outcome_free_audit
+
+stop_rules:
+  max_total_timesteps: 15000000
+  early_stop_allowed: false
+  failed_smoke_contract_policy: exclude_arm_with_reason
+  missing_required_gate_policy: exclude_arm_with_reason
+
+queue_plan:
+  submission_surface: private_queue_after_pr
+  submit_in_this_pr: false
+  per_arm_queue_entry_required: true
+  output_root: output/training/comparison_matrix_issue_7846

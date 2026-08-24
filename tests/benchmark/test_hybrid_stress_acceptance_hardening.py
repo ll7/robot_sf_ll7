@@ -9,7 +9,10 @@ from typing import Any
 import pytest
 
 from robot_sf.benchmark import release_acceptance
-from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
+from robot_sf.benchmark.camera_ready._config import (
+    _load_campaign_scenarios,
+    _scenario_with_kinematics,
+)
 from robot_sf.benchmark.camera_ready._preflight import _config_hash_payload, _scenario_matrix_hash
 from robot_sf.benchmark.camera_ready._run_state import validate_campaign_integrity
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
@@ -63,7 +66,7 @@ def _row(*, algo: str, scenario_id: str, seed: int) -> dict[str, Any]:
         "seed": seed,
         "status": "success",
         "algorithm_metadata": {
-            "algorithm": algo,
+            "algorithm": "ppo" if algo == "guarded_ppo" else algo,
             "canonical_algorithm": algo,
             "planner_kinematics": {
                 "robot_kinematics": "differential_drive",
@@ -95,6 +98,14 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
     manifest = load_release_manifest(MANIFEST_PATH)
     campaign_config = load_campaign_config(manifest.canonical_campaign_config_path)
     scenarios = _load_campaign_scenarios(campaign_config)
+    effective_scenarios = [
+        _scenario_with_kinematics(
+            scenario,
+            kinematics="differential_drive",
+            holonomic_command_mode=campaign_config.holonomic_command_mode,
+        )
+        for scenario in scenarios
+    ]
     scenario_ids = tuple(str(scenario["name"]) for scenario in scenarios)
     assert scenario_ids == STRESS_SMOKE_EXPECTED_SCENARIO_IDS
 
@@ -154,7 +165,7 @@ def stress_fixture(tmp_path: Path) -> tuple[Path, Any, Any]:
             episode_records=rows,
             schema_path=REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json",
             scenario_path=campaign_config.scenario_matrix_path,
-            scenarios=scenarios,
+            scenarios=effective_scenarios,
             algo=planner.algo,
             algo_config_path=planner.algo_config_path,
             benchmark_profile=planner.benchmark_profile,
@@ -266,6 +277,145 @@ def test_complete_stress_campaign_is_admitted(stress_fixture: tuple[Path, Any, A
     assert report["status"] == "valid", report["blockers"]
     assert report["diagnostic_success"] is True
     assert report["observed_episode_rows"] == 70
+
+
+@pytest.mark.parametrize("status", ("collision", "failure"))
+def test_scientific_terminal_outcomes_do_not_fail_runtime_admission(
+    stress_fixture: tuple[Path, Any, Any], status: str
+) -> None:
+    """A completed native episode need not reach the goal to prove runtime execution."""
+    root, manifest, campaign_config = stress_fixture
+    episodes_path = _first_row_path(root, "prediction_planner")
+    rows = [json.loads(line) for line in episodes_path.read_text().splitlines()]
+    rows[0]["status"] = status
+    episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    _refresh_sidecar_raw_hash(episodes_path)
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "valid", report["blockers"]
+
+
+def test_unknown_episode_status_fails_runtime_admission(
+    stress_fixture: tuple[Path, Any, Any],
+) -> None:
+    root, manifest, campaign_config = stress_fixture
+    episodes_path = _first_row_path(root, "prediction_planner")
+    rows = [json.loads(line) for line in episodes_path.read_text().splitlines()]
+    rows[0]["status"] = "mystery"
+    episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    _refresh_sidecar_raw_hash(episodes_path)
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "invalid"
+    assert any("terminal outcome" in blocker for blocker in report["blockers"])
+
+
+@pytest.mark.parametrize(
+    ("metadata_path", "value"),
+    (
+        (("fallback_reason",), "alternate planner invoked"),
+        (("planner_diagnostics", "fallback_count"), 1),
+        (("runtime", "fallback_count"), 1),
+    ),
+)
+def test_fallback_markers_anywhere_in_runtime_algorithm_metadata_fail_closed(
+    stress_fixture: tuple[Path, Any, Any],
+    metadata_path: tuple[str, ...],
+    value: Any,
+) -> None:
+    """Canonical and newly introduced runtime containers cannot bypass admission."""
+    root, manifest, campaign_config = stress_fixture
+    episodes_path = _first_row_path(root, "prediction_planner")
+    rows = [json.loads(line) for line in episodes_path.read_text().splitlines()]
+    target = rows[0]["algorithm_metadata"]
+    for key in metadata_path[:-1]:
+        target = target.setdefault(key, {})
+    target[metadata_path[-1]] = value
+    episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    _refresh_sidecar_raw_hash(episodes_path)
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "invalid"
+    assert any("fallback" in blocker for blocker in report["blockers"])
+
+
+def test_guarded_ppo_declared_safe_shield_intervention_is_native(
+    stress_fixture: tuple[Path, Any, Any],
+) -> None:
+    """The exact safe Risk-DWA shield path is part of the declared composite arm."""
+    root, manifest, campaign_config = stress_fixture
+    episodes_path = _first_row_path(root, "guarded_ppo")
+    rows = [json.loads(line) for line in episodes_path.read_text().splitlines()]
+    rows[0]["algorithm_metadata"].update(
+        {
+            "guard_stats": {"fallback_safe": 3, "fallback_best_effort": 0},
+            "shield_stats": {
+                "decision_counts": {"fallback_safe": 3, "fallback_best_effort": 0},
+                "last_decision": {"fallback_controller_state": {"status": "ok"}},
+            },
+        }
+    )
+    episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    _refresh_sidecar_raw_hash(episodes_path)
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "valid", report["blockers"]
+
+
+def test_guarded_ppo_best_effort_fallback_still_fails_closed(
+    stress_fixture: tuple[Path, Any, Any],
+) -> None:
+    root, manifest, campaign_config = stress_fixture
+    episodes_path = _first_row_path(root, "guarded_ppo")
+    rows = [json.loads(line) for line in episodes_path.read_text().splitlines()]
+    rows[0]["algorithm_metadata"]["guard_stats"] = {"fallback_best_effort": 1}
+    episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    _refresh_sidecar_raw_hash(episodes_path)
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "invalid"
+    assert any("fallback_best_effort" in blocker for blocker in report["blockers"])
+
+
+def test_guarded_ppo_safe_label_requires_exact_composite_identity(
+    stress_fixture: tuple[Path, Any, Any],
+) -> None:
+    root, manifest, campaign_config = stress_fixture
+    episodes_path = _first_row_path(root, "guarded_ppo")
+    rows = [json.loads(line) for line in episodes_path.read_text().splitlines()]
+    metadata = rows[0]["algorithm_metadata"]
+    metadata["planner_contract"]["planner_id"] = "ppo"
+    metadata["guard_stats"] = {"fallback_safe": 1}
+    episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    _refresh_sidecar_raw_hash(episodes_path)
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "invalid"
+    assert any("fallback_safe" in blocker for blocker in report["blockers"])
+
+
+@pytest.mark.parametrize("value", ("1", 1.5, -1, True))
+def test_guarded_ppo_safe_counter_requires_valid_numeric_telemetry(
+    stress_fixture: tuple[Path, Any, Any], value: Any
+) -> None:
+    """Malformed native-shield counters cannot bypass exact composite identity."""
+    root, manifest, campaign_config = stress_fixture
+    episodes_path = _first_row_path(root, "guarded_ppo")
+    rows = [json.loads(line) for line in episodes_path.read_text().splitlines()]
+    rows[0]["algorithm_metadata"]["guard_stats"] = {"fallback_safe": value}
+    episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    _refresh_sidecar_raw_hash(episodes_path)
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "invalid"
+    assert any("fallback_safe" in blocker for blocker in report["blockers"])
 
 
 @pytest.mark.parametrize(

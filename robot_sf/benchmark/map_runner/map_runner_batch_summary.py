@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from robot_sf.benchmark.algorithm_metadata import (
@@ -148,7 +149,7 @@ def merge_runtime_algorithm_contract(  # noqa: C901, PLR0915
     if not isinstance(base_contract, dict) or not isinstance(runtime_algorithm_metadata, dict):
         return base_contract
 
-    def _merge_mapping(  # noqa: C901
+    def _merge_mapping(  # noqa: C901, PLR0912
         target: dict[str, Any], source: dict[str, Any]
     ) -> None:
         """Merge authoritative runtime contract values into a nested mapping."""
@@ -182,11 +183,49 @@ def merge_runtime_algorithm_contract(  # noqa: C901, PLR0915
                 value_count = value if isinstance(value, (int, float)) else 0
                 target[key] = max(current_count, value_count)
                 continue
+            if key == "protective_stop_count":
+                if (
+                    isinstance(current, int)
+                    and not isinstance(current, bool)
+                    and current >= 0
+                    and isinstance(value, int)
+                    and not isinstance(value, bool)
+                    and value >= 0
+                ):
+                    target[key] = current + value
+                elif _is_placeholder(current):
+                    target[key] = deepcopy(value)
+                else:
+                    target[key] = "mixed"
+                continue
+            if key == "selected_source_counts" and isinstance(value, dict):
+                if _is_placeholder(current):
+                    target[key] = deepcopy(value)
+                elif isinstance(current, dict):
+                    for source_name, count in value.items():
+                        prior = current.get(source_name, 0)
+                        if (
+                            isinstance(prior, int)
+                            and not isinstance(prior, bool)
+                            and prior >= 0
+                            and isinstance(count, int)
+                            and not isinstance(count, bool)
+                            and count >= 0
+                        ):
+                            current[source_name] = prior + count
+                        else:
+                            current[source_name] = "mixed"
+                else:
+                    target[key] = "mixed"
+                continue
             if key == "readiness_status" and str(value).lower() in {"fallback", "degraded"}:
                 target[key] = value
                 continue
             if _is_placeholder(current):
-                target[key] = value
+                # Batch aggregation must own its copy. Some nested values come
+                # directly from an episode record that is written later; aliasing
+                # them here lets subsequent merges silently rewrite that row.
+                target[key] = deepcopy(value)
                 continue
             if isinstance(current, dict) and isinstance(value, dict):
                 _merge_mapping(current, value)
@@ -194,7 +233,7 @@ def merge_runtime_algorithm_contract(  # noqa: C901, PLR0915
             if _is_placeholder(value) or current == value:
                 continue
             if key in authoritative_keys:
-                target[key] = value
+                target[key] = deepcopy(value)
                 continue
             target[key] = "mixed"
 

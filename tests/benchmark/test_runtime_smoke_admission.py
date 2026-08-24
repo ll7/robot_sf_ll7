@@ -861,6 +861,10 @@ def test_runtime_smoke_allows_guarded_ppo_intrinsic_safe_shield_counter(
     ("planner", "guard_stats"),
     [
         ("guarded_ppo", {"fallback_best_effort": 1}),
+        ("guarded_ppo", {"fallback_safe": "1"}),
+        ("guarded_ppo", {"fallback_safe": 0.0}),
+        ("guarded_ppo", {"fallback_safe": 1.5}),
+        ("guarded_ppo", {"fallback_safe": -1}),
         ("prediction_planner", {"fallback_safe": 1}),
     ],
 )
@@ -868,12 +872,36 @@ def test_runtime_smoke_rejects_noncanonical_guard_fallback_counter(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     planner: str,
-    guard_stats: dict[str, int],
+    guard_stats: dict[str, object],
 ) -> None:
     result, planners = _fixture(tmp_path, monkeypatch)
     episode_path = result.parent.parent / "runs" / f"{planner}__differential_drive/episodes.jsonl"
     row = json.loads(episode_path.read_text(encoding="utf-8"))
     row["algorithm_metadata"]["guard_stats"] = guard_stats
+    _write_json(episode_path, row)
+    sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
+    _write_json(sidecar_path, sidecar)
+
+    with pytest.raises(RuntimeSmokeAdmissionError, match="fallback or degraded"):
+        _admit(result, planners, tmp_path)
+
+
+def test_runtime_smoke_rejects_malformed_safe_counter_for_exact_guarded_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The exact Guarded PPO identity does not authorize string-valued counters."""
+    result, planners = _fixture(tmp_path, monkeypatch)
+    episode_path = result.parent.parent / "runs/guarded_ppo__differential_drive/episodes.jsonl"
+    row = json.loads(episode_path.read_text(encoding="utf-8"))
+    row["algorithm_metadata"].update(
+        {
+            "canonical_algorithm": "guarded_ppo",
+            "planner_contract": {"planner_id": "guarded_ppo"},
+            "guard_stats": {"fallback_safe": "1"},
+        }
+    )
     _write_json(episode_path, row)
     sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
     sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))

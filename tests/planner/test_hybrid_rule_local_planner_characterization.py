@@ -266,7 +266,7 @@ def test_plan_near_pedestrian_speed_cap() -> None:
 
 
 def test_plan_static_clearance_rejection_fails_closed() -> None:
-    """A blocking static-obstacle wall rejects every candidate to an emergency stop."""
+    """A blocking static wall produces an explicit native protective stop."""
     planner = _nominal_planner()
 
     command = planner.plan(_OBS_STATIC_REJECTION)
@@ -274,11 +274,30 @@ def test_plan_static_clearance_rejection_fails_closed() -> None:
     assert command == (0.0, 0.0)
     last = planner.last_decision()
     assert last is not None
-    assert last["planner_mode"] == "EMERGENCY_STOP"
-    assert last["selected_source"] == "all_candidates_rejected"
+    assert last["planner_mode"] == "PROTECTIVE_STOP"
+    assert last["selected_source"] == "static_protective_stop"
     # Both static-clearance and static-collision rejections must fire.
     assert last["rejection_counts"]["static_clearance"] == 48
     assert last["rejection_counts"]["static_collision"] == 18
+
+
+def test_plan_static_clearance_native_protective_reorient() -> None:
+    """Opt-in rotate-in-place recovery remains native safety behavior, not fallback."""
+    planner = HybridRuleLocalPlannerAdapter(
+        HybridRuleLocalPlannerConfig(
+            recovery_enabled=True,
+            recovery_reorient_angular_speed=0.6,
+        )
+    )
+
+    command = planner.plan(_OBS_STATIC_REJECTION)
+
+    assert command == (0.0, 0.6)
+    diagnostics = planner.diagnostics()
+    assert diagnostics["fallback_count"] == 0
+    assert diagnostics["protective_stop_count"] == 1
+    assert diagnostics["last_decision"]["planner_mode"] == "PROTECTIVE_REORIENT"
+    assert diagnostics["last_decision"]["selected_source"] == "static_protective_reorient"
 
 
 def test_plan_goal_posterior_active() -> None:
@@ -334,6 +353,7 @@ _DIAGNOSTICS_KEYS = frozenset(
     {
         "actuation_scoring",
         "fallback_count",
+        "protective_stop_count",
         "goal_posterior_avoidance",
         "last_decision",
         "planner_variant",
@@ -383,7 +403,8 @@ def test_diagnostics_and_last_decision_shape_after_plan(label, planner, observat
     assert isinstance(last["rejection_counts_by_source"], dict)
     assert last["rejection_counts"] == diagnostics["rejection_counts"]
     assert diagnostics["steps"] == 1
-    assert diagnostics["fallback_count"] == (1 if label == "static_rejection" else 0)
+    assert diagnostics["fallback_count"] == 0
+    assert diagnostics["protective_stop_count"] == (1 if label == "static_rejection" else 0)
 
     # The unavailable-count structure pins the corridor-subgoal-disabled marker.
     assert isinstance(last["unavailable_counts"], dict)

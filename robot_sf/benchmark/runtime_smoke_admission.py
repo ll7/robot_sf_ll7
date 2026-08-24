@@ -276,6 +276,10 @@ def _read_episode_rows(path: Path) -> list[dict[str, Any]]:
 def _runtime_marker_value(key: str, value: Any) -> str | None:  # noqa: C901
     """Return a forbidden/malformed runtime marker value, or ``None`` when safe."""
     normalized = str(value).strip().lower().replace(" ", "_")
+    if key == "fallback_safe" and (
+        not isinstance(value, int) or isinstance(value, bool) or value < 0
+    ):
+        return f"invalid_{type(value).__name__}"
     is_status = key in _RUNTIME_STATUS_FIELDS or key.endswith("_status")
     if is_status:
         if not isinstance(value, str):
@@ -343,6 +347,35 @@ def _is_canonical_not_applicable_status(path: str, key: str, value: Any) -> bool
     return any(re.fullmatch(pattern, path) is not None for pattern in patterns)
 
 
+def _is_guarded_ppo_safe_shield_marker(
+    path: str, value: Any, *, normalized_marker: bool = False
+) -> bool:
+    """Allow only the canonical Guarded PPO native safe-shield counter.
+
+    ``_status_markers`` normalizes a detected integer counter to text before the
+    runtime-smoke deep walk sees it. Accept both the original integer and that
+    normalized representation, while keeping floats and malformed values closed.
+
+    Returns:
+        Whether ``path`` identifies the fixed Guarded PPO arm's native safe counter.
+    """
+    if re.fullmatch(
+        r"runs\[11\]\.rows\[0\]\.algorithm_metadata\."
+        r"(?:guard_stats|shield_stats\.decision_counts)\.fallback_safe",
+        path,
+    ) is None or isinstance(value, bool):
+        return False
+    if normalized_marker:
+        if not isinstance(value, str) or not value.isdigit():
+            return False
+        numeric = int(value)
+    else:
+        if not isinstance(value, int):
+            return False
+        numeric = value
+    return numeric >= 0
+
+
 def _is_allowed_runtime_marker(path: str, key: str, value: Any, *, parent: dict[str, Any]) -> bool:
     """Return whether a non-boolean/status token is canonical for its exact report surface.
 
@@ -356,17 +389,7 @@ def _is_allowed_runtime_marker(path: str, key: str, value: Any, *, parent: dict[
     # planner, not a missing-policy or degraded-runtime fallback. Keep the
     # exception exact: best-effort/uncertainty fallbacks and every other arm
     # continue to fail closed.
-    if (
-        re.fullmatch(
-            r"runs\[11\]\.rows\[0\]\.algorithm_metadata\."
-            r"(?:guard_stats|shield_stats\.decision_counts)\.fallback_safe",
-            path,
-        )
-        and isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-        and value >= 0
-    ):
+    if _is_guarded_ppo_safe_shield_marker(path, value):
         return True
     if (
         path
@@ -430,7 +453,15 @@ def _forbidden_status_markers(  # noqa: C901
     Returns:
         Path/value pairs for every forbidden marker.
     """
-    markers = list(_status_markers(payload, prefix)) if isinstance(payload, dict) else []
+    markers = (
+        [
+            (path, value)
+            for path, value in _status_markers(payload, prefix)
+            if not _is_guarded_ppo_safe_shield_marker(path, value, normalized_marker=True)
+        ]
+        if isinstance(payload, dict)
+        else []
+    )
     seen = {(path, value) for path, value in markers}
 
     def _walk(value: Any, path: str, *, descend_all: bool = False) -> None:

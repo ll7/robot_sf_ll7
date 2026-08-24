@@ -10,13 +10,18 @@ module keeps that publication gate separate from the bounded runtime smoke.
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
+from robot_sf.benchmark.analysis_trace import normalize_telemetry_profile
+from robot_sf.benchmark.camera_ready._config import (
+    _load_campaign_scenarios,
+    _scenario_with_kinematics,
+)
 from robot_sf.benchmark.camera_ready._preflight import (
     _config_hash_payload,
     _resolved_seed_inventory,
@@ -29,6 +34,7 @@ from robot_sf.benchmark.camera_ready._run_state import (
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.map_runner_identity import suite_key as _producer_suite_key
 from robot_sf.benchmark.release_protocol import (
     STRESS_SMOKE_EXPECTED_DT,
     STRESS_SMOKE_EXPECTED_EPISODE_CELLS,
@@ -70,7 +76,7 @@ _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _LEGACY_EMERGENCY_MODES = frozenset({"emergency_stop", "reorient"})
 _LEGACY_EMERGENCY_SOURCES = frozenset({"all_candidates_rejected", "static_reorient"})
 _STRESS_RUN_SUCCESS_STATUSES = frozenset({"ok"})
-_STRESS_ROW_SUCCESS_STATUSES = frozenset({"success"})
+_STRESS_ROW_TERMINAL_STATUSES = frozenset({"success", "collision", "failure"})
 _STRESS_VALID_BENCHMARK_SUCCESS = frozenset({"true"})
 _MISSING = object()
 _RUNTIME_METADATA_CONTAINERS = frozenset(
@@ -88,6 +94,9 @@ _RUNTIME_METADATA_CONTAINERS = frozenset(
         "runtime",
         "runtime_metadata",
     }
+)
+_DECLARATIVE_ALGORITHM_METADATA_CONTAINERS = frozenset(
+    {"config", "planner_contract", "safety_shield_contract"}
 )
 
 
@@ -135,7 +144,9 @@ def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:  # noqa: C90
     def _normalized(value: Any) -> str:
         return str(value).strip().lower().replace("-", "_")
 
-    def _walk(value: Any, path: str, *, active: bool = False) -> tuple[str, str] | None:  # noqa: C901
+    def _walk(  # noqa: C901, PLR0912
+        value: Any, path: str, *, active: bool = False
+    ) -> tuple[str, str] | None:
         if isinstance(value, Mapping):
             root_mapping = not path
             inspect_context = active or root_mapping
@@ -160,6 +171,26 @@ def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:  # noqa: C90
                         and normalized_value in _LEGACY_EMERGENCY_MODES
                     ):
                         return nested_path, normalized_value
+                elif inspect_marker and normalized_key == "selected_source_counts":
+                    if not isinstance(nested, Mapping):
+                        return nested_path, "invalid"
+                    for raw_source, count in nested.items():
+                        source = _normalized(raw_source)
+                        if source not in _LEGACY_EMERGENCY_SOURCES:
+                            continue
+                        count_path = f"{nested_path}.{raw_source}"
+                        if str(raw_source) != source:
+                            return count_path, "invalid"
+                        if not isinstance(count, (int, float)) or isinstance(count, bool):
+                            return count_path, "invalid"
+                        try:
+                            finite = math.isfinite(float(count))
+                        except (OverflowError, ValueError):
+                            finite = False
+                        if not finite or count < 0:
+                            return count_path, "invalid"
+                        if count > 0:
+                            return count_path, str(count)
                 elif inspect_marker and normalized_key == "emergency_stop_count":
                     parsed_counter = (
                         nested if isinstance(nested, int) and not isinstance(nested, bool) else None
@@ -190,8 +221,80 @@ def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:  # noqa: C90
     return _walk(payload, "")
 
 
+def _algorithm_metadata_runtime_marker(
+    metadata: Mapping[str, Any], *, expected_algorithm: str | None = None
+) -> tuple[str, str] | None:
+    """Scan runtime-bearing algorithm metadata without treating config as execution evidence.
+
+    Guarded PPO's safe Risk-DWA shield command is a declared component of that composite
+    planner.  Its exact ``fallback_safe`` counters are therefore native intervention telemetry;
+    best-effort and uncertainty fallbacks remain forbidden.
+
+    Returns:
+        The first forbidden runtime marker, if present.
+    """
+
+    def _is_valid_native_counter(value: Any) -> bool:
+        if not isinstance(value, int) or isinstance(value, bool):
+            return False
+        return value >= 0
+
+    runtime_view: dict[str, Any] = {
+        str(key): value
+        for key, value in metadata.items()
+        if str(key) not in _DECLARATIVE_ALGORITHM_METADATA_CONTAINERS
+    }
+    planner_contract = metadata.get("planner_contract")
+    planner_id = (
+        str(planner_contract.get("planner_id", "")).strip().lower()
+        if isinstance(planner_contract, Mapping)
+        else ""
+    )
+    guarded_ppo_identity = (
+        str(expected_algorithm or "").strip().lower() == "guarded_ppo"
+        and str(metadata.get("canonical_algorithm", "")).strip().lower() == "guarded_ppo"
+        and str(metadata.get("algorithm", "")).strip().lower() == "ppo"
+        and planner_id == "guarded_ppo"
+    )
+    if guarded_ppo_identity:
+        guard_stats = metadata.get("guard_stats")
+        if isinstance(guard_stats, Mapping):
+            if "fallback_safe" in guard_stats and not _is_valid_native_counter(
+                guard_stats["fallback_safe"]
+            ):
+                return "guard_stats.fallback_safe", "invalid"
+            runtime_view["guard_stats"] = {
+                str(key): value
+                for key, value in guard_stats.items()
+                if key != "fallback_safe" or not _is_valid_native_counter(value)
+            }
+        shield_stats = metadata.get("shield_stats")
+        if isinstance(shield_stats, Mapping):
+            shield_view = dict(shield_stats)
+            decision_counts = shield_stats.get("decision_counts")
+            if isinstance(decision_counts, Mapping):
+                if "fallback_safe" in decision_counts and not _is_valid_native_counter(
+                    decision_counts["fallback_safe"]
+                ):
+                    return "shield_stats.decision_counts.fallback_safe", "invalid"
+                shield_view["decision_counts"] = {
+                    str(key): value
+                    for key, value in decision_counts.items()
+                    if key != "fallback_safe" or not _is_valid_native_counter(value)
+                }
+            last_decision = shield_stats.get("last_decision")
+            if isinstance(last_decision, Mapping):
+                shield_view["last_decision"] = {
+                    str(key): value
+                    for key, value in last_decision.items()
+                    if key != "fallback_controller_state" or not isinstance(value, Mapping)
+                }
+            runtime_view["shield_stats"] = shield_view
+    return runtime_fallback_or_degraded_marker(runtime_view)
+
+
 def _status_markers(  # noqa: C901, PLR0912, PLR0915
-    payload: Mapping[str, Any], prefix: str
+    payload: Mapping[str, Any], prefix: str, *, expected_algorithm: str | None = None
 ) -> list[tuple[str, str]]:
     """Extract only execution/evidence status markers from one structured row.
 
@@ -248,6 +351,12 @@ def _status_markers(  # noqa: C901, PLR0912, PLR0915
         metadata = payload.get(field)
         if not isinstance(metadata, Mapping):
             continue
+        metadata_marker = _algorithm_metadata_runtime_marker(
+            metadata, expected_algorithm=expected_algorithm
+        )
+        if metadata_marker is not None:
+            marker_path, marker_value = metadata_marker
+            markers.append((f"{prefix}.{field}.{marker_path}", marker_value))
         _add(f"{field}.status", metadata.get("status"))
         for marker_field in (
             "fallback",
@@ -289,7 +398,11 @@ def _status_markers(  # noqa: C901, PLR0912, PLR0915
         for field in ("status", "readiness_status", "availability_status", "execution_mode"):
             if field in availability:
                 _add(f"benchmark_availability.{field}", availability[field])
-    return markers
+    # The broad runtime metadata scan and the explicit compatibility fields above can
+    # intentionally reach the same leaf (for example
+    # ``planner_kinematics.execution_mode``).  Count each concrete marker once so the
+    # acceptance receipt reports artifact facts rather than traversal-path multiplicity.
+    return list(dict.fromkeys(markers))
 
 
 def _read_campaign_summary(campaign_root: Path) -> tuple[dict[str, Any] | None, str | None]:
@@ -641,8 +754,9 @@ def _stress_episode_provenance_blockers(  # noqa: C901, PLR0912, PLR0913, PLR091
     identity = identity if isinstance(identity, Mapping) else {}
     if str(identity.get("algorithm", "")).strip().lower() != expected_algo.lower():
         blockers.append(f"planner {planner_key} sidecar algorithm is not bound to its arm")
-    if identity.get("suite_key") != "default":
-        blockers.append(f"planner {planner_key} sidecar suite key must be default")
+    expected_suite_key = _producer_suite_key(expected_scenario_path)
+    if identity.get("suite_key") != expected_suite_key:
+        blockers.append(f"planner {planner_key} sidecar suite key must be {expected_suite_key}")
     if identity.get("scenario_matrix_hash") != expected_scenario_identity:
         blockers.append(f"planner {planner_key} sidecar scenario identity hash is not bound")
     expected_identity_config = _config_hash(
@@ -1152,8 +1266,8 @@ def _stress_row_contract_blockers(  # noqa: C901, PLR0912, PLR0915
         Bounded blocker messages for this row.
     """
     blockers: list[str] = []
-    if not _status_is(row.get("status"), _STRESS_ROW_SUCCESS_STATUSES):
-        blockers.append(f"{prefix}.status must be 'success'")
+    if not _status_is(row.get("status"), _STRESS_ROW_TERMINAL_STATUSES):
+        blockers.append(f"{prefix}.status must be a recognized scientific terminal outcome")
     if "benchmark_success" in row and not _explicit_success(row.get("benchmark_success")):
         blockers.append(f"{prefix}.benchmark_success must be explicitly true")
 
@@ -1247,14 +1361,19 @@ def _stress_row_contract_blockers(  # noqa: C901, PLR0912, PLR0915
             )
         )
 
+    metadata_algorithm = _nested_value(row, "algorithm_metadata", "algorithm")
+    expected_metadata_algorithm = "ppo" if expected_algo == "guarded_ppo" else expected_algo
+    if metadata_algorithm is _MISSING:
+        blockers.append(f"{prefix}: algorithm_metadata.algorithm is missing")
+    elif str(metadata_algorithm).strip().lower() != expected_metadata_algorithm:
+        blockers.append(
+            f"{prefix}: algorithm_metadata.algorithm does not match declared base algorithm "
+            f"'{expected_metadata_algorithm}'"
+        )
     algo_aliases = _alias_values(
         row,
         (
             ("algo", row.get("algo", _MISSING)),
-            (
-                "algorithm_metadata.algorithm",
-                _nested_value(row, "algorithm_metadata", "algorithm"),
-            ),
             (
                 "algorithm_metadata.canonical_algorithm",
                 _nested_value(row, "algorithm_metadata", "canonical_algorithm"),
@@ -1428,6 +1547,40 @@ def _scenario_id(scenario: Mapping[str, Any]) -> str:
     ).strip()
 
 
+def _result_provenance_scenarios(
+    campaign_config: Any,
+    scenarios: list[dict[str, Any]],
+    *,
+    kinematics: str,
+) -> list[dict[str, Any]]:
+    """Mirror the scenario payload hashed by map-runner result sidecars.
+
+    The campaign runner adds kinematics and top-level telemetry. Map runner then
+    adds normalized telemetry under ``metadata`` before emitting provenance.
+
+    Returns:
+        Scenarios in their producer-side result-provenance form.
+    """
+    effective_scenarios = [
+        _scenario_with_kinematics(
+            scenario,
+            kinematics=kinematics,
+            holonomic_command_mode=str(getattr(campaign_config, "holonomic_command_mode", "vx_vy")),
+        )
+        for scenario in scenarios
+    ]
+    telemetry = getattr(campaign_config, "telemetry", None)
+    if isinstance(telemetry, Mapping):
+        normalized_telemetry = normalize_telemetry_profile(dict(telemetry)).to_mapping()
+        for scenario in effective_scenarios:
+            scenario["telemetry"] = dict(telemetry)
+            metadata = scenario.get("metadata")
+            metadata = dict(metadata) if isinstance(metadata, Mapping) else {}
+            metadata["telemetry"] = dict(normalized_telemetry)
+            scenario["metadata"] = metadata
+    return effective_scenarios
+
+
 def _resolve_expected_matrix_axes(  # noqa: C901
     manifest: Any,
     campaign_config: Any | None,
@@ -1482,6 +1635,242 @@ def _resolve_expected_matrix_axes(  # noqa: C901
     if not scenario_ids or not seeds:
         blockers.append("resolved campaign scenario/seed axes are unavailable")
     return scenario_ids, seeds, blockers
+
+
+def _full_release_planner_items(candidates: Any) -> tuple[tuple[Any, Any], ...]:
+    """Return planner key/algo pairs from a config or test manifest mapping."""
+    if isinstance(candidates, Mapping):
+        return tuple(candidates.items())
+    if not isinstance(candidates, (list, tuple)):
+        return ()
+    items: list[tuple[Any, Any]] = []
+    for planner in candidates:
+        if isinstance(planner, Mapping):
+            items.append((planner.get("key"), planner.get("algo")))
+        else:
+            items.append((getattr(planner, "key", None), getattr(planner, "algo", None)))
+    return tuple(items)
+
+
+def _full_release_planner_candidates(
+    manifest: Any, campaign_config: Any | None
+) -> tuple[Any, list[str]]:
+    """Resolve the source of the publication planner roster.
+
+    Returns:
+        Candidate planner roster and resolution blockers.
+    """
+    blockers: list[str] = []
+    candidates: Any = getattr(campaign_config, "planners", None)
+    if candidates is not None:
+        return candidates, blockers
+    candidates = getattr(manifest, "planner_algorithms", None)
+    if candidates is not None:
+        return candidates, blockers
+    config_path = getattr(manifest, "canonical_campaign_config_path", None)
+    if config_path is None:
+        return None, blockers
+    try:
+        candidates = getattr(load_campaign_config(config_path), "planners", None)
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        blockers.append(f"canonical campaign planner roster cannot be resolved: {exc}")
+    return candidates, blockers
+
+
+def _full_release_campaign_config(
+    manifest: Any, campaign_config: Any | None
+) -> tuple[Any | None, list[str]]:
+    """Resolve the canonical config required for arm-bound publication provenance.
+
+    Returns:
+        The loaded campaign config and any fail-closed resolution blockers.
+    """
+    if campaign_config is not None:
+        return campaign_config, []
+    config_path = getattr(manifest, "canonical_campaign_config_path", None)
+    if config_path is None:
+        return None, ["canonical campaign config is required for full-release provenance"]
+    try:
+        return load_campaign_config(config_path), []
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return None, [f"canonical campaign config cannot be resolved for provenance: {exc}"]
+
+
+def _full_release_algorithm_roster(
+    manifest: Any, campaign_config: Any | None, planner_keys: tuple[str, ...]
+) -> tuple[dict[str, str], list[str]]:
+    """Resolve the expected algorithm for every publication-grade planner arm.
+
+    Returns:
+        An arm-to-algorithm mapping and blockers for an unavailable or conflicting roster.
+    """
+    candidates, blockers = _full_release_planner_candidates(manifest, campaign_config)
+    algorithms: dict[str, str] = {}
+    items = _full_release_planner_items(candidates)
+    for raw_key, raw_algo in items:
+        key = str(raw_key or "").strip()
+        algo = str(raw_algo or "").strip().lower()
+        if not key or not algo:
+            blockers.append("full-release planner algorithm roster contains an empty key or algo")
+            continue
+        if key in algorithms and algorithms[key] != algo:
+            blockers.append(f"full-release planner algorithm roster conflicts for {key!r}")
+            continue
+        algorithms[key] = algo
+
+    expected_keys = set(planner_keys)
+    if set(algorithms) != expected_keys:
+        missing = sorted(expected_keys - set(algorithms))
+        unexpected = sorted(set(algorithms) - expected_keys)
+        if missing:
+            blockers.append(f"full-release planner algorithm roster is missing {missing!r}")
+        if unexpected:
+            blockers.append(f"full-release planner algorithm roster has unexpected {unexpected!r}")
+    return algorithms, blockers
+
+
+def _full_release_row_contract_blockers(
+    row: Mapping[str, Any],
+    *,
+    prefix: str,
+    expected_algo: str,
+) -> list[str]:
+    """Bind one publication row's algorithm and provenance to its containing arm.
+
+    Returns:
+        Blockers for missing or conflicting arm/provenance aliases.
+    """
+    blockers: list[str] = []
+    if not _status_is(row.get("status"), _STRESS_ROW_TERMINAL_STATUSES):
+        blockers.append(f"{prefix}.status must be a recognized scientific terminal outcome")
+    normalized_algo = expected_algo.strip().lower()
+    metadata_algorithm = "ppo" if normalized_algo == "guarded_ppo" else normalized_algo
+    blockers.extend(
+        f"{prefix}: {blocker}"
+        for blocker in _alias_blockers(
+            _alias_values(row, (("algo", row.get("algo", _MISSING)),)),
+            label="planner algorithm",
+            expected=normalized_algo,
+        )
+    )
+
+    metadata = row.get("algorithm_metadata")
+    if not isinstance(metadata, Mapping):
+        blockers.append(f"{prefix}: algorithm_metadata is missing")
+    else:
+        blockers.extend(
+            f"{prefix}: {blocker}"
+            for blocker in _alias_blockers(
+                _alias_values(
+                    metadata,
+                    (("algorithm_metadata.algorithm", metadata.get("algorithm", _MISSING)),),
+                ),
+                label="algorithm metadata algorithm",
+                expected=metadata_algorithm,
+            )
+        )
+        blockers.extend(
+            f"{prefix}: {blocker}"
+            for blocker in _alias_blockers(
+                _alias_values(
+                    metadata,
+                    (
+                        (
+                            "algorithm_metadata.canonical_algorithm",
+                            metadata.get("canonical_algorithm", _MISSING),
+                        ),
+                    ),
+                ),
+                label="canonical algorithm",
+                expected=normalized_algo,
+            )
+        )
+        planner_contract = metadata.get("planner_contract")
+        planner_id = (
+            planner_contract.get("planner_id", _MISSING)
+            if isinstance(planner_contract, Mapping)
+            else _MISSING
+        )
+        blockers.extend(
+            f"{prefix}: {blocker}"
+            for blocker in _alias_blockers(
+                _alias_values(
+                    metadata,
+                    (("algorithm_metadata.planner_contract.planner_id", planner_id),),
+                ),
+                label="planner contract identity",
+                expected=normalized_algo,
+            )
+        )
+
+    result_provenance = row.get("result_provenance")
+    if not isinstance(result_provenance, Mapping):
+        blockers.append(f"{prefix}: result_provenance is missing")
+    else:
+        source_commit = str(result_provenance.get("repo_commit", "")).strip().lower()
+        blockers.extend(
+            f"{prefix}: {blocker}"
+            for blocker in _alias_blockers(
+                _alias_values(
+                    row,
+                    (
+                        ("git_hash", row.get("git_hash", _MISSING)),
+                        ("repo_commit", row.get("repo_commit", _MISSING)),
+                        (
+                            "provenance.git_hash",
+                            _nested_value(row, "provenance", "git_hash"),
+                        ),
+                        (
+                            "result_provenance.repo_commit",
+                            result_provenance.get("repo_commit", _MISSING),
+                        ),
+                        (
+                            "event_ledger.software_commit",
+                            _nested_value(row, "event_ledger", "software_commit"),
+                        ),
+                    ),
+                ),
+                label="source",
+                expected=source_commit or None,
+            )
+        )
+        config_hash = str(result_provenance.get("config_hash", "")).strip().lower()
+        blockers.extend(
+            f"{prefix}: {blocker}"
+            for blocker in _alias_blockers(
+                _alias_values(
+                    row,
+                    (
+                        ("config_hash", row.get("config_hash", _MISSING)),
+                        (
+                            "provenance.config_hash",
+                            _nested_value(row, "provenance", "config_hash"),
+                        ),
+                        (
+                            "result_provenance.config_hash",
+                            result_provenance.get("config_hash", _MISSING),
+                        ),
+                    ),
+                ),
+                label="row config",
+                expected=config_hash or None,
+            )
+        )
+        row_scenario = str(row.get("scenario_id", "")).strip()
+        provenance_scenario = str(result_provenance.get("scenario_id", "")).strip()
+        if not row_scenario or not provenance_scenario:
+            blockers.append(f"{prefix}: scenario provenance is missing")
+        elif row_scenario != provenance_scenario:
+            blockers.append(f"{prefix}: scenario provenance does not match the row")
+        row_seed = _strict_int(row.get("seed"))
+        provenance_seed = _strict_int(result_provenance.get("seed"))
+        if row_seed is None or provenance_seed is None:
+            blockers.append(f"{prefix}: seed provenance is missing or invalid")
+        elif row_seed != provenance_seed:
+            blockers.append(f"{prefix}: seed provenance does not match the row")
+        if not str(result_provenance.get("repo_commit", "")).strip():
+            blockers.append(f"{prefix}: result_provenance.repo_commit is missing")
+    return blockers
 
 
 def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
@@ -1583,7 +1972,12 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
     # Campaign metadata uses the camera-ready 12-character structural hash;
     # result-provenance sidecars use the 16-character config hash over the
     # resolved scenario payload.  Keep these identities distinct.
-    expected_scenario_identity = _config_hash(resolved_scenarios)
+    effective_scenarios = _result_provenance_scenarios(
+        campaign_config,
+        resolved_scenarios,
+        kinematics=STRESS_SMOKE_EXPECTED_KINEMATICS,
+    )
+    expected_scenario_identity = _config_hash(effective_scenarios)
 
     for marker_path, marker in _status_markers(summary, "campaign_summary"):
         _append_blocker(blockers, f"forbidden {marker_path}={marker}")
@@ -1657,7 +2051,11 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
             _append_blocker(
                 blockers, f"runs[{run_index}] benchmark_success must be explicitly true"
             )
-        for marker_path, marker in _status_markers(run, f"runs[{run_index}]"):
+        for marker_path, marker in _status_markers(
+            run,
+            f"runs[{run_index}]",
+            expected_algorithm=expected_algo,
+        ):
             _append_blocker(blockers, f"forbidden {marker_path}={marker}")
         run_summary = run.get("summary")
         if not isinstance(run_summary, Mapping):
@@ -1687,7 +2085,11 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
             failures = run_summary.get("failures")
             if not isinstance(failures, list) or failures:
                 _append_blocker(blockers, f"runs[{run_index}].summary failures must be empty")
-            for marker_path, marker in _status_markers(run_summary, f"runs[{run_index}].summary"):
+            for marker_path, marker in _status_markers(
+                run_summary,
+                f"runs[{run_index}].summary",
+                expected_algorithm=expected_algo,
+            ):
                 _append_blocker(blockers, f"forbidden {marker_path}={marker}")
         raw_path = str(run.get("episodes_path", "")).strip()
         if not raw_path:
@@ -1746,7 +2148,11 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
                 f"runs[{run_index}] contains {len(rows)} rows; expected {expected_per_arm}",
             )
         for row_index, row in enumerate(rows):
-            for marker_path, marker in _status_markers(row, f"runs[{run_index}].rows[{row_index}]"):
+            for marker_path, marker in _status_markers(
+                row,
+                f"runs[{run_index}].rows[{row_index}]",
+                expected_algorithm=expected_algo,
+            ):
                 _append_blocker(blockers, f"forbidden {marker_path}={marker}")
             blockers.extend(
                 f"{blocker}"
@@ -1794,8 +2200,16 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
             )
         if _strict_int(planner_row.get("failed_jobs", 0)) != 0:
             _append_blocker(blockers, f"planner_rows[{planner_row_index}] failed_jobs must be 0")
+        planner_spec = planner_specs.get(planner_row_arm[0])
+        planner_row_expected_algo = (
+            str(getattr(planner_spec, "algo", planner_row.get("algo", planner_row_arm[0])))
+            .strip()
+            .lower()
+        )
         for marker_path, marker in _status_markers(
-            planner_row, f"planner_rows[{planner_row_index}]"
+            planner_row,
+            f"planner_rows[{planner_row_index}]",
+            expected_algorithm=planner_row_expected_algo,
         ):
             _append_blocker(blockers, f"forbidden {marker_path}={marker}")
 
@@ -1936,8 +2350,18 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             blockers,
             f"manifest kinematics must be [{FULL_RELEASE_KINEMATICS!r}]",
         )
-    scenario_ids, resolved_seeds, axis_blockers = _resolve_expected_matrix_axes(
+    resolved_campaign_config, config_resolution_blockers = _full_release_campaign_config(
         manifest, campaign_config
+    )
+    for blocker in config_resolution_blockers:
+        _append_blocker(blockers, blocker)
+    expected_algorithms, algorithm_roster_blockers = _full_release_algorithm_roster(
+        manifest, resolved_campaign_config, planner_keys
+    )
+    for blocker in algorithm_roster_blockers:
+        _append_blocker(blockers, blocker)
+    scenario_ids, resolved_seeds, axis_blockers = _resolve_expected_matrix_axes(
+        manifest, resolved_campaign_config
     )
     for blocker in axis_blockers:
         _append_blocker(blockers, blocker)
@@ -1949,6 +2373,34 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         _append_blocker(
             blockers, "manifest-resolved planner/scenario/seed product mismatches 20,160"
         )
+
+    planner_specs: dict[str, Any] = {}
+    expected_scenario_identity = ""
+    expected_scenario_path: Path | None = None
+    expected_scenario_hash = ""
+    if resolved_campaign_config is not None:
+        planner_specs = {
+            str(getattr(planner, "key", "")).strip(): planner
+            for planner in getattr(resolved_campaign_config, "planners", ())
+        }
+        try:
+            resolved_scenarios = _load_campaign_scenarios(resolved_campaign_config)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            _append_blocker(
+                blockers, f"campaign scenarios cannot be resolved for provenance: {exc}"
+            )
+        else:
+            effective_scenarios = _result_provenance_scenarios(
+                resolved_campaign_config,
+                resolved_scenarios,
+                kinematics=FULL_RELEASE_KINEMATICS,
+            )
+            expected_scenario_identity = _config_hash(effective_scenarios)
+        expected_scenario_path = Path(resolved_campaign_config.scenario_matrix_path)
+        try:
+            expected_scenario_hash = sha256_file(expected_scenario_path)
+        except OSError as exc:
+            _append_blocker(blockers, f"campaign scenario matrix cannot be hashed: {exc}")
 
     summary, summary_error = _read_campaign_summary(campaign_root.resolve())
     if summary_error:
@@ -2019,6 +2471,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
     expected_per_arm = (
         FULL_RELEASE_EXPECTED_EPISODE_CELLS // len(expected_arms) if expected_arms else 0
     )
+    expected_source = str(campaign.get("git_hash", "")).strip().lower()
 
     for index, entry in enumerate(runs):
         if not isinstance(entry, Mapping):
@@ -2027,17 +2480,25 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         planner = entry.get("planner")
         planner = planner if isinstance(planner, Mapping) else {}
         arm = (str(planner.get("key", "")).strip(), str(planner.get("kinematics", "")).strip())
+        expected_algo = expected_algorithms.get(arm[0], "")
         if arm in observed_arms:
             duplicate_arms.add(arm)
         observed_arms.add(arm)
+        expected_algo = expected_algorithms.get(arm[0], "")
         if str(entry.get("status", "")).strip().lower() != "ok":
             _append_blocker(blockers, f"runs[{index}] status is not ok")
-        for marker_path, marker in _status_markers(entry, f"runs[{index}]"):
+        for marker_path, marker in _status_markers(
+            entry, f"runs[{index}]", expected_algorithm=expected_algo
+        ):
             forbidden_status_counts[marker] += 1
             _append_blocker(blockers, f"forbidden {marker_path}={marker}")
         entry_summary = entry.get("summary")
         if isinstance(entry_summary, Mapping):
-            for marker_path, marker in _status_markers(entry_summary, f"runs[{index}].summary"):
+            for marker_path, marker in _status_markers(
+                entry_summary,
+                f"runs[{index}].summary",
+                expected_algorithm=expected_algo,
+            ):
                 forbidden_status_counts[marker] += 1
                 _append_blocker(blockers, f"forbidden {marker_path}={marker}")
             failed_jobs = _strict_int(entry_summary.get("failed_jobs"))
@@ -2055,7 +2516,11 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             _append_blocker(blockers, f"runs[{index}] is missing episodes_path")
             continue
         try:
-            episodes_path = _resolve_integrity_artifact_path(campaign_root.resolve(), raw_path)
+            episodes_path = (
+                _resolve_stress_artifact_path(campaign_root, raw_path, arm=arm)
+                if resolved_campaign_config is not None
+                else _resolve_integrity_artifact_path(campaign_root.resolve(), raw_path)
+            )
         except (OSError, ValueError) as exc:
             _append_blocker(blockers, f"runs[{index}] episodes_path rejected: {exc}")
             continue
@@ -2074,9 +2539,45 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             )
         if declared_count is None or _strict_int(declared_count) != len(rows):
             _append_blocker(blockers, f"runs[{index}] declared episode count mismatches artifact")
+        if resolved_campaign_config is not None:
+            planner_spec = planner_specs.get(arm[0])
+            algo_config_path = getattr(planner_spec, "algo_config_path", None)
+            if planner_spec is None:
+                _append_blocker(blockers, f"runs[{index}] has no canonical planner specification")
+            elif expected_scenario_path is None or not expected_scenario_identity:
+                _append_blocker(
+                    blockers,
+                    f"runs[{index}] cannot validate arm-bound provenance without scenarios",
+                )
+            else:
+                for blocker in _stress_episode_provenance_blockers(
+                    episodes_path,
+                    campaign_root=campaign_root,
+                    planner_key=arm[0],
+                    expected_algo=expected_algorithms.get(arm[0], ""),
+                    expected_source_commit=expected_source,
+                    expected_scenario_path=expected_scenario_path,
+                    expected_scenario_hash=expected_scenario_hash,
+                    expected_scenario_identity=expected_scenario_identity,
+                    expected_algo_config_path=(
+                        Path(algo_config_path) if algo_config_path is not None else None
+                    ),
+                    expected_rows=rows,
+                ):
+                    _append_blocker(blockers, blocker)
         arm_identities: set[tuple[str, str, str, int]] = set()
         for row_index, row in enumerate(rows):
-            for marker_path, marker in _status_markers(row, f"runs[{index}].rows[{row_index}]"):
+            for blocker in _full_release_row_contract_blockers(
+                row,
+                prefix=f"runs[{index}].rows[{row_index}]",
+                expected_algo=expected_algo,
+            ):
+                _append_blocker(blockers, blocker)
+            for marker_path, marker in _status_markers(
+                row,
+                f"runs[{index}].rows[{row_index}]",
+                expected_algorithm=expected_algo,
+            ):
                 forbidden_status_counts[marker] += 1
                 _append_blocker(blockers, f"forbidden {marker_path}={marker}")
             scenario_id = str(row.get("scenario_id", "")).strip()
@@ -2118,7 +2619,12 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         if arm in planner_row_arms:
             duplicate_planner_row_arms.add(arm)
         planner_row_arms.add(arm)
-        for marker_path, marker in _status_markers(row, f"planner_rows[{index}]"):
+        expected_algo = expected_algorithms.get(arm[0], "")
+        for marker_path, marker in _status_markers(
+            row,
+            f"planner_rows[{index}]",
+            expected_algorithm=expected_algo,
+        ):
             forbidden_status_counts[marker] += 1
             _append_blocker(blockers, f"forbidden {marker_path}={marker}")
         if str(row.get("status", "")).strip().lower() != "ok":
@@ -2139,7 +2645,6 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
     if planner_row_arms != expected_arms:
         _append_blocker(blockers, "planner aggregate rows do not match the manifest roster")
 
-    expected_source = str(campaign.get("git_hash", "")).strip().lower()
     if not _GIT_SHA_RE.fullmatch(expected_source):
         _append_blocker(blockers, "campaign.git_hash must be an exact 40-character SHA")
     if expected_source and source_commits and source_commits != {expected_source}:

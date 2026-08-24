@@ -59,12 +59,31 @@ summary contains:
 - missing/false benchmark-success evidence, failed jobs, malformed rows,
   duplicate identities, mixed source/config provenance, or incomplete coverage.
 
+Here, a failed *execution row* is different from a completed episode whose
+scientific outcome is `collision` or `failure`. Those terminal outcomes are
+retained as data and affect the reported component metrics; requiring every
+navigation episode to succeed would censor the benchmark. The planner-level
+run must still complete every declared identity and report `benchmark_success`.
+
 A zero `fallback_count` does not make a legacy emergency-stop or
 all-candidates-rejected row admissible. `fallback_count` remains an
 independent counter: any positive value is still rejected. Dynamic escape and
 other normal candidate-evaluated sources do not create an emergency-stop
-exception. The smoke contract never authorizes ranking, an SNQI claim, or
-promotion of the stress slice into the 20,160-cell release.
+exception. A current hybrid planner may instead emit an explicit native
+`*_protective_stop` source, or the opt-in `static_protective_reorient` source,
+and increment `protective_stop_count` when every motion candidate fails its hard
+safety filters. Those commands are part of the planner being evaluated, do not
+invoke another planner, and are therefore not fallback or degraded execution.
+They remain outcome evidence: preserve and report the count, and never
+reinterpret them as success or suppress their effect on component metrics.
+
+Guarded PPO has one similarly narrow historical label: `fallback_safe` means
+that its declared Risk-DWA safety-shield component supplied a command that
+passed the shield. Admission permits only that exact native composite-planner
+counter. `fallback_best_effort`, uncertainty fallback, a non-empty generic
+`fallback_reason`, or any other positive fallback marker remains forbidden.
+The smoke contract never authorizes ranking, an SNQI claim, or promotion of the
+stress slice into the 20,160-cell release.
 
 ## imech192 submission
 

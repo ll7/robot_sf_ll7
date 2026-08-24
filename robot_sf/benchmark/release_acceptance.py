@@ -34,6 +34,7 @@ from robot_sf.benchmark.camera_ready._run_state import (
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.map_runner_identity import suite_key as _producer_suite_key
 from robot_sf.benchmark.release_protocol import (
     STRESS_SMOKE_EXPECTED_DT,
     STRESS_SMOKE_EXPECTED_EPISODE_CELLS,
@@ -258,6 +259,10 @@ def _algorithm_metadata_runtime_marker(
     if guarded_ppo_identity:
         guard_stats = metadata.get("guard_stats")
         if isinstance(guard_stats, Mapping):
+            if "fallback_safe" in guard_stats and not _is_valid_native_counter(
+                guard_stats["fallback_safe"]
+            ):
+                return "guard_stats.fallback_safe", "invalid"
             runtime_view["guard_stats"] = {
                 str(key): value
                 for key, value in guard_stats.items()
@@ -268,6 +273,10 @@ def _algorithm_metadata_runtime_marker(
             shield_view = dict(shield_stats)
             decision_counts = shield_stats.get("decision_counts")
             if isinstance(decision_counts, Mapping):
+                if "fallback_safe" in decision_counts and not _is_valid_native_counter(
+                    decision_counts["fallback_safe"]
+                ):
+                    return "shield_stats.decision_counts.fallback_safe", "invalid"
                 shield_view["decision_counts"] = {
                     str(key): value
                     for key, value in decision_counts.items()
@@ -745,8 +754,9 @@ def _stress_episode_provenance_blockers(  # noqa: C901, PLR0912, PLR0913, PLR091
     identity = identity if isinstance(identity, Mapping) else {}
     if str(identity.get("algorithm", "")).strip().lower() != expected_algo.lower():
         blockers.append(f"planner {planner_key} sidecar algorithm is not bound to its arm")
-    if identity.get("suite_key") != "default":
-        blockers.append(f"planner {planner_key} sidecar suite key must be default")
+    expected_suite_key = _producer_suite_key(expected_scenario_path)
+    if identity.get("suite_key") != expected_suite_key:
+        blockers.append(f"planner {planner_key} sidecar suite key must be {expected_suite_key}")
     if identity.get("scenario_matrix_hash") != expected_scenario_identity:
         blockers.append(f"planner {planner_key} sidecar scenario identity hash is not bound")
     expected_identity_config = _config_hash(
@@ -1731,6 +1741,8 @@ def _full_release_row_contract_blockers(
         Blockers for missing or conflicting arm/provenance aliases.
     """
     blockers: list[str] = []
+    if not _status_is(row.get("status"), _STRESS_ROW_TERMINAL_STATUSES):
+        blockers.append(f"{prefix}.status must be a recognized scientific terminal outcome")
     normalized_algo = expected_algo.strip().lower()
     metadata_algorithm = "ppo" if normalized_algo == "guarded_ppo" else normalized_algo
     blockers.extend(
@@ -1795,6 +1807,55 @@ def _full_release_row_contract_blockers(
     if not isinstance(result_provenance, Mapping):
         blockers.append(f"{prefix}: result_provenance is missing")
     else:
+        source_commit = str(result_provenance.get("repo_commit", "")).strip().lower()
+        blockers.extend(
+            f"{prefix}: {blocker}"
+            for blocker in _alias_blockers(
+                _alias_values(
+                    row,
+                    (
+                        ("git_hash", row.get("git_hash", _MISSING)),
+                        ("repo_commit", row.get("repo_commit", _MISSING)),
+                        (
+                            "provenance.git_hash",
+                            _nested_value(row, "provenance", "git_hash"),
+                        ),
+                        (
+                            "result_provenance.repo_commit",
+                            result_provenance.get("repo_commit", _MISSING),
+                        ),
+                        (
+                            "event_ledger.software_commit",
+                            _nested_value(row, "event_ledger", "software_commit"),
+                        ),
+                    ),
+                ),
+                label="source",
+                expected=source_commit or None,
+            )
+        )
+        config_hash = str(result_provenance.get("config_hash", "")).strip().lower()
+        blockers.extend(
+            f"{prefix}: {blocker}"
+            for blocker in _alias_blockers(
+                _alias_values(
+                    row,
+                    (
+                        ("config_hash", row.get("config_hash", _MISSING)),
+                        (
+                            "provenance.config_hash",
+                            _nested_value(row, "provenance", "config_hash"),
+                        ),
+                        (
+                            "result_provenance.config_hash",
+                            result_provenance.get("config_hash", _MISSING),
+                        ),
+                    ),
+                ),
+                label="row config",
+                expected=config_hash or None,
+            )
+        )
         row_scenario = str(row.get("scenario_id", "")).strip()
         provenance_scenario = str(result_provenance.get("scenario_id", "")).strip()
         if not row_scenario or not provenance_scenario:

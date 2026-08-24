@@ -276,6 +276,10 @@ def _read_episode_rows(path: Path) -> list[dict[str, Any]]:
 def _runtime_marker_value(key: str, value: Any) -> str | None:  # noqa: C901
     """Return a forbidden/malformed runtime marker value, or ``None`` when safe."""
     normalized = str(value).strip().lower().replace(" ", "_")
+    if key == "fallback_safe" and (
+        not isinstance(value, int) or isinstance(value, bool) or value < 0
+    ):
+        return f"invalid_{type(value).__name__}"
     is_status = key in _RUNTIME_STATUS_FIELDS or key.endswith("_status")
     if is_status:
         if not isinstance(value, str):

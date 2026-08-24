@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from robot_sf.benchmark import release_acceptance
+from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.release_acceptance import (
     _episode_horizon,
     _read_campaign_summary,
@@ -202,7 +203,7 @@ def _write_provenance_bound_full_campaign(
     campaign_root = _write_full_campaign(tmp_path)
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    scenario_path = tmp_path / "scenarios.yaml"
+    scenario_path = tmp_path / "classic_interactions_francis2023.yaml"
     scenario_path.write_text("scenarios: []\n", encoding="utf-8")
     resolved_scenarios = [{"id": scenario_id} for scenario_id in _SCENARIO_IDS]
     monkeypatch.setattr(
@@ -273,7 +274,7 @@ def _write_provenance_bound_full_campaign(
             algo=expected_algo,
             algo_config_path=algo_config_path,
             benchmark_profile="release-acceptance-test",
-            suite_key="default",
+            suite_key="classic_interactions",
             total_jobs=len(rows),
             written=len(rows),
             horizon=600,
@@ -316,6 +317,63 @@ def test_full_release_acceptance_requires_all_arms_and_episode_cells(
     assert result["unique_episode_identities"] == 20_160
     assert result["source_commits"] == [_SOURCE_SHA]
     assert result["blockers"] == []
+
+
+def test_full_release_rejects_unrecognized_episode_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Publication rows must use a documented scientific terminal outcome."""
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    episode_path = campaign_root / "runs/planner_00__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+    rows[0]["status"] = "garbage"
+    episode_path.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+    sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
+    sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+    )
+
+    assert result["status"] == "invalid"
+    assert any("recognized scientific terminal outcome" in item for item in result["blockers"])
+
+
+@pytest.mark.parametrize("field", ["git_hash", "config_hash"])
+def test_full_release_rejects_conflicting_present_provenance_alias(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
+) -> None:
+    """A top-level alias cannot disagree with the producer's nested provenance."""
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    episode_path = campaign_root / "runs/planner_00__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+    rows[0][field] = "b" * 64 if field == "config_hash" else "b" * 40
+    episode_path.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+    sidecar_path = episode_path.with_name(f"{episode_path.name}.provenance.json")
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    sidecar["raw_artifacts"][0]["sha256"] = sha256_file(episode_path)
+    sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+    )
+
+    assert result["status"] == "invalid"
+    assert any("aliases conflict" in item for item in result["blockers"])
 
 
 def test_full_release_sidecar_identity_matches_telemetry_enabled_producer(
@@ -388,15 +446,26 @@ def test_full_release_binds_same_algorithm_artifacts_to_exact_arms(
     second = campaign_root / "runs" / "planner_01__differential_drive" / "episodes.jsonl"
     first_payload = first.read_bytes()
     second_payload = second.read_bytes()
+    first_sidecar = first.with_name(f"{first.name}.provenance.json")
+    second_sidecar = second.with_name(f"{second.name}.provenance.json")
+    first_sidecar_payload = first_sidecar.read_bytes()
+    second_sidecar_payload = second_sidecar.read_bytes()
     first.write_bytes(second_payload)
     second.write_bytes(first_payload)
+    first_sidecar.write_bytes(second_sidecar_payload)
+    second_sidecar.write_bytes(first_sidecar_payload)
 
     result = validate_full_benchmark_release_acceptance(
         campaign_root, manifest=manifest, campaign_config=config
     )
 
     assert result["status"] == "invalid"
-    assert any("sidecar raw artifact hash is stale" in item for item in result["blockers"])
+    assert not any("sidecar raw artifact hash is stale" in item for item in result["blockers"])
+    assert any(
+        "sidecar raw artifact is not the run artifact" in item
+        or "sidecar config path is not bound to its arm" in item
+        for item in result["blockers"]
+    )
 
 
 def test_full_release_rejects_forged_guarded_ppo_metadata_on_other_arm(tmp_path: Path) -> None:
@@ -564,6 +633,25 @@ def test_guarded_ppo_safe_exception_requires_an_explicit_expected_arm() -> None:
     assert _status_markers(payload, "row")
     assert _status_markers(payload, "row", expected_algorithm="goal")
     assert _status_markers(payload, "row", expected_algorithm="guarded_ppo") == []
+
+
+@pytest.mark.parametrize("value", [0.0, 1.5, "0", True, -1])
+def test_guarded_ppo_safe_exception_rejects_non_integer_counters(value: object) -> None:
+    """Even numerically zero Guarded PPO counters must retain integer JSON type."""
+    payload = {
+        "status": "success",
+        "algorithm_metadata": {
+            "algorithm": "ppo",
+            "canonical_algorithm": "guarded_ppo",
+            "planner_contract": {"planner_id": "guarded_ppo"},
+            "guard_stats": {"fallback_safe": value},
+        },
+    }
+
+    markers = _status_markers(payload, "row", expected_algorithm="guarded_ppo")
+
+    assert markers
+    assert any("fallback_safe" in path for path, _marker in markers)
 
 
 def test_full_release_rejects_unbound_guarded_safe_aggregate_metadata(tmp_path: Path) -> None:

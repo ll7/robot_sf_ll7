@@ -79,6 +79,7 @@ from robot_sf.benchmark.map_runner.map_runner_trace import _trace_pedestrians
 from robot_sf.benchmark.map_runner_policies import safety_barrier as safety_barrier_policy_builder
 from robot_sf.benchmark.map_runner_policies.registry import build_registered_policy
 from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_spec
+from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.types import Rect
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
@@ -2200,7 +2201,7 @@ def test_policy_command_to_env_action_passthroughs_world_velocity_for_holonomic_
 
 
 def test_policy_command_to_env_action_converts_world_velocity_for_differential_drive() -> None:
-    """Structured world velocities should reuse the differential-drive adapter path."""
+    """Structured world velocities should become timestep-scaled drive accelerations."""
     config = SimpleNamespace(
         robot_config=DifferentialDriveSettings(
             radius=0.3,
@@ -2227,8 +2228,22 @@ def test_policy_command_to_env_action_converts_world_velocity_for_differential_d
     )
     assert np.allclose(
         action,
-        np.array([expected_vw[0] - 0.3, expected_vw[1] + 0.1], dtype=float),
+        np.array([(expected_vw[0] - 0.3) / 0.1, (expected_vw[1] + 0.1) / 0.1], dtype=float),
     )
+
+
+def test_policy_command_to_env_action_scales_unicycle_velocity_error_by_timestep() -> None:
+    """A differential-drive velocity command must be converted to acceleration units."""
+    config = SimpleNamespace(
+        robot_config=DifferentialDriveSettings(),
+        sim_config=SimpleNamespace(time_per_step_in_secs=0.2),
+    )
+    robot = SimpleNamespace(pose=((0.0, 0.0), 0.0), current_speed=(0.4, -0.2))
+    env = SimpleNamespace(simulator=SimpleNamespace(robots=[robot]))
+
+    action = _policy_command_to_env_action(env=env, config=config, command=(0.8, 0.4))
+
+    assert np.allclose(action, np.array([2.0, 3.0], dtype=float))
 
 
 def test_velocity_and_ped_stack_helpers() -> None:
@@ -5999,6 +6014,11 @@ def test_analysis_trace_profile_does_not_change_recorded_actions_or_outcome(
     assert "simulation_step_trace" not in off["algorithm_metadata"]
     assert "simulation_step_trace" in on["algorithm_metadata"]
     assert on["algorithm_metadata"]["analysis_trace"]["steps"][0]["time_s"] == 0.0
+    assert on["config_hash"] == _config_hash(on["scenario_params"])
+    assert on["result_provenance"]["config_hash"] == on["config_hash"]
+    assert (
+        on["provenance"]["config_hash"] == on["algorithm_metadata"]["analysis_trace"]["config_hash"]
+    )
     # Compare the actual commands passed to env.step, not only the terminal
     # result. This catches profile-induced control changes.
     assert action_sequences[0] == action_sequences[1]

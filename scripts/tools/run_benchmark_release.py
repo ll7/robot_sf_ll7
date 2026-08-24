@@ -10,6 +10,7 @@ Exit codes follow the wrapped campaign semantics for non-success benchmark outco
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import subprocess
 import sys
@@ -35,14 +36,20 @@ from robot_sf.benchmark.checkpoint_staging_receipt import (
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError, check_orca_rvo2_preflight
-from robot_sf.benchmark.release_acceptance import validate_full_benchmark_release_acceptance
+from robot_sf.benchmark.release_acceptance import (
+    validate_diagnostic_stress_smoke_acceptance,
+    validate_full_benchmark_release_acceptance,
+)
 from robot_sf.benchmark.release_protocol import (
     HISTORICAL_ZENODO_CONCEPT_DOIS,
     build_release_provenance,
     build_resolved_release_manifest,
+    is_diagnostic_stress_smoke,
     load_release_manifest,
     parse_release_args,
+    resolve_campaign_artifact_path,
     validate_release_manifest,
+    validate_stress_smoke_runtime_identity,
 )
 from robot_sf.benchmark.release_resume_admission import (
     ReleaseResumeAdmissionError,
@@ -83,6 +90,11 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def _campaign_summary_path(campaign_root: Path) -> Path:
+    """Resolve the campaign summary before any release read or merge write."""
+    return resolve_campaign_artifact_path(campaign_root, "reports/campaign_summary.json")
+
+
 def _repo_relative(path: Path) -> str:
     """Return a repository-relative path string when possible."""
     resolved = path.resolve()
@@ -120,6 +132,30 @@ def _current_source_commit() -> str:
     ):
         raise ReleaseResumeAdmissionError("unable to resolve exact release source commit")
     return commit
+
+
+def _current_worktree_clean() -> bool:
+    """Return whether the release checkout has no tracked or untracked changes."""
+    completed = subprocess.run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+        cwd=get_repository_root(),
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise ReleaseResumeAdmissionError("unable to inspect release source worktree state")
+    return not bool(completed.stdout.strip())
+
+
+def _private_stress_launch() -> bool:
+    """Identify private/SLURM execution without treating local tests as cluster launches."""
+    return bool(
+        os.environ.get("SLURM_JOB_ID")
+        or "SLURM_EXPECTED_PUBLIC_COMMIT" in os.environ
+        or os.environ.get("RELEASE_PRIVATE_LAUNCH")
+    )
 
 
 def _fixed_campaign_root(*, output_root: Path | None, campaign_id: str) -> Path:
@@ -179,7 +215,7 @@ def _admit_release_resume(
 def _merge_release_provenance(campaign_root: Path, release_provenance: dict[str, Any]) -> None:
     """Inject release provenance into campaign artifacts and refresh the markdown report."""
     # Campaign summary JSON and its human-readable markdown report.
-    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary_path = _campaign_summary_path(campaign_root)
     report_md_path = campaign_root / "reports" / "campaign_report.md"
     # Campaign and benchmark manifests that describe the run contract.
     manifest_path = campaign_root / "campaign_manifest.json"
@@ -273,11 +309,12 @@ def _assert_no_historical_release_identity(campaign_root: Path) -> None:
 
 
 def _required_artifacts_missing(campaign_root: Path, required_paths: tuple[str, ...]) -> list[str]:
-    """Return required artifact paths that are missing from the campaign root."""
+    """Return missing or unsafe required artifact paths from the campaign root."""
     missing: list[str] = []
     for relative_path in required_paths:
-        candidate = campaign_root / relative_path
-        if not candidate.exists():
+        try:
+            resolve_campaign_artifact_path(campaign_root, relative_path)
+        except (OSError, ValueError):
             missing.append(relative_path)
     return missing
 
@@ -329,7 +366,7 @@ def _run_publication_preflight(bundle_dir: Path) -> None:
 
 def _record_publication_payload(campaign_root: Path, publication_payload: dict[str, Any]) -> None:
     """Record the exported bundle descriptor in the campaign summary and report."""
-    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary_path = _campaign_summary_path(campaign_root)
     summary = _read_json(summary_path)
     summary["publication_bundle"] = publication_payload
     _write_json(summary_path, summary)
@@ -338,9 +375,20 @@ def _record_publication_payload(campaign_root: Path, publication_payload: dict[s
 
 def _record_release_acceptance(campaign_root: Path, acceptance: dict[str, Any]) -> None:
     """Persist the full-release gate beside the campaign summary and report."""
-    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary_path = _campaign_summary_path(campaign_root)
     summary = _read_json(summary_path)
     summary["full_release_acceptance"] = acceptance
+    _write_json(summary_path, summary)
+    write_campaign_report(campaign_root / "reports" / "campaign_report.md", summary)
+
+
+def _record_diagnostic_stress_smoke_acceptance(
+    campaign_root: Path, acceptance: dict[str, Any]
+) -> None:
+    """Persist diagnostic stress admission without using the full-release field."""
+    summary_path = _campaign_summary_path(campaign_root)
+    summary = _read_json(summary_path)
+    summary["diagnostic_stress_smoke_acceptance"] = acceptance
     _write_json(summary_path, summary)
     write_campaign_report(campaign_root / "reports" / "campaign_report.md", summary)
 
@@ -377,6 +425,53 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
 
     manifest = load_release_manifest(args.manifest)
     cfg = load_campaign_config(manifest.canonical_campaign_config_path)
+    stress_smoke = is_diagnostic_stress_smoke(manifest)
+    runtime_source_commit: str | None = None
+    runtime_source_admission: dict[str, Any] = {
+        "schema_version": "benchmark-stress-smoke-runtime-identity.v1",
+        "status": "not_applicable",
+        "runtime_source_commit": None,
+        "blockers": [],
+    }
+    if stress_smoke:
+        try:
+            runtime_source_commit = _current_source_commit()
+            private_launch = _private_stress_launch()
+            # A stress result is evidence about the exact checked-out source even
+            # when it is run locally.  Never allow local edits to become part of
+            # an apparently immutable stress campaign.
+            worktree_clean = _current_worktree_clean()
+        except (ReleaseResumeAdmissionError, ValueError) as exc:
+            runtime_source_admission = {
+                "schema_version": "benchmark-stress-smoke-runtime-identity.v1",
+                "status": "invalid",
+                "runtime_source_commit": None,
+                "blockers": [str(exc)],
+            }
+        else:
+            runtime_source_admission = validate_stress_smoke_runtime_identity(
+                manifest,
+                current_source_commit=runtime_source_commit,
+                launch_expected_source_commit=os.environ.get("SLURM_EXPECTED_PUBLIC_COMMIT"),
+                require_launch_pin=private_launch,
+                worktree_clean=worktree_clean,
+                require_clean_worktree=True,
+            )
+        if runtime_source_admission["status"] != "valid":
+            result = {
+                "mode": args.mode,
+                "status": "stress_smoke_source_rejected",
+                "status_reason": str(runtime_source_admission["blockers"][0]),
+                "benchmark_success": False,
+                "release_benchmark_success": False,
+                "diagnostic_success": False,
+                "stress_smoke_runtime_identity": runtime_source_admission,
+                "release_status": "stress_smoke_source_rejected",
+                "release_status_reason": str(runtime_source_admission["blockers"][0]),
+                "release_exit_code": 2,
+            }
+            print(json.dumps(result, indent=2))
+            return 2
     try:
         check_orca_rvo2_preflight(cfg)
     except OrcaRvo2PreflightError as exc:
@@ -404,7 +499,10 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         return 2
     validation = validate_release_manifest(manifest, campaign_config=cfg)
 
-    resolved_manifest = build_resolved_release_manifest(manifest, campaign_config=cfg)
+    resolved_manifest_kwargs: dict[str, Any] = {"campaign_config": cfg}
+    if stress_smoke:
+        resolved_manifest_kwargs["source_commit"] = runtime_source_commit
+    resolved_manifest = build_resolved_release_manifest(manifest, **resolved_manifest_kwargs)
     if args.mode == "preflight":
         prepared = prepare_campaign_preflight(
             cfg,
@@ -424,6 +522,9 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
             "matrix_summary_json": str(prepared["matrix_summary_json_path"]),
             "matrix_summary_csv": str(prepared["matrix_summary_csv_path"]),
         }
+        if stress_smoke:
+            preflight_payload["runtime_source_commit"] = runtime_source_commit
+            preflight_payload["stress_smoke_runtime_identity"] = runtime_source_admission
         print(json.dumps(preflight_payload, indent=2))
         return 0 if validation["status"] == "valid" else 2
 
@@ -571,10 +672,49 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     result.update(run_payload)
     campaign_root = Path(str(run_payload["campaign_root"])).resolve()
 
+    post_manifest_validation: dict[str, Any] | None = None
+    if stress_smoke:
+        # Re-hash every stress input after execution.  A clean HEAD alone does
+        # not protect a long campaign from an asset being replaced in-place.
+        post_manifest_validation = validate_release_manifest(manifest, campaign_config=cfg)
+        result["post_run_manifest_validation"] = post_manifest_validation
+
+    post_runtime_source_admission = runtime_source_admission
+    if stress_smoke:
+        try:
+            post_runtime_source_commit = _current_source_commit()
+            private_launch = _private_stress_launch()
+            post_worktree_clean = _current_worktree_clean()
+            post_runtime_source_admission = validate_stress_smoke_runtime_identity(
+                manifest,
+                current_source_commit=post_runtime_source_commit,
+                launch_expected_source_commit=os.environ.get("SLURM_EXPECTED_PUBLIC_COMMIT"),
+                require_launch_pin=private_launch,
+                worktree_clean=post_worktree_clean,
+                require_clean_worktree=True,
+            )
+            if post_runtime_source_commit != runtime_source_commit:
+                post_runtime_source_admission["status"] = "invalid"
+                post_runtime_source_admission.setdefault("blockers", []).append(
+                    "checked-out runtime source commit changed during campaign execution"
+                )
+        except (ReleaseResumeAdmissionError, ValueError) as exc:
+            post_runtime_source_admission = {
+                "schema_version": "benchmark-stress-smoke-runtime-identity.v1",
+                "status": "invalid",
+                "runtime_source_commit": None,
+                "blockers": [str(exc)],
+            }
+
+    release_provenance_kwargs: dict[str, Any] = {
+        "campaign_root": campaign_root,
+        "invoked_command": invoked_command,
+    }
+    if stress_smoke:
+        release_provenance_kwargs["source_commit"] = runtime_source_commit
     release_provenance = build_release_provenance(
         manifest,
-        campaign_root=campaign_root,
-        invoked_command=invoked_command,
+        **release_provenance_kwargs,
     )
     result["benchmark_release"] = release_provenance
     try:
@@ -601,6 +741,73 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         print(json.dumps(result, indent=2))
         return 2
 
+    missing = _required_artifacts_missing(campaign_root, manifest.required_artifact_paths)
+    result["required_artifact_paths"] = list(manifest.required_artifact_paths)
+    result["missing_required_artifacts"] = missing
+
+    if stress_smoke:
+        diagnostic_acceptance = validate_diagnostic_stress_smoke_acceptance(
+            campaign_root,
+            manifest=manifest,
+            campaign_config=cfg,
+            expected_source_commit=runtime_source_commit or "",
+        )
+        if post_runtime_source_admission["status"] != "valid":
+            diagnostic_acceptance["status"] = "invalid"
+            diagnostic_acceptance["diagnostic_success"] = False
+            diagnostic_acceptance.setdefault("blockers", []).extend(
+                f"runtime identity: {blocker}"
+                for blocker in post_runtime_source_admission.get("blockers", [])
+            )
+        if missing:
+            diagnostic_acceptance["status"] = "invalid"
+            diagnostic_acceptance["diagnostic_success"] = False
+            diagnostic_acceptance.setdefault("blockers", []).append(
+                "required campaign artifacts are missing: " + ", ".join(missing)
+            )
+        if post_manifest_validation is not None and post_manifest_validation["status"] != "valid":
+            diagnostic_acceptance["status"] = "invalid"
+            diagnostic_acceptance["diagnostic_success"] = False
+            for problem in post_manifest_validation.get("problems", []):
+                diagnostic_acceptance.setdefault("blockers", []).append(
+                    f"post-run manifest validation: {problem}"
+                )
+        _record_diagnostic_stress_smoke_acceptance(campaign_root, diagnostic_acceptance)
+        result["stress_smoke_runtime_identity"] = post_runtime_source_admission
+        result["diagnostic_stress_smoke_acceptance"] = diagnostic_acceptance
+        result["campaign_benchmark_success"] = bool(run_payload.get("benchmark_success"))
+        result["benchmark_success"] = False
+        result["diagnostic_success"] = bool(diagnostic_acceptance.get("diagnostic_success"))
+        result["release_benchmark_success"] = False
+        result["publication_requested"] = False
+        result["publication_bundle"] = None
+        result["publication_preflight_status"] = "not_requested"
+        result["release_status"] = (
+            "diagnostic_stress_smoke_passed"
+            if result["diagnostic_success"]
+            else "diagnostic_stress_smoke_failed"
+        )
+        result["release_status_reason"] = (
+            "diagnostic stress smoke passed exact-source, matrix, and fail-closed admission; "
+            "this is not benchmark-release success"
+            if result["diagnostic_success"]
+            else str(
+                (diagnostic_acceptance.get("blockers") or ["diagnostic stress smoke failed"])[0]
+            )
+        )
+        result["campaign_status"] = run_payload.get("status")
+        result["campaign_status_reason"] = run_payload.get("status_reason")
+        run_exit_code = int(run_payload.get("exit_code", 2))
+        result["release_exit_code"] = 0 if result["diagnostic_success"] else (run_exit_code or 2)
+        result["status"] = result["release_status"]
+        result["status_reason"] = result["release_status_reason"]
+        result["exit_code"] = result["release_exit_code"]
+        release_dir = campaign_root / "release"
+        _write_json(release_dir / "release_manifest.resolved.json", resolved_manifest)
+        _write_json(release_dir / "release_result.json", result)
+        print(json.dumps(result, indent=2))
+        return int(result["release_exit_code"])
+
     release_acceptance = validate_full_benchmark_release_acceptance(
         campaign_root,
         manifest=manifest,
@@ -620,9 +827,6 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
             run_payload.get("benchmark_success") and not full_release_acceptance_failed
         )
 
-    missing = _required_artifacts_missing(campaign_root, manifest.required_artifact_paths)
-    result["required_artifact_paths"] = list(manifest.required_artifact_paths)
-    result["missing_required_artifacts"] = missing
     result["benchmark_release"] = release_provenance
 
     release_dir = campaign_root / "release"

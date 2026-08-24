@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -66,6 +67,8 @@ _RUNTIME_BOOLEAN_MARKERS = frozenset(
 )
 _RUNTIME_FORBIDDEN_STATUSES = frozenset({"degraded", "fallback", "not_available", "unavailable"})
 _RUNTIME_FORBIDDEN_STATUS_PREFIXES = ("predictive_foresight_model_fallback",)
+_RUNTIME_STATUS_COUNT_CONTAINERS = frozenset({"proposal_status_counts"})
+_RUNTIME_STATUS_COUNT_MARKERS = frozenset({"degraded", "fallback"})
 
 
 def runtime_fallback_or_degraded_marker(  # noqa: C901
@@ -76,13 +79,28 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
     The traversal is deliberately key-aware: descriptive strings such as an
     implementation-mode label are not failures by substring.  Only canonical
     status fields (including the predictive-foresight fallback prefix), explicit
-    boolean markers, and positive fallback counters fail closed.
+    boolean markers, and positive fallback counters fail closed.  An empty
+    ``fallback_reason`` is tolerated only beside an explicit false
+    ``fallback_used`` or ``fallback_triggered`` flag.
 
     Returns:
         ``(path, normalized_value)`` for the first forbidden marker, otherwise ``None``.
     """
 
-    def _visit(value: Any, path: str) -> tuple[str, str] | None:  # noqa: C901
+    def _counter_marker(item: Any, item_path: str) -> tuple[str, str] | None:
+        if not isinstance(item, (int, float)) or isinstance(item, bool):
+            return item_path, "invalid"
+        try:
+            finite = math.isfinite(float(item))
+        except (OverflowError, ValueError):
+            finite = False
+        if not finite or item < 0:
+            return item_path, "invalid"
+        if item > 0:
+            return item_path, str(item)
+        return None
+
+    def _visit(value: Any, path: str) -> tuple[str, str] | None:  # noqa: C901, PLR0912
         if isinstance(value, dict):
             for raw_key, item in value.items():
                 key = str(raw_key)
@@ -94,15 +112,34 @@ def runtime_fallback_or_degraded_marker(  # noqa: C901
                         for prefix in _RUNTIME_FORBIDDEN_STATUS_PREFIXES
                     ):
                         return item_path, normalized
-                if key in _RUNTIME_BOOLEAN_MARKERS and item is True:
-                    return item_path, "true"
-                if (
-                    "fallback" in key
-                    and isinstance(item, (int, float))
-                    and not isinstance(item, bool)
-                    and item > 0
-                ):
-                    return item_path, str(item)
+                if key in _RUNTIME_BOOLEAN_MARKERS:
+                    container_key = path.rsplit(".", maxsplit=1)[-1]
+                    if (
+                        container_key in _RUNTIME_STATUS_COUNT_CONTAINERS
+                        and key in _RUNTIME_STATUS_COUNT_MARKERS
+                    ):
+                        counter_marker = _counter_marker(item, item_path)
+                        if counter_marker is not None:
+                            return counter_marker
+                    elif item is True:
+                        return item_path, "true"
+                    elif not isinstance(item, bool):
+                        return item_path, "invalid"
+                elif key == "fallback_reason":
+                    if item is None or item == "":
+                        if (
+                            value.get("fallback_used") is False
+                            or value.get("fallback_triggered") is False
+                        ):
+                            pass
+                        else:
+                            return item_path, "invalid"
+                    else:
+                        return item_path, "invalid"
+                elif "fallback" in key:
+                    counter_marker = _counter_marker(item, item_path)
+                    if counter_marker is not None:
+                        return counter_marker
                 nested = _visit(item, item_path)
                 if nested is not None:
                     return nested

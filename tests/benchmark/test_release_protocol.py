@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,17 @@ from robot_sf.benchmark.release_protocol import (
     load_release_manifest,
     validate_release_manifest,
 )
+
+STRESS_MANIFEST = Path(
+    "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml"
+)
+
+
+def _stress_manifest_payload() -> dict[str, object]:
+    """Load an isolated mutable copy of the canonical diagnostic stress manifest."""
+    payload = yaml.safe_load(STRESS_MANIFEST.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return copy.deepcopy(payload)
 
 
 def test_smoke_release_manifest_validates_against_campaign_config() -> None:
@@ -105,6 +117,106 @@ def test_load_release_manifest_rejects_missing_file() -> None:
     """Missing manifests should fail with a path-specific error."""
     with pytest.raises(FileNotFoundError, match="Benchmark release manifest not found"):
         load_release_manifest(Path("configs/benchmarks/releases/does_not_exist.yaml"))
+
+
+@pytest.mark.parametrize(
+    ("case", "pattern"),
+    (
+        ("contract_type", "stress_smoke_contract must be a mapping"),
+        ("schema", "schema_version"),
+        ("review_base", "review_base_commit"),
+        ("source_policy", "source_commit_policy"),
+        ("episode_cells", "expected_episode_cells"),
+        ("dt_type", "expected_dt"),
+        ("dt_nonfinite", "expected_dt"),
+        ("kinematics", "expected_kinematics"),
+        ("hybrid_arms_empty", "required_hybrid_arms"),
+        ("hybrid_arms_duplicate", "required_hybrid_arms"),
+        ("scenario_type", "scenario must be a mapping"),
+        ("seed_policy_type", "seed_policy must be a mapping"),
+        ("suite_hash", "suite_policy_sha256"),
+        ("seed_hash", "seed_sets_sha256"),
+        ("route_hash", "route_certification_sha256"),
+        ("pinned_assets_type", "pinned_assets must be a mapping"),
+        ("nested_seed_hash", "pinned_assets.seed_sets_sha256"),
+        ("scenario_sources_empty", "scenario_sources must be a non-empty list"),
+        ("scenario_source_type", r"scenario_sources\[0\] must be a mapping"),
+        ("scenario_source_duplicate", "duplicate asset paths"),
+        ("scenario_source_hash", r"scenario_sources\[0\].sha256"),
+        ("hybrid_planner_missing", r"hybrid_configs\[0\].planner_key"),
+        ("hybrid_planner_duplicate", "duplicate planner keys"),
+    ),
+)
+def test_diagnostic_stress_contract_rejects_malformed_pins(  # noqa: C901, PLR0912, PLR0915
+    case: str, pattern: str
+) -> None:
+    """Every fail-closed stress-contract parser branch has a malformed fixture."""
+    payload = _stress_manifest_payload()
+    contract = payload["stress_smoke_contract"]
+    assert isinstance(contract, dict)
+    scenario = payload["scenario"]
+    assert isinstance(scenario, dict)
+    seed_policy = payload["seed_policy"]
+    assert isinstance(seed_policy, dict)
+
+    if case == "contract_type":
+        payload["stress_smoke_contract"] = []
+    elif case == "schema":
+        contract["schema_version"] = "wrong"
+    elif case == "review_base":
+        contract["review_base_commit"] = "not-a-sha"
+    elif case == "source_policy":
+        contract["source_commit_policy"] = "floating"
+    elif case == "episode_cells":
+        contract["expected_episode_cells"] = True
+    elif case == "dt_type":
+        contract["expected_dt"] = "0.1"
+    elif case == "dt_nonfinite":
+        contract["expected_dt"] = float("nan")
+    elif case == "kinematics":
+        contract["expected_kinematics"] = "holonomic"
+    elif case == "hybrid_arms_empty":
+        contract["required_hybrid_arms"] = []
+    elif case == "hybrid_arms_duplicate":
+        arm = contract["required_hybrid_arms"][0]
+        contract["required_hybrid_arms"] = [arm, arm]
+    elif case == "scenario_type":
+        payload["scenario"] = []
+    elif case == "seed_policy_type":
+        payload["seed_policy"] = []
+    elif case == "suite_hash":
+        scenario["suite_policy_sha256"] = "bad"
+    elif case == "seed_hash":
+        seed_policy["seed_sets_sha256"] = "bad"
+    elif case == "route_hash":
+        scenario["route_certification_sha256"] = "bad"
+    elif case == "pinned_assets_type":
+        contract["pinned_assets"] = []
+    elif case == "nested_seed_hash":
+        pins = contract["pinned_assets"]
+        assert isinstance(pins, dict)
+        pins["seed_sets"] = {"path": pins["seed_sets_path"], "sha256": "bad"}
+    elif case == "scenario_sources_empty":
+        contract["scenario_sources"] = []
+    elif case == "scenario_source_type":
+        contract["scenario_sources"] = ["not-a-mapping"]
+    elif case == "scenario_source_duplicate":
+        pins = contract["scenario_sources"]
+        assert isinstance(pins, list)
+        pins.append(copy.deepcopy(pins[0]))
+    elif case == "scenario_source_hash":
+        contract["scenario_sources"][0]["sha256"] = "bad"
+    elif case == "hybrid_planner_missing":
+        contract["hybrid_configs"][0].pop("planner_key")
+    else:
+        pins = contract["hybrid_configs"]
+        assert isinstance(pins, list)
+        duplicate = copy.deepcopy(pins[1])
+        duplicate["planner_key"] = pins[0]["planner_key"]
+        pins[1] = duplicate
+
+    with pytest.raises(ValueError, match=pattern):
+        release_protocol._load_stress_smoke_contract(STRESS_MANIFEST, payload)
 
 
 def test_load_release_manifest_rejects_json_non_mapping(tmp_path: Path) -> None:
@@ -246,6 +358,43 @@ def test_load_release_manifest_rejects_non_file_required_path(tmp_path: Path) ->
 
     with pytest.raises(ValueError, match="citation_path must be a file path"):
         load_release_manifest(manifest_path)
+
+
+def test_manifest_side_inputs_are_repository_contained_and_not_symlinked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every manifest-side input must be a real file in the repository scope."""
+    repo = tmp_path / "repo"
+    manifest_dir = repo / "configs" / "releases"
+    manifest_dir.mkdir(parents=True)
+    monkeypatch.setattr(release_protocol, "get_repository_root", lambda: repo)
+    manifest_path = manifest_dir / "manifest.yaml"
+    safe_path = manifest_dir / "safe.yaml"
+    safe_path.write_text("safe\n", encoding="utf-8")
+
+    assert release_protocol._resolve_required_file(manifest_path, "safe.yaml", "input") == safe_path
+
+    outside = tmp_path / "outside.yaml"
+    outside.write_text("outside\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="repository"):
+        release_protocol._resolve_required_file(manifest_path, "../../../outside.yaml", "input")
+    with pytest.raises(ValueError, match="repository"):
+        release_protocol._resolve_required_file(manifest_path, str(outside), "input")
+
+    escaped = repo / "inputs" / "escaped.yaml"
+    escaped.parent.mkdir()
+    escaped.symlink_to(outside)
+    with pytest.raises(ValueError, match="symlink"):
+        release_protocol._resolve_required_file(manifest_path, "../../inputs/escaped.yaml", "input")
+
+
+def test_manifest_required_artifact_paths_are_campaign_relative() -> None:
+    """Manifest artifact declarations cannot escape the runtime campaign root."""
+    for value in ("/tmp/campaign/report.json", "../report.json", "reports/../report.json"):
+        with pytest.raises(ValueError, match="campaign-relative"):
+            release_protocol._load_manifest_artifacts_section(
+                {"artifacts": {"required_paths": [value]}}
+            )
 
 
 def test_load_release_manifest_rejects_empty_required_artifact_path(tmp_path: Path) -> None:

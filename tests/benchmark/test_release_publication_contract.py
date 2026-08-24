@@ -6,6 +6,8 @@ import hashlib
 import json
 from typing import TYPE_CHECKING
 
+import pytest
+
 from robot_sf.benchmark.release_publication_contract import (
     validate_release_publication_contract,
 )
@@ -142,6 +144,146 @@ def test_consistency_mismatch_blocks_publication(tmp_path: Path) -> None:
 
     assert report["status"] == "blocked"
     assert any("total_episodes" in blocker for blocker in report["blockers"])
+
+
+def test_symlink_campaign_summary_blocks_publication_before_read(tmp_path: Path) -> None:
+    """Publication contract validation never follows a campaign summary link."""
+    campaign_root, bundle_dir = _build_fixture(tmp_path)
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    outside = tmp_path / "outside-summary.json"
+    outside.write_text(summary_path.read_text(encoding="utf-8"), encoding="utf-8")
+    summary_path.unlink()
+    summary_path.symlink_to(outside)
+
+    report = validate_release_publication_contract(
+        campaign_root, bundle_dir, expected_release_tag="v1"
+    )
+
+    assert report["status"] == "blocked"
+    assert any("symlink" in blocker for blocker in report["blockers"])
+
+
+def test_symlink_bundle_root_blocks_publication_before_resolution(tmp_path: Path) -> None:
+    """Publication contract validation never resolves away a bundle-root link."""
+    campaign_root, bundle_dir = _build_fixture(tmp_path)
+    linked_bundle = tmp_path / "publication" / "bundle-link"
+    linked_bundle.symlink_to(bundle_dir, target_is_directory=True)
+
+    report = validate_release_publication_contract(
+        campaign_root, linked_bundle, expected_release_tag="v1"
+    )
+
+    assert report["status"] == "blocked"
+    assert any("symlink" in blocker for blocker in report["blockers"])
+
+
+def test_symlink_campaign_root_blocks_publication_before_resolution(tmp_path: Path) -> None:
+    """Publication contract validation never resolves away a campaign-root link."""
+    campaign_root, bundle_dir = _build_fixture(tmp_path)
+    linked_campaign = tmp_path / "campaign-link"
+    linked_campaign.symlink_to(campaign_root, target_is_directory=True)
+
+    report = validate_release_publication_contract(
+        linked_campaign, bundle_dir, expected_release_tag="v1"
+    )
+
+    assert report["status"] == "blocked"
+    assert any("symlink" in blocker for blocker in report["blockers"])
+
+
+@pytest.mark.parametrize(
+    "relative",
+    (
+        "publication_manifest.json",
+        "checksums.sha256",
+        "payload/reports/campaign_summary.json",
+        "payload/release/release_manifest.resolved.json",
+    ),
+)
+def test_symlink_bundle_inputs_block_publication_before_read(tmp_path: Path, relative: str) -> None:
+    """Publication validation never follows links in bundle metadata or payloads."""
+    campaign_root, bundle_dir = _build_fixture(tmp_path)
+    source = bundle_dir / relative
+    outside = tmp_path / f"outside-{relative.replace('/', '-')}"
+    outside.write_bytes(source.read_bytes())
+    source.unlink()
+    source.symlink_to(outside)
+
+    report = validate_release_publication_contract(
+        campaign_root, bundle_dir, expected_release_tag="v1"
+    )
+
+    assert report["status"] == "blocked"
+    assert any("symlink" in blocker for blocker in report["blockers"])
+
+
+def test_symlink_campaign_release_result_blocks_publication_before_read(tmp_path: Path) -> None:
+    """Publication validation never follows a campaign release-result link."""
+    campaign_root, bundle_dir = _build_fixture(tmp_path)
+    source = campaign_root / "release" / "release_result.json"
+    outside = tmp_path / "outside-release-result.json"
+    outside.write_bytes(source.read_bytes())
+    source.unlink()
+    source.symlink_to(outside)
+
+    report = validate_release_publication_contract(
+        campaign_root, bundle_dir, expected_release_tag="v1"
+    )
+
+    assert report["status"] == "blocked"
+    assert any("symlink" in blocker for blocker in report["blockers"])
+
+
+def test_symlink_campaign_runs_directory_blocks_publication_before_read(tmp_path: Path) -> None:
+    """Episode provenance must not be collected through a campaign runs link."""
+    campaign_root, bundle_dir = _build_fixture(tmp_path)
+    runs_path = campaign_root / "runs"
+    outside = tmp_path / "outside-runs"
+    runs_path.rename(outside)
+    runs_path.symlink_to(outside, target_is_directory=True)
+
+    report = validate_release_publication_contract(
+        campaign_root, bundle_dir, expected_release_tag="v1"
+    )
+
+    assert report["status"] == "blocked"
+    assert any("symlink" in blocker for blocker in report["blockers"])
+
+
+def test_publication_contract_requires_regular_campaign_and_bundle_directories(
+    tmp_path: Path,
+) -> None:
+    """Campaign and bundle roots must be existing non-symlink directories."""
+    campaign_root, bundle_dir = _build_fixture(tmp_path)
+    campaign_file = tmp_path / "campaign-file"
+    campaign_file.write_text("not a directory\n", encoding="utf-8")
+    report = validate_release_publication_contract(
+        campaign_file, bundle_dir, expected_release_tag="v1"
+    )
+    assert report["status"] == "blocked"
+    assert any("regular directory" in blocker for blocker in report["blockers"])
+
+    bundle_file = tmp_path / "bundle-file"
+    bundle_file.write_text("not a directory\n", encoding="utf-8")
+    report = validate_release_publication_contract(
+        campaign_root, bundle_file, expected_release_tag="v1"
+    )
+    assert report["status"] == "blocked"
+    assert any("regular directory" in blocker for blocker in report["blockers"])
+
+
+@pytest.mark.parametrize("relative", ("/outside/payload.json", "payload/../outside.json"))
+def test_external_checksum_entries_block_publication(tmp_path: Path, relative: str) -> None:
+    """Checksum manifests cannot direct publication reads outside the bundle payload."""
+    campaign_root, bundle_dir = _build_fixture(tmp_path)
+    (bundle_dir / "checksums.sha256").write_text(f"{'a' * 64}  {relative}\n", encoding="utf-8")
+
+    report = validate_release_publication_contract(
+        campaign_root, bundle_dir, expected_release_tag="v1"
+    )
+
+    assert report["status"] == "blocked"
+    assert any("payload-relative" in blocker for blocker in report["blockers"])
 
 
 def test_explained_commit_drift_and_excluded_boundary_can_pass(tmp_path: Path) -> None:

@@ -82,6 +82,7 @@ from robot_sf.benchmark.release_protocol import (
     build_resolved_release_manifest,
     load_release_manifest,
     parse_release_args,
+    resolve_campaign_artifact_path,
     validate_release_manifest,
 )
 from robot_sf.benchmark.snqi_scalarization_sensitivity import (
@@ -199,6 +200,11 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     """Write a JSON object to disk."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _campaign_summary_path(campaign_root: Path) -> Path:
+    """Resolve the campaign summary before any release read or merge write."""
+    return resolve_campaign_artifact_path(campaign_root, "reports/campaign_summary.json")
 
 
 def _repo_relative(path: Path) -> str:
@@ -429,7 +435,7 @@ def _reconcile_snqi_diagnostics(campaign_root: Path, cfg: Any) -> None:
 
 def _merge_release_provenance(campaign_root: Path, release_provenance: dict[str, Any]) -> None:
     """Inject release provenance into campaign artifacts and refresh the markdown report."""
-    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary_path = _campaign_summary_path(campaign_root)
     report_md_path = campaign_root / "reports" / "campaign_report.md"
     manifest_path = campaign_root / "campaign_manifest.json"
     benchmark_manifest_path = campaign_root / "manifest.json"
@@ -474,11 +480,12 @@ def _merge_release_provenance(campaign_root: Path, release_provenance: dict[str,
 
 
 def _required_artifacts_missing(campaign_root: Path, required_paths: tuple[str, ...]) -> list[str]:
-    """Return required artifact paths that are missing from the campaign root."""
+    """Return missing or unsafe required artifact paths from the campaign root."""
     missing: list[str] = []
     for relative_path in required_paths:
-        candidate = campaign_root / relative_path
-        if not candidate.exists():
+        try:
+            resolve_campaign_artifact_path(campaign_root, relative_path)
+        except (OSError, ValueError):
             missing.append(relative_path)
     return missing
 
@@ -529,7 +536,7 @@ def _run_publication_preflight(bundle_dir: Path) -> None:
 
 def _record_publication_payload(campaign_root: Path, publication_payload: dict[str, Any]) -> None:
     """Record the exported bundle descriptor in the campaign summary and report."""
-    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary_path = _campaign_summary_path(campaign_root)
     summary = _read_json(summary_path)
     summary["publication_bundle"] = publication_payload
     _write_json(summary_path, summary)

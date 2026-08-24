@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import copy
 import json
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
@@ -15,9 +16,6 @@ from robot_sf.render.jsonl_playback import JSONLPlaybackLoader
 from scripts.repro import butterfly_hinge_figure_proto as hinge
 from scripts.repro import butterfly_reexport_to_trace_series as adapter
 from scripts.repro import butterfly_trace_to_video_proto as video
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _frame(step: int, robot_x: float, pedestrian_x: float) -> dict[str, Any]:
@@ -445,3 +443,76 @@ def test_assert_render_expectations_match_guard_semantics() -> None:
             actual_b_story_steps=220,
             actual_n_steps_b=220,
         )
+
+
+def test_contrast_layout_labels_use_exposure_steps() -> None:
+    """Issue #7702: both vertical and horizontal contrast layouts display 'exposure steps'."""
+    gutter = {
+        "mode": "contrast",
+        "min_clearance_focal_m": {"episode_a": 1.23, "episode_b": 2.34},
+        "near_miss_steps": {"episode_a": 4, "episode_b": 7},
+        "steps_to_termination": {"episode_a": 10, "episode_b": 15},
+        "first_braking_time_s": {"episode_a": 1.2, "episode_b": 2.4},
+    }
+
+    # Vertical contrast gutter lines
+    vertical_lines = hinge._format_contrast_gutter_lines(gutter)
+    assert any("exposure steps" in line for line in vertical_lines)
+    assert not any("near-miss steps" in line for line in vertical_lines)
+    exposure_line = next(line for line in vertical_lines if "exposure steps" in line)
+    assert "A 4 / B 7" in exposure_line
+
+    # Horizontal contrast strip
+    fig, ax = plt.subplots()
+    try:
+        hinge._draw_contrast_strip(ax, gutter, fontsize=7.0)
+        texts = [t.get_text() for t in ax.texts]
+        assert "exposure steps" in texts
+        assert "A 4 / B 7" in texts
+        assert not any("near-miss steps" in t for t in texts)
+    finally:
+        plt.close(fig)
+
+    # Headline composition
+    ep_a = hinge.EpisodeTrace(
+        label="A",
+        bundle_dir=Path("/tmp/a"),
+        payload={},
+        metadata={
+            "scenario_id": "doorway",
+            "seed": 113,
+            "episode_status": "success",
+            "planner": "sfm",
+        },
+        robot_xy=np.zeros((0, 2)),
+        robot_vel=np.zeros((0, 2)),
+        time_s=np.zeros(0),
+        ped_ids=[],
+        ped_xy=np.zeros((0, 0, 2)),
+        cmd_v=np.zeros(0),
+        cmd_omega=np.zeros(0),
+        metrics={},
+    )
+    ep_b = hinge.EpisodeTrace(
+        label="B",
+        bundle_dir=Path("/tmp/b"),
+        payload={},
+        metadata={
+            "scenario_id": "doorway",
+            "seed": 114,
+            "episode_status": "collision",
+            "planner": "sfm",
+        },
+        robot_xy=np.zeros((0, 2)),
+        robot_vel=np.zeros((0, 2)),
+        time_s=np.zeros(0),
+        ped_ids=[],
+        ped_xy=np.zeros((0, 0, 2)),
+        cmd_v=np.zeros(0),
+        cmd_omega=np.zeros(0),
+        metrics={},
+    )
+    headline = hinge._compose_contrast_headline(ep_a, ep_b, gutter, start_sep_m=1.5)
+    assert "4 exposure steps" in headline
+    assert "7 exposure steps" in headline
+    assert "near-miss steps" not in headline

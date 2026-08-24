@@ -1466,7 +1466,7 @@ def _format_contrast_gutter_lines(gutter: dict[str, Any]) -> list[str]:
     lines = ["A | B", ""]
     lines.append(f"min clearance\n(focal ped)\nA {clear_a:.2f} m\nB {clear_b:.2f} m")
     lines.append("")
-    lines.append(f"near-miss steps\nA {near_a} / B {near_b}")
+    lines.append(f"exposure steps\nA {near_a} / B {near_b}")
     lines.append("")
     lines.append(f"steps to\ntermination\nA {steps_a} / B {steps_b}")
     lines.append("")
@@ -1524,7 +1524,7 @@ def _draw_delta_gutter(ax: plt.Axes, gutter: dict[str, Any]) -> None:
 def _draw_contrast_strip(ax: plt.Axes, gutter: dict[str, Any], *, fontsize: float) -> None:
     """Draw the print layout's compact single-row contrast strip (replaces the vertical
     central gutter below the panels): four cells, each a small dimmed header over its A/B
-    values -- min clearance to the focal pedestrian, near-miss steps, steps to
+    values -- min clearance to the focal pedestrian, exposure steps, steps to
     termination, first braking. Same data source as the vertical contrast gutter
     (``compute_contrast_gutter``); only the arrangement changes.
     """
@@ -1548,12 +1548,12 @@ def _draw_contrast_strip(ax: plt.Axes, gutter: dict[str, Any], *, fontsize: floa
         brake_val = "n/a"
     cells = [
         ("min clearance (focal ped)", f"A {clear_a:.2f} m / B {clear_b:.2f} m"),
-        ("near-miss steps", f"A {near_a} / B {near_b}"),
+        ("exposure steps", f"A {near_a} / B {near_b}"),
         ("steps to termination", f"A {steps_a} / B {steps_b}"),
         ("first braking", brake_val),
     ]
     # Cell centers: NOT an even quarter-split. At the true (narrower) print width the
-    # even split puts the long "min clearance (focal ped)" / "near-miss steps" headers
+    # even split puts the long "min clearance (focal ped)" / "exposure steps" headers
     # (cells 0/1) close enough to collide; cells 2/3's shorter headers have slack, so
     # centers are nudged left/right to borrow that slack for cells 0/1 (text unchanged).
     cell_x = (0.11, 0.40, 0.635, 0.87)
@@ -2163,10 +2163,10 @@ def _compose_contrast_headline(
         f"(starts {start_sep_m:.1f} m apart). "
         f"The outcome flips from {ep_a.metadata['episode_status']} "
         f"({gutter['steps_to_termination']['episode_a']} steps, "
-        f"{gutter['near_miss_steps']['episode_a']} near-miss steps) to "
+        f"{gutter['near_miss_steps']['episode_a']} exposure steps) to "
         f"{ep_b.metadata['episode_status']} "
         f"({gutter['steps_to_termination']['episode_b']} steps, "
-        f"{gutter['near_miss_steps']['episode_b']} near-miss steps)."
+        f"{gutter['near_miss_steps']['episode_b']} exposure steps)."
     )
 
 

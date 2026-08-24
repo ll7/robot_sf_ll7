@@ -2530,6 +2530,13 @@ def _step_build_actuation_trace(
     )
 
 
+def _finite_planner_decision_value(value: Any) -> float | None:
+    """Return a finite planner diagnostic value or ``None``."""
+    if isinstance(value, int | float | np.integer | np.floating) and math.isfinite(float(value)):
+        return float(value)
+    return None
+
+
 def _step_build_planner_decision_entry(
     state: _StepLoopState,
     slc: _StepLoopConfig,
@@ -2547,10 +2554,21 @@ def _step_build_planner_decision_entry(
     progress_windows = progress_windows_raw if isinstance(progress_windows_raw, dict) else {}
     selected_command = psd.get("selected_command")
     selected_command = selected_command if isinstance(selected_command, list) else []
+    rejection_counts_raw = psd.get("rejection_counts")
+    rejection_counts = rejection_counts_raw if isinstance(rejection_counts_raw, dict) else {}
+    moving_rejection_counts_raw = psd.get("moving_rejection_counts")
+    moving_rejection_counts = (
+        moving_rejection_counts_raw if isinstance(moving_rejection_counts_raw, dict) else {}
+    )
+    rejection_counts_by_source_raw = psd.get("rejection_counts_by_source")
+    rejection_counts_by_source = (
+        rejection_counts_by_source_raw if isinstance(rejection_counts_by_source_raw, dict) else {}
+    )
     distance_to_goal = float(np.linalg.norm(sim.robot_pos - state.goal_vec))
     step_decision: dict[str, Any] = {
         "step": int(step_idx),
         "selected_source": str(psd.get("selected_source", "unknown")),
+        "planner_mode": str(psd.get("planner_mode", "unknown")),
         "selected_command": [
             float(value)
             for value in selected_command[:2]
@@ -2568,6 +2586,31 @@ def _step_build_planner_decision_entry(
             for key, value in progress_windows.items()
             if isinstance(value, int | float | np.integer | np.floating)
         },
+        "rejection_counts": {
+            str(key): int(value)
+            for key, value in rejection_counts.items()
+            if isinstance(value, int | np.integer) and int(value) >= 0
+        },
+        "moving_rejection_counts": {
+            str(key): int(value)
+            for key, value in moving_rejection_counts.items()
+            if isinstance(value, int | np.integer) and int(value) >= 0
+        },
+        "rejection_counts_by_source": {
+            str(source): {
+                str(key): int(value)
+                for key, value in counts.items()
+                if isinstance(value, int | np.integer) and int(value) >= 0
+            }
+            for source, counts in rejection_counts_by_source.items()
+            if isinstance(counts, dict)
+        },
+        "nearest_pedestrian_distance_m": _finite_planner_decision_value(
+            psd.get("nearest_pedestrian_distance")
+        ),
+        "nearest_static_obstacle_distance_m": _finite_planner_decision_value(
+            psd.get("nearest_static_obstacle_distance")
+        ),
         "distance_to_goal_m": distance_to_goal,
         "route_progress_from_start_m": float(state.initial_goal_distance - distance_to_goal),
         "robot_x_m": float(sim.robot_pos[0]),

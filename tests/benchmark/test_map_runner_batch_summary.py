@@ -187,6 +187,62 @@ class TestMergeRuntimeAlgorithmContract:
         assert planner_runtime["readiness_status"] == "degraded"
         assert planner_runtime["provenance"] == {"source": "base", "checkpoint": "runtime"}
 
+    def test_nested_runtime_merge_does_not_mutate_episode_metadata(self) -> None:
+        """Batch aggregation must not alias and rewrite a previously emitted episode row."""
+        first_episode = {
+            "planner_runtime": {
+                "selected_source_counts": {"dynamic_window": 4},
+                "fallback_count": 0,
+            }
+        }
+        contract = merge_runtime_algorithm_contract({}, first_episode)
+
+        merge_runtime_algorithm_contract(
+            contract,
+            {
+                "planner_runtime": {
+                    "selected_source_counts": {"all_candidates_rejected": 3},
+                    "fallback_count": 3,
+                }
+            },
+        )
+
+        assert first_episode["planner_runtime"]["selected_source_counts"] == {"dynamic_window": 4}
+
+    def test_native_protective_stop_telemetry_aggregates_numerically(self) -> None:
+        contract: dict = {}
+        merge_runtime_algorithm_contract(
+            contract,
+            {
+                "planner_runtime": {
+                    "protective_stop_count": 2,
+                    "selected_source_counts": {
+                        "dynamic_window": 4,
+                        "dynamic_protective_stop": 2,
+                    },
+                }
+            },
+        )
+        merge_runtime_algorithm_contract(
+            contract,
+            {
+                "planner_runtime": {
+                    "protective_stop_count": 3,
+                    "selected_source_counts": {
+                        "dynamic_window": 5,
+                        "static_protective_stop": 3,
+                    },
+                }
+            },
+        )
+
+        assert contract["planner_runtime"]["protective_stop_count"] == 5
+        assert contract["planner_runtime"]["selected_source_counts"] == {
+            "dynamic_protective_stop": 2,
+            "dynamic_window": 9,
+            "static_protective_stop": 3,
+        }
+
 
 class TestBuildAmmvFeasibilitySummary:
     """Tests for build_ammv_feasibility_summary."""

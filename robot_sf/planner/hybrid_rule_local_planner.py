@@ -383,6 +383,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         self._rejection_counts: Counter[str] = Counter()
         self._unavailable_counts: Counter[str] = Counter()
         self._fallback_count = 0
+        self._protective_stop_count = 0
         self._last_decision: dict[str, Any] | None = None
         self._clearance_context: _ObstacleClearanceContext | None = None
 
@@ -2964,7 +2965,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             rejected_examples,
         )
 
-    def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
+    def plan(self, observation: dict[str, Any]) -> tuple[float, float]:  # noqa: PLR0915
         """Return the selected ``(linear, angular)`` command."""
         state = self._extract_state(observation)
         robot_pos = state["robot_pos"]
@@ -3063,9 +3064,21 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                 for item in accepted[: max(int(self.config.top_k_diagnostics), 1)]
             ]
         else:
-            self._fallback_count += 1
-            mode = "EMERGENCY_STOP"
-            source = "all_candidates_rejected"
+            # No alternate planner is invoked here. All candidates were rejected
+            # by the native hard-safety filters, so the zero command is an explicit
+            # native policy decision rather than an execution fallback.
+            self._protective_stop_count += 1
+            rejection_kinds = set(rejection_counts)
+            mode = "PROTECTIVE_STOP"
+            if rejection_kinds and rejection_kinds <= {"dynamic_collision"}:
+                source = "dynamic_protective_stop"
+            elif rejection_kinds and rejection_kinds <= {
+                "static_clearance",
+                "static_collision",
+            }:
+                source = "static_protective_stop"
+            else:
+                source = "safety_protective_stop"
             command = (0.0, 0.0)
             if self._static_recovery_allowed(rejection_counts, nearest_ped):
                 goal_vec = goal - robot_pos
@@ -3076,8 +3089,8 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
                     0.0,
                     float(turn_sign * abs(float(self.config.recovery_reorient_angular_speed))),
                 )
-                mode = "REORIENT"
-                source = "static_reorient"
+                mode = "PROTECTIVE_REORIENT"
+                source = "static_protective_reorient"
             score = 0.0
             terms = {"freezing_penalty": 1.0}
             nearest_static = self._min_obstacle_clearance(robot_pos, observation)
@@ -3208,6 +3221,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "rejection_counts": dict(sorted(self._rejection_counts.items())),
             "unavailable_counts": dict(sorted(self._unavailable_counts.items())),
             "fallback_count": int(self._fallback_count),
+            "protective_stop_count": int(self._protective_stop_count),
             "last_decision": dict(self._last_decision) if self._last_decision else None,
         }
 

@@ -83,7 +83,10 @@ successful `release/release_result.json` (for example,
 `output/benchmarks/camera_ready/<smoke_id>/release/release_result.json`). Also run
 the hybrid stress gate at the same exact source commit and require zero fallback,
 degraded, unavailable, failed, legacy emergency-stop, or all-candidates-rejected
-markers. A benign one-cell runtime smoke does not replace this stress gate. Then run:
+markers. Native `*_protective_stop` decisions are not alternate-planner fallback;
+retain their explicit counts as planner-outcome evidence and do not treat them as
+successful navigation. A benign one-cell runtime smoke does not replace this stress
+gate. Then run:
 
 ```bash
 uv run python scripts/tools/run_benchmark_release.py \

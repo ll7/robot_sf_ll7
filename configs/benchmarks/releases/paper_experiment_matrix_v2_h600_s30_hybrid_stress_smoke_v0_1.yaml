@@ -11,7 +11,7 @@ release_tag: paper-matrix-v2-h600-s30-hybrid-stress-smoke
 maturity: diagnostic
 release_kind: benchmark-stress-smoke
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_hybrid_stress_smoke.yaml
-campaign_config_sha256: "b046b4298be25c9144c91db218749d3a08310aeabc54d8e0fd7f0f46cd52ae49"
+campaign_config_sha256: "1201cc1c5d374659e045071d035e87cb0a3684d8dcfd172f149e127d9102d455"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: diagnostic-stress-no-ranking
 

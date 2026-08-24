@@ -158,9 +158,14 @@ def test_planner_decision_trace_entry() -> None:
         "selected_command": [1.0, 0.0],
         "selected_score": 0.95,
         "distance_to_goal_m": 3.0,
+        "planner_mode": "NORMAL",
+        "rejection_counts": {},
+        "nearest_static_obstacle_distance_m": 1.25,
     }
     assert entry["step"] == 5
     assert entry["selected_score"] == 0.95
+    assert entry["planner_mode"] == "NORMAL"
+    assert entry["nearest_static_obstacle_distance_m"] == 1.25
     assert entry.get("static_recenter") is None
 
 

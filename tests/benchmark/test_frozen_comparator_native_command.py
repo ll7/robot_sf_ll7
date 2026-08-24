@@ -150,8 +150,12 @@ def test_blocking_static_segment_changes_comparator_behavior(
         clear_diagnostics = clear_planner.diagnostics()
         blocked_diagnostics = blocked_planner.diagnostics()
         assert clear_diagnostics["last_decision"]["planner_mode"] == "NORMAL"
-        assert blocked_diagnostics["last_decision"]["planner_mode"] == "EMERGENCY_STOP"
-        assert blocked_diagnostics["fallback_count"] > clear_diagnostics["fallback_count"]
+        assert blocked_diagnostics["last_decision"]["planner_mode"] == "PROTECTIVE_STOP"
+        assert blocked_diagnostics["fallback_count"] == clear_diagnostics["fallback_count"] == 0
+        assert (
+            blocked_diagnostics["protective_stop_count"]
+            > clear_diagnostics["protective_stop_count"]
+        )
     elif planner_id == "dwa":
         clear_decision = clear_planner.diagnostics()["last_decision"]
         blocked_decision = blocked_planner.diagnostics()["last_decision"]

@@ -3560,6 +3560,12 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
                     "route_arc_progress": 0.0,
                     "goal_progress": -0.1,
                 },
+                "planner_mode": "EMERGENCY_STOP",
+                "rejection_counts": {"static_clearance": 7},
+                "moving_rejection_counts": {"static_clearance": 4},
+                "rejection_counts_by_source": {"dynamic_window": {"static_clearance": 4}},
+                "nearest_pedestrian_distance": 2.5,
+                "nearest_static_obstacle_distance": 0.42,
                 "progress_windows": {"3s": 0.0},
             },
         }
@@ -3619,6 +3625,12 @@ def test_run_map_episode_merges_planner_runtime_stats(monkeypatch: pytest.Monkey
     assert step["selected_score"] == pytest.approx(1.25)
     assert step["static_recenter"] == pytest.approx(1.0)
     assert step["progress_windows"]["3s"] == pytest.approx(0.0)
+    assert step["planner_mode"] == "EMERGENCY_STOP"
+    assert step["rejection_counts"] == {"static_clearance": 7}
+    assert step["moving_rejection_counts"] == {"static_clearance": 4}
+    assert step["rejection_counts_by_source"] == {"dynamic_window": {"static_clearance": 4}}
+    assert step["nearest_pedestrian_distance_m"] == pytest.approx(2.5)
+    assert step["nearest_static_obstacle_distance_m"] == pytest.approx(0.42)
 
 
 def test_run_map_episode_snapshots_planner_runtime_before_close(

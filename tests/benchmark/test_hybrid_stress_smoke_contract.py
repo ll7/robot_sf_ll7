@@ -256,6 +256,47 @@ def test_legacy_emergency_paths_are_never_admitted(field: str, value: str) -> No
     )
 
 
+@pytest.mark.parametrize("count", (1, 36, "mixed", "invalid"))
+def test_aggregated_legacy_emergency_source_counts_are_never_admitted(
+    count: int | str,
+) -> None:
+    """Aggregated runtime diagnostics cannot hide emergency-stop steps."""
+    runtime = {
+        "fallback_count": 0,
+        "selected_source_counts": {"all_candidates_rejected": count},
+    }
+
+    assert _emergency_stop_marker(runtime) is not None
+    assert _status_markers(
+        {"status": "ok", "algorithm_metadata": {"planner_runtime": runtime}},
+        "stress-row",
+    )
+
+
+def test_zero_aggregated_legacy_emergency_source_count_is_admitted() -> None:
+    runtime = {
+        "fallback_count": 0,
+        "selected_source_counts": {"all_candidates_rejected": 0},
+    }
+
+    assert _emergency_stop_marker(runtime) is None
+
+
+def test_native_protective_stop_is_not_execution_fallback() -> None:
+    runtime = {
+        "fallback_count": 0,
+        "protective_stop_count": 4,
+        "selected_source_counts": {"dynamic_protective_stop": 4},
+        "last_decision": {
+            "planner_mode": "PROTECTIVE_STOP",
+            "selected_source": "dynamic_protective_stop",
+        },
+    }
+
+    assert runtime_fallback_or_degraded_marker(runtime) is None
+    assert _emergency_stop_marker(runtime) is None
+
+
 def test_positive_emergency_stop_count_is_rejected() -> None:
     runtime = {"fallback_count": 0, "emergency_stop_count": 1}
 

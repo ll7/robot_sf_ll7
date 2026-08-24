@@ -178,12 +178,18 @@ class PlannerDecisionTraceEntry(TypedDict, total=False):
 
     step: int
     selected_source: str
+    planner_mode: str
     selected_command: list[float]
     selected_score: float | None
     static_recenter: float
     route_arc_progress: float
     goal_progress: float
     progress_windows: dict[str, float]
+    rejection_counts: dict[str, int]
+    moving_rejection_counts: dict[str, int]
+    rejection_counts_by_source: dict[str, dict[str, int]]
+    nearest_pedestrian_distance_m: float | None
+    nearest_static_obstacle_distance_m: float | None
     distance_to_goal_m: float
     route_progress_from_start_m: float
     robot_x_m: float

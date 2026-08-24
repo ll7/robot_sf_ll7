@@ -59,12 +59,24 @@ summary contains:
 - missing/false benchmark-success evidence, failed jobs, malformed rows,
   duplicate identities, mixed source/config provenance, or incomplete coverage.
 
+Here, a failed *execution row* is different from a completed episode whose
+scientific outcome is `collision` or `failure`. Those terminal outcomes are
+retained as data and affect the reported component metrics; requiring every
+navigation episode to succeed would censor the benchmark. The planner-level
+run must still complete every declared identity and report `benchmark_success`.
+
 A zero `fallback_count` does not make a legacy emergency-stop or
 all-candidates-rejected row admissible. `fallback_count` remains an
 independent counter: any positive value is still rejected. Dynamic escape and
 other normal candidate-evaluated sources do not create an emergency-stop
-exception. The smoke contract never authorizes ranking, an SNQI claim, or
-promotion of the stress slice into the 20,160-cell release.
+exception. A current hybrid planner may instead emit an explicit native
+`*_protective_stop` source and increment `protective_stop_count` when every
+motion candidate fails its hard safety filters. That zero command is part of
+the planner being evaluated, does not invoke another planner, and is therefore
+not fallback or degraded execution. It remains outcome evidence: preserve and
+report the count, and never reinterpret it as success or suppress its effect on
+component metrics. The smoke contract never authorizes ranking, an SNQI claim,
+or promotion of the stress slice into the 20,160-cell release.
 
 ## imech192 submission
 

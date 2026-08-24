@@ -268,6 +268,39 @@ def test_complete_stress_campaign_is_admitted(stress_fixture: tuple[Path, Any, A
     assert report["observed_episode_rows"] == 70
 
 
+@pytest.mark.parametrize("status", ("collision", "failure"))
+def test_scientific_terminal_outcomes_do_not_fail_runtime_admission(
+    stress_fixture: tuple[Path, Any, Any], status: str
+) -> None:
+    """A completed native episode need not reach the goal to prove runtime execution."""
+    root, manifest, campaign_config = stress_fixture
+    episodes_path = _first_row_path(root, "prediction_planner")
+    rows = [json.loads(line) for line in episodes_path.read_text().splitlines()]
+    rows[0]["status"] = status
+    episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    _refresh_sidecar_raw_hash(episodes_path)
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "valid", report["blockers"]
+
+
+def test_unknown_episode_status_fails_runtime_admission(
+    stress_fixture: tuple[Path, Any, Any],
+) -> None:
+    root, manifest, campaign_config = stress_fixture
+    episodes_path = _first_row_path(root, "prediction_planner")
+    rows = [json.loads(line) for line in episodes_path.read_text().splitlines()]
+    rows[0]["status"] = "mystery"
+    episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    _refresh_sidecar_raw_hash(episodes_path)
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "invalid"
+    assert any("terminal outcome" in blocker for blocker in report["blockers"])
+
+
 @pytest.mark.parametrize(
     "mutation",
     (

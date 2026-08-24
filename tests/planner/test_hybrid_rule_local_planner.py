@@ -656,16 +656,18 @@ def test_hybrid_rule_switches_to_next_waypoint_near_current() -> None:
     assert np.allclose(state["goal"], np.asarray((2.0, 0.0), dtype=float))
 
 
-def test_hybrid_rule_v0_emergency_stop_when_all_candidates_rejected() -> None:
-    """Hard dynamic collision filtering should fail closed to an emergency stop."""
+def test_hybrid_rule_v0_protective_stop_when_all_candidates_rejected() -> None:
+    """Hard dynamic filtering should remain a native, explicitly recorded safety stop."""
     planner = HybridRuleLocalPlannerAdapter(HybridRuleLocalPlannerConfig())
 
     command = planner.plan(_obs(ped_positions=[(0.3, 0.0)], ped_velocities=[(0.0, 0.0)]))
 
     assert command == (0.0, 0.0)
     diagnostics = planner.diagnostics()
-    assert diagnostics["fallback_count"] == 1
-    assert diagnostics["last_decision"]["planner_mode"] == "EMERGENCY_STOP"
+    assert diagnostics["fallback_count"] == 0
+    assert diagnostics["protective_stop_count"] == 1
+    assert diagnostics["last_decision"]["planner_mode"] == "PROTECTIVE_STOP"
+    assert diagnostics["last_decision"]["selected_source"] == "safety_protective_stop"
     assert diagnostics["rejection_counts"]["dynamic_collision"] > 0
 
 

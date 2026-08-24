@@ -35,9 +35,16 @@ workers: 32
 horizon: 600
 dt: 0.1
 record_forces: true
+# Retain per-step planner decisions so any forbidden emergency source can be
+# diagnosed from the immutable smoke artifact instead of inferred from a mixed
+# aggregate counter.
+record_planner_decision_trace: true
 checkpoint_provenance_enforcement: error
 resume: false
-stop_on_failure: true
+# Finish all 70 diagnostic cells even when one arm is rejected so a fresh run
+# yields complete mechanism evidence.  The campaign and release gates still
+# return non-zero unless every planner executes without forbidden markers.
+stop_on_failure: false
 bootstrap_samples: 100
 bootstrap_confidence: 0.95
 bootstrap_seed: 123

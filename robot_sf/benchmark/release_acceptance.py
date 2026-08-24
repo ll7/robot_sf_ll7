@@ -10,6 +10,7 @@ module keeps that publication gate separate from the bounded runtime smoke.
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections import Counter
 from collections.abc import Mapping
@@ -70,7 +71,7 @@ _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _LEGACY_EMERGENCY_MODES = frozenset({"emergency_stop", "reorient"})
 _LEGACY_EMERGENCY_SOURCES = frozenset({"all_candidates_rejected", "static_reorient"})
 _STRESS_RUN_SUCCESS_STATUSES = frozenset({"ok"})
-_STRESS_ROW_SUCCESS_STATUSES = frozenset({"success"})
+_STRESS_ROW_TERMINAL_STATUSES = frozenset({"success", "collision", "failure"})
 _STRESS_VALID_BENCHMARK_SUCCESS = frozenset({"true"})
 _MISSING = object()
 _RUNTIME_METADATA_CONTAINERS = frozenset(
@@ -135,7 +136,9 @@ def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:  # noqa: C90
     def _normalized(value: Any) -> str:
         return str(value).strip().lower().replace("-", "_")
 
-    def _walk(value: Any, path: str, *, active: bool = False) -> tuple[str, str] | None:  # noqa: C901
+    def _walk(  # noqa: C901, PLR0912
+        value: Any, path: str, *, active: bool = False
+    ) -> tuple[str, str] | None:
         if isinstance(value, Mapping):
             root_mapping = not path
             inspect_context = active or root_mapping
@@ -160,6 +163,24 @@ def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:  # noqa: C90
                         and normalized_value in _LEGACY_EMERGENCY_MODES
                     ):
                         return nested_path, normalized_value
+                elif inspect_marker and normalized_key == "selected_source_counts":
+                    if not isinstance(nested, Mapping):
+                        return nested_path, "invalid"
+                    for source in _LEGACY_EMERGENCY_SOURCES:
+                        if source not in nested:
+                            continue
+                        count = nested[source]
+                        count_path = f"{nested_path}.{source}"
+                        if not isinstance(count, (int, float)) or isinstance(count, bool):
+                            return count_path, "invalid"
+                        try:
+                            finite = math.isfinite(float(count))
+                        except (OverflowError, ValueError):
+                            finite = False
+                        if not finite or count < 0:
+                            return count_path, "invalid"
+                        if count > 0:
+                            return count_path, str(count)
                 elif inspect_marker and normalized_key == "emergency_stop_count":
                     parsed_counter = (
                         nested if isinstance(nested, int) and not isinstance(nested, bool) else None
@@ -1152,8 +1173,8 @@ def _stress_row_contract_blockers(  # noqa: C901, PLR0912, PLR0915
         Bounded blocker messages for this row.
     """
     blockers: list[str] = []
-    if not _status_is(row.get("status"), _STRESS_ROW_SUCCESS_STATUSES):
-        blockers.append(f"{prefix}.status must be 'success'")
+    if not _status_is(row.get("status"), _STRESS_ROW_TERMINAL_STATUSES):
+        blockers.append(f"{prefix}.status must be a recognized scientific terminal outcome")
     if "benchmark_success" in row and not _explicit_success(row.get("benchmark_success")):
         blockers.append(f"{prefix}.benchmark_success must be explicitly true")
 

@@ -141,16 +141,18 @@ def test_recipe_run_dry_run_prints_command_without_executing(
 def test_recipe_run_is_shell_free_and_defaults_to_repository_root(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    fake_subprocess,
 ) -> None:
     """Installed CLI invocations work outside the checkout without a shell."""
     captured: dict[str, object] = {}
 
-    def fake_run(argv, *, cwd, check):
+    def handle_run(argv, *, cwd, check):
         captured.update(argv=argv, cwd=cwd, check=check)
         return SimpleNamespace(returncode=0)
 
+    fake_subprocess.set_default(handle_run)
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("robot_sf.recipes.cli.subprocess.run", fake_run)
+    monkeypatch.setattr("robot_sf.recipes.cli.subprocess.run", fake_subprocess)
 
     assert main(["recipe", "run", "first-demo"]) == 0
     assert captured["argv"] == [

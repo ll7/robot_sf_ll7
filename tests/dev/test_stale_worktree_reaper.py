@@ -12,6 +12,8 @@ from scripts.dev import stale_worktree_reaper as reaper
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from tests.conftest import FakeSubprocess
+
 
 def _result(stdout: str = "", stderr: str = "", returncode: int = 0):
     return reaper.subprocess.CompletedProcess(
@@ -32,6 +34,36 @@ def _worktree_porcelain(*entries: tuple[str, str, str]) -> str:
             blocks.append(f"branch refs/heads/{branch}")
         blocks.append("")
     return "\n".join(blocks)
+
+
+def _setup_reaper_mock(
+    fake_subprocess: FakeSubprocess,
+    *,
+    branch: str = "stale-branch",
+    status_porcelain: str = "",
+    upstream: str | None = None,
+    log: str = "",
+    pr_list: str = "[]",
+    ignored: str = "",
+    git_common_dir: str | None = None,
+) -> FakeSubprocess:
+    fake_subprocess.register(["git", "status", "--porcelain"], _result(status_porcelain))
+    if upstream == "no upstream":
+        fake_subprocess.register(
+            ["git", "rev-parse", "--abbrev-ref", "@{upstream}"], _result("", "no upstream", 128)
+        )
+    else:
+        up_val = f"origin/{branch}\n" if upstream is None else upstream
+        fake_subprocess.register(
+            ["git", "rev-parse", "--abbrev-ref", "@{upstream}"], _result(up_val)
+        )
+    fake_subprocess.register(["git", "log"], _result(log))
+    fake_subprocess.register(["gh", "pr", "list"], _result(pr_list))
+    fake_subprocess.register(["git", "status", "--ignored"], _result(ignored))
+    if git_common_dir:
+        fake_subprocess.register(["git", "rev-parse", "--git-common-dir"], _result(git_common_dir))
+    fake_subprocess.set_default(_result("", returncode=1))
+    return fake_subprocess
 
 
 def test_parse_worktree_porcelain_extracts_rows() -> None:
@@ -63,37 +95,16 @@ def test_classify_current_worktree_is_protected(tmp_path: Path) -> None:
     assert candidate.preservation_required == "current worktree"
 
 
-def test_classify_clean_stale_candidate(tmp_path: Path) -> None:
+def test_classify_clean_stale_candidate(tmp_path: Path, fake_subprocess: FakeSubprocess) -> None:
     """A worktree with no risks should be classified as clean_stale."""
     main = tmp_path / "main"
     stale = tmp_path / "stale-branch"
     main.mkdir()
     stale.mkdir()
 
-    def fake_run(args, *, cwd=None, timeout=30):
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/stale-branch\n")
-        if args == ["git", "log", "origin/stale-branch..HEAD", "--oneline"]:
-            return _result("")
-        if args == [
-            "gh",
-            "pr",
-            "list",
-            "--head",
-            "stale-branch",
-            "--state",
-            "open",
-            "--json",
-            "number",
-        ]:
-            return _result("[]")
-        if args == ["git", "status", "--ignored", "--short", "-uall"]:
-            return _result("")
-        return _result("", returncode=1)
+    _setup_reaper_mock(fake_subprocess, branch="stale-branch")
 
-    with patch.object(reaper, "_run_command", side_effect=fake_run):
+    with patch.object(reaper, "_run_command", side_effect=fake_subprocess):
         candidate = reaper.classify_worktree(
             path=str(stale),
             branch="stale-branch",
@@ -105,37 +116,16 @@ def test_classify_clean_stale_candidate(tmp_path: Path) -> None:
     assert candidate.risk_flags == []
 
 
-def test_classify_dirty_worktree(tmp_path: Path) -> None:
+def test_classify_dirty_worktree(tmp_path: Path, fake_subprocess: FakeSubprocess) -> None:
     """A worktree with uncommitted changes should be classified as risky."""
     main = tmp_path / "main"
     dirty = tmp_path / "dirty-wt"
     main.mkdir()
     dirty.mkdir()
 
-    def fake_run(args, *, cwd=None, timeout=30):
-        if args == ["git", "status", "--porcelain"]:
-            return _result(" M file.txt\n")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/dirty-branch\n")
-        if args == ["git", "log", "origin/dirty-branch..HEAD", "--oneline"]:
-            return _result("")
-        if args == [
-            "gh",
-            "pr",
-            "list",
-            "--head",
-            "dirty-branch",
-            "--state",
-            "open",
-            "--json",
-            "number",
-        ]:
-            return _result("[]")
-        if args == ["git", "status", "--ignored", "--short", "-uall"]:
-            return _result("")
-        return _result("", returncode=1)
+    _setup_reaper_mock(fake_subprocess, branch="dirty-branch", status_porcelain=" M file.txt\n")
 
-    with patch.object(reaper, "_run_command", side_effect=fake_run):
+    with patch.object(reaper, "_run_command", side_effect=fake_subprocess):
         candidate = reaper.classify_worktree(
             path=str(dirty),
             branch="dirty-branch",
@@ -147,37 +137,16 @@ def test_classify_dirty_worktree(tmp_path: Path) -> None:
     assert "dirty" in candidate.risk_flags
 
 
-def test_classify_unpushed_commits(tmp_path: Path) -> None:
+def test_classify_unpushed_commits(tmp_path: Path, fake_subprocess: FakeSubprocess) -> None:
     """Commits ahead of origin should be flagged as unpushed_commits."""
     main = tmp_path / "main"
     ahead = tmp_path / "ahead-wt"
     main.mkdir()
     ahead.mkdir()
 
-    def fake_run(args, *, cwd=None, timeout=30):
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/ahead-branch\n")
-        if args == ["git", "log", "origin/ahead-branch..HEAD", "--oneline"]:
-            return _result("abc1234 add feature\n")
-        if args == [
-            "gh",
-            "pr",
-            "list",
-            "--head",
-            "ahead-branch",
-            "--state",
-            "open",
-            "--json",
-            "number",
-        ]:
-            return _result("[]")
-        if args == ["git", "status", "--ignored", "--short", "-uall"]:
-            return _result("")
-        return _result("", returncode=1)
+    _setup_reaper_mock(fake_subprocess, branch="ahead-branch", log="abc1234 add feature\n")
 
-    with patch.object(reaper, "_run_command", side_effect=fake_run):
+    with patch.object(reaper, "_run_command", side_effect=fake_subprocess):
         candidate = reaper.classify_worktree(
             path=str(ahead),
             branch="ahead-branch",
@@ -189,35 +158,18 @@ def test_classify_unpushed_commits(tmp_path: Path) -> None:
     assert "unpushed_commits" in candidate.risk_flags
 
 
-def test_classify_missing_upstream_as_unpushed_risk(tmp_path: Path) -> None:
+def test_classify_missing_upstream_as_unpushed_risk(
+    tmp_path: Path, fake_subprocess: FakeSubprocess
+) -> None:
     """A branch without an upstream should not be considered safe to reap."""
     main = tmp_path / "main"
     local_only = tmp_path / "local-only-wt"
     main.mkdir()
     local_only.mkdir()
 
-    def fake_run(args, *, cwd=None, timeout=30):
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("", "no upstream", 128)
-        if args == [
-            "gh",
-            "pr",
-            "list",
-            "--head",
-            "local-only",
-            "--state",
-            "open",
-            "--json",
-            "number",
-        ]:
-            return _result("[]")
-        if args == ["git", "status", "--ignored", "--short", "-uall"]:
-            return _result("")
-        return _result("", returncode=1)
+    _setup_reaper_mock(fake_subprocess, branch="local-only", upstream="no upstream")
 
-    with patch.object(reaper, "_run_command", side_effect=fake_run):
+    with patch.object(reaper, "_run_command", side_effect=fake_subprocess):
         candidate = reaper.classify_worktree(
             path=str(local_only),
             branch="local-only",
@@ -229,37 +181,16 @@ def test_classify_missing_upstream_as_unpushed_risk(tmp_path: Path) -> None:
     assert "unpushed_commits" in candidate.risk_flags
 
 
-def test_classify_open_pr_risk(tmp_path: Path) -> None:
+def test_classify_open_pr_risk(tmp_path: Path, fake_subprocess: FakeSubprocess) -> None:
     """An open PR should be flagged as open_pr."""
     main = tmp_path / "main"
     pr_wt = tmp_path / "pr-wt"
     main.mkdir()
     pr_wt.mkdir()
 
-    def fake_run(args, *, cwd=None, timeout=30):
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/pr-branch\n")
-        if args == ["git", "log", "origin/pr-branch..HEAD", "--oneline"]:
-            return _result("")
-        if args == [
-            "gh",
-            "pr",
-            "list",
-            "--head",
-            "pr-branch",
-            "--state",
-            "open",
-            "--json",
-            "number",
-        ]:
-            return _result('[{"number": 42}]')
-        if args == ["git", "status", "--ignored", "--short", "-uall"]:
-            return _result("")
-        return _result("", returncode=1)
+    _setup_reaper_mock(fake_subprocess, branch="pr-branch", pr_list='[{"number": 42}]')
 
-    with patch.object(reaper, "_run_command", side_effect=fake_run):
+    with patch.object(reaper, "_run_command", side_effect=fake_subprocess):
         candidate = reaper.classify_worktree(
             path=str(pr_wt),
             branch="pr-branch",
@@ -271,25 +202,18 @@ def test_classify_open_pr_risk(tmp_path: Path) -> None:
     assert "open_pr" in candidate.risk_flags
 
 
-def test_skip_pr_check_is_conservative_risk(tmp_path: Path) -> None:
+def test_skip_pr_check_is_conservative_risk(
+    tmp_path: Path, fake_subprocess: FakeSubprocess
+) -> None:
     """Skipping PR lookup should prevent a branch worktree from becoming deletable."""
     main = tmp_path / "main"
     stale = tmp_path / "stale-wt"
     main.mkdir()
     stale.mkdir()
 
-    def fake_run(args, *, cwd=None, timeout=30):
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/stale-branch\n")
-        if args == ["git", "log", "origin/stale-branch..HEAD", "--oneline"]:
-            return _result("")
-        if args == ["git", "status", "--ignored", "--short", "-uall"]:
-            return _result("")
-        return _result("", returncode=1)
+    _setup_reaper_mock(fake_subprocess, branch="stale-branch")
 
-    with patch.object(reaper, "_run_command", side_effect=fake_run):
+    with patch.object(reaper, "_run_command", side_effect=fake_subprocess):
         candidate = reaper.classify_worktree(
             path=str(stale),
             branch="stale-branch",
@@ -301,37 +225,18 @@ def test_skip_pr_check_is_conservative_risk(tmp_path: Path) -> None:
     assert "pr_check_skipped" in candidate.risk_flags
 
 
-def test_classify_ignored_output_risk(tmp_path: Path) -> None:
+def test_classify_ignored_output_risk(tmp_path: Path, fake_subprocess: FakeSubprocess) -> None:
     """Ignored output files should be flagged as ignored_output."""
     main = tmp_path / "main"
     out_wt = tmp_path / "output-wt"
     main.mkdir()
     out_wt.mkdir()
 
-    def fake_run(args, *, cwd=None, timeout=30):
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/output-branch\n")
-        if args == ["git", "log", "origin/output-branch..HEAD", "--oneline"]:
-            return _result("")
-        if args == [
-            "gh",
-            "pr",
-            "list",
-            "--head",
-            "output-branch",
-            "--state",
-            "open",
-            "--json",
-            "number",
-        ]:
-            return _result("[]")
-        if args == ["git", "status", "--ignored", "--short", "-uall"]:
-            return _result("!! output/model_cache/\n!! output/videos/")
-        return _result("", returncode=1)
+    _setup_reaper_mock(
+        fake_subprocess, branch="output-branch", ignored="!! output/model_cache/\n!! output/videos/"
+    )
 
-    with patch.object(reaper, "_run_command", side_effect=fake_run):
+    with patch.object(reaper, "_run_command", side_effect=fake_subprocess):
         candidate = reaper.classify_worktree(
             path=str(out_wt),
             branch="output-branch",
@@ -386,46 +291,31 @@ def test_apply_refuses_risky_candidates(tmp_path: Path) -> None:
     assert any("refused risky candidate" in event for event in result.audit_log)
 
 
-def test_dry_run_produces_no_deletion_command(tmp_path: Path, monkeypatch) -> None:
+def test_dry_run_produces_no_deletion_command(
+    tmp_path: Path, monkeypatch, fake_subprocess: FakeSubprocess
+) -> None:
     """Dry-run mode must never invoke git worktree remove."""
     main = tmp_path / "main"
     stale = tmp_path / "stale-wt"
     main.mkdir()
     stale.mkdir()
 
-    def fake_run(args, *, cwd=None, timeout=30):
-        if args[:4] == ["git", "worktree", "list", "--porcelain"]:
-            return _result(
-                _worktree_porcelain(
-                    (str(main), "aaa", "main"),
-                    (str(stale), "bbb", "stale-branch"),
-                )
+    fake_subprocess.register(
+        ["git", "worktree", "list", "--porcelain"],
+        _result(
+            _worktree_porcelain(
+                (str(main), "aaa", "main"),
+                (str(stale), "bbb", "stale-branch"),
             )
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/stale-branch\n")
-        if args[0:4] == ["git", "log", "origin/stale-branch..HEAD", "--oneline"]:
-            return _result("")
-        if args[:4] == [
-            "gh",
-            "pr",
-            "list",
-            "--head",
-            "stale-branch",
-            "--state",
-            "open",
-            "--json",
-            "number",
-        ]:
-            return _result("[]")
-        if args == ["git", "status", "--ignored", "--short", "-uall"]:
-            return _result("")
-        if args == ["git", "worktree", "remove", str(stale)]:
-            raise AssertionError("git worktree remove must NOT be called in dry-run mode")
-        return _result("", returncode=1)
+        ),
+    )
+    _setup_reaper_mock(fake_subprocess, branch="stale-branch")
+    fake_subprocess.register(
+        ["git", "worktree", "remove"],
+        AssertionError("git worktree remove must NOT be called in dry-run mode"),
+    )
 
-    monkeypatch.setattr(reaper, "_run_command", fake_run)
+    monkeypatch.setattr(reaper, "_run_command", fake_subprocess)
     plan = reaper.build_plan(skip_pr_check=False)
     assert plan.mode == "dry_run"
     assert str(stale) in plan.deletable
@@ -433,21 +323,20 @@ def test_dry_run_produces_no_deletion_command(tmp_path: Path, monkeypatch) -> No
     assert any(str(stale) in event for event in plan.audit_log)
 
 
-def test_build_plan_dry_run_default(tmp_path: Path, monkeypatch) -> None:
+def test_build_plan_dry_run_default(
+    tmp_path: Path, monkeypatch, fake_subprocess: FakeSubprocess
+) -> None:
     """build_plan should default to dry_run mode."""
     main = tmp_path / "main"
     main.mkdir()
 
-    def fake_run(args, *, cwd=None, timeout=30):
-        if args[:4] == ["git", "worktree", "list", "--porcelain"]:
-            return _result(
-                _worktree_porcelain(
-                    (str(main), "aaa", "main"),
-                )
-            )
-        return _result("", returncode=1)
+    fake_subprocess.register(
+        ["git", "worktree", "list", "--porcelain"],
+        _result(_worktree_porcelain((str(main), "aaa", "main"))),
+    )
+    fake_subprocess.set_default(_result("", returncode=1))
 
-    monkeypatch.setattr(reaper, "_run_command", fake_run)
+    monkeypatch.setattr(reaper, "_run_command", fake_subprocess)
     plan = reaper.build_plan(skip_pr_check=True, current_path=str(main))
     assert plan.mode == "dry_run"
     assert plan.total_worktrees == 1
@@ -456,44 +345,24 @@ def test_build_plan_dry_run_default(tmp_path: Path, monkeypatch) -> None:
     assert plan.audit_log == [f"classified {main} as current"]
 
 
-def test_classify_active_pr_gate_lease_risk(tmp_path: Path, monkeypatch) -> None:
+def test_classify_active_pr_gate_lease_risk(
+    tmp_path: Path, monkeypatch, fake_subprocess: FakeSubprocess
+) -> None:
     """A worktree with an active PR-gate lease should be flagged as risky."""
     main = tmp_path / "main"
     lease_wt = tmp_path / "lease-wt"
     main.mkdir()
     lease_wt.mkdir()
 
-    def fake_run(args, *, cwd=None, timeout=30):
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/lease-branch\n")
-        if args == ["git", "log", "origin/lease-branch..HEAD", "--oneline"]:
-            return _result("")
-        if args == [
-            "gh",
-            "pr",
-            "list",
-            "--head",
-            "lease-branch",
-            "--state",
-            "open",
-            "--json",
-            "number",
-        ]:
-            return _result("[]")
-        if args == ["git", "status", "--ignored", "--short", "-uall"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--git-common-dir"]:
-            return _result(str(tmp_path / ".git"))
-        return _result("", returncode=1)
+    _setup_reaper_mock(
+        fake_subprocess, branch="lease-branch", git_common_dir=str(tmp_path / ".git")
+    )
 
-    # Mock the lease check to return True (active lease)
     def fake_has_active_lease(path: str) -> bool:
         return True
 
     monkeypatch.setattr(reaper, "_has_active_pr_gate_lease", fake_has_active_lease)
-    monkeypatch.setattr(reaper, "_run_command", fake_run)
+    monkeypatch.setattr(reaper, "_run_command", fake_subprocess)
 
     candidate = reaper.classify_worktree(
         path=str(lease_wt),
@@ -506,44 +375,24 @@ def test_classify_active_pr_gate_lease_risk(tmp_path: Path, monkeypatch) -> None
     assert "active_pr_gate_lease" in candidate.risk_flags
 
 
-def test_classify_no_pr_gate_lease_not_risky(tmp_path: Path, monkeypatch) -> None:
+def test_classify_no_pr_gate_lease_not_risky(
+    tmp_path: Path, monkeypatch, fake_subprocess: FakeSubprocess
+) -> None:
     """A worktree without an active PR-gate lease should not get the flag."""
     main = tmp_path / "main"
     stale = tmp_path / "stale-wt"
     main.mkdir()
     stale.mkdir()
 
-    def fake_run(args, *, cwd=None, timeout=30):
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/stale-branch\n")
-        if args == ["git", "log", "origin/stale-branch..HEAD", "--oneline"]:
-            return _result("")
-        if args == [
-            "gh",
-            "pr",
-            "list",
-            "--head",
-            "stale-branch",
-            "--state",
-            "open",
-            "--json",
-            "number",
-        ]:
-            return _result("[]")
-        if args == ["git", "status", "--ignored", "--short", "-uall"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--git-common-dir"]:
-            return _result(str(tmp_path / ".git"))
-        return _result("", returncode=1)
+    _setup_reaper_mock(
+        fake_subprocess, branch="stale-branch", git_common_dir=str(tmp_path / ".git")
+    )
 
-    # Mock the lease check to return False (no active lease)
     def fake_has_active_lease(path: str) -> bool:
         return False
 
     monkeypatch.setattr(reaper, "_has_active_pr_gate_lease", fake_has_active_lease)
-    monkeypatch.setattr(reaper, "_run_command", fake_run)
+    monkeypatch.setattr(reaper, "_run_command", fake_subprocess)
 
     candidate = reaper.classify_worktree(
         path=str(stale),
@@ -556,7 +405,9 @@ def test_classify_no_pr_gate_lease_not_risky(tmp_path: Path, monkeypatch) -> Non
     assert "active_pr_gate_lease" not in candidate.risk_flags
 
 
-def test_classify_unreadable_pr_gate_lease_risk(tmp_path: Path, monkeypatch) -> None:
+def test_classify_unreadable_pr_gate_lease_risk(
+    tmp_path: Path, monkeypatch, fake_subprocess: FakeSubprocess
+) -> None:
     """A worktree with an unreadable/malformed lease file should be flagged as risky."""
     main = tmp_path / "main"
     stale = tmp_path / "stale-wt"
@@ -566,32 +417,8 @@ def test_classify_unreadable_pr_gate_lease_risk(tmp_path: Path, monkeypatch) -> 
     git_common = tmp_path / ".git"
     git_common.mkdir()
 
-    def fake_run(args, *, cwd=None, timeout=30):
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/stale-branch\n")
-        if args == ["git", "log", "origin/stale-branch..HEAD", "--oneline"]:
-            return _result("")
-        if args == [
-            "gh",
-            "pr",
-            "list",
-            "--head",
-            "stale-branch",
-            "--state",
-            "open",
-            "--json",
-            "number",
-        ]:
-            return _result("[]")
-        if args == ["git", "status", "--ignored", "--short", "-uall"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--git-common-dir"]:
-            return _result(str(git_common))
-        return _result("", returncode=1)
-
-    monkeypatch.setattr(reaper, "_run_command", fake_run)
+    _setup_reaper_mock(fake_subprocess, branch="stale-branch", git_common_dir=str(git_common))
+    monkeypatch.setattr(reaper, "_run_command", fake_subprocess)
 
     from scripts.dev.pr_gate_lease import lease_path
 
@@ -612,7 +439,9 @@ def test_classify_unreadable_pr_gate_lease_risk(tmp_path: Path, monkeypatch) -> 
     assert "unreadable_pr_gate_lease" in candidate.risk_flags
 
 
-def test_classify_legacy_pr_gate_lease_risk(tmp_path: Path, monkeypatch) -> None:
+def test_classify_legacy_pr_gate_lease_risk(
+    tmp_path: Path, monkeypatch, fake_subprocess: FakeSubprocess
+) -> None:
     """A live pre-isolation lease protects worktrees during the path migration."""
     main = tmp_path / "main"
     stale = tmp_path / "stale-wt"
@@ -622,32 +451,8 @@ def test_classify_legacy_pr_gate_lease_risk(tmp_path: Path, monkeypatch) -> None
     git_common = tmp_path / ".git"
     git_common.mkdir()
 
-    def fake_run(args, *, cwd=None, timeout=30):
-        if args == ["git", "status", "--porcelain"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return _result("origin/stale-branch\n")
-        if args == ["git", "log", "origin/stale-branch..HEAD", "--oneline"]:
-            return _result("")
-        if args == [
-            "gh",
-            "pr",
-            "list",
-            "--head",
-            "stale-branch",
-            "--state",
-            "open",
-            "--json",
-            "number",
-        ]:
-            return _result("[]")
-        if args == ["git", "status", "--ignored", "--short", "-uall"]:
-            return _result("")
-        if args == ["git", "rev-parse", "--git-common-dir"]:
-            return _result(str(git_common))
-        return _result("", returncode=1)
-
-    monkeypatch.setattr(reaper, "_run_command", fake_run)
+    _setup_reaper_mock(fake_subprocess, branch="stale-branch", git_common_dir=str(git_common))
+    monkeypatch.setattr(reaper, "_run_command", fake_subprocess)
 
     from scripts.dev.pr_gate_lease import create_lease, lease_path, legacy_lease_path
 

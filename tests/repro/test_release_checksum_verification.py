@@ -1603,6 +1603,11 @@ def actual_execution_results(tmp_path_factory: pytest.TempPathFactory) -> dict[s
         download=True,
     )
 
+    if verify_report.get("overall_verdict") == "error":
+        err_msg = " ".join(str(e) for e in verify_report.get("errors", []))
+        if "bundle download failed" in err_msg.lower():
+            pytest.skip(f"GitHub release download failed (e.g. rate limit or offline): {err_msg}")
+
     reproduction_dir = execution_dir / "reproduction"
     # Reuse the bundle that verify_release already downloaded so the cold-start
     # report does not issue a second gh download (which could fail in the full

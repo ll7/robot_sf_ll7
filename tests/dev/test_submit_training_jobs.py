@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -125,24 +124,17 @@ def test_load_queue_rejects_missing_config_path(tmp_path: Path) -> None:
 def test_dry_run_writes_manifest_without_calling_sbatch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    fake_subprocess,
 ) -> None:
     """Dry runs should produce reviewable manifests but never submit jobs."""
     repo = _write_minimal_repo(tmp_path, allow_slurm=False)
     queue_path = _write_queue(repo, _queue_payload())
-    calls: list[list[str]] = []
     monkeypatch.setattr(submit_training_jobs.shutil, "which", lambda name: None)
 
-    def fake_run(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        calls.append(cmd)
-        if cmd[:2] == ["git", "branch"]:
-            return subprocess.CompletedProcess(cmd, 0, stdout="feature\n", stderr="")
-        if cmd[:2] == ["git", "rev-parse"]:
-            return subprocess.CompletedProcess(cmd, 0, stdout="abc123\n", stderr="")
-        if cmd[:2] == ["git", "status"]:
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-        raise AssertionError(f"unexpected command in dry run: {cmd}")
-
-    monkeypatch.setattr(submit_training_jobs.subprocess, "run", fake_run)
+    fake_subprocess.register(["git", "branch"], stdout="feature\n")
+    fake_subprocess.register(["git", "rev-parse"], stdout="abc123\n")
+    fake_subprocess.register(["git", "status"], stdout="")
+    monkeypatch.setattr(submit_training_jobs.subprocess, "run", fake_subprocess)
 
     result = submit_training_jobs.plan_submissions(
         queue_path=queue_path,
@@ -157,7 +149,7 @@ def test_dry_run_writes_manifest_without_calling_sbatch(
     assert manifest["jobs"][0]["queue_id"] == "issue-999-example"
     assert manifest["jobs"][0]["status"] == "dry_run"
     assert "--dry-run" in manifest["jobs"][0]["command"]
-    assert not any("sbatch_use_max_time.sh" in " ".join(call) for call in calls)
+    assert not any("sbatch_use_max_time.sh" in " ".join(call) for call in fake_subprocess.calls)
 
 
 def test_submit_requires_slurm_enabled_machine(tmp_path: Path) -> None:
@@ -207,30 +199,23 @@ def test_submit_rejects_bulleted_local_machine_slurm_policy(tmp_path: Path) -> N
 def test_submit_invokes_wrapper_and_captures_job_id(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    fake_subprocess,
 ) -> None:
     """Eligible submit mode should call the existing wrapper and record the scheduler id."""
     repo = _write_minimal_repo(tmp_path, allow_slurm=True)
     queue_path = _write_queue(repo, _queue_payload())
     monkeypatch.setattr(submit_training_jobs.shutil, "which", lambda name: f"/usr/bin/{name}")
 
-    def fake_run(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        if cmd[:2] == ["git", "branch"]:
-            return subprocess.CompletedProcess(cmd, 0, stdout="feature\n", stderr="")
-        if cmd[:2] == ["git", "rev-parse"]:
-            return subprocess.CompletedProcess(cmd, 0, stdout="abc123\n", stderr="")
-        if cmd[:2] == ["git", "status"]:
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-        if cmd[0] == "squeue":
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-        if cmd[0] == "sacct":
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-        if cmd[0].endswith("sbatch_use_max_time.sh"):
-            return subprocess.CompletedProcess(
-                cmd, 0, stdout="Submitted batch job 4242\n", stderr=""
-            )
-        raise AssertionError(f"unexpected command: {cmd}")
-
-    monkeypatch.setattr(submit_training_jobs.subprocess, "run", fake_run)
+    fake_subprocess.register(["git", "branch"], stdout="feature\n")
+    fake_subprocess.register(["git", "rev-parse"], stdout="abc123\n")
+    fake_subprocess.register(["git", "status"], stdout="")
+    fake_subprocess.register("squeue", stdout="")
+    fake_subprocess.register("sacct", stdout="")
+    fake_subprocess.register(
+        lambda cmd: cmd[0].endswith("sbatch_use_max_time.sh"),
+        stdout="Submitted batch job 4242\n",
+    )
+    monkeypatch.setattr(submit_training_jobs.subprocess, "run", fake_subprocess)
 
     result = submit_training_jobs.plan_submissions(
         queue_path=queue_path,
@@ -262,28 +247,24 @@ def test_submit_blocks_when_auto_submit_is_false(tmp_path: Path) -> None:
 def test_submit_blocks_when_wrapper_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    fake_subprocess,
 ) -> None:
     """A failed wrapper should block submission and expose the exit status."""
     repo = _write_minimal_repo(tmp_path, allow_slurm=True)
     queue_path = _write_queue(repo, _queue_payload())
     monkeypatch.setattr(submit_training_jobs.shutil, "which", lambda name: f"/usr/bin/{name}")
 
-    def fake_run(cmd: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
-        if cmd[:2] == ["git", "branch"]:
-            return subprocess.CompletedProcess(cmd, 0, stdout="feature\n", stderr="")
-        if cmd[:2] == ["git", "rev-parse"]:
-            return subprocess.CompletedProcess(cmd, 0, stdout="abc123\n", stderr="")
-        if cmd[:2] == ["git", "status"]:
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-        if cmd[0] == "squeue":
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-        if cmd[0] == "sacct":
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-        if cmd[0].endswith("sbatch_use_max_time.sh"):
-            return subprocess.CompletedProcess(cmd, 2, stdout="", stderr="bad wrapper")
-        raise AssertionError(f"unexpected command: {cmd}")
-
-    monkeypatch.setattr(submit_training_jobs.subprocess, "run", fake_run)
+    fake_subprocess.register(["git", "branch"], stdout="feature\n")
+    fake_subprocess.register(["git", "rev-parse"], stdout="abc123\n")
+    fake_subprocess.register(["git", "status"], stdout="")
+    fake_subprocess.register("squeue", stdout="")
+    fake_subprocess.register("sacct", stdout="")
+    fake_subprocess.register(
+        lambda cmd: cmd[0].endswith("sbatch_use_max_time.sh"),
+        returncode=2,
+        stderr="bad wrapper",
+    )
+    monkeypatch.setattr(submit_training_jobs.subprocess, "run", fake_subprocess)
 
     with pytest.raises(submit_training_jobs.SubmissionBlockedError, match="wrapper failed"):
         submit_training_jobs.plan_submissions(

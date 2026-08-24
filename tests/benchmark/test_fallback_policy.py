@@ -371,6 +371,36 @@ def test_runtime_fallback_marker_allows_empty_reason_with_explicit_false_sibling
         )
 
 
+def test_runtime_fallback_marker_allows_zero_canonical_proposal_status_counts() -> None:
+    """Zero fallback/degraded proposal counters are valid no-event telemetry."""
+    payload = {
+        "proposal_status_counts": {
+            "adapter": 1,
+            "degraded": 0,
+            "fallback": 0,
+            "native": 1,
+        }
+    }
+
+    assert runtime_fallback_or_degraded_marker(payload) is None
+
+
+@pytest.mark.parametrize(
+    ("value", "normalized"),
+    [(1, "1"), (-1, "invalid"), (float("inf"), "invalid"), ("0", "invalid")],
+)
+def test_runtime_fallback_marker_rejects_nonzero_or_malformed_proposal_status_counts(
+    value: object, normalized: str
+) -> None:
+    """Canonical proposal counters still fail closed on use or malformed telemetry."""
+    payload = {"proposal_status_counts": {"fallback": value}}
+
+    assert runtime_fallback_or_degraded_marker(payload) == (
+        "proposal_status_counts.fallback",
+        normalized,
+    )
+
+
 @pytest.mark.parametrize(
     ("payload", "expected"),
     [

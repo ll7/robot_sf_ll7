@@ -252,7 +252,7 @@ def _algorithm_metadata_runtime_marker(
         else ""
     )
     guarded_ppo_identity = (
-        (expected_algorithm is None or expected_algorithm == "guarded_ppo")
+        str(expected_algorithm or "").strip().lower() == "guarded_ppo"
         and str(metadata.get("canonical_algorithm", "")).strip().lower() == "guarded_ppo"
         and str(metadata.get("algorithm", "")).strip().lower() == "ppo"
         and planner_id == "guarded_ppo"
@@ -2099,10 +2099,6 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
             str(planner_row.get("planner_key", "")).strip(),
             str(planner_row.get("kinematics", "")).strip(),
         )
-        planner_row_spec = planner_specs.get(planner_row_arm[0])
-        planner_row_algo = (
-            str(getattr(planner_row_spec, "algo", planner_row_arm[0])).strip().lower()
-        )
         observed_planner_row_arms.add(planner_row_arm)
         if not _status_is(planner_row.get("status"), _STRESS_RUN_SUCCESS_STATUSES):
             _append_blocker(blockers, f"planner_rows[{planner_row_index}] status is not ok")
@@ -2118,10 +2114,16 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
             )
         if _strict_int(planner_row.get("failed_jobs", 0)) != 0:
             _append_blocker(blockers, f"planner_rows[{planner_row_index}] failed_jobs must be 0")
+        planner_spec = planner_specs.get(planner_row_arm[0])
+        planner_row_expected_algo = (
+            str(getattr(planner_spec, "algo", planner_row.get("algo", planner_row_arm[0])))
+            .strip()
+            .lower()
+        )
         for marker_path, marker in _status_markers(
             planner_row,
             f"planner_rows[{planner_row_index}]",
-            expected_algorithm=planner_row_algo,
+            expected_algorithm=planner_row_expected_algo,
         ):
             _append_blocker(blockers, f"forbidden {marker_path}={marker}")
 
@@ -2401,6 +2403,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         planner = entry.get("planner")
         planner = planner if isinstance(planner, Mapping) else {}
         arm = (str(planner.get("key", "")).strip(), str(planner.get("kinematics", "")).strip())
+        expected_algo = expected_algorithms.get(arm[0], "")
         if arm in observed_arms:
             duplicate_arms.add(arm)
         observed_arms.add(arm)
@@ -2539,10 +2542,11 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         if arm in planner_row_arms:
             duplicate_planner_row_arms.add(arm)
         planner_row_arms.add(arm)
+        expected_algo = expected_algorithms.get(arm[0], "")
         for marker_path, marker in _status_markers(
             row,
             f"planner_rows[{index}]",
-            expected_algorithm=expected_algorithms.get(arm[0], ""),
+            expected_algorithm=expected_algo,
         ):
             forbidden_status_counts[marker] += 1
             _append_blocker(blockers, f"forbidden {marker_path}={marker}")

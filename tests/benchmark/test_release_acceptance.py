@@ -457,6 +457,104 @@ def test_full_release_rejects_malformed_guarded_fallback_controller_state(tmp_pa
     assert any("fallback_controller_state" in blocker for blocker in result["blockers"])
 
 
+@pytest.mark.parametrize(
+    ("metadata_container", "metadata"),
+    tuple(
+        (container, metadata)
+        for container in ("algorithm_metadata", "algorithm_metadata_contract")
+        for metadata in (
+            {"fallback_reason": "alternate planner invoked"},
+            {"planner_diagnostics": {"fallback_count": 1}},
+            {"runtime": {"fallback_count": 1}},
+        )
+    ),
+)
+def test_status_markers_reject_runtime_markers_anywhere_in_canonical_metadata(
+    metadata_container: str, metadata: dict[str, Any]
+) -> None:
+    """Both canonical metadata containers fail closed for nested runtime fallbacks."""
+    payload = {"status": "ok", metadata_container: metadata}
+
+    markers = _status_markers(payload, "row", expected_algorithm="goal")
+
+    assert markers
+    assert any("fallback" in value or "fallback" in path for path, value in markers)
+
+
+def test_status_markers_ignores_declarative_algorithm_configuration() -> None:
+    """Declarative config/contract text is not execution evidence."""
+    payload = {
+        "status": "ok",
+        "algorithm_metadata": {
+            "config": {"fallback_reason": "configured alternate policy"},
+            "planner_contract": {"fallback_count": 1},
+            "safety_shield_contract": {"fallback_used": True},
+        },
+        "algorithm_metadata_contract": {
+            "config": {"runtime": {"fallback_count": 1}},
+            "planner_contract": {"fallback_reason": "declared policy"},
+            "safety_shield_contract": {"fallback": True},
+        },
+    }
+
+    assert _status_markers(payload, "row", expected_algorithm="goal") == []
+
+
+def test_native_protective_reorient_is_not_execution_fallback() -> None:
+    """Native static protective reorientation remains admissible telemetry."""
+    payload = {
+        "status": "ok",
+        "algorithm_metadata": {
+            "planner_runtime": {
+                "fallback_count": 0,
+                "protective_stop_count": 2,
+                "last_decision": {
+                    "planner_mode": "PROTECTIVE_REORIENT",
+                    "selected_source": "static_protective_reorient",
+                },
+            }
+        },
+    }
+
+    assert _status_markers(payload, "row", expected_algorithm="hybrid_rule_v3") == []
+
+
+def test_guarded_ppo_safe_exception_requires_an_explicit_expected_arm() -> None:
+    """A safe-shield counter is allowed only when the caller binds the guarded arm."""
+    payload = {
+        "status": "ok",
+        "algorithm_metadata": {
+            "algorithm": "ppo",
+            "canonical_algorithm": "guarded_ppo",
+            "planner_contract": {"planner_id": "guarded_ppo"},
+            "guard_stats": {"fallback_safe": 1},
+        },
+    }
+
+    assert _status_markers(payload, "row")
+    assert _status_markers(payload, "row", expected_algorithm="goal")
+    assert _status_markers(payload, "row", expected_algorithm="guarded_ppo") == []
+
+
+def test_full_release_rejects_unbound_guarded_safe_aggregate_metadata(tmp_path: Path) -> None:
+    """Aggregate metadata cannot smuggle a guarded exception onto another arm."""
+    campaign_root = _write_full_campaign(tmp_path)
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["planner_rows"][0]["algorithm_metadata"] = {
+        "algorithm": "ppo",
+        "canonical_algorithm": "guarded_ppo",
+        "planner_contract": {"planner_id": "guarded_ppo"},
+        "guard_stats": {"fallback_safe": 1},
+    }
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    result = validate_full_benchmark_release_acceptance(campaign_root, manifest=_full_manifest())
+
+    assert result["status"] == "invalid"
+    assert any("fallback_safe" in blocker for blocker in result["blockers"])
+
+
 def test_full_release_rejects_fallback_even_when_campaign_reports_success(tmp_path: Path) -> None:
     """A campaign's permissive core-success status cannot authorize publication."""
     campaign_root = _write_full_campaign(tmp_path)

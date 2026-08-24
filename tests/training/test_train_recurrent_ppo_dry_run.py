@@ -30,7 +30,8 @@ def test_recurrent_ppo_dry_run_writes_manifest(tmp_path: Path) -> None:
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     assert exit_code == 0
-    assert payload["issue"] == 4014
+    assert payload["schema_version"] == "recurrent-ppo-training-manifest.v2"
+    assert payload["issue"] == 7847
     assert payload["algorithm"] == "recurrent_ppo"
     assert payload["policy"] == "MultiInputLstmPolicy"
     assert payload["dry_run"] is True
@@ -44,6 +45,7 @@ def test_recurrent_ppo_dry_run_writes_manifest(tmp_path: Path) -> None:
         "shared_lstm": False,
     }
     assert "Slurm or GPU submission" in payload["out_of_scope"]
+    assert "full matched comparison campaign (#7846)" in payload["out_of_scope"]
 
 
 def test_recurrent_ppo_config_uses_multi_input_lstm_policy() -> None:

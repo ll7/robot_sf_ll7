@@ -10,8 +10,8 @@ The current campaign contract is the 14-arm, differential-drive matrix in
 `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`.
 Its publication-grade manifest is
 `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`, with fresh
-concept DOI `10.5281/zenodo.22053132` and reserved version DOI
-`10.5281/zenodo.22053133`.
+concept DOI `10.5281/zenodo.22077447` and reserved version DOI
+`10.5281/zenodo.22077448`.
 The bounded one-scenario/one-seed preflight and runtime smoke is tracked by
 `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`.
 The separate fallback-prone hybrid stress gate is tracked by
@@ -33,8 +33,8 @@ The smoke is execution evidence only: the Social Navigation Quality Index
 - confirm manifest hashes still match referenced config and assets
 - confirm benchmark fallback policy is fail-closed for benchmark mode
 - confirm a fresh Zenodo concept is reserved for the benchmark-data record; the
-  current reservation is concept `10.5281/zenodo.22053132` and version
-  `10.5281/zenodo.22053133`; verify both again after publication; the
+  current reservation is concept `10.5281/zenodo.22077447` and version
+  `10.5281/zenodo.22077448`; verify both again after publication; the
   historical concepts `10.5281/zenodo.19482025` and
   `10.5281/zenodo.19563812` must not be reused
 - confirm the dataset metadata is the tracked benchmark-specific file
@@ -137,8 +137,8 @@ uv run robot-sf release doctor \
   --repo "$PWD" \
   --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
   --expected-release-sha <exact-release-sha> \
-  --expected-base-sha 43bd25edba11f1e4aa848c787e92eccf0670aa5a \
-  --tag paper-matrix-v2-h600-s30-2026-08-43bd25edba11 \
+  --expected-base-sha b6340e5e69f56120bed5322f332d7b2591b43c26 \
+  --tag paper-matrix-v2-h600-s30-2026-08-b6340e5e69f5 \
   --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
   --private-launch-packet <private-ops-launch-packet> \
   --dissertation <dissertation-worktree> \

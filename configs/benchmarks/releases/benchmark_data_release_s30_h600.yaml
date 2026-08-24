@@ -4,14 +4,14 @@
 # provenance records the final immutable merged source SHA separately.
 schema_version: benchmark-release-manifest.v0.2
 benchmark_protocol_version: 0.1.0
-release_id: paper_matrix_v2_h600_s30_2026_08_43bd25edba11
-release_tag: paper-matrix-v2-h600-s30-2026-08-43bd25edba11
+release_id: paper_matrix_v2_h600_s30_2026_08_b6340e5e69f5
+release_tag: paper-matrix-v2-h600-s30-2026-08-b6340e5e69f5
 maturity: pre-1.0
 release_kind: benchmark-data
-latest_main_base_commit: "43bd25edba11f1e4aa848c787e92eccf0670aa5a"
+latest_main_base_commit: "b6340e5e69f56120bed5322f332d7b2591b43c26"
 
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml
-campaign_config_sha256: "e8b431e91ef22b20ebe7555a630cc7d5b3c0410c9aaaf06cd733b049ce3643d1"
+campaign_config_sha256: "31e3e4689d91ed540af0037b9373108f10c45d11bbaf12f013016d9f99f076f2"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: baseline-ready-core
 
@@ -24,13 +24,13 @@ matrix:
 
 publication:
   channel: direct_zenodo_benchmark_dataset
-  concept_doi: 10.5281/zenodo.22053132
-  version_doi: 10.5281/zenodo.22053133
-  concept_record_id: "22053132"
-  version_record_id: "22053133"
+  concept_doi: 10.5281/zenodo.22077447
+  version_doi: 10.5281/zenodo.22077448
+  concept_record_id: "22077447"
+  version_record_id: "22077448"
   reservation_status: reserved_unpublished
   metadata_path: benchmark_data_release_s30_h600_zenodo_metadata.json
-  metadata_sha256: "7341e20007f56ce002f841c4b3264e9d81bd7e91d53707e39a1233b49557ed20"
+  metadata_sha256: "342845bdeb0ac8ee48fad847a24a4e1bddfe456510b0b8e61b3125f0948087e8"
   github_zenodo_webhook_policy: disable_before_publication_and_leave_disabled
 
 claim_boundary:
@@ -150,7 +150,7 @@ artifact_provenance:
 
 provenance:
   repository_url: https://github.com/ll7/robot_sf_ll7
-  doi: 10.5281/zenodo.22053133
+  doi: 10.5281/zenodo.22077448
 
 citation_path: ../../../CITATION.cff
 release_checklist_path: ../../../docs/RELEASE.md

@@ -90,6 +90,7 @@ def test_runtime_smoke_preserves_all_fourteen_source_arms_without_fallback() -> 
     """Every source arm is present, and prerequisite gaps fail closed in smoke mode."""
     source = _load_yaml(SOURCE_CONFIG_PATH)
     smoke = _load_yaml(SMOKE_CONFIG_PATH)
+    comparability = _load_yaml(REPO_ROOT / source["comparability_mapping"])
     source_planners = {row["key"]: row for row in source["planners"]}
     smoke_planners = {row["key"]: row for row in smoke["planners"]}
 
@@ -102,6 +103,7 @@ def test_runtime_smoke_preserves_all_fourteen_source_arms_without_fallback() -> 
         assert smoke_row == source_row
         if smoke_row.get("algo_config"):
             assert (REPO_ROOT / smoke_row["algo_config"]).is_file()
+        assert key in comparability["planner_key_mapping"]
         assert smoke_row.get("socnav_missing_prereq_policy") != "fallback"
         assert source_row.get("socnav_missing_prereq_policy", "fail-fast") == "fail-fast"
 

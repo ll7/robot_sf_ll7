@@ -62,8 +62,8 @@ The approved S30/H600 benchmark-data campaign is:
 - publication-grade manifest:
   - `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`
 - fresh Zenodo reservation:
-  - concept DOI `10.5281/zenodo.22053132`
-  - version DOI `10.5281/zenodo.22053133`
+  - concept DOI `10.5281/zenodo.22077447`
+  - version DOI `10.5281/zenodo.22077448`
 - source contract:
   - 14 planner arms, `paper_eval_s30`, `horizon: 600`, and
     `kinematics_matrix: [differential_drive]`

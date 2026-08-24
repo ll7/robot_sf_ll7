@@ -1962,3 +1962,111 @@ def test_fetch_ci_status_identifies_superseded_exact_head_replacement(
     assert superseded["replacement"]["run_id"] == 126
     assert superseded["reason"] == "newer_same_workflow_job"
     assert data["checks"]["recovery"]["action"] == "wait_for_replacement"
+
+
+def test_main_bounded_polling_stops_early_when_pr_closed(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Bounded polling should terminate immediately on closed PR state without exhausting attempts."""
+    open_pending_data = json.dumps(
+        {
+            "number": 7498,
+            "title": "sample pr",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "sample-branch",
+            "headRefOid": FULL_SHA,
+            "statusCheckRollup": [{"name": "ci", "status": "queued", "conclusion": ""}],
+            "reviews": [],
+        }
+    )
+    closed_data = json.dumps(
+        {
+            "number": 7498,
+            "title": "sample pr",
+            "state": "CLOSED",
+            "mergeable": "UNKNOWN",
+            "headRefName": "sample-branch",
+            "headRefOid": FULL_SHA,
+            "statusCheckRollup": [{"name": "ci", "status": "queued", "conclusion": ""}],
+            "reviews": [],
+        }
+    )
+
+    with (
+        patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run,
+        patch("scripts.dev.check_pr_ci_status.time.sleep") as mock_sleep,
+    ):
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout=open_pending_data, stderr=""),
+            MagicMock(returncode=0, stdout=closed_data, stderr=""),
+        ]
+        rc = main(
+            [
+                "7498",
+                "--poll-attempts",
+                "10",
+                "--poll-interval",
+                "0.1",
+                "--json",
+                "--expected-head-sha",
+                FULL_SHA,
+            ]
+        )
+
+    assert rc == 0
+    assert mock_run.call_count == 2
+    mock_sleep.assert_called_once_with(0.1)
+    captured = capsys.readouterr()
+    payloads = [json.loads(line) for line in captured.out.splitlines() if line.strip()]
+    assert len(payloads) == 2
+    assert payloads[0]["monitor"]["poll_attempt"] == 1
+    assert "terminal_reason" not in payloads[0]["monitor"]
+    assert payloads[1]["monitor"]["poll_attempt"] == 2
+    assert payloads[1]["monitor"]["terminal_reason"] == "pr_closed"
+    assert payloads[1]["state"] == "CLOSED"
+
+
+def test_main_bounded_polling_stops_early_when_pr_merged(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Bounded polling should terminate immediately on merged PR state without exhausting attempts."""
+    merged_data = json.dumps(
+        {
+            "number": 7499,
+            "title": "merged pr",
+            "state": "MERGED",
+            "mergeable": "MERGEABLE",
+            "headRefName": "merged-branch",
+            "headRefOid": FULL_SHA,
+            "statusCheckRollup": [{"name": "ci", "status": "queued", "conclusion": ""}],
+            "reviews": [],
+        }
+    )
+
+    with (
+        patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run,
+        patch("scripts.dev.check_pr_ci_status.time.sleep") as mock_sleep,
+    ):
+        mock_run.return_value = MagicMock(returncode=0, stdout=merged_data, stderr="")
+        rc = main(
+            [
+                "7499",
+                "--poll-attempts",
+                "10",
+                "--poll-interval",
+                "0.1",
+                "--json",
+                "--expected-head-sha",
+                FULL_SHA,
+            ]
+        )
+
+    assert rc == 0
+    assert mock_run.call_count == 1
+    mock_sleep.assert_not_called()
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out.strip())
+    assert payload["monitor"]["poll_attempt"] == 1
+    assert payload["monitor"]["terminal_reason"] == "pr_merged"
+    assert payload["state"] == "MERGED"

@@ -3525,9 +3525,9 @@ def test_pr_ready_check_optional_lane_defaults_to_worksteal_distribution() -> No
 
     script_text = PR_READY_CHECK.read_text(encoding="utf-8")
 
-    assert (
-        'PYTEST_XDIST_DIST="${PYTEST_XDIST_DIST:-worksteal}"' in script_text
-    ), "optional readiness lane must default PYTEST_XDIST_DIST to worksteal with caller override"
+    assert 'PYTEST_XDIST_DIST="${PYTEST_XDIST_DIST:-worksteal}"' in script_text, (
+        "optional readiness lane must default PYTEST_XDIST_DIST to worksteal with caller override"
+    )
     # The pin belongs only on the optional lane invocation; the core lane keeps its default
     # scheduling so core-lane behavior is unchanged.
     core_line = next(
@@ -3535,4 +3535,6 @@ def test_pr_ready_check_optional_lane_defaults_to_worksteal_distribution() -> No
         for line in script_text.splitlines()
         if "ROBOT_SF_TEST_LANE=core" in line and "run_tests_parallel.sh" in line
     )
-    assert "PYTEST_XDIST_DIST" not in core_line, "core lane must not change its distribution default"
+    assert "PYTEST_XDIST_DIST" not in core_line, (
+        "core lane must not change its distribution default"
+    )

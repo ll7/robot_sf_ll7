@@ -46,6 +46,46 @@ def _full_manifest() -> SimpleNamespace:
     )
 
 
+def test_full_release_roster_resolution_helpers_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Canonical config and planner-roster resolution reject ambiguous inputs."""
+    assert release_acceptance._full_release_planner_items(None) == ()
+    assert release_acceptance._full_release_planner_items([{"key": "arm", "algo": "goal"}]) == (
+        ("arm", "goal"),
+    )
+
+    resolved = SimpleNamespace(planners=())
+    monkeypatch.setattr(release_acceptance, "load_campaign_config", lambda _path: resolved)
+    manifest = SimpleNamespace(canonical_campaign_config_path=Path("campaign.yaml"))
+    assert release_acceptance._full_release_campaign_config(manifest, None) == (resolved, [])
+    monkeypatch.setattr(
+        release_acceptance,
+        "load_campaign_config",
+        lambda _path: (_ for _ in ()).throw(ValueError("bad config")),
+    )
+    config, blockers = release_acceptance._full_release_campaign_config(manifest, None)
+    assert config is None
+    assert blockers == ["canonical campaign config cannot be resolved for provenance: bad config"]
+
+    roster_manifest = SimpleNamespace(
+        planner_algorithms=[
+            {"key": "arm_a", "algo": "goal"},
+            {"key": "arm_a", "algo": "orca"},
+            {"key": "", "algo": "goal"},
+            {"key": "unexpected", "algo": "social_force"},
+        ]
+    )
+    algorithms, roster_blockers = release_acceptance._full_release_algorithm_roster(
+        roster_manifest, None, ("arm_a", "missing")
+    )
+    assert algorithms == {"arm_a": "goal", "unexpected": "social_force"}
+    assert any("empty key or algo" in blocker for blocker in roster_blockers)
+    assert any("conflicts for 'arm_a'" in blocker for blocker in roster_blockers)
+    assert any("is missing ['missing']" in blocker for blocker in roster_blockers)
+    assert any("has unexpected ['unexpected']" in blocker for blocker in roster_blockers)
+
+
 def _write_full_campaign(tmp_path: Path) -> Path:
     """Write a complete 14-arm fixture with 48 scenarios and 30 seeds."""
     campaign_root = tmp_path / "campaign"

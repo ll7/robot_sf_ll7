@@ -3512,3 +3512,27 @@ def test_gh_pr_merge_wrapper_refuses_without_exact_head_binding() -> None:
     )
     assert result.returncode == 2
     assert "requires a full 40-char SHA" in result.stderr
+
+
+def test_pr_ready_check_optional_lane_defaults_to_worksteal_distribution() -> None:
+    """The readiness optional lane must not strand a long test tail on one worker (issue #7842).
+
+    ``--dist load`` assigns items to workers up front, so a heavily parametrized module such as
+    ``tests/benchmark/test_case_dossier_figure.py`` can keep one worker busy for minutes after all
+    others finish. ``worksteal`` redistributes unstarted items instead. Callers may still override
+    the distribution mode explicitly via ``PYTEST_XDIST_DIST``.
+    """
+
+    script_text = PR_READY_CHECK.read_text(encoding="utf-8")
+
+    assert (
+        'PYTEST_XDIST_DIST="${PYTEST_XDIST_DIST:-worksteal}"' in script_text
+    ), "optional readiness lane must default PYTEST_XDIST_DIST to worksteal with caller override"
+    # The pin belongs only on the optional lane invocation; the core lane keeps its default
+    # scheduling so core-lane behavior is unchanged.
+    core_line = next(
+        line
+        for line in script_text.splitlines()
+        if "ROBOT_SF_TEST_LANE=core" in line and "run_tests_parallel.sh" in line
+    )
+    assert "PYTEST_XDIST_DIST" not in core_line, "core lane must not change its distribution default"

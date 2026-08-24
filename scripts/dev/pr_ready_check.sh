@@ -500,7 +500,9 @@ if [[ ${#optional_changed_files[@]} -gt 0 ]]; then
   if [[ " $optional_pytest_addopts " != *" --cov-append "* ]]; then
     optional_pytest_addopts="${optional_pytest_addopts:+$optional_pytest_addopts }--cov-append"
   fi
-  PYTEST_ADDOPTS="$optional_pytest_addopts" ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=optional "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional
+  PYTEST_ADDOPTS="$optional_pytest_addopts" ROBOT_SF_PYTEST_COVERAGE=1 \
+    ROBOT_SF_TEST_LANE=optional PYTEST_XDIST_DIST="${PYTEST_XDIST_DIST:-worksteal}" \
+    "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional
 else
   if [[ "$pr_ready_final" == "1" ]]; then
     printf 'No changed files require the optional-extra lane.\n' >&2

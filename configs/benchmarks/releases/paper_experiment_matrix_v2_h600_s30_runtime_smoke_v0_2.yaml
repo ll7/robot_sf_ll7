@@ -8,7 +8,7 @@ release_id: paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2
 release_tag: paper-matrix-v2-h600-s30-runtime-smoke
 maturity: pre-1.0
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_runtime_smoke.yaml
-campaign_config_sha256: "41661bdcc1823d2698dab921409a36faac3f4e6b193efc8ac7507dc6b14d704b"
+campaign_config_sha256: "c3671790d0beb12511223efa86e2cf26245692566b2c849dba956b6e36bdf64a"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: runtime-smoke-advisory-no-ranking
 
@@ -16,7 +16,7 @@ release_kind: benchmark-data
 release_status: runtime-smoke-only
 derived_from:
   config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml
-  config_sha256: "31e3e4689d91ed540af0037b9373108f10c45d11bbaf12f013016d9f99f076f2"
+  config_sha256: "aa3057faeeefbd2ced41e3e093da32d1705270330cb1c124bc0b3558f8f88afd"
 claim_boundary:
   evidence_class: runtime-smoke
   snqi: advisory-no-ranking

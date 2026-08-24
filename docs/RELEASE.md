@@ -143,8 +143,8 @@ uv run robot-sf release doctor \
   --repo "$PWD" \
   --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
   --expected-release-sha <exact-release-sha> \
-  --expected-base-sha b6340e5e69f56120bed5322f332d7b2591b43c26 \
-  --tag paper-matrix-v2-h600-s30-2026-08-b6340e5e69f5 \
+  --expected-base-sha cd831d7582c117ac9529065e7d1c60386933c92d \
+  --tag paper-matrix-v2-h600-s30-2026-08-cd831d7582c1 \
   --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
   --private-launch-packet <private-ops-launch-packet> \
   --dissertation <dissertation-worktree> \

@@ -4,14 +4,14 @@
 # provenance records the final immutable merged source SHA separately.
 schema_version: benchmark-release-manifest.v0.2
 benchmark_protocol_version: 0.1.0
-release_id: paper_matrix_v2_h600_s30_2026_08_b6340e5e69f5
-release_tag: paper-matrix-v2-h600-s30-2026-08-b6340e5e69f5
+release_id: paper_matrix_v2_h600_s30_2026_08_cd831d7582c1
+release_tag: paper-matrix-v2-h600-s30-2026-08-cd831d7582c1
 maturity: pre-1.0
 release_kind: benchmark-data
-latest_main_base_commit: "b6340e5e69f56120bed5322f332d7b2591b43c26"
+latest_main_base_commit: "cd831d7582c117ac9529065e7d1c60386933c92d"
 
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml
-campaign_config_sha256: "31e3e4689d91ed540af0037b9373108f10c45d11bbaf12f013016d9f99f076f2"
+campaign_config_sha256: "aa3057faeeefbd2ced41e3e093da32d1705270330cb1c124bc0b3558f8f88afd"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: baseline-ready-core
 
@@ -30,7 +30,7 @@ publication:
   version_record_id: "22077448"
   reservation_status: reserved_unpublished
   metadata_path: benchmark_data_release_s30_h600_zenodo_metadata.json
-  metadata_sha256: "342845bdeb0ac8ee48fad847a24a4e1bddfe456510b0b8e61b3125f0948087e8"
+  metadata_sha256: "b1fa7120abec8dcef09b2a6718e8e30fd39056687399e995df43a0ed800c27c3"
   github_zenodo_webhook_policy: disable_before_publication_and_leave_disabled
 
 claim_boundary:

@@ -419,6 +419,11 @@ _FAST_FILES = {
     "test_checkpoint_provenance_issue_4970.py",
     "test_checkpoint_staging_receipt.py",
     "test_fallback_policy.py",
+    # The hybrid stress suites are deterministic filesystem/schema contracts
+    # and carry the direct fail-closed branch coverage for release acceptance
+    # and release-protocol changes; keep them in hosted pull-request shards.
+    "test_hybrid_stress_acceptance_hardening.py",
+    "test_hybrid_stress_smoke_contract.py",
     "test_release_acceptance.py",
     "test_release_admission_edge_cases.py",
     "test_release_assurance_case.py",

@@ -14,7 +14,12 @@ from collections.abc import Callable
 from multiprocessing.context import BaseContext
 
 import numpy as np
+import pytest
 
+from robot_sf.benchmark.map_runner.map_runner_episode import (
+    _planner_decision_counter_mapping,
+    _planner_decision_nested_counter_mapping,
+)
 from robot_sf.benchmark.observation_noise import normalize_observation_noise_spec
 from robot_sf.benchmark.tracking_precision_contract import normalize_tracking_precision_spec
 from robot_sf.benchmark.types import (
@@ -167,6 +172,21 @@ def test_planner_decision_trace_entry() -> None:
     assert entry["planner_mode"] == "NORMAL"
     assert entry["nearest_static_obstacle_distance_m"] == 1.25
     assert entry.get("static_recenter") is None
+
+
+@pytest.mark.parametrize("value", (-1, 1.5, True, "1"))
+def test_planner_decision_trace_rejects_malformed_counters(value: object) -> None:
+    """Malformed counters must fail the trace producer instead of disappearing."""
+    with pytest.raises(ValueError, match="non-negative integer"):
+        _planner_decision_counter_mapping({"static_collision": value}, field="rejections")
+
+
+def test_planner_decision_trace_rejects_malformed_nested_counter_container() -> None:
+    with pytest.raises(ValueError, match="must be a mapping"):
+        _planner_decision_nested_counter_mapping(
+            {"dynamic_window": 3},
+            field="rejection_counts_by_source",
+        )
 
 
 def test_planner_decision_trace_entry_with_topology() -> None:

@@ -17,7 +17,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
+from robot_sf.benchmark.camera_ready._config import (
+    _load_campaign_scenarios,
+    _scenario_with_kinematics,
+)
 from robot_sf.benchmark.camera_ready._preflight import (
     _config_hash_payload,
     _resolved_seed_inventory,
@@ -89,6 +92,9 @@ _RUNTIME_METADATA_CONTAINERS = frozenset(
         "runtime",
         "runtime_metadata",
     }
+)
+_DECLARATIVE_ALGORITHM_METADATA_CONTAINERS = frozenset(
+    {"config", "planner_contract", "safety_shield_contract"}
 )
 
 
@@ -211,6 +217,59 @@ def _emergency_stop_marker(payload: Any) -> tuple[str, str] | None:  # noqa: C90
     return _walk(payload, "")
 
 
+def _algorithm_metadata_runtime_marker(metadata: Mapping[str, Any]) -> tuple[str, str] | None:
+    """Scan runtime-bearing algorithm metadata without treating config as execution evidence.
+
+    Guarded PPO's safe Risk-DWA shield command is a declared component of that composite
+    planner.  Its exact ``fallback_safe`` counters are therefore native intervention telemetry;
+    best-effort and uncertainty fallbacks remain forbidden.
+
+    Returns:
+        The first forbidden runtime marker, if present.
+    """
+    runtime_view: dict[str, Any] = {
+        str(key): value
+        for key, value in metadata.items()
+        if str(key) not in _DECLARATIVE_ALGORITHM_METADATA_CONTAINERS
+    }
+    planner_contract = metadata.get("planner_contract")
+    planner_id = (
+        str(planner_contract.get("planner_id", "")).strip().lower()
+        if isinstance(planner_contract, Mapping)
+        else ""
+    )
+    guarded_ppo_identity = (
+        str(metadata.get("canonical_algorithm", "")).strip().lower() == "guarded_ppo"
+        and str(metadata.get("algorithm", "")).strip().lower() == "ppo"
+        and planner_id == "guarded_ppo"
+    )
+    if guarded_ppo_identity:
+        guard_stats = metadata.get("guard_stats")
+        if isinstance(guard_stats, Mapping):
+            runtime_view["guard_stats"] = {
+                str(key): value for key, value in guard_stats.items() if key != "fallback_safe"
+            }
+        shield_stats = metadata.get("shield_stats")
+        if isinstance(shield_stats, Mapping):
+            shield_view = dict(shield_stats)
+            decision_counts = shield_stats.get("decision_counts")
+            if isinstance(decision_counts, Mapping):
+                shield_view["decision_counts"] = {
+                    str(key): value
+                    for key, value in decision_counts.items()
+                    if key != "fallback_safe"
+                }
+            last_decision = shield_stats.get("last_decision")
+            if isinstance(last_decision, Mapping):
+                shield_view["last_decision"] = {
+                    str(key): value
+                    for key, value in last_decision.items()
+                    if key != "fallback_controller_state"
+                }
+            runtime_view["shield_stats"] = shield_view
+    return runtime_fallback_or_degraded_marker(runtime_view)
+
+
 def _status_markers(  # noqa: C901, PLR0912, PLR0915
     payload: Mapping[str, Any], prefix: str
 ) -> list[tuple[str, str]]:
@@ -269,6 +328,10 @@ def _status_markers(  # noqa: C901, PLR0912, PLR0915
         metadata = payload.get(field)
         if not isinstance(metadata, Mapping):
             continue
+        metadata_marker = _algorithm_metadata_runtime_marker(metadata)
+        if metadata_marker is not None:
+            marker_path, marker_value = metadata_marker
+            markers.append((f"{prefix}.{field}.{marker_path}", marker_value))
         _add(f"{field}.status", metadata.get("status"))
         for marker_field in (
             "fallback",
@@ -1268,14 +1331,19 @@ def _stress_row_contract_blockers(  # noqa: C901, PLR0912, PLR0915
             )
         )
 
+    metadata_algorithm = _nested_value(row, "algorithm_metadata", "algorithm")
+    expected_metadata_algorithm = "ppo" if expected_algo == "guarded_ppo" else expected_algo
+    if metadata_algorithm is _MISSING:
+        blockers.append(f"{prefix}: algorithm_metadata.algorithm is missing")
+    elif str(metadata_algorithm).strip().lower() != expected_metadata_algorithm:
+        blockers.append(
+            f"{prefix}: algorithm_metadata.algorithm does not match declared base algorithm "
+            f"'{expected_metadata_algorithm}'"
+        )
     algo_aliases = _alias_values(
         row,
         (
             ("algo", row.get("algo", _MISSING)),
-            (
-                "algorithm_metadata.algorithm",
-                _nested_value(row, "algorithm_metadata", "algorithm"),
-            ),
             (
                 "algorithm_metadata.canonical_algorithm",
                 _nested_value(row, "algorithm_metadata", "canonical_algorithm"),
@@ -1604,7 +1672,19 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
     # Campaign metadata uses the camera-ready 12-character structural hash;
     # result-provenance sidecars use the 16-character config hash over the
     # resolved scenario payload.  Keep these identities distinct.
-    expected_scenario_identity = _config_hash(resolved_scenarios)
+    effective_scenarios = [
+        _scenario_with_kinematics(
+            scenario,
+            kinematics=STRESS_SMOKE_EXPECTED_KINEMATICS,
+            holonomic_command_mode=str(getattr(campaign_config, "holonomic_command_mode", "vx_vy")),
+        )
+        for scenario in resolved_scenarios
+    ]
+    telemetry = getattr(campaign_config, "telemetry", None)
+    if isinstance(telemetry, Mapping):
+        for scenario in effective_scenarios:
+            scenario["telemetry"] = dict(telemetry)
+    expected_scenario_identity = _config_hash(effective_scenarios)
 
     for marker_path, marker in _status_markers(summary, "campaign_summary"):
         _append_blocker(blockers, f"forbidden {marker_path}={marker}")

@@ -2537,6 +2537,43 @@ def _finite_planner_decision_value(value: Any) -> float | None:
     return None
 
 
+def _planner_decision_counter_mapping(raw: Any, *, field: str) -> dict[str, int]:
+    """Normalize a non-negative integer trace counter mapping or fail closed.
+
+    Returns:
+        A string-keyed counter mapping.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"planner decision {field} must be a mapping")
+    normalized: dict[str, int] = {}
+    for key, value in raw.items():
+        if not isinstance(value, int | np.integer) or isinstance(value, bool) or int(value) < 0:
+            raise ValueError(f"planner decision {field}.{key} must be a non-negative integer")
+        normalized[str(key)] = int(value)
+    return normalized
+
+
+def _planner_decision_nested_counter_mapping(raw: Any, *, field: str) -> dict[str, dict[str, int]]:
+    """Normalize nested per-source trace counters or fail closed.
+
+    Returns:
+        A string-keyed mapping of counter mappings.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"planner decision {field} must be a mapping")
+    normalized: dict[str, dict[str, int]] = {}
+    for source, counts in raw.items():
+        normalized[str(source)] = _planner_decision_counter_mapping(
+            counts,
+            field=f"{field}.{source}",
+        )
+    return normalized
+
+
 def _step_build_planner_decision_entry(
     state: _StepLoopState,
     slc: _StepLoopConfig,
@@ -2554,15 +2591,14 @@ def _step_build_planner_decision_entry(
     progress_windows = progress_windows_raw if isinstance(progress_windows_raw, dict) else {}
     selected_command = psd.get("selected_command")
     selected_command = selected_command if isinstance(selected_command, list) else []
-    rejection_counts_raw = psd.get("rejection_counts")
-    rejection_counts = rejection_counts_raw if isinstance(rejection_counts_raw, dict) else {}
-    moving_rejection_counts_raw = psd.get("moving_rejection_counts")
-    moving_rejection_counts = (
-        moving_rejection_counts_raw if isinstance(moving_rejection_counts_raw, dict) else {}
+    rejection_counts = _planner_decision_counter_mapping(
+        psd.get("rejection_counts"), field="rejection_counts"
     )
-    rejection_counts_by_source_raw = psd.get("rejection_counts_by_source")
-    rejection_counts_by_source = (
-        rejection_counts_by_source_raw if isinstance(rejection_counts_by_source_raw, dict) else {}
+    moving_rejection_counts = _planner_decision_counter_mapping(
+        psd.get("moving_rejection_counts"), field="moving_rejection_counts"
+    )
+    rejection_counts_by_source = _planner_decision_nested_counter_mapping(
+        psd.get("rejection_counts_by_source"), field="rejection_counts_by_source"
     )
     distance_to_goal = float(np.linalg.norm(sim.robot_pos - state.goal_vec))
     step_decision: dict[str, Any] = {
@@ -2586,25 +2622,9 @@ def _step_build_planner_decision_entry(
             for key, value in progress_windows.items()
             if isinstance(value, int | float | np.integer | np.floating)
         },
-        "rejection_counts": {
-            str(key): int(value)
-            for key, value in rejection_counts.items()
-            if isinstance(value, int | np.integer) and int(value) >= 0
-        },
-        "moving_rejection_counts": {
-            str(key): int(value)
-            for key, value in moving_rejection_counts.items()
-            if isinstance(value, int | np.integer) and int(value) >= 0
-        },
-        "rejection_counts_by_source": {
-            str(source): {
-                str(key): int(value)
-                for key, value in counts.items()
-                if isinstance(value, int | np.integer) and int(value) >= 0
-            }
-            for source, counts in rejection_counts_by_source.items()
-            if isinstance(counts, dict)
-        },
+        "rejection_counts": rejection_counts,
+        "moving_rejection_counts": moving_rejection_counts,
+        "rejection_counts_by_source": rejection_counts_by_source,
         "nearest_pedestrian_distance_m": _finite_planner_decision_value(
             psd.get("nearest_pedestrian_distance")
         ),

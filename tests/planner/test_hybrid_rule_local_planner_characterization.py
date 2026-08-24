@@ -281,6 +281,25 @@ def test_plan_static_clearance_rejection_fails_closed() -> None:
     assert last["rejection_counts"]["static_collision"] == 18
 
 
+def test_plan_static_clearance_native_protective_reorient() -> None:
+    """Opt-in rotate-in-place recovery remains native safety behavior, not fallback."""
+    planner = HybridRuleLocalPlannerAdapter(
+        HybridRuleLocalPlannerConfig(
+            recovery_enabled=True,
+            recovery_reorient_angular_speed=0.6,
+        )
+    )
+
+    command = planner.plan(_OBS_STATIC_REJECTION)
+
+    assert command == (0.0, 0.6)
+    diagnostics = planner.diagnostics()
+    assert diagnostics["fallback_count"] == 0
+    assert diagnostics["protective_stop_count"] == 1
+    assert diagnostics["last_decision"]["planner_mode"] == "PROTECTIVE_REORIENT"
+    assert diagnostics["last_decision"]["selected_source"] == "static_protective_reorient"
+
+
 def test_plan_goal_posterior_active() -> None:
     """An active goal-posterior channel overrides route-following with a yield command."""
     planner = HybridRuleLocalPlannerAdapter(_GOAL_POSTERIOR_CONFIG)

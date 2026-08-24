@@ -424,6 +424,7 @@ _FAST_FILES = {
     # and release-protocol changes; keep them in hosted pull-request shards.
     "test_hybrid_stress_acceptance_hardening.py",
     "test_hybrid_stress_smoke_contract.py",
+    "test_release_stress_smoke_acceptance.py",
     "test_release_acceptance.py",
     "test_release_admission_edge_cases.py",
     "test_release_assurance_case.py",

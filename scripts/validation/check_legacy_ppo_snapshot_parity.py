@@ -69,6 +69,7 @@ class DurableLegacyCheckpoint:
     source_paths: tuple[str, ...]
     kind: str
     display_path: str = ""
+    cutover: bool = False
 
 
 # Phase A of issue #6268: legacy checkpoints now published as durable GitHub
@@ -85,11 +86,13 @@ DURABLE_LEGACY_CHECKPOINTS: tuple[DurableLegacyCheckpoint, ...] = (
         model_id="legacy_ppo_run_023",
         source_paths=("model/run_023.zip",),
         kind="single_file",
+        cutover=True,
     ),
     DurableLegacyCheckpoint(
         model_id="legacy_ppo_run_043",
         source_paths=("model/run_043.zip",),
         kind="single_file",
+        cutover=True,
     ),
     DurableLegacyCheckpoint(
         model_id="legacy_ppo_retrained_10m_2024_09_17",
@@ -481,9 +484,31 @@ def _verify_durable_checkpoint_sources(
     registry_path: Path,
     cache_dir: Path | None,
 ) -> tuple[str, str]:
-    """Verify a durable checkpoint's in-tree bytes and resolver contract."""
+    """Verify a durable checkpoint's source bytes and resolver contract.
+
+    ``single_file`` checkpoints verify their recorded SHA-256 against the
+    in-tree source when it still exists (Phase A state), and against the
+    release-hydrated durable artifact when the in-tree binary has been cut
+    over to a registry/release-backed stub (Phase B of issue #6268).
+    """
     if checkpoint.kind == "single_file":
-        return _verify_single_file(entry, resolved=repo_root / checkpoint.source_paths[0])
+        in_tree = repo_root / checkpoint.source_paths[0]
+        if in_tree.is_file():
+            return _verify_single_file(entry, resolved=in_tree)
+        if not checkpoint.cutover:
+            return "missing_component", f"durable checkpoint is not a regular file: {in_tree}"
+        # Phase B cutover: the in-tree binary is replaced by a stub; byte-match
+        # the release-backed artifact instead.
+        try:
+            resolved = _resolve_single_file_release_hydration(
+                checkpoint.model_id,
+                repo_root=repo_root,
+                registry_path=registry_path,
+                cache_dir=cache_dir,
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            return "unresolved", f"release resolution failed: {exc}"
+        return _verify_single_file(entry, resolved=resolved)
     if checkpoint.kind != "multi_file_bundle":
         return "unknown_kind", f"unsupported checkpoint kind: {checkpoint.kind}"
 

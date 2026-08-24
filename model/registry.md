@@ -191,11 +191,12 @@ Root-local debug checkpoints such as `model/run_023.zip`, `model/run_043.zip`,
 durable compatibility because they lacked registry provenance and release checksums. **Phase A of
 issue #6268 (issue #6321) published them as durable registry artifacts** (see the next section), so
 they are now `supported` rows with GitHub release provenance, recorded SHA-256 checksums, and
-`benchmark_promotion.claim_boundary: legacy_non_track`. The in-tree files are not deleted, moved,
-or renamed; single-file registry `local_path` values name ignored `output/model_cache/` release-cache
-targets, while GA3C keeps its existing in-tree `.meta` checkpoint path because SA-CADRL requires
-the adjacent TensorFlow checkpoint files. Existing hardcoded in-tree load paths remain unchanged in
-this Phase-A slice.
+`benchmark_promotion.claim_boundary: legacy_non_track`. **Phase B of issue #6268 (issue #6793)
+cuts `model/run_023.zip` and `model/run_043.zip` over** to the release-backed artifacts: the
+in-tree binaries are replaced by stub READMEs that point at the durable assets, and code resolves
+them through `resolve_model_path`. Single-file registry `local_path` values name ignored
+`output/model_cache/` release-cache targets, while GA3C keeps its existing in-tree `.meta`
+checkpoint path because SA-CADRL requires the adjacent TensorFlow checkpoint files.
 
 ### Durable legacy checkpoints (Phase A of #6268)
 
@@ -213,8 +214,8 @@ are the integrity guard if the tag or an asset is ever changed:
 
 The durable legacy `model_id`s are:
 
-- `legacy_ppo_run_023` (`model/run_023.zip`)
-- `legacy_ppo_run_043` (`model/run_043.zip`)
+- `legacy_ppo_run_023` (Phase B stub `model/run_023/README.md`; binary cut over)
+- `legacy_ppo_run_043` (Phase B stub `model/run_043/README.md`; binary cut over)
 - `legacy_ppo_retrained_10m_2024_09_17` (`model/ppo_model_retrained_10m_2024-09-17.zip`)
 - `legacy_ppo_retrained_10m_2025_02_01` (`model/ppo_model_retrained_10m_2025-02-01.zip`; default
   `model_path` in `configs/baselines/ppo.yaml` and `robot_sf/baselines/ppo.py`)

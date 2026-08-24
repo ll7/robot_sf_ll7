@@ -51,8 +51,10 @@ def test_ego_ped_env():
     """Ensure the ego pedestrian env can step with a loaded robot model."""
     from stable_baselines3 import PPO
 
+    from robot_sf.models.registry import resolve_model_path
+
     total_steps = 100
-    robot_model = PPO.load("./model/run_043", env=None)
+    robot_model = PPO.load(str(resolve_model_path("legacy_ppo_run_043")), env=None)
     env = PedestrianEnv(robot_model=robot_model)
     assert env is not None
     env.reset()

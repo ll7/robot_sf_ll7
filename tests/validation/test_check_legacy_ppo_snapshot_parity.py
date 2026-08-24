@@ -181,7 +181,14 @@ def test_durable_legacy_recorded_checksums_match_in_tree_sha256() -> None:
         release = registry[cp.model_id]["github_release"]
         if cp.kind == "single_file":
             assert len(cp.source_paths) == 1, cp.model_id
-            observed = _sha256(repo_root / cp.source_paths[0])
+            in_tree = repo_root / cp.source_paths[0]
+            if not in_tree.is_file():
+                # Phase B cutover (issue #6268): the in-tree binary is replaced
+                # by a registry/release-backed stub, so there is no in-tree
+                # source to recompute. Resolution byte-matching is covered by
+                # test_durable_cutover_single_file_resolves_release_artifact.
+                continue
+            observed = _sha256(in_tree)
             assert observed == release["sha256"], cp.model_id
         elif cp.kind == "multi_file_bundle":
             per_file = release["per_file_sha256"]
@@ -286,6 +293,78 @@ def test_release_hydration_does_not_reuse_worktree_local_cache(
     assert status == "verified", detail
     assert downloads == [expected_hydrated]
     assert expected_hydrated.read_bytes() == source.read_bytes()
+
+
+def test_durable_cutover_single_file_resolves_release_artifact(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A cut-over single file (Phase B) byte-matches the durable release artifact."""
+    model_id = "legacy_ppo_synthetic_cutover"
+    source = tmp_path / "published.zip"
+    source.write_bytes(b"published-checkpoint")
+    entry = _durable_entry(model_id, source, sha256=_sha256(source))
+    entry["local_path"] = f"output/model_cache/{model_id}/{model_id}.zip"
+    registry_path = tmp_path / "registry.yaml"
+    _write_registry(registry_path, [entry])
+
+    # The in-tree binary is removed (cut over to a stub); the release artifact
+    # is hydrated into an isolated cache.
+    cache_dir = tmp_path / "release-cache"
+    hydrated = cache_dir / model_id / f"{model_id}.zip"
+    hydrated.parent.mkdir(parents=True)
+    hydrated.write_bytes(source.read_bytes())
+
+    def fake_hydrate(*args, **kwargs):
+        return hydrated
+
+    monkeypatch.setattr(checker, "_resolve_single_file_release_hydration", fake_hydrate)
+    checkpoint = checker.DurableLegacyCheckpoint(
+        model_id=model_id,
+        source_paths=("model/run_023.zip",),
+        kind="single_file",
+        cutover=True,
+    )
+    status, detail = checker._verify_durable_checkpoint_sources(
+        checkpoint,
+        entry=entry,
+        repo_root=tmp_path,
+        registry_path=registry_path,
+        cache_dir=cache_dir,
+    )
+    assert status == "verified", detail
+    assert "byte-match" in detail
+
+
+def test_durable_cutover_single_file_fails_closed_on_unresolvable_release(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A cut-over single file with an unresolvable release fails closed."""
+    model_id = "legacy_ppo_synthetic_cutover_unresolvable"
+    source = tmp_path / "published.zip"
+    source.write_bytes(b"published-checkpoint")
+    entry = _durable_entry(model_id, source, sha256=_sha256(source))
+    registry_path = tmp_path / "registry.yaml"
+    _write_registry(registry_path, [entry])
+
+    def fake_hydrate(*args, **kwargs):
+        raise RuntimeError("release asset unavailable")
+
+    monkeypatch.setattr(checker, "_resolve_single_file_release_hydration", fake_hydrate)
+    checkpoint = checker.DurableLegacyCheckpoint(
+        model_id=model_id,
+        source_paths=("model/run_023.zip",),
+        kind="single_file",
+        cutover=True,
+    )
+    status, detail = checker._verify_durable_checkpoint_sources(
+        checkpoint,
+        entry=entry,
+        repo_root=tmp_path,
+        registry_path=registry_path,
+        cache_dir=None,
+    )
+    assert status == "unresolved"
+    assert "release resolution failed" in detail
 
 
 def test_verify_durable_checkpoint_detects_checksum_mismatch(tmp_path: Path) -> None:

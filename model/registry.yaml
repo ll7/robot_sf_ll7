@@ -733,11 +733,13 @@ models:
   - durable-registry
   - phase-a-6268
   notes:
-  - 'Pre-registry PPO debug checkpoint retained at its original in-tree path model/run_023.zip.'
+  - 'Phase B (#6268): in-tree binary model/run_023.zip removed; replaced by a stub
+    (model/run_023/README.md) pointing at this durable release asset.'
   - 'Historically adapted by robot_sf/training/observation_wrappers.py (run_23 adapter).'
   - >-
     Phase A of #6268: published as a durable GitHub release asset and hydrated to
-    the ignored model cache by resolve_model_path; the in-tree source remains unchanged.
+    the ignored model cache by resolve_model_path; Phase B cuts the in-tree source
+    over to the release-backed artifact.
   github_release:
     repo: ll7/robot_sf_ll7
     tag: artifact/legacy-models-2026-07-registry-v1
@@ -771,10 +773,12 @@ models:
   - durable-registry
   - phase-a-6268
   notes:
-  - 'Pre-registry PPO debug checkpoint retained at its original in-tree path model/run_043.zip.'
+  - 'Phase B (#6268): in-tree binary model/run_043.zip removed; replaced by a stub
+    (model/run_043/README.md) pointing at this durable release asset.'
   - >-
     Phase A of #6268: published as a durable GitHub release asset and hydrated to
-    the ignored model cache by resolve_model_path; the in-tree source remains unchanged.
+    the ignored model cache by resolve_model_path; Phase B cuts the in-tree source
+    over to the release-backed artifact.
   github_release:
     repo: ll7/robot_sf_ll7
     tag: artifact/legacy-models-2026-07-registry-v1

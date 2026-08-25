@@ -25,6 +25,7 @@ from scripts.validation.check_docs_proof_consistency import (
     _should_check_context_catalog,
     main,
 )
+from tests.support.environment_guards import configure_git_identity, git_identity_environment
 
 
 def _run_git(repo_root: Path, *args: str, env: dict[str, str] | None = None) -> None:
@@ -41,14 +42,11 @@ def _run_git(repo_root: Path, *args: str, env: dict[str, str] | None = None) -> 
 
 def _commit_all(repo_root: Path, message: str, *, iso_date: str) -> None:
     """Commit all fixture changes with a deterministic timestamp."""
-    env = {
-        "GIT_AUTHOR_DATE": iso_date,
-        "GIT_COMMITTER_DATE": iso_date,
-        "GIT_AUTHOR_NAME": "Test Author",
-        "GIT_AUTHOR_EMAIL": "test@example.com",
-        "GIT_COMMITTER_NAME": "Test Author",
-        "GIT_COMMITTER_EMAIL": "test@example.com",
-    }
+    env = git_identity_environment(
+        {"GIT_AUTHOR_DATE": iso_date, "GIT_COMMITTER_DATE": iso_date},
+        name="Test Author",
+        email="test@example.com",
+    )
     _run_git(repo_root, "add", ".")
     _run_git(repo_root, "commit", "-m", message, env=env)
 
@@ -402,20 +400,7 @@ def test_explicit_path_new_context_note_is_treated_as_added(tmp_path: Path) -> N
     """Explicit path checks should still enforce added-note index-link validation."""
     repo_root = tmp_path
     subprocess.run(["git", "init"], cwd=repo_root, check=True, capture_output=True, text=True)
-    subprocess.run(
-        ["git", "config", "user.name", "Test User"],
-        cwd=repo_root,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.email", "test@example.com"],
-        cwd=repo_root,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    configure_git_identity(repo_root, name="Test User", email="test@example.com")
 
     (repo_root / "docs/context").mkdir(parents=True)
     (repo_root / "docs/context/README.md").write_text(
@@ -1339,18 +1324,7 @@ def test_context_catalog_reports_malformed_yaml(tmp_path: Path) -> None:
 def _make_git_repo(tmp_path: Path) -> Path:
     """Create a minimal git repo rooted at tmp_path and return it."""
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.name", "Test"],
-        cwd=tmp_path,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.email", "t@t"],
-        cwd=tmp_path,
-        check=True,
-        capture_output=True,
-    )
+    configure_git_identity(tmp_path, name="Test", email="t@t")
     return tmp_path
 
 

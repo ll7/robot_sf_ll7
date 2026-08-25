@@ -32,6 +32,38 @@ uv run pytest <focused-test> -q
 uv run ruff check <changed-files>
 uv run ruff format --check <changed-files>
 
+# Hermetic Git-identity lane (Git-backed tests only)
+scripts/dev/run_hermetic_git_tests.sh
+```
+
+## Hermetic Git-identity lane
+
+Git-backed tests that create commits or commit trees must not depend on ambient
+developer or CI-runner Git identity/configuration. To reproduce a clean-runner
+Git failure locally, run the hermetic lane:
+
+```bash
+scripts/dev/run_hermetic_git_tests.sh
+```
+
+The wrapper unsets `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL`/
+`GIT_COMMITTER_NAME`/`GIT_COMMITTER_EMAIL`, points `GIT_CONFIG_GLOBAL` at
+`/dev/null`, and sets `GIT_CONFIG_NOSYSTEM=1` before running the Git-backed test
+modules under `tests/dev/`, `tests/tools/`, `tests/validation/`,
+`tests/unit/`, and `tests/integration/`.
+
+Temporary Git fixtures configure their own deterministic identity via the
+shared helpers in `tests/support/environment_guards.py`:
+
+- `git_identity_environment()` returns a hermetic env dict for subprocess calls
+  (sets author/committer identity and disables global/system config).
+- `configure_git_identity(repo)` runs repository-local `git config` for
+  `user.name`/`user.email`.
+
+A fixture that omits both fails closed in the lane with git's
+"Author identity unknown" error instead of silently passing on a developer
+machine.
+
 # Final PR proof when the change crosses the escalation boundary
 BASE_REF=origin/main PR_READY_MODE=final scripts/dev/pr_ready_check.sh
 ```

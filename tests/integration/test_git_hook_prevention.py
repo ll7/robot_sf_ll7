@@ -9,6 +9,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from tests.support.environment_guards import configure_git_identity
+
 
 class TestGitHookPreventionIntegration:
     """Integration tests for git hook duplicate prevention functionality."""
@@ -24,12 +26,7 @@ class TestGitHookPreventionIntegration:
 
             # Initialize git repo
             subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True)
-            subprocess.run(
-                ["git", "config", "user.email", "test@example.com"],
-                cwd=repo_path,
-                check=True,
-            )
+            configure_git_identity(repo_path, name="Test User", email="test@example.com")
 
             # Create initial commit
             (repo_path / "README.md").write_text("# Test Repo")
@@ -88,12 +85,7 @@ class TestGitHookPreventionIntegration:
 
             # Initialize git repo
             subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True)
-            subprocess.run(
-                ["git", "config", "user.email", "test@example.com"],
-                cwd=repo_path,
-                check=True,
-            )
+            configure_git_identity(repo_path, name="Test User", email="test@example.com")
 
             # Create initial commit
             (repo_path / "README.md").write_text("# Test Repo")
@@ -132,12 +124,7 @@ class TestGitHookPreventionIntegration:
 
             # Initialize git repo
             subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True)
-            subprocess.run(
-                ["git", "config", "user.email", "test@example.com"],
-                cwd=repo_path,
-                check=True,
-            )
+            configure_git_identity(repo_path, name="Test User", email="test@example.com")
 
             # Create initial commit
             (repo_path / "README.md").write_text("# Test Repo")
@@ -186,12 +173,7 @@ class TestGitHookPreventionIntegration:
 
             # Initialize git repo
             subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
-            subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True)
-            subprocess.run(
-                ["git", "config", "user.email", "test@example.com"],
-                cwd=repo_path,
-                check=True,
-            )
+            configure_git_identity(repo_path, name="Test User", email="test@example.com")
 
             # Create initial commit
             (repo_path / "README.md").write_text("# Test Repo")

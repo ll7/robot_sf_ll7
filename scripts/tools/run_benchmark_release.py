@@ -157,6 +157,14 @@ def _public_campaign_result(run_payload: dict[str, Any]) -> dict[str, Any]:
     return projected
 
 
+def _print_public_result_file(path: Path) -> None:
+    """Emit the persisted public result after a second private-path check."""
+    payload = _read_json(path)
+    if find_offending_paths(payload):
+        raise ReleaseResultPrivacyError("persisted release result contains private filesystem data")
+    print(json.dumps(payload, indent=2))
+
+
 def _campaign_summary_path(campaign_root: Path) -> Path:
     """Resolve the campaign summary before any release read or merge write."""
     return resolve_campaign_artifact_path(campaign_root, "reports/campaign_summary.json")
@@ -1024,13 +1032,14 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
                 "publication bundle failed the final self-consistency preflight"
             )
             result["release_exit_code"] = 2
-            _write_json(release_dir / "release_result.json", result)
-            print(json.dumps(result, indent=2))
+            release_result_path = release_dir / "release_result.json"
+            _write_json(release_result_path, result)
+            _print_public_result_file(release_result_path)
             return 2
     else:
         _write_json(release_dir / "release_result.json", result)
 
-    print(json.dumps(result, indent=2))
+    _print_public_result_file(release_dir / "release_result.json")
     return int(result["release_exit_code"])
 
 

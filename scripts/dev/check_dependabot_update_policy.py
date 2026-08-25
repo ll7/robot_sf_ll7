@@ -10,8 +10,9 @@ When a pull request changes a lockfile or project dependency declaration, the
 checker compares the exact base and head lock rows through the canonical
 profile-aware coherence contract, retains deterministic resolution evidence,
 classifies direct packages from the canonical policy, and rejects mixed
-material direct-risk lanes. Unknown direct packages are rejected until the
-policy is deliberately extended.
+material direct-risk lanes. It also checks changed workflow action pins for
+stale exact references elsewhere in the tracked HEAD tree. Unknown direct
+packages are rejected until the policy is deliberately extended.
 """
 
 from __future__ import annotations
@@ -50,10 +51,24 @@ DEPENDENCY_FILES = (
 PROJECT_FILES = ("pyproject.toml", "fast-pysf/pyproject.toml")
 LOCK_FILES = ("uv.lock", "fast-pysf/uv.lock")
 PACKAGE_TOKEN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+WORKFLOW_ACTION_VALUE = re.compile(
+    r"^(?P<action>(?!\.)[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+)@(?P<sha>[0-9a-fA-F]{40})$"
+)
+WORKFLOW_PATH_PREFIX = ".github/workflows/"
+WORKFLOW_SUFFIXES = {".yml", ".yaml"}
 
 
 class PolicyError(ValueError):
     """Raised when dependency-policy evidence is incomplete or inconsistent."""
+
+
+class WorkflowActionPinError(PolicyError):
+    """Raised when a changed workflow leaves an old action pin in the HEAD tree."""
+
+    def __init__(self, message: str, report: Mapping[str, Any]) -> None:
+        """Keep the structured guard report alongside the actionable error."""
+        super().__init__(message)
+        self.report = dict(report)
 
 
 def normalize_package_name(name: str) -> str:
@@ -517,6 +532,153 @@ def changed_files(
     return [line.strip() for line in output.splitlines() if line.strip()]
 
 
+def _git_ref_exists(repo_root: Path, ref: str) -> bool:
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def _workflow_action_refs(text: str) -> dict[str, set[str]]:
+    try:
+        root = yaml.compose(text)
+    except yaml.YAMLError as exc:
+        raise PolicyError(f"unable to parse workflow YAML for action-pin guard: {exc}") from exc
+
+    refs: dict[str, set[str]] = {}
+
+    def visit(node: yaml.Node) -> None:
+        if isinstance(node, yaml.MappingNode):
+            for key_node, value_node in node.value:
+                if (
+                    isinstance(key_node, yaml.ScalarNode)
+                    and key_node.value == "uses"
+                    and isinstance(value_node, yaml.ScalarNode)
+                ):
+                    match = WORKFLOW_ACTION_VALUE.fullmatch(value_node.value.strip())
+                    if match is not None:
+                        action = match.group("action")
+                        refs.setdefault(action, set()).add(f"{action}@{match.group('sha')}")
+                visit(value_node)
+        elif isinstance(node, yaml.SequenceNode):
+            for child_node in node.value:
+                visit(child_node)
+
+    if root is not None:
+        visit(root)
+    return refs
+
+
+def _is_workflow_yaml(relative_path: str) -> bool:
+    path = relative_path.replace("\\", "/")
+    return path.startswith(WORKFLOW_PATH_PREFIX) and Path(path).suffix.lower() in WORKFLOW_SUFFIXES
+
+
+def _head_ref_matches(repo_root: Path, action_ref: str) -> list[str]:
+    result = subprocess.run(
+        ["git", "grep", "--text", "-n", "-F", action_ref, "HEAD", "--"],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 1:
+        return []
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "git grep failed without a diagnostic"
+        raise PolicyError(f"unable to search the HEAD tree for {action_ref}: {detail}")
+
+    exact_ref = re.compile(r"(?<![A-Za-z0-9_./-])" + re.escape(action_ref) + r"(?![0-9a-fA-F])")
+    paths = {
+        line.removeprefix("HEAD:").split(":", 1)[0]
+        for line in result.stdout.splitlines()
+        if exact_ref.search(line)
+    }
+    return sorted(paths)
+
+
+def _workflow_pin_replacements(
+    base_text: str, head_text: str, relative_path: str
+) -> set[tuple[str, str, str]]:
+    base_refs = _workflow_action_refs(base_text)
+    head_refs = _workflow_action_refs(head_text)
+    replacements: set[tuple[str, str, str]] = set()
+    for action, old_refs in base_refs.items():
+        new_refs = head_refs.get(action, set())
+        for old_ref in old_refs - new_refs:
+            for new_ref in new_refs - old_refs:
+                replacements.add((relative_path, old_ref, new_ref))
+    return replacements
+
+
+def check_workflow_action_pin_guard(
+    repo_root: Path = REPO_ROOT,
+    base_ref: str = "origin/main",
+    changed_files: Iterable[str] = (),
+) -> dict[str, Any]:
+    """Reject stale exact action pins after a changed workflow pin replacement."""
+    workflow_files = sorted({path for path in changed_files if _is_workflow_yaml(path)})
+    report: dict[str, Any] = {
+        "schema_version": "robot-sf.workflow-action-pin-guard.v1",
+        "base_ref": base_ref,
+        "status": "not_applicable",
+        "changed_workflow_files": workflow_files,
+        "replacements": [],
+        "stale_references": [],
+    }
+    if not workflow_files:
+        report["message"] = "no workflow YAML changed"
+        return report
+    if not _git_ref_exists(repo_root, base_ref):
+        raise PolicyError(f"unable to resolve workflow action-pin base ref {base_ref!r}")
+
+    replacements: set[tuple[str, str, str]] = set()
+    for relative_path in workflow_files:
+        base_text = git_file_at_ref(repo_root, base_ref, relative_path) or ""
+        head_text = git_file_at_ref(repo_root, "HEAD", relative_path) or ""
+        replacements.update(_workflow_pin_replacements(base_text, head_text, relative_path))
+
+    replacement_rows = [
+        {"workflow_file": path, "old_ref": old_ref, "new_ref": new_ref}
+        for path, old_ref, new_ref in sorted(replacements)
+    ]
+    report["replacements"] = replacement_rows
+    if not replacement_rows:
+        report["message"] = "no full-SHA workflow action pin replacement detected"
+        return report
+
+    report["status"] = "pass"
+    stale_rows: list[dict[str, Any]] = []
+    for replacement in replacement_rows:
+        matching_paths = _head_ref_matches(repo_root, replacement["old_ref"])
+        if matching_paths:
+            stale_rows.append(
+                {
+                    **replacement,
+                    "matching_paths": matching_paths,
+                }
+            )
+    report["stale_references"] = stale_rows
+    if stale_rows:
+        report["status"] = "blocked"
+        details = "; ".join(
+            f"{row['old_ref']} -> {row['new_ref']} in {row['workflow_file']}; "
+            f"still present at {', '.join(row['matching_paths'])}"
+            for row in stale_rows
+        )
+        raise WorkflowActionPinError(
+            "workflow action pin guard found stale exact references: "
+            f"{details}. Update the coupled workflow/test references and rerun "
+            "check_dependabot_update_policy.py.",
+            report,
+        )
+    return report
+
+
 def _changed_project_names(
     repo_root: Path,
     base_ref: str,
@@ -729,11 +891,17 @@ def evaluate_update(
     """Return a fail-closed report for changed dependency files."""
     policy = policy or load_policy()
     files = changed_files(repo_root, base_ref, changed_files_path)
+    workflow_action_pin_guard = check_workflow_action_pin_guard(
+        repo_root=repo_root,
+        base_ref=base_ref,
+        changed_files=files,
+    )
     dependency_files = sorted(set(files) & set(DEPENDENCY_FILES))
     report: dict[str, Any] = {
         "schema_version": "robot-sf.dependabot-update-report.v1",
         "base_ref": base_ref,
         "dependency_files": dependency_files,
+        "workflow_action_pin_guard": workflow_action_pin_guard,
         "status": "not_applicable",
     }
     if not dependency_files:
@@ -814,7 +982,10 @@ def main(argv: list[str] | None = None) -> int:
         )
     except PolicyError as exc:
         if args.as_json:
-            print(json.dumps({"status": "blocked", "error": str(exc)}, indent=2, sort_keys=True))
+            report = {"status": "blocked", "error": str(exc)}
+            if isinstance(exc, WorkflowActionPinError):
+                report["workflow_action_pin_guard"] = exc.report
+            print(json.dumps(report, indent=2, sort_keys=True))
         else:
             print(f"DEPENDABOT POLICY: BLOCKED: {exc}", file=sys.stderr)
         return 1

@@ -154,6 +154,12 @@ shared primitives in `robot_sf/benchmark/`, `robot_sf/research/`, `scripts/tools
 orchestration, not re-deriving existing capability. If a new owner is unavoidable, state what it
 supersedes in the PR.
 
+When changing a pinned external GitHub Action (`uses: owner/action@<40-hex-SHA>`) in
+`.github/workflows/`, search for the old exact action reference and update coupled workflow or test
+references in the same change. Run `uv run python scripts/dev/check_dependabot_update_policy.py
+--base-ref origin/main --json` and the focused policy tests before handoff; this is the canonical
+guard for base-to-head action-pin drift.
+
 ## Build, Test, And Style
 
 Set up dependencies with `uv sync --all-extras` and hooks with `uv run pre-commit install`. Format

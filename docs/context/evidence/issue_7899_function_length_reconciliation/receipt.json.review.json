@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_7899_function_length_reconciliation/receipt.json",
+  "artifact_sha256": "39ce47564a3121a73452ef5909afd65752aa4c256cece282327d8dc19a016075",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

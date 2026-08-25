@@ -1,0 +1,29 @@
+{
+  "closed_child_symbols_resolved": 32,
+  "closed_child_symbols_still_over_threshold": [],
+  "counting_rule": "inclusive source lines from def to end of body; decorators excluded",
+  "findings_count": 32,
+  "full_report_pointer": "output/function_length_audit.json (ignored, worktree-local)",
+  "full_report_sha256": "81da165d9bf9a0dc9b4bf9cf89e0529739f8a8e977c876a731f8eb85cfba97a9",
+  "no_benchmark_execution": true,
+  "no_production_change": true,
+  "reconciliation": {
+    "closed_child_targets": "resolved_below_threshold or renamed_or_moved_resolved (none of the 32 child symbols remain over 200 lines on current main)",
+    "current_findings": "32 functions over 200 lines; none are covered by an existing open issue; all classified remaining_without_child",
+    "parent_disposition": "residual_children_required",
+    "rationale": "the 25 original #6456 child targets are resolved, but 32 current functions exceed the 200-line threshold and have no open decomposition issue"
+  },
+  "repository_commit": "77f44d99f61cb108c4d430b2d0b459db1a4149eb",
+  "scan": {
+    "excluded_count": 1,
+    "exclusions": {
+      "<root>/__init__.py": "package namespace re-exports only"
+    },
+    "file_count": 933,
+    "scanned_file_count": 932
+  },
+  "scanner": "scripts/dev/audit_function_lengths.py",
+  "scanner_schema": "function_length_audit.v1",
+  "schema": "function_length_reconciliation.v1",
+  "threshold": 200
+}

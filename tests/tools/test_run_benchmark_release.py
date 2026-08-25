@@ -153,6 +153,31 @@ def test_release_input_path_rejects_external_location_without_leaking_it(
         raise AssertionError("external release input was not rejected")
 
 
+def test_public_release_invocation_omits_absolute_scheduler_paths(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Public provenance retains the entrypoint but not private launch paths."""
+    repo = tmp_path / "repo"
+    manifest = repo / "configs" / "benchmarks" / "release.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("schema_version: benchmark-release-manifest.v0.2\n", encoding="utf-8")
+    monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: repo)
+    monkeypatch.setattr(
+        run_benchmark_release.sys,
+        "executable",
+        "/home/luttkule/private/release-worktree/.venv/bin/python",
+    )
+
+    command = run_benchmark_release._public_release_invocation(str(manifest), "run")
+
+    assert command == (
+        "python scripts/tools/run_benchmark_release.py "
+        "--manifest configs/benchmarks/release.yaml --mode run"
+    )
+    assert "/home/" not in command
+    assert not run_benchmark_release.find_offending_paths({"invoked_release_command": command})
+
+
 def test_local_stress_run_rejects_dirty_worktree(monkeypatch, capsys, tmp_path: Path) -> None:
     """The runner applies the exact-source clean-worktree gate outside SLURM too."""
     manifest = SimpleNamespace(

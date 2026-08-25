@@ -226,6 +226,26 @@ def _required_repo_relative(path: Path) -> str:
         raise ValueError("release input must be inside the repository worktree") from exc
 
 
+def _public_release_invocation(manifest_argument: str, mode: str) -> str:
+    """Return a reproducible public entrypoint without machine-local launch paths.
+
+    The complete scheduler invocation remains in private campaign provenance.  The
+    publication record intentionally omits operational arguments such as output
+    roots and receipt locations because those values identify local filesystems.
+    """
+    manifest_path = _repo_relative(Path(manifest_argument))
+    return shlex.join(
+        [
+            "python",
+            "scripts/tools/run_benchmark_release.py",
+            "--manifest",
+            manifest_path,
+            "--mode",
+            mode,
+        ]
+    )
+
+
 def _current_source_commit() -> str:
     """Return the exact checked-out source commit or fail closed."""
     completed = subprocess.run(
@@ -841,7 +861,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
 
     release_provenance_kwargs: dict[str, Any] = {
         "campaign_root": campaign_root,
-        "invoked_command": invoked_command,
+        "invoked_command": _public_release_invocation(args.manifest, args.mode),
     }
     if stress_smoke:
         release_provenance_kwargs["source_commit"] = runtime_source_commit

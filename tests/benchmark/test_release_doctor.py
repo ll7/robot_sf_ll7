@@ -1515,3 +1515,39 @@ def test_packet_private_evidence_accepts_pinned_receipt(tmp_path: Path) -> None:
         checkpoint_receipt=tmp_path / "configs" / "checkpoint_staging_receipt",
     )
     assert check.status == "pass", check.summary
+
+
+def test_runtime_smoke_receipt_mutation_fails_closed(tmp_path: Path) -> None:
+    """Issue #7919: a post-packet runtime-smoke receipt mutation fails admission."""
+    packet, queue = _write_final_packet_fixture(tmp_path)
+    smoke_receipt = tmp_path / "configs" / "runtime_smoke_receipt"
+    # Pass the exact pinned receipt first.
+    check = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+        checkpoint_receipt=tmp_path / "configs" / "checkpoint_staging_receipt",
+    )
+    assert check.status == "pass", check.summary
+
+    # Mutate the runtime-smoke receipt in the checkout after packet creation.
+    smoke_receipt.write_text(
+        smoke_receipt.read_text(encoding="utf-8") + "# post-packet mutation\n",
+        encoding="utf-8",
+    )
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+        checkpoint_receipt=tmp_path / "configs" / "checkpoint_staging_receipt",
+    )
+    assert rejected.status == "fail"
+    assert "runtime_smoke_receipt hash does not match checkout" in rejected.summary

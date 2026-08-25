@@ -8,6 +8,8 @@ import stat
 import subprocess
 from pathlib import Path
 
+from tests.support.environment_guards import configure_git_identity
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUN_CI_LOCAL = REPO_ROOT / "scripts" / "dev" / "run_ci_local.sh"
 RUN_SHARED_VENV = REPO_ROOT / "scripts" / "dev" / "run_worktree_shared_venv.sh"
@@ -166,8 +168,7 @@ def _docs_proof_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
         target.chmod(target.stat().st_mode | stat.S_IXUSR)
     (repo / "README.md").write_text("fixture\n", encoding="utf-8")
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-    subprocess.run(["git", "config", "user.email", "fixture@example.invalid"], cwd=repo, check=True)
-    subprocess.run(["git", "config", "user.name", "Fixture"], cwd=repo, check=True)
+    configure_git_identity(repo, name="Fixture", email="fixture@example.invalid")
     subprocess.run(["git", "add", "README.md"], cwd=repo, check=True)
     subprocess.run(["git", "commit", "-qm", "fixture"], cwd=repo, check=True)
 

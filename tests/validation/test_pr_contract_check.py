@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from scripts.ci import pr_contract_check
+from tests.support.environment_guards import configure_git_identity
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -581,8 +582,7 @@ class TestPlaceholderDocstringRatchet:
         repo = tmp_path / "repo"
         repo.mkdir()
         subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-        subprocess.run(["git", "config", "user.email", "ci@example.com"], cwd=repo, check=True)
-        subprocess.run(["git", "config", "user.name", "CI"], cwd=repo, check=True)
+        configure_git_identity(repo, name="CI", email="ci@example.com")
         # A base commit with a pre-existing (grandfathered) stub.
         legacy = repo / "tool.py"
         legacy.write_text(

@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 from robot_sf.benchmark.snqi.compute import recompute_snqi_weights
+from tests.support.environment_guards import configure_git_identity
 
 _BASELINE_STATS = {"collisions": {"median": 0.5, "p95": 2.0}}
 
@@ -40,15 +41,7 @@ def test_git_sha_resolves_in_a_git_checkout(monkeypatch, tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@example.example"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"], cwd=repo, check=True, capture_output=True
-    )
+    configure_git_identity(repo, name="Test", email="test@example.example")
     (repo / "README").write_text("init\n", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
     subprocess.run(["git", "commit", "-m", "init"], cwd=repo, check=True, capture_output=True)

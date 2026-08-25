@@ -237,13 +237,17 @@ def test_reset_accounting_tracks_reason_and_count(adapter) -> None:
     """Reset records the boundary reason and increments the reset count."""
     adapter.predict(_obs())
     assert adapter.diagnostics()["reset_count"] == 0
-    adapter.reset(reason="episode_terminated")
+    adapter.reset()
     diagnostics = adapter.diagnostics()
     assert diagnostics["reset_count"] == 1
-    assert diagnostics["last_reset_reason"] == "episode_terminated"
+    assert diagnostics["last_reset_reason"] == "explicit_reset"
     assert diagnostics["episode_start"] is True
-    adapter.reset(reason="scenario_replaced")
-    assert adapter.diagnostics()["reset_count"] == 2
+    adapter.reset_state(reason="episode_terminated")
+    diagnostics = adapter.diagnostics()
+    assert diagnostics["reset_count"] == 2
+    assert diagnostics["last_reset_reason"] == "episode_terminated"
+    adapter.reset_state(reason="scenario_replaced")
+    assert adapter.diagnostics()["reset_count"] == 3
 
 
 def test_reset_with_seed_sets_sequence_identity(adapter) -> None:

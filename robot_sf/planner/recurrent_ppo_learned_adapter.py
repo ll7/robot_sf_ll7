@@ -372,12 +372,16 @@ class RecurrentPPOLearnedLocalPolicyAdapter:
         """Return the unicycle command as a planner-protocol action dictionary."""
         return dict(self.predict(obs).action)
 
-    def reset(self, *, seed: int | None = None, reason: str = "explicit_reset") -> None:
+    def reset(self, *, seed: int | None = None) -> None:
         """Clear recurrent state for a new episode and scenario boundary.
 
         The reset is idempotent: clearing an already-clear state is a no-op for
         the recurrent payload but still records the explicit boundary reason.
         """
+        self.reset_state(seed=seed, reason="explicit_reset")
+
+    def reset_state(self, *, seed: int | None = None, reason: str = "explicit_reset") -> None:
+        """Clear recurrent state with an explicit lifecycle reason recorded."""
         if seed is not None:
             self._seed = seed
         self._lstm_states = None

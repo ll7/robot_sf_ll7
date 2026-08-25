@@ -326,6 +326,12 @@ reviewed_files:
       and worktree-local dataset identities have the same four generic-linter findings; the atlas
       validator and review-marker sidecar provide the stronger path/digest checks. This remains
       diagnostic-only and is not benchmark, paper, or dissertation evidence.
+  - path: docs/context/evidence/issue_7399_forecast_preparation/forecast_preparation_packet.json
+    codes: [artifact_hash_mismatch]
+    disposition: baseline
+    reason: >-
+      Issue #7399 forecast preparation packet declares an artifact checksum that differs from
+      the repo-root-relative resolved target; record this provenance finding explicitly as baseline.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
     codes: [dangling_commit]
@@ -385,3 +391,4 @@ reviewed_baseline_increases:
       ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
       this checkout-dependent historical provenance finding explicitly; do not rewrite the
       artifact or producer SHA in this baseline reconciliation.
+

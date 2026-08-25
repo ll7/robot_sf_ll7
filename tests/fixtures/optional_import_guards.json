@@ -6,7 +6,7 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 118,
+  "total_guards": 119,
   "spellings": {
     "AttributeError+ImportError": {
       "count_ceiling": 3,
@@ -17,7 +17,7 @@
       "samples": [
         "robot_sf/baselines/sicnav.py:378",
         "robot_sf/benchmark/latency/latency_stress.py:826",
-        "robot_sf/planner/socnav_base.py:726"
+        "robot_sf/planner/socnav_base.py:738"
       ]
     },
     "AttributeError+ImportError+IndexError+KeyError+OSError+RuntimeError+TypeError+ValueError": {
@@ -57,7 +57,7 @@
       "blessed": true,
       "note": "Blessed broad catch: defensive best-effort boundary. Very broad; do not extend further without strong justification.",
       "samples": [
-        "robot_sf/planner/socnav_base.py:591"
+        "robot_sf/planner/socnav_base.py:603"
       ]
     },
     "AttributeError+ImportError+OSError": {
@@ -102,9 +102,9 @@
       ]
     },
     "ImportError": {
-      "count_ceiling": 81,
+      "count_ceiling": 82,
       "has_as_count": 21,
-      "pragma_no_cover_count": 24,
+      "pragma_no_cover_count": 25,
       "blessed": true,
       "note": "Pure optional-import. Prefer robot_sf.common.optional_import.try_import for new plain cases.",
       "samples": [
@@ -177,6 +177,7 @@
         "robot_sf/planner/ompl_geometric_adapter.py:193",
         "robot_sf/planner/ompl_smoke.py:42",
         "robot_sf/planner/ompl_smoke.py:254",
+        "robot_sf/planner/recurrent_ppo_learned_adapter.py:40",
         "robot_sf/planner/socnav.py:90",
         "robot_sf/planner/socnav.py:98",
         "robot_sf/planner/socnav.py:103",
@@ -212,7 +213,7 @@
       "blessed": true,
       "note": "Blessed broad catch: defensive ingest boundary. Review carefully.",
       "samples": [
-        "robot_sf/benchmark/camera_ready/resource_lifecycle.py:279"
+        "robot_sf/benchmark/camera_ready/resource_lifecycle.py:284"
       ]
     },
     "ImportError+ParquetDependencyError": {

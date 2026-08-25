@@ -324,6 +324,27 @@ def test_terminal_queue_rejects_second_attempt(tmp_path: Path) -> None:
     assert "one consumed attempt" in check.summary
 
 
+def test_terminal_queue_rejects_malformed_forbidden_marker(tmp_path: Path) -> None:
+    """A structured or nonnumeric marker cannot masquerade as a zero count."""
+    queue_path, jobs_path = _private_ledgers(tmp_path)
+    queue = yaml.safe_load(queue_path.read_text(encoding="utf-8"))
+    queue[0]["fallback_rows"] = ["malformed-positive-marker"]
+    _write_yaml(queue_path, queue)
+    check = doctor._private_execution_check(
+        queue_path,
+        jobs_path,
+        source_sha=doctor.FROZEN_SOURCE_SHA,
+        campaign_id=doctor.EXPECTED_CAMPAIGN_ID,
+        job_id=doctor.EXPECTED_JOB_ID,
+        derived_evaluation_receipt=None,
+        public_revalidation_receipt=None,
+        publication_bundle=None,
+        publication_archive=None,
+    )
+    assert check.status == "fail"
+    assert "positive forbidden runtime marker" in check.summary
+
+
 def test_post_execution_receipt_rejects_ranking_snqi(tmp_path: Path) -> None:
     """A derived receipt cannot turn failed SNQI calibration into ranking evidence."""
     acceptance = {
@@ -453,6 +474,15 @@ def test_credential_scan_rejects_recorded_or_payload_credentials(tmp_path: Path)
     assert doctor._credential_scan_problems(
         bundle, {"credentials": "not_recorded"}, extra_archive
     ) == ["publication archive file set differs from supplied bundle"]
+    traversal_directory_archive = tmp_path / "traversal-directory.tar.gz"
+    with tarfile.open(traversal_directory_archive, "w:gz") as handle:
+        handle.add(bundle, arcname=bundle.name)
+        traversal = tarfile.TarInfo(f"{bundle.name}/../escape")
+        traversal.type = tarfile.DIRTYPE
+        handle.addfile(traversal)
+    assert doctor._credential_scan_problems(
+        bundle, {"credentials": "not_recorded"}, traversal_directory_archive
+    ) == ["publication archive member path differs from bundle layout"]
 
 
 def test_post_execution_identity_is_fixed_to_frozen_candidate(tmp_path: Path) -> None:
@@ -758,6 +788,8 @@ def test_low_level_inputs_fail_closed_without_leaking_payload(tmp_path: Path) ->
     assert doctor._int(" 12 ") == 12
     assert doctor._int("1.2") is None
     assert doctor._positive_forbidden_markers({"nested": [{"fallback_count": 1}]})
+    assert doctor._positive_forbidden_markers({"fallback_rows": ["malformed"]})
+    assert doctor._positive_forbidden_markers({"fallback_count": "not-a-number"})
     assert not doctor._positive_forbidden_markers({"fallback_count": 0})
     with pytest.raises(ValueError, match="ledger is missing"):
         doctor._load_rows(None)

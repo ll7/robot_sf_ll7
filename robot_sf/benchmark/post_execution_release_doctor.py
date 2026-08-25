@@ -375,7 +375,9 @@ def _positive_forbidden_markers(payload: Any) -> bool:
     if isinstance(payload, dict):
         for key, value in payload.items():
             if str(key).lower() in _FORBIDDEN_MARKER_KEYS:
-                if _int(value) not in {None, 0} or (isinstance(value, bool) and value):
+                # Marker fields are scalar counts. A malformed or structured value cannot
+                # prove the required zero and must therefore fail closed.
+                if _int(value) != 0:
                     return True
             if _positive_forbidden_markers(value):
                 return True
@@ -731,7 +733,11 @@ def _credential_scan_problems(  # noqa: C901, PLR0912
     if bundle is None or not bundle.is_dir():
         return problems
     try:
-        files = [path for path in bundle.rglob("*") if path.is_file()]
+        bundle_entries = list(bundle.rglob("*"))
+        files = [path for path in bundle_entries if path.is_file()]
+        bundle_directories = {
+            path.relative_to(bundle).as_posix() for path in bundle_entries if path.is_dir()
+        }
     except OSError:
         return [*problems, "publication payload could not be scanned for credentials"]
     for path in files:
@@ -760,11 +766,6 @@ def _credential_scan_problems(  # noqa: C901, PLR0912
                         "publication archive contains credential-shaped member metadata"
                     )
                     return problems
-                if member.isdir():
-                    continue
-                if not member.isfile():
-                    problems.append("publication archive contains a non-file/non-directory member")
-                    return problems
                 member_path = Path(member.name)
                 parts = member_path.parts
                 if (
@@ -776,6 +777,14 @@ def _credential_scan_problems(  # noqa: C901, PLR0912
                     problems.append("publication archive member path differs from bundle layout")
                     return problems
                 relative = Path(*parts[1:]).as_posix()
+                if member.isdir():
+                    if relative not in {".", *bundle_directories}:
+                        problems.append("publication archive directory differs from bundle layout")
+                        return problems
+                    continue
+                if not member.isfile():
+                    problems.append("publication archive contains a non-file/non-directory member")
+                    return problems
                 if not relative or relative in archive_files:
                     problems.append("publication archive has an empty or duplicate file member")
                     return problems

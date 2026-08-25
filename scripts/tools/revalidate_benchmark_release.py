@@ -1638,9 +1638,8 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         _assert_no_private_absolute_paths(staging_campaign)
         os.replace(staging_campaign, final_campaign)
         staging_parent.rmdir()
-    except Exception:
+    finally:
         shutil.rmtree(staging_parent, ignore_errors=True)
-        raise
 
     return {
         "status": "published_to_staging",

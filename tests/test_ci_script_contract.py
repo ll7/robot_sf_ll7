@@ -34,6 +34,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.support.environment_guards import configure_git_identity
+
 ROOT = Path(__file__).resolve().parents[1]
 CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
 GH_COMMENT = ROOT / "scripts" / "dev" / "gh_comment.sh"
@@ -627,20 +629,7 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_
     fake_uv.chmod(0o755)
 
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
-    subprocess.run(
-        ["git", "config", "user.email", "agent@example.invalid"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Agent"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    configure_git_identity(repo, name="Agent", email="agent@example.invalid")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
     subprocess.run(
         ["git", "commit", "-m", "base fixture"],
@@ -1084,20 +1073,7 @@ def test_pr_ready_check_final_mode_preflights_analytics_dependencies(tmp_path: P
     fake_uv.chmod(0o755)
 
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
-    subprocess.run(
-        ["git", "config", "user.email", "agent@example.invalid"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Agent"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    configure_git_identity(repo, name="Agent", email="agent@example.invalid")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
     subprocess.run(
         ["git", "commit", "-m", "test fixture"],
@@ -1279,20 +1255,7 @@ def test_pr_ready_check_help_does_not_invoke_gates(tmp_path: Path) -> None:
     fake_uv.chmod(0o755)
 
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
-    subprocess.run(
-        ["git", "config", "user.email", "agent@example.invalid"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Agent"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    configure_git_identity(repo, name="Agent", email="agent@example.invalid")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
     subprocess.run(
         ["git", "commit", "-m", "test fixture"],
@@ -1486,20 +1449,7 @@ def _make_freshness_fixture_repo(
     fake_uv.chmod(0o755)
 
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
-    subprocess.run(
-        ["git", "config", "user.email", "agent@example.invalid"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Agent"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    configure_git_identity(repo, name="Agent", email="agent@example.invalid")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
     subprocess.run(
         ["git", "commit", "-m", "freshness fixture"],
@@ -2685,20 +2635,7 @@ def _make_help_fixture_repo(
     fake_uv.chmod(0o755)
 
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
-    subprocess.run(
-        ["git", "config", "user.email", "agent@example.invalid"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Agent"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    configure_git_identity(repo, name="Agent", email="agent@example.invalid")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
     subprocess.run(
         ["git", "commit", "-m", "test fixture"],
@@ -3003,20 +2940,7 @@ def test_bootstrap_worktree_forwards_repeatable_extras_to_uv_sync(tmp_path: Path
     fake_uv.chmod(0o755)
 
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
-    subprocess.run(
-        ["git", "config", "user.email", "agent@example.invalid"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Agent"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    configure_git_identity(repo, name="Agent", email="agent@example.invalid")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
     subprocess.run(
         ["git", "commit", "-m", "bootstrap extra fixture"],
@@ -3090,20 +3014,7 @@ def test_bootstrap_worktree_targets_an_explicit_linked_worktree(tmp_path: Path) 
     fake_uv.chmod(0o755)
 
     subprocess.run(["git", "init"], cwd=main_repo, check=True, capture_output=True, text=True)
-    subprocess.run(
-        ["git", "config", "user.email", "agent@example.invalid"],
-        cwd=main_repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Agent"],
-        cwd=main_repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    configure_git_identity(main_repo, name="Agent", email="agent@example.invalid")
     subprocess.run(["git", "add", "."], cwd=main_repo, check=True, capture_output=True, text=True)
     subprocess.run(
         ["git", "commit", "-m", "bootstrap target fixture"],
@@ -3222,20 +3133,7 @@ def test_bootstrap_worktree_fails_closed_on_missing_python(tmp_path: Path) -> No
     fake_uv.chmod(0o755)
 
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
-    subprocess.run(
-        ["git", "config", "user.email", "agent@example.invalid"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Agent"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    configure_git_identity(repo, name="Agent", email="agent@example.invalid")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
     subprocess.run(
         ["git", "commit", "-m", "bootstrap test fixture"],
@@ -3310,20 +3208,7 @@ def test_bootstrap_worktree_succeeds_when_python_present(tmp_path: Path) -> None
     fake_uv.chmod(0o755)
 
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
-    subprocess.run(
-        ["git", "config", "user.email", "agent@example.invalid"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Agent"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    configure_git_identity(repo, name="Agent", email="agent@example.invalid")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
     subprocess.run(
         ["git", "commit", "-m", "bootstrap success fixture"],

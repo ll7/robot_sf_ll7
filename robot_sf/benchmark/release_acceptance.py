@@ -422,8 +422,9 @@ def _read_campaign_summary(campaign_root: Path) -> tuple[dict[str, Any] | None, 
     """
     try:
         path = resolve_campaign_artifact_path(campaign_root, "reports/campaign_summary.json")
-    except (OSError, ValueError):
-        return None, "campaign summary cannot be read: path is missing or unsafe"
+    except (OSError, ValueError) as exc:
+        category = "symlink is unsafe" if "symlink" in str(exc).lower() else "path is missing or unsafe"
+        return None, f"campaign summary cannot be read: campaign_summary.json {category}"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except OSError:

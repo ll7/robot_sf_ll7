@@ -838,6 +838,7 @@ def test_final_cluster_check_validates_packet_queue_and_launch_contract(tmp_path
         expected_campaign_id="campaign-1",
         queue_path=queue,
         repo=tmp_path,
+        checkpoint_receipt=tmp_path / "configs" / "checkpoint_staging_receipt",
     )
     assert check.status == "pass", check.summary
 
@@ -852,6 +853,7 @@ def test_final_cluster_check_validates_packet_queue_and_launch_contract(tmp_path
         expected_campaign_id="campaign-1",
         queue_path=queue,
         repo=tmp_path,
+        checkpoint_receipt=tmp_path / "configs" / "checkpoint_staging_receipt",
     )
     assert rejected.status == "fail"
     assert "resource contract mismatch" in rejected.summary
@@ -870,6 +872,7 @@ def test_final_cluster_check_accepts_frozen_imech192_packet(tmp_path: Path) -> N
         expected_campaign_id="campaign-1",
         queue_path=queue,
         repo=tmp_path,
+        checkpoint_receipt=tmp_path / "configs" / "checkpoint_staging_receipt",
     )
     assert check.status == "pass", check.summary
 
@@ -892,6 +895,7 @@ def test_final_cluster_check_accepts_count_only_gpu_gres(tmp_path: Path) -> None
         expected_campaign_id="campaign-1",
         queue_path=queue,
         repo=tmp_path,
+        checkpoint_receipt=tmp_path / "configs" / "checkpoint_staging_receipt",
     )
     assert check.status == "pass", check.summary
 
@@ -1339,6 +1343,7 @@ def test_final_cluster_check_accepts_exact_scheduler_time_as_duration_evidence(
         expected_campaign_id="campaign-1",
         queue_path=queue,
         repo=tmp_path,
+        checkpoint_receipt=tmp_path / "configs" / "checkpoint_staging_receipt",
     )
     assert check.status == "pass", check.summary
 
@@ -1457,3 +1462,56 @@ def test_final_cluster_check_rejects_runtime_smoke_identity_drift(tmp_path: Path
     )
     assert rejected.status == "fail"
     assert "runtime_smoke_receipt hash is not bound" in rejected.summary
+
+
+def test_packet_private_evidence_rejects_missing_receipt_file(tmp_path: Path) -> None:
+    """A final packet without its pinned checkpoint receipt fails closed."""
+    packet, queue = _write_final_packet_fixture(tmp_path)
+    check = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+        checkpoint_receipt=tmp_path / "configs" / "missing-receipt.json",
+    )
+    assert check.status == "fail"
+    assert "checkpoint receipt file is missing" in check.summary
+
+
+def test_packet_private_evidence_rejects_receipt_drift(tmp_path: Path) -> None:
+    """A receipt file that drifts from the packet-pinned digest fails closed."""
+    packet, queue = _write_final_packet_fixture(tmp_path)
+    receipt = tmp_path / "configs" / "checkpoint_staging_receipt"
+    drifted = tmp_path / "configs" / "drifted-receipt.json"
+    drifted.write_text(receipt.read_text(encoding="utf-8") + "\n# drifted\n", encoding="utf-8")
+    check = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+        checkpoint_receipt=drifted,
+    )
+    assert check.status == "fail"
+    assert "checkpoint receipt hash does not match packet-pinned evidence" in check.summary
+
+
+def test_packet_private_evidence_accepts_pinned_receipt(tmp_path: Path) -> None:
+    """An exact packet-pinned receipt passes the private-evidence check."""
+    packet, queue = _write_final_packet_fixture(tmp_path)
+    check = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+        checkpoint_receipt=tmp_path / "configs" / "checkpoint_staging_receipt",
+    )
+    assert check.status == "pass", check.summary

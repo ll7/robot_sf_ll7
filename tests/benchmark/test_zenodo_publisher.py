@@ -257,16 +257,31 @@ def test_reserve_upload_publish_and_verify_without_credentials_in_state(tmp_path
         {
             "filename": bundle.name,
             "size": bundle.stat().st_size,
-            "links": {"download": "https://zenodo.org/api/records/123/files/bundle/content"},
+            "links": {"download": "https://zenodo.org/api/records/123/draft/files/bundle/content"},
         }
     ]
+    published_record = {
+        "id": 123,
+        "conceptrecid": "122",
+        "doi": "10.5281/zenodo.123",
+        "status": "published",
+        "files": [
+            {
+                "key": bundle.name,
+                "size": bundle.stat().st_size,
+                "links": {"self": "https://zenodo.org/api/records/123/files/bundle/content"},
+            }
+        ],
+    }
     downloaded = _Response({})
     downloaded.content = bundle.read_bytes()
-    session.gets = [_Response(remote), downloaded]
+    session.gets = [_Response(remote), _Response(published_record), downloaded]
     report = verify(session, state, _metadata())
     assert report["status"] == "pass"
     assert report["publication_state"] == "published"
     assert report["file_count"] == 1
+    assert session.urls[-2] == "https://zenodo.org/api/records/123"
+    assert session.urls[-1] == "https://zenodo.org/api/records/123/files/bundle/content"
 
 
 def test_verify_accepts_zenodo_license_and_creator_normalization(tmp_path: Path) -> None:

@@ -7,6 +7,9 @@ pin the safety contract: deterministic inference, conservative
 idempotence.
 """
 
+# evidence-writer-exempt: tests write throwaway tmp_path evidence-catalog fixtures
+# for proposer diagnostics; nothing generated is committed as repository evidence.
+
 from __future__ import annotations
 
 import subprocess

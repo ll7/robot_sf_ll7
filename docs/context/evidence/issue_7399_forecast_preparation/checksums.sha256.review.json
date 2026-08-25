@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_7399_forecast_preparation/checksums.sha256",
-  "artifact_sha256": "f4ab69adedc5501048e82160ca4930629bbeb32fcc32d260f2820d6961e504f4",
+  "artifact_sha256": "ec87ece95c6827d036ef5abda1933be8817fd35c7603fc83e282029fb5a98901",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

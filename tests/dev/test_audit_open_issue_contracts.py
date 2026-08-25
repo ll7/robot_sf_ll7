@@ -12,6 +12,7 @@ from scripts.dev.audit_open_issue_contracts import (
     NEXT_ACTIONS,
     _build_report,
     _fixture_evaluator,
+    _fixture_pagination,
     _render_markdown,
     _validate_fixture,
 )
@@ -111,9 +112,11 @@ def _report(
 ) -> dict[str, Any]:
     """Build one deterministic report from fixture data."""
     normalized = _validate_fixture(fixture)
-    pages = normalized["pages"][:max_pages]
-    complete = bool(pages) and len(pages[-1]) < page_size
-    errors = [] if complete else ["fixture pagination incomplete"]
+    pages, complete, errors = _fixture_pagination(
+        normalized,
+        page_size=page_size,
+        max_pages=max_pages,
+    )
     return _build_report(
         repo="ll7/robot_sf_ll7",
         source="fixture",
@@ -192,6 +195,17 @@ def test_full_final_page_at_limit_is_truncated() -> None:
     assert report["complete"] is False
     assert report["applicable"] is False
     assert report["content_sha256"]
+
+
+def test_hidden_extra_fixture_page_is_truncated() -> None:
+    """Extra source pages beyond max-pages remain incomplete even after a short selected page."""
+    fixture = _fixture([_raw_issue(1)])
+    fixture["pages"] = [[_raw_issue(1)], [], []]
+
+    report = _report(fixture, page_size=100, max_pages=2)
+    assert report["complete"] is False
+    assert report["applicable"] is False
+    assert any("fixture pagination is incomplete" in error for error in report["errors"])
 
 
 def test_listing_to_exact_read_drift_cannot_authorize_dispatch() -> None:

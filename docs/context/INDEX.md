@@ -1,5 +1,11 @@
 # Context Retrieval Index
 
+Issue #7848 RecurrentPPO learned adapter: stateful `sb3_contrib.RecurrentPPO` local planner
+under the #7846 `default_gym` observation contract (`drive_state` + `rays`), recurrent hidden/cell
+state lifecycle across control steps and reset boundaries, deterministic inference mode,
+action parity, fail-closed checkpoint validation, and versioned diagnostics telemetry:
+[issue_7848_recurrent_ppo_adapter_contract.md](issue_7848_recurrent_ppo_adapter_contract.md).
+
 Issue #7670 exact dependency-license disposition: the canonical inventory now
 binds the reviewed llvmlite 0.49.0 package/version/expression, lock artifacts,
 profile target, notice references, and allowed release surfaces without

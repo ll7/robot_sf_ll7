@@ -102,9 +102,7 @@ def _fixture(
         "pages": pages,
         "exact_issues": {str(number): value for number, value in exact_rows.items()},
         "claims": {str(number): value for number, value in claim_rows.items()},
-        "dependencies": {
-            str(number): value for number, value in (dependencies or {}).items()
-        },
+        "dependencies": {str(number): value for number, value in (dependencies or {}).items()},
     }
 
 

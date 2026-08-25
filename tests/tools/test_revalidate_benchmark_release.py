@@ -346,7 +346,62 @@ def test_source_binding_redirects_all_relative_asset_resolvers(tmp_path: Path) -
         assert recovery.camera_config_module.get_repository_root() == source
         assert artifact_publication.get_repository_root() == source
         assert release_acceptance.get_repository_root() == validator
-        assert recovery.camera_run_state_module.get_repository_root() == validator
+        assert recovery.camera_run_state_module.get_repository_root() == source
+
+
+def test_private_path_hygiene_rejects_paths_in_text_and_binary(tmp_path: Path) -> None:
+    """Public projections reject private path markers in every admitted format."""
+    root = tmp_path / "projection"
+    _write(root / "notes.txt", "/var/worktrees/private/job.json\n")
+    with pytest.raises(recovery.DerivedReleaseError, match="private absolute path"):
+        recovery._assert_no_private_absolute_paths(root)
+
+    binary = root / "payload.pdf"
+    binary.write_bytes(b"%PDF\x00/var/worktrees/private/job.json\x00")
+    (root / "notes.txt").write_text("portable\n", encoding="utf-8")
+    with pytest.raises(recovery.DerivedReleaseError, match="private absolute path"):
+        recovery._assert_no_private_absolute_paths(root)
+
+
+def test_optional_accepted_receipt_is_schema_checked_and_bound(tmp_path: Path) -> None:
+    """An accepted receipt must describe the accepted map and retrieved receipt."""
+    root, _ = _make_verified_retrieval(tmp_path)
+    evidence = recovery._verify_campaign_file_map(
+        root,
+        expected_sums_sha256=_sha256(root / "SHA256SUMS"),
+        expected_result_sha256=_sha256(root / "release/release_result.json"),
+        expected_file_count=2,
+    )
+    retrieved = recovery.verify_producer_artifacts(
+        root,
+        expected_sums_sha256=_sha256(root / "SHA256SUMS"),
+        expected_receipt_sha256=_sha256(root / "artifact-verification-receipt.json"),
+        expected_rejected_result_sha256=_sha256(root / "release/release_result.json"),
+        expected_file_count=2,
+    )
+    recovery._assert_accepted_receipt_relation(evidence, retrieved)
+    _write(root / "artifact-verification-receipt.json", "tampered\n")
+    with pytest.raises(recovery.DerivedReleaseError, match="invalid JSON input"):
+        recovery._verify_campaign_file_map(
+            root,
+            expected_sums_sha256=_sha256(root / "SHA256SUMS"),
+            expected_result_sha256=_sha256(root / "release/release_result.json"),
+            expected_file_count=2,
+        )
+
+
+def test_validator_checkout_must_be_distinct_from_source_and_helper(tmp_path: Path) -> None:
+    """A reviewed validator cannot be the source or helper checkout itself."""
+    source = tmp_path / "source"
+    validator = tmp_path / "validator"
+    source.mkdir()
+    validator.mkdir()
+    recovery._assert_distinct_validator_checkout(validator, source)
+    with pytest.raises(recovery.DerivedReleaseError, match="distinct"):
+        recovery._assert_distinct_validator_checkout(source, source)
+    helper = Path(recovery.__file__).resolve().parents[2]
+    with pytest.raises(recovery.DerivedReleaseError, match="distinct"):
+        recovery._assert_distinct_validator_checkout(helper, source)
 
 
 def test_seed_set_path_uses_manifest_relative_loader_rule(tmp_path: Path) -> None:
@@ -424,13 +479,40 @@ def test_validator_provenance_requires_exact_reviewed_commit(tmp_path: Path) -> 
 def test_exact_validator_subprocess_uses_supplied_checkout() -> None:
     """The acceptance result is produced by the explicitly supplied checkout."""
     root = Path(__file__).parents[2].resolve()
-    manifest = root / (
+    candidates = [root.parent / "release-fix-adaptive-algo-b1d5-20260825"]
+    candidates = [
+        path
+        for path in candidates
+        if path.resolve() != root
+        and (path / "robot_sf/benchmark/release_acceptance.py").is_file()
+        and (
+            path
+            / "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml"
+        ).is_file()
+    ]
+    if not candidates:
+        pytest.skip("requires a distinct reviewed validator checkout")
+    validator = candidates[0]
+    source_candidates = [root.parent / "release-exec-s30-h600-b1d5ab6de708-20260825"]
+    source_candidates = [
+        path
+        for path in source_candidates
+        if path.resolve() != root
+        and (
+            path
+            / "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml"
+        ).is_file()
+    ]
+    if not source_candidates:
+        pytest.skip("requires a distinct frozen source checkout")
+    source = source_candidates[0]
+    manifest = source / (
         "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml"
     )
     result = recovery._run_exact_validator(
-        validator_root=root,
-        source_root=root,
-        acceptance_root=root,
+        validator_root=validator,
+        source_root=source,
+        acceptance_root=validator,
         manifest_path=manifest,
     )
     assert result["status"] == "not_applicable"
@@ -442,7 +524,9 @@ def test_build_derived_release_cleans_partial_stage_on_bundle_failure(
     """A failed export leaves neither a final target nor a hidden partial stage."""
     producer, _ = _make_verified_retrieval(tmp_path)
     source = tmp_path / "source"
+    validator = tmp_path / "validator"
     source.mkdir()
+    validator.mkdir()
     manifest = source / "manifest.yaml"
     _write(manifest, "manifest\n")
     config_path = source / "config.yaml"
@@ -548,7 +632,7 @@ def test_build_derived_release_cleans_partial_stage_on_bundle_failure(
             producer_root=producer,
             acceptance_root=producer,
             source_repository_root=source,
-            validator_repository_root=source,
+            validator_repository_root=validator,
             expected_validator_commit="d" * 40,
             manifest_path=manifest,
             output_root=output_root,
@@ -564,7 +648,9 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
     """The build path promotes one complete campaign/publication snapshot atomically."""
     producer, _ = _make_verified_retrieval(tmp_path)
     source = tmp_path / "source"
+    validator = tmp_path / "validator"
     source.mkdir()
+    validator.mkdir()
     manifest = source / "manifest.yaml"
     config_path = source / "config.yaml"
     _write(manifest, "manifest\n")
@@ -674,7 +760,7 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
         producer_root=producer,
         acceptance_root=producer,
         source_repository_root=source,
-        validator_repository_root=source,
+        validator_repository_root=validator,
         expected_validator_commit="d" * 40,
         manifest_path=manifest,
         output_root=output_root,

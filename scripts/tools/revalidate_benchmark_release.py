@@ -72,7 +72,7 @@ SNQI_ADVISORY_BOUNDARY = (
 
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _PRIVATE_ABSOLUTE_PATH_RE = re.compile(
-    rb"(?<![A-Za-z0-9_:/])/(?:home|root|Users|tmp|scratch|dev/shm|gpfs|lustre|mnt|work|worktrees|workspace)/[^\s\"'<>`]+"
+    rb"(?<![A-Za-z0-9_:/])/(?:home|root|Users|tmp|scratch|dev/shm|gpfs|lustre|mnt|work|worktrees|workspace|var)/[^\s\"'<>`]+"
 )
 _TEXT_SUFFIXES = {
     ".bib",
@@ -167,6 +167,16 @@ def _assert_safe_directory(path: Path, *, label: str) -> Path:
     return lexical
 
 
+def _assert_safe_file(path: Path, *, label: str) -> Path:
+    """Require a regular file whose parent path contains no symlink."""
+    lexical = Path(path).absolute()
+    if any(component.is_symlink() for component in lexical.parents) or lexical.is_symlink():
+        raise DerivedReleaseError(f"{label} contains a symlink component")
+    if not lexical.is_file():
+        raise DerivedReleaseError(f"{label} is missing or not a regular file")
+    return lexical
+
+
 def _is_text_capable(path: Path) -> bool:
     """Classify only explicitly supported text/binary formats.
 
@@ -197,7 +207,7 @@ def _source_repository_binding(source_root: Path, *, validator_root: Path | None
     release_protocol_module.get_repository_root = lambda: source_root
     artifact_publication_module.get_repository_root = lambda: source_root
     camera_config_module.get_repository_root = lambda: source_root
-    camera_run_state_module.get_repository_root = lambda: validator_root or source_root
+    camera_run_state_module.get_repository_root = lambda: source_root
     release_acceptance_module.get_repository_root = lambda: validator_root or source_root
     try:
         yield
@@ -238,8 +248,7 @@ def _read_json_bytes(data: bytes, *, label: str) -> dict[str, Any]:
 
 def _read_single_gzip_member(path: Path) -> bytes:
     """Read exactly one gzip member and reject truncation or trailing data."""
-    if path.is_symlink() or not path.is_file():
-        raise DerivedReleaseError("preserved receipt source is missing or unsafe")
+    path = _assert_safe_file(path, label="preserved receipt source")
     try:
         compressed = path.read_bytes()
     except OSError as exc:
@@ -385,7 +394,17 @@ def _verify_campaign_file_map(
         raise DerivedReleaseError("accepted campaign file inventory does not match SHA256SUMS")
     map_paths = sorted(listed | {PRODUCER_SUMS_NAME})
     separate_receipt = None
+    separate_receipt_payload = None
     if receipt_path.is_file():
+        separate_receipt_payload = _read_json(receipt_path)
+        _validate_receipt(
+            separate_receipt_payload,
+            label="accepted campaign artifact-verification-receipt",
+            root=root,
+            sums_digest=sums_digest,
+            entries=entries,
+            expected_file_count=expected_file_count,
+        )
         separate_receipt = {
             "path": PRODUCER_RECEIPT_NAME,
             "bytes": receipt_path.stat().st_size,
@@ -400,7 +419,28 @@ def _verify_campaign_file_map(
         "rejected_release_result_sha256": result_digest,
         "file_map": _build_file_map(root, map_paths),
         "separate_receipt": separate_receipt,
+        "_separate_receipt_payload": separate_receipt_payload,
     }
+
+
+def _assert_accepted_receipt_relation(
+    accepted: Mapping[str, Any], retrieved: Mapping[str, Any]
+) -> None:
+    """Bind an optional accepted receipt to the retrieved receipt semantics."""
+    accepted_receipt = accepted.get("_separate_receipt_payload")
+    if accepted_receipt is None:
+        return
+    current_bytes = retrieved.get("_current_receipt_bytes")
+    if not isinstance(current_bytes, bytes):
+        raise DerivedReleaseError("retrieved artifact receipt is unavailable for relation binding")
+    current_receipt = _read_json_bytes(current_bytes, label="retrieved artifact receipt")
+    differences = _json_difference_paths(accepted_receipt, current_receipt)
+    if differences not in ([], ["verified_at"]):
+        raise DerivedReleaseError(
+            "accepted artifact receipt differs from retrieved receipt outside verified_at"
+        )
+    if differences == ["verified_at"]:
+        _validate_preserved_refresh(accepted_receipt, current_receipt)
 
 
 def _assert_equal_file_maps(accepted: Mapping[str, Any], retrieved: Mapping[str, Any]) -> None:
@@ -764,8 +804,10 @@ def _sanitise_tree_paths(
 def _assert_no_private_absolute_paths(root: Path) -> None:
     """Reject private absolute path markers in the public projection."""
     for path in _all_tree_files(root):
-        if not _is_text_capable(path):
-            continue
+        # Classify every file, including opaque scientific binaries.  Binary
+        # payloads are never rewritten, but a known private path marker in one
+        # is still a publication leak and must fail closed.
+        _is_text_capable(path)
         try:
             data = path.read_bytes()
         except OSError as exc:
@@ -878,6 +920,17 @@ def _validator_provenance(repo_root: Path, *, expected_commit: str) -> dict[str,
     }
 
 
+def _assert_distinct_validator_checkout(validator_root: Path, source_root: Path) -> None:
+    """Reject the frozen source or helper checkout as the reviewed validator."""
+    validator = Path(validator_root).resolve()
+    source = Path(source_root).resolve()
+    helper = Path(__file__).resolve().parents[2]
+    if validator in {source, helper}:
+        raise DerivedReleaseError(
+            "validator checkout must be distinct from frozen source and helper checkout"
+        )
+
+
 def _run_exact_validator(
     *,
     validator_root: Path,
@@ -886,6 +939,7 @@ def _run_exact_validator(
     manifest_path: Path,
 ) -> dict[str, Any]:
     """Execute the reviewed validator from its clean checkout in isolation."""
+    _assert_distinct_validator_checkout(validator_root, source_root)
     script = r"""
 import json
 from pathlib import Path
@@ -1068,11 +1122,11 @@ def _assert_publication_inputs_from_manifest(
     return bound
 
 
-def _assert_frozen_source_repository(source_root: Path, expected_sha: str) -> None:
-    """Require the explicitly supplied source checkout to be clean and exact."""
+def _assert_frozen_source_repository(source_root: Path) -> None:
+    """Require the supplied source checkout to be clean and the fixed release SHA."""
     _assert_safe_directory(source_root, label="source repository root")
     actual = _git_value(["rev-parse", "HEAD^{commit}"], cwd=source_root).lower()
-    if actual != expected_sha:
+    if actual != FROZEN_SOURCE_SHA:
         raise DerivedReleaseError("source repository checkout is not the frozen execution SHA")
     status = subprocess.run(
         ["git", "status", "--porcelain=v1", "--untracked-files=all"],
@@ -1358,7 +1412,6 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     expected_validator_commit: str,
     publication_name: str | None = None,
     preserved_receipt_source: Path | None = None,
-    expected_source_sha: str = FROZEN_SOURCE_SHA,
 ) -> dict[str, Any]:
     """Run the complete derived validation/build/promotion workflow.
 
@@ -1402,10 +1455,8 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     final_publication = final_campaign / publication_name
     if final_campaign.exists():
         raise DerivedReleaseError("derived campaign or publication target already exists")
-    if not re.fullmatch(r"[0-9a-f]{40}", expected_source_sha):
-        raise DerivedReleaseError("expected source SHA must be a 40-character lowercase SHA")
-
-    _assert_frozen_source_repository(source_repository_root, expected_source_sha)
+    _assert_distinct_validator_checkout(validator_repository_root, source_repository_root)
+    _assert_frozen_source_repository(source_repository_root)
     validator = _validator_provenance(
         validator_repository_root,
         expected_commit=expected_validator_commit,
@@ -1426,6 +1477,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         expected_file_count=EXPECTED_PRODUCER_FILE_COUNT,
     )
     _assert_equal_file_maps(accepted_evidence, producer_evidence)
+    _assert_accepted_receipt_relation(accepted_evidence, producer_evidence)
 
     with _source_repository_binding(
         source_repository_root,
@@ -1460,7 +1512,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     if acceptance.get("status") != "valid":
         raise DerivedReleaseError("corrected full-release acceptance rejected preserved rows")
     source_commits = acceptance.get("source_commits")
-    if source_commits != [expected_source_sha]:
+    if source_commits != [FROZEN_SOURCE_SHA]:
         raise DerivedReleaseError("acceptance did not bind every row to the frozen source SHA")
 
     output_root.mkdir(parents=True, exist_ok=True)
@@ -1496,7 +1548,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             manifest_validation=manifest_validation,
             acceptance=acceptance,
             validator=validator,
-            source_sha=expected_source_sha,
+            source_sha=FROZEN_SOURCE_SHA,
             derived_checksums=derived_checksums,
             publication_inputs=publication_inputs,
         )
@@ -1540,7 +1592,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             bundle_name=bundle_dir.name,
             archive_path=archive_path,
             bundle_dir=bundle_dir,
-            source_sha=expected_source_sha,
+            source_sha=FROZEN_SOURCE_SHA,
         )
         # Detect producer mutation before promotion.  This is deliberately the
         # same strict manifest check used before copying.
@@ -1571,6 +1623,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             expected_file_count=EXPECTED_PRODUCER_FILE_COUNT,
         )
         _assert_equal_file_maps(accepted_after, producer_after)
+        _assert_accepted_receipt_relation(accepted_after, producer_after)
         if accepted_after.get("separate_receipt") != accepted_evidence.get("separate_receipt"):
             raise DerivedReleaseError("accepted separate receipt changed during derived build")
         # Put campaign and publication artifacts under one staged directory,
@@ -1626,7 +1679,6 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Single-member gzip containing the immutable pre-refresh receipt.",
     )
-    parser.add_argument("--source-sha", default=FROZEN_SOURCE_SHA)
     return parser
 
 
@@ -1646,7 +1698,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             derived_name=args.derived_name,
             publication_name=args.publication_name,
             preserved_receipt_source=args.preserved_receipt,
-            expected_source_sha=args.source_sha,
         )
     except (DerivedReleaseError, OSError, ValueError, PublicationPreflightError) as exc:
         print(json.dumps({"status": "rejected", "reason": str(exc)}, indent=2))

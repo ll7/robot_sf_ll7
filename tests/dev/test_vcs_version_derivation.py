@@ -32,7 +32,6 @@ configuration surface that can regress.
 
 from __future__ import annotations
 
-import os
 import re
 import shlex
 import subprocess
@@ -41,6 +40,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+
+from tests.support.environment_guards import git_identity_environment
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -64,17 +65,8 @@ def _raw_options() -> Mapping[str, object]:
 
 
 def _git_env() -> Mapping[str, str]:
-    """Return an env with a deterministic git identity for throwaway repos."""
-    env = dict(os.environ)
-    env.update(
-        {
-            "GIT_AUTHOR_NAME": "robot-sf-tests",
-            "GIT_AUTHOR_EMAIL": "robot-sf-tests@example.com",
-            "GIT_COMMITTER_NAME": "robot-sf-tests",
-            "GIT_COMMITTER_EMAIL": "robot-sf-tests@example.com",
-        }
-    )
-    return env
+    """Return a hermetic env with a deterministic git identity for throwaway repos."""
+    return git_identity_environment(name="robot-sf-tests", email="robot-sf-tests@example.com")
 
 
 def _init_repo(root: Path) -> None:

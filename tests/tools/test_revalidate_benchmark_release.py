@@ -590,6 +590,42 @@ def test_exact_validator_subprocess_uses_supplied_checkout() -> None:
     assert result["status"] == "not_applicable"
 
 
+def test_exact_validator_runs_from_frozen_source_without_import_shadow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Relative source assets resolve from the frozen checkout, not validator tooling."""
+    validator = tmp_path / "validator"
+    source = tmp_path / "source"
+    acceptance = tmp_path / "acceptance"
+    manifest = source / "manifest.yaml"
+    for path in (validator, source, acceptance):
+        path.mkdir()
+    _write(manifest, "manifest\n")
+    _write(source / "maps/registry.yaml", "maps: {}\n")
+    observed: dict[str, object] = {}
+
+    def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+        observed["command"] = command
+        observed.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout='{"status":"valid"}\n', stderr="")
+
+    monkeypatch.setattr(recovery.subprocess, "run", fake_run)
+    result = recovery._run_exact_validator(
+        validator_root=validator,
+        source_root=source,
+        acceptance_root=acceptance,
+        manifest_path=manifest,
+    )
+
+    assert result["status"] == "valid"
+    assert observed["cwd"] == source
+    assert observed["env"]["PYTHONPATH"] == str(validator)  # type: ignore[index]
+    assert observed["env"]["ROBOT_SF_MAP_REGISTRY"] == str(  # type: ignore[index]
+        source / "maps/registry.yaml"
+    )
+    assert "sys.path.insert(0, str(validator_root))" in observed["command"][2]  # type: ignore[index]
+
+
 def test_build_derived_release_cleans_partial_stage_on_bundle_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

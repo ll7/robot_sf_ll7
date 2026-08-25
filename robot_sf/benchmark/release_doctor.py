@@ -104,6 +104,7 @@ _PUBLIC_PACKET_INPUT_NAMES = (
     "canonical_campaign_config",
     "scenario_matrix",
     "public_single_node_entrypoint",
+    "runtime_smoke_receipt",
     "release_runner",
 )
 
@@ -1323,7 +1324,9 @@ def _validate_packet_queue(  # noqa: C901
     artifact_path, separator, artifact_digest = artifact_manifest.partition(" sha256:")
     if not artifact_path.endswith(packet_path.name):
         problems.append("private queue artifact manifest does not match packet")
-    if separator and (
+    if not separator:
+        problems.append("private queue artifact manifest is not digest-bound to the packet")
+    elif (
         not _SHA256_RE.fullmatch(artifact_digest)
         or artifact_digest.lower() != _sha256(packet_path).lower()
     ):
@@ -1332,6 +1335,42 @@ def _validate_packet_queue(  # noqa: C901
     problems.extend(_validate_queue_submit_args(submit_args, packet_path, packet))
     problems.extend(_validate_queue_resources(row, packet))
     return list(dict.fromkeys(problems))
+
+
+def _validate_packet_private_evidence(
+    packet: dict[str, Any],
+    *,
+    checkpoint_receipt_path: Path | None,
+) -> list[str]:
+    """Verify private evidence files match the digests pinned by the packet.
+
+    The packet's identity block pins ``checkpoint_receipt_sha256``.  The doctor
+    must resolve the actual private evidence from the admitted packet and fail
+    closed when the file at the CLI-provided path drifts from the pinned digest,
+    so a stale, moved, or contradictory receipt cannot silently satisfy final
+    admission.
+
+    Returns:
+        Sanitized private-evidence drift problems.
+    """
+    problems: list[str] = []
+    identity = packet.get("identity")
+    pinned_receipt_sha = (
+        str(identity.get("checkpoint_receipt_sha256") or "").lower()
+        if isinstance(identity, dict)
+        else ""
+    )
+    if not pinned_receipt_sha:
+        return ["packet identity does not pin checkpoint_receipt_sha256"]
+    if checkpoint_receipt_path is None or not checkpoint_receipt_path.is_file():
+        return ["checkpoint receipt file is missing for packet-pinned evidence"]
+    try:
+        actual_sha = _sha256(checkpoint_receipt_path).lower()
+    except OSError:
+        return ["checkpoint receipt file could not be read for packet-pinned evidence"]
+    if actual_sha != pinned_receipt_sha:
+        problems.append("checkpoint receipt hash does not match packet-pinned evidence")
+    return problems
 
 
 def _validate_packet_contract(
@@ -1343,6 +1382,7 @@ def _validate_packet_contract(
     packet_path: Path,
     queue_path: Path | None,
     repo: Path | None,
+    checkpoint_receipt: Path | None = None,
 ) -> list[str]:
     """Validate final private launch identity, route, hashes, and startup contract.
 
@@ -1359,6 +1399,9 @@ def _validate_packet_contract(
         )
     )
     problems.extend(_validate_packet_file_hashes(packet, repo))
+    problems.extend(
+        _validate_packet_private_evidence(packet, checkpoint_receipt_path=checkpoint_receipt)
+    )
     problems.extend(_validate_packet_execution_contract(packet))
     problems.extend(_validate_packet_traceability(packet))
     problems.extend(_validate_packet_queue(packet, packet_path, queue_path, expected_sha))
@@ -1374,6 +1417,7 @@ def _cluster_check(
     expected_campaign_id: str | None = None,
     queue_path: Path | None = None,
     repo: Path | None = None,
+    checkpoint_receipt: Path | None = None,
 ) -> ReleaseDoctorCheck:
     """Require an admitted launch packet bound to the frozen public SHA.
 
@@ -1415,6 +1459,7 @@ def _cluster_check(
                 packet_path=packet_path,
                 queue_path=queue_path,
                 repo=repo,
+                checkpoint_receipt=checkpoint_receipt,
             )
         )
     return ReleaseDoctorCheck(
@@ -1591,6 +1636,7 @@ def collect_release_doctor_report(  # noqa: PLR0913
             expected_campaign_id=expected_campaign_id,
             queue_path=private_queue,
             repo=repo,
+            checkpoint_receipt=checkpoint_receipt,
         )
     else:
         # Preserve the lightweight preparation-mode contract for callers that

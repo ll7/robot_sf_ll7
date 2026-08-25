@@ -7,6 +7,8 @@ import subprocess
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
+from tests.support.environment_guards import configure_git_identity
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -1489,8 +1491,7 @@ def real_git_repo(tmp_path: Path, monkeypatch):
 
     worker_dir = tmp_path / "worker"
     subprocess.run(["git", "clone", str(remote_dir), str(worker_dir)], check=True)
-    subprocess.run(["git", "config", "user.name", "Test Committer"], cwd=worker_dir, check=True)
-    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=worker_dir, check=True)
+    configure_git_identity(worker_dir, name="Test Committer", email="test@example.com")
 
     (worker_dir / ".gitignore").write_text("*.json\noutput/\n", encoding="utf-8")
     (worker_dir / "base.txt").write_text("initial base content\n", encoding="utf-8")
@@ -1558,8 +1559,7 @@ def test_real_git_unpushed_branch_sync_integrates_main_and_is_ready(
     # Advance remote main by creating a commit in a temporary clone
     other_dir = worker.parent / "other"
     subprocess.run(["git", "clone", str(real_git_repo.remote), str(other_dir)], check=True)
-    subprocess.run(["git", "config", "user.name", "Main Author"], cwd=other_dir, check=True)
-    subprocess.run(["git", "config", "user.email", "main@example.com"], cwd=other_dir, check=True)
+    configure_git_identity(other_dir, name="Main Author", email="main@example.com")
     (other_dir / "main_update.txt").write_text("new main work\n", encoding="utf-8")
     subprocess.run(["git", "add", "main_update.txt"], cwd=other_dir, check=True)
     subprocess.run(["git", "commit", "-m", "update main"], cwd=other_dir, check=True)
@@ -1620,8 +1620,7 @@ def test_real_git_pushed_branch_sync_advances_head_requires_push(
     # Advance remote main
     other_dir = worker.parent / "other2"
     subprocess.run(["git", "clone", str(real_git_repo.remote), str(other_dir)], check=True)
-    subprocess.run(["git", "config", "user.name", "Main Author"], cwd=other_dir, check=True)
-    subprocess.run(["git", "config", "user.email", "main@example.com"], cwd=other_dir, check=True)
+    configure_git_identity(other_dir, name="Main Author", email="main@example.com")
     (other_dir / "main_update2.txt").write_text("main update 2\n", encoding="utf-8")
     subprocess.run(["git", "add", "main_update2.txt"], cwd=other_dir, check=True)
     subprocess.run(["git", "commit", "-m", "update main 2"], cwd=other_dir, check=True)
@@ -1698,8 +1697,7 @@ def test_real_git_local_commit_after_capture_fails_closed(
     # Advance remote main
     other_dir = worker.parent / "other3"
     subprocess.run(["git", "clone", str(real_git_repo.remote), str(other_dir)], check=True)
-    subprocess.run(["git", "config", "user.name", "Main Author"], cwd=other_dir, check=True)
-    subprocess.run(["git", "config", "user.email", "main@example.com"], cwd=other_dir, check=True)
+    configure_git_identity(other_dir, name="Main Author", email="main@example.com")
     (other_dir / "m3.txt").write_text("m3\n", encoding="utf-8")
     subprocess.run(["git", "add", "m3.txt"], cwd=other_dir, check=True)
     subprocess.run(["git", "commit", "-m", "m3 commit"], cwd=other_dir, check=True)
@@ -1744,8 +1742,7 @@ def test_real_git_merge_conflict_aborts_cleanly(real_git_repo, monkeypatch, caps
     # Create conflict on remote main
     other_dir = worker.parent / "other4"
     subprocess.run(["git", "clone", str(real_git_repo.remote), str(other_dir)], check=True)
-    subprocess.run(["git", "config", "user.name", "Main Author"], cwd=other_dir, check=True)
-    subprocess.run(["git", "config", "user.email", "main@example.com"], cwd=other_dir, check=True)
+    configure_git_identity(other_dir, name="Main Author", email="main@example.com")
     (other_dir / "base.txt").write_text("main branch conflicting edit\n", encoding="utf-8")
     subprocess.run(["git", "add", "base.txt"], cwd=other_dir, check=True)
     subprocess.run(["git", "commit", "-m", "main conflicting edit"], cwd=other_dir, check=True)

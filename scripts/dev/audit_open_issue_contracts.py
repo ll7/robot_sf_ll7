@@ -137,17 +137,19 @@ def _fetch_live_pages(
         if error:
             return pages, False, [error]
         if not isinstance(payload, list) or any(not isinstance(row, dict) for row in payload):
-            return pages, False, [
-                f"open issues page {page_number} must be a JSON array of objects"
-            ]
+            return pages, False, [f"open issues page {page_number} must be a JSON array of objects"]
         page = list(payload)
         pages.append(page)
         if len(page) < page_size:
             return pages, True, []
-    return pages, False, [
-        f"open issue inventory reached max_pages={max_pages} with a full final page; "
-        "pagination may be truncated"
-    ]
+    return (
+        pages,
+        False,
+        [
+            f"open issue inventory reached max_pages={max_pages} with a full final page; "
+            "pagination may be truncated"
+        ],
+    )
 
 
 def _validate_fixture(payload: Any) -> dict[str, Any]:
@@ -233,16 +235,12 @@ def _live_evaluator(*, repo: str, remote: str) -> Callable[[int], dict[str, Any]
     return evaluate
 
 
-def _listing_drift(
-    listed: Mapping[str, Any], exact: Mapping[str, Any]
-) -> list[dict[str, Any]]:
+def _listing_drift(listed: Mapping[str, Any], exact: Mapping[str, Any]) -> list[dict[str, Any]]:
     """Return field-level differences between the listing row and exact read."""
     drift: list[dict[str, Any]] = []
     for field in ("title", "state", "url", "labels", "assignees"):
         if listed.get(field) != exact.get(field):
-            drift.append(
-                {"field": field, "listed": listed.get(field), "exact": exact.get(field)}
-            )
+            drift.append({"field": field, "listed": listed.get(field), "exact": exact.get(field)})
     return drift
 
 
@@ -270,9 +268,7 @@ def _error_item(listed: Mapping[str, Any], message: str) -> dict[str, Any]:
     }
 
 
-def _item_from_report(
-    listed: Mapping[str, Any], report: Mapping[str, Any]
-) -> dict[str, Any]:
+def _item_from_report(listed: Mapping[str, Any], report: Mapping[str, Any]) -> dict[str, Any]:
     """Convert one canonical implementability report to a bounded preparation packet."""
     issue = report.get("issue")
     claim = report.get("claim")
@@ -457,9 +453,7 @@ def _markdown_cell(value: object) -> str:
     return str(value).replace("|", "\\|").replace("\n", " ")
 
 
-def _render_markdown(
-    report: Mapping[str, Any], *, item_limit: int, json_report: str | None
-) -> str:
+def _render_markdown(report: Mapping[str, Any], *, item_limit: int, json_report: str | None) -> str:
     """Render a bounded Markdown summary without reproducing issue bodies."""
     summary = report.get("summary", {})
     pagination = report.get("pagination", {})
@@ -496,9 +490,7 @@ def _render_markdown(
     items = list(report.get("items", []))
     non_ready_count = sum(item.get("classification") != "ready" for item in items)
     selected = [
-        item
-        for item in items
-        if item.get("classification") != "ready" or item.get("listing_drift")
+        item for item in items if item.get("classification") != "ready" or item.get("listing_drift")
     ][:item_limit]
     for item in selected:
         missing = ", ".join(str(value) for value in item.get("missing_fields", [])) or "—"

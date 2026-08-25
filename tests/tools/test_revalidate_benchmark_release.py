@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import math
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,6 +13,11 @@ from types import SimpleNamespace
 import pytest
 
 from robot_sf.benchmark import release_acceptance
+from robot_sf.benchmark.metrics import snqi as curvature_aware_snqi
+from robot_sf.benchmark.snqi_scalarization_sensitivity import (
+    load_baseline_mapping,
+    load_weight_mapping,
+)
 from scripts.tools import revalidate_benchmark_release as recovery
 
 
@@ -24,6 +30,26 @@ def _write(path: Path, value: str) -> None:
     """Write a UTF-8 fixture file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(value, encoding="utf-8")
+
+
+def _snqi_metrics(*, curvature_mean: float) -> dict[str, float]:
+    """Return a minimal metric payload on the pinned curvature-aware basis."""
+    root = Path(__file__).resolve().parents[2]
+    weights = load_weight_mapping(root / "configs/benchmarks/snqi_weights_camera_ready_v3.json")
+    baseline = load_baseline_mapping(root / "configs/benchmarks/snqi_baseline_camera_ready_v3.json")
+    metrics = {
+        "success": 1.0,
+        "time_to_goal_norm": 1.0,
+        "collisions": 0.0,
+        "near_misses": 0.0,
+        "comfort_exposure": 0.0,
+        "force_exceed_events": 0.0,
+        "jerk_mean": 0.0,
+        "curvature_mean": curvature_mean,
+    }
+    metrics["snqi"] = curvature_aware_snqi(metrics, weights, baseline_stats=baseline)
+    assert math.isfinite(metrics["snqi"])
+    return metrics
 
 
 def _make_verified_retrieval(tmp_path: Path) -> tuple[Path, dict[str, str]]:
@@ -212,6 +238,25 @@ def test_sanitise_tree_paths_removes_private_absolute_paths(tmp_path: Path) -> N
     assert "/root/" not in value
     assert "/Users/" not in value
     recovery._assert_no_private_absolute_paths(copied)
+
+
+def test_path_sanitiser_does_not_split_a_source_path_at_stream_boundary(tmp_path: Path) -> None:
+    """A long text line cannot corrupt a source path that crosses the old chunk boundary."""
+    source_root = tmp_path / "source"
+    producer_root = tmp_path / "producer"
+    copied = tmp_path / "copied"
+    copied.mkdir()
+    source_path = source_root / "output/benchmarks/campaign/runs/arm/episodes.jsonl"
+    split_offset = 1024 * 1024 - 8192 - 10
+    path = copied / "large.json"
+    path.write_bytes(b"x" * split_offset + str(source_path).encode() + b"x" * 9000 + b"\n")
+
+    recovery._sanitise_tree_paths(copied, source_root=source_root, producer_root=producer_root)
+
+    value = path.read_text(encoding="utf-8")
+    assert str(source_root) not in value
+    assert "output/benchmarks/campaign/runs/arm/episodes.jsonl" in value
+    assert "<external-path>" not in value
 
 
 def test_path_sanitiser_rejects_unknown_suffix_and_preserves_known_binary(
@@ -626,6 +671,265 @@ def test_exact_validator_runs_from_frozen_source_without_import_shadow(
     assert "sys.path.insert(0, str(validator_root))" in observed["command"][2]  # type: ignore[index]
 
 
+def test_publication_projection_annotates_only_pinned_goal_timeout_boundary(
+    tmp_path: Path,
+) -> None:
+    """A known terminal-boundary ambiguity gains a note without invented timing or metric drift."""
+    campaign = tmp_path / "campaign"
+    arm = "guarded_ppo__differential_drive"
+    episode_id = "francis2023_parallel_traffic--132--2bf83ad03db6559e"
+    episodes = campaign / "runs" / arm / "episodes.jsonl"
+    row = {
+        "episode_id": episode_id,
+        "status": "success",
+        "termination_reason": "success",
+        "steps": 400,
+        "metrics": {"success": 1.0, "time_to_goal": 39.9},
+        "outcome": {"route_complete": True, "timeout_event": True},
+        "event_ledger": {
+            "software_commit": recovery.FROZEN_SOURCE_SHA,
+            "exact_events": {"goal_reached": True, "timeout": True},
+        },
+    }
+    _write(episodes, json.dumps(row, sort_keys=True) + "\n")
+    original_digest = _sha256(episodes)
+    sidecar = episodes.with_name("episodes.jsonl.provenance.json")
+    _write(
+        sidecar,
+        json.dumps(
+            {
+                "raw_artifacts": [
+                    {
+                        "kind": "episodes_jsonl",
+                        "path": f"runs/{arm}/episodes.jsonl",
+                        "sha256": original_digest,
+                    }
+                ],
+                "derived_artifacts": [],
+                "rows": [{"raw_artifact": f"runs/{arm}/episodes.jsonl"}],
+            }
+        )
+        + "\n",
+    )
+    _write(campaign / "run_meta.json", json.dumps({"repo": {"commit": recovery.FROZEN_SOURCE_SHA}}))
+
+    evidence = recovery._annotate_publication_goal_timeout_boundaries(
+        campaign,
+        expected_rows={(arm, episode_id)},
+    )
+    sidecar_evidence = recovery._rebind_publication_sidecars(
+        campaign,
+        source_file_map={
+            f"runs/{arm}/episodes.jsonl": {
+                "sha256": original_digest,
+                "bytes": len(json.dumps(row, sort_keys=True) + "\n"),
+            },
+            f"runs/{arm}/episodes.jsonl.provenance.json": {
+                "sha256": _sha256(sidecar),
+                "bytes": sidecar.stat().st_size,
+            },
+        },
+        boundary_reconciliation=evidence,
+        expected_arm_count=1,
+        expected_row_count=1,
+    )
+
+    derived = json.loads(episodes.read_text(encoding="utf-8"))
+    assert derived["goal_timeout_boundary_note"] == recovery.GOAL_TIMEOUT_BOUNDARY_NOTE
+    assert "reached_goal_step" not in derived
+    assert derived["status"] == row["status"]
+    assert derived["termination_reason"] == row["termination_reason"]
+    assert derived["outcome"] == row["outcome"]
+    assert derived["metrics"] == row["metrics"]
+    refreshed_sidecar = json.loads(sidecar.read_text(encoding="utf-8"))
+    assert refreshed_sidecar["raw_artifacts"][0]["sha256"] == _sha256(episodes)
+    projection = refreshed_sidecar["derived_artifacts"][-1]
+    assert projection["producer_sha256"] == original_digest
+    assert projection["goal_timeout_boundary_annotation"]["timing_evidence_fabricated"] is False
+    assert evidence["annotated_row_count"] == 1
+    assert sidecar_evidence["row_count"] == 1
+    assert evidence["timing_evidence_fabricated"] is False
+    run_meta = json.loads((campaign / "run_meta.json").read_text(encoding="utf-8"))
+    assert run_meta["goal_timeout_boundary"]["unresolved_rows"] == 0
+
+
+def test_publication_projection_rejects_unexpected_goal_timeout_row_before_writing(
+    tmp_path: Path,
+) -> None:
+    """An unreviewed ambiguous identity cannot be silently annotated by the recovery helper."""
+    campaign = tmp_path / "campaign"
+    episodes = campaign / "runs" / "guarded_ppo__differential_drive" / "episodes.jsonl"
+    row = {
+        "episode_id": "unexpected-row",
+        "status": "success",
+        "termination_reason": "success",
+        "metrics": {"success": 1.0},
+        "outcome": {"route_complete": True, "timeout_event": True},
+        "event_ledger": {"exact_events": {"goal_reached": True, "timeout": True}},
+    }
+    original = json.dumps(row, sort_keys=True) + "\n"
+    _write(episodes, original)
+
+    with pytest.raises(recovery.DerivedReleaseError, match="reviewed boundary-row set"):
+        recovery._annotate_publication_goal_timeout_boundaries(
+            campaign,
+            expected_rows={
+                (
+                    "guarded_ppo__differential_drive",
+                    "francis2023_parallel_traffic--132--2bf83ad03db6559e",
+                )
+            },
+        )
+    assert episodes.read_text(encoding="utf-8") == original
+
+
+def test_publication_projection_rejects_inconsistent_goal_timeout_semantics(
+    tmp_path: Path,
+) -> None:
+    """The reviewed identity cannot receive a note when its scientific outcome is inconsistent."""
+    campaign = tmp_path / "campaign"
+    arm = "guarded_ppo__differential_drive"
+    episode_id = "francis2023_parallel_traffic--132--2bf83ad03db6559e"
+    episodes = campaign / "runs" / arm / "episodes.jsonl"
+    row = {
+        "episode_id": episode_id,
+        "status": "failure",
+        "termination_reason": "success",
+        "metrics": {"success": 1.0},
+        "outcome": {"route_complete": True, "timeout_event": True},
+        "event_ledger": {"exact_events": {"goal_reached": True, "timeout": True}},
+    }
+    original = json.dumps(row, sort_keys=True) + "\n"
+    _write(episodes, original)
+
+    with pytest.raises(recovery.DerivedReleaseError, match="successful terminal semantics"):
+        recovery._annotate_publication_goal_timeout_boundaries(
+            campaign,
+            expected_rows={(arm, episode_id)},
+        )
+    assert episodes.read_text(encoding="utf-8") == original
+
+
+@pytest.mark.parametrize("malformed_value", ["false", "true", 1, [], {}])
+def test_publication_projection_requires_literal_boolean_boundary_events(
+    malformed_value: object,
+) -> None:
+    """Truth-like malformed event values cannot authorize a publication annotation."""
+    record = {
+        "event_ledger": {
+            "exact_events": {"goal_reached": malformed_value, "timeout": True},
+        }
+    }
+
+    assert recovery._is_unresolved_goal_timeout_boundary(record) is False
+
+
+def test_publication_projection_reconciles_snqi_ordering_as_advisory(
+    tmp_path: Path,
+) -> None:
+    """Stored SNQI fields define diagnostics ordering but never gain ranking authority."""
+    campaign = tmp_path / "campaign"
+    root = Path(__file__).resolve().parents[2]
+    weights = root / "configs/benchmarks/snqi_weights_camera_ready_v3.json"
+    baseline = root / "configs/benchmarks/snqi_baseline_camera_ready_v3.json"
+    rows = {
+        "goal__differential_drive": _snqi_metrics(curvature_mean=0.05),
+        "orca__differential_drive": _snqi_metrics(curvature_mean=0.5),
+    }
+    for arm, metrics in rows.items():
+        _write(
+            campaign / "runs" / arm / "episodes.jsonl",
+            json.dumps({"episode_id": arm, "metrics": metrics}) + "\n",
+        )
+    diagnostics = {
+        "contract_enabled": True,
+        "contract_enforcement": "warn",
+        "contract_status": "fail",
+        "weights_sha256": _sha256(weights),
+        "baseline_sha256": _sha256(baseline),
+        "planner_ordering": [
+            {
+                "planner_key": "orca",
+                "kinematics": "differential_drive",
+                "episode_count": 1,
+                "mean_snqi": rows["orca__differential_drive"]["snqi"],
+                "rank": 1,
+            },
+            {
+                "planner_key": "goal",
+                "kinematics": "differential_drive",
+                "episode_count": 1,
+                "mean_snqi": rows["goal__differential_drive"]["snqi"],
+                "rank": 2,
+            },
+        ],
+        "positioning": {"planner_ordering_informative": True, "caveats": []},
+    }
+    _write(campaign / "reports" / "snqi_diagnostics.json", json.dumps(diagnostics) + "\n")
+
+    evidence = recovery._reconcile_publication_snqi_diagnostics(
+        campaign,
+        expected_row_count=2,
+        expected_arm_count=2,
+    )
+
+    reconciled = json.loads(
+        (campaign / "reports" / "snqi_diagnostics.json").read_text(encoding="utf-8")
+    )
+    assert [row["planner_key"] for row in reconciled["planner_ordering"]] == ["goal", "orca"]
+    assert reconciled["contract_status"] == "fail"
+    assert reconciled["contract_enforcement"] == "warn"
+    assert reconciled["release_claim_boundary"]["ranking_authority"] is False
+    assert reconciled["positioning"]["planner_ordering_informative"] is False
+    assert evidence["verified_episode_rows"] == 2
+    assert evidence["post_reconciliation_violation_count"] == 0
+    markdown = (campaign / "reports" / "snqi_diagnostics.md").read_text(encoding="utf-8")
+    assert recovery.SNQI_ADVISORY_BOUNDARY in markdown
+
+
+def test_publication_projection_rejects_drifted_stored_snqi(tmp_path: Path) -> None:
+    """Ordering repair cannot hide a per-episode scalarization mismatch."""
+    campaign = tmp_path / "campaign"
+    root = Path(__file__).resolve().parents[2]
+    weights = root / "configs/benchmarks/snqi_weights_camera_ready_v3.json"
+    baseline = root / "configs/benchmarks/snqi_baseline_camera_ready_v3.json"
+    metrics = _snqi_metrics(curvature_mean=0.05)
+    metrics["snqi"] += 0.25
+    _write(
+        campaign / "runs" / "goal__differential_drive" / "episodes.jsonl",
+        json.dumps({"episode_id": "drifted", "metrics": metrics}) + "\n",
+    )
+    _write(
+        campaign / "reports" / "snqi_diagnostics.json",
+        json.dumps(
+            {
+                "contract_enabled": True,
+                "contract_enforcement": "warn",
+                "contract_status": "fail",
+                "weights_sha256": _sha256(weights),
+                "baseline_sha256": _sha256(baseline),
+                "planner_ordering": [
+                    {
+                        "planner_key": "goal",
+                        "kinematics": "differential_drive",
+                        "episode_count": 1,
+                        "mean_snqi": metrics["snqi"],
+                        "rank": 1,
+                    }
+                ],
+            }
+        )
+        + "\n",
+    )
+
+    with pytest.raises(recovery.DerivedReleaseError, match="drift beyond"):
+        recovery._reconcile_publication_snqi_diagnostics(
+            campaign,
+            expected_row_count=1,
+            expected_arm_count=1,
+        )
+
+
 def test_build_derived_release_cleans_partial_stage_on_bundle_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -728,6 +1032,21 @@ def test_build_derived_release_cleans_partial_stage_on_bundle_failure(
         recovery,
         "_assert_publication_inputs_from_manifest",
         lambda *_args, **_kwargs: {},
+    )
+    monkeypatch.setattr(
+        recovery,
+        "_annotate_publication_goal_timeout_boundaries",
+        lambda *_args, **_kwargs: {"annotated_row_count": 1},
+    )
+    monkeypatch.setattr(
+        recovery,
+        "_rebind_publication_sidecars",
+        lambda *_args, **_kwargs: {"arm_count": 14, "row_count": 20_160},
+    )
+    monkeypatch.setattr(
+        recovery,
+        "_reconcile_publication_snqi_diagnostics",
+        lambda *_args, **_kwargs: {"verified_episode_rows": 20_160},
     )
 
     def fail_export(*_args, **_kwargs):
@@ -843,6 +1162,21 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
         recovery,
         "_assert_publication_inputs_from_manifest",
         lambda *_a, **_k: {},
+    )
+    monkeypatch.setattr(
+        recovery,
+        "_annotate_publication_goal_timeout_boundaries",
+        lambda *_a, **_k: {"annotated_row_count": 1},
+    )
+    monkeypatch.setattr(
+        recovery,
+        "_rebind_publication_sidecars",
+        lambda *_a, **_k: {"arm_count": 14, "row_count": 20_160},
+    )
+    monkeypatch.setattr(
+        recovery,
+        "_reconcile_publication_snqi_diagnostics",
+        lambda *_a, **_k: {"verified_episode_rows": 20_160},
     )
     monkeypatch.setattr(recovery, "verify_publication_bundle_preflight", lambda *_a, **_k: {})
 

@@ -985,12 +985,16 @@ def _run_exact_validator(
     _assert_distinct_validator_checkout(validator_root, source_root)
     script = r"""
 import json
+import sys
 from pathlib import Path
 
-validator_root = Path(__import__("sys").argv[1])
-source_root = Path(__import__("sys").argv[2])
-acceptance_root = Path(__import__("sys").argv[3])
-manifest_path = Path(__import__("sys").argv[4])
+validator_root = Path(sys.argv[1])
+source_root = Path(sys.argv[2])
+acceptance_root = Path(sys.argv[3])
+manifest_path = Path(sys.argv[4])
+# Resolve source-relative assets from the frozen checkout while keeping the
+# reviewed validator implementation ahead of the working directory on import.
+sys.path.insert(0, str(validator_root))
 
 from robot_sf.benchmark import release_protocol as protocol
 from robot_sf.benchmark import release_acceptance as acceptance_module
@@ -1016,8 +1020,14 @@ print(json.dumps(result, sort_keys=True, default=str))
 """
     environment = os.environ.copy()
     # A validator checkout must win over any editable helper checkout in the
-    # caller's environment.  Keep only the exact checkout on PYTHONPATH.
+    # caller's environment. Source-owned registry paths must likewise resolve
+    # from the frozen execution checkout rather than the validator checkout.
     environment["PYTHONPATH"] = str(validator_root)
+    source_map_registry = _assert_safe_file(
+        source_root / "maps/registry.yaml",
+        label="frozen source map registry",
+    )
+    environment["ROBOT_SF_MAP_REGISTRY"] = str(source_map_registry)
     completed = subprocess.run(
         [
             sys.executable,
@@ -1028,7 +1038,7 @@ print(json.dumps(result, sort_keys=True, default=str))
             str(acceptance_root),
             str(manifest_path),
         ],
-        cwd=validator_root,
+        cwd=source_root,
         env=environment,
         capture_output=True,
         text=True,

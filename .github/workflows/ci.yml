@@ -749,6 +749,7 @@ jobs:
         run: |
           python scripts/dev/check_ci_needs.py \
             --event-name "${{ github.event_name }}" \
+            --treat-cancelled-as-superseded \
             --results "$CI_NEEDS_JSON"
 
       - name: Download test-duration shards

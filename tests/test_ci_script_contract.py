@@ -438,6 +438,7 @@ def test_ci_aggregate_uses_declarative_needs_checker() -> None:
     assert "--results" in result_step["run"]
     assert "python scripts/dev/check_ci_needs.py" in result_step["run"]
     assert "uv run python scripts/dev/check_ci_needs.py" not in result_step["run"]
+    assert "--treat-cancelled-as-superseded" in result_step["run"]
     assert '--results "$CI_NEEDS_JSON"' in result_step["run"]
     assert result_step.get("env", {}).get("CI_NEEDS_JSON") == "${{ toJSON(needs) }}"
     checkout_index = next(

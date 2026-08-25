@@ -24,6 +24,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import zlib
 from collections.abc import Mapping, Sequence
@@ -40,10 +41,10 @@ from robot_sf.benchmark.artifact_publication import (
     verify_publication_bundle_preflight,
 )
 from robot_sf.benchmark.camera_ready import _config as camera_config_module
+from robot_sf.benchmark.camera_ready import _run_state as camera_run_state_module
 from robot_sf.benchmark.camera_ready._config import load_campaign_config
 from robot_sf.benchmark.camera_ready_campaign import write_campaign_report
 from robot_sf.benchmark.identity.hash_utils import sha256_file
-from robot_sf.benchmark.release_acceptance import validate_full_benchmark_release_acceptance
 from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
 
 FROZEN_SOURCE_SHA = "b1d5ab6de708385c0828c99501a9d1c29727ec11"
@@ -71,8 +72,38 @@ SNQI_ADVISORY_BOUNDARY = (
 
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 _PRIVATE_ABSOLUTE_PATH_RE = re.compile(
-    rb"(?<![A-Za-z0-9_:/])/(?:home|tmp|scratch|dev/shm|gpfs|lustre|mnt|work)/[^\s\"'<>`]+"
+    rb"(?<![A-Za-z0-9_:/])/(?:home|root|Users|tmp|scratch|dev/shm|gpfs|lustre|mnt|work|worktrees|workspace)/[^\s\"'<>`]+"
 )
+_TEXT_SUFFIXES = {
+    ".bib",
+    ".cff",
+    ".cfg",
+    ".conf",
+    ".csv",
+    ".html",
+    ".htm",
+    ".ini",
+    ".json",
+    ".jsonl",
+    ".log",
+    ".lock",
+    ".md",
+    ".py",
+    ".rst",
+    ".sbatch",
+    ".sha256",
+    ".sh",
+    ".sum",
+    ".svg",
+    ".tex",
+    ".toml",
+    ".tsv",
+    ".txt",
+    ".xml",
+    ".yaml",
+    ".yml",
+}
+_TEXT_NAMES = {"CITATION", "LICENSE", "Makefile", "README", "SHA256SUMS"}
 _BINARY_SUFFIXES = {
     ".7z",
     ".bin",
@@ -88,6 +119,10 @@ _BINARY_SUFFIXES = {
     ".onnx",
     ".pdf",
     ".pickle",
+    ".db",
+    ".sqlite",
+    ".sqlite3",
+    ".parquet",
     ".png",
     ".pt",
     ".pth",
@@ -104,9 +139,24 @@ class DerivedReleaseError(RuntimeError):
     """Raised when a preserved release cannot be promoted safely."""
 
 
+_SAFE_COMPONENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def _validate_safe_component(value: str, *, label: str) -> str:
+    """Require a generated output name to be one safe path component."""
+    if not isinstance(value, str) or not value or value in {".", ".."}:
+        raise DerivedReleaseError(f"{label} must be a non-empty safe path component")
+    candidate = Path(value)
+    if candidate.is_absolute() or len(candidate.parts) != 1 or candidate.name != value:
+        raise DerivedReleaseError(f"{label} must be a single relative path component")
+    if not _SAFE_COMPONENT_RE.fullmatch(value):
+        raise DerivedReleaseError(f"{label} contains unsafe characters")
+    return value
+
+
 def _assert_safe_directory(path: Path, *, label: str) -> Path:
     """Require a real directory with no symlink path component."""
-    lexical = Path(path.absolute())
+    lexical = Path(path).absolute()
     current = Path(lexical.anchor)
     for part in lexical.parts[1:]:
         current /= part
@@ -118,8 +168,22 @@ def _assert_safe_directory(path: Path, *, label: str) -> Path:
 
 
 def _is_text_capable(path: Path) -> bool:
-    """Use a strict binary allowlist; every other file is scanned as text."""
-    return path.suffix.lower() not in _BINARY_SUFFIXES
+    """Classify only explicitly supported text/binary formats.
+
+    Unknown suffixes are rejected instead of being decoded as text.  This is
+    important for opaque scientific payloads such as SQLite and Parquet: a
+    publication projection must never rewrite a binary file merely because it
+    happened to contain bytes that look like UTF-8.
+    """
+    if (
+        path.name in _TEXT_NAMES
+        or path.name.endswith("SHA256SUMS")
+        or path.suffix.lower() in _TEXT_SUFFIXES
+    ):
+        return True
+    if path.suffix.lower() in _BINARY_SUFFIXES:
+        return False
+    raise DerivedReleaseError(f"unsupported publication file type: {path.name}")
 
 
 @contextlib.contextmanager
@@ -128,10 +192,12 @@ def _source_repository_binding(source_root: Path, *, validator_root: Path | None
     previous_protocol_root = release_protocol_module.get_repository_root
     previous_publication_root = artifact_publication_module.get_repository_root
     previous_config_root = camera_config_module.get_repository_root
+    previous_run_state_root = camera_run_state_module.get_repository_root
     previous_acceptance_root = release_acceptance_module.get_repository_root
     release_protocol_module.get_repository_root = lambda: source_root
     artifact_publication_module.get_repository_root = lambda: source_root
     camera_config_module.get_repository_root = lambda: source_root
+    camera_run_state_module.get_repository_root = lambda: validator_root or source_root
     release_acceptance_module.get_repository_root = lambda: validator_root or source_root
     try:
         yield
@@ -139,6 +205,7 @@ def _source_repository_binding(source_root: Path, *, validator_root: Path | None
         release_protocol_module.get_repository_root = previous_protocol_root
         artifact_publication_module.get_repository_root = previous_publication_root
         camera_config_module.get_repository_root = previous_config_root
+        camera_run_state_module.get_repository_root = previous_run_state_root
         release_acceptance_module.get_repository_root = previous_acceptance_root
 
 
@@ -208,7 +275,7 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
 
 def _relative_path(root: Path, path: Path) -> str:
     """Return a POSIX path relative to ``root``."""
-    return path.resolve().relative_to(root.resolve()).as_posix()
+    return path.absolute().relative_to(root.absolute()).as_posix()
 
 
 def _all_tree_files(root: Path) -> list[Path]:
@@ -308,14 +375,23 @@ def _verify_campaign_file_map(
         )
     _verify_hashes(root, entries)
     listed = set(entries)
-    optional_receipt = (
-        {PRODUCER_RECEIPT_NAME} if (root / PRODUCER_RECEIPT_NAME).is_file() else set()
-    )
+    receipt_path = root / PRODUCER_RECEIPT_NAME
+    if receipt_path.is_symlink():
+        raise DerivedReleaseError("accepted campaign receipt is symlinked")
+    optional_receipt = {PRODUCER_RECEIPT_NAME} if receipt_path.is_file() else set()
     actual = {_relative_path(root, path) for path in all_files}
     expected_actual = listed | {PRODUCER_SUMS_NAME} | optional_receipt
     if actual != expected_actual:
         raise DerivedReleaseError("accepted campaign file inventory does not match SHA256SUMS")
     map_paths = sorted(listed | {PRODUCER_SUMS_NAME})
+    separate_receipt = None
+    if receipt_path.is_file():
+        separate_receipt = {
+            "path": PRODUCER_RECEIPT_NAME,
+            "bytes": receipt_path.stat().st_size,
+            "sha256": sha256_file(receipt_path).lower(),
+            "policy": "accepted-root-receipt-is-separate-from-admitted-row-map",
+        }
     return {
         "status": "verified",
         "listed_file_count": len(entries),
@@ -323,6 +399,7 @@ def _verify_campaign_file_map(
         "sha256sums_sha256": sums_digest,
         "rejected_release_result_sha256": result_digest,
         "file_map": _build_file_map(root, map_paths),
+        "separate_receipt": separate_receipt,
     }
 
 
@@ -459,7 +536,7 @@ def verify_producer_artifacts(  # noqa: C901
     Optional expected values remain explicit so small unit fixtures can
     exercise the same fail-closed logic.
     """
-    root = producer_root.resolve()
+    root = _assert_safe_directory(producer_root, label="producer retrieval root")
     admitted_receipt_sha256 = expected_receipt_sha256 or (
         EXPECTED_REFRESHED_PRODUCER_RECEIPT_SHA256
         if preserved_receipt_source is not None
@@ -610,13 +687,24 @@ def _copy_tree_without_symlinks(
             raise DerivedReleaseError("producer tree changed to include a non-regular entry")
 
 
-def _sanitise_bytes(data: bytes, *, source_root: Path, producer_root: Path) -> bytes:
+def _sanitise_bytes(
+    data: bytes,
+    *,
+    source_root: Path,
+    producer_root: Path,
+    validator_root: Path | None = None,
+) -> bytes:
     """Remove private absolute paths while retaining portable relative paths."""
     result = data
     # These two roots are safe to turn into portable paths: sidecar validation
     # accepts paths relative to either the source checkout or campaign root.
     for root in sorted(
-        (source_root.resolve(), producer_root.resolve()), key=lambda value: -len(str(value))
+        (
+            root.resolve()
+            for root in (source_root, producer_root, validator_root)
+            if root is not None
+        ),
+        key=lambda value: -len(str(value)),
     ):
         root_bytes = str(root).encode("utf-8")
         result = result.replace(root_bytes + b"/", b"")
@@ -624,7 +712,13 @@ def _sanitise_bytes(data: bytes, *, source_root: Path, producer_root: Path) -> b
     return _PRIVATE_ABSOLUTE_PATH_RE.sub(b"<external-path>", result)
 
 
-def _sanitise_tree_paths(root: Path, *, source_root: Path, producer_root: Path) -> None:
+def _sanitise_tree_paths(
+    root: Path,
+    *,
+    source_root: Path,
+    producer_root: Path,
+    validator_root: Path | None = None,
+) -> None:
     """Rewrite private path strings in copied text artifacts using streaming I/O."""
     for path in _all_tree_files(root):
         if not _is_text_capable(path):
@@ -643,12 +737,18 @@ def _sanitise_tree_paths(root: Path, *, source_root: Path, producer_root: Path) 
                     else:
                         body, carry = b"", data
                     replaced = _sanitise_bytes(
-                        body, source_root=source_root, producer_root=producer_root
+                        body,
+                        source_root=source_root,
+                        producer_root=producer_root,
+                        validator_root=validator_root,
                     )
                     changed = changed or replaced != body
                     target_handle.write(replaced)
                 replaced = _sanitise_bytes(
-                    carry, source_root=source_root, producer_root=producer_root
+                    carry,
+                    source_root=source_root,
+                    producer_root=producer_root,
+                    validator_root=validator_root,
                 )
                 changed = changed or replaced != carry
                 target_handle.write(replaced)
@@ -679,6 +779,7 @@ def _copy_producer_projection(
     *,
     staging_root: Path,
     source_root: Path,
+    validator_root: Path | None = None,
     expected_file_map: Mapping[str, Mapping[str, Any]],
     current_receipt_bytes: bytes,
     preserved_receipt_bytes: bytes | None,
@@ -712,7 +813,12 @@ def _copy_producer_projection(
             current_receipt_bytes
         )
     (staging_root / PRODUCER_RECEIPT_NAME).unlink()
-    _sanitise_tree_paths(staging_root, source_root=source_root, producer_root=producer_root)
+    _sanitise_tree_paths(
+        staging_root,
+        source_root=source_root,
+        producer_root=producer_root,
+        validator_root=validator_root,
+    )
     _assert_no_private_absolute_paths(staging_root)
 
 
@@ -772,6 +878,77 @@ def _validator_provenance(repo_root: Path, *, expected_commit: str) -> dict[str,
     }
 
 
+def _run_exact_validator(
+    *,
+    validator_root: Path,
+    source_root: Path,
+    acceptance_root: Path,
+    manifest_path: Path,
+) -> dict[str, Any]:
+    """Execute the reviewed validator from its clean checkout in isolation."""
+    script = r"""
+import json
+from pathlib import Path
+
+validator_root = Path(__import__("sys").argv[1])
+source_root = Path(__import__("sys").argv[2])
+acceptance_root = Path(__import__("sys").argv[3])
+manifest_path = Path(__import__("sys").argv[4])
+
+from robot_sf.benchmark import release_protocol as protocol
+from robot_sf.benchmark import release_acceptance as acceptance_module
+from robot_sf.benchmark.camera_ready import _config as config_module
+from robot_sf.benchmark.camera_ready import _run_state as run_state_module
+
+expected_validator_file = validator_root / "robot_sf/benchmark/release_acceptance.py"
+if Path(acceptance_module.__file__).resolve() != expected_validator_file.resolve():
+    raise RuntimeError("imported validator is not from the reviewed checkout")
+
+protocol.get_repository_root = lambda: source_root
+config_module.get_repository_root = lambda: source_root
+run_state_module.get_repository_root = lambda: source_root
+manifest = protocol.load_release_manifest(manifest_path)
+campaign_config = config_module.load_campaign_config(manifest.canonical_campaign_config_path)
+result = acceptance_module.validate_full_benchmark_release_acceptance(
+    acceptance_root,
+    manifest=manifest,
+    campaign_config=campaign_config,
+    source_repository_root=source_root,
+)
+print(json.dumps(result, sort_keys=True, default=str))
+"""
+    environment = os.environ.copy()
+    # A validator checkout must win over any editable helper checkout in the
+    # caller's environment.  Keep only the exact checkout on PYTHONPATH.
+    environment["PYTHONPATH"] = str(validator_root)
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            script,
+            str(validator_root),
+            str(source_root),
+            str(acceptance_root),
+            str(manifest_path),
+        ],
+        cwd=validator_root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=900,
+    )
+    if completed.returncode != 0:
+        raise DerivedReleaseError("exact reviewed validator execution failed")
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise DerivedReleaseError("exact reviewed validator returned malformed JSON") from exc
+    if not isinstance(payload, dict):
+        raise DerivedReleaseError("exact reviewed validator returned a non-object result")
+    return payload
+
+
 def _assert_manifest_paths_from_source(manifest: Any, source_root: Path) -> None:  # noqa: C901
     """Ensure every manifest-resolved asset is owned by the frozen checkout."""
     source_root = _assert_safe_directory(source_root, label="source repository root")
@@ -809,17 +986,86 @@ def _assert_manifest_paths_from_source(manifest: Any, source_root: Path) -> None
         pins = getattr(manifest, field, ())
         for pin in pins:
             path = getattr(pin, "path", None)
-            if not isinstance(path, Path) or not path.resolve().is_relative_to(
-                source_root.resolve()
+            if not isinstance(path, Path):
+                raise DerivedReleaseError(f"manifest {field} contains an external asset")
+            lexical_pin = Path(path.absolute())
+            if (
+                any(component.is_symlink() for component in lexical_pin.parents)
+                or lexical_pin.is_symlink()
             ):
+                raise DerivedReleaseError(f"manifest {field} contains a symlink")
+            if not lexical_pin.resolve().is_relative_to(source_root.resolve()):
                 raise DerivedReleaseError(f"manifest {field} contains an external asset")
     seed_policy = getattr(manifest, "seed_policy", {})
     raw_seed_path = seed_policy.get("seed_sets_path") if isinstance(seed_policy, Mapping) else None
     if raw_seed_path:
         candidate = Path(str(raw_seed_path))
-        candidate = candidate if candidate.is_absolute() else source_root / candidate
-        if not candidate.resolve().is_relative_to(source_root.resolve()):
+        # ``load_release_manifest`` resolves stress-contract assets relative to
+        # the manifest directory, not the repository root.  Mirror that exact
+        # rule here so a helper checkout cannot satisfy a relative seed path by
+        # accident.
+        candidate = candidate if candidate.is_absolute() else manifest.path.parent / candidate
+        if any(component.is_symlink() for component in candidate.parents) or candidate.is_symlink():
+            raise DerivedReleaseError("manifest seed_sets_path contains a symlink")
+        resolved = candidate.resolve()
+        if not resolved.is_relative_to(source_root.resolve()):
             raise DerivedReleaseError("manifest seed_sets_path is not bound to frozen source")
+
+
+def _assert_publication_inputs_from_manifest(
+    manifest: Any,
+    resolved_manifest: Mapping[str, Any],
+    source_root: Path,
+) -> dict[str, dict[str, str]]:
+    """Bind publication metadata and SNQI assets to the loaded manifest exactly."""
+    source_root = _assert_safe_directory(source_root, label="source repository root")
+    expected_fields = {
+        "citation": ("citation_path", None),
+        "zenodo_metadata": ("metadata_path", "metadata_sha256"),
+        "snqi_weights": ("snqi_weights_path", "snqi_weights_sha256"),
+        "snqi_baseline": ("snqi_baseline_path", "snqi_baseline_sha256"),
+    }
+    provenance = resolved_manifest.get("provenance")
+    provenance = provenance if isinstance(provenance, Mapping) else {}
+    metrics = resolved_manifest.get("metrics")
+    metrics = metrics if isinstance(metrics, Mapping) else {}
+    raw_by_role = {
+        "citation": provenance.get("citation_path"),
+        "zenodo_metadata": provenance.get("zenodo_metadata_path")
+        or provenance.get("metadata_path"),
+        "snqi_weights": metrics.get("snqi_weights_path"),
+        "snqi_baseline": metrics.get("snqi_baseline_path"),
+    }
+    bound: dict[str, dict[str, str]] = {}
+    for role, (path_field, digest_field) in expected_fields.items():
+        expected_path = getattr(manifest, path_field, None)
+        if not isinstance(expected_path, Path):
+            raise DerivedReleaseError(f"manifest {path_field} is missing")
+        expected_path = Path(expected_path.absolute())
+        raw_path = raw_by_role[role]
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            raise DerivedReleaseError(f"publication manifest omits canonical {role} path")
+        candidate = Path(raw_path)
+        if not candidate.is_absolute():
+            candidate = source_root / candidate
+        if any(component.is_symlink() for component in candidate.parents) or candidate.is_symlink():
+            raise DerivedReleaseError(f"publication {role} path contains a symlink")
+        candidate = Path(candidate.absolute())
+        if candidate != expected_path:
+            raise DerivedReleaseError(
+                f"publication {role} path differs from canonical loaded manifest asset"
+            )
+        if not candidate.is_file() or not candidate.absolute().is_relative_to(source_root):
+            raise DerivedReleaseError(f"publication {role} path is outside frozen source")
+        digest = sha256_file(candidate).lower()
+        expected_digest = getattr(manifest, digest_field, None) if digest_field else None
+        if expected_digest is not None and digest != str(expected_digest).lower():
+            raise DerivedReleaseError(f"publication {role} hash differs from manifest pin")
+        bound[role] = {
+            "path": candidate.relative_to(source_root).as_posix(),
+            "sha256": digest,
+        }
+    return bound
 
 
 def _assert_frozen_source_repository(source_root: Path, expected_sha: str) -> None:
@@ -847,7 +1093,8 @@ def _safe_publication_descriptor(
     publication_relative_dir: str,
 ) -> dict[str, Any]:
     """Build a path-portable descriptor without leaking staging paths."""
-    prefix = publication_relative_dir.strip("/")
+    prefix = _validate_safe_component(publication_relative_dir, label="publication_relative_dir")
+    _validate_safe_component(bundle_name, label="bundle_name")
     return {
         "bundle_dir": f"{prefix}/{bundle_name}",
         "archive_path": f"{prefix}/{bundle_name}.tar.gz",
@@ -916,7 +1163,7 @@ def _set_accepted_release_metadata(
     write_campaign_report(campaign_root / "reports" / "campaign_report.md", summary)
 
 
-def _write_derivation_receipt(
+def _write_derivation_receipt(  # noqa: PLR0913
     campaign_root: Path,
     *,
     producer_evidence: Mapping[str, Any],
@@ -926,6 +1173,7 @@ def _write_derivation_receipt(
     validator: Mapping[str, str],
     source_sha: str,
     derived_checksums: Mapping[str, str],
+    publication_inputs: Mapping[str, Any],
 ) -> None:
     """Write the credential-free binding receipt for the derived projection."""
     receipt = {
@@ -952,9 +1200,19 @@ def _write_derivation_receipt(
         "cross_root_binding": {
             "accepted_file_map": accepted_evidence.get("file_map"),
             "retrieved_file_map": producer_evidence.get("file_map"),
-            "separate_receipt_policy": "verification receipt is excluded from cross-root map",
+            "accepted_separate_receipt": accepted_evidence.get("separate_receipt"),
+            "retrieved_separate_receipt": {
+                "path": PRODUCER_RECEIPT_NAME,
+                "bytes": len(producer_evidence["_current_receipt_bytes"]),
+                "sha256": producer_evidence["artifact_verification_receipt_sha256"],
+            },
+            "separate_receipt_policy": (
+                "verification receipts are explicitly recorded separately and excluded from "
+                "the accepted/retrieved raw file-map equality"
+            ),
         },
         "manifest_validation": dict(manifest_validation),
+        "publication_inputs": dict(publication_inputs),
         "validator": dict(validator),
         "acceptance": dict(acceptance),
         "derived_projection": {
@@ -964,6 +1222,7 @@ def _write_derivation_receipt(
             "sha256sums_entry_count_scope": "pre_publication_projection",
             "sha256sums_excludes_only": PRODUCER_SUMS_NAME,
             "final_inventory_rewritten_after_publication": True,
+            "nested_bundle_root_inventory": "omitted_to_avoid_checksum_cycle; bundle checksums.sha256 is complete",
             "final_inventory_includes": [
                 "publication subtree",
                 "publication archive",
@@ -1010,6 +1269,30 @@ def _write_custody_receipt(
     _write_json(publication_dir / PUBLICATION_CUSTODY_NAME, payload)
 
 
+@contextlib.contextmanager
+def _exclude_root_checksum_from_bundle(campaign_root: Path):
+    """Keep the mutable root inventory out of the nested publication bundle.
+
+    The root inventory is finalized after the publication archive and custody
+    receipt exist.  Copying it into the bundle would create a checksum cycle:
+    changing the bundle changes the root inventory, which would make the
+    bundled copy stale.  The bundle has its own complete ``checksums.sha256``;
+    the final campaign inventory remains at the campaign root and explicitly
+    covers the publication subtree, archive, and custody receipt.
+    """
+    source = campaign_root / PRODUCER_SUMS_NAME
+    hidden = campaign_root / f".{PRODUCER_SUMS_NAME}.not-bundled"
+    if not source.is_file() or hidden.exists():
+        raise DerivedReleaseError("root checksum inventory is unavailable for publication export")
+    os.replace(source, hidden)
+    try:
+        yield
+    finally:
+        if source.exists():
+            raise DerivedReleaseError("publication exporter recreated root checksum inventory")
+        os.replace(hidden, source)
+
+
 def _export_stabilised_bundle(  # noqa: PLR0913
     campaign_root: Path,
     *,
@@ -1023,6 +1306,8 @@ def _export_stabilised_bundle(  # noqa: PLR0913
     publication_relative_dir: str,
 ) -> tuple[dict[str, Any], Path, Path]:
     """Export, write descriptors, and repeat until the descriptor is stable."""
+    _validate_safe_component(bundle_name, label="bundle_name")
+    _validate_safe_component(publication_relative_dir, label="publication_relative_dir")
     descriptor: dict[str, Any] = {
         "bundle_dir": f"{publication_relative_dir}/{bundle_name}",
         "archive_path": f"{publication_relative_dir}/{bundle_name}.tar.gz",
@@ -1103,9 +1388,17 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         raise DerivedReleaseError(
             "release manifest must be supplied from the frozen source repository"
         ) from exc
-    output_root = output_root.resolve()
+    if output_root.exists():
+        output_root = _assert_safe_directory(output_root, label="derived output root")
+    else:
+        output_root = Path(output_root).absolute()
+        parent = output_root.parent
+        if any(component.is_symlink() for component in parent.parents) or parent.is_symlink():
+            raise DerivedReleaseError("derived output root contains a symlink component")
     final_campaign = output_root / derived_name
+    _validate_safe_component(derived_name, label="derived_name")
     publication_name = publication_name or f"{derived_name}_publication"
+    _validate_safe_component(publication_name, label="publication_name")
     final_publication = final_campaign / publication_name
     if final_campaign.exists():
         raise DerivedReleaseError("derived campaign or publication target already exists")
@@ -1117,11 +1410,6 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         validator_repository_root,
         expected_commit=expected_validator_commit,
     )
-    helper_validator_path = Path(release_acceptance_module.__file__).resolve()
-    if sha256_file(helper_validator_path) != validator["file_sha256"]:
-        raise DerivedReleaseError(
-            "running validator implementation differs from the reviewed validator checkout"
-        )
     producer_evidence = verify_producer_artifacts(
         producer_root,
         expected_receipt_sha256=(
@@ -1156,12 +1444,19 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 "release manifest validation failed: "
                 + "; ".join(str(item) for item in manifest_validation.get("problems", []))
             )
-        acceptance = validate_full_benchmark_release_acceptance(
-            acceptance_root,
-            manifest=manifest,
-            campaign_config=campaign_config,
-            source_repository_root=source_repository_root,
+        acceptance = _run_exact_validator(
+            validator_root=validator_repository_root,
+            source_root=source_repository_root,
+            acceptance_root=acceptance_root,
+            manifest_path=manifest_path,
         )
+    acceptance = dict(acceptance)
+    acceptance["validator_execution"] = {
+        "commit": validator["commit"],
+        "file": validator["file"],
+        "file_sha256": validator["file_sha256"],
+        "execution_mode": "isolated_exact_validator_checkout",
+    }
     if acceptance.get("status") != "valid":
         raise DerivedReleaseError("corrected full-release acceptance rejected preserved rows")
     source_commits = acceptance.get("source_commits")
@@ -1182,9 +1477,16 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             producer_root,
             staging_root=staging_campaign,
             source_root=source_repository_root,
+            validator_root=validator_repository_root,
             expected_file_map=copy_file_map,
             current_receipt_bytes=producer_evidence["_current_receipt_bytes"],
             preserved_receipt_bytes=producer_evidence["_preserved_receipt_bytes"],
+        )
+        resolved_manifest = _read_json(
+            staging_campaign / "release" / "release_manifest.resolved.json"
+        )
+        publication_inputs = _assert_publication_inputs_from_manifest(
+            manifest, resolved_manifest, source_repository_root
         )
         derived_checksums = _write_derived_checksums(staging_campaign)
         _write_derivation_receipt(
@@ -1196,14 +1498,12 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             validator=validator,
             source_sha=expected_source_sha,
             derived_checksums=derived_checksums,
+            publication_inputs=publication_inputs,
         )
         # The receipt itself is part of the derived checksum inventory.  Rewrite
         # once after it is emitted, without ever signing SHA256SUMS itself.
         _write_derived_checksums(staging_campaign)
 
-        resolved_manifest = _read_json(
-            staging_campaign / "release" / "release_manifest.resolved.json"
-        )
         release_tag = str(resolved_manifest.get("release_tag", "")).strip()
         provenance = resolved_manifest.get("provenance")
         provenance = provenance if isinstance(provenance, Mapping) else {}
@@ -1219,19 +1519,20 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             source_repository_root,
             validator_root=validator_repository_root,
         ):
-            descriptor, bundle_dir, archive_path = _export_stabilised_bundle(
-                staging_campaign,
-                publication_stage=staging_publication,
-                bundle_name=f"{derived_name}_publication_bundle",
-                acceptance=acceptance,
-                producer_result=_read_json(
-                    staging_campaign / "release" / "producer_release_result.rejected.json"
-                ),
-                release_tag=release_tag,
-                doi=doi,
-                repository_url=repository_url,
-                publication_relative_dir=publication_name,
-            )
+            with _exclude_root_checksum_from_bundle(staging_campaign):
+                descriptor, bundle_dir, archive_path = _export_stabilised_bundle(
+                    staging_campaign,
+                    publication_stage=staging_publication,
+                    bundle_name=f"{derived_name}_publication_bundle",
+                    acceptance=acceptance,
+                    producer_result=_read_json(
+                        staging_campaign / "release" / "producer_release_result.rejected.json"
+                    ),
+                    release_tag=release_tag,
+                    doi=doi,
+                    repository_url=repository_url,
+                    publication_relative_dir=publication_name,
+                )
         _assert_no_private_absolute_paths(staging_campaign)
         _assert_no_private_absolute_paths(staging_publication)
         _write_custody_receipt(
@@ -1270,6 +1571,8 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             expected_file_count=EXPECTED_PRODUCER_FILE_COUNT,
         )
         _assert_equal_file_maps(accepted_after, producer_after)
+        if accepted_after.get("separate_receipt") != accepted_evidence.get("separate_receipt"):
+            raise DerivedReleaseError("accepted separate receipt changed during derived build")
         # Put campaign and publication artifacts under one staged directory,
         # then perform one directory rename.  This prevents a caller from
         # observing a campaign without its bundle or archive.
@@ -1298,6 +1601,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         "manifest_validation": manifest_validation,
         "acceptance": acceptance,
         "validator": validator,
+        "publication_inputs": publication_inputs,
     }
 
 

@@ -199,6 +199,8 @@ def test_sanitise_tree_paths_removes_private_absolute_paths(tmp_path: Path) -> N
                 "source": str(source_root / "configs/scenarios/matrix.yaml"),
                 "campaign": str(producer_root / "runs/arm/episodes.jsonl"),
                 "private": "/tmp/secret/job.log",
+                "root_private": "/root/.cache/robot-sf/worktree/output.json",
+                "mac_private": "/Users/example/worktrees/release/output.json",
             }
         ),
     )
@@ -207,7 +209,34 @@ def test_sanitise_tree_paths_removes_private_absolute_paths(tmp_path: Path) -> N
     assert "configs/scenarios/matrix.yaml" in value
     assert "runs/arm/episodes.jsonl" in value
     assert "/tmp/" not in value
+    assert "/root/" not in value
+    assert "/Users/" not in value
     recovery._assert_no_private_absolute_paths(copied)
+
+
+def test_path_sanitiser_rejects_unknown_suffix_and_preserves_known_binary(
+    tmp_path: Path,
+) -> None:
+    """Unknown files fail closed while declared binary payloads are untouched."""
+    source_root = tmp_path / "source"
+    producer_root = tmp_path / "producer"
+    copied = tmp_path / "copied"
+    copied.mkdir()
+    _write(copied / "opaque.weird", "/root/private\n")
+    with pytest.raises(recovery.DerivedReleaseError, match="unsupported publication file type"):
+        recovery._sanitise_tree_paths(copied, source_root=source_root, producer_root=producer_root)
+    copied.joinpath("opaque.weird").unlink()
+    payload = b"/root/private\x00\x01"
+    (copied / "payload.parquet").write_bytes(payload)
+    recovery._sanitise_tree_paths(copied, source_root=source_root, producer_root=producer_root)
+    assert (copied / "payload.parquet").read_bytes() == payload
+
+
+@pytest.mark.parametrize("name", ["../escape", "/tmp/escape", "nested/name", ""])
+def test_generated_names_are_single_safe_components(name: str) -> None:
+    """Derived and publication descriptors cannot escape their output root."""
+    with pytest.raises(recovery.DerivedReleaseError):
+        recovery._validate_safe_component(name, label="derived_name")
 
 
 def test_copy_projection_carries_preserved_and_refreshed_receipts(tmp_path: Path) -> None:
@@ -256,6 +285,44 @@ def test_manifest_assets_must_rebind_to_frozen_source_root(tmp_path: Path) -> No
         recovery._assert_manifest_paths_from_source(manifest, source)
 
 
+def test_publication_inputs_must_match_loaded_manifest_paths_and_hashes(tmp_path: Path) -> None:
+    """CITATION, Zenodo, and SNQI inputs cannot silently switch source assets."""
+    source = tmp_path / "source"
+    source.mkdir()
+    paths = {
+        "citation": source / "CITATION.cff",
+        "metadata": source / "metadata.json",
+        "weights": source / "weights.json",
+        "baseline": source / "baseline.json",
+    }
+    for path in paths.values():
+        _write(path, path.name + "\n")
+    manifest = SimpleNamespace(
+        citation_path=paths["citation"],
+        metadata_path=paths["metadata"],
+        metadata_sha256=_sha256(paths["metadata"]),
+        snqi_weights_path=paths["weights"],
+        snqi_weights_sha256=_sha256(paths["weights"]),
+        snqi_baseline_path=paths["baseline"],
+        snqi_baseline_sha256=_sha256(paths["baseline"]),
+    )
+    resolved = {
+        "provenance": {
+            "citation_path": "CITATION.cff",
+            "metadata_path": "metadata.json",
+        },
+        "metrics": {
+            "snqi_weights_path": "weights.json",
+            "snqi_baseline_path": "baseline.json",
+        },
+    }
+    result = recovery._assert_publication_inputs_from_manifest(manifest, resolved, source)
+    assert result["citation"]["sha256"] == _sha256(paths["citation"])
+    resolved["metrics"]["snqi_weights_path"] = "baseline.json"
+    with pytest.raises(recovery.DerivedReleaseError, match="canonical loaded manifest"):
+        recovery._assert_publication_inputs_from_manifest(manifest, resolved, source)
+
+
 def test_artifact_root_symlink_is_rejected(tmp_path: Path) -> None:
     """A symlink at the supplied root cannot become an immutable input."""
     real = tmp_path / "real"
@@ -279,6 +346,26 @@ def test_source_binding_redirects_all_relative_asset_resolvers(tmp_path: Path) -
         assert recovery.camera_config_module.get_repository_root() == source
         assert artifact_publication.get_repository_root() == source
         assert release_acceptance.get_repository_root() == validator
+        assert recovery.camera_run_state_module.get_repository_root() == validator
+
+
+def test_seed_set_path_uses_manifest_relative_loader_rule(tmp_path: Path) -> None:
+    """Relative seed assets resolve beside the manifest, not at repository root."""
+    source = tmp_path / "source"
+    source.mkdir()
+    manifest_path = source / "configs" / "release.yaml"
+    seed_path = manifest_path.parent / "assets" / "seeds.json"
+    _write(manifest_path, "manifest\n")
+    _write(seed_path, "{}\n")
+    manifest = SimpleNamespace(
+        path=manifest_path,
+        seed_policy={"seed_sets_path": "assets/seeds.json"},
+    )
+    recovery._assert_manifest_paths_from_source(manifest, source)
+    _write(source / "assets" / "seeds.json", "wrong location\n")
+    # The manifest-relative candidate remains authoritative even when a same-
+    # named repository-root candidate exists.
+    recovery._assert_manifest_paths_from_source(manifest, source)
 
 
 def test_cross_root_file_map_rejects_size_or_digest_drift() -> None:
@@ -287,6 +374,18 @@ def test_cross_root_file_map_rejects_size_or_digest_drift() -> None:
     retrieved = {"file_map": {"row.json": {"bytes": 11, "sha256": "a" * 64}}}
     with pytest.raises(recovery.DerivedReleaseError, match="file map mismatch"):
         recovery._assert_equal_file_maps(accepted, retrieved)
+
+
+def test_root_checksum_is_temporarily_excluded_from_nested_bundle(tmp_path: Path) -> None:
+    """The final root inventory cannot be copied into a checksum-dependent archive."""
+    campaign = tmp_path / "campaign"
+    campaign.mkdir()
+    sums = campaign / "SHA256SUMS"
+    sums.write_text("a" * 64 + "  payload.txt\n", encoding="utf-8")
+    with recovery._exclude_root_checksum_from_bundle(campaign):
+        assert not sums.exists()
+        assert (campaign / ".SHA256SUMS.not-bundled").is_file()
+    assert sums.read_text(encoding="utf-8").startswith("a" * 64)
 
 
 def test_staged_copy_rejects_source_revert_or_copy_tamper(
@@ -320,6 +419,21 @@ def test_validator_provenance_requires_exact_reviewed_commit(tmp_path: Path) -> 
             Path(release_acceptance.__file__).parents[2],
             expected_commit="0" * 40,
         )
+
+
+def test_exact_validator_subprocess_uses_supplied_checkout() -> None:
+    """The acceptance result is produced by the explicitly supplied checkout."""
+    root = Path(__file__).parents[2].resolve()
+    manifest = root / (
+        "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml"
+    )
+    result = recovery._run_exact_validator(
+        validator_root=root,
+        source_root=root,
+        acceptance_root=root,
+        manifest_path=manifest,
+    )
+    assert result["status"] == "not_applicable"
 
 
 def test_build_derived_release_cleans_partial_stage_on_bundle_failure(
@@ -388,8 +502,8 @@ def test_build_derived_release_cleans_partial_stage_on_bundle_failure(
     monkeypatch.setattr(recovery, "load_campaign_config", lambda _path: SimpleNamespace())
     monkeypatch.setattr(
         recovery,
-        "validate_full_benchmark_release_acceptance",
-        lambda *_args, **_kwargs: {
+        "_run_exact_validator",
+        lambda **_kwargs: {
             "status": "valid",
             "source_commits": [recovery.FROZEN_SOURCE_SHA],
         },
@@ -418,6 +532,11 @@ def test_build_derived_release_cleans_partial_stage_on_bundle_failure(
     )
     monkeypatch.setattr(recovery, "_assert_frozen_source_repository", lambda *_args: None)
     monkeypatch.setattr(recovery, "write_campaign_report", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        recovery,
+        "_assert_publication_inputs_from_manifest",
+        lambda *_args, **_kwargs: {},
+    )
 
     def fail_export(*_args, **_kwargs):
         raise recovery.PublicationPreflightError("test export failure")
@@ -508,8 +627,8 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
     )
     monkeypatch.setattr(
         recovery,
-        "validate_full_benchmark_release_acceptance",
-        lambda *_a, **_k: {
+        "_run_exact_validator",
+        lambda **_k: {
             "status": "valid",
             "source_commits": [recovery.FROZEN_SOURCE_SHA],
             "episode_count": 2,
@@ -526,6 +645,11 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
         },
     )
     monkeypatch.setattr(recovery, "write_campaign_report", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        recovery,
+        "_assert_publication_inputs_from_manifest",
+        lambda *_a, **_k: {},
+    )
     monkeypatch.setattr(recovery, "verify_publication_bundle_preflight", lambda *_a, **_k: {})
 
     def fake_export(run_dir: Path, out_dir: Path, *, bundle_name: str, **_kwargs: object):

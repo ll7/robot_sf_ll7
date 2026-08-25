@@ -289,8 +289,9 @@ def test_issue_template_docs_and_skills_reference_real_paths() -> None:
     assert "High `Success Probability`" in prioritization_text
 
     creator_text = _skill_path("gh-issue-creator").read_text(encoding="utf-8")
-    assert "GitHub MCP / GitHub app tools" in creator_text
+    assert "GitHub REST API or `gh`" in creator_text
     assert "gh issue create" in creator_text
+    assert "do not combine `--template` with `--body` or `--body-file`" in creator_text
     assert "gh project item-add" in creator_text
     assert "gh project item-edit" in creator_text
     assert "issue_default.md" in creator_text

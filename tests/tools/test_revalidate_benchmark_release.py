@@ -390,6 +390,78 @@ def test_optional_accepted_receipt_is_schema_checked_and_bound(tmp_path: Path) -
         )
 
 
+def test_acceptance_campaign_is_checksums_bound_subset_without_local_inventory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The canonical execution tree need not duplicate collection-only custody files."""
+    producer, _ = _make_verified_retrieval(tmp_path)
+    producer_evidence = recovery.verify_producer_artifacts(
+        producer,
+        expected_sums_sha256=_sha256(producer / "SHA256SUMS"),
+        expected_receipt_sha256=_sha256(producer / "artifact-verification-receipt.json"),
+        expected_rejected_result_sha256=_sha256(producer / "release/release_result.json"),
+        expected_file_count=2,
+    )
+    acceptance = tmp_path / "acceptance"
+    _write(acceptance / "payload.txt", (producer / "payload.txt").read_text())
+    _write(
+        acceptance / "release/release_result.json",
+        (producer / "release/release_result.json").read_text(),
+    )
+    monkeypatch.setattr(
+        recovery,
+        "EXPECTED_REJECTED_RESULT_SHA256",
+        _sha256(producer / "release/release_result.json"),
+    )
+
+    evidence = recovery._verify_acceptance_campaign_subset(
+        acceptance,
+        producer_evidence=producer_evidence,
+    )
+
+    assert evidence["status"] == "verified"
+    assert evidence["file_count"] == 2
+    assert evidence["producer_extra_file_count"] > 0
+    assert not (acceptance / "SHA256SUMS").exists()
+
+    _write(acceptance / "payload.txt", "tampered\n")
+    with pytest.raises(recovery.DerivedReleaseError, match="not bound"):
+        recovery._verify_acceptance_campaign_subset(
+            acceptance,
+            producer_evidence=producer_evidence,
+        )
+
+
+def test_acceptance_campaign_rejects_unlisted_extra_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every validator-visible acceptance byte must exist in the producer inventory."""
+    producer, _ = _make_verified_retrieval(tmp_path)
+    producer_evidence = recovery.verify_producer_artifacts(
+        producer,
+        expected_sums_sha256=_sha256(producer / "SHA256SUMS"),
+        expected_receipt_sha256=_sha256(producer / "artifact-verification-receipt.json"),
+        expected_rejected_result_sha256=_sha256(producer / "release/release_result.json"),
+        expected_file_count=2,
+    )
+    acceptance = tmp_path / "acceptance"
+    _write(
+        acceptance / "release/release_result.json",
+        (producer / "release/release_result.json").read_text(),
+    )
+    _write(acceptance / "unlisted.json", "{}\n")
+    monkeypatch.setattr(
+        recovery,
+        "EXPECTED_REJECTED_RESULT_SHA256",
+        _sha256(acceptance / "release/release_result.json"),
+    )
+    with pytest.raises(recovery.DerivedReleaseError, match="not bound"):
+        recovery._verify_acceptance_campaign_subset(
+            acceptance,
+            producer_evidence=producer_evidence,
+        )
+
+
 def test_validator_checkout_must_be_distinct_from_source_and_helper(tmp_path: Path) -> None:
     """A reviewed validator cannot be the source or helper checkout itself."""
     source = tmp_path / "source"
@@ -603,7 +675,7 @@ def test_build_derived_release_cleans_partial_stage_on_bundle_failure(
     )
     monkeypatch.setattr(
         recovery,
-        "_verify_campaign_file_map",
+        "_verify_acceptance_campaign_subset",
         lambda *_args, **_kwargs: {
             "status": "verified",
             "file_map": fixture_file_map,
@@ -697,7 +769,7 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
     monkeypatch.setattr(recovery, "verify_producer_artifacts", lambda *_a, **_k: verifier_result)
     monkeypatch.setattr(
         recovery,
-        "_verify_campaign_file_map",
+        "_verify_acceptance_campaign_subset",
         lambda *_a, **_k: {"status": "verified", "file_map": fixture_file_map},
     )
     monkeypatch.setattr(

@@ -423,6 +423,49 @@ def _verify_campaign_file_map(
     }
 
 
+def _verify_acceptance_campaign_subset(
+    campaign_root: Path,
+    *,
+    producer_evidence: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Bind the untouched acceptance tree to the checksummed producer superset.
+
+    The execution campaign is the only root whose provenance sidecars retain
+    their canonical ``raw_artifact`` paths.  Collection adds scheduler and
+    custody files to a separate checksum-bearing tree, so requiring the two
+    directory inventories to be identical would reject the real layout.  Every
+    file read by the acceptance validator must instead be present byte-for-byte
+    in the admitted producer inventory.
+    """
+    root = _assert_safe_directory(campaign_root, label="accepted campaign root")
+    producer_map = producer_evidence.get("file_map")
+    if not isinstance(producer_map, Mapping) or not producer_map:
+        raise DerivedReleaseError("producer file map is unavailable for acceptance binding")
+    relative_paths = [_relative_path(root, path) for path in _all_tree_files(root)]
+    if not relative_paths:
+        raise DerivedReleaseError("accepted campaign tree is empty")
+    file_map = _build_file_map(root, relative_paths)
+    for relative, identity in file_map.items():
+        if producer_map.get(relative) != identity:
+            raise DerivedReleaseError(
+                f"accepted campaign file is not bound to producer inventory: {relative}"
+            )
+    result_identity = file_map.get(REJECTED_RESULT_RELATIVE)
+    if not isinstance(result_identity, Mapping):
+        raise DerivedReleaseError("accepted campaign release_result is missing")
+    if result_identity.get("sha256") != EXPECTED_REJECTED_RESULT_SHA256:
+        raise DerivedReleaseError("accepted campaign release_result is not the admitted rejection")
+    return {
+        "status": "verified",
+        "file_count": len(file_map),
+        "producer_file_count": len(producer_map),
+        "producer_extra_file_count": len(set(producer_map) - set(file_map)),
+        "rejected_release_result_sha256": result_identity["sha256"],
+        "binding_policy": "acceptance-tree-is-byte-identical-subset-of-checksummed-producer",
+        "file_map": file_map,
+    }
+
+
 def _assert_accepted_receipt_relation(
     accepted: Mapping[str, Any], retrieved: Mapping[str, Any]
 ) -> None:
@@ -1470,14 +1513,10 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         ),
         preserved_receipt_source=preserved_receipt_source,
     )
-    accepted_evidence = _verify_campaign_file_map(
+    accepted_evidence = _verify_acceptance_campaign_subset(
         acceptance_root,
-        expected_sums_sha256=EXPECTED_PRODUCER_SUMS_SHA256,
-        expected_result_sha256=EXPECTED_REJECTED_RESULT_SHA256,
-        expected_file_count=EXPECTED_PRODUCER_FILE_COUNT,
+        producer_evidence=producer_evidence,
     )
-    _assert_equal_file_maps(accepted_evidence, producer_evidence)
-    _assert_accepted_receipt_relation(accepted_evidence, producer_evidence)
 
     with _source_repository_binding(
         source_repository_root,
@@ -1616,16 +1655,12 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         ):
             if producer_after.get(key) != producer_evidence.get(key):
                 raise DerivedReleaseError("producer receipt changed during derived build")
-        accepted_after = _verify_campaign_file_map(
+        accepted_after = _verify_acceptance_campaign_subset(
             acceptance_root,
-            expected_sums_sha256=EXPECTED_PRODUCER_SUMS_SHA256,
-            expected_result_sha256=EXPECTED_REJECTED_RESULT_SHA256,
-            expected_file_count=EXPECTED_PRODUCER_FILE_COUNT,
+            producer_evidence=producer_after,
         )
-        _assert_equal_file_maps(accepted_after, producer_after)
-        _assert_accepted_receipt_relation(accepted_after, producer_after)
-        if accepted_after.get("separate_receipt") != accepted_evidence.get("separate_receipt"):
-            raise DerivedReleaseError("accepted separate receipt changed during derived build")
+        if accepted_after.get("file_map") != accepted_evidence.get("file_map"):
+            raise DerivedReleaseError("accepted campaign tree changed during derived build")
         # Put campaign and publication artifacts under one staged directory,
         # then perform one directory rename.  This prevents a caller from
         # observing a campaign without its bundle or archive.

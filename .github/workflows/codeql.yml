@@ -48,13 +48,13 @@ jobs:
           persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
+        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
         with:
           languages: python
 
       - name: Perform CodeQL analysis
         id: codeql-analysis
-        uses: github/codeql-action/analyze@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
+        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
         with:
           category: "/language:python"
           # Upload separately so a transient SARIF endpoint failure can be retried
@@ -65,7 +65,7 @@ jobs:
         id: upload-codeql-sarif-attempt-1
         if: steps.codeql-analysis.outcome == 'success'
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
         with:
           category: "/language:python"
           sarif_file: ${{ steps.codeql-analysis.outputs.sarif-output }}
@@ -85,7 +85,7 @@ jobs:
           steps.codeql-analysis.outcome == 'success' &&
           steps.upload-codeql-sarif-attempt-1.outcome == 'failure'
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
         with:
           category: "/language:python"
           sarif_file: ${{ steps.codeql-analysis.outputs.sarif-output }}

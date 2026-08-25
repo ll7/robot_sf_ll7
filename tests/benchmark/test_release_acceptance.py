@@ -319,14 +319,36 @@ def _write_effective_component_campaign(
         config.source_repository_root / "configs/policy_search/scenario_adaptive_candidate.yaml"
     )
     candidate_path.parent.mkdir(parents=True, exist_ok=True)
+    base_config_path = config.source_repository_root / "configs/algos/hybrid.yaml"
+    override_config_path = config.source_repository_root / "configs/algos/orca.yaml"
+    base_config_path.parent.mkdir(parents=True, exist_ok=True)
+    base_config_path.write_text("planner: hybrid\n", encoding="utf-8")
+    override_config_path.write_text("planner: orca\n", encoding="utf-8")
     if override_mode == "valid":
-        override_payload = "scenario_algo_overrides:\n  scenario_00:\n    algo: orca\n"
+        override_payload = (
+            "scenario_algo_overrides:\n"
+            "  scenario_00:\n"
+            "    algo: orca\n"
+            "    base_config_path: configs/algos/orca.yaml\n"
+        )
     elif override_mode == "malformed":
         override_payload = "scenario_algo_overrides:\n  scenario_00: orca\n"
+    elif override_mode == "malformed_base":
+        override_payload = "scenario_algo_overrides:\n  scenario_00: orca\n"
+    elif override_mode == "external":
+        external_config_path = tmp_path / "external.yaml"
+        external_config_path.write_text("planner: external\n", encoding="utf-8")
+        override_payload = (
+            "scenario_algo_overrides:\n"
+            "  scenario_00:\n"
+            f"    base_config_path: {external_config_path}\n"
+        )
     else:
         override_payload = ""
     candidate_path.write_text(
-        "algo: hybrid_rule_local_planner\nparams: {}\n" + override_payload,
+        "algo: hybrid_rule_local_planner\n"
+        "base_config_path: configs/algos/hybrid.yaml\n"
+        "params: {}\n" + override_payload,
         encoding="utf-8",
     )
     planner_specs = []
@@ -354,7 +376,10 @@ def _write_effective_component_campaign(
                 "planner_contract": {"planner_id": "hybrid_rule_local_planner"},
             }
         )
-        if row["scenario_id"] == "scenario_00":
+        if row["scenario_id"] == "scenario_00" and override_mode not in {
+            "malformed_base",
+            "external",
+        }:
             row["algo"] = "orca"
             row["algorithm_metadata"].update(
                 {
@@ -474,6 +499,52 @@ def test_full_release_accepts_effective_policy_search_component_algorithm(
 
     assert result["status"] == "valid"
     assert result["blockers"] == []
+
+
+def test_full_release_rejects_malformed_scenario_override_when_rows_use_base_algorithm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Malformed overrides cannot be hidden by rows that happen to use the base algorithm."""
+    campaign_root, config = _write_effective_component_campaign(
+        tmp_path,
+        monkeypatch,
+        override_mode="malformed_base",
+    )
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+
+    assert result["status"] == "invalid"
+    assert any(
+        "scenario_algo_overrides entries must be mappings" in item for item in result["blockers"]
+    )
+
+
+def test_full_release_rejects_external_nested_candidate_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Nested candidate configs must remain inside the explicit trusted source checkout."""
+    campaign_root, config = _write_effective_component_campaign(
+        tmp_path,
+        monkeypatch,
+        override_mode="external",
+    )
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+
+    assert result["status"] == "invalid"
+    assert any("outside trusted source repository root" in item for item in result["blockers"])
 
 
 @pytest.mark.parametrize("override_mode", ["missing", "malformed"])

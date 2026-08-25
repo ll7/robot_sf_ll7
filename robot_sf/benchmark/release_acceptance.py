@@ -14,6 +14,7 @@ import math
 import re
 from collections import Counter
 from collections.abc import Mapping
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,8 @@ from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.map_runner.map_runner_trace import _scenario_id as _producer_scenario_id
 from robot_sf.benchmark.map_runner_identity import suite_key as _producer_suite_key
 from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
+    _is_policy_search_candidate_manifest,
+    _parse_algo_config,
     _resolve_policy_search_candidate_runtime,
 )
 from robot_sf.benchmark.release_protocol import (
@@ -1803,6 +1806,125 @@ def _full_release_algorithm_roster(
     return algorithms, blockers
 
 
+def _full_release_nested_config_path(
+    raw_path: Any,
+    *,
+    config_anchor: Path,
+    source_repository_root: Path,
+    label: str,
+) -> Path:
+    """Resolve a candidate's nested config path inside the trusted source checkout.
+
+    The producer resolver accepts absolute paths and otherwise falls back to the process
+    working directory.  That is appropriate for an interactive run, but it is not a safe
+    publication provenance boundary: a validator must not resolve a nested candidate config
+    from an unrelated checkout or an external file.  Prefer the producer's config-relative
+    lookup when it exists, then apply the producer's repository-relative convention explicitly
+    against ``source_repository_root``.
+
+    Returns:
+        The resolved regular file path inside ``source_repository_root``.
+
+    Raises:
+        ValueError: If the declaration is malformed, escapes the source root, is symlinked, or
+            does not name a regular file.
+    """
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise ValueError(f"{label} must be a non-empty string")
+    source_root = source_repository_root.resolve()
+    raw = Path(raw_path.strip())
+    if raw.is_absolute():
+        candidate = raw.resolve()
+    else:
+        anchored = (config_anchor / raw).resolve()
+        candidate = anchored if anchored.is_file() else (source_root / raw).resolve()
+    try:
+        candidate.relative_to(source_root)
+    except ValueError as exc:
+        raise ValueError(f"{label} is outside trusted source repository root: {raw}") from exc
+    if _path_has_symlink_component(candidate):
+        raise ValueError(f"{label} contains a symlink component: {raw}")
+    if not candidate.is_file():
+        raise ValueError(f"{label} does not name a regular file: {raw}")
+    return candidate
+
+
+def _full_release_candidate_config(  # noqa: C901
+    *,
+    planner_spec: Any,
+    source_repository_root: Path,
+) -> tuple[Path | None, dict[str, Any] | None, str | None]:
+    """Load and structurally validate one arm's policy-search candidate config.
+
+    Returns:
+        The trusted top-level config path, normalized manifest, and an optional blocker.  All
+        nested ``base_config_path`` declarations are rewritten to source-root absolute paths so
+        the producer resolver cannot fall back to the validator process working directory.
+    """
+    raw_config_path = getattr(planner_spec, "algo_config_path", None)
+    if raw_config_path is None:
+        return None, None, None
+    source_root = source_repository_root.resolve()
+    try:
+        config_path = _source_repository_path(raw_config_path, source_root)
+        if _path_has_symlink_component(config_path) or not config_path.is_file():
+            raise ValueError("candidate algorithm config is not a regular trusted source file")
+        manifest = _parse_algo_config(str(config_path))
+        if not _is_policy_search_candidate_manifest(manifest):
+            return config_path, manifest, None
+
+        normalized = deepcopy(manifest)
+        if "base_config_path" in normalized:
+            normalized["base_config_path"] = str(
+                _full_release_nested_config_path(
+                    normalized["base_config_path"],
+                    config_anchor=config_path.parent,
+                    source_repository_root=source_root,
+                    label="candidate base_config_path",
+                )
+            )
+
+        raw_overrides = normalized.get("scenario_algo_overrides")
+        if raw_overrides is not None:
+            if not isinstance(raw_overrides, Mapping):
+                raise TypeError("scenario_algo_overrides must be a mapping")
+            validated_overrides: dict[str, Any] = {}
+            for raw_scenario_id, raw_override in raw_overrides.items():
+                if not isinstance(raw_scenario_id, str) or not raw_scenario_id.strip():
+                    raise TypeError("scenario_algo_overrides keys must be non-empty strings")
+                if not isinstance(raw_override, Mapping):
+                    raise TypeError(
+                        f"scenario_algo_overrides entries must be mappings ({raw_scenario_id!r})"
+                    )
+                override = deepcopy(dict(raw_override))
+                if "algo" in override and (
+                    not isinstance(override["algo"], str) or not override["algo"].strip()
+                ):
+                    raise TypeError(
+                        f"scenario_algo_overrides[{raw_scenario_id!r}].algo must be a non-empty string"
+                    )
+                if "params" in override and not isinstance(override["params"], Mapping):
+                    raise TypeError(
+                        f"scenario_algo_overrides[{raw_scenario_id!r}].params must be a mapping"
+                    )
+                if "base_config_path" in override:
+                    override["base_config_path"] = str(
+                        _full_release_nested_config_path(
+                            override["base_config_path"],
+                            config_anchor=config_path.parent,
+                            source_repository_root=source_root,
+                            label=(
+                                f"scenario_algo_overrides[{raw_scenario_id!r}].base_config_path"
+                            ),
+                        )
+                    )
+                validated_overrides[raw_scenario_id.strip()] = override
+            normalized["scenario_algo_overrides"] = validated_overrides
+        return config_path, normalized, None
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        return None, None, f"canonical planner policy config validation failed: {exc}"
+
+
 def _full_release_row_contract_blockers(
     row: Mapping[str, Any],
     *,
@@ -1969,22 +2091,18 @@ def _full_release_effective_algorithm(
     scenario_id = _producer_scenario_id(dict(scenario))
     if not scenario_id or scenario_id == "unknown":
         return None, "canonical scenario is missing a producer-resolvable identifier"
-    raw_config_path = getattr(planner_spec, "algo_config_path", None)
     try:
-        config_path = (
-            str(
-                _source_repository_path(
-                    raw_config_path,
-                    Path(source_repository_root or get_repository_root()).resolve(),
-                )
-            )
-            if raw_config_path is not None
-            else None
+        config_path, candidate_config, config_error = _full_release_candidate_config(
+            planner_spec=planner_spec,
+            source_repository_root=Path(source_repository_root or get_repository_root()).resolve(),
         )
+        if config_error is not None:
+            return None, f"{config_error} for scenario {scenario_id!r}"
         effective_algorithm, _effective_config = _resolve_policy_search_candidate_runtime(
             default_algo=str(base_algorithm).strip(),
-            algo_config_path=config_path,
+            algo_config_path=str(config_path) if config_path is not None else None,
             scenario=dict(scenario),
+            algo_config=candidate_config,
         )
     except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
         return (

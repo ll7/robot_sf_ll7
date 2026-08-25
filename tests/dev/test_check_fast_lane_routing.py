@@ -73,6 +73,7 @@ def test_release_checkpoint_producer_tests_are_registered_in_fast_lane() -> None
 
     assert {
         "test_checkpoint_provenance_issue_4970.py",
+        "test_post_execution_release_doctor.py",
         "test_predictive_mppi_planner.py",
         "test_runtime_smoke_admission.py",
     } <= policy.fast_files

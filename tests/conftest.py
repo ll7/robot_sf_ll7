@@ -417,6 +417,7 @@ _FAST_FILES = {
     "test_artifact_publication.py",
     "test_camera_ready_checkpoint_submit_preflight.py",
     "test_camera_ready_subprocess_isolation.py",
+    "test_post_execution_release_doctor.py",
     # Checkpoint provenance and Predictive MPPI adapter tests are deterministic
     # contract coverage for release-smoke producer changes; keep them in the
     # exact-head changed-coverage shards.

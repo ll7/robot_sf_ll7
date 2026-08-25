@@ -512,12 +512,14 @@ def test_ci_check_rejects_pending_codeql_even_when_ci_is_green(
         stdout=json.dumps(
             [
                 {
+                    "databaseId": 1001,
                     "headSha": "a" * 40,
                     "status": "completed",
                     "conclusion": "success",
                     "workflowName": "CI",
                 },
                 {
+                    "databaseId": 1002,
                     "headSha": "a" * 40,
                     "status": "in_progress",
                     "conclusion": "",
@@ -530,3 +532,114 @@ def test_ci_check_rejects_pending_codeql_even_when_ci_is_green(
     check = release_doctor._ci_check(tmp_path, "a" * 40)
     assert check.status == "fail"
     assert "CodeQL" in check.summary
+
+
+def test_ci_check_accepts_successful_run_despite_later_concurrency_cancellations(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A prior complete successful run is not invalidated by later concurrency cancellations."""
+    result = _result(
+        [],
+        stdout=json.dumps(
+            [
+                {
+                    "databaseId": 32807916917,
+                    "headSha": "a" * 40,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "workflowName": "CI",
+                },
+                {
+                    "databaseId": 32813075613,
+                    "headSha": "a" * 40,
+                    "status": "completed",
+                    "conclusion": "cancelled",
+                    "workflowName": "CI",
+                },
+                {
+                    "databaseId": 32813075614,
+                    "headSha": "a" * 40,
+                    "status": "completed",
+                    "conclusion": "cancelled",
+                    "workflowName": "CI",
+                },
+                {
+                    "databaseId": 32807916918,
+                    "headSha": "a" * 40,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "workflowName": "CodeQL",
+                },
+            ]
+        ),
+    )
+    monkeypatch.setattr(release_doctor, "_run", lambda *args: result)
+    check = release_doctor._ci_check(tmp_path, "a" * 40)
+    assert check.status == "pass"
+    assert "green" in check.summary
+    assert "32807916917" in check.summary
+    assert "32807916918" in check.summary
+
+
+def test_ci_check_fails_closed_when_only_cancelled_runs_exist(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """If no successful run exists for a workflow, cancellation fails closed and records run IDs."""
+    result = _result(
+        [],
+        stdout=json.dumps(
+            [
+                {
+                    "databaseId": 32813075613,
+                    "headSha": "a" * 40,
+                    "status": "completed",
+                    "conclusion": "cancelled",
+                    "workflowName": "CI",
+                },
+                {
+                    "databaseId": 32807916918,
+                    "headSha": "a" * 40,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "workflowName": "CodeQL",
+                },
+            ]
+        ),
+    )
+    monkeypatch.setattr(release_doctor, "_run", lambda *args: result)
+    check = release_doctor._ci_check(tmp_path, "a" * 40)
+    assert check.status == "fail"
+    assert "CI cancelled" in check.summary
+    assert "32813075613" in check.summary
+
+
+def test_ci_check_fails_closed_on_genuine_failure_without_successful_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A genuine failure blocks admission and reports the failing run ID."""
+    result = _result(
+        [],
+        stdout=json.dumps(
+            [
+                {
+                    "databaseId": 32800000001,
+                    "headSha": "a" * 40,
+                    "status": "completed",
+                    "conclusion": "failure",
+                    "workflowName": "CI",
+                },
+                {
+                    "databaseId": 32807916918,
+                    "headSha": "a" * 40,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "workflowName": "CodeQL",
+                },
+            ]
+        ),
+    )
+    monkeypatch.setattr(release_doctor, "_run", lambda *args: result)
+    check = release_doctor._ci_check(tmp_path, "a" * 40)
+    assert check.status == "fail"
+    assert "CI failed" in check.summary
+    assert "32800000001" in check.summary

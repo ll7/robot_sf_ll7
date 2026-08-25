@@ -146,6 +146,77 @@ def _git_check(repo: Path, expected_sha: str) -> ReleaseDoctorCheck:
     )
 
 
+def _evaluate_workflow_runs(
+    name: str, matching: list[dict[str, Any]]
+) -> tuple[str | None, str | None]:
+    """Evaluate runs for one required workflow and return (supported_detail, non_green_detail).
+
+    Returns:
+        tuple of (supported_detail, non_green_detail), where exactly one is non-None.
+    """
+    success_runs = [
+        run
+        for run in matching
+        if str(run.get("status", "")).lower() == "completed"
+        and str(run.get("conclusion", "")).lower() == "success"
+    ]
+    if success_runs:
+        run_ids = [str(r.get("databaseId")) for r in success_runs if r.get("databaseId")]
+        detail = f"{name} (run {run_ids[0]})" if run_ids else name
+        return detail, None
+
+    in_prog_runs = [run for run in matching if str(run.get("status", "")).lower() != "completed"]
+    failing_runs = [
+        run
+        for run in matching
+        if str(run.get("status", "")).lower() == "completed"
+        and str(run.get("conclusion", "")).lower() == "failure"
+    ]
+    cancelled_runs = [
+        run
+        for run in matching
+        if str(run.get("status", "")).lower() == "completed"
+        and str(run.get("conclusion", "")).lower() == "cancelled"
+    ]
+
+    run_ids = [str(r.get("databaseId")) for r in matching if r.get("databaseId")]
+    id_suffix = f" (run {', '.join(run_ids)})" if run_ids else ""
+
+    if in_prog_runs:
+        return None, f"{name} pending{id_suffix}"
+    if failing_runs:
+        return None, f"{name} failed{id_suffix}"
+    if cancelled_runs:
+        return None, f"{name} cancelled{id_suffix}"
+    return None, f"{name}{id_suffix}"
+
+
+def _parse_gh_runs(
+    stdout: str, expected_sha: str, required_workflows: tuple[str, ...]
+) -> dict[str, list[dict[str, Any]]]:
+    """Group exact-SHA workflow runs by required workflow name.
+
+    Returns:
+        Mapping of workflow name to list of matching exact-SHA runs.
+    """
+    try:
+        raw_runs = json.loads(stdout)
+    except (json.JSONDecodeError, TypeError):
+        raw_runs = []
+    if not isinstance(raw_runs, list):
+        raw_runs = []
+    by_workflow: dict[str, list[dict[str, Any]]] = {name: [] for name in required_workflows}
+    for run in raw_runs:
+        if not isinstance(run, dict) or run.get("headSha") != expected_sha:
+            continue
+        workflow_name = str(
+            run.get("workflowName") or run.get("name") or run.get("workflow") or ""
+        ).strip()
+        if workflow_name in by_workflow:
+            by_workflow[workflow_name].append(run)
+    return by_workflow
+
+
 def _ci_check(
     repo: Path,
     expected_sha: str,
@@ -168,7 +239,7 @@ def _ci_check(
             "--limit",
             "100",
             "--json",
-            "headSha,status,conclusion,workflowName,name",
+            "databaseId,headSha,status,conclusion,workflowName,name",
         ],
         repo,
     )
@@ -176,42 +247,37 @@ def _ci_check(
         return ReleaseDoctorCheck(
             "ci", "fail", "exact-source required workflow state is unavailable"
         )
-    try:
-        runs = json.loads(result.stdout)
-    except (json.JSONDecodeError, TypeError):
-        runs = []
-    if not isinstance(runs, list):
-        runs = []
-    exact = [run for run in runs if isinstance(run, dict) and run.get("headSha") == expected_sha]
-    by_workflow: dict[str, list[dict[str, Any]]] = {name: [] for name in required_workflows}
-    for run in exact:
-        workflow_name = str(
-            run.get("workflowName") or run.get("name") or run.get("workflow") or ""
-        ).strip()
-        if workflow_name in by_workflow:
-            by_workflow[workflow_name].append(run)
+    by_workflow = _parse_gh_runs(result.stdout, expected_sha, required_workflows)
+    missing: list[str] = []
+    non_green: list[str] = []
+    supported_details: list[str] = []
 
-    missing = [name for name, matching in by_workflow.items() if not matching]
-    non_green = [
-        name
-        for name, matching in by_workflow.items()
-        if matching
-        and any(
-            str(run.get("status", "")).lower() != "completed"
-            or str(run.get("conclusion", "")).lower() != "success"
-            for run in matching
-        )
-    ]
-    problems = []
+    for name, matching in by_workflow.items():
+        if not matching:
+            missing.append(name)
+            continue
+        supported, non_green_reason = _evaluate_workflow_runs(name, matching)
+        if supported:
+            supported_details.append(supported)
+        elif non_green_reason:
+            non_green.append(non_green_reason)
+
+    problems: list[str] = []
     if missing:
         problems.append("missing " + ", ".join(missing))
     if non_green:
         problems.append("not completed green: " + ", ".join(non_green))
     green = not problems
+    if green:
+        detail_str = f": {', '.join(supported_details)}" if supported_details else ""
+        summary_msg = f"all exact-source required workflows are green{detail_str}"
+    else:
+        summary_msg = "; ".join(problems)
+
     return ReleaseDoctorCheck(
         "ci",
         "pass" if green else "fail",
-        "all exact-source required workflows are green" if green else "; ".join(problems),
+        summary_msg,
     )
 
 

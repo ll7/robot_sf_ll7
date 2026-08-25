@@ -203,7 +203,16 @@ def _write_provenance_bound_full_campaign(
     campaign_root = _write_full_campaign(tmp_path)
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    scenario_path = tmp_path / "classic_interactions_francis2023.yaml"
+    source_repository_root = tmp_path / "frozen-source"
+    schema_path = source_repository_root / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+    schema_path.parent.mkdir(parents=True, exist_ok=True)
+    schema_path.write_bytes(
+        (get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json").read_bytes()
+    )
+    scenario_path = (
+        source_repository_root / "configs/scenarios/classic_interactions_francis2023.yaml"
+    )
+    scenario_path.parent.mkdir(parents=True, exist_ok=True)
     scenario_path.write_text("scenarios: []\n", encoding="utf-8")
     resolved_scenarios = [{"id": scenario_id} for scenario_id in _SCENARIO_IDS]
     monkeypatch.setattr(
@@ -224,7 +233,6 @@ def _write_provenance_bound_full_campaign(
         for scenario in effective_scenarios:
             scenario["telemetry"] = dict(telemetry)
             scenario["metadata"] = {"telemetry": dict(telemetry)}
-    schema_path = get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json"
     planner_specs: list[SimpleNamespace] = []
     for run in summary["runs"]:
         planner_key = run["planner"]["key"]
@@ -232,7 +240,7 @@ def _write_provenance_bound_full_campaign(
         algo_config_path: Path | None = None
         if shared_first_algorithm and planner_key in {"planner_00", "planner_01"}:
             expected_algo = "hybrid_rule_local_planner"
-            algo_config_path = tmp_path / "algo-configs" / f"{planner_key}.yaml"
+            algo_config_path = source_repository_root / "configs/algos" / f"{planner_key}.yaml"
             algo_config_path.parent.mkdir(parents=True, exist_ok=True)
             algo_config_path.write_text(f"planner_key: {planner_key}\n", encoding="utf-8")
         planner_specs.append(
@@ -294,6 +302,7 @@ def _write_provenance_bound_full_campaign(
         scenario_matrix_path=scenario_path,
         holonomic_command_mode="vx_vy",
         telemetry=telemetry,
+        source_repository_root=source_repository_root,
     )
     return campaign_root, config
 
@@ -306,7 +315,10 @@ def _write_effective_component_campaign(
 ) -> tuple[Path, SimpleNamespace]:
     """Build a full fixture whose first arm selects ORCA for one canonical scenario."""
     campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
-    candidate_path = tmp_path / "scenario_adaptive_candidate.yaml"
+    candidate_path = (
+        config.source_repository_root / "configs/policy_search/scenario_adaptive_candidate.yaml"
+    )
+    candidate_path.parent.mkdir(parents=True, exist_ok=True)
     if override_mode == "valid":
         override_payload = "scenario_algo_overrides:\n  scenario_00:\n    algo: orca\n"
     elif override_mode == "malformed":
@@ -358,7 +370,9 @@ def _write_effective_component_campaign(
     sidecar = build_result_provenance_manifest(
         out_path=episode_path,
         episode_records=rows,
-        schema_path=get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json",
+        schema_path=(
+            config.source_repository_root / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+        ),
         scenario_path=config.scenario_matrix_path,
         scenarios=release_acceptance._result_provenance_scenarios(
             config,
@@ -394,6 +408,7 @@ def test_full_release_acceptance_requires_all_arms_and_episode_cells(
         campaign_root,
         manifest=_full_manifest(),
         campaign_config=config,
+        source_repository_root=config.source_repository_root,
     )
 
     assert result["status"] == "valid"
@@ -403,6 +418,44 @@ def test_full_release_acceptance_requires_all_arms_and_episode_cells(
     assert result["unique_episode_identities"] == 20_160
     assert result["source_commits"] == [_SOURCE_SHA]
     assert result["blockers"] == []
+
+
+def test_full_release_acceptance_uses_frozen_source_repository_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A validator checkout must resolve canonical sidecars against the execution checkout."""
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+
+    default_result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+    )
+    assert default_result["status"] == "invalid"
+    assert any("trusted" in blocker for blocker in default_result["blockers"])
+
+    source_result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+    assert source_result["status"] == "valid"
+    assert source_result["blockers"] == []
+
+
+def test_source_repository_path_retargets_validator_paths_and_rejects_external_paths(
+    tmp_path: Path,
+) -> None:
+    """Source binding maps validator-root absolutes but rejects unrelated absolute paths."""
+    source_root = tmp_path / "frozen-source"
+    validator_path = get_repository_root() / "configs/scenarios/example.yaml"
+    assert release_acceptance._source_repository_path(validator_path, source_root) == (
+        source_root / "configs/scenarios/example.yaml"
+    )
+    with pytest.raises(ValueError, match="outside trusted repositories"):
+        release_acceptance._source_repository_path(tmp_path.parent / "external.yaml", source_root)
 
 
 def test_full_release_accepts_effective_policy_search_component_algorithm(
@@ -416,6 +469,7 @@ def test_full_release_accepts_effective_policy_search_component_algorithm(
         campaign_root,
         manifest=_full_manifest(),
         campaign_config=config,
+        source_repository_root=config.source_repository_root,
     )
 
     assert result["status"] == "valid"
@@ -439,6 +493,7 @@ def test_full_release_rejects_unbound_effective_policy_search_component(
         campaign_root,
         manifest=_full_manifest(),
         campaign_config=config,
+        source_repository_root=config.source_repository_root,
     )
 
     assert result["status"] == "invalid"
@@ -495,6 +550,7 @@ def test_full_release_rejects_effective_component_on_wrong_scenario_or_arm(
         campaign_root,
         manifest=_full_manifest(),
         campaign_config=config,
+        source_repository_root=config.source_repository_root,
     )
 
     assert result["status"] == "invalid"
@@ -522,6 +578,7 @@ def test_full_release_rejects_unrecognized_episode_status(
         campaign_root,
         manifest=_full_manifest(),
         campaign_config=config,
+        source_repository_root=config.source_repository_root,
     )
 
     assert result["status"] == "invalid"
@@ -552,6 +609,7 @@ def test_full_release_rejects_conflicting_present_provenance_alias(
         campaign_root,
         manifest=_full_manifest(),
         campaign_config=config,
+        source_repository_root=config.source_repository_root,
     )
 
     assert result["status"] == "invalid"
@@ -577,6 +635,7 @@ def test_full_release_sidecar_identity_matches_telemetry_enabled_producer(
         campaign_root,
         manifest=_full_manifest(),
         campaign_config=config,
+        source_repository_root=config.source_repository_root,
     )
 
     assert result["status"] == "valid"
@@ -620,7 +679,10 @@ def test_full_release_binds_same_algorithm_artifacts_to_exact_arms(
     )
     manifest = _full_manifest()
     baseline = validate_full_benchmark_release_acceptance(
-        campaign_root, manifest=manifest, campaign_config=config
+        campaign_root,
+        manifest=manifest,
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
     )
     assert baseline["status"] == "valid"
 
@@ -638,7 +700,10 @@ def test_full_release_binds_same_algorithm_artifacts_to_exact_arms(
     second_sidecar.write_bytes(first_sidecar_payload)
 
     result = validate_full_benchmark_release_acceptance(
-        campaign_root, manifest=manifest, campaign_config=config
+        campaign_root,
+        manifest=manifest,
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
     )
 
     assert result["status"] == "invalid"

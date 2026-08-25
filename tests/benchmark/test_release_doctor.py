@@ -1624,6 +1624,26 @@ def test_final_cluster_check_rejects_runtime_smoke_identity_drift(tmp_path: Path
     assert "runtime_smoke_receipt hash is not bound" in rejected.summary
 
 
+def test_final_cluster_check_rejects_runtime_smoke_receipt_mutation(
+    tmp_path: Path,
+) -> None:
+    """Final admission rejects runtime-smoke bytes changed after packet creation."""
+    packet, queue = _write_final_packet_fixture(tmp_path)
+    receipt = tmp_path / "configs" / "runtime_smoke_receipt"
+    receipt.write_text("mutated after packet creation\n", encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert "runtime_smoke_receipt hash does not match checkout" in rejected.summary
+
+
 def test_packet_private_evidence_rejects_missing_receipt_file(tmp_path: Path) -> None:
     """A final packet without its pinned checkpoint receipt fails closed."""
     packet, queue = _write_final_packet_fixture(tmp_path)

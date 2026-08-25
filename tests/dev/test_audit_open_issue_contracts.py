@@ -312,6 +312,31 @@ def test_unknown_classifier_output_fails_closed() -> None:
     assert report["applicable"] is False
 
 
+def test_unexpected_per_issue_exception_is_bounded_and_scan_continues() -> None:
+    """One unexpected evaluator exception must not hide later issue packets."""
+    fixture = _validate_fixture(_fixture([_raw_issue(1), _raw_issue(2)]))
+    stable_evaluator = _fixture_evaluator(fixture)
+
+    def unstable(number: int) -> dict[str, Any]:
+        if number == 1:
+            raise ZeroDivisionError("unexpected per-issue failure")
+        return stable_evaluator(number)
+
+    report = _build_report(
+        repo="ll7/robot_sf_ll7",
+        source="fixture",
+        pages=fixture["pages"],
+        pagination={"complete": True, "errors": [], "page_size": 100, "max_pages": 20},
+        evaluator=unstable,
+        input_sha256="f" * 64,
+    )
+
+    assert [item["classification"] for item in report["items"]] == ["error", "ready"]
+    assert report["items"][1]["dispatch_eligible"] is True
+    assert report["applicable"] is False
+    assert any("ZeroDivisionError" in error for error in report["errors"])
+
+
 def test_report_is_byte_stable_for_fixed_fixture() -> None:
     """A fixed fixture must produce identical content and digest."""
     fixture = _fixture([_raw_issue(1), _raw_issue(2)])

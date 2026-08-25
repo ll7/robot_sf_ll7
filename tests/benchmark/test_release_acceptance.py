@@ -1430,3 +1430,18 @@ def test_release_acceptance_bounds_duplicate_blockers() -> None:
 
     assert blockers[0] == "same blocker"
     assert len(blockers) == 100
+
+
+def test_campaign_summary_reader_reports_invalid_json_without_private_path(
+    tmp_path: Path,
+) -> None:
+    """Malformed summary diagnostics remain useful without exposing their location."""
+    summary_path = tmp_path / "reports" / "campaign_summary.json"
+    summary_path.parent.mkdir(parents=True)
+    summary_path.write_text("{invalid\n", encoding="utf-8")
+
+    payload, error = release_acceptance._read_campaign_summary(tmp_path)
+
+    assert payload is None
+    assert error == "campaign summary contains invalid JSON"
+    assert str(tmp_path) not in error

@@ -106,6 +106,11 @@ _PUBLIC_PACKET_INPUT_NAMES = (
     "canonical_campaign_config",
     "scenario_matrix",
     "public_single_node_entrypoint",
+    # Runtime smoke is generated privately, but the accepted receipt is
+    # materialized beneath the exact release checkout before final admission.
+    # Rehash it here so a post-packet mutation cannot satisfy only the ledger
+    # aliases while changing the bytes the doctor would publish.
+    "runtime_smoke_receipt",
     "release_runner",
 )
 _TERMINAL_QUEUE_STATES = frozenset({"complete", "done"})
@@ -1387,12 +1392,13 @@ def _validate_runtime_smoke_contract(packet: dict[str, Any], contract: dict[str,
 
 
 def _validate_packet_file_hashes(packet: dict[str, Any], repo: Path | None) -> list[str]:
-    """Recompute every declared public-input hash from the release checkout.
+    """Recompute every packet input materialized in the release checkout.
 
     Returns:
         Sanitized file-hash problems.  Final admission has no implicit
-        remote-only input mode: the private packet schema does not declare one,
-        so every public input must be present in the exact checkout.
+        remote-only input mode: every packet input used for final admission,
+        including the accepted runtime-smoke receipt, must be present in the
+        exact checkout.
     """
     if repo is None:
         return ["public-input checkout is required for final packet admission"]

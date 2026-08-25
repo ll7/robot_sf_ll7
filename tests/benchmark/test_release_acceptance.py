@@ -307,7 +307,7 @@ def _write_provenance_bound_full_campaign(
     return campaign_root, config
 
 
-def _write_effective_component_campaign(
+def _write_effective_component_campaign(  # noqa: C901
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     *,
@@ -343,6 +343,17 @@ def _write_effective_component_campaign(
             "  scenario_00:\n"
             f"    base_config_path: {external_config_path}\n"
         )
+    elif override_mode == "symlink":
+        symlink_config_path = config.source_repository_root / "configs/algos/orca-link.yaml"
+        symlink_config_path.symlink_to(override_config_path)
+        override_payload = (
+            "scenario_algo_overrides:\n"
+            "  scenario_00:\n"
+            "    algo: orca\n"
+            "    base_config_path: configs/algos/orca-link.yaml\n"
+        )
+    elif override_mode == "unknown":
+        override_payload = "scenario_algo_overrides:\n  unknown_scenario:\n    algo: orca\n"
     else:
         override_payload = ""
     candidate_path.write_text(
@@ -379,6 +390,7 @@ def _write_effective_component_campaign(
         if row["scenario_id"] == "scenario_00" and override_mode not in {
             "malformed_base",
             "external",
+            "unknown",
         }:
             row["algo"] = "orca"
             row["algorithm_metadata"].update(
@@ -545,6 +557,50 @@ def test_full_release_rejects_external_nested_candidate_config(
 
     assert result["status"] == "invalid"
     assert any("outside trusted source repository root" in item for item in result["blockers"])
+
+
+def test_full_release_rejects_symlinked_nested_candidate_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Nested candidate config symlinks are rejected before resolution can hide the link."""
+    campaign_root, config = _write_effective_component_campaign(
+        tmp_path,
+        monkeypatch,
+        override_mode="symlink",
+    )
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+
+    assert result["status"] == "invalid"
+    assert any("contains a symlink component" in item for item in result["blockers"])
+
+
+def test_full_release_rejects_unknown_scenario_override_when_rows_use_base_algorithm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unused override keys cannot bypass the canonical scenario matrix binding."""
+    campaign_root, config = _write_effective_component_campaign(
+        tmp_path,
+        monkeypatch,
+        override_mode="unknown",
+    )
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+
+    assert result["status"] == "invalid"
+    assert any("not in the canonical campaign matrix" in item for item in result["blockers"])
 
 
 @pytest.mark.parametrize("override_mode", ["missing", "malformed"])

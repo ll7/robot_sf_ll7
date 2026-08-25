@@ -1834,10 +1834,22 @@ def _full_release_nested_config_path(
     source_root = source_repository_root.resolve()
     raw = Path(raw_path.strip())
     if raw.is_absolute():
+        lexical_candidate = raw.absolute()
+        if _path_has_symlink_component(lexical_candidate):
+            raise ValueError(f"{label} contains a symlink component: {raw}")
         candidate = raw.resolve()
     else:
-        anchored = (config_anchor / raw).resolve()
-        candidate = anchored if anchored.is_file() else (source_root / raw).resolve()
+        lexical_anchored = config_anchor / raw
+        if _path_has_symlink_component(lexical_anchored):
+            raise ValueError(f"{label} contains a symlink component: {raw}")
+        anchored = lexical_anchored.resolve()
+        if anchored.is_file():
+            candidate = anchored
+        else:
+            lexical_source = source_root / raw
+            if _path_has_symlink_component(lexical_source):
+                raise ValueError(f"{label} contains a symlink component: {raw}")
+            candidate = lexical_source.resolve()
     try:
         candidate.relative_to(source_root)
     except ValueError as exc:
@@ -1853,6 +1865,7 @@ def _full_release_candidate_config(  # noqa: C901
     *,
     planner_spec: Any,
     source_repository_root: Path,
+    allowed_scenario_ids: set[str] | None = None,
 ) -> tuple[Path | None, dict[str, Any] | None, str | None]:
     """Load and structurally validate one arm's policy-search candidate config.
 
@@ -1892,20 +1905,26 @@ def _full_release_candidate_config(  # noqa: C901
             for raw_scenario_id, raw_override in raw_overrides.items():
                 if not isinstance(raw_scenario_id, str) or not raw_scenario_id.strip():
                     raise TypeError("scenario_algo_overrides keys must be non-empty strings")
+                scenario_id = raw_scenario_id.strip()
+                if allowed_scenario_ids is not None and scenario_id not in allowed_scenario_ids:
+                    raise ValueError(
+                        "scenario_algo_overrides key is not in the canonical campaign matrix: "
+                        f"{scenario_id!r}"
+                    )
                 if not isinstance(raw_override, Mapping):
                     raise TypeError(
-                        f"scenario_algo_overrides entries must be mappings ({raw_scenario_id!r})"
+                        f"scenario_algo_overrides entries must be mappings ({scenario_id!r})"
                     )
                 override = deepcopy(dict(raw_override))
                 if "algo" in override and (
                     not isinstance(override["algo"], str) or not override["algo"].strip()
                 ):
                     raise TypeError(
-                        f"scenario_algo_overrides[{raw_scenario_id!r}].algo must be a non-empty string"
+                        f"scenario_algo_overrides[{scenario_id!r}].algo must be a non-empty string"
                     )
                 if "params" in override and not isinstance(override["params"], Mapping):
                     raise TypeError(
-                        f"scenario_algo_overrides[{raw_scenario_id!r}].params must be a mapping"
+                        f"scenario_algo_overrides[{scenario_id!r}].params must be a mapping"
                     )
                 if "base_config_path" in override:
                     override["base_config_path"] = str(
@@ -1913,12 +1932,10 @@ def _full_release_candidate_config(  # noqa: C901
                             override["base_config_path"],
                             config_anchor=config_path.parent,
                             source_repository_root=source_root,
-                            label=(
-                                f"scenario_algo_overrides[{raw_scenario_id!r}].base_config_path"
-                            ),
+                            label=(f"scenario_algo_overrides[{scenario_id!r}].base_config_path"),
                         )
                     )
-                validated_overrides[raw_scenario_id.strip()] = override
+                validated_overrides[scenario_id] = override
             normalized["scenario_algo_overrides"] = validated_overrides
         return config_path, normalized, None
     except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
@@ -2075,6 +2092,7 @@ def _full_release_effective_algorithm(
     base_algorithm: str,
     scenario: Mapping[str, Any],
     source_repository_root: Path | None = None,
+    allowed_scenario_ids: set[str] | None = None,
 ) -> tuple[str | None, str | None]:
     """Resolve one row's expected algorithm through the producer's policy resolver.
 
@@ -2095,6 +2113,7 @@ def _full_release_effective_algorithm(
         config_path, candidate_config, config_error = _full_release_candidate_config(
             planner_spec=planner_spec,
             source_repository_root=Path(source_repository_root or get_repository_root()).resolve(),
+            allowed_scenario_ids=allowed_scenario_ids,
         )
         if config_error is not None:
             return None, f"{config_error} for scenario {scenario_id!r}"
@@ -2748,6 +2767,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
     )
     expected_source = str(campaign.get("git_hash", "")).strip().lower()
     effective_algorithm_cache: dict[tuple[str, str], tuple[str | None, str | None]] = {}
+    allowed_scenario_ids = set(scenarios_by_producer_id)
 
     for index, entry in enumerate(runs):
         if not isinstance(entry, Mapping):
@@ -2871,6 +2891,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
                             base_algorithm=expected_algo,
                             scenario=canonical_scenario,
                             source_repository_root=trusted_source_root,
+                            allowed_scenario_ids=allowed_scenario_ids,
                         )
                     row_expected_algo, resolution_error = effective_algorithm_cache[cache_key]
                     if resolution_error is not None:

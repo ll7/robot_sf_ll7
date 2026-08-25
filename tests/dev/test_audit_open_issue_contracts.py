@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 from scripts.dev.audit_open_issue_contracts import (
     NEXT_ACTIONS,
@@ -40,7 +41,7 @@ def _raw_issue(
     labels: list[str] | None = None,
     assignees: list[str] | None = None,
     title: str | None = None,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Return one REST-listing fixture row."""
     return {
         "number": number,
@@ -60,7 +61,7 @@ def _exact_issue(
     body: str = COMPLETE_BODY,
     title: str | None = None,
     state: str = "OPEN",
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Return one normalized exact-read fixture issue."""
     return {
         "number": number,
@@ -73,7 +74,7 @@ def _exact_issue(
     }
 
 
-def _claim(*, claimed: bool = False, ok: bool = True) -> dict[str, object]:
+def _claim(*, claimed: bool = False, ok: bool = True) -> dict[str, Any]:
     """Return one normalized claim fixture."""
     return {
         "ok": ok,
@@ -84,17 +85,17 @@ def _claim(*, claimed: bool = False, ok: bool = True) -> dict[str, object]:
 
 
 def _fixture(
-    rows: list[dict[str, object]],
+    rows: list[dict[str, Any]],
     *,
-    exact: dict[int, dict[str, object]] | None = None,
-    claims: dict[int, dict[str, object]] | None = None,
-    dependencies: dict[int, dict[str, object]] | None = None,
+    exact: dict[int, dict[str, Any]] | None = None,
+    claims: dict[int, dict[str, Any]] | None = None,
+    dependencies: dict[int, dict[str, Any]] | None = None,
     trailing_empty_page: bool = True,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     """Return one valid fixture envelope."""
     exact_rows = exact or {row["number"]: _exact_issue(row["number"]) for row in rows}
     claim_rows = claims or {row["number"]: _claim() for row in rows}
-    pages: list[list[dict[str, object]]] = [rows]
+    pages: list[list[dict[str, Any]]] = [rows]
     if trailing_empty_page:
         pages.append([])
     return {
@@ -108,8 +109,8 @@ def _fixture(
 
 
 def _report(
-    fixture: dict[str, object], *, page_size: int = 100, max_pages: int = 20
-) -> dict[str, object]:
+    fixture: dict[str, Any], *, page_size: int = 100, max_pages: int = 20
+) -> dict[str, Any]:
     """Build one deterministic report from fixture data."""
     normalized = _validate_fixture(fixture)
     pages = normalized["pages"][:max_pages]
@@ -136,8 +137,15 @@ def test_ready_issue_uses_canonical_classifier_and_dispatch_handoff() -> None:
 
     item = report["items"][0]
     assert item["classification"] == "ready"
+    assert item["claim"] == {
+        "ok": True,
+        "claimed": False,
+        "claim_ref": None,
+        "sha": None,
+    }
     assert item["dispatch_eligible"] is True
     assert item["next_action"] == "dispatch_via_goal_issue_admission"
+    assert report["summary"]["claim_states"] == {"unclaimed": 1}
     assert report["summary"]["executable_leaf_numbers"] == [1]
     assert report["mutation_authorized"] is False
 
@@ -253,6 +261,11 @@ def test_claimed_assigned_and_unavailable_claim_states_are_distinct() -> None:
         "assigned",
         "error",
     ]
+    assert report["summary"]["claim_states"] == {
+        "claimed": 1,
+        "unavailable": 1,
+        "unclaimed": 1,
+    }
     assert report["applicable"] is False
 
 
@@ -280,6 +293,27 @@ def test_dependency_evaluation_is_delegated_to_canonical_gate() -> None:
     assert item["dependency_gate"]["mandatory_failures"][0]["id"] == "required-pr"
 
 
+def test_unknown_classifier_output_fails_closed() -> None:
+    """A future unknown classification must not become implied dispatch authority."""
+    fixture = _validate_fixture(_fixture([_raw_issue(1)]))
+
+    def unknown(_number: int) -> dict[str, Any]:
+        report = _fixture_evaluator(fixture)(1)
+        report["classification"] = "future_state"
+        return report
+
+    report = _build_report(
+        repo="ll7/robot_sf_ll7",
+        source="fixture",
+        pages=fixture["pages"],
+        pagination={"complete": True, "errors": [], "page_size": 100, "max_pages": 20},
+        evaluator=unknown,
+        input_sha256="f" * 64,
+    )
+    assert report["items"][0]["classification"] == "error"
+    assert report["applicable"] is False
+
+
 def test_report_is_byte_stable_for_fixed_fixture() -> None:
     """A fixed fixture must produce identical content and digest."""
     fixture = _fixture([_raw_issue(1), _raw_issue(2)])
@@ -305,6 +339,22 @@ def test_markdown_summary_is_bounded_and_omits_issue_bodies() -> None:
     assert "Repair one bounded workflow defect" not in rendered
 
 
+def test_module_has_no_github_mutation_surface() -> None:
+    """The audit owner must not import or call repository mutation helpers."""
+    root = Path(__file__).resolve().parents[2]
+    source = (root / "scripts/dev/audit_open_issue_contracts.py").read_text(encoding="utf-8")
+    forbidden = (
+        "add_issue_labels",
+        "remove_issue_label",
+        "update_issue",
+        "create_issue",
+        "add_comment_to_issue",
+        "create_pull_request",
+        "update_ref",
+    )
+    assert not any(name in source for name in forbidden)
+
+
 def test_fixture_cli_process_boundary(tmp_path: Path) -> None:
     """The documented fixture CLI must emit JSON and preserve exit-code semantics."""
     fixture_path = tmp_path / "fixture.json"
@@ -314,7 +364,8 @@ def test_fixture_cli_process_boundary(tmp_path: Path) -> None:
     result = subprocess.run(
         [
             sys.executable,
-            "scripts/dev/audit_open_issue_contracts.py",
+            "-m",
+            "scripts.dev.audit_open_issue_contracts",
             "--fixture",
             str(fixture_path),
             "--page-size",

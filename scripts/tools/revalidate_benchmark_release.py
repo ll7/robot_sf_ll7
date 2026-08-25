@@ -20,6 +20,7 @@ import argparse
 import contextlib
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -27,6 +28,7 @@ import subprocess
 import sys
 import tempfile
 import zlib
+from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -42,6 +44,7 @@ from robot_sf.benchmark.artifact_publication import (
 )
 from robot_sf.benchmark.camera_ready import _config as camera_config_module
 from robot_sf.benchmark.camera_ready import _run_state as camera_run_state_module
+from robot_sf.benchmark.camera_ready._artifacts import _write_snqi_diagnostics_artifacts
 from robot_sf.benchmark.camera_ready._config import load_campaign_config
 from robot_sf.benchmark.camera_ready_campaign import write_campaign_report
 from robot_sf.benchmark.identity.hash_utils import sha256_file
@@ -68,6 +71,25 @@ PUBLICATION_CUSTODY_NAME = "publication_custody.json"
 SNQI_ADVISORY_BOUNDARY = (
     "SNQI calibration failed under warn and remains advisory only; it is not a planner-ranking "
     "authority for this release."
+)
+GOAL_TIMEOUT_BOUNDARY_NOTE = (
+    "Producer recorded goal_reached and timeout in the same terminal row without "
+    "reached_goal_step; exact event ordering is unavailable. This row is excluded from "
+    "goal/timeout timing-boundary interpretation; status, termination, outcome, and metrics "
+    "remain unchanged."
+)
+EXPECTED_GOAL_TIMEOUT_BOUNDARY_ROWS = frozenset(
+    {
+        (
+            "guarded_ppo__differential_drive",
+            "francis2023_parallel_traffic--132--2bf83ad03db6559e",
+        )
+    }
+)
+EXPECTED_RELEASE_EPISODE_ROWS = 20_160
+EXPECTED_RELEASE_ARMS = 14
+EXPECTED_SOURCE_CAMPAIGN_RELATIVE = Path(
+    "output/benchmarks/camera_ready/issue7742_release_full-s30-h600-b1d5ab6de708-v1_20260825"
 )
 
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
@@ -808,17 +830,14 @@ def _sanitise_tree_paths(
             continue
         temporary = path.with_name(path.name + ".path-sanitising")
         changed = False
-        carry = b""
         try:
             with path.open("rb") as source_handle, temporary.open("wb") as target_handle:
-                while chunk := source_handle.read(1024 * 1024):
-                    data = carry + chunk
-                    # Keep enough overlap for a long absolute prefix/path to
-                    # cross a chunk boundary.  The output is still streamed.
-                    if len(data) > 8192:
-                        body, carry = data[:-8192], data[-8192:]
-                    else:
-                        body, carry = b"", data
+                # Text artifacts are structured by lines.  Processing complete
+                # lines prevents an absolute path from being split and corrupted
+                # at an arbitrary byte-chunk boundary.  JSONL rows can be large,
+                # but remain bounded per episode and do not require whole-file
+                # buffering.
+                for body in source_handle:
                     replaced = _sanitise_bytes(
                         body,
                         source_root=source_root,
@@ -827,14 +846,6 @@ def _sanitise_tree_paths(
                     )
                     changed = changed or replaced != body
                     target_handle.write(replaced)
-                replaced = _sanitise_bytes(
-                    carry,
-                    source_root=source_root,
-                    producer_root=producer_root,
-                    validator_root=validator_root,
-                )
-                changed = changed or replaced != carry
-                target_handle.write(replaced)
             if changed:
                 os.replace(temporary, path)
             else:
@@ -905,6 +916,414 @@ def _copy_producer_projection(
         validator_root=validator_root,
     )
     _assert_no_private_absolute_paths(staging_root)
+
+
+def _is_unresolved_goal_timeout_boundary(record: Mapping[str, Any]) -> bool:
+    """Return whether a row needs an explicit non-fabricated boundary annotation."""
+    ledger = record.get("event_ledger")
+    ledger = ledger if isinstance(ledger, Mapping) else {}
+    exact_events = ledger.get("exact_events")
+    exact_events = exact_events if isinstance(exact_events, Mapping) else {}
+    note = record.get("goal_timeout_boundary_note")
+    return (
+        exact_events.get("goal_reached") is True
+        and exact_events.get("timeout") is True
+        and record.get("reached_goal_step") is None
+        and not (isinstance(note, str) and note.strip())
+    )
+
+
+def _validate_goal_timeout_annotation_candidate(record: Mapping[str, Any]) -> None:
+    """Require the reviewed terminal semantics before adding a publication-only note."""
+    outcome = record.get("outcome")
+    outcome = outcome if isinstance(outcome, Mapping) else {}
+    metrics = record.get("metrics")
+    metrics = metrics if isinstance(metrics, Mapping) else {}
+    if (
+        record.get("status") != "success"
+        or record.get("termination_reason") != "success"
+        or outcome.get("route_complete") is not True
+        or outcome.get("timeout_event") is not True
+        or metrics.get("success") not in (1, 1.0, True)
+    ):
+        raise DerivedReleaseError(
+            "reviewed goal+timeout row does not retain successful terminal semantics"
+        )
+
+
+def _rebind_sidecar_rows(
+    sidecar: Mapping[str, Any],
+    *,
+    allowed_paths: set[str],
+    relative_path: str,
+    expected_count: int,
+) -> None:
+    """Validate and rebind every row-level raw-artifact path."""
+    sidecar_rows = sidecar.get("rows")
+    if not isinstance(sidecar_rows, list) or len(sidecar_rows) != expected_count:
+        raise DerivedReleaseError("episode provenance sidecar row count is stale")
+    for sidecar_row in sidecar_rows:
+        if (
+            not isinstance(sidecar_row, dict)
+            or sidecar_row.get("raw_artifact") not in allowed_paths
+        ):
+            raise DerivedReleaseError("episode sidecar row path is not source/projection bound")
+        sidecar_row["raw_artifact"] = relative_path
+
+
+def _rebind_one_publication_sidecar(
+    campaign_root: Path,
+    *,
+    episodes_path: Path,
+    source_file_map: Mapping[str, Mapping[str, Any]],
+    boundary_files: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Rebind one source-validated sidecar to its derived episode path."""
+    relative_path = episodes_path.relative_to(campaign_root).as_posix()
+    source_relative_path = (EXPECTED_SOURCE_CAMPAIGN_RELATIVE / relative_path).as_posix()
+    allowed_paths = {relative_path, source_relative_path}
+    sidecar_path = episodes_path.with_name(f"{episodes_path.name}.provenance.json")
+    sidecar_relative = sidecar_path.relative_to(campaign_root).as_posix()
+    pre_rebind_sidecar_sha256 = sha256_file(sidecar_path).lower()
+    producer_sidecar_entry = source_file_map.get(sidecar_relative)
+    producer_sidecar_sha256 = (
+        str(producer_sidecar_entry.get("sha256", "")).lower()
+        if isinstance(producer_sidecar_entry, Mapping)
+        else ""
+    )
+    if not _SHA256_RE.fullmatch(producer_sidecar_sha256):
+        raise DerivedReleaseError("producer map omits a valid episode sidecar digest")
+    sidecar = _read_json(sidecar_path)
+    raw_artifacts = sidecar.get("raw_artifacts")
+    if not isinstance(raw_artifacts, list):
+        raise DerivedReleaseError("episode provenance sidecar raw_artifacts is malformed")
+    episode_artifacts = [
+        item
+        for item in raw_artifacts
+        if isinstance(item, dict) and item.get("kind") == "episodes_jsonl"
+    ]
+    if len(episode_artifacts) != 1 or episode_artifacts[0].get("path") not in allowed_paths:
+        raise DerivedReleaseError("episode sidecar raw path is not source/projection bound")
+    source_entry = source_file_map.get(relative_path)
+    source_digest = (
+        str(source_entry.get("sha256", "")).lower() if isinstance(source_entry, Mapping) else ""
+    )
+    if not _SHA256_RE.fullmatch(source_digest):
+        raise DerivedReleaseError("producer map omits a valid episode artifact digest")
+    if str(episode_artifacts[0].get("sha256", "")).lower() != source_digest:
+        raise DerivedReleaseError("episode provenance sidecar disagrees with producer map")
+    current_digest = sha256_file(episodes_path).lower()
+    episode_artifacts[0]["path"] = relative_path
+    episode_artifacts[0]["sha256"] = current_digest
+    episode_rows = sum(
+        1 for line in episodes_path.read_text(encoding="utf-8").splitlines() if line.strip()
+    )
+    _rebind_sidecar_rows(
+        sidecar,
+        allowed_paths=allowed_paths,
+        relative_path=relative_path,
+        expected_count=episode_rows,
+    )
+    derived_artifacts = sidecar.get("derived_artifacts")
+    if not isinstance(derived_artifacts, list):
+        raise DerivedReleaseError("episode provenance sidecar derived_artifacts is malformed")
+    projection_record: dict[str, Any] = {
+        "kind": "publication_projection",
+        "path": relative_path,
+        "producer_sha256": source_digest,
+        "sha256": current_digest,
+        "path_binding": "projection_relative",
+        "producer_sidecar_sha256": producer_sidecar_sha256,
+        "scientific_execution_changed": False,
+        "simulation_rerun": False,
+    }
+    boundary = boundary_files.get(relative_path)
+    if isinstance(boundary, Mapping):
+        projection_record["goal_timeout_boundary_annotation"] = {
+            "pre_annotation_projection_sha256": boundary.get("source_sha256"),
+            "annotation_count": len(boundary.get("episode_ids", [])),
+            "episode_ids": boundary.get("episode_ids", []),
+            "timing_evidence_fabricated": False,
+            "scientific_fields_changed": False,
+        }
+    derived_artifacts.append(projection_record)
+    _write_json(sidecar_path, sidecar)
+    return {
+        "path": sidecar_relative,
+        "producer_sidecar_sha256": producer_sidecar_sha256,
+        "pre_rebind_projection_sidecar_sha256": pre_rebind_sidecar_sha256,
+        "derived_sha256": sha256_file(sidecar_path).lower(),
+        "episodes_path": relative_path,
+        "producer_episodes_sha256": source_digest,
+        "episodes_sha256": current_digest,
+        "row_count": episode_rows,
+    }
+
+
+def _rebind_publication_sidecars(
+    campaign_root: Path,
+    *,
+    source_file_map: Mapping[str, Mapping[str, Any]],
+    boundary_reconciliation: Mapping[str, Any],
+    expected_arm_count: int = EXPECTED_RELEASE_ARMS,
+    expected_row_count: int = EXPECTED_RELEASE_EPISODE_ROWS,
+) -> dict[str, Any]:
+    """Rebind every copied sidecar to the derived tree after strict source-path validation."""
+    raw_boundary_files = boundary_reconciliation.get("files")
+    raw_boundary_files = raw_boundary_files if isinstance(raw_boundary_files, list) else []
+    boundary_files = {
+        str(item.get("path")): item for item in raw_boundary_files if isinstance(item, Mapping)
+    }
+    files = [
+        _rebind_one_publication_sidecar(
+            campaign_root,
+            episodes_path=episodes_path,
+            source_file_map=source_file_map,
+            boundary_files=boundary_files,
+        )
+        for episodes_path in sorted(campaign_root.glob("runs/*/episodes.jsonl"))
+    ]
+    row_count = sum(int(item["row_count"]) for item in files)
+    if len(files) != expected_arm_count or row_count != expected_row_count:
+        raise DerivedReleaseError("projection sidecar rebind did not cover the full release matrix")
+    return {
+        "status": "projection_relative",
+        "arm_count": len(files),
+        "row_count": row_count,
+        "files": files,
+    }
+
+
+def _find_unresolved_goal_timeout_rows(
+    campaign_root: Path,
+) -> tuple[dict[Path, list[tuple[int, str, dict[str, Any]]]], set[tuple[str, str]]]:
+    """Plan boundary annotations without changing any artifact bytes."""
+    planned: dict[Path, list[tuple[int, str, dict[str, Any]]]] = defaultdict(list)
+    observed: set[tuple[str, str]] = set()
+    for episodes_path in sorted(campaign_root.glob("runs/*/episodes.jsonl")):
+        try:
+            lines = episodes_path.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            raise DerivedReleaseError("could not read publication episode projection") from exc
+        for line_index, line in enumerate(lines):
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise DerivedReleaseError(
+                    "publication episode projection contains invalid JSON"
+                ) from exc
+            if not isinstance(record, dict):
+                raise DerivedReleaseError("publication episode projection row is not an object")
+            if not _is_unresolved_goal_timeout_boundary(record):
+                continue
+            episode_id = record.get("episode_id")
+            if not isinstance(episode_id, str) or not episode_id.strip():
+                raise DerivedReleaseError("goal+timeout row is missing an episode identity")
+            observed.add((episodes_path.parent.name, episode_id.strip()))
+            planned[episodes_path].append((line_index, line, record))
+    return planned, observed
+
+
+def _annotate_publication_goal_timeout_boundaries(
+    campaign_root: Path,
+    *,
+    expected_rows: set[tuple[str, str]] | frozenset[tuple[str, str]] = (
+        EXPECTED_GOAL_TIMEOUT_BOUNDARY_ROWS
+    ),
+) -> dict[str, Any]:
+    """Annotate only the reviewed frozen-row ambiguity without inventing event timing."""
+    planned, observed = _find_unresolved_goal_timeout_rows(campaign_root)
+    if observed != set(expected_rows):
+        raise DerivedReleaseError(
+            "unresolved goal+timeout rows differ from reviewed boundary-row set"
+        )
+
+    file_evidence: list[dict[str, Any]] = []
+    for episodes_path, edits in sorted(planned.items(), key=lambda item: item[0].as_posix()):
+        lines = episodes_path.read_text(encoding="utf-8").splitlines()
+        source_sha256 = sha256_file(episodes_path).lower()
+        episode_ids: list[str] = []
+        for line_index, original_line, record in edits:
+            if lines[line_index] != original_line:
+                raise DerivedReleaseError("episode projection changed during annotation planning")
+            _validate_goal_timeout_annotation_candidate(record)
+            record["goal_timeout_boundary_note"] = GOAL_TIMEOUT_BOUNDARY_NOTE
+            lines[line_index] = json.dumps(record, sort_keys=True, ensure_ascii=False)
+            episode_ids.append(str(record["episode_id"]))
+        temporary = episodes_path.with_name(f".{episodes_path.name}.boundary-annotation")
+        temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        os.replace(temporary, episodes_path)
+        file_evidence.append(
+            {
+                "path": episodes_path.relative_to(campaign_root).as_posix(),
+                "source_sha256": source_sha256,
+                "derived_sha256": sha256_file(episodes_path).lower(),
+                "episode_ids": sorted(episode_ids),
+            }
+        )
+
+    run_meta_path = campaign_root / "run_meta.json"
+    run_meta = _read_json(run_meta_path)
+    run_meta["goal_timeout_boundary"] = {
+        "annotated_rows": len(observed),
+        "unresolved_rows": 0,
+        "timing_evidence_fabricated": False,
+        "policy": (
+            "Frozen rows lacking a reached-goal step carry an explicit note and are excluded "
+            "from timing-boundary interpretation; no event timing is inferred."
+        ),
+    }
+    _write_json(run_meta_path, run_meta)
+    return {
+        "status": "annotated",
+        "annotated_row_count": len(observed),
+        "rows": [{"arm": arm, "episode_id": episode_id} for arm, episode_id in sorted(observed)],
+        "files": file_evidence,
+        "timing_evidence_fabricated": False,
+        "scientific_fields_changed": False,
+    }
+
+
+def _require_reviewed_snqi_mismatch(
+    campaign_root: Path,
+    *,
+    expected_row_count: int,
+    expected_arm_count: int,
+) -> dict[str, Any]:
+    """Require that stale ordering is the only SNQI publication inconsistency."""
+    before = artifact_publication_module._check_snqi_field_consistency(campaign_root)
+    counts = before.get("counts")
+    counts = counts if isinstance(counts, Mapping) else {}
+    expected_violation = (
+        "per-episode metrics.snqi arm ordering disagrees with "
+        "snqi_diagnostics.json planner_ordering"
+    )
+    counts_match = (
+        counts.get("rows") == expected_row_count
+        and counts.get("episode_field_present") == expected_row_count
+        and counts.get("snqi_field_mismatches") == 0
+        and counts.get("arms") == expected_arm_count
+    )
+    if (
+        before.get("checked") is not True
+        or not counts_match
+        or before.get("violations") != [expected_violation]
+    ):
+        raise DerivedReleaseError(
+            "SNQI diagnostics have drift beyond the reviewed ordering mismatch"
+        )
+    return before
+
+
+def _stored_snqi_ordering(campaign_root: Path) -> list[dict[str, Any]]:
+    """Build planner ordering from already formula-verified stored episode fields."""
+    grouped: defaultdict[tuple[str, str], list[float]] = defaultdict(list)
+    for episodes_path in sorted(campaign_root.glob("runs/*/episodes.jsonl")):
+        planner_key, separator, kinematics = episodes_path.parent.name.partition("__")
+        if not separator or not planner_key or not kinematics:
+            raise DerivedReleaseError("SNQI episode arm directory is malformed")
+        for line in episodes_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            metrics = record.get("metrics") if isinstance(record, Mapping) else None
+            raw_snqi = metrics.get("snqi") if isinstance(metrics, Mapping) else None
+            if (
+                isinstance(raw_snqi, bool)
+                or not isinstance(raw_snqi, (int, float))
+                or not math.isfinite(float(raw_snqi))
+            ):
+                raise DerivedReleaseError("publication row lacks a finite stored SNQI value")
+            grouped[(planner_key, kinematics)].append(float(raw_snqi))
+    ordering = [
+        {
+            "planner_key": planner_key,
+            "kinematics": kinematics,
+            "episode_count": len(values),
+            "mean_snqi": sum(values) / len(values),
+        }
+        for (planner_key, kinematics), values in grouped.items()
+    ]
+    ordering.sort(
+        key=lambda row: (
+            -float(row["mean_snqi"]),
+            str(row["planner_key"]),
+            str(row["kinematics"]),
+        )
+    )
+    for rank, row in enumerate(ordering, start=1):
+        row["rank"] = rank
+    return ordering
+
+
+def _reconcile_publication_snqi_diagnostics(
+    campaign_root: Path,
+    *,
+    expected_row_count: int = EXPECTED_RELEASE_EPISODE_ROWS,
+    expected_arm_count: int = EXPECTED_RELEASE_ARMS,
+) -> dict[str, Any]:
+    """Reconcile stale diagnostics ordering while keeping failed SNQI calibration advisory."""
+    diagnostics_path = campaign_root / "reports" / "snqi_diagnostics.json"
+    producer_diagnostics_sha256 = sha256_file(diagnostics_path).lower()
+    diagnostics = _read_json(diagnostics_path)
+    if (
+        diagnostics.get("contract_enabled") is not True
+        or diagnostics.get("contract_enforcement") != "warn"
+        or diagnostics.get("contract_status") != "fail"
+    ):
+        raise DerivedReleaseError("SNQI recovery requires the reviewed failed-under-warn contract")
+
+    before = _require_reviewed_snqi_mismatch(
+        campaign_root,
+        expected_row_count=expected_row_count,
+        expected_arm_count=expected_arm_count,
+    )
+    diagnostics["planner_ordering"] = _stored_snqi_ordering(campaign_root)
+    diagnostics["score_basis_reconciliation"] = {
+        "status": "reconciled_from_verified_stored_fields",
+        "canonical_formula": "robot_sf.benchmark.metrics.snqi",
+        "verified_episode_rows": expected_row_count,
+        "stored_field_disposition": (
+            "retained: every stored metrics.snqi value matched the pinned curvature-aware basis"
+        ),
+        "planner_ordering_disposition": (
+            "recomputed from the frozen per-episode fields without changing episode metrics"
+        ),
+        "integrity": dict(before.get("integrity", {})),
+    }
+    diagnostics["release_claim_boundary"] = {
+        "status": "advisory_only",
+        "ranking_authority": False,
+        "calibration_status": "fail",
+        "enforcement": "warn",
+        "claim_boundary": SNQI_ADVISORY_BOUNDARY,
+    }
+    positioning = diagnostics.get("positioning")
+    positioning = dict(positioning) if isinstance(positioning, Mapping) else {}
+    positioning["planner_ordering_informative"] = False
+    caveats = positioning.get("caveats")
+    caveats = list(caveats) if isinstance(caveats, list) else []
+    if SNQI_ADVISORY_BOUNDARY not in caveats:
+        caveats.append(SNQI_ADVISORY_BOUNDARY)
+    positioning["caveats"] = caveats
+    diagnostics["positioning"] = positioning
+    _write_snqi_diagnostics_artifacts(campaign_root / "reports", diagnostics)
+
+    after = artifact_publication_module._check_snqi_field_consistency(campaign_root)
+    if after.get("violation_count") != 0 or after.get("violations"):
+        raise DerivedReleaseError("reconciled SNQI diagnostics remain publication-inconsistent")
+    return {
+        "status": "reconciled_advisory_only",
+        "verified_episode_rows": expected_row_count,
+        "arm_count": expected_arm_count,
+        "producer_diagnostics_sha256": producer_diagnostics_sha256,
+        "derived_diagnostics_sha256": sha256_file(diagnostics_path).lower(),
+        "post_reconciliation_violation_count": 0,
+        "ranking_authority": False,
+        "claim_boundary": SNQI_ADVISORY_BOUNDARY,
+    }
 
 
 def _write_derived_checksums(root: Path) -> dict[str, str]:
@@ -1281,6 +1700,8 @@ def _write_derivation_receipt(  # noqa: PLR0913
     source_sha: str,
     derived_checksums: Mapping[str, str],
     publication_inputs: Mapping[str, Any],
+    publication_reconciliation: Mapping[str, Any],
+    projection_acceptance: Mapping[str, Any],
 ) -> None:
     """Write the credential-free binding receipt for the derived projection."""
     receipt = {
@@ -1321,7 +1742,10 @@ def _write_derivation_receipt(  # noqa: PLR0913
         "manifest_validation": dict(manifest_validation),
         "publication_inputs": dict(publication_inputs),
         "validator": dict(validator),
-        "acceptance": dict(acceptance),
+        "acceptance": dict(projection_acceptance),
+        "source_acceptance": dict(acceptance),
+        "projection_acceptance": dict(projection_acceptance),
+        "publication_reconciliation": dict(publication_reconciliation),
         "derived_projection": {
             "campaign_root": "(this directory)",
             "sha256sums_file": PRODUCER_SUMS_NAME,
@@ -1339,6 +1763,7 @@ def _write_derivation_receipt(  # noqa: PLR0913
         },
         "snqi": {
             "status": "advisory",
+            "ranking_authority": False,
             "claim_boundary": SNQI_ADVISORY_BOUNDARY,
         },
         "credentials": "not_recorded",
@@ -1589,6 +2014,36 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         publication_inputs = _assert_publication_inputs_from_manifest(
             manifest, resolved_manifest, source_repository_root
         )
+        goal_timeout_reconciliation = _annotate_publication_goal_timeout_boundaries(
+            staging_campaign
+        )
+        sidecar_reconciliation = _rebind_publication_sidecars(
+            staging_campaign,
+            source_file_map=producer_evidence["file_map"],
+            boundary_reconciliation=goal_timeout_reconciliation,
+        )
+        with _source_repository_binding(
+            source_repository_root,
+            validator_root=validator_repository_root,
+        ):
+            snqi_reconciliation = _reconcile_publication_snqi_diagnostics(staging_campaign)
+            projection_acceptance = _run_exact_validator(
+                validator_root=validator_repository_root,
+                source_root=source_repository_root,
+                acceptance_root=staging_campaign,
+                manifest_path=manifest_path,
+            )
+        if projection_acceptance.get("status") != "valid":
+            raise DerivedReleaseError("derived publication projection failed full acceptance")
+        if projection_acceptance.get("source_commits") != [FROZEN_SOURCE_SHA]:
+            raise DerivedReleaseError("derived publication projection lost frozen source binding")
+        publication_reconciliation = {
+            "goal_timeout_boundary": goal_timeout_reconciliation,
+            "sidecar_path_binding": sidecar_reconciliation,
+            "snqi_diagnostics": snqi_reconciliation,
+            "scientific_execution_changed": False,
+            "simulation_rerun": False,
+        }
         derived_checksums = _write_derived_checksums(staging_campaign)
         _write_derivation_receipt(
             staging_campaign,
@@ -1600,6 +2055,8 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             source_sha=FROZEN_SOURCE_SHA,
             derived_checksums=derived_checksums,
             publication_inputs=publication_inputs,
+            publication_reconciliation=publication_reconciliation,
+            projection_acceptance=projection_acceptance,
         )
         # The receipt itself is part of the derived checksum inventory.  Rewrite
         # once after it is emitted, without ever signing SHA256SUMS itself.
@@ -1625,7 +2082,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     staging_campaign,
                     publication_stage=staging_publication,
                     bundle_name=f"{derived_name}_publication_bundle",
-                    acceptance=acceptance,
+                    acceptance=projection_acceptance,
                     producer_result=_read_json(
                         staging_campaign / "release" / "producer_release_result.rejected.json"
                     ),
@@ -1697,6 +2154,8 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         "accepted": accepted_evidence,
         "manifest_validation": manifest_validation,
         "acceptance": acceptance,
+        "projection_acceptance": projection_acceptance,
+        "publication_reconciliation": publication_reconciliation,
         "validator": validator,
         "publication_inputs": publication_inputs,
     }

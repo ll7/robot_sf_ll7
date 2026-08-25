@@ -120,6 +120,26 @@ _CAMPAIGN_PUBLIC_RESULT_FIELDS = frozenset(
         "soft_contract_warning",
     }
 )
+_PUBLIC_RELEASE_ACCEPTANCE_FIELDS = frozenset(
+    {
+        "schema_version",
+        "status",
+        "benchmark_success",
+        "claim_boundary",
+        "expected_planner_arms",
+        "successful_planner_arms",
+        "expected_scenario_count",
+        "expected_seed_count",
+        "expected_episode_cells",
+        "observed_episode_rows",
+        "unique_episode_identities",
+        "missing_episode_identities",
+        "unexpected_episode_identities",
+        "source_commits",
+        "forbidden_status_counts",
+        "blockers",
+    }
+)
 
 
 class ReleaseArtifactIdentityError(ValueError):
@@ -163,6 +183,23 @@ def _print_public_result_file(path: Path) -> None:
     if find_offending_paths(payload):
         raise ReleaseResultPrivacyError("persisted release result contains private filesystem data")
     print(json.dumps(payload, indent=2))
+
+
+def _public_release_acceptance(acceptance: dict[str, Any]) -> dict[str, Any]:
+    """Project validator output onto its path-free publication contract."""
+    unknown = set(acceptance) - _PUBLIC_RELEASE_ACCEPTANCE_FIELDS
+    projected = {
+        key: acceptance[key] for key in _PUBLIC_RELEASE_ACCEPTANCE_FIELDS if key in acceptance
+    }
+    if unknown or find_offending_paths(projected):
+        return {
+            "schema_version": str(acceptance.get("schema_version", "unknown")),
+            "status": "invalid",
+            "benchmark_success": False,
+            "claim_boundary": "release acceptance diagnostics must be public and path-free",
+            "blockers": ["release acceptance diagnostics contained non-public fields"],
+        }
+    return projected
 
 
 def _campaign_summary_path(campaign_root: Path) -> Path:
@@ -904,10 +941,12 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         print(json.dumps(result, indent=2))
         return int(result["release_exit_code"])
 
-    release_acceptance = validate_full_benchmark_release_acceptance(
-        campaign_root,
-        manifest=manifest,
-        campaign_config=cfg,
+    release_acceptance = _public_release_acceptance(
+        validate_full_benchmark_release_acceptance(
+            campaign_root,
+            manifest=manifest,
+            campaign_config=cfg,
+        )
     )
     _record_release_acceptance(campaign_root, release_acceptance)
     result["release_acceptance"] = release_acceptance

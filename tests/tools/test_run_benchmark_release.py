@@ -990,7 +990,7 @@ def test_full_release_acceptance_failure_blocks_publication(
         lambda *args, **kwargs: {
             "status": "invalid",
             "benchmark_success": False,
-            "blockers": ["fallback row present"],
+            "blockers": ["trusted root /home/example/private-source is unavailable"],
         },
     )
     monkeypatch.setattr(
@@ -1025,6 +1025,9 @@ def test_full_release_acceptance_failure_blocks_publication(
     )
 
     payload = json.loads(capsys.readouterr().out)
+    persisted = json.loads(
+        (campaign_root / "release" / "release_result.json").read_text(encoding="utf-8")
+    )
     assert exit_code == 2
     assert payload["campaign_benchmark_success"] is True
     assert payload["benchmark_success"] is False
@@ -1032,6 +1035,10 @@ def test_full_release_acceptance_failure_blocks_publication(
     assert payload["release_status"] == "full_release_acceptance_failed"
     assert payload["release_exit_code"] == 2
     assert payload["publication_bundle"] is None
+    assert "/home/example/private-source" not in json.dumps(persisted)
+    assert persisted["release_acceptance"]["blockers"] == [
+        "release acceptance diagnostics contained non-public fields"
+    ]
 
 
 def test_release_preflight_fails_closed_when_orca_rvo2_missing(

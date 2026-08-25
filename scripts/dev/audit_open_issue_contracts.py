@@ -17,6 +17,7 @@ import json
 import sys
 from collections import Counter
 from collections.abc import Mapping
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -317,6 +318,16 @@ def _item_from_report(listed: Mapping[str, Any], report: Mapping[str, Any]) -> d
     }
 
 
+def _evaluate_item(
+    listed: Mapping[str, Any], evaluator: Callable[[int], dict[str, Any]]
+) -> dict[str, Any]:
+    """Evaluate and normalize one issue inside the per-item isolation boundary."""
+    result = evaluator(listed["number"])
+    if not isinstance(result, dict):
+        raise ValueError("implementability evaluator returned a non-object payload")
+    return _item_from_report(listed, result)
+
+
 def _prepare_listing(
     pages: Sequence[Sequence[Mapping[str, Any]]],
 ) -> tuple[list[dict[str, Any]], dict[str, int], list[str]]:
@@ -414,17 +425,22 @@ def _build_report(
 
     errors = [*(str(error) for error in pagination_errors), *listing_errors]
     items: list[dict[str, Any]] = []
-    for row in listed:
-        try:
-            result = evaluator(row["number"])
-            if not isinstance(result, dict):
-                raise ValueError("implementability evaluator returned a non-object payload")
-            item = _item_from_report(row, result)
-        except (OSError, RuntimeError, TypeError, ValueError) as exc:
-            item = _error_item(row, str(exc))
-        if item["classification"] == "error":
-            errors.append(f"issue {row['number']}: " + "; ".join(item["reasons"]))
-        items.append(item)
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="open-issue-audit") as executor:
+        for row in listed:
+            future = executor.submit(_evaluate_item, row, evaluator)
+            if future.cancelled():
+                item = _error_item(row, "issue evaluation was cancelled")
+            else:
+                exception = future.exception()
+                if isinstance(exception, (KeyboardInterrupt, SystemExit)):
+                    raise exception
+                if exception is not None:
+                    item = _error_item(row, f"{type(exception).__name__}: {exception}")
+                else:
+                    item = future.result()
+            if item["classification"] == "error":
+                errors.append(f"issue {row['number']}: " + "; ".join(item["reasons"]))
+            items.append(item)
 
     report: dict[str, Any] = {
         "schema": SCHEMA,

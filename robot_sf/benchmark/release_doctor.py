@@ -104,6 +104,7 @@ _PUBLIC_PACKET_INPUT_NAMES = (
     "canonical_campaign_config",
     "scenario_matrix",
     "public_single_node_entrypoint",
+    "runtime_smoke_receipt",
     "release_runner",
 )
 

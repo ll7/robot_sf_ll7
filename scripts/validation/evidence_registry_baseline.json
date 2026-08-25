@@ -1,8 +1,8 @@
 {
   "description": "Evidence-registry integrity downward ratchet (issue #5275). The ratchet gates on per-file, per-code finding counts: a clean file (absent here) that gains a finding fails, and a tracked file whose per-code count increases fails. The committed baseline is the explicitly-approved grandfathered exclusion policy for legacy findings classified by docs/context/evidence/evidence_registry_dispositions.yaml. Remediate a category and refresh this baseline with `scripts/dev/evidence_registry_ratchet.py --write-baseline` to lock in the reduction; the blocking evidence-registry workflow enforces the ratchet on its configured paths. The payload also carries an evidence_tree manifest (issue #6839): adding or removing any file under docs/context/evidence/ without refreshing this baseline fails the ratchet on the causing PR, so a stale baseline can never redden main after merge.",
   "evidence_tree": {
-    "count": 2334,
-    "sha256": "eb52a27b528df169ec1aeb74eef1261359aafb29d84b569a4bf31b21173c9a60"
+    "count": 2338,
+    "sha256": "25268af55e922b248a1ebfb0d9eba4762c2f391879e5e858688702d664caff1c"
   },
   "findings_by_path": {
     "docs/context/evidence/camera_ready_all_planners_2026-05-04/campaign/campaign_manifest.json": {
@@ -363,7 +363,7 @@
       "hash_without_artifact_path": 1
     }
   },
-  "generated_at": "2026-08-25T11:50:35Z",
+  "generated_at": "2026-08-25T13:23:36Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {

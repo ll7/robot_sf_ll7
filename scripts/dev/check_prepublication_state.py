@@ -145,6 +145,16 @@ def _git_output(*args: str) -> str:
     return output
 
 
+def _git_sha(ref: str) -> str:
+    """Resolve a Git ref or commit identifier to a full 40-character SHA."""
+    return _git_output("rev-parse", "--verify", f"{ref}^{{commit}}")
+
+
+def _git_head_sha() -> str:
+    """Return the current local HEAD SHA."""
+    return _git_output("rev-parse", "HEAD")
+
+
 def _git_branch() -> str:
     """Return the current branch, rejecting detached publication attempts."""
     branch = _git_output("branch", "--show-current")
@@ -1001,28 +1011,95 @@ def _write_error(path: Path | None, error: str) -> dict[str, Any]:
     return payload
 
 
-def _integrate_targets(*, remote: str, branch: str, targets: list[str]) -> dict[str, Any]:
+def _integrate_targets(
+    *,
+    remote: str,
+    branch: str,
+    expected_local_head_sha: str,
+    targets: list[dict[str, str]],
+) -> dict[str, Any]:
     """Merge refreshed remote refs without resetting or deleting local state."""
     if _tree_state() != "clean":
         return {"ok": False, "reason": "dirty_worktree"}
-    if any(target.endswith(f"/{branch}") for target in targets):
-        _fetch_remote_branch(remote=remote, branch=branch)
-    merged: list[str] = []
+    current_branch = _git_branch()
+    if current_branch != branch:
+        return {
+            "ok": False,
+            "reason": "branch_mismatch",
+            "expected_branch": branch,
+            "current_branch": current_branch,
+        }
+    current_head = _git_head_sha()
+    if current_head != expected_local_head_sha:
+        return {
+            "ok": False,
+            "reason": "local_head_drift",
+            "expected_local_head_sha": expected_local_head_sha,
+            "current_local_head_sha": current_head,
+        }
+
+    merged_targets: list[str] = []
+    merged_shas: list[str] = []
+
     for target in targets:
-        result = _run(["git", "merge", "--no-edit", target], check=False)
+        ref = target["ref"]
+        expected_sha = target["sha"]
+        kind = target.get("kind", "")
+
+        if kind == "remote_branch" or ref.endswith(f"/{branch}"):
+            _fetch_remote_branch(remote=remote, branch=branch)
+
+        try:
+            actual_ref_sha = _git_sha(ref)
+        except GateError as exc:
+            return {
+                "ok": False,
+                "reason": "target_ref_unresolvable",
+                "target": ref,
+                "detail": str(exc),
+                "merged": merged_targets,
+            }
+
+        if actual_ref_sha != expected_sha:
+            return {
+                "ok": False,
+                "reason": "target_ref_moved",
+                "target": ref,
+                "expected_sha": expected_sha,
+                "actual_sha": actual_ref_sha,
+                "merged": merged_targets,
+            }
+
+        result = _run(["git", "merge", "--no-edit", expected_sha], check=False)
         if result.returncode != 0:
             detail = result.stderr.strip() or result.stdout.strip() or "merge failed"
             abort = _run(["git", "merge", "--abort"], check=False)
             return {
                 "ok": False,
                 "reason": "integration_conflict",
-                "target": target,
+                "target": ref,
+                "target_sha": expected_sha,
                 "detail": detail,
-                "merged": merged,
+                "merged": merged_targets,
                 "merge_aborted": abort.returncode == 0,
             }
-        merged.append(target)
-    return {"ok": True, "merged": merged}
+
+        if _tree_state() != "clean":
+            return {
+                "ok": False,
+                "reason": "dirty_worktree_after_merge",
+                "target": ref,
+                "merged": merged_targets,
+            }
+
+        merged_targets.append(ref)
+        merged_shas.append(expected_sha)
+
+    return {
+        "ok": True,
+        "merged": merged_targets,
+        "merged_shas": merged_shas,
+    }
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -1160,6 +1237,7 @@ def _handle_check_or_sync(args: argparse.Namespace) -> int:
     repo = _normalize_repo_argument(str(baseline["repo"]), remote=str(baseline["remote"]))
     max_pr_pages = _effective_page_budget(args.max_pr_pages, snapshot=baseline)
     decision_path = _decision_path(snapshot_path, args.decision_path)
+    declaration_text = str(baseline.get("stack_declaration") or "")
     current = collect_live_state(
         repo=repo,
         issue=_issue_number(baseline["issue"]),
@@ -1167,6 +1245,7 @@ def _handle_check_or_sync(args: argparse.Namespace) -> int:
         base_ref=str(baseline["base_ref"]),
         remote=str(baseline["remote"]),
         max_pr_pages=max_pr_pages,
+        declaration_text=declaration_text,
     )
     decision = evaluate_state(baseline, current)
     if (
@@ -1179,15 +1258,254 @@ def _handle_check_or_sync(args: argparse.Namespace) -> int:
         print(json.dumps(decision, indent=2, sort_keys=True))
         return _exit_code(str(decision["decision"]))
 
-    drift = decision.get("drift", {})
-    targets: list[str] = []
-    if "base_sha" in drift:
-        targets.append(f"refs/remotes/{baseline['remote']}/{baseline['base_ref']}")
+
+def _build_integration_targets(
+    baseline: dict[str, Any], current: dict[str, Any], drift: dict[str, Any]
+) -> tuple[list[dict[str, str]], dict[str, Any] | None]:
+    """Build exact-SHA merge targets or return a fail-closed integration error."""
+    if "local_head_sha" in drift:
+        return [], {
+            "ok": False,
+            "reason": "local_head_drift_non_integrable",
+            "detail": (
+                "local commits exist after baseline capture; cannot integrate into drifted local head"
+            ),
+        }
+
+    targets: list[dict[str, str]] = []
+    if "base_sha" in drift and current.get("base_sha"):
+        targets.append(
+            {
+                "ref": f"refs/remotes/{baseline['remote']}/{baseline['base_ref']}",
+                "sha": str(current["base_sha"]),
+                "kind": "base",
+            }
+        )
     if "remote_branch_sha" in drift and current.get("remote_branch_sha"):
-        targets.append(f"refs/remotes/{baseline['remote']}/{baseline['branch']}")
+        targets.append(
+            {
+                "ref": f"refs/remotes/{baseline['remote']}/{baseline['branch']}",
+                "sha": str(current["remote_branch_sha"]),
+                "kind": "remote_branch",
+            }
+        )
+
+    if not targets:
+        return [], {
+            "ok": False,
+            "reason": "no_integrable_targets",
+            "detail": "no base or remote branch drift targets available for integration",
+        }
+
+    return targets, None
+
+
+def _evaluate_post_integration(
+    baseline: dict[str, Any],
+    current: dict[str, Any],
+    refreshed: dict[str, Any],
+    integration: dict[str, Any],
+    snapshot_path: Path,
+    decision_path: Path,
+) -> dict[str, Any]:
+    """Evaluate post-integration state against expected baseline without self-comparison."""
+    if refreshed.get("base_sha") != current.get("base_sha"):
+        return _decision(
+            baseline,
+            refreshed,
+            decision="refresh-required",
+            reason="base_changed",
+            extra={
+                "drift": {
+                    "base_sha": {
+                        "baseline": current.get("base_sha"),
+                        "current": refreshed.get("base_sha"),
+                    }
+                },
+                "integration": integration,
+                "comparison": "expected_post_integration",
+                "snapshot_path": str(snapshot_path),
+                "decision_path": str(decision_path),
+            },
+        )
+
+    if refreshed.get("remote_branch_sha") != current.get("remote_branch_sha"):
+        return _decision(
+            baseline,
+            refreshed,
+            decision="refresh-required",
+            reason="remote_branch_changed",
+            extra={
+                "drift": {
+                    "remote_branch_sha": {
+                        "baseline": current.get("remote_branch_sha"),
+                        "current": refreshed.get("remote_branch_sha"),
+                    }
+                },
+                "integration": integration,
+                "comparison": "expected_post_integration",
+                "snapshot_path": str(snapshot_path),
+                "decision_path": str(decision_path),
+            },
+        )
+
+    if refreshed.get("tree_state") != "clean":
+        return _decision(
+            baseline,
+            refreshed,
+            decision="blocked",
+            reason="dirty_worktree",
+            extra={
+                "integration": integration,
+                "snapshot_path": str(snapshot_path),
+                "decision_path": str(decision_path),
+            },
+        )
+
+    ancestry_state_val = _ancestry_blocking_state(refreshed)
+    if ancestry_state_val is not None:
+        return _decision(
+            baseline,
+            refreshed,
+            decision="blocked",
+            reason="undeclared_stack_ancestry",
+            extra={
+                "ancestry": refreshed.get("ancestry"),
+                "integration": integration,
+                "snapshot_path": str(snapshot_path),
+                "decision_path": str(decision_path),
+            },
+        )
+
+    refreshed_issue_state = _normalized_state(refreshed.get("issue_state"))
+    if refreshed_issue_state == "CLOSED":
+        return _decision(
+            baseline,
+            refreshed,
+            decision="superseded",
+            reason="issue_closed",
+            extra={
+                "integration": integration,
+                "snapshot_path": str(snapshot_path),
+                "decision_path": str(decision_path),
+            },
+        )
+
+    if refreshed.get("closing_prs"):
+        return _decision(
+            baseline,
+            refreshed,
+            decision="superseded",
+            reason="merged_pr_closes_issue",
+            extra={
+                "closing_prs": refreshed.get("closing_prs", []),
+                "integration": integration,
+                "snapshot_path": str(snapshot_path),
+                "decision_path": str(decision_path),
+            },
+        )
+
+    current_branch = str(refreshed.get("branch") or "")
+    competing_open = [
+        pr
+        for pr in refreshed.get("open_covering_prs", [])
+        if isinstance(pr, dict) and pr.get("head_ref") != current_branch
+    ]
+    if competing_open:
+        return _decision(
+            baseline,
+            refreshed,
+            decision="superseded",
+            reason="open_pr_covers_issue",
+            extra={
+                "open_covering_prs": competing_open,
+                "integration": integration,
+                "snapshot_path": str(snapshot_path),
+                "decision_path": str(decision_path),
+            },
+        )
+
+    if refreshed.get("remote_branch_sha") is not None and refreshed.get(
+        "local_head_sha"
+    ) != refreshed.get("remote_branch_sha"):
+        return _decision(
+            baseline,
+            refreshed,
+            decision="refresh-required",
+            reason="remote_branch_changed",
+            extra={
+                "drift": {
+                    "remote_branch_sha": {
+                        "baseline": refreshed.get("local_head_sha"),
+                        "current": refreshed.get("remote_branch_sha"),
+                    }
+                },
+                "integration": integration,
+                "comparison": "expected_post_integration",
+                "snapshot_path": str(snapshot_path),
+                "decision_path": str(decision_path),
+            },
+        )
+
+    _write_json(snapshot_path, refreshed)
+    return _decision(
+        baseline,
+        refreshed,
+        decision="ready",
+        reason="remote_state_integrated",
+        extra={
+            "comparison": "expected_post_integration",
+            "integrated": integration.get("merged", []),
+            "integrated_shas": integration.get("merged_shas", []),
+            "snapshot_path": str(snapshot_path),
+            "decision_path": str(decision_path),
+        },
+    )
+
+
+def _handle_check_or_sync(args: argparse.Namespace) -> int:
+    """Handle the check and sync commands."""
+    snapshot_path = Path(args.snapshot_path)
+    baseline = _load_snapshot(snapshot_path)
+    baseline["base_ref"] = _normalize_base_ref(
+        str(baseline["base_ref"]), remote=str(baseline["remote"])
+    )
+    repo = _normalize_repo_argument(str(baseline["repo"]), remote=str(baseline["remote"]))
+    max_pr_pages = _effective_page_budget(args.max_pr_pages, snapshot=baseline)
+    decision_path = _decision_path(snapshot_path, args.decision_path)
+    declaration_text = str(baseline.get("stack_declaration") or "")
+    current = collect_live_state(
+        repo=repo,
+        issue=_issue_number(baseline["issue"]),
+        branch=str(baseline["branch"]),
+        base_ref=str(baseline["base_ref"]),
+        remote=str(baseline["remote"]),
+        max_pr_pages=max_pr_pages,
+        declaration_text=declaration_text,
+    )
+    decision = evaluate_state(baseline, current)
+    if (
+        args.command == "check"
+        or decision["decision"] != "refresh-required"
+        or not getattr(args, "integrate", False)
+    ):
+        decision["decision_path"] = str(decision_path)
+        _write_json(decision_path, decision)
+        print(json.dumps(decision, indent=2, sort_keys=True))
+        return _exit_code(str(decision["decision"]))
+
+    targets, target_error = _build_integration_targets(baseline, current, decision.get("drift", {}))
+    if target_error:
+        decision["integration"] = target_error
+        decision["decision_path"] = str(decision_path)
+        _write_json(decision_path, decision)
+        print(json.dumps(decision, indent=2, sort_keys=True))
+        return _exit_code(str(decision["decision"]))
+
     integration = _integrate_targets(
         remote=str(baseline["remote"]),
         branch=str(baseline["branch"]),
+        expected_local_head_sha=str(current["local_head_sha"]),
         targets=targets,
     )
     if not integration.get("ok"):
@@ -1204,17 +1522,11 @@ def _handle_check_or_sync(args: argparse.Namespace) -> int:
         base_ref=str(baseline["base_ref"]),
         remote=str(baseline["remote"]),
         max_pr_pages=max_pr_pages,
+        declaration_text=declaration_text,
     )
-    _write_json(snapshot_path, refreshed)
-    refreshed_decision = evaluate_state(refreshed, refreshed)
-    refreshed_decision.update(
-        {
-            "reason": "remote_state_integrated",
-            "comparison": "self_snapshot_after_integration",
-            "integrated": integration.get("merged", []),
-            "snapshot_path": str(snapshot_path),
-            "decision_path": str(decision_path),
-        }
+
+    refreshed_decision = _evaluate_post_integration(
+        baseline, current, refreshed, integration, snapshot_path, decision_path
     )
     _write_json(decision_path, refreshed_decision)
     print(json.dumps(refreshed_decision, indent=2, sort_keys=True))

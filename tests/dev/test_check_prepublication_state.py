@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 import subprocess
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 import pytest
 
@@ -606,12 +609,22 @@ def test_non_fast_forward_integration_fails_closed_without_reset(monkeypatch) ->
 
     monkeypatch.setattr(gate, "_run", fake_run)
     monkeypatch.setattr(gate, "_tree_state", lambda: "clean")
+    monkeypatch.setattr(gate, "_git_branch", lambda: "feature/fresh-state")
+    monkeypatch.setattr(gate, "_git_head_sha", lambda: "head-a")
+    monkeypatch.setattr(gate, "_git_sha", lambda ref: "head-remote")
     monkeypatch.setattr(gate, "_fetch_remote_branch", lambda **_: None)
 
     result = gate._integrate_targets(
         remote="origin",
         branch="feature/fresh-state",
-        targets=["refs/remotes/origin/feature/fresh-state"],
+        expected_local_head_sha="head-a",
+        targets=[
+            {
+                "ref": "refs/remotes/origin/feature/fresh-state",
+                "sha": "head-remote",
+                "kind": "remote_branch",
+            }
+        ],
     )
 
     assert result["ok"] is False
@@ -838,16 +851,25 @@ def test_sync_failure_nests_integration_result(tmp_path, monkeypatch, capsys) ->
     assert persisted == output
 
 
-def test_sync_success_marks_post_integration_self_comparison(tmp_path, monkeypatch, capsys) -> None:
-    """A refreshed post-integration decision identifies its self-comparison basis."""
+def test_sync_unpushed_branch_success_integrates_base(tmp_path, monkeypatch, capsys) -> None:
+    """An unpushed branch integrates a moved base and records ready without self-comparison."""
     snapshot_path = tmp_path / "state.json"
-    snapshot_path.write_text(json.dumps(_snapshot()), encoding="utf-8")
-    states = iter([_snapshot(base_sha="base-b"), _snapshot(base_sha="base-b")])
+    snapshot_path.write_text(json.dumps(_snapshot(remote_branch_sha=None)), encoding="utf-8")
+    states = iter(
+        [
+            _snapshot(base_sha="base-b", remote_branch_sha=None),
+            _snapshot(base_sha="base-b", remote_branch_sha=None, local_head_sha="head-merge"),
+        ]
+    )
     monkeypatch.setattr(gate, "collect_live_state", lambda **_: next(states))
     monkeypatch.setattr(
         gate,
         "_integrate_targets",
-        lambda **_: {"ok": True, "merged": ["refs/remotes/origin/main"]},
+        lambda **_: {
+            "ok": True,
+            "merged": ["refs/remotes/origin/main"],
+            "merged_shas": ["base-b"],
+        },
     )
 
     assert gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"]) == 0
@@ -855,7 +877,293 @@ def test_sync_success_marks_post_integration_self_comparison(tmp_path, monkeypat
     output = json.loads(capsys.readouterr().out)
     assert output["decision"] == "ready"
     assert output["reason"] == "remote_state_integrated"
-    assert output["comparison"] == "self_snapshot_after_integration"
+    assert output["comparison"] == "expected_post_integration"
+    assert output["integrated"] == ["refs/remotes/origin/main"]
+    persisted_snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    assert persisted_snapshot["base_sha"] == "base-b"
+    assert persisted_snapshot["local_head_sha"] == "head-merge"
+
+
+def test_sync_pushed_branch_base_merge_requires_push_and_recapture(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """A pushed branch whose head advances during base merge requires push and fresh capture."""
+    snapshot_path = tmp_path / "state.json"
+    snapshot_path.write_text(json.dumps(_snapshot()), encoding="utf-8")
+    states = iter(
+        [
+            _snapshot(base_sha="base-b", remote_branch_sha="branch-a", local_head_sha="head-a"),
+            _snapshot(base_sha="base-b", remote_branch_sha="branch-a", local_head_sha="head-merge"),
+        ]
+    )
+    monkeypatch.setattr(gate, "collect_live_state", lambda **_: next(states))
+    monkeypatch.setattr(
+        gate,
+        "_integrate_targets",
+        lambda **_: {
+            "ok": True,
+            "merged": ["refs/remotes/origin/main"],
+            "merged_shas": ["base-b"],
+        },
+    )
+
+    assert gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"]) == 2
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "refresh-required"
+    assert output["reason"] == "remote_branch_changed"
+    assert output["comparison"] == "expected_post_integration"
+    assert output["drift"]["remote_branch_sha"] == {
+        "baseline": "head-merge",
+        "current": "branch-a",
+    }
+
+
+def test_sync_pushed_branch_fast_forward_remote_branch_ready(tmp_path, monkeypatch, capsys) -> None:
+    """A fast-forward merge of remote branch tracking ref is ready post-integration."""
+    snapshot_path = tmp_path / "state.json"
+    snapshot_path.write_text(json.dumps(_snapshot()), encoding="utf-8")
+    states = iter(
+        [
+            _snapshot(remote_branch_sha="branch-b", local_head_sha="head-a"),
+            _snapshot(remote_branch_sha="branch-b", local_head_sha="branch-b"),
+        ]
+    )
+    monkeypatch.setattr(gate, "collect_live_state", lambda **_: next(states))
+    monkeypatch.setattr(
+        gate,
+        "_integrate_targets",
+        lambda **_: {
+            "ok": True,
+            "merged": ["refs/remotes/origin/feature/fresh-state"],
+            "merged_shas": ["branch-b"],
+        },
+    )
+
+    assert gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"]) == 0
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "ready"
+    assert output["reason"] == "remote_state_integrated"
+    assert output["comparison"] == "expected_post_integration"
+    persisted_snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    assert persisted_snapshot["local_head_sha"] == "branch-b"
+
+
+def test_sync_rejects_local_head_drift_non_integrable(tmp_path, monkeypatch, capsys) -> None:
+    """Local commits made after baseline capture cannot be integrated or self-baselined."""
+    snapshot_path = tmp_path / "state.json"
+    snapshot_path.write_text(json.dumps(_snapshot(local_head_sha="head-a")), encoding="utf-8")
+    monkeypatch.setattr(
+        gate,
+        "collect_live_state",
+        lambda **_: _snapshot(local_head_sha="head-b", base_sha="base-b"),
+    )
+    integrate_called = False
+
+    def fake_integrate(**_):
+        nonlocal integrate_called
+        integrate_called = True
+        return {"ok": True, "merged": []}
+
+    monkeypatch.setattr(gate, "_integrate_targets", fake_integrate)
+
+    assert gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"]) == 2
+
+    output = json.loads(capsys.readouterr().out)
+    assert not integrate_called
+    assert output["decision"] == "refresh-required"
+    assert output["integration"]["reason"] == "local_head_drift_non_integrable"
+    persisted_snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    assert persisted_snapshot["local_head_sha"] == "head-a"
+
+
+def test_sync_rejects_when_no_integrable_targets(tmp_path, monkeypatch, capsys) -> None:
+    """When decision has no base or remote branch targets, sync fails closed."""
+    snapshot_path = tmp_path / "state.json"
+    snapshot_path.write_text(json.dumps(_snapshot()), encoding="utf-8")
+    monkeypatch.setattr(gate, "collect_live_state", lambda **_: _snapshot())
+    monkeypatch.setattr(
+        gate,
+        "evaluate_state",
+        lambda baseline, current: gate._decision(
+            baseline, current, decision="refresh-required", reason="unknown", extra={"drift": {}}
+        ),
+    )
+
+    assert gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"]) == 2
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["integration"]["reason"] == "no_integrable_targets"
+
+
+def test_sync_detects_base_movement_race_during_integration(tmp_path, monkeypatch, capsys) -> None:
+    """Base moving during merge execution fails closed with refresh-required."""
+    snapshot_path = tmp_path / "state.json"
+    snapshot_path.write_text(json.dumps(_snapshot(remote_branch_sha=None)), encoding="utf-8")
+    states = iter(
+        [
+            _snapshot(base_sha="base-b", remote_branch_sha=None),
+            _snapshot(base_sha="base-c", remote_branch_sha=None, local_head_sha="head-merge"),
+        ]
+    )
+    monkeypatch.setattr(gate, "collect_live_state", lambda **_: next(states))
+    monkeypatch.setattr(
+        gate,
+        "_integrate_targets",
+        lambda **_: {"ok": True, "merged": ["refs/remotes/origin/main"], "merged_shas": ["base-b"]},
+    )
+
+    assert gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"]) == 2
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "refresh-required"
+    assert output["reason"] == "base_changed"
+    assert output["drift"]["base_sha"] == {"baseline": "base-b", "current": "base-c"}
+
+
+def test_sync_detects_remote_branch_movement_race_during_integration(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """Remote branch moving during merge execution fails closed with refresh-required."""
+    snapshot_path = tmp_path / "state.json"
+    snapshot_path.write_text(json.dumps(_snapshot()), encoding="utf-8")
+    states = iter(
+        [
+            _snapshot(remote_branch_sha="branch-b"),
+            _snapshot(remote_branch_sha="branch-c", local_head_sha="branch-b"),
+        ]
+    )
+    monkeypatch.setattr(gate, "collect_live_state", lambda **_: next(states))
+    monkeypatch.setattr(
+        gate,
+        "_integrate_targets",
+        lambda **_: {
+            "ok": True,
+            "merged": ["refs/remotes/origin/feature/fresh-state"],
+            "merged_shas": ["branch-b"],
+        },
+    )
+
+    assert gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"]) == 2
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "refresh-required"
+    assert output["reason"] == "remote_branch_changed"
+    assert output["drift"]["remote_branch_sha"] == {"baseline": "branch-b", "current": "branch-c"}
+
+
+def test_sync_post_integration_fails_closed_on_dirty_tree(tmp_path, monkeypatch, capsys) -> None:
+    """A dirty worktree after integration fails closed with blocked."""
+    snapshot_path = tmp_path / "state.json"
+    snapshot_path.write_text(json.dumps(_snapshot(remote_branch_sha=None)), encoding="utf-8")
+    states = iter(
+        [
+            _snapshot(base_sha="base-b", remote_branch_sha=None),
+            _snapshot(
+                base_sha="base-b",
+                remote_branch_sha=None,
+                local_head_sha="head-merge",
+                tree_state="dirty",
+            ),
+        ]
+    )
+    monkeypatch.setattr(gate, "collect_live_state", lambda **_: next(states))
+    monkeypatch.setattr(
+        gate,
+        "_integrate_targets",
+        lambda **_: {"ok": True, "merged": ["refs/remotes/origin/main"], "merged_shas": ["base-b"]},
+    )
+
+    assert gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"]) == 4
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "blocked"
+    assert output["reason"] == "dirty_worktree"
+
+
+def test_sync_post_integration_fails_closed_on_blocking_ancestry(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """Blocking ancestry after integration fails closed with blocked."""
+    snapshot_path = tmp_path / "state.json"
+    snapshot_path.write_text(json.dumps(_snapshot(remote_branch_sha=None)), encoding="utf-8")
+    states = iter(
+        [
+            _snapshot(base_sha="base-b", remote_branch_sha=None),
+            _snapshot(
+                base_sha="base-b",
+                remote_branch_sha=None,
+                local_head_sha="head-merge",
+                ancestry={"state": "undeclared_stack"},
+            ),
+        ]
+    )
+    monkeypatch.setattr(gate, "collect_live_state", lambda **_: next(states))
+    monkeypatch.setattr(
+        gate,
+        "_integrate_targets",
+        lambda **_: {"ok": True, "merged": ["refs/remotes/origin/main"], "merged_shas": ["base-b"]},
+    )
+
+    assert gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"]) == 4
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "blocked"
+    assert output["reason"] == "undeclared_stack_ancestry"
+
+
+def test_integrate_targets_validations(monkeypatch) -> None:
+    """Unit tests verifying all pre-merge validation gates in _integrate_targets."""
+    # 1. Dirty worktree
+    monkeypatch.setattr(gate, "_tree_state", lambda: "dirty")
+    res = gate._integrate_targets(
+        remote="origin", branch="feat", expected_local_head_sha="h1", targets=[]
+    )
+    assert res == {"ok": False, "reason": "dirty_worktree"}
+
+    # 2. Branch mismatch
+    monkeypatch.setattr(gate, "_tree_state", lambda: "clean")
+    monkeypatch.setattr(gate, "_git_branch", lambda: "other-branch")
+    res = gate._integrate_targets(
+        remote="origin", branch="feat", expected_local_head_sha="h1", targets=[]
+    )
+    assert res["reason"] == "branch_mismatch"
+
+    # 3. Local head drift
+    monkeypatch.setattr(gate, "_git_branch", lambda: "feat")
+    monkeypatch.setattr(gate, "_git_head_sha", lambda: "h2")
+    res = gate._integrate_targets(
+        remote="origin", branch="feat", expected_local_head_sha="h1", targets=[]
+    )
+    assert res["reason"] == "local_head_drift"
+
+    # 4. Target ref unresolvable
+    monkeypatch.setattr(gate, "_git_head_sha", lambda: "h1")
+
+    def fail_git_sha(ref):
+        raise gate.GateError("ref not found")
+
+    monkeypatch.setattr(gate, "_git_sha", fail_git_sha)
+    res = gate._integrate_targets(
+        remote="origin",
+        branch="feat",
+        expected_local_head_sha="h1",
+        targets=[{"ref": "refs/remotes/origin/main", "sha": "b1"}],
+    )
+    assert res["reason"] == "target_ref_unresolvable"
+
+    # 5. Target ref moved (SHA mismatch)
+    monkeypatch.setattr(gate, "_git_sha", lambda ref: "b2")
+    res = gate._integrate_targets(
+        remote="origin",
+        branch="feat",
+        expected_local_head_sha="h1",
+        targets=[{"ref": "refs/remotes/origin/main", "sha": "b1"}],
+    )
+    assert res["reason"] == "target_ref_moved"
+    assert res["expected_sha"] == "b1"
+    assert res["actual_sha"] == "b2"
 
 
 # ---------------------------------------------------------------------------
@@ -1165,3 +1473,289 @@ def test_evaluate_state_ready_when_open_pr_is_same_branch() -> None:
 
     assert result["decision"] == "ready"
     assert result["reason"] == "remote_state_unchanged"
+
+
+# ---------------------------------------------------------------------------
+# Real temporary Git repository end-to-end integration tests (issue #7829)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def real_git_repo(tmp_path: Path, monkeypatch):
+    """Set up a real bare remote and a cloned local worker repository."""
+    remote_dir = tmp_path / "remote.git"
+    remote_dir.mkdir()
+    subprocess.run(["git", "init", "--bare", "-b", "main"], cwd=remote_dir, check=True)
+
+    worker_dir = tmp_path / "worker"
+    subprocess.run(["git", "clone", str(remote_dir), str(worker_dir)], check=True)
+    subprocess.run(["git", "config", "user.name", "Test Committer"], cwd=worker_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=worker_dir, check=True)
+
+    (worker_dir / ".gitignore").write_text("*.json\noutput/\n", encoding="utf-8")
+    (worker_dir / "base.txt").write_text("initial base content\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore", "base.txt"], cwd=worker_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "initial main commit"], cwd=worker_dir, check=True)
+    subprocess.run(["git", "push", "origin", "main"], cwd=worker_dir, check=True)
+
+    initial_main_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=worker_dir, capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+    # Monkeypatch GitHub CLI commands to return deterministic OPEN issue state with no PRs
+    def fake_json_command(command: list[str]) -> Any:
+        if "issue" in command and "view" in command:
+            return {
+                "state": "OPEN",
+                "updatedAt": "2026-08-25T10:00:00Z",
+                "closedAt": None,
+            }
+        if "pr" in command and "list" in command:
+            return []
+        return {}
+
+    monkeypatch.setattr(gate, "_json_command", fake_json_command)
+    monkeypatch.setattr(gate, "_closing_prs", lambda **_: [])
+    monkeypatch.setattr(gate, "_open_covering_prs", lambda **_: [])
+    monkeypatch.setattr(gate, "_fetch_claim_ref", lambda **_: {"claimed": False, "sha": None})
+
+    return SimpleNamespace(remote=remote_dir, worker=worker_dir, initial_main_sha=initial_main_sha)
+
+
+def test_real_git_unpushed_branch_sync_integrates_main_and_is_ready(
+    real_git_repo, monkeypatch, capsys
+) -> None:
+    """An unpushed branch merges updated remote main and becomes ready with updated snapshot."""
+    worker = real_git_repo.worker
+    monkeypatch.chdir(worker)
+
+    # Create feature branch with a local commit
+    subprocess.run(["git", "checkout", "-b", "feature/unpushed-work"], cwd=worker, check=True)
+    (worker / "feature.txt").write_text("feature content\n", encoding="utf-8")
+    subprocess.run(["git", "add", "feature.txt"], cwd=worker, check=True)
+    subprocess.run(["git", "commit", "-m", "feature commit"], cwd=worker, check=True)
+
+    decl = f"## Stack Declaration\nparent_pr: 100\nparent_head: {real_git_repo.initial_main_sha}\n"
+    snapshot_path = worker / "state.json"
+    exit_code = gate.main(
+        [
+            "capture",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--issue",
+            "7829",
+            "--branch",
+            "feature/unpushed-work",
+            "--declaration-text",
+            decl,
+            "--snapshot-path",
+            str(snapshot_path),
+        ]
+    )
+    assert exit_code == 0
+    capsys.readouterr()
+
+    # Advance remote main by creating a commit in a temporary clone
+    other_dir = worker.parent / "other"
+    subprocess.run(["git", "clone", str(real_git_repo.remote), str(other_dir)], check=True)
+    subprocess.run(["git", "config", "user.name", "Main Author"], cwd=other_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "main@example.com"], cwd=other_dir, check=True)
+    (other_dir / "main_update.txt").write_text("new main work\n", encoding="utf-8")
+    subprocess.run(["git", "add", "main_update.txt"], cwd=other_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "update main"], cwd=other_dir, check=True)
+    subprocess.run(["git", "push", "origin", "main"], cwd=other_dir, check=True)
+
+    # Check returns 2 (refresh-required)
+    check_exit = gate.main(["check", "--snapshot-path", str(snapshot_path)])
+    assert check_exit == 2
+    capsys.readouterr()
+
+    # Sync with --integrate performs clean merge of main and records ready
+    sync_exit = gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"])
+    assert sync_exit == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "ready"
+    assert output["reason"] == "remote_state_integrated"
+    assert output["comparison"] == "expected_post_integration"
+
+    # Verify both feature.txt and main_update.txt exist in the working directory
+    assert (worker / "feature.txt").exists()
+    assert (worker / "main_update.txt").exists()
+
+
+def test_real_git_pushed_branch_sync_advances_head_requires_push(
+    real_git_repo, monkeypatch, capsys
+) -> None:
+    """A pushed branch whose head advances during base merge is not ready until pushed."""
+    worker = real_git_repo.worker
+    monkeypatch.chdir(worker)
+
+    # Create feature branch and push to origin
+    subprocess.run(["git", "checkout", "-b", "feature/pushed-work"], cwd=worker, check=True)
+    (worker / "feature2.txt").write_text("feature 2 content\n", encoding="utf-8")
+    subprocess.run(["git", "add", "feature2.txt"], cwd=worker, check=True)
+    subprocess.run(["git", "commit", "-m", "feature 2 commit"], cwd=worker, check=True)
+    subprocess.run(["git", "push", "-u", "origin", "feature/pushed-work"], cwd=worker, check=True)
+
+    decl = f"## Stack Declaration\nparent_pr: 100\nparent_head: {real_git_repo.initial_main_sha}\n"
+    snapshot_path = worker / "state.json"
+    exit_code = gate.main(
+        [
+            "capture",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--issue",
+            "7829",
+            "--branch",
+            "feature/pushed-work",
+            "--declaration-text",
+            decl,
+            "--snapshot-path",
+            str(snapshot_path),
+        ]
+    )
+    assert exit_code == 0
+    capsys.readouterr()
+
+    # Advance remote main
+    other_dir = worker.parent / "other2"
+    subprocess.run(["git", "clone", str(real_git_repo.remote), str(other_dir)], check=True)
+    subprocess.run(["git", "config", "user.name", "Main Author"], cwd=other_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "main@example.com"], cwd=other_dir, check=True)
+    (other_dir / "main_update2.txt").write_text("main update 2\n", encoding="utf-8")
+    subprocess.run(["git", "add", "main_update2.txt"], cwd=other_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "update main 2"], cwd=other_dir, check=True)
+    subprocess.run(["git", "push", "origin", "main"], cwd=other_dir, check=True)
+
+    # Sync with --integrate merges main locally, but since remote_branch is out of sync, returns 2
+    sync_exit = gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"])
+    assert sync_exit == 2
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "refresh-required"
+    assert output["reason"] == "remote_branch_changed"
+    assert output["comparison"] == "expected_post_integration"
+
+    # Push integrated head to origin and capture fresh snapshot -> check is ready!
+    subprocess.run(["git", "push", "origin", "feature/pushed-work"], cwd=worker, check=True)
+    recapture_exit = gate.main(
+        [
+            "capture",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--issue",
+            "7829",
+            "--branch",
+            "feature/pushed-work",
+            "--declaration-text",
+            decl,
+            "--snapshot-path",
+            str(snapshot_path),
+        ]
+    )
+    assert recapture_exit == 0
+    capsys.readouterr()
+
+    check_exit = gate.main(["check", "--snapshot-path", str(snapshot_path)])
+    assert check_exit == 0
+
+
+def test_real_git_local_commit_after_capture_fails_closed(
+    real_git_repo, monkeypatch, capsys
+) -> None:
+    """A local commit made after capture fails closed and is rejected by sync --integrate."""
+    worker = real_git_repo.worker
+    monkeypatch.chdir(worker)
+
+    subprocess.run(["git", "checkout", "-b", "feature/drifted-head"], cwd=worker, check=True)
+    (worker / "f3.txt").write_text("f3 initial\n", encoding="utf-8")
+    subprocess.run(["git", "add", "f3.txt"], cwd=worker, check=True)
+    subprocess.run(["git", "commit", "-m", "f3 initial commit"], cwd=worker, check=True)
+
+    decl = f"## Stack Declaration\nparent_pr: 100\nparent_head: {real_git_repo.initial_main_sha}\n"
+    snapshot_path = worker / "state.json"
+    gate.main(
+        [
+            "capture",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--issue",
+            "7829",
+            "--branch",
+            "feature/drifted-head",
+            "--declaration-text",
+            decl,
+            "--snapshot-path",
+            str(snapshot_path),
+        ]
+    )
+    capsys.readouterr()
+
+    # Local commit after capture
+    (worker / "local_only.txt").write_text("local post capture\n", encoding="utf-8")
+    subprocess.run(["git", "add", "local_only.txt"], cwd=worker, check=True)
+    subprocess.run(["git", "commit", "-m", "post capture commit"], cwd=worker, check=True)
+
+    # Advance remote main
+    other_dir = worker.parent / "other3"
+    subprocess.run(["git", "clone", str(real_git_repo.remote), str(other_dir)], check=True)
+    (other_dir / "m3.txt").write_text("m3\n", encoding="utf-8")
+    subprocess.run(["git", "add", "m3.txt"], cwd=other_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "m3 commit"], cwd=other_dir, check=True)
+    subprocess.run(["git", "push", "origin", "main"], cwd=other_dir, check=True)
+
+    # Sync --integrate refuses to merge into drifted local head
+    sync_exit = gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"])
+    assert sync_exit == 2
+    output = json.loads(capsys.readouterr().out)
+    assert output["integration"]["reason"] == "local_head_drift_non_integrable"
+
+
+def test_real_git_merge_conflict_aborts_cleanly(real_git_repo, monkeypatch, capsys) -> None:
+    """A merge conflict during sync --integrate aborts cleanly, leaving a clean tree."""
+    worker = real_git_repo.worker
+    monkeypatch.chdir(worker)
+
+    subprocess.run(["git", "checkout", "-b", "feature/conflict-test"], cwd=worker, check=True)
+    (worker / "base.txt").write_text("feature branch conflicting edit\n", encoding="utf-8")
+    subprocess.run(["git", "add", "base.txt"], cwd=worker, check=True)
+    subprocess.run(["git", "commit", "-m", "feature conflicting edit"], cwd=worker, check=True)
+
+    decl = f"## Stack Declaration\nparent_pr: 100\nparent_head: {real_git_repo.initial_main_sha}\n"
+    snapshot_path = worker / "state.json"
+    gate.main(
+        [
+            "capture",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--issue",
+            "7829",
+            "--branch",
+            "feature/conflict-test",
+            "--declaration-text",
+            decl,
+            "--snapshot-path",
+            str(snapshot_path),
+        ]
+    )
+    capsys.readouterr()
+
+    # Create conflict on remote main
+    other_dir = worker.parent / "other4"
+    subprocess.run(["git", "clone", str(real_git_repo.remote), str(other_dir)], check=True)
+    (other_dir / "base.txt").write_text("main branch conflicting edit\n", encoding="utf-8")
+    subprocess.run(["git", "add", "base.txt"], cwd=other_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "main conflicting edit"], cwd=other_dir, check=True)
+    subprocess.run(["git", "push", "origin", "main"], cwd=other_dir, check=True)
+
+    # Sync --integrate fails with conflict and aborts cleanly
+    sync_exit = gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"])
+    assert sync_exit == 2
+    output = json.loads(capsys.readouterr().out)
+    assert output["integration"]["reason"] == "integration_conflict"
+    assert output["integration"]["merge_aborted"] is True
+
+    # Verify worktree is clean
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=worker, capture_output=True, text=True, check=True
+    )
+    assert status.stdout.strip() == ""

@@ -1698,6 +1698,8 @@ def test_real_git_local_commit_after_capture_fails_closed(
     # Advance remote main
     other_dir = worker.parent / "other3"
     subprocess.run(["git", "clone", str(real_git_repo.remote), str(other_dir)], check=True)
+    subprocess.run(["git", "config", "user.name", "Main Author"], cwd=other_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "main@example.com"], cwd=other_dir, check=True)
     (other_dir / "m3.txt").write_text("m3\n", encoding="utf-8")
     subprocess.run(["git", "add", "m3.txt"], cwd=other_dir, check=True)
     subprocess.run(["git", "commit", "-m", "m3 commit"], cwd=other_dir, check=True)
@@ -1742,6 +1744,8 @@ def test_real_git_merge_conflict_aborts_cleanly(real_git_repo, monkeypatch, caps
     # Create conflict on remote main
     other_dir = worker.parent / "other4"
     subprocess.run(["git", "clone", str(real_git_repo.remote), str(other_dir)], check=True)
+    subprocess.run(["git", "config", "user.name", "Main Author"], cwd=other_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "main@example.com"], cwd=other_dir, check=True)
     (other_dir / "base.txt").write_text("main branch conflicting edit\n", encoding="utf-8")
     subprocess.run(["git", "add", "base.txt"], cwd=other_dir, check=True)
     subprocess.run(["git", "commit", "-m", "main conflicting edit"], cwd=other_dir, check=True)

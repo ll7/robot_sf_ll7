@@ -1324,7 +1324,9 @@ def _validate_packet_queue(  # noqa: C901
     artifact_path, separator, artifact_digest = artifact_manifest.partition(" sha256:")
     if not artifact_path.endswith(packet_path.name):
         problems.append("private queue artifact manifest does not match packet")
-    if separator and (
+    if not separator:
+        problems.append("private queue artifact manifest is not digest-bound to the packet")
+    elif (
         not _SHA256_RE.fullmatch(artifact_digest)
         or artifact_digest.lower() != _sha256(packet_path).lower()
     ):

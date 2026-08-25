@@ -16,6 +16,7 @@ import hashlib
 import json
 import sys
 from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -23,7 +24,7 @@ from scripts.dev import issue_implementability
 from scripts.dev._gh_rest import parse_json, run_gh_api
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Callable, Sequence
 
 SCHEMA = "open_issue_contract_audit.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
@@ -77,40 +78,22 @@ def _sha256_json(payload: object) -> str:
     return hashlib.sha256(_stable_json(payload).encode("utf-8")).hexdigest()
 
 
-def _normalize_labels(raw: Any) -> list[str]:
-    """Normalize one REST label list to sorted unique names."""
+def _normalize_named_values(raw: Any, *, field: str, key: str) -> list[str]:
+    """Normalize REST strings or named objects to sorted unique values."""
     if not isinstance(raw, list):
-        raise ValueError("labels must be a list")
-    labels: list[str] = []
-    for value in raw:
-        if isinstance(value, str):
-            name = value
-        elif isinstance(value, dict) and isinstance(value.get("name"), str):
-            name = value["name"]
+        raise ValueError(f"{field} must be a list")
+    values: list[str] = []
+    for item in raw:
+        if isinstance(item, str):
+            value = item
+        elif isinstance(item, dict) and isinstance(item.get(key), str):
+            value = item[key]
         else:
-            raise ValueError("each label must be a string or an object with a string name")
-        name = name.strip()
-        if name:
-            labels.append(name)
-    return sorted(set(labels))
-
-
-def _normalize_assignees(raw: Any) -> list[str]:
-    """Normalize one REST assignee list to sorted unique logins."""
-    if not isinstance(raw, list):
-        raise ValueError("assignees must be a list")
-    assignees: list[str] = []
-    for value in raw:
-        if isinstance(value, str):
-            login = value
-        elif isinstance(value, dict) and isinstance(value.get("login"), str):
-            login = value["login"]
-        else:
-            raise ValueError("each assignee must be a string or an object with a string login")
-        login = login.strip()
-        if login:
-            assignees.append(login)
-    return sorted(set(assignees))
+            raise ValueError(f"each {field} entry must be a string or an object with {key!r}")
+        value = value.strip()
+        if value:
+            values.append(value)
+    return sorted(set(values))
 
 
 def _normalize_listing_row(raw: Mapping[str, Any]) -> dict[str, Any]:
@@ -133,8 +116,10 @@ def _normalize_listing_row(raw: Mapping[str, Any]) -> dict[str, Any]:
         "title": title.strip(),
         "state": state.strip().upper(),
         "url": url,
-        "labels": _normalize_labels(raw.get("labels", [])),
-        "assignees": _normalize_assignees(raw.get("assignees", [])),
+        "labels": _normalize_named_values(raw.get("labels", []), field="labels", key="name"),
+        "assignees": _normalize_named_values(
+            raw.get("assignees", []), field="assignees", key="login"
+        ),
     }
 
 
@@ -143,26 +128,26 @@ def _fetch_live_pages(
 ) -> tuple[list[list[dict[str, Any]]], bool, list[str]]:
     """Fetch bounded REST pages and fail closed when the page budget may truncate results."""
     pages: list[list[dict[str, Any]]] = []
-    errors: list[str] = []
     for page_number in range(1, max_pages + 1):
         path = f"repos/{repo}/issues?state=open&per_page={page_size}&page={page_number}"
-        result = run_gh_api(path)
-        payload, error = parse_json(result, what=f"open issues page {page_number}")
+        payload, error = parse_json(
+            run_gh_api(path),
+            what=f"open issues page {page_number}",
+        )
         if error:
-            errors.append(error)
-            return pages, False, errors
+            return pages, False, [error]
         if not isinstance(payload, list) or any(not isinstance(row, dict) for row in payload):
-            errors.append(f"open issues page {page_number} must be a JSON array of objects")
-            return pages, False, errors
+            return pages, False, [
+                f"open issues page {page_number} must be a JSON array of objects"
+            ]
         page = list(payload)
         pages.append(page)
         if len(page) < page_size:
-            return pages, True, errors
-    errors.append(
+            return pages, True, []
+    return pages, False, [
         f"open issue inventory reached max_pages={max_pages} with a full final page; "
         "pagination may be truncated"
-    )
-    return pages, False, errors
+    ]
 
 
 def _validate_fixture(payload: Any) -> dict[str, Any]:
@@ -177,12 +162,13 @@ def _validate_fixture(payload: Any) -> dict[str, Any]:
         raise ValueError("fixture.pages must be a list of page arrays")
     if any(any(not isinstance(row, dict) for row in page) for page in pages):
         raise ValueError("every fixture page row must be an object")
-    if not isinstance(exact_issues, dict):
-        raise ValueError("fixture.exact_issues must be an object keyed by issue number")
-    if not isinstance(claims, dict):
-        raise ValueError("fixture.claims must be an object keyed by issue number")
-    if not isinstance(dependencies, dict):
-        raise ValueError("fixture.dependencies must be an object keyed by issue number")
+    for field, value in (
+        ("exact_issues", exact_issues),
+        ("claims", claims),
+        ("dependencies", dependencies),
+    ):
+        if not isinstance(value, dict):
+            raise ValueError(f"fixture.{field} must be an object keyed by issue number")
     return {
         "pages": pages,
         "exact_issues": exact_issues,
@@ -198,17 +184,15 @@ def _load_fixture(path: Path) -> tuple[dict[str, Any], str]:
         The normalized fixture and the input-file SHA-256 digest.
     """
     raw = path.read_bytes()
-    payload = json.loads(raw.decode("utf-8"))
-    return _validate_fixture(payload), hashlib.sha256(raw).hexdigest()
+    return _validate_fixture(json.loads(raw.decode("utf-8"))), hashlib.sha256(raw).hexdigest()
 
 
 def _fixture_lookup(mapping: Mapping[str, Any], number: int, *, field: str) -> Any:
-    """Read one fixture mapping value by string or integer issue key."""
-    if str(number) in mapping:
-        return mapping[str(number)]
-    if number in mapping:
-        return mapping[number]
-    raise ValueError(f"fixture.{field} has no entry for issue {number}")
+    """Read one fixture value by its JSON string issue key."""
+    key = str(number)
+    if key not in mapping:
+        raise ValueError(f"fixture.{field} has no entry for issue {number}")
+    return mapping[key]
 
 
 def _fixture_evaluator(fixture: Mapping[str, Any]) -> Callable[[int], dict[str, Any]]:
@@ -224,8 +208,6 @@ def _fixture_evaluator(fixture: Mapping[str, Any]) -> Callable[[int], dict[str, 
         if exact.get("number") != number:
             raise ValueError(f"fixture exact issue {number} has a mismatched number")
         dependency = fixture["dependencies"].get(str(number))
-        if dependency is None:
-            dependency = fixture["dependencies"].get(number)
         if dependency is not None and not isinstance(dependency, dict):
             raise ValueError(f"fixture dependency evaluation {number} must be an object")
         return issue_implementability.evaluate_issue(
@@ -255,13 +237,12 @@ def _listing_drift(
     listed: Mapping[str, Any], exact: Mapping[str, Any]
 ) -> list[dict[str, Any]]:
     """Return field-level differences between the listing row and exact read."""
-    fields = ("title", "state", "url", "labels", "assignees")
     drift: list[dict[str, Any]] = []
-    for field in fields:
-        listed_value = listed.get(field)
-        exact_value = exact.get(field)
-        if listed_value != exact_value:
-            drift.append({"field": field, "listed": listed_value, "exact": exact_value})
+    for field in ("title", "state", "url", "labels", "assignees"):
+        if listed.get(field) != exact.get(field):
+            drift.append(
+                {"field": field, "listed": listed.get(field), "exact": exact.get(field)}
+            )
     return drift
 
 
@@ -273,6 +254,7 @@ def _error_item(listed: Mapping[str, Any], message: str) -> dict[str, Any]:
         "url": listed.get("url", ""),
         "labels": listed.get("labels", []),
         "assignees": listed.get("assignees", []),
+        "claim": None,
         "observed_classification": "error",
         "classification": "error",
         "reasons": [message],
@@ -293,23 +275,24 @@ def _item_from_report(
 ) -> dict[str, Any]:
     """Convert one canonical implementability report to a bounded preparation packet."""
     issue = report.get("issue")
+    claim = report.get("claim")
+    observed = report.get("classification")
     if not isinstance(issue, dict):
         return _error_item(listed, "implementability report has no normalized issue object")
-    observed = report.get("classification")
-    if not isinstance(observed, str) or not observed:
-        return _error_item(listed, "implementability report has no classification")
+    if not isinstance(claim, dict):
+        return _error_item(listed, "implementability report has no normalized claim object")
+    if not isinstance(observed, str) or observed not in NEXT_ACTIONS:
+        return _error_item(listed, "implementability report has an unknown classification")
+
     drift = _listing_drift(listed, issue)
     effective = "error" if drift else observed
     contract = report.get("contract") if isinstance(report.get("contract"), dict) else {}
     fields = contract.get("fields") if isinstance(contract.get("fields"), dict) else {}
     missing = contract.get("missing_fields")
-    missing_fields = list(missing) if isinstance(missing, list) else []
     reasons = report.get("reasons")
     normalized_reasons = list(reasons) if isinstance(reasons, list) else []
     if drift:
         normalized_reasons.append("listing state changed before exact issue evaluation")
-    action = NEXT_ACTIONS.get(effective, NEXT_ACTIONS["error"])
-    authority = AUTHORITIES.get(effective, AUTHORITIES["error"])
     applicable = effective != "error"
     return {
         "number": issue.get("number", listed.get("number")),
@@ -317,18 +300,24 @@ def _item_from_report(
         "url": issue.get("url", listed.get("url", "")),
         "labels": issue.get("labels", listed.get("labels", [])),
         "assignees": issue.get("assignees", listed.get("assignees", [])),
+        "claim": claim,
         "observed_classification": observed,
         "classification": effective,
         "reasons": normalized_reasons,
         "body_sha256": contract.get("body_sha256"),
         "contract_fields": fields,
-        "missing_fields": missing_fields,
+        "missing_fields": list(missing) if isinstance(missing, list) else [],
         "dependency_gate": report.get("dependency_gate"),
         "listing_drift": drift,
         "applicable": applicable,
-        "dispatch_eligible": applicable and report.get("ready") is True,
-        "next_action": action,
-        "authority": authority,
+        "dispatch_eligible": (
+            applicable
+            and effective == "ready"
+            and report.get("ready") is True
+            and report.get("write_allowed") is True
+        ),
+        "next_action": NEXT_ACTIONS[effective],
+        "authority": AUTHORITIES[effective],
     }
 
 
@@ -362,25 +351,36 @@ def _prepare_listing(
     return issues, counts, errors
 
 
+def _claim_state(claim: object) -> str:
+    """Return one compact claim-state aggregate value."""
+    if not isinstance(claim, Mapping) or claim.get("ok") is not True:
+        return "unavailable"
+    return "claimed" if claim.get("claimed") is True else "unclaimed"
+
+
 def _summary(items: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """Build aggregate classification and contract-field counts."""
+    """Build aggregate classification, claim, and contract-field counts."""
     classifications: Counter[str] = Counter()
     next_actions: Counter[str] = Counter()
+    claim_states: Counter[str] = Counter()
     missing_fields: Counter[str] = Counter()
     labels: Counter[str] = Counter()
     executable: list[int] = []
     for item in items:
         classifications[str(item.get("classification", "error"))] += 1
         next_actions[str(item.get("next_action", NEXT_ACTIONS["error"]))] += 1
+        claim_states[_claim_state(item.get("claim"))] += 1
         for field in item.get("missing_fields", []):
             missing_fields[str(field)] += 1
         for label in item.get("labels", []):
             labels[str(label)] += 1
-        if item.get("dispatch_eligible") is True and isinstance(item.get("number"), int):
-            executable.append(item["number"])
+        number = item.get("number")
+        if item.get("dispatch_eligible") is True and isinstance(number, int):
+            executable.append(number)
     return {
         "classifications": dict(sorted(classifications.items())),
         "next_actions": dict(sorted(next_actions.items())),
+        "claim_states": dict(sorted(claim_states.items())),
         "missing_fields": dict(sorted(missing_fields.items())),
         "labels": dict(sorted(labels.items())),
         "executable_leaf_numbers": sorted(executable),
@@ -407,14 +407,15 @@ def _build_report(
     listed, counts, listing_errors = _prepare_listing(pages)
     pagination_complete = pagination.get("complete") is True
     pagination_errors = pagination.get("errors", [])
-    if not isinstance(pagination_errors, list):
-        raise ValueError("pagination.errors must be a list")
     page_size = pagination.get("page_size")
     max_pages = pagination.get("max_pages")
+    if not isinstance(pagination_errors, list):
+        raise ValueError("pagination.errors must be a list")
     if type(page_size) is not int or page_size < 1:
         raise ValueError("pagination.page_size must be a positive integer")
     if type(max_pages) is not int or max_pages < 1:
         raise ValueError("pagination.max_pages must be a positive integer")
+
     errors = [*(str(error) for error in pagination_errors), *listing_errors]
     items: list[dict[str, Any]] = []
     for row in listed:
@@ -429,7 +430,6 @@ def _build_report(
             errors.append(f"issue {row['number']}: " + "; ".join(item["reasons"]))
         items.append(item)
 
-    applicable = pagination_complete and not errors
     report: dict[str, Any] = {
         "schema": SCHEMA,
         "repository": repo,
@@ -437,7 +437,7 @@ def _build_report(
         "input_sha256": input_sha256,
         "mutation_authorized": False,
         "complete": pagination_complete,
-        "applicable": applicable,
+        "applicable": pagination_complete and not errors,
         "pagination": {
             "page_size": page_size,
             "max_pages": max_pages,
@@ -494,6 +494,7 @@ def _render_markdown(
         ]
     )
     items = list(report.get("items", []))
+    non_ready_count = sum(item.get("classification") != "ready" for item in items)
     selected = [
         item
         for item in items
@@ -505,10 +506,9 @@ def _render_markdown(
             f"| #{item.get('number', '')} | `{_markdown_cell(item.get('classification', ''))}` | "
             f"`{_markdown_cell(item.get('next_action', ''))}` | {_markdown_cell(missing)} |"
         )
-    if len(selected) < len([item for item in items if item.get("classification") != "ready"]):
-        lines.append("")
-        lines.append(
-            f"Output is capped at {item_limit} rows. Use the full JSON report for all items."
+    if len(selected) < non_ready_count:
+        lines.extend(
+            ["", f"Output is capped at {item_limit} rows. Use the full JSON report for all items."]
         )
     if report.get("errors"):
         lines.extend(["", "## Operational errors", ""])
@@ -546,13 +546,12 @@ def main(argv: list[str] | None = None) -> int:
     """Run the open-issue contract audit.
 
     Returns:
-        ``0`` for an applicable report, ``2`` for a fail-closed non-applicable report, and ``1``
-        for malformed input or an unexpected operational error.
+        ``0`` for a completed command, ``2`` with ``--check`` for a fail-closed non-applicable
+        report, and ``1`` for malformed input or an unexpected operational error.
     """
-    parser = _build_parser()
-    args = parser.parse_args(argv)
+    args = _build_parser().parse_args(argv)
     try:
-        if args.page_size < 1 or args.page_size > 100:
+        if not 1 <= args.page_size <= 100:
             raise ValueError("--page-size must be between 1 and 100")
         if args.max_pages < 1:
             raise ValueError("--max-pages must be positive")
@@ -563,7 +562,7 @@ def main(argv: list[str] | None = None) -> int:
             fixture, input_sha256 = _load_fixture(args.fixture)
             pages = fixture["pages"][: args.max_pages]
             complete = bool(pages) and len(pages[-1]) < args.page_size
-            page_errors: list[str] = []
+            page_errors = []
             if len(fixture["pages"]) > args.max_pages or not complete:
                 page_errors.append(
                     "fixture pagination is incomplete under the configured page-size/page-limit"
@@ -609,9 +608,7 @@ def main(argv: list[str] | None = None) -> int:
             _write_text(args.output, output)
         else:
             print(output, end="")
-        if args.check and not report["applicable"]:
-            return 2
-        return 0
+        return 2 if args.check and not report["applicable"] else 0
     except (OSError, RuntimeError, TypeError, ValueError) as exc:
         print(f"open issue contract audit failed: {exc}", file=sys.stderr)
         return 1

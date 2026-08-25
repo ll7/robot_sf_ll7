@@ -45,7 +45,7 @@
       "configs/algos/hybrid_rule_v3_teb_like_rollout_proxemic_costmap.yaml",
       "configs/algos/hybrid_rule_v4_recovery_aware.yaml"
     ],
-    "proof_plan": "freeze resolved mappings for all 5 members (pre-change digests), introduce configs/algos/hybrid_rule_base.yaml containing only byte-identical paths, re-resolve and diff digests; parity tests for missing-base and cycle fail-closed; no training/benchmark execution",
+    "proof_plan": "freeze resolved mappings for all 5 members (pre-change digests); introduce ONE new shared base YAML (proposed filename hybrid_rule_base, under configs/algos/) containing only byte-identical paths; re-resolve and diff digests; parity tests for missing-base and cycle fail-closed; no training/benchmark execution",
     "risk_flags": [
       "estimated_reduction is heuristic; must be confirmed by the frozen-resolved-mapping proof before the child executes"
     ]

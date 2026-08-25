@@ -29,9 +29,10 @@ Families whose members already declare `base_config` (e.g. `expert_ppo_*`,
 
 ## Proposed child (at most one)
 
-**`hybrid_rule`** (5 members): introduce `configs/algos/hybrid_rule_base.yaml` containing only
-byte-identical resolved key/value paths; freeze pre-change resolved mappings and digests,
-re-resolve, and diff after the change; parity tests for missing-base and cycle fail-closed.
+**`hybrid_rule`** (5 members): introduce ONE new shared base YAML (proposed filename
+`hybrid_rule_base`, under `configs/algos/`) containing only byte-identical resolved
+key/value paths; freeze pre-change resolved mappings and digests, re-resolve, and diff
+after the change; parity tests for missing-base and cycle fail-closed.
 No training, simulation, benchmark, external-data, or scheduler work; no runtime/claim change.
 The estimated reduction is heuristic and must be confirmed by the frozen-resolved-mapping proof
 before the child executes.

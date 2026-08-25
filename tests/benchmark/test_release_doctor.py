@@ -15,6 +15,8 @@ import yaml
 from robot_sf import cli as robot_sf_cli
 from robot_sf import release_cli
 from robot_sf.benchmark import release_doctor
+from robot_sf.benchmark.camera_ready import _config as camera_ready_config
+from robot_sf.benchmark.camera_ready import _run_state as camera_ready_run_state
 from robot_sf.benchmark.release_doctor import ReleaseDoctorCheck
 from robot_sf.cli import main as robot_sf_main
 
@@ -32,6 +34,103 @@ def test_manifest_doctor_confirms_s30_h600_cardinality() -> None:
     assert "20160-cell" in check.summary
     assert manifest is not None
     assert cfg is not None
+
+
+def test_doctor_anchors_manifest_and_git_checks_to_explicit_release_checkout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Reviewed tooling may inspect a different untouched ``--repo`` checkout."""
+    tooling_root = tmp_path / "tooling-worktree"
+    release_root = tmp_path / "frozen-release-worktree"
+    tooling_root.mkdir()
+    release_root.mkdir()
+    manifest_path = release_root / "configs" / "release.yaml"
+    manifest_path.parent.mkdir()
+    manifest_path.write_text("manifest", encoding="utf-8")
+    campaign_path = release_root / "configs" / "campaign.yaml"
+    campaign_path.write_text("campaign", encoding="utf-8")
+    manifest = SimpleNamespace(
+        canonical_campaign_config_path=campaign_path,
+        schema_version="benchmark-release-manifest.v0.1",
+        expected_episode_cells=1,
+    )
+    cfg = SimpleNamespace(planners=[SimpleNamespace(enabled=True)])
+    roots: list[Path] = []
+    monkeypatch.setattr(
+        release_doctor,
+        "load_release_manifest",
+        lambda path, **kwargs: roots.append(kwargs["repository_root"]) or manifest,
+    )
+    monkeypatch.setattr(
+        release_doctor,
+        "load_campaign_config",
+        lambda path, **kwargs: roots.append(kwargs["repository_root"]) or cfg,
+    )
+    monkeypatch.setattr(
+        release_doctor,
+        "validate_release_manifest",
+        lambda value, **kwargs: (
+            roots.append(kwargs["repository_root"]) or {"problems": [], "status": "valid"}
+        ),
+    )
+    monkeypatch.setattr(
+        release_doctor,
+        "_load_campaign_scenarios",
+        lambda value, **kwargs: roots.append(kwargs["repository_root"]) or [{"id": "one"}],
+    )
+    monkeypatch.setattr(release_doctor, "_resolved_seed_inventory", lambda _: [1])
+    check, _, _ = release_doctor._manifest_check(
+        manifest_path,
+        1,
+        repository_root=release_root,
+    )
+    assert check.status == "pass", check.summary
+    assert roots == [release_root, release_root, release_root, release_root]
+
+    run_cwds: list[Path] = []
+
+    def fake_run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+        run_cwds.append(cwd)
+        return subprocess.CompletedProcess(
+            command, 0, "a" * 40 + "\n" if command[1] == "rev-parse" else "", ""
+        )
+
+    monkeypatch.setattr(release_doctor, "_run", fake_run)
+    git_check = release_doctor._git_check(release_root, "a" * 40)
+    assert git_check.status == "pass", git_check.summary
+    assert run_cwds == [release_root, release_root]
+
+
+def test_campaign_asset_paths_use_explicit_release_checkout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A tooling import must not make relative packet paths resolve in its own checkout."""
+    tooling_root = tmp_path / "tooling-worktree"
+    release_root = tmp_path / "frozen-release-worktree"
+    tooling_matrix = tooling_root / "configs" / "scenarios" / "matrix.yaml"
+    release_matrix = release_root / "configs" / "scenarios" / "matrix.yaml"
+    tooling_seed_sets = tooling_root / "configs" / "benchmarks" / "seed_sets.yaml"
+    release_seed_sets = release_root / "configs" / "benchmarks" / "seed_sets.yaml"
+    config_path = release_root / "configs" / "benchmarks" / "campaign.yaml"
+    for path in (tooling_matrix, release_matrix, tooling_seed_sets, release_seed_sets):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("fixture", encoding="utf-8")
+    config_path.write_text("name: release\n", encoding="utf-8")
+    monkeypatch.setattr(camera_ready_run_state, "get_repository_root", lambda: tooling_root)
+
+    matrix_path = camera_ready_config._resolve_scenario_matrix_path(
+        {"scenario_matrix": "configs/scenarios/matrix.yaml"},
+        config_path=config_path,
+        repository_root=release_root,
+    )
+    seed_policy = camera_ready_config._build_seed_policy(
+        {"seed_policy": {"seed_sets_path": "configs/benchmarks/seed_sets.yaml"}},
+        base_dir=config_path.parent,
+        repository_root=release_root,
+    )
+
+    assert matrix_path == release_matrix
+    assert seed_policy.seed_sets_path == release_seed_sets
 
 
 def test_v02_manifest_cardinality_cannot_be_overridden() -> None:
@@ -256,6 +355,7 @@ def test_top_level_cli_registers_release_doctor(capsys) -> None:
     assert "--expected-base-sha" in output
     assert "--expected-campaign-id" in output
     assert "--checkpoint-path-map" in output
+    assert "--private-ops-repository" in output
 
 
 def test_cli_checkpoint_path_map_reaches_doctor_with_repo_root(monkeypatch, tmp_path: Path) -> None:
@@ -318,6 +418,44 @@ def test_cli_relative_manifest_resolves_against_repo_root(monkeypatch, tmp_path:
     assert release_cli.handle(args) == 0
     assert captured["manifest_path"] == (tmp_path / "configs/release_manifest.yaml").resolve()
     assert captured["repo"] == tmp_path.resolve()
+
+
+def test_cli_private_ops_repository_reaches_doctor_without_public_root_rewriting(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """The private ledger checkout remains an independent object-addressed root."""
+    release_root = tmp_path / "release-worktree"
+    private_root = tmp_path / "private-ops-worktree"
+    release_root.mkdir()
+    private_root.mkdir()
+    args = robot_sf_cli._build_parser().parse_args(
+        [
+            "release",
+            "doctor",
+            "--repo",
+            str(release_root),
+            "--manifest",
+            "manifest.yaml",
+            "--expected-release-sha",
+            "a" * 40,
+            "--expected-base-sha",
+            "b" * 40,
+            "--tag",
+            "release",
+            "--private-ops-repository",
+            str(private_root),
+        ]
+    )
+    captured: dict[str, object] = {}
+
+    def fake_report(**kwargs):
+        captured.update(kwargs)
+        return {"status": "pass"}
+
+    monkeypatch.setattr(release_cli, "collect_release_doctor_report", fake_report)
+    assert release_cli.handle(args) == 0
+    assert captured["repo"] == release_root.resolve()
+    assert captured["private_ops_repository"] == private_root
 
 
 def test_cli_relative_doctor_paths_anchor_to_repo_from_tooling_cwd(

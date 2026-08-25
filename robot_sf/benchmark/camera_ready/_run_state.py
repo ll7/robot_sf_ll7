@@ -527,7 +527,12 @@ def _resolve_campaign_id(
     return _campaign_id(cfg, label=label)
 
 
-def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
+def _resolve_path(
+    raw_path: str | None,
+    *,
+    base_dir: Path,
+    repository_root: Path | None = None,
+) -> Path | None:
     """Resolve paths relative to ``base_dir``.
 
     Returns:
@@ -543,14 +548,20 @@ def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
     if candidate.exists():
         return candidate
 
-    repo_candidate = (get_repository_root() / path).resolve()
+    repo_root = (repository_root or get_repository_root()).resolve()
+    repo_candidate = (repo_root / path).resolve()
     if repo_candidate.exists():
         return repo_candidate
 
     return candidate
 
 
-def _resolve_observation_noise(raw: Any, *, base_dir: Path) -> dict[str, Any] | None:
+def _resolve_observation_noise(
+    raw: Any,
+    *,
+    base_dir: Path,
+    repository_root: Path | None = None,
+) -> dict[str, Any] | None:
     """Resolve an optional inline or file-backed observation-noise config.
 
     Returns:
@@ -561,7 +572,7 @@ def _resolve_observation_noise(raw: Any, *, base_dir: Path) -> dict[str, Any] | 
     if isinstance(raw, dict):
         return normalize_observation_noise_spec(raw)
     if isinstance(raw, str) and raw.strip():
-        path = _resolve_path(raw, base_dir=base_dir)
+        path = _resolve_path(raw, base_dir=base_dir, repository_root=repository_root)
         if path is None or not path.is_file():
             raise FileNotFoundError(f"Could not resolve observation_noise '{raw}'")
         return load_observation_noise_spec(path)

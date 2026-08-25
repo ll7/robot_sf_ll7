@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from scripts.dev import check_worktree_capacity as capacity
+from tests.support.environment_guards import git_identity_environment
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CHECK_CAPACITY = REPO_ROOT / "scripts" / "dev" / "check_worktree_capacity.py"
@@ -456,13 +457,7 @@ def test_create_worktree_hints_when_orphan_branch_diverged(tmp_path: Path) -> No
     commit = subprocess.run(
         ["git", "commit-tree", tree, "-m", "orphan diverged"],
         cwd=REPO_ROOT,
-        env={
-            **os.environ,
-            "GIT_AUTHOR_NAME": "Robot SF test",
-            "GIT_AUTHOR_EMAIL": "robot-sf-test@example.invalid",
-            "GIT_COMMITTER_NAME": "Robot SF test",
-            "GIT_COMMITTER_EMAIL": "robot-sf-test@example.invalid",
-        },
+        env=git_identity_environment(),
         check=True,
         capture_output=True,
         text=True,

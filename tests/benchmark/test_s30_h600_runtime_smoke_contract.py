@@ -12,6 +12,7 @@ import yaml
 from robot_sf.benchmark.camera_ready._config import load_campaign_config
 from robot_sf.benchmark.camera_ready._preflight import _load_campaign_scenarios
 from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
+from robot_sf.benchmark.runtime_smoke_admission import RUNTIME_SMOKE_PLANNER_KEYS
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_CONFIG_PATH = (
@@ -96,6 +97,7 @@ def test_runtime_smoke_preserves_all_fourteen_source_arms_without_fallback() -> 
 
     assert list(smoke_planners) == EXPECTED_PLANNER_KEYS
     assert list(source_planners) == EXPECTED_PLANNER_KEYS
+    assert list(RUNTIME_SMOKE_PLANNER_KEYS) == EXPECTED_PLANNER_KEYS
     assert len(smoke_planners) == 14
     for key in EXPECTED_PLANNER_KEYS:
         source_row = dict(source_planners[key])

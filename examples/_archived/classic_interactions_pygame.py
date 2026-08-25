@@ -4,7 +4,7 @@ Usage:
     uv run python examples/_archived/classic_interactions_pygame.py
 
 Prerequisites:
-    - model/run_043.zip
+    - the public release-backed ``legacy_ppo_run_043`` entry in ``model/registry.yaml``
     - configs/scenarios/classic_interactions.yaml
 
 Expected Output:
@@ -74,6 +74,7 @@ from robot_sf.common.artifact_paths import resolve_artifact_path
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.reward import simple_reward
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.models.registry import resolve_model_path
 from robot_sf.nav.map_config import MapDefinitionPool, serialize_map
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.render.helper_catalog import ensure_output_dir
@@ -88,7 +89,9 @@ _PPO_IMPORT_ERROR = None
 # ---------------------------------------------------------------------------
 # CONFIG CONSTANTS (edit these to adjust behavior)
 # ---------------------------------------------------------------------------
-MODEL_PATH = Path("model/run_043.zip")
+DEFAULT_MODEL_PATH = Path("model/run_043.zip")
+MODEL_PATH = DEFAULT_MODEL_PATH
+MODEL_ID = "legacy_ppo_run_043"
 SCENARIO_MATRIX_PATH = Path("configs/scenarios/classic_interactions.yaml")
 SCENARIO_NAME: str | None = None  # default = first scenario
 # When True (or when run_demo(scenario_name="ALL") / run_demo(sweep=True)), iterate over all
@@ -391,6 +394,21 @@ def _log_dry_run(scenario: dict[str, Any], seeds: list[int]) -> None:
     )
 
 
+def _resolve_configured_model_path() -> Path:
+    """Resolve the configured model, hydrating the cut-over legacy model when needed."""
+    configured_path = Path(MODEL_PATH)
+    if configured_path.exists() or configured_path != DEFAULT_MODEL_PATH:
+        return configured_path
+
+    try:
+        return resolve_model_path(MODEL_ID, allow_download=True)
+    except (FileNotFoundError, KeyError, RuntimeError, ValueError) as exc:
+        raise FileNotFoundError(
+            f"Model path does not exist: {configured_path}. Download a pre-trained PPO model or "
+            f"make registry model '{MODEL_ID}' available."
+        ) from exc
+
+
 def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-any]
     """Load the trained policy or return a stub policy in explicit fast mode.
 
@@ -400,11 +418,6 @@ def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-a
     """
     explicit_fast_flag = _is_explicit_fast_demo()
     if fast_mode and eff_max <= 1:
-        # Only fall back to stub if user explicitly requested fast demo; otherwise enforce model presence.
-        if not MODEL_PATH.exists() and not explicit_fast_flag:
-            raise FileNotFoundError(
-                f"Model path does not exist: {MODEL_PATH}. Download a pre-trained PPO model or set ROBOT_SF_FAST_DEMO=1 for stub policy.",
-            )
         if explicit_fast_flag:
 
             class _StubPolicy:  # pragma: no cover - trivial
@@ -416,14 +429,16 @@ def _load_or_stub_model(fast_mode: bool, eff_max: int):  # type: ignore[return-a
 
             logger.info("FAST DEMO: Using stub policy (ROBOT_SF_FAST_DEMO=1)")
             return _StubPolicy()
+    model_path = _resolve_configured_model_path()
     # Real model load path (non-fast or explicit model present)
-    if not MODEL_PATH.exists():  # Surface actionable error for tests (model_path_failure)
+    if not model_path.exists():  # Surface actionable error for tests (model_path_failure)
         raise FileNotFoundError(
-            f"Model path does not exist: {MODEL_PATH}. Download a pre-trained PPO model or set ROBOT_SF_FAST_DEMO=1 for stub policy.",
+            f"Model path does not exist: {model_path}. Download a pre-trained PPO model or "
+            "set ROBOT_SF_FAST_DEMO=1 for stub policy.",
         )
     model_start = time.time()
-    model = load_trained_policy(str(MODEL_PATH))
-    logger.info(f"Loaded model in {time.time() - model_start:.2f}s: {MODEL_PATH}")
+    model = load_trained_policy(str(model_path))
+    logger.info(f"Loaded model in {time.time() - model_start:.2f}s: {model_path}")
     return model
 
 

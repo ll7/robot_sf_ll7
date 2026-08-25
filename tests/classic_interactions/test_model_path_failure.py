@@ -58,3 +58,34 @@ def test_model_path_missing_provides_actionable_message():
     assert "download" in msg or "pre-trained" in msg, (
         "Model missing error message lacks user guidance (expected 'download' or 'pre-trained' phrase)."
     )
+
+
+def test_default_model_path_uses_registry_after_legacy_cutover(monkeypatch, tmp_path):
+    """The demo should hydrate the cut-over legacy checkpoint through the registry."""
+    mod = _demo_module()
+    resolved_path = tmp_path / "legacy_ppo_run_043.zip"
+    resolved_path.touch()
+    resolved_ids: list[str] = []
+    loaded_paths: list[str] = []
+
+    def fake_resolve_model_path(model_id: str, **_kwargs: object) -> Path:
+        """Record the registry lookup and return a deterministic fixture path."""
+        resolved_ids.append(model_id)
+        return resolved_path
+
+    def fake_load_trained_policy(path: str) -> object:
+        """Record the hydrated checkpoint passed to the policy loader."""
+        loaded_paths.append(path)
+        return object()
+
+    monkeypatch.setattr(mod, "MODEL_PATH", Path("model/run_043.zip"))
+    monkeypatch.setattr(mod, "resolve_model_path", fake_resolve_model_path, raising=False)
+    monkeypatch.setattr(mod, "load_trained_policy", fake_load_trained_policy)
+    monkeypatch.setattr(mod, "_load_map_definition", lambda _map_file: None)
+    monkeypatch.setattr(mod, "make_robot_env", lambda **_kwargs: object())
+    monkeypatch.setattr(mod, "_run_episodes", lambda *_args, **_kwargs: [])
+
+    mod.run_demo(dry_run=False, max_episodes=1, enable_recording=False)
+
+    assert resolved_ids == ["legacy_ppo_run_043"]
+    assert loaded_paths == [str(resolved_path)]

@@ -190,6 +190,27 @@ def _load_fixture(path: Path) -> tuple[dict[str, Any], str]:
     return _validate_fixture(json.loads(raw.decode("utf-8"))), hashlib.sha256(raw).hexdigest()
 
 
+def _fixture_pagination(
+    fixture: Mapping[str, Any], *, page_size: int, max_pages: int
+) -> tuple[list[list[dict[str, Any]]], bool, list[str]]:
+    """Apply the canonical bounded fixture-pagination decision."""
+    raw_pages = fixture.get("pages")
+    if not isinstance(raw_pages, list) or any(not isinstance(page, list) for page in raw_pages):
+        raise ValueError("fixture.pages must be a list of page arrays")
+    if any(any(not isinstance(row, dict) for row in page) for page in raw_pages):
+        raise ValueError("every fixture page row must be an object")
+    pages = raw_pages[:max_pages]
+    complete = (
+        bool(pages)
+        and len(raw_pages) <= max_pages
+        and len(pages[-1]) < page_size
+    )
+    errors = []
+    if not complete:
+        errors.append("fixture pagination is incomplete under the configured page-size/page-limit")
+    return pages, complete, errors
+
+
 def _fixture_lookup(mapping: Mapping[str, Any], number: int, *, field: str) -> Any:
     """Read one fixture value by its JSON string issue key."""
     key = str(number)
@@ -568,13 +589,11 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.fixture:
             fixture, input_sha256 = _load_fixture(args.fixture)
-            pages = fixture["pages"][: args.max_pages]
-            complete = bool(pages) and len(pages[-1]) < args.page_size
-            page_errors = []
-            if len(fixture["pages"]) > args.max_pages or not complete:
-                page_errors.append(
-                    "fixture pagination is incomplete under the configured page-size/page-limit"
-                )
+            pages, complete, page_errors = _fixture_pagination(
+                fixture,
+                page_size=args.page_size,
+                max_pages=args.max_pages,
+            )
             evaluator = _fixture_evaluator(fixture)
             source = "fixture"
         else:

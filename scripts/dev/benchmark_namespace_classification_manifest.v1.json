@@ -203,6 +203,7 @@
     "plots.py",
     "plotting_style.py",
     "policy_builders.py",
+    "post_execution_release_doctor.py",
     "prediction_mpc_factorial_preregistration.py",
     "prediction_open_closed_eval.py",
     "predictive",

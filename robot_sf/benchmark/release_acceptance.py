@@ -422,12 +422,14 @@ def _read_campaign_summary(campaign_root: Path) -> tuple[dict[str, Any] | None, 
     """
     try:
         path = resolve_campaign_artifact_path(campaign_root, "reports/campaign_summary.json")
-    except (OSError, ValueError) as exc:
-        return None, f"campaign summary cannot be read: {exc}"
+    except (OSError, ValueError):
+        return None, "campaign summary cannot be read: path is missing or unsafe"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return None, f"campaign summary cannot be read: {exc}"
+    except OSError:
+        return None, "campaign summary cannot be read"
+    except json.JSONDecodeError:
+        return None, "campaign summary contains invalid JSON"
     if not isinstance(payload, dict):
         return None, "campaign summary must be a JSON object"
     return payload, None
@@ -447,13 +449,13 @@ def _read_episode_rows(path: Path) -> tuple[list[dict[str, Any]], str | None]:
                     continue
                 try:
                     payload = json.loads(raw_line)
-                except json.JSONDecodeError as exc:
-                    return [], f"{path}:{line_number}: invalid JSON: {exc}"
+                except json.JSONDecodeError:
+                    return [], f"episode artifact line {line_number}: invalid JSON"
                 if not isinstance(payload, dict):
-                    return [], f"{path}:{line_number}: episode row must be an object"
+                    return [], f"episode artifact line {line_number}: episode row must be an object"
                 rows.append(payload)
-    except OSError as exc:
-        return [], f"{path}: cannot read episode artifact: {exc}"
+    except OSError:
+        return [], "cannot read episode artifact"
     return rows, None
 
 
@@ -470,8 +472,10 @@ def _read_campaign_object(
         return None, f"{filename} contains a symlink component"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return None, f"{filename} cannot be read: {exc}"
+    except OSError:
+        return None, f"{filename} cannot be read"
+    except json.JSONDecodeError:
+        return None, f"{filename} contains invalid JSON"
     if not isinstance(payload, dict):
         return None, f"{filename} must contain a JSON object"
     return payload, None
@@ -522,7 +526,7 @@ def _source_repository_path(raw_path: Any, source_repository_root: Path) -> Path
         try:
             resolved.relative_to(source_root)
         except ValueError as exc:
-            raise ValueError(f"source path escapes trusted repository root: {path}") from exc
+            raise ValueError("source path escapes trusted repository root") from exc
         return resolved
     resolved = path.resolve()
     try:
@@ -531,7 +535,7 @@ def _source_repository_path(raw_path: Any, source_repository_root: Path) -> Path
         try:
             relative = resolved.relative_to(validator_root)
         except ValueError as exc:
-            raise ValueError(f"source path is outside trusted repositories: {resolved}") from exc
+            raise ValueError("source path is outside trusted repositories") from exc
         return (source_root / relative).resolve()
     return (source_root / relative).resolve()
 
@@ -779,14 +783,14 @@ def _stress_episode_provenance_blockers(  # noqa: C901, PLR0912, PLR0913, PLR091
         return [f"planner {planner_key} episode provenance sidecar is missing"]
     try:
         payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return [f"planner {planner_key} episode provenance sidecar cannot be read: {exc}"]
+    except (OSError, json.JSONDecodeError):
+        return [f"planner {planner_key} episode provenance sidecar cannot be read"]
     if not isinstance(payload, Mapping):
         return [f"planner {planner_key} episode provenance sidecar must be an object"]
     try:
         validate_result_provenance_manifest(payload)
-    except (TypeError, ValueError) as exc:
-        blockers.append(f"planner {planner_key} episode provenance schema rejected: {exc}")
+    except (TypeError, ValueError):
+        blockers.append(f"planner {planner_key} episode provenance schema rejected")
 
     run = payload.get("run")
     run = run if isinstance(run, Mapping) else {}
@@ -1658,15 +1662,15 @@ def _resolve_expected_matrix_axes(  # noqa: C901
                 campaign_config = load_campaign_config(
                     _source_repository_path(config_path, source_root)
                 )
-            except (OSError, ValueError, KeyError, TypeError) as exc:
-                blockers.append(f"canonical campaign config cannot be resolved: {exc}")
+            except (OSError, ValueError, KeyError, TypeError):
+                blockers.append("canonical campaign config cannot be resolved")
     if campaign_config is not None:
         try:
             scenarios = _load_campaign_scenarios(campaign_config)
             scenario_ids = tuple(_scenario_id(scenario) for scenario in scenarios)
             seeds = tuple(_resolved_seed_inventory(scenarios))
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            blockers.append(f"resolved campaign matrix cannot be loaded: {exc}")
+        except (OSError, ValueError, KeyError, TypeError):
+            blockers.append("resolved campaign matrix cannot be loaded")
             return (), (), blockers
         if any(not scenario_id for scenario_id in scenario_ids):
             blockers.append("resolved campaign matrix contains an empty scenario identifier")
@@ -1741,8 +1745,8 @@ def _full_release_planner_candidates(
             "planners",
             None,
         )
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        blockers.append(f"canonical campaign planner roster cannot be resolved: {exc}")
+    except (OSError, ValueError, KeyError, TypeError):
+        blockers.append("canonical campaign planner roster cannot be resolved")
     return candidates, blockers
 
 
@@ -1764,8 +1768,8 @@ def _full_release_campaign_config(
     try:
         source_root = Path(source_repository_root or get_repository_root()).resolve()
         return load_campaign_config(_source_repository_path(config_path, source_root)), []
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        return None, [f"canonical campaign config cannot be resolved for provenance: {exc}"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None, ["canonical campaign config cannot be resolved for provenance"]
 
 
 def _full_release_algorithm_roster(
@@ -1836,28 +1840,28 @@ def _full_release_nested_config_path(
     if raw.is_absolute():
         lexical_candidate = raw.absolute()
         if _path_has_symlink_component(lexical_candidate):
-            raise ValueError(f"{label} contains a symlink component: {raw}")
+            raise ValueError(f"{label} contains a symlink component")
         candidate = raw.resolve()
     else:
         lexical_anchored = config_anchor / raw
         if _path_has_symlink_component(lexical_anchored):
-            raise ValueError(f"{label} contains a symlink component: {raw}")
+            raise ValueError(f"{label} contains a symlink component")
         anchored = lexical_anchored.resolve()
         if anchored.is_file():
             candidate = anchored
         else:
             lexical_source = source_root / raw
             if _path_has_symlink_component(lexical_source):
-                raise ValueError(f"{label} contains a symlink component: {raw}")
+                raise ValueError(f"{label} contains a symlink component")
             candidate = lexical_source.resolve()
     try:
         candidate.relative_to(source_root)
     except ValueError as exc:
-        raise ValueError(f"{label} is outside trusted source repository root: {raw}") from exc
+        raise ValueError(f"{label} is outside trusted source repository root") from exc
     if _path_has_symlink_component(candidate):
-        raise ValueError(f"{label} contains a symlink component: {raw}")
+        raise ValueError(f"{label} contains a symlink component")
     if not candidate.is_file():
-        raise ValueError(f"{label} does not name a regular file: {raw}")
+        raise ValueError(f"{label} does not name a regular file")
     return candidate
 
 
@@ -1939,7 +1943,26 @@ def _full_release_candidate_config(  # noqa: C901
             normalized["scenario_algo_overrides"] = validated_overrides
         return config_path, normalized, None
     except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
-        return None, None, f"canonical planner policy config validation failed: {exc}"
+        reason = str(exc)
+        safe_reason = next(
+            (
+                marker
+                for marker in (
+                    "scenario_algo_overrides entries must be mappings",
+                    "scenario_algo_overrides keys must be non-empty strings",
+                    "scenario_algo_overrides key is not in the canonical campaign matrix",
+                    "scenario_algo_overrides entries must be mappings",
+                    "scenario_algo_overrides algo must be a non-empty string",
+                    "scenario_algo_overrides params must be a mapping",
+                    "outside trusted source repository root",
+                    "contains a symlink component",
+                    "does not name a regular file",
+                )
+                if marker in reason
+            ),
+            "invalid canonical policy configuration",
+        )
+        return None, None, f"canonical planner policy config validation failed: {safe_reason}"
 
 
 def _full_release_row_contract_blockers(
@@ -2123,10 +2146,10 @@ def _full_release_effective_algorithm(
             scenario=dict(scenario),
             algo_config=candidate_config,
         )
-    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+    except (OSError, TypeError, ValueError, yaml.YAMLError):
         return (
             None,
-            f"canonical planner policy resolution failed for scenario {scenario_id!r}: {exc}",
+            f"canonical planner policy resolution failed for scenario {scenario_id!r}",
         )
     normalized = str(effective_algorithm or "").strip().lower()
     if not normalized:
@@ -2595,7 +2618,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
     if not trusted_source_root.is_dir():
         _append_blocker(
             blockers,
-            f"trusted source repository root is not a directory: {trusted_source_root}",
+            "trusted source repository root is not a directory",
         )
     expected_cells = getattr(manifest, "expected_episode_cells", None)
     expected_horizon = getattr(manifest, "expected_horizon_steps", None)
@@ -2658,10 +2681,8 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         }
         try:
             resolved_scenarios = _load_campaign_scenarios(resolved_campaign_config)
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            _append_blocker(
-                blockers, f"campaign scenarios cannot be resolved for provenance: {exc}"
-            )
+        except (OSError, ValueError, KeyError, TypeError):
+            _append_blocker(blockers, "campaign scenarios cannot be resolved for provenance")
         else:
             for scenario in resolved_scenarios:
                 if not isinstance(scenario, Mapping):
@@ -2688,13 +2709,13 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             expected_scenario_path = _source_repository_path(
                 resolved_campaign_config.scenario_matrix_path, trusted_source_root
             )
-        except ValueError as exc:
-            _append_blocker(blockers, f"canonical scenario matrix path is not trusted: {exc}")
+        except ValueError:
+            _append_blocker(blockers, "canonical scenario matrix path is not trusted")
         try:
             if expected_scenario_path is not None:
                 expected_scenario_hash = sha256_file(expected_scenario_path)
-        except OSError as exc:
-            _append_blocker(blockers, f"campaign scenario matrix cannot be hashed: {exc}")
+        except OSError:
+            _append_blocker(blockers, "campaign scenario matrix cannot be hashed")
 
     summary, summary_error = _read_campaign_summary(campaign_root.resolve())
     if summary_error:
@@ -2817,8 +2838,8 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
                 if resolved_campaign_config is not None
                 else _resolve_integrity_artifact_path(campaign_root.resolve(), raw_path)
             )
-        except (OSError, ValueError) as exc:
-            _append_blocker(blockers, f"runs[{index}] episodes_path rejected: {exc}")
+        except (OSError, ValueError):
+            _append_blocker(blockers, f"runs[{index}] episodes_path rejected as missing or unsafe")
             continue
         rows, error = _read_episode_rows(episodes_path)
         if error:
@@ -2852,11 +2873,11 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
                         if algo_config_path is not None
                         else None
                     )
-                except ValueError as exc:
+                except ValueError:
                     expected_algo_config_path = None
                     _append_blocker(
                         blockers,
-                        f"runs[{index}] canonical algorithm config path is not trusted: {exc}",
+                        f"runs[{index}] canonical algorithm config path is not trusted",
                     )
                 for blocker in _stress_episode_provenance_blockers(
                     episodes_path,

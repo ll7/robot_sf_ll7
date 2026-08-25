@@ -73,7 +73,7 @@ def test_full_release_roster_resolution_helpers_fail_closed(
     )
     config, blockers = release_acceptance._full_release_campaign_config(manifest, None)
     assert config is None
-    assert blockers == ["canonical campaign config cannot be resolved for provenance: bad config"]
+    assert blockers == ["canonical campaign config cannot be resolved for provenance"]
     missing_config, missing_blockers = release_acceptance._full_release_campaign_config(
         SimpleNamespace(), None
     )
@@ -480,6 +480,21 @@ def test_full_release_acceptance_uses_frozen_source_repository_root(
     )
     assert source_result["status"] == "valid"
     assert source_result["blockers"] == []
+
+
+def test_full_release_acceptance_does_not_persist_trusted_source_paths(tmp_path: Path) -> None:
+    """A rejected trusted source is reported without leaking its machine-local path."""
+    private_source = tmp_path / "private-source-marker" / "missing"
+
+    result = validate_full_benchmark_release_acceptance(
+        tmp_path / "campaign",
+        manifest=_full_manifest(),
+        source_repository_root=private_source,
+    )
+
+    assert result["status"] == "invalid"
+    assert any("trusted source repository root" in item for item in result["blockers"])
+    assert str(private_source) not in json.dumps(result)
 
 
 def test_source_repository_path_retargets_validator_paths_and_rejects_external_paths(

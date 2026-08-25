@@ -457,6 +457,9 @@ _FAST_FILES = {
     # the changed classic_planner_adapter.py producer; keep in fast shards for
     # the exact-head changed-coverage gate.
     "test_classic_planner_adapter.py",
+    # RecurrentPPO learned adapter tests are deterministic planner-contract coverage
+    # for the changed recurrent_ppo_learned_adapter.py producer in PR fast shards.
+    "test_recurrent_ppo_learned_adapter.py",
     # Both CLI test owners exercise deterministic release command contracts.
     "test_cli.py",
     # The release-publication contract is deterministic schema/CLI coverage for

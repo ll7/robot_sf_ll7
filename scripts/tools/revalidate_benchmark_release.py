@@ -1305,7 +1305,7 @@ def _write_derivation_receipt(  # noqa: PLR0913
             },
             "separate_receipt_policy": (
                 "verification receipts are explicitly recorded separately and excluded from "
-                "the accepted/retrieved raw file-map equality"
+                "the acceptance-tree subset and retrieved producer file maps"
             ),
         },
         "manifest_validation": dict(manifest_validation),

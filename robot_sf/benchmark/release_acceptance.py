@@ -17,6 +17,8 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from robot_sf.benchmark.analysis_trace import normalize_telemetry_profile
 from robot_sf.benchmark.camera_ready._config import (
     _load_campaign_scenarios,
@@ -34,7 +36,11 @@ from robot_sf.benchmark.camera_ready._run_state import (
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.map_runner.map_runner_trace import _scenario_id as _producer_scenario_id
 from robot_sf.benchmark.map_runner_identity import suite_key as _producer_suite_key
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
+    _resolve_policy_search_candidate_runtime,
+)
 from robot_sf.benchmark.release_protocol import (
     STRESS_SMOKE_EXPECTED_DT,
     STRESS_SMOKE_EXPECTED_EPISODE_CELLS,
@@ -1873,6 +1879,49 @@ def _full_release_row_contract_blockers(
     return blockers
 
 
+def _full_release_effective_algorithm(
+    *,
+    planner_spec: Any,
+    base_algorithm: str,
+    scenario: Mapping[str, Any],
+) -> tuple[str | None, str | None]:
+    """Resolve one row's expected algorithm through the producer's policy resolver.
+
+    Policy-search arms may intentionally replace their base algorithm for a named scenario.
+    The release gate must therefore compare row metadata with the effective runtime algorithm,
+    while retaining the arm's base algorithm for sidecar/config binding.  Reusing the producer
+    resolver keeps the two paths deterministic and makes malformed candidate manifests fail
+    closed instead of silently falling back to the base algorithm.
+
+    Returns:
+        ``(algorithm, None)`` for a valid resolution, or ``(None, blocker)`` when the canonical
+        planner/config/scenario binding cannot be resolved.
+    """
+    scenario_id = _producer_scenario_id(dict(scenario))
+    if not scenario_id or scenario_id == "unknown":
+        return None, "canonical scenario is missing a producer-resolvable identifier"
+    raw_config_path = getattr(planner_spec, "algo_config_path", None)
+    config_path = str(raw_config_path) if raw_config_path is not None else None
+    try:
+        effective_algorithm, _effective_config = _resolve_policy_search_candidate_runtime(
+            default_algo=str(base_algorithm).strip(),
+            algo_config_path=config_path,
+            scenario=dict(scenario),
+        )
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        return (
+            None,
+            f"canonical planner policy resolution failed for scenario {scenario_id!r}: {exc}",
+        )
+    normalized = str(effective_algorithm or "").strip().lower()
+    if not normalized:
+        return (
+            None,
+            f"canonical planner policy resolution returned an empty algorithm for {scenario_id!r}",
+        )
+    return normalized, None
+
+
 def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
     campaign_root: Path,
     *,
@@ -2375,6 +2424,8 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         )
 
     planner_specs: dict[str, Any] = {}
+    resolved_scenarios: list[dict[str, Any]] = []
+    scenarios_by_producer_id: dict[str, dict[str, Any]] = {}
     expected_scenario_identity = ""
     expected_scenario_path: Path | None = None
     expected_scenario_hash = ""
@@ -2390,6 +2441,21 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
                 blockers, f"campaign scenarios cannot be resolved for provenance: {exc}"
             )
         else:
+            for scenario in resolved_scenarios:
+                if not isinstance(scenario, Mapping):
+                    _append_blocker(
+                        blockers,
+                        "campaign scenarios must be mappings for effective algorithm resolution",
+                    )
+                    continue
+                producer_scenario_id = _producer_scenario_id(dict(scenario))
+                if producer_scenario_id in scenarios_by_producer_id:
+                    _append_blocker(
+                        blockers,
+                        f"campaign scenarios contain duplicate producer identifier {producer_scenario_id!r}",
+                    )
+                    continue
+                scenarios_by_producer_id[producer_scenario_id] = dict(scenario)
             effective_scenarios = _result_provenance_scenarios(
                 resolved_campaign_config,
                 resolved_scenarios,
@@ -2472,6 +2538,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         FULL_RELEASE_EXPECTED_EPISODE_CELLS // len(expected_arms) if expected_arms else 0
     )
     expected_source = str(campaign.get("git_hash", "")).strip().lower()
+    effective_algorithm_cache: dict[tuple[str, str], tuple[str | None, str | None]] = {}
 
     for index, entry in enumerate(runs):
         if not isinstance(entry, Mapping):
@@ -2567,10 +2634,34 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
                     _append_blocker(blockers, blocker)
         arm_identities: set[tuple[str, str, str, int]] = set()
         for row_index, row in enumerate(rows):
+            row_scenario_id = str(row.get("scenario_id", "")).strip()
+            row_expected_algo = expected_algo
+            if resolved_campaign_config is not None:
+                canonical_scenario = scenarios_by_producer_id.get(row_scenario_id)
+                if canonical_scenario is None:
+                    _append_blocker(
+                        blockers,
+                        f"runs[{index}].rows[{row_index}] scenario is not in the canonical campaign matrix",
+                    )
+                else:
+                    cache_key = (arm[0], row_scenario_id)
+                    if cache_key not in effective_algorithm_cache:
+                        effective_algorithm_cache[cache_key] = _full_release_effective_algorithm(
+                            planner_spec=planner_specs.get(arm[0]),
+                            base_algorithm=expected_algo,
+                            scenario=canonical_scenario,
+                        )
+                    row_expected_algo, resolution_error = effective_algorithm_cache[cache_key]
+                    if resolution_error is not None:
+                        _append_blocker(
+                            blockers,
+                            f"runs[{index}].rows[{row_index}] {resolution_error}",
+                        )
+                        row_expected_algo = expected_algo
             for blocker in _full_release_row_contract_blockers(
                 row,
                 prefix=f"runs[{index}].rows[{row_index}]",
-                expected_algo=expected_algo,
+                expected_algo=row_expected_algo or expected_algo,
             ):
                 _append_blocker(blockers, blocker)
             for marker_path, marker in _status_markers(

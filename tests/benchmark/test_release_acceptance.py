@@ -298,6 +298,92 @@ def _write_provenance_bound_full_campaign(
     return campaign_root, config
 
 
+def _write_effective_component_campaign(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    override_mode: str = "valid",
+) -> tuple[Path, SimpleNamespace]:
+    """Build a full fixture whose first arm selects ORCA for one canonical scenario."""
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    candidate_path = tmp_path / "scenario_adaptive_candidate.yaml"
+    if override_mode == "valid":
+        override_payload = "scenario_algo_overrides:\n  scenario_00:\n    algo: orca\n"
+    elif override_mode == "malformed":
+        override_payload = "scenario_algo_overrides:\n  scenario_00: orca\n"
+    else:
+        override_payload = ""
+    candidate_path.write_text(
+        "algo: hybrid_rule_local_planner\nparams: {}\n" + override_payload,
+        encoding="utf-8",
+    )
+    planner_specs = []
+    for planner in config.planners:
+        if planner.key != "planner_00":
+            planner_specs.append(planner)
+            continue
+        planner_specs.append(
+            SimpleNamespace(
+                key=planner.key,
+                algo="hybrid_rule_local_planner",
+                algo_config_path=candidate_path,
+            )
+        )
+    config.planners = tuple(planner_specs)
+
+    episode_path = campaign_root / "runs" / "planner_00__differential_drive" / "episodes.jsonl"
+    rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+    for row in rows:
+        row["algo"] = "hybrid_rule_local_planner"
+        row["algorithm_metadata"].update(
+            {
+                "algorithm": "hybrid_rule_local_planner",
+                "canonical_algorithm": "hybrid_rule_local_planner",
+                "planner_contract": {"planner_id": "hybrid_rule_local_planner"},
+            }
+        )
+        if row["scenario_id"] == "scenario_00":
+            row["algo"] = "orca"
+            row["algorithm_metadata"].update(
+                {
+                    "algorithm": "orca",
+                    "canonical_algorithm": "orca",
+                    "planner_contract": {"planner_id": "orca"},
+                }
+            )
+    episode_path.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+    sidecar = build_result_provenance_manifest(
+        out_path=episode_path,
+        episode_records=rows,
+        schema_path=get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json",
+        scenario_path=config.scenario_matrix_path,
+        scenarios=release_acceptance._result_provenance_scenarios(
+            config,
+            [{"id": scenario_id} for scenario_id in _SCENARIO_IDS],
+            kinematics="differential_drive",
+        ),
+        algo="hybrid_rule_local_planner",
+        algo_config_path=candidate_path,
+        benchmark_profile="release-acceptance-test",
+        suite_key="classic_interactions",
+        total_jobs=len(rows),
+        written=len(rows),
+        horizon=600,
+        dt=0.1,
+        record_forces=False,
+        active_observation_mode=None,
+        active_observation_level=None,
+    )
+    sidecar["run"]["repo_commit"] = _SOURCE_SHA
+    write_result_provenance_manifest(
+        episode_path.with_name(f"{episode_path.name}.provenance.json"), sidecar
+    )
+    return campaign_root, config
+
+
 def test_full_release_acceptance_requires_all_arms_and_episode_cells(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -317,6 +403,102 @@ def test_full_release_acceptance_requires_all_arms_and_episode_cells(
     assert result["unique_episode_identities"] == 20_160
     assert result["source_commits"] == [_SOURCE_SHA]
     assert result["blockers"] == []
+
+
+def test_full_release_accepts_effective_policy_search_component_algorithm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A canonical scenario override may replace an arm's base algorithm in episode rows."""
+    campaign_root, config = _write_effective_component_campaign(tmp_path, monkeypatch)
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+    )
+
+    assert result["status"] == "valid"
+    assert result["blockers"] == []
+
+
+@pytest.mark.parametrize("override_mode", ["missing", "malformed"])
+def test_full_release_rejects_unbound_effective_policy_search_component(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    override_mode: str,
+) -> None:
+    """Rows cannot claim ORCA when the canonical candidate has no valid scenario override."""
+    campaign_root, config = _write_effective_component_campaign(
+        tmp_path,
+        monkeypatch,
+        override_mode=override_mode,
+    )
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+    )
+
+    assert result["status"] == "invalid"
+    assert any("planner algorithm aliases do not match" in item for item in result["blockers"])
+
+
+def test_full_release_rejects_effective_component_on_wrong_scenario_or_arm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The effective algorithm is bound to both its canonical scenario and containing arm."""
+    campaign_root, config = _write_effective_component_campaign(tmp_path, monkeypatch)
+    first_path = campaign_root / "runs" / "planner_00__differential_drive" / "episodes.jsonl"
+    first_rows = [json.loads(line) for line in first_path.read_text(encoding="utf-8").splitlines()]
+    first_rows[len(_SEEDS)]["algo"] = "orca"
+    first_rows[len(_SEEDS)]["algorithm_metadata"].update(
+        {
+            "algorithm": "orca",
+            "canonical_algorithm": "orca",
+            "planner_contract": {"planner_id": "orca"},
+        }
+    )
+    first_path.write_text(
+        "\n".join(json.dumps(row) for row in first_rows) + "\n",
+        encoding="utf-8",
+    )
+    first_sidecar_path = first_path.with_name(f"{first_path.name}.provenance.json")
+    first_sidecar = json.loads(first_sidecar_path.read_text(encoding="utf-8"))
+    first_sidecar["raw_artifacts"][0]["sha256"] = sha256_file(first_path)
+    first_sidecar_path.write_text(json.dumps(first_sidecar), encoding="utf-8")
+
+    second_path = campaign_root / "runs" / "planner_01__differential_drive" / "episodes.jsonl"
+    second_rows = [
+        json.loads(line) for line in second_path.read_text(encoding="utf-8").splitlines()
+    ]
+    second_rows[0]["algo"] = "orca"
+    second_rows[0]["algorithm_metadata"].update(
+        {
+            "algorithm": "orca",
+            "canonical_algorithm": "orca",
+            "planner_contract": {"planner_id": "orca"},
+        }
+    )
+    second_path.write_text(
+        "\n".join(json.dumps(row) for row in second_rows) + "\n",
+        encoding="utf-8",
+    )
+    second_sidecar_path = second_path.with_name(f"{second_path.name}.provenance.json")
+    second_sidecar = json.loads(second_sidecar_path.read_text(encoding="utf-8"))
+    second_sidecar["raw_artifacts"][0]["sha256"] = sha256_file(second_path)
+    second_sidecar_path.write_text(json.dumps(second_sidecar), encoding="utf-8")
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+    )
+
+    assert result["status"] == "invalid"
+    assert sum("planner algorithm aliases do not match" in item for item in result["blockers"]) >= 2
 
 
 def test_full_release_rejects_unrecognized_episode_status(

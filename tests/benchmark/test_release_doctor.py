@@ -1057,6 +1057,28 @@ def test_final_cluster_check_rejects_artifact_manifest_hash_drift(tmp_path: Path
     assert "artifact manifest hash does not match packet" in rejected.summary
 
 
+def test_final_cluster_check_rejects_digest_less_artifact_manifest(tmp_path: Path) -> None:
+    """Issue #7921: a queue artifact manifest without a bound digest fails closed."""
+    packet, queue = _write_final_packet_fixture(tmp_path)
+    queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
+    artifact_manifest = queue_payload[0]["artifact_manifest"]
+    artifact_path = artifact_manifest.split(" sha256:", 1)[0]
+    # Strip the digest binding entirely (the previous bypass path).
+    queue_payload[0]["artifact_manifest"] = artifact_path
+    queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+    assert rejected.status == "fail"
+    assert "artifact manifest is not digest-bound to the packet" in rejected.summary
+
+
 @pytest.mark.parametrize(
     "field",
     [

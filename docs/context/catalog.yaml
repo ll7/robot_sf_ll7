@@ -72,6 +72,7 @@ entries:
   status: evidence
   freshness: evidence
   area: workflow_evidence
+<<<<<<< HEAD
 - path: docs/context/evidence/issue_7901_config_family_inventory/README.md
   status: evidence
   freshness: evidence
@@ -85,6 +86,21 @@ entries:
   freshness: evidence
   area: workflow_evidence
 - path: docs/context/evidence/issue_7901_config_family_inventory/receipt.json.review.json
+=======
+- path: docs/context/evidence/issue_7900_validation_helper_inventory/README.md
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
+- path: docs/context/evidence/issue_7900_validation_helper_inventory/README.md.review.json
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
+- path: docs/context/evidence/issue_7900_validation_helper_inventory/receipt.json
+  status: evidence
+  freshness: evidence
+  area: workflow_evidence
+- path: docs/context/evidence/issue_7900_validation_helper_inventory/receipt.json.review.json
+>>>>>>> origin/main
   status: evidence
   freshness: evidence
   area: workflow_evidence

@@ -1,0 +1,225 @@
+"""Tests for the camera-ready release publisher's draft-creation contract."""
+
+from __future__ import annotations
+
+import contextlib
+import io
+import json
+import subprocess
+from typing import TYPE_CHECKING
+from unittest.mock import patch
+
+import pytest
+
+from scripts.tools import publish_camera_ready_release as publisher
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+_SOURCE_SHA = "a" * 40
+
+
+def _summary_payload(*, tag: str = "v0.0.1") -> dict[str, object]:
+    """Return a minimal accepted campaign summary."""
+    return {
+        "campaign": {
+            "release_id": "test_release_01",
+            "release_tag": tag,
+            "repository_url": "https://github.com/ll7/robot_sf_ll7",
+            "doi": "10.5281/zenodo.0000001",
+        },
+        "publication_bundle": {
+            "archive_path": "test_release_01_publication_bundle.tar.gz",
+            "checksums_path": "publication_bundle/checksums.sha256",
+            "manifest_path": "publication_bundle/manifest.json",
+        },
+    }
+
+
+def _run(tmp_path: Path, *extra: str, summary: dict[str, object] | None = None) -> str:
+    """Run the publisher with prerequisites satisfied by a mocked summary."""
+    campaign_root = tmp_path / "campaign"
+    campaign_root.mkdir()
+    payload = summary or _summary_payload()
+    with (
+        patch(
+            "scripts.tools.publish_camera_ready_release._validate_prerequisites",
+            return_value=(
+                campaign_root / "archive.tar.gz",
+                campaign_root / "checksums.sha256",
+                campaign_root / "manifest.json",
+                payload,
+            ),
+        ),
+        patch(
+            "scripts.tools.publish_camera_ready_release.get_repository_root",
+            return_value=tmp_path,
+        ),
+    ):
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            exit_code = publisher.main(
+                [
+                    "--campaign-root",
+                    str(campaign_root),
+                    "--tag",
+                    "v0.0.1",
+                    *extra,
+                ]
+            )
+        assert exit_code == 0
+        return buffer.getvalue()
+
+
+def test_create_draft_requires_expected_source_sha(tmp_path: Path) -> None:
+    """--create-draft without --expected-source-sha fails argument validation."""
+    with pytest.raises(SystemExit):
+        _run(tmp_path, "--create-draft")
+
+
+def test_expected_source_sha_must_be_40_chars(tmp_path: Path) -> None:
+    """A non-40-character expected SHA is rejected."""
+    with pytest.raises(SystemExit):
+        _run(tmp_path, "--create-draft", "--expected-source-sha", "abc")
+
+
+def test_dry_run_plans_draft_create_before_upload(tmp_path: Path) -> None:
+    """Dry-run reports the draft-create command without executing anything."""
+    with patch("subprocess.run", side_effect=AssertionError("dry-run must not execute")) as run:
+        payload = json.loads(_run(tmp_path, "--create-draft", "--expected-source-sha", _SOURCE_SHA))
+        run.assert_not_called()
+    assert payload["draft_create_command"][:3] == ["gh", "release", "create"]
+    assert payload["draft_create_command"][0:6] == [
+        "gh",
+        "release",
+        "create",
+        "v0.0.1",
+        "--repo",
+        "ll7/robot_sf_ll7",
+    ]
+    assert "--draft" in payload["draft_create_command"]
+    assert "--target" in payload["draft_create_command"]
+    assert payload["expected_source_sha"] == _SOURCE_SHA
+    assert payload["release_title"] == "Benchmark data release test_release_01"
+
+
+def test_create_draft_then_upload_order(tmp_path: Path) -> None:
+    """With --execute-upload, the draft is created before the upload runs."""
+    calls: list[list[str]] = []
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        if cmd[:3] == ["gh", "release", "view"]:
+            raise subprocess.CalledProcessError(1, cmd, output="", stderr="not found")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    with patch("subprocess.run", side_effect=_fake_run):
+        _run(tmp_path, "--create-draft", "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    create_calls = [c for c in calls if c[:3] == ["gh", "release", "create"]]
+    upload_calls = [c for c in calls if c[:3] == ["gh", "release", "upload"]]
+    assert len(create_calls) == 1
+    assert len(upload_calls) == 1
+    assert calls.index(create_calls[0]) < calls.index(upload_calls[0])
+
+
+def test_collision_with_existing_release_on_different_sha_fails_closed(tmp_path: Path) -> None:
+    """An existing release at a different target SHA blocks creation and upload."""
+    existing = json.dumps(
+        {"isDraft": True, "targetCommitish": "b" * 40},
+    )
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if cmd[:3] == ["gh", "release", "view"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    with patch("subprocess.run", side_effect=_fake_run), pytest.raises(SystemExit) as exc_info:
+        _run(tmp_path, "--create-draft", "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    assert "already exists at target" in str(exc_info.value)
+
+
+def test_collision_with_public_release_fails_closed(tmp_path: Path) -> None:
+    """A non-draft existing release is never mutated."""
+    existing = json.dumps(
+        {"isDraft": False, "targetCommitish": _SOURCE_SHA},
+    )
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if cmd[:3] == ["gh", "release", "view"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    with patch("subprocess.run", side_effect=_fake_run), pytest.raises(SystemExit) as exc_info:
+        _run(tmp_path, "--create-draft", "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    assert "not a draft" in str(exc_info.value)
+
+
+def test_existing_exact_sha_draft_allows_upload(tmp_path: Path) -> None:
+    """An exact-SHA draft is not a blocker; upload proceeds without creation."""
+    existing = json.dumps(
+        {"isDraft": True, "targetCommitish": _SOURCE_SHA},
+    )
+    calls: list[list[str]] = []
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        if cmd[:3] == ["gh", "release", "view"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    with patch("subprocess.run", side_effect=_fake_run):
+        _run(tmp_path, "--create-draft", "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    create_calls = [c for c in calls if c[:3] == ["gh", "release", "create"]]
+    upload_calls = [c for c in calls if c[:3] == ["gh", "release", "upload"]]
+    assert create_calls == []
+    assert len(upload_calls) == 1
+
+
+def test_missing_release_creates_draft(tmp_path: Path) -> None:
+    """When `gh release view` finds nothing, draft creation is planned."""
+    calls: list[list[str]] = []
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        if cmd[:3] == ["gh", "release", "view"]:
+            raise subprocess.CalledProcessError(1, cmd, output="", stderr="not found")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    with patch("subprocess.run", side_effect=_fake_run):
+        _run(tmp_path, "--create-draft", "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    create_calls = [c for c in calls if c[:3] == ["gh", "release", "create"]]
+    upload_calls = [c for c in calls if c[:3] == ["gh", "release", "upload"]]
+    assert len(create_calls) == 1
+    assert len(upload_calls) == 1
+
+
+def test_release_identity_derives_title_and_notes() -> None:
+    """The derived title/notes bind the campaign identity deterministically."""
+    summary = {
+        "campaign": {
+            "release_id": "paper_v1",
+            "repository_url": "https://github.com/ll7/robot_sf_ll7",
+            "doi": "10.5281/zenodo.42",
+        }
+    }
+    title, notes = publisher._resolve_release_identity(
+        summary, tag="v0.1.0", release_title=None, release_notes=None
+    )
+    assert title == "Benchmark data release paper_v1"
+    assert "paper_v1" in notes
+    assert "10.5281/zenodo.42" in notes
+
+
+def test_upload_without_create_draft_is_unchanged(tmp_path: Path) -> None:
+    """Existing upload-only behavior is preserved when --create-draft is absent."""
+    calls: list[list[str]] = []
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    with patch("subprocess.run", side_effect=_fake_run):
+        payload = json.loads(_run(tmp_path, "--execute-upload"))
+    assert "draft_create_command" not in payload
+    assert len(calls) == 1
+    assert calls[0][:3] == ["gh", "release", "upload"]

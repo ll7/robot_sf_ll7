@@ -153,6 +153,31 @@ def test_release_input_path_rejects_external_location_without_leaking_it(
         raise AssertionError("external release input was not rejected")
 
 
+def test_public_release_invocation_omits_absolute_scheduler_paths(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Public provenance retains the entrypoint but not private launch paths."""
+    repo = tmp_path / "repo"
+    manifest = repo / "configs" / "benchmarks" / "release.yaml"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("schema_version: benchmark-release-manifest.v0.2\n", encoding="utf-8")
+    monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: repo)
+    monkeypatch.setattr(
+        run_benchmark_release.sys,
+        "executable",
+        "/home/luttkule/private/release-worktree/.venv/bin/python",
+    )
+
+    command = run_benchmark_release._public_release_invocation(str(manifest), "run")
+
+    assert command == (
+        "python scripts/tools/run_benchmark_release.py "
+        "--manifest configs/benchmarks/release.yaml --mode run"
+    )
+    assert "/home/" not in command
+    assert not run_benchmark_release.find_offending_paths({"invoked_release_command": command})
+
+
 def test_local_stress_run_rejects_dirty_worktree(monkeypatch, capsys, tmp_path: Path) -> None:
     """The runner applies the exact-source clean-worktree gate outside SLURM too."""
     manifest = SimpleNamespace(
@@ -332,7 +357,8 @@ def test_publication_identity_rejection_does_not_log_campaign_paths(
     assert payload["release_status"] == "publication_identity_rejected"
     assert payload["release_benchmark_success"] is False
     assert secret_marker not in stdout
-    assert secret_marker in persisted["campaign_root"]
+    assert secret_marker not in json.dumps(persisted)
+    assert "campaign_root" not in persisted
 
 
 def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_path: Path) -> None:
@@ -989,7 +1015,7 @@ def test_full_release_acceptance_failure_blocks_publication(
         lambda *args, **kwargs: {
             "status": "invalid",
             "benchmark_success": False,
-            "blockers": ["fallback row present"],
+            "blockers": ["trusted root /home/example/private-source is unavailable"],
         },
     )
     monkeypatch.setattr(
@@ -1024,6 +1050,9 @@ def test_full_release_acceptance_failure_blocks_publication(
     )
 
     payload = json.loads(capsys.readouterr().out)
+    persisted = json.loads(
+        (campaign_root / "release" / "release_result.json").read_text(encoding="utf-8")
+    )
     assert exit_code == 2
     assert payload["campaign_benchmark_success"] is True
     assert payload["benchmark_success"] is False
@@ -1031,6 +1060,10 @@ def test_full_release_acceptance_failure_blocks_publication(
     assert payload["release_status"] == "full_release_acceptance_failed"
     assert payload["release_exit_code"] == 2
     assert payload["publication_bundle"] is None
+    assert "/home/example/private-source" not in json.dumps(persisted)
+    assert persisted["release_acceptance"]["blockers"] == [
+        "release acceptance diagnostics contained non-public fields"
+    ]
 
 
 def test_release_preflight_fails_closed_when_orca_rvo2_missing(
@@ -1136,4 +1169,29 @@ def test_release_existing_fixed_campaign_requires_resume_receipt(tmp_path: Path)
             cfg=cfg,
             campaign_config_path=config,
             checkpoint_receipt_path=checkpoint,
+        )
+
+
+def test_public_campaign_result_rejects_unexpected_fields() -> None:
+    """New runner fields must be classified before entering a public release result."""
+    with pytest.raises(
+        run_benchmark_release.ReleaseResultPrivacyError,
+        match="unsupported result fields",
+    ):
+        run_benchmark_release._public_campaign_result(
+            {"status": "benchmark_success", "new_artifact_location": "/srv/private/result"}
+        )
+
+
+def test_public_campaign_result_rejects_nested_private_paths() -> None:
+    """Free-form public fields cannot smuggle a machine-local path into logs or JSON."""
+    with pytest.raises(
+        run_benchmark_release.ReleaseResultPrivacyError,
+        match="contains private filesystem data",
+    ):
+        run_benchmark_release._public_campaign_result(
+            {
+                "status": "benchmark_success",
+                "warnings": ["diagnostic file: /home/example/private/result.json"],
+            }
         )

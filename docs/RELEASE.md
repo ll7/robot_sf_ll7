@@ -188,7 +188,16 @@ registry bindings. This option does not rewrite the receipt and does not authori
 turn a diagnostic remap into benchmark evidence.
 
 The report must be `pass`. It prints stable status and identity data, never the
-credential. For a future release, reserve a fresh benchmark-data
+credential. The release doctor verifies that each required workflow (`CI`, `CodeQL`)
+possesses at least one complete successful run for the exact source SHA (`--expected-release-sha`).
+If subsequent historical runs or manual dispatches for that SHA were cancelled due to
+GitHub Actions moving-main concurrency, the completed green run provides valid exact-SHA evidence
+and the doctor records supporting run IDs. If all runs for a required workflow are cancelled,
+pending, or failed, the doctor fails closed and lists the blocking run IDs. To reconcile a
+blocking workflow run without altering workflow history, trigger a clean run for that exact ref
+(`gh workflow run <workflow>.yml --ref <ref>`) and allow it to finish.
+
+For a future release, reserve a fresh benchmark-data
 concept/version before freezing the DOI into its v0.2 manifest:
 
 ```bash

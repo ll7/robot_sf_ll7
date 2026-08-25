@@ -348,6 +348,59 @@ def test_verify_rejects_published_record_identity_drift(
     assert problem in report["problems"]
 
 
+@pytest.mark.parametrize(
+    ("remote_size", "problem"),
+    [
+        (None, "has an invalid size"),
+        ("8", "has an invalid size"),
+        ({"value": 8}, "has an invalid size"),
+        (True, "has an invalid size"),
+        (0, "is empty"),
+        (9, "size does not match uploaded bytes"),
+    ],
+)
+def test_verify_rejects_invalid_published_file_size(
+    tmp_path: Path, remote_size: Any, problem: str
+) -> None:
+    """Published file sizes are required positive integers bound to uploaded bytes."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"expected")
+    state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "doi": "10.5281/zenodo.7",
+            "concept_record_id": "6",
+            "submitted": True,
+            "files": [
+                {
+                    "name": bundle.name,
+                    "size": bundle.stat().st_size,
+                    "sha256": publisher._sha256_file(bundle),
+                }
+            ],
+        }
+    )
+    public_file: dict[str, Any] = {
+        "key": bundle.name,
+        "links": {"self": "https://zenodo.org/api/records/7/files/bundle/content"},
+    }
+    if remote_size is not None:
+        public_file["size"] = remote_size
+    session = _Session()
+    session.gets = [
+        _Response(_draft(submitted=True)),
+        _Response(_published_record([public_file])),
+        _Response({}, content=bundle.read_bytes()),
+    ]
+
+    report = publisher.verify(session, state, _metadata())
+
+    assert report["status"] == "fail"
+    assert any(problem in item for item in report["problems"])
+
+
 def test_verify_rejects_missing_state_identity() -> None:
     """Verification requires a deposition identifier before contacting Zenodo."""
     with pytest.raises(publisher.ZenodoPublisherError, match="no deposition_id"):

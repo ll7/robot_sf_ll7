@@ -964,10 +964,12 @@ def verify(  # noqa: C901, PLR0912, PLR0915
         if remote_file is None:
             continue
         remote_size = remote_file.get("size")
-        if isinstance(remote_size, int) and remote_size != expected.get("size"):
-            problems.append(f"remote file {name} size does not match uploaded bytes")
-        if isinstance(remote_size, int) and remote_size <= 0:
+        if not isinstance(remote_size, int) or isinstance(remote_size, bool):
+            problems.append(f"remote file {name} has an invalid size")
+        elif remote_size <= 0:
             problems.append(f"remote file {name} is empty")
+        elif remote_size != expected.get("size"):
+            problems.append(f"remote file {name} size does not match uploaded bytes")
         links = remote_file.get("links")
         download_url = (
             (links.get("self") if remote_submitted is True else links.get("download"))

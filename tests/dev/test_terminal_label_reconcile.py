@@ -7,10 +7,14 @@ from unittest.mock import patch
 
 from scripts.dev.terminal_label_reconcile import (
     ACTIVE_LABELS,
+    INVENTORY_SCHEMA,
+    STATE_QUALIFIER_CLASSIFICATION,
     TERMINAL_CLASSES,
+    _terminal_class_from_state,
     fetch_item_state,
     plan_for_terminal,
     reconcile_item,
+    run_terminal_inventory,
 )
 
 
@@ -183,3 +187,220 @@ def test_fetch_item_state_parses_labels() -> None:
     assert state["ok"] is True
     assert state["reason"] == "completed"
     assert state["labels"] == ["state:running", "type:docs"]
+
+
+# --- issue #7896: terminal-label inventory mode ---
+
+
+def _closed_item(
+    number: int,
+    *,
+    labels: list[str],
+    reason: str = "completed",
+    is_pr: bool = False,
+    merged: bool = False,
+) -> dict:
+    item: dict = {
+        "number": number,
+        "state": "closed",
+        "state_reason": reason,
+        "labels": [{"name": label} for label in labels],
+        "html_url": f"https://github.com/o/r/issues/{number}",
+    }
+    if is_pr:
+        item["pull_request"] = {"url": f"https://api.github.com/repos/o/r/pulls/{number}"}
+        item["merged_at"] = "2026-08-01T00:00:00Z" if merged else None
+    return item
+
+
+def test_inventory_removes_agent_from_completed() -> None:
+    """agent is an active dispatch label and is removed for verified terminal classes."""
+    assert "agent" in ACTIVE_LABELS
+    report = run_terminal_inventory(
+        fixture=[_closed_item(1, labels=["agent", "agent-ready", "type:docs"])],
+        observed_at="2026-08-25T00:00:00Z",
+    )
+    assert report["ok"] is True
+    row = report["items"][0]
+    assert row["terminal_class"] == "completed"
+    assert "agent" in row["remove"]
+    assert "agent-ready" in row["remove"]
+    assert "type:docs" in row["preserved"]
+    assert report["mutation_authorized"] is False
+
+
+def test_inventory_reopened_and_unverified_retain_active_labels() -> None:
+    """Reopened and terminal_unverified items receive no false terminal plan."""
+    reopened = _closed_item(2, labels=["state:running", "state:done"], reason="reopened")
+    reopened["state"] = "open"
+    unverified = _closed_item(3, labels=["agent-ready"], reason=None)
+    unverified["state_reason"] = None
+    report = run_terminal_inventory(
+        fixture=[reopened, unverified],
+        observed_at="2026-08-25T00:00:00Z",
+    )
+    rows = {row["number"]: row for row in report["items"]}
+    assert rows[2]["terminal_class"] == "reopened"
+    assert "state:running" in rows[2]["preserved"]
+    assert rows[3]["terminal_class"] == "terminal_unverified"
+    assert rows[3]["remove"] == []
+
+
+def test_inventory_not_planned_and_duplicate() -> None:
+    """not_planned and duplicate closures produce the documented plans."""
+    report = run_terminal_inventory(
+        fixture=[
+            _closed_item(4, labels=["state:ready", "blocked:some-dep"], reason="not_planned"),
+            _closed_item(5, labels=["decision-required", "state:review"], reason="duplicate"),
+        ],
+        observed_at="2026-08-25T00:00:00Z",
+    )
+    rows = {row["number"]: row for row in report["items"]}
+    assert rows[4]["terminal_class"] == "not_planned"
+    assert "state:ready" in rows[4]["remove"]
+    assert rows[5]["terminal_class"] == "duplicate"
+    assert "decision-required" in rows[5]["remove"]
+
+
+def test_inventory_merged_and_closed_unmerged_prs() -> None:
+    """PR kinds derive from pull_request and merged_at fields."""
+    report = run_terminal_inventory(
+        fixture=[
+            _closed_item(6, labels=["merge-ready"], is_pr=True, merged=True, reason=None),
+            _closed_item(7, labels=["needs-review"], is_pr=True, merged=False, reason=None),
+        ],
+        observed_at="2026-08-25T00:00:00Z",
+    )
+    rows = {row["number"]: row for row in report["items"]}
+    assert rows[6]["kind"] == "pull_request"
+    assert rows[6]["terminal_class"] == "pr_merged"
+    assert "merge-ready" in rows[6]["remove"]
+    assert rows[7]["terminal_class"] == "pr_closed_unmerged"
+
+
+def test_inventory_preserves_unknown_and_provenance_labels() -> None:
+    """Unknown/manual/provenance labels remain preserved by default."""
+    report = run_terminal_inventory(
+        fixture=[
+            _closed_item(
+                8,
+                labels=[
+                    "state:ready",
+                    "evidence:smoke",
+                    "priority:4",
+                    "artifact:durable-required",
+                    "custom-manual-label",
+                ],
+            )
+        ],
+        observed_at="2026-08-25T00:00:00Z",
+    )
+    row = report["items"][0]
+    for preserved in (
+        "evidence:smoke",
+        "priority:4",
+        "artifact:durable-required",
+        "custom-manual-label",
+    ):
+        assert preserved in row["preserved"]
+
+
+def test_inventory_duplicate_numbers_fail_closed() -> None:
+    """Duplicate item numbers across pages make the report non-applicable."""
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="duplicate item numbers"):
+        run_terminal_inventory(
+            fixture=[
+                _closed_item(9, labels=["type:docs"]),
+                _closed_item(9, labels=["type:docs"]),
+            ],
+            observed_at="2026-08-25T00:00:00Z",
+        )
+
+
+def test_inventory_ambiguous_state_qualifier_fails_closed() -> None:
+    """An unclassified state:* label fails closed instead of wildcard removal."""
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="ambiguous"):
+        run_terminal_inventory(
+            fixture=[_closed_item(10, labels=["state:mystery-new-state"])],
+            observed_at="2026-08-25T00:00:00Z",
+        )
+
+
+def test_inventory_unknown_terminal_class_fails_closed() -> None:
+    """A missing/unknown state reason cannot produce a trustworthy plan."""
+    import pytest as _pytest
+
+    item = _closed_item(11, labels=["type:docs"], reason="some_unknown_reason")
+    with _pytest.raises(ValueError, match="no trustworthy terminal class"):
+        run_terminal_inventory(fixture=[item], observed_at="2026-08-25T00:00:00Z")
+
+
+def test_inventory_repeated_runs_are_byte_stable() -> None:
+    """Repeated runs over a fixed fixture are byte-stable."""
+    fixture = [
+        _closed_item(12, labels=["agent", "state:ready", "type:docs"]),
+        _closed_item(13, labels=["needs-review"], is_pr=True, merged=True, reason=None),
+    ]
+    first = run_terminal_inventory(fixture=fixture, observed_at="2026-08-25T00:00:00Z")
+    second = run_terminal_inventory(fixture=fixture, observed_at="2026-08-25T00:00:00Z")
+    assert json.dumps(first, sort_keys=True) == json.dumps(second, sort_keys=True)
+
+
+def test_inventory_schema_and_aggregate_counts() -> None:
+    """The inventory report carries schema, pagination, and aggregate counts."""
+    report = run_terminal_inventory(
+        fixture=[
+            _closed_item(14, labels=["agent", "state:ready", "type:docs"]),
+            _closed_item(15, labels=["merge-ready"], is_pr=True, merged=True, reason=None),
+        ],
+        observed_at="2026-08-25T00:00:00Z",
+    )
+    assert report["schema"] == INVENTORY_SCHEMA
+    assert report["pagination"]["item_count"] == 2
+    assert report["aggregate_counts"]["completed"] == 1
+    assert report["aggregate_counts"]["pr_merged"] == 1
+    assert report["aggregate_counts"]["agent"] == 1
+    assert report["aggregate_counts"]["merge-ready"] == 1
+
+
+def test_inventory_zero_mutation_proof() -> None:
+    """The inventory command never calls label mutation helpers."""
+    fixture = [_closed_item(16, labels=["agent", "type:docs"])]
+    with (
+        patch("scripts.dev.terminal_label_reconcile.add_label") as mock_add,
+        patch("scripts.dev.terminal_label_reconcile.remove_label") as mock_remove,
+    ):
+        report = run_terminal_inventory(fixture=fixture, observed_at="2026-08-25T00:00:00Z")
+    assert report["ok"] is True
+    mock_add.assert_not_called()
+    mock_remove.assert_not_called()
+
+
+def test_state_qualifier_classification_is_explicit() -> None:
+    """Every known state:* label is explicitly classified or would fail closed."""
+    for label, classification in STATE_QUALIFIER_CLASSIFICATION.items():
+        assert label.startswith("state:")
+        assert classification in {"active", "terminal", "historical"}
+    assert STATE_QUALIFIER_CLASSIFICATION["state:done"] == "terminal"
+    assert STATE_QUALIFIER_CLASSIFICATION["state:hold"] == "historical"
+
+
+def test_terminal_class_from_state() -> None:
+    """REST state/reason/merged fields map to the documented terminal classes."""
+    assert (
+        _terminal_class_from_state({"state": "closed", "state_reason": "completed"}) == "completed"
+    )
+    assert (
+        _terminal_class_from_state({"state": "closed", "state_reason": "not_planned"})
+        == "not_planned"
+    )
+    assert (
+        _terminal_class_from_state({"state": "closed", "state_reason": "duplicate"}) == "duplicate"
+    )
+    assert _terminal_class_from_state({"state": "open", "state_reason": None}) == "reopened"
+    pr = {"state": "closed", "state_reason": None, "pull_request": {}, "merged_at": "x"}
+    assert _terminal_class_from_state(pr) == "pr_merged"

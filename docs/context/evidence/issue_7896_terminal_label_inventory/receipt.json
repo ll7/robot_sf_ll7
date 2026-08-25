@@ -1,0 +1,22 @@
+{
+  "aggregate_counts": {
+    "agent": 6,
+    "completed": 85,
+    "merge-ready": 94,
+    "needs-review": 5,
+    "pr_closed_unmerged": 115
+  },
+  "ambiguous_labels": [],
+  "command": "python scripts/dev/terminal_label_reconcile.py --inventory terminal --repo ll7/robot_sf_ll7 --report output/terminal_label_plan.json --max-items 200",
+  "full_report_pointer": "output/terminal_label_plan.json (ignored, worktree-local)",
+  "full_report_sha256": "8e49fc670ae2286ed4bf4f69de83a75c97aad99fa8322725a5ea94dc3427d4dd",
+  "mutation_authorized": false,
+  "pagination": {
+    "bounded_by_max_items": true,
+    "item_count": 200,
+    "pages_read": 2
+  },
+  "repository_commit": "77f44d99f61cb108c4d430b2d0b459db1a4149eb",
+  "schema": "terminal_label_inventory_receipt.v1",
+  "zero_mutation_proof": "inventory mode never calls add_label/remove_label; verified by test_inventory_zero_mutation_proof"
+}

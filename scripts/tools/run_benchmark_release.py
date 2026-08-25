@@ -66,7 +66,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
-HISTORICAL_RELEASE_IDENTITY_TOKENS = frozenset({"0.0.3.post1", *HISTORICAL_ZENODO_CONCEPT_DOIS})
+HISTORICAL_RELEASE_IDENTITY_MARKERS = frozenset({"0.0.3.post1", *HISTORICAL_ZENODO_CONCEPT_DOIS})
 _TEXT_ARTIFACT_SUFFIXES = frozenset(
     {".cff", ".csv", ".html", ".json", ".jsonl", ".md", ".tex", ".tsv", ".txt", ".yaml", ".yml"}
 )
@@ -273,8 +273,10 @@ def _assert_no_historical_release_identity(campaign_root: Path) -> None:
     mixing two release identities.
     """
     offenders: list[str] = []
-    token_bytes = {token: token.encode("ascii") for token in HISTORICAL_RELEASE_IDENTITY_TOKENS}
-    overlap = max(len(value) for value in token_bytes.values()) - 1
+    marker_bytes = {
+        marker: marker.encode("ascii") for marker in HISTORICAL_RELEASE_IDENTITY_MARKERS
+    }
+    overlap = max(len(value) for value in marker_bytes.values()) - 1
     for candidate in sorted(campaign_root.rglob("*")):
         if (
             not candidate.is_file()
@@ -288,10 +290,10 @@ def _assert_no_historical_release_identity(campaign_root: Path) -> None:
                 tail = b""
                 while chunk := handle.read(1024 * 1024):
                     searchable = tail + chunk
-                    for token, token_value in token_bytes.items():
-                        if token_value in searchable:
-                            matched.add(token)
-                    if matched == HISTORICAL_RELEASE_IDENTITY_TOKENS:
+                    for marker, marker_value in marker_bytes.items():
+                        if marker_value in searchable:
+                            matched.add(marker)
+                    if matched == HISTORICAL_RELEASE_IDENTITY_MARKERS:
                         break
                     tail = searchable[-overlap:]
         except OSError as exc:

@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from robot_sf.adversarial.public_projection import find_offending_paths
 from robot_sf.benchmark.artifact_publication import (
     PublicationPreflightError,
     export_publication_bundle,
@@ -66,14 +67,67 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
-HISTORICAL_RELEASE_IDENTITY_MARKERS = frozenset({"0.0.3.post1", *HISTORICAL_ZENODO_CONCEPT_DOIS})
+HISTORICAL_RELEASE_IDENTITY_TOKENS = frozenset({"0.0.3.post1", *HISTORICAL_ZENODO_CONCEPT_DOIS})
 _TEXT_ARTIFACT_SUFFIXES = frozenset(
     {".cff", ".csv", ".html", ".json", ".jsonl", ".md", ".tex", ".tsv", ".txt", ".yaml", ".yml"}
+)
+_CAMPAIGN_LOCAL_PATH_FIELDS = frozenset(
+    {
+        "campaign_root",
+        "summary_json",
+        "table_csv",
+        "table_md",
+        "report_md",
+        "snqi_diagnostics_json",
+        "snqi_diagnostics_md",
+        "snqi_sensitivity_csv",
+        "assurance_fragment_json",
+        "assurance_fragment_md",
+        "assurance_fragment_svg",
+        "matrix_summary_json",
+        "matrix_summary_csv",
+        "seed_variability_json",
+        "seed_variability_csv",
+        "seed_episode_rows_csv",
+        "statistical_sufficiency_json",
+        "actuation_envelope_json",
+        "actuation_envelope_md",
+        "publication_bundle",
+    }
+)
+_CAMPAIGN_PUBLIC_RESULT_FIELDS = frozenset(
+    {
+        "campaign_id",
+        "total_runs",
+        "successful_runs",
+        "non_success_runs",
+        "accepted_unavailable_runs",
+        "unexpected_failed_runs",
+        "campaign_execution_status",
+        "evidence_status",
+        "row_status_summary",
+        "benchmark_success",
+        "status",
+        "status_reason",
+        "exit_code",
+        "benchmark_success_basis",
+        "core_successful_runs",
+        "core_total_runs",
+        "total_episodes",
+        "runtime_sec",
+        "campaign_integrity",
+        "warnings",
+        "soft_contract_warning",
+    }
 )
 
 
 class ReleaseArtifactIdentityError(ValueError):
     """Raised when a campaign artifact still carries a predecessor identity."""
+
+
+class ReleaseResultPrivacyError(ValueError):
+    """Raised when a release result could expose machine-local filesystem state."""
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -88,6 +142,19 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     """Write a JSON object to disk."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _public_campaign_result(run_payload: dict[str, Any]) -> dict[str, Any]:
+    """Project a campaign runner result onto its public, path-free release fields."""
+    unknown = set(run_payload) - _CAMPAIGN_LOCAL_PATH_FIELDS - _CAMPAIGN_PUBLIC_RESULT_FIELDS
+    if unknown:
+        raise ReleaseResultPrivacyError("campaign runner returned unsupported result fields")
+    projected = {
+        key: run_payload[key] for key in _CAMPAIGN_PUBLIC_RESULT_FIELDS if key in run_payload
+    }
+    if find_offending_paths(projected):
+        raise ReleaseResultPrivacyError("campaign runner result contains private filesystem data")
+    return projected
 
 
 def _campaign_summary_path(campaign_root: Path) -> Path:
@@ -273,10 +340,8 @@ def _assert_no_historical_release_identity(campaign_root: Path) -> None:
     mixing two release identities.
     """
     offenders: list[str] = []
-    marker_bytes = {
-        marker: marker.encode("ascii") for marker in HISTORICAL_RELEASE_IDENTITY_MARKERS
-    }
-    overlap = max(len(value) for value in marker_bytes.values()) - 1
+    token_bytes = {token: token.encode("ascii") for token in HISTORICAL_RELEASE_IDENTITY_TOKENS}
+    overlap = max(len(value) for value in token_bytes.values()) - 1
     for candidate in sorted(campaign_root.rglob("*")):
         if (
             not candidate.is_file()
@@ -290,10 +355,10 @@ def _assert_no_historical_release_identity(campaign_root: Path) -> None:
                 tail = b""
                 while chunk := handle.read(1024 * 1024):
                     searchable = tail + chunk
-                    for marker, marker_value in marker_bytes.items():
-                        if marker_value in searchable:
-                            matched.add(marker)
-                    if matched == HISTORICAL_RELEASE_IDENTITY_MARKERS:
+                    for token, token_value in token_bytes.items():
+                        if token_value in searchable:
+                            matched.add(token)
+                    if matched == HISTORICAL_RELEASE_IDENTITY_TOKENS:
                         break
                     tail = searchable[-overlap:]
         except OSError as exc:
@@ -671,8 +736,29 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         skip_publication_bundle=True,
         invoked_command=invoked_command,
     )
-    result.update(run_payload)
     campaign_root = Path(str(run_payload["campaign_root"])).resolve()
+    try:
+        result.update(_public_campaign_result(run_payload))
+    except ReleaseResultPrivacyError:
+        result.update(
+            {
+                "benchmark_success": False,
+                "status": "release_result_privacy_rejected",
+                "status_reason": "campaign result could not be projected without private paths",
+                "campaign_execution_status": "completed",
+                "evidence_status": "blocked",
+                "release_status": "release_result_privacy_rejected",
+                "release_status_reason": (
+                    "campaign result could not be projected without private paths"
+                ),
+                "release_benchmark_success": False,
+                "release_exit_code": 2,
+            }
+        )
+        release_dir = campaign_root / "release"
+        _write_json(release_dir / "release_result.json", result)
+        print(json.dumps(result, indent=2))
+        return 2
 
     post_manifest_validation: dict[str, Any] | None = None
     if stress_smoke:

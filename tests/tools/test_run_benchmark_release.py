@@ -332,7 +332,8 @@ def test_publication_identity_rejection_does_not_log_campaign_paths(
     assert payload["release_status"] == "publication_identity_rejected"
     assert payload["release_benchmark_success"] is False
     assert secret_marker not in stdout
-    assert secret_marker in persisted["campaign_root"]
+    assert secret_marker not in json.dumps(persisted)
+    assert "campaign_root" not in persisted
 
 
 def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_path: Path) -> None:
@@ -1136,4 +1137,29 @@ def test_release_existing_fixed_campaign_requires_resume_receipt(tmp_path: Path)
             cfg=cfg,
             campaign_config_path=config,
             checkpoint_receipt_path=checkpoint,
+        )
+
+
+def test_public_campaign_result_rejects_unexpected_fields() -> None:
+    """New runner fields must be classified before entering a public release result."""
+    with pytest.raises(
+        run_benchmark_release.ReleaseResultPrivacyError,
+        match="unsupported result fields",
+    ):
+        run_benchmark_release._public_campaign_result(
+            {"status": "benchmark_success", "new_artifact_location": "/srv/private/result"}
+        )
+
+
+def test_public_campaign_result_rejects_nested_private_paths() -> None:
+    """Free-form public fields cannot smuggle a machine-local path into logs or JSON."""
+    with pytest.raises(
+        run_benchmark_release.ReleaseResultPrivacyError,
+        match="contains private filesystem data",
+    ):
+        run_benchmark_release._public_campaign_result(
+            {
+                "status": "benchmark_success",
+                "warnings": ["diagnostic file: /home/example/private/result.json"],
+            }
         )

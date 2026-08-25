@@ -61,6 +61,94 @@ the GitHub Release and leave it disabled. Do not use the webhook to create or
 update this benchmark-data deposition: unrelated software or model releases
 must not contaminate the benchmark concept.
 
+## Exact-SHA Continuous Integration (CI) reconciliation
+
+The release doctor requires one completed successful run of each required
+workflow (`CI` and `CodeQL`) for the exact source SHA. It records the selected
+supporting run IDs in its credential-free receipt. A later concurrency or
+infrastructure cancellation for that same workflow is recorded as ignored when
+the earlier successful run exists; a pending run or genuine failure remains a
+blocker. Re-run the doctor against the same immutable checkout to reconcile
+workflow history—do not delete cancelled runs or treat a retry on moving
+`main` as new evidence for the frozen SHA.
+
+If a required workflow has no successful exact-SHA run, inspect the credential-
+free `gh run list --commit <sha>` output and retry that workflow only through
+the normal GitHub Actions path. After a retry completes, run the doctor again
+and retain its supporting or blocking run IDs with the release receipt. A
+successful retry is sufficient; historical cancellations do not need to be
+removed.
+
+## Final queue reconciliation
+
+Final-mode admission accepts either a still-dispatchable queue row (`ready` or
+`queued`) or an honestly closed row whose state is `complete` or `done` and
+whose execution, artifact, evaluation, completion, and preservation fields
+jointly report success (`passed`, `verified`, a terminal evaluation, `complete`,
+and `preserved`). A terminal state or preservation claim by itself is not
+publication evidence. Failed, incomplete, and partially preserved rows remain
+blocked; reconcile the private queue and rerun the doctor after closeout.
+
+## Frozen-checkout validation boundary
+
+The public doctor and private launch packet are versioned contracts. A doctor
+imported from a newer checkout must not reinterpret an older packet as if its
+missing inputs or traceability fields were valid. `--repo` is the explicit
+public-checkout root: the doctor passes it through manifest, campaign,
+scenario, and checkpoint validation, and uses it for clean exact-HEAD checks.
+Legacy packet fields are synthesized only after the strict private-ledger and
+queue-export equality checks described below; otherwise the mismatch remains
+fail-closed. Do not weaken packet or file-hash checks to make a historical
+packet pass.
+
+Run the reviewed doctor code from its own tooling checkout and point `--repo`
+at the untouched frozen public checkout. The code checkout and the release
+checkout intentionally have different Git identities: manifest/config/scenario
+resolution, checkpoint containment, and `_git_check` all use `--repo`, while
+the Python implementation and tests come from `TOOLING_ROOT`. Do not patch or
+otherwise change the frozen execution checkout.
+Use absolute paths for private packet, queue, and private-ops inputs because
+they are not public files beneath `--repo`:
+
+```bash
+TOOLING_ROOT=<reviewed-public-tooling-checkout>
+FROZEN_ROOT=<untouched-exact-public-release-checkout>
+PRIVATE_OPS_ROOT=<trusted-private-ops-git-checkout>
+PRIVATE_LAUNCH_PACKET=<absolute-private-launch-packet>
+PRIVATE_QUEUE=<absolute-private-queue>
+FROZEN_SHA=b1d5ab6de708385c0828c99501a9d1c29727ec11
+(
+  cd "$TOOLING_ROOT"
+  uv run --project "$TOOLING_ROOT" pytest \
+    "$TOOLING_ROOT/tests/benchmark/test_release_doctor.py" \
+    "$TOOLING_ROOT/tests/benchmark/test_release_doctor_edge_cases.py"
+  uv run --project "$TOOLING_ROOT" robot-sf release doctor \
+  --repo "$FROZEN_ROOT" \
+  --manifest "$FROZEN_ROOT/<frozen-manifest-path>" \
+  --expected-release-sha "$FROZEN_SHA" \
+  --expected-base-sha <frozen-manifest-base-sha> \
+  --tag <frozen-release-tag> \
+  --checkpoint-receipt "$FROZEN_ROOT/<frozen-checkpoint-receipt>" \
+  --private-launch-packet "$PRIVATE_LAUNCH_PACKET" \
+  --private-queue "$PRIVATE_QUEUE" \
+  --private-ops-repository "$PRIVATE_OPS_ROOT" \
+  --expected-campaign-id <frozen-campaign-id> \
+  --publication-mode final
+)
+```
+
+Use the packet's immutable manifest/base/tag and private paths as the explicit
+values; never copy credentials into the command or receipt. The private-ops
+reviewed commit is a trusted private-ledger assumption: the doctor verifies
+that the commit object exists and reads `ops/jobs/jobs.yaml` and
+`ops/jobs/queue.yaml` with object-addressed `git show`, never from the private
+worktree. Git signatures are not required because no trusted signing key is
+available; the packet-pinned commit, exact job `14884`, queue identity, source
+SHA, result/preservation digests, terminal statuses, and a future/stale-safe
+`submitted_at` window provide the fail-closed binding. This invocation keeps
+the execution checkout unchanged and makes any schema incompatibility visible
+as a blocked doctor result.
+
 ## Command Path
 
 1. Dry-run validation + command plan:
@@ -73,27 +161,19 @@ uv run python scripts/tools/publish_camera_ready_release.py \
   --output-json output/benchmarks/camera_ready/<campaign_id>/reports/release_publish_plan.json
 ```
 
-2. Execute asset upload (first publication: create the draft release first):
+2. Execute asset upload:
 
 ```bash
 uv run python scripts/tools/publish_camera_ready_release.py \
   --campaign-root output/benchmarks/camera_ready/<campaign_id> \
   --repo ll7/robot_sf_ll7 \
   --tag <release_tag> \
-  --create-draft \
-  --expected-source-sha <exact-40-char-source-sha> \
   --execute-upload
 ```
 
-The upload helper uploads into a draft GitHub Release only. Use `--create-draft`
-(which requires `--expected-source-sha`) to create the missing tag-targeted draft
-before the first upload; it fails closed when the tag already exists at a
-different target or a non-draft release is present, and skips creation when an
-exact-SHA draft already exists. Dry-run (without `--execute-upload`) prints the
-planned `gh release create`/`gh release upload` commands without touching GitHub.
-The helper never reserves, uploads to, or publishes Zenodo. Use the direct
-Zenodo CLI for the reserved deposition after the bundle has passed the
-independent cold check:
+The upload helper creates or updates a draft GitHub Release only. It does not
+reserve, upload to, or publish Zenodo. Use the direct Zenodo CLI for the
+reserved deposition after the bundle has passed the independent cold check:
 
 ```bash
 # Keep this file outside Git with mode 0600; never print its contents.

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import re
 import shlex
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -106,6 +108,12 @@ _PUBLIC_PACKET_INPUT_NAMES = (
     "public_single_node_entrypoint",
     "release_runner",
 )
+_TERMINAL_QUEUE_STATES = frozenset({"complete", "done"})
+_TERMINAL_QUEUE_EVALUATION_STATES = frozenset({"complete", "canary_passed"})
+_PRIVATE_OPS_COMMIT_RE = _COMMIT_SHA_RE
+_PRIVATE_OPS_LEDGER_PATHS = ("ops/jobs/jobs.yaml", "ops/jobs/queue.yaml")
+_RUNTIME_SMOKE_JOB_ID = "14884"
+_RUNTIME_SMOKE_MAX_AGE = timedelta(hours=24)
 
 
 @dataclass(frozen=True)
@@ -115,6 +123,17 @@ class ReleaseDoctorCheck:
     name: str
     status: str
     summary: str
+
+
+@dataclass(frozen=True)
+class _PrivateOpsEvidence:
+    """Exact-commit private-ledger evidence for the accepted runtime smoke."""
+
+    reviewed_commit: str
+    runtime_smoke_job: dict[str, Any]
+    runtime_smoke_queue: dict[str, Any]
+    queue_exports: dict[str, list[str]]
+    submitted_at: datetime
 
 
 def _run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -146,68 +165,117 @@ def _git_check(repo: Path, expected_sha: str) -> ReleaseDoctorCheck:
     )
 
 
-def _evaluate_workflow_runs(
-    name: str, matching: list[dict[str, Any]]
-) -> tuple[str | None, str | None]:
-    """Evaluate runs for one required workflow and return (supported_detail, non_green_detail).
+_CI_CANCELLATION_CONCLUSIONS = {"cancelled", "canceled"}
 
-    Returns:
-        tuple of (supported_detail, non_green_detail), where exactly one is non-None.
+
+def _ci_run_id(run: dict[str, Any]) -> int | None:
+    """Return a numeric, credential-free GitHub Actions run identifier.
+
+    The doctor only needs the identifier for an operator receipt.  Rejecting
+    non-numeric values keeps summaries from echoing arbitrary API payload text.
     """
-    success_runs = [
-        run
-        for run in matching
-        if str(run.get("status", "")).lower() == "completed"
-        and str(run.get("conclusion", "")).lower() == "success"
-    ]
-    if success_runs:
-        run_ids = [str(r.get("databaseId")) for r in success_runs if r.get("databaseId")]
-        detail = f"{name} (run {run_ids[0]})" if run_ids else name
-        return detail, None
-
-    in_prog_runs = [run for run in matching if str(run.get("status", "")).lower() != "completed"]
-    failing_runs = [
-        run
-        for run in matching
-        if str(run.get("status", "")).lower() == "completed"
-        and str(run.get("conclusion", "")).lower() == "failure"
-    ]
-    cancelled_runs = [
-        run
-        for run in matching
-        if str(run.get("status", "")).lower() == "completed"
-        and str(run.get("conclusion", "")).lower() == "cancelled"
-    ]
-
-    run_ids = [str(r.get("databaseId")) for r in matching if r.get("databaseId")]
-    id_suffix = f" (run {', '.join(run_ids)})" if run_ids else ""
-
-    if in_prog_runs:
-        return None, f"{name} pending{id_suffix}"
-    if failing_runs:
-        return None, f"{name} failed{id_suffix}"
-    if cancelled_runs:
-        return None, f"{name} cancelled{id_suffix}"
-    return None, f"{name}{id_suffix}"
+    value = run.get("databaseId")
+    if value is None:
+        value = run.get("id")
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
 
 
-def _parse_gh_runs(
-    stdout: str, expected_sha: str, required_workflows: tuple[str, ...]
-) -> dict[str, list[dict[str, Any]]]:
-    """Group exact-SHA workflow runs by required workflow name.
+def _ci_run_order_key(run: dict[str, Any]) -> tuple[str, int, str]:
+    """Return a stable order key for exact-SHA workflow runs."""
+    run_id = _ci_run_id(run)
+    return (
+        str(run.get("createdAt") or ""),
+        run_id if run_id is not None else -1,
+        str(run.get("updatedAt") or ""),
+    )
+
+
+def _format_ci_run_ids(
+    runs_by_workflow: dict[str, list[dict[str, Any]]],
+    required_workflows: tuple[str, ...],
+) -> str:
+    """Format workflow-to-run IDs without URLs, tokens, or raw API payloads.
 
     Returns:
-        Mapping of workflow name to list of matching exact-SHA runs.
+        Stable ``workflow=id`` pairs for the supplied workflows.
+    """
+    formatted: list[str] = []
+    for workflow in required_workflows:
+        workflow_runs = runs_by_workflow.get(workflow, [])
+        if not workflow_runs:
+            continue
+        run_ids = sorted(
+            {str(run_id) for run in workflow_runs if (run_id := _ci_run_id(run)) is not None},
+            key=int,
+        )
+        formatted.append(f"{workflow}=" + (",".join(run_ids) if run_ids else "unavailable"))
+    return ", ".join(formatted) or "none"
+
+
+def _classify_ci_workflow_runs(
+    matching: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Classify one workflow's exact-SHA runs as support, ignored, or blocking.
+
+    Returns:
+        Selected successful runs, tolerated cancellations, and blocking runs.
+    """
+    successful = [
+        run
+        for run in matching
+        if str(run.get("status", "")).casefold() == "completed"
+        and str(run.get("conclusion", "")).casefold() == "success"
+    ]
+    supporting = [max(successful, key=_ci_run_order_key)] if successful else []
+    ignored_cancellations: list[dict[str, Any]] = []
+    blocking: list[dict[str, Any]] = []
+    for run in matching:
+        status = str(run.get("status", "")).casefold()
+        conclusion = str(run.get("conclusion", "")).casefold()
+        if status == "completed" and conclusion == "success":
+            continue
+        if status == "completed" and conclusion in _CI_CANCELLATION_CONCLUSIONS and successful:
+            ignored_cancellations.append(run)
+        else:
+            blocking.append(run)
+    return supporting, ignored_cancellations, blocking
+
+
+def _parse_ci_run_list(stdout: str) -> list[dict[str, Any]]:
+    """Parse a GitHub Actions run list, discarding malformed top-level entries.
+
+    Returns:
+        Mapping entries from the JSON array, or an empty list when unavailable.
     """
     try:
-        raw_runs = json.loads(stdout)
+        payload = json.loads(stdout)
     except (json.JSONDecodeError, TypeError):
-        raw_runs = []
-    if not isinstance(raw_runs, list):
-        raw_runs = []
+        return []
+    if not isinstance(payload, list):
+        return []
+    return [run for run in payload if isinstance(run, dict)]
+
+
+def _group_exact_ci_runs(
+    runs: list[dict[str, Any]],
+    expected_sha: str,
+    required_workflows: tuple[str, ...],
+) -> dict[str, list[dict[str, Any]]]:
+    """Group exact-SHA runs by required workflow name.
+
+    Returns:
+        Required workflow names mapped to their exact-SHA runs.
+    """
     by_workflow: dict[str, list[dict[str, Any]]] = {name: [] for name in required_workflows}
-    for run in raw_runs:
-        if not isinstance(run, dict) or run.get("headSha") != expected_sha:
+    normalized_expected_sha = expected_sha.casefold()
+    for run in runs:
+        if str(run.get("headSha") or "").casefold() != normalized_expected_sha:
             continue
         workflow_name = str(
             run.get("workflowName") or run.get("name") or run.get("workflow") or ""
@@ -217,12 +285,128 @@ def _parse_gh_runs(
     return by_workflow
 
 
+def _parse_gh_runs(
+    stdout: str, expected_sha: str, required_workflows: tuple[str, ...]
+) -> dict[str, list[dict[str, Any]]]:
+    """Retain the pre-#7880 parser entry point for narrow tooling callers.
+
+    Returns:
+        Required workflow names mapped to their exact-SHA runs.
+    """
+    return _group_exact_ci_runs(
+        _parse_ci_run_list(stdout),
+        expected_sha,
+        required_workflows,
+    )
+
+
+def _ci_problems(
+    missing: list[str],
+    non_green: list[str],
+    blocking: dict[str, list[dict[str, Any]]],
+    required_workflows: tuple[str, ...],
+) -> list[str]:
+    """Build blocking CI messages with sanitized run identifiers.
+
+    Returns:
+        Blocking messages for missing, non-green, or failed runs.
+    """
+    problems: list[str] = []
+    if missing:
+        problems.append("missing " + ", ".join(missing))
+    if non_green:
+        problems.append("not completed green: " + ", ".join(non_green))
+    if blocking:
+        problems.append(
+            "blocking exact-source run IDs: " + _format_ci_run_ids(blocking, required_workflows)
+        )
+    return problems
+
+
+def _ci_blocking_detail(name: str, blocked: list[dict[str, Any]]) -> str:
+    """Describe the first blocking state without echoing API payload text.
+
+    Returns:
+        Sanitized workflow state detail.
+    """
+    if any(str(run.get("status", "")).casefold() != "completed" for run in blocked):
+        return f"{name} pending"
+    if any(str(run.get("conclusion", "")).casefold() == "failure" for run in blocked):
+        return f"{name} failed"
+    if any(
+        str(run.get("conclusion", "")).casefold() in _CI_CANCELLATION_CONCLUSIONS for run in blocked
+    ):
+        return f"{name} cancelled"
+    return name
+
+
+def _ci_details(
+    supporting: dict[str, list[dict[str, Any]]],
+    ignored_cancellations: dict[str, list[dict[str, Any]]],
+    required_workflows: tuple[str, ...],
+) -> list[str]:
+    """Build credential-free supporting and ignored-run receipt details.
+
+    Returns:
+        Human-readable receipt details containing only workflow names and IDs.
+    """
+    details: list[str] = []
+    if supporting:
+        details.append(
+            "supporting exact-source run IDs: " + _format_ci_run_ids(supporting, required_workflows)
+        )
+    if ignored_cancellations:
+        details.append(
+            "ignored cancellation run IDs: "
+            + _format_ci_run_ids(ignored_cancellations, required_workflows)
+        )
+    return details
+
+
+def _build_ci_check(
+    by_workflow: dict[str, list[dict[str, Any]]],
+    required_workflows: tuple[str, ...],
+) -> ReleaseDoctorCheck:
+    """Build the sanitized CI check from grouped exact-SHA workflow runs.
+
+    Returns:
+        Sanitized CI check result.
+    """
+    missing = [name for name, matching in by_workflow.items() if not matching]
+    classified = {
+        name: _classify_ci_workflow_runs(matching) for name, matching in by_workflow.items()
+    }
+    supporting = {name: selected for name, (selected, _, _) in classified.items() if selected}
+    ignored_cancellations = {
+        name: ignored for name, (_, ignored, _) in classified.items() if ignored
+    }
+    blocking = {name: blocked for name, (_, _, blocked) in classified.items() if blocked}
+    non_green = [_ci_blocking_detail(name, blocked) for name, blocked in blocking.items()]
+    problems = _ci_problems(missing, non_green, blocking, required_workflows)
+    details = _ci_details(supporting, ignored_cancellations, required_workflows)
+    green = not problems
+    summary = (
+        "all exact-source required workflows are green with completed successful evidence"
+        if green
+        else "; ".join(problems)
+    )
+    if details:
+        summary += "; " + "; ".join(details)
+    return ReleaseDoctorCheck("ci", "pass" if green else "fail", summary)
+
+
 def _ci_check(
     repo: Path,
     expected_sha: str,
     required_workflows: tuple[str, ...] = REQUIRED_CI_WORKFLOWS,
 ) -> ReleaseDoctorCheck:
-    """Require every required workflow to be completed green for the SHA.
+    """Require independent successful exact-SHA evidence for every workflow.
+
+    A completed success is durable evidence for its workflow.  Later
+    concurrency or infrastructure cancellations are recorded but ignored when
+    that workflow already has a successful exact-SHA run.  Pending runs and
+    genuine non-success conclusions remain blocking, including when another
+    run for the same workflow succeeded.
 
     Returns:
         Sanitized check result.
@@ -239,7 +423,7 @@ def _ci_check(
             "--limit",
             "100",
             "--json",
-            "databaseId,headSha,status,conclusion,workflowName,name",
+            "databaseId,headSha,status,conclusion,workflowName,name,createdAt,updatedAt",
         ],
         repo,
     )
@@ -248,37 +432,7 @@ def _ci_check(
             "ci", "fail", "exact-source required workflow state is unavailable"
         )
     by_workflow = _parse_gh_runs(result.stdout, expected_sha, required_workflows)
-    missing: list[str] = []
-    non_green: list[str] = []
-    supported_details: list[str] = []
-
-    for name, matching in by_workflow.items():
-        if not matching:
-            missing.append(name)
-            continue
-        supported, non_green_reason = _evaluate_workflow_runs(name, matching)
-        if supported:
-            supported_details.append(supported)
-        elif non_green_reason:
-            non_green.append(non_green_reason)
-
-    problems: list[str] = []
-    if missing:
-        problems.append("missing " + ", ".join(missing))
-    if non_green:
-        problems.append("not completed green: " + ", ".join(non_green))
-    green = not problems
-    if green:
-        detail_str = f": {', '.join(supported_details)}" if supported_details else ""
-        summary_msg = f"all exact-source required workflows are green{detail_str}"
-    else:
-        summary_msg = "; ".join(problems)
-
-    return ReleaseDoctorCheck(
-        "ci",
-        "pass" if green else "fail",
-        summary_msg,
-    )
+    return _build_ci_check(by_workflow, required_workflows)
 
 
 def _tag_check(repo: Path, tag: str) -> ReleaseDoctorCheck:
@@ -317,7 +471,7 @@ def _tag_check(repo: Path, tag: str) -> ReleaseDoctorCheck:
 
 
 def _manifest_check(
-    manifest_path: Path, expected_cells: int
+    manifest_path: Path, expected_cells: int, *, repository_root: Path | None = None
 ) -> tuple[ReleaseDoctorCheck, Any, Any]:
     """Validate pinned hashes and exact matrix cardinality.
 
@@ -325,10 +479,17 @@ def _manifest_check(
         Check result, loaded manifest, and loaded campaign config.
     """
     try:
-        manifest = load_release_manifest(manifest_path)
-        cfg = load_campaign_config(manifest.canonical_campaign_config_path)
-        validation = validate_release_manifest(manifest, campaign_config=cfg)
-        scenarios = _load_campaign_scenarios(cfg)
+        manifest = load_release_manifest(manifest_path, repository_root=repository_root)
+        cfg = load_campaign_config(
+            manifest.canonical_campaign_config_path,
+            repository_root=repository_root,
+        )
+        validation = validate_release_manifest(
+            manifest,
+            campaign_config=cfg,
+            repository_root=repository_root,
+        )
+        scenarios = _load_campaign_scenarios(cfg, repository_root=repository_root)
         seeds = _resolved_seed_inventory(scenarios)
         planners = [planner for planner in cfg.planners if planner.enabled]
         cells = len(scenarios) * len(seeds) * len(planners)
@@ -364,6 +525,26 @@ def _manifest_check(
     )
 
 
+def _manifest_check_for_repo(
+    manifest_path: Path, expected_cells: int, repository_root: Path
+) -> tuple[ReleaseDoctorCheck, Any, Any]:
+    """Call the manifest checker with an explicit root when supported.
+
+    Returns:
+        Manifest check, loaded manifest, and loaded campaign configuration.
+    """
+    if "repository_root" in inspect.signature(_manifest_check).parameters:
+        return _manifest_check(
+            manifest_path,
+            expected_cells,
+            repository_root=repository_root,
+        )
+    # Preserve compatibility with narrow test/tooling doubles written for the
+    # pre-root-aware checker while the production implementation remains
+    # explicitly repository-bound.
+    return _manifest_check(manifest_path, expected_cells)
+
+
 def _checkpoint_check(
     cfg: Any,
     manifest: Any,
@@ -380,14 +561,11 @@ def _checkpoint_check(
     if cfg is None or manifest is None or receipt is None:
         return ReleaseDoctorCheck("checkpoints", "fail", "staged-checkpoint receipt is missing")
     try:
-        mapping_kwargs = (
-            {
-                "checkpoint_path_map": checkpoint_path_map,
-                "repo_root": repo_root,
-            }
-            if checkpoint_path_map
-            else {}
-        )
+        mapping_kwargs: dict[str, Any] = {}
+        if checkpoint_path_map:
+            mapping_kwargs["checkpoint_path_map"] = checkpoint_path_map
+        if repo_root is not None:
+            mapping_kwargs["repo_root"] = repo_root
         payload = validate_checkpoint_staging_receipt(
             cfg,
             receipt,
@@ -399,6 +577,28 @@ def _checkpoint_check(
     return ReleaseDoctorCheck(
         "checkpoints", "pass", f"{len(payload['arms'])} checkpoint references staged and verified"
     )
+
+
+def _checkpoint_check_for_repo(
+    cfg: Any,
+    manifest: Any,
+    receipt: Path | None,
+    *,
+    repository_root: Path,
+    checkpoint_path_map: Any = None,
+) -> ReleaseDoctorCheck:
+    """Call checkpoint validation with the explicit public checkout root.
+
+    Returns:
+        Sanitized checkpoint check result.
+    """
+    kwargs: dict[str, Any] = {}
+    parameters = inspect.signature(_checkpoint_check).parameters
+    if "repo_root" in parameters:
+        kwargs["repo_root"] = repository_root
+    if checkpoint_path_map:
+        kwargs["checkpoint_path_map"] = checkpoint_path_map
+    return _checkpoint_check(cfg, manifest, receipt, **kwargs)
 
 
 def _release_identity_check(manifest: Any, expected_base_sha: str, tag: str) -> ReleaseDoctorCheck:
@@ -457,6 +657,447 @@ def _load_queue_rows(path: Path) -> list[dict[str, Any]]:
     if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
         raise ValueError("queue file must contain a list of mapping rows")
     return rows
+
+
+def _load_rows_from_text(text: str, *, label: str) -> list[dict[str, Any]]:
+    """Parse a private-ledger YAML blob into mapping rows.
+
+    Returns:
+        Parsed mapping rows.
+    """
+    payload = yaml.safe_load(text)
+    rows: Any = payload
+    if isinstance(payload, dict):
+        for key in ("queues", "rows", "queue", "jobs"):
+            if isinstance(payload.get(key), list):
+                rows = payload[key]
+                break
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+        raise ValueError(f"{label} must contain a list of mapping rows")
+    return rows
+
+
+def _private_ops_blob(repository: Path, reviewed_commit: str, relative_path: str) -> str | None:
+    """Read one private-ledger blob by object address, never from its worktree.
+
+    Returns:
+        Blob text, or ``None`` when the object-addressed read fails.
+    """
+    result = _run(
+        [
+            "git",
+            "-C",
+            str(repository),
+            "show",
+            f"{reviewed_commit}:{relative_path}",
+        ],
+        repository,
+    )
+    if result.returncode:
+        return None
+    return result.stdout
+
+
+def _utc_now() -> datetime:
+    """Return the UTC instant used by freshness checks."""
+    return datetime.now(UTC)
+
+
+def _parse_utc_timestamp(value: Any) -> datetime | None:
+    """Parse an explicit timezone-aware ISO timestamp.
+
+    Returns:
+        UTC timestamp, or ``None`` for malformed or timezone-naive input.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(UTC)
+
+
+def _digest_value(value: Any) -> str | None:
+    """Normalize a SHA-256 value with an optional ``sha256:`` prefix.
+
+    Returns:
+        Lowercase digest without a prefix, or ``None`` for invalid input.
+    """
+    text = str(value or "").strip().lower()
+    if text.startswith("sha256:"):
+        text = text.removeprefix("sha256:")
+    return text if _SHA256_RE.fullmatch(text) else None
+
+
+def _private_ops_evidence(  # noqa: C901, PLR0912, PLR0915
+    packet: dict[str, Any],
+    expected_sha: str,
+    private_ops_repository: Path | None,
+) -> tuple[_PrivateOpsEvidence | None, list[str]]:
+    """Validate accepted runtime smoke from packet-pinned private Git blobs.
+
+    The private ledger is an explicitly trusted operator-controlled source.  We
+    do not require a Git signature because no trusted signing key is available,
+    but we do require the packet-pinned commit object and read both ledger files
+    through ``git show <commit>:<path>``.  The private worktree is never read.
+
+    Returns:
+        Exact runtime-smoke evidence and sanitized problems.
+    """
+    problems: list[str] = []
+    contract = packet.get("execution_contract")
+    reviewed_commit = (
+        contract.get("private_ops_reviewed_base_commit") if isinstance(contract, dict) else None
+    )
+    reviewed_commit = str(reviewed_commit or "").strip().lower()
+    if _PRIVATE_OPS_COMMIT_RE.fullmatch(reviewed_commit) is None:
+        return None, ["private ops reviewed base commit is not a concrete Git commit"]
+    accepted_hybrid = packet.get("accepted_hybrid_stress")
+    if isinstance(accepted_hybrid, dict):
+        private_tracking_commit = (
+            str(accepted_hybrid.get("private_tracking_commit") or "").strip().lower()
+        )
+        if private_tracking_commit and private_tracking_commit != reviewed_commit:
+            problems.append(
+                "private ops reviewed base commit does not match accepted hybrid evidence"
+            )
+    if private_ops_repository is None:
+        return None, ["private ops repository is required for packet-pinned final evidence"]
+    repository = private_ops_repository.resolve()
+    if not repository.is_dir():
+        return None, ["private ops repository is missing or not a directory"]
+
+    commit_type = _run(
+        ["git", "-C", str(repository), "cat-file", "-t", reviewed_commit], repository
+    )
+    if commit_type.returncode or commit_type.stdout.strip() != "commit":
+        return None, ["packet-pinned private ops commit is unavailable"]
+    blobs: dict[str, str] = {}
+    for relative_path in _PRIVATE_OPS_LEDGER_PATHS:
+        blob = _private_ops_blob(repository, reviewed_commit, relative_path)
+        if blob is None:
+            problems.append("packet-pinned private ops ledger blob is unavailable")
+        else:
+            blobs[relative_path] = blob
+    if problems:
+        return None, problems
+    try:
+        jobs = _load_rows_from_text(blobs[_PRIVATE_OPS_LEDGER_PATHS[0]], label="jobs ledger")
+        queues = _load_rows_from_text(blobs[_PRIVATE_OPS_LEDGER_PATHS[1]], label="queue ledger")
+    except (TypeError, ValueError, yaml.YAMLError):
+        return None, ["packet-pinned private ops ledger is invalid"]
+
+    accepted = packet.get("accepted_runtime_smoke")
+    identity = packet.get("identity")
+    if not isinstance(accepted, dict):
+        problems.append("accepted runtime-smoke evidence is missing")
+        accepted = {}
+    if not isinstance(identity, dict):
+        problems.append("launch packet identity is missing")
+        identity = {}
+    job_matches = [row for row in jobs if str(row.get("job_id")) == _RUNTIME_SMOKE_JOB_ID]
+    if len(job_matches) != 1:
+        problems.append(
+            "packet-pinned private ledger does not contain exactly one runtime-smoke job"
+        )
+        job: dict[str, Any] = {}
+    else:
+        job = job_matches[0]
+    queue_id = str(accepted.get("queue_id") or "").strip()
+    queue_matches = [row for row in queues if row.get("queue_id") == queue_id]
+    if not queue_id or len(queue_matches) != 1:
+        problems.append(
+            "packet-pinned private ledger does not contain exactly one runtime-smoke queue"
+        )
+        queue: dict[str, Any] = {}
+    else:
+        queue = queue_matches[0]
+
+    expected_campaign = str(accepted.get("campaign_id") or "").strip()
+    expected_result_path = str(
+        accepted.get("release_result_path") or identity.get("runtime_smoke_receipt_path") or ""
+    ).strip()
+    expected_result_digest = _digest_value(
+        accepted.get("release_result_sha256") or identity.get("runtime_smoke_receipt_sha256")
+    )
+    expected_preservation_digest = _digest_value(accepted.get("preservation_manifest_digest"))
+    source_values = {
+        str(identity.get("public_source_commit") or "").strip(),
+        str(accepted.get("public_source_commit") or "").strip(),
+        str(queue.get("expected_public_commit") or "").strip(),
+        str(job.get("public_commit") or "").strip(),
+        expected_sha,
+    }
+    if "" in source_values or len(source_values) != 1:
+        problems.append(
+            "runtime-smoke source SHA is not consistent across packet and private ledger"
+        )
+    if str(job.get("campaign") or "").strip() != expected_campaign:
+        problems.append("runtime-smoke job campaign does not match packet evidence")
+    if str(queue.get("campaign") or "").strip() != expected_campaign:
+        problems.append("runtime-smoke queue campaign does not match packet evidence")
+    if str(queue.get("queue_id") or "").strip() != queue_id:
+        problems.append("runtime-smoke queue identity does not match packet evidence")
+    if str(accepted.get("job_id") or "").strip() != _RUNTIME_SMOKE_JOB_ID:
+        problems.append("packet accepted runtime-smoke job is not 14884")
+    if (
+        not expected_result_path
+        or expected_result_path != str(identity.get("runtime_smoke_receipt_path") or "").strip()
+    ):
+        problems.append("runtime-smoke result path is not consistent across packet fields")
+    if expected_result_digest is None or expected_result_digest != _digest_value(
+        identity.get("runtime_smoke_receipt_sha256")
+    ):
+        problems.append("runtime-smoke result digest is not consistent across packet fields")
+    if expected_result_digest != _digest_value(job.get("evaluation_receipt_digest")):
+        problems.append("runtime-smoke result digest does not match job evidence")
+    if expected_preservation_digest is None or expected_preservation_digest != _digest_value(
+        queue.get("preservation_digest")
+    ):
+        problems.append("runtime-smoke preservation digest does not match queue evidence")
+    if (
+        str(queue.get("preservation_artifact") or "").strip()
+        != str(accepted.get("preservation_artifact") or "").strip()
+    ):
+        problems.append("runtime-smoke preservation artifact does not match queue evidence")
+
+    for label, row in (("job", job), ("queue", queue)):
+        expected_statuses = {
+            "execution_status": "passed",
+            "artifact_status": "verified",
+            "evaluation_status": "canary_passed",
+            "completion_status": "complete",
+        }
+        for field, expected in expected_statuses.items():
+            if str(row.get(field) or "").strip().lower() != expected:
+                problems.append(f"runtime-smoke {label} {field} is not {expected}")
+    if str(job.get("state") or "").strip().lower() != "retrieved":
+        problems.append("runtime-smoke job is not retrieved")
+    if str(job.get("slurm_state") or "").strip().upper() != "COMPLETED":
+        problems.append("runtime-smoke job is not completed")
+    if str(job.get("exit_code") or "").strip() != "0:0":
+        problems.append("runtime-smoke job exit code is not 0:0")
+    if str(job.get("derived_exit_code") or "").strip() != "0:0":
+        problems.append("runtime-smoke job derived exit code is not 0:0")
+    if str(job.get("startup_status") or "").strip().lower() != "started":
+        problems.append("runtime-smoke startup was not recorded")
+    if str(queue.get("state") or "").strip().lower() not in _TERMINAL_QUEUE_STATES:
+        problems.append("runtime-smoke queue state is not terminal")
+    if str(queue.get("preservation_state") or "").strip().lower() != "preserved":
+        problems.append("runtime-smoke queue preservation is not complete")
+    if str(accepted.get("status") or "").strip() != "accepted_preserved_verified":
+        problems.append("packet runtime-smoke status is not accepted_preserved_verified")
+    if _strict_int(accepted.get("fallback_or_degraded_rows")) != 0:
+        problems.append("packet runtime-smoke evidence contains fallback or degraded rows")
+
+    submitted_at = _parse_utc_timestamp(job.get("submitted_at"))
+    if submitted_at is None:
+        problems.append("runtime-smoke submitted_at is missing or invalid")
+    else:
+        now = _utc_now()
+        if submitted_at > now:
+            problems.append("runtime-smoke submitted_at is in the future")
+        elif now - submitted_at > _RUNTIME_SMOKE_MAX_AGE:
+            problems.append("runtime-smoke evidence is older than 24 hours")
+
+    queue_exports, export_problems = _parse_smoke_exports(str(queue.get("submit_args") or ""))
+    problems.extend(export_problems)
+    smoke_result_export = _single_export_value(
+        queue_exports, "SMOKE_RELEASE_RESULT_PATH", problems, label="SMOKE"
+    )
+    if smoke_result_export != expected_result_path:
+        problems.append("runtime-smoke queue result path does not match packet evidence")
+
+    if problems or submitted_at is None:
+        return None, list(dict.fromkeys(problems))
+    return (
+        _PrivateOpsEvidence(
+            reviewed_commit=reviewed_commit,
+            runtime_smoke_job=job,
+            runtime_smoke_queue=queue,
+            queue_exports=queue_exports,
+            submitted_at=submitted_at,
+        ),
+        [],
+    )
+
+
+def _consistent_alias(
+    values: list[Any], *, label: str, problems: list[str], required: bool = True
+) -> str | None:
+    """Require all supplied aliases for one legacy value to agree exactly.
+
+    Returns:
+        The one agreed value, or ``None`` when aliases are absent or divergent.
+    """
+    normalized = [str(value).strip() for value in values if _is_concrete(value)]
+    if required and len(normalized) != len(values):
+        problems.append(f"{label} is missing or not concrete across packet aliases")
+        return None
+    if not normalized:
+        if required:
+            problems.append(f"{label} is missing across packet aliases")
+        return None
+    if len(set(normalized)) != 1:
+        problems.append(f"{label} differs across packet aliases")
+        return None
+    return normalized[0]
+
+
+def _normalize_legacy_packet_aliases(  # noqa: C901
+    packet: dict[str, Any],
+    *,
+    expected_sha: str,
+    private_evidence: _PrivateOpsEvidence,
+    packet_queue_exports: dict[str, list[str]],
+) -> tuple[dict[str, Any], list[str]]:
+    """Normalize one known legacy packet shape after strict cross-store checks.
+
+    Modern packet fields are authoritative and are never overwritten.  Missing
+    legacy fields are synthesized only when the packet identity, accepted
+    runtime-smoke record, exact private-ledger evidence, and queue exports agree.
+    The implicit startup path is limited to the exact ``submit_and_record``
+    wrapper contract and its pinned helper/sentinel hashes.
+    Returns:
+        Normalized packet view and sanitized normalization problems.
+    """
+    normalized = dict(packet)
+    identity = dict(packet.get("identity")) if isinstance(packet.get("identity"), dict) else {}
+    accepted = (
+        dict(packet.get("accepted_runtime_smoke"))
+        if isinstance(packet.get("accepted_runtime_smoke"), dict)
+        else {}
+    )
+    contract = (
+        dict(packet.get("execution_contract"))
+        if isinstance(packet.get("execution_contract"), dict)
+        else {}
+    )
+    inputs = dict(packet.get("inputs")) if isinstance(packet.get("inputs"), dict) else {}
+    problems: list[str] = []
+
+    def export(field: str) -> str | None:
+        values = packet_queue_exports.get(field, [])
+        if len(values) != 1:
+            return None
+        return values[0]
+
+    if "runtime_smoke_receipt" not in inputs:
+        result_path = _consistent_alias(
+            [
+                identity.get("runtime_smoke_receipt_path"),
+                accepted.get("release_result_path"),
+                export("RELEASE_RUNTIME_SMOKE_RECEIPT_PATH"),
+            ],
+            label="runtime-smoke result path",
+            problems=problems,
+        )
+        result_sha = _consistent_alias(
+            [
+                identity.get("runtime_smoke_receipt_sha256"),
+                accepted.get("release_result_sha256"),
+                export("RELEASE_RUNTIME_SMOKE_RECEIPT_SHA256"),
+                _digest_value(private_evidence.runtime_smoke_job.get("evaluation_receipt_digest")),
+            ],
+            label="runtime-smoke result digest",
+            problems=problems,
+        )
+        if result_path is not None and result_sha is not None:
+            inputs["runtime_smoke_receipt"] = {"path": result_path, "sha256": result_sha}
+
+    if "private_wrapper" not in inputs:
+        wrapper_sha = _consistent_alias(
+            [
+                identity.get("private_wrapper_sha256"),
+                export("RELEASE_WRAPPER_SHA256"),
+            ],
+            label="private wrapper hash",
+            problems=problems,
+        )
+        wrapper_path = str(contract.get("private_script") or "").strip()
+        if not _is_concrete(wrapper_path):
+            problems.append("private wrapper path is missing from the legacy packet")
+        elif wrapper_sha is not None:
+            inputs["private_wrapper"] = {"path": wrapper_path, "sha256": wrapper_sha}
+
+    if "source" not in inputs:
+        source_commit = _consistent_alias(
+            [
+                identity.get("public_source_commit"),
+                accepted.get("public_source_commit"),
+                private_evidence.runtime_smoke_queue.get("expected_public_commit"),
+                private_evidence.runtime_smoke_job.get("public_commit"),
+                expected_sha,
+            ],
+            label="public source commit",
+            problems=problems,
+        )
+        if source_commit is not None:
+            inputs["source"] = {
+                "repository": "https://github.com/ll7/robot_sf_ll7",
+                "public_commit": source_commit,
+            }
+
+    traceability = packet.get("sentinel_traceability")
+    if traceability is None:
+        entrypoint = str(contract.get("canonical_entrypoint") or "").strip()
+        wrapper_sha = _consistent_alias(
+            [identity.get("private_wrapper_sha256"), export("RELEASE_WRAPPER_SHA256")],
+            label="private wrapper hash",
+            problems=problems,
+        )
+        helper_sha = _consistent_alias(
+            [identity.get("admission_helper_sha256"), export("RELEASE_STARTUP_HELPER_SHA256")],
+            label="startup helper hash",
+            problems=problems,
+        )
+        sentinel_sha = _consistent_alias(
+            [identity.get("startup_sentinel_sha256"), export("RELEASE_STARTUP_SENTINEL_SHA256")],
+            label="startup sentinel hash",
+            problems=problems,
+        )
+        reviewed_commit = str(contract.get("private_ops_reviewed_base_commit") or "").strip()
+        exported_commit = export("RELEASE_EXPECTED_PRIVATE_OPS_COMMIT")
+        implicit_startup = (
+            entrypoint.endswith("submit_and_record.sh")
+            and _is_concrete(contract.get("private_script"))
+            and wrapper_sha is not None
+            and helper_sha is not None
+            and sentinel_sha is not None
+            and _consistent_alias(
+                [reviewed_commit, exported_commit],
+                label="private ops reviewed commit",
+                problems=problems,
+            )
+            is not None
+        )
+        if implicit_startup:
+            if "startup_sentinel_required" not in contract:
+                contract["startup_sentinel_required"] = True
+            if "startup_prefix" not in contract:
+                contract["startup_prefix"] = 'source "$SLURM_STARTUP_SENTINEL"'
+            if "runtime_smoke_receipt_max_age_hours" not in contract:
+                contract["runtime_smoke_receipt_max_age_hours"] = 24
+            normalized["sentinel_traceability"] = {
+                "required": True,
+                "source": "$SLURM_STARTUP_SENTINEL",
+                "helper": "$SLURM_STARTUP_HELPER",
+                "startup_receipt": "$SLURM_STARTUP_RECEIPT",
+                "admission_trace": "$SLURM_ADMISSION_RECEIPT",
+                "required_identity_fields": sorted(_REQUIRED_PACKET_TRACE_FIELDS),
+            }
+        elif not entrypoint.endswith("submit_and_record.sh"):
+            problems.append("legacy startup normalization requires submit_and_record.sh")
+
+    normalized["identity"] = identity
+    normalized["accepted_runtime_smoke"] = accepted
+    normalized["execution_contract"] = contract
+    normalized["inputs"] = inputs
+    return normalized, list(dict.fromkeys(problems))
 
 
 def _sha256(path: Path) -> str:
@@ -815,10 +1456,10 @@ def _validate_packet_traceability(packet: dict[str, Any]) -> list[str]:
     return problems
 
 
-def _parse_release_exports(  # noqa: C901, PLR0912
-    submit_args: str,
+def _parse_prefixed_exports(  # noqa: C901, PLR0912
+    submit_args: str, *, prefix: str
 ) -> tuple[dict[str, list[str]], list[str]]:
-    """Parse exact ``RELEASE_*`` assignments from Slurm ``--export`` flags.
+    """Parse exact prefixed assignments from Slurm ``--export`` flags.
 
     Queue rows store the arguments passed through ``submit_and_record.sh``.
     They may use raw scheduler options or wrap them as ``--sbatch-arg``
@@ -876,14 +1517,14 @@ def _parse_release_exports(  # noqa: C901, PLR0912
             if assignment in {"ALL", "NONE"} or not assignment:
                 continue
             if "=" not in assignment:
-                if assignment.startswith("RELEASE_"):
-                    problems.append("private queue RELEASE export is missing a value")
+                if assignment.startswith(prefix):
+                    problems.append(f"private queue {prefix[:-1]} export is missing a value")
                 continue
             field, field_value = assignment.split("=", 1)
-            if not field.startswith("RELEASE_"):
+            if not field.startswith(prefix):
                 continue
-            if not re.fullmatch(r"RELEASE_[A-Za-z0-9_]+", field):
-                problems.append("private queue RELEASE export key is invalid")
+            if not re.fullmatch(re.escape(prefix) + r"[A-Za-z0-9_]+", field):
+                problems.append(f"private queue {prefix[:-1]} export key is invalid")
                 continue
             values.setdefault(field, []).append(field_value)
         index += 1
@@ -892,6 +1533,24 @@ def _parse_release_exports(  # noqa: C901, PLR0912
         if len(matching) > 1:
             problems.append(f"private queue {field} is duplicated")
     return values, problems
+
+
+def _parse_release_exports(submit_args: str) -> tuple[dict[str, list[str]], list[str]]:
+    """Parse exact ``RELEASE_*`` assignments from Slurm export flags.
+
+    Returns:
+        Export values and sanitized parser problems.
+    """
+    return _parse_prefixed_exports(submit_args, prefix="RELEASE_")
+
+
+def _parse_smoke_exports(submit_args: str) -> tuple[dict[str, list[str]], list[str]]:
+    """Parse exact ``SMOKE_*`` assignments from runtime-smoke export flags.
+
+    Returns:
+        Export values and sanitized parser problems.
+    """
+    return _parse_prefixed_exports(submit_args, prefix="SMOKE_")
 
 
 def _release_export_value(
@@ -905,6 +1564,20 @@ def _release_export_value(
     if len(matching) != 1:
         # The parser already records a sanitized duplicate diagnostic.  Do not
         # select a value from an ambiguous assignment list.
+        return None
+    return matching[0]
+
+
+def _single_export_value(
+    values: dict[str, list[str]], field: str, problems: list[str], *, label: str
+) -> str | None:
+    """Return one exact prefixed export value, rejecting missing/duplicates."""
+    matching = values.get(field, [])
+    if not matching:
+        problems.append(f"private queue {label} export {field} is missing")
+        return None
+    if len(matching) != 1:
+        problems.append(f"private queue {label} export {field} is duplicated")
         return None
     return matching[0]
 
@@ -1281,8 +1954,33 @@ def _validate_queue_resources(  # noqa: C901
     return problems
 
 
+def _is_successful_terminal_queue_row(row: dict[str, Any]) -> bool:
+    """Return whether a closed queue row carries the complete success contract.
+
+    Private queue reconciliation closes a successful campaign only after the
+    execution, artifact, evaluation, completion, and preservation fields all
+    agree.  Keep the public doctor independent of private-ops imports while
+    accepting exactly that narrow terminal shape; a terminal state by itself
+    is never evidence of a publishable campaign.
+    """
+    return (
+        str(row.get("state") or "").strip().lower() in _TERMINAL_QUEUE_STATES
+        and str(row.get("execution_status") or "").strip().lower() == "passed"
+        and str(row.get("artifact_status") or "").strip().lower() == "verified"
+        and str(row.get("evaluation_status") or "").strip().lower()
+        in _TERMINAL_QUEUE_EVALUATION_STATES
+        and str(row.get("completion_status") or "").strip().lower() == "complete"
+        and str(row.get("preservation_state") or "").strip().lower() == "preserved"
+    )
+
+
 def _validate_packet_queue(  # noqa: C901
-    packet: dict[str, Any], packet_path: Path, queue_path: Path | None, expected_sha: str
+    packet: dict[str, Any],
+    packet_path: Path,
+    queue_path: Path | None,
+    expected_sha: str,
+    *,
+    queue_rows: list[dict[str, Any]] | None = None,
 ) -> list[str]:
     """Validate private queue identity, hashes, and packet-bound resources.
 
@@ -1292,10 +1990,13 @@ def _validate_packet_queue(  # noqa: C901
     problems: list[str] = []
     if queue_path is None:
         return ["private queue path is required for final admission"]
-    try:
-        rows = _load_queue_rows(queue_path)
-    except (OSError, ValueError, yaml.YAMLError):
-        return ["private queue is missing or invalid"]
+    if queue_rows is None:
+        try:
+            rows = _load_queue_rows(queue_path)
+        except (OSError, ValueError, yaml.YAMLError):
+            return ["private queue is missing or invalid"]
+    else:
+        rows = queue_rows
     queue_id = packet.get("queue_id")
     if not isinstance(queue_id, str) or not _is_concrete(queue_id):
         return ["launch packet queue_id is missing or not concrete"]
@@ -1314,8 +2015,8 @@ def _validate_packet_queue(  # noqa: C901
         problems.append("private queue campaign identity does not match")
     if row.get("expected_public_commit") != expected_sha:
         problems.append("private queue source SHA does not match")
-    if row.get("state") not in {"ready", "queued"}:
-        problems.append("private queue row is not dispatchable")
+    if row.get("state") not in {"ready", "queued"} and not _is_successful_terminal_queue_row(row):
+        problems.append("private queue row is not dispatchable or a verified terminal success")
     # Host-specific private-ops roots differ between the local and submit
     # machines.  Compare the stable packet filename while the submit-args
     # digest binds the exact bytes.
@@ -1343,6 +2044,7 @@ def _validate_packet_contract(
     packet_path: Path,
     queue_path: Path | None,
     repo: Path | None,
+    queue_rows: list[dict[str, Any]] | None = None,
 ) -> list[str]:
     """Validate final private launch identity, route, hashes, and startup contract.
 
@@ -1361,11 +2063,19 @@ def _validate_packet_contract(
     problems.extend(_validate_packet_file_hashes(packet, repo))
     problems.extend(_validate_packet_execution_contract(packet))
     problems.extend(_validate_packet_traceability(packet))
-    problems.extend(_validate_packet_queue(packet, packet_path, queue_path, expected_sha))
+    problems.extend(
+        _validate_packet_queue(
+            packet,
+            packet_path,
+            queue_path,
+            expected_sha,
+            queue_rows=queue_rows,
+        )
+    )
     return list(dict.fromkeys(problems))
 
 
-def _cluster_check(
+def _cluster_check(  # noqa: C901, PLR0912
     packet_path: Path | None,
     expected_sha: str,
     *,
@@ -1374,6 +2084,7 @@ def _cluster_check(
     expected_campaign_id: str | None = None,
     queue_path: Path | None = None,
     repo: Path | None = None,
+    private_ops_repository: Path | None = None,
 ) -> ReleaseDoctorCheck:
     """Require an admitted launch packet bound to the frozen public SHA.
 
@@ -1405,7 +2116,44 @@ def _cluster_check(
         problems.append("launch packet is not dispatchable")
     if source_sha != expected_sha:
         problems.append("launch packet source SHA does not match")
+    queue_rows: list[dict[str, Any]] | None = None
+    private_evidence: _PrivateOpsEvidence | None = None
     if final:
+        if private_ops_repository is not None or (
+            isinstance(packet.get("execution_contract"), dict)
+            and packet["execution_contract"].get("private_ops_reviewed_base_commit")
+        ):
+            private_evidence, evidence_problems = _private_ops_evidence(
+                packet,
+                expected_sha,
+                private_ops_repository,
+            )
+            problems.extend(evidence_problems)
+        if queue_path is not None:
+            try:
+                queue_rows = _load_queue_rows(queue_path)
+            except (OSError, ValueError, yaml.YAMLError):
+                problems.append("private queue is missing or invalid")
+            else:
+                queue_id = packet.get("queue_id")
+                packet_queue_rows = [row for row in queue_rows if row.get("queue_id") == queue_id]
+                if len(packet_queue_rows) == 1:
+                    packet_queue_exports, export_problems = _parse_release_exports(
+                        str(packet_queue_rows[0].get("submit_args") or "")
+                    )
+                    problems.extend(export_problems)
+                else:
+                    packet_queue_exports = {}
+        else:
+            packet_queue_exports = {}
+        if private_evidence is not None:
+            packet, normalization_problems = _normalize_legacy_packet_aliases(
+                packet,
+                expected_sha=expected_sha,
+                private_evidence=private_evidence,
+                packet_queue_exports=packet_queue_exports,
+            )
+            problems.extend(normalization_problems)
         problems.extend(
             _validate_packet_contract(
                 packet,
@@ -1415,12 +2163,20 @@ def _cluster_check(
                 packet_path=packet_path,
                 queue_path=queue_path,
                 repo=repo,
+                queue_rows=queue_rows,
             )
         )
+    if private_evidence is not None and not problems:
+        summary = (
+            "launch packet admitted; exact private-ledger runtime-smoke job 14884 "
+            f"is fresh from pinned commit {private_evidence.reviewed_commit}"
+        )
+    else:
+        summary = "; ".join(problems) or "launch packet admitted"
     return ReleaseDoctorCheck(
         "cluster_admission",
         "pass" if not problems else "fail",
-        "; ".join(problems) or "launch packet admitted",
+        summary,
     )
 
 
@@ -1556,6 +2312,7 @@ def collect_release_doctor_report(  # noqa: PLR0913
     minimum_free_gib: float = 100.0,
     require_zenodo_webhook_disabled: bool = False,
     private_queue: Path | None = None,
+    private_ops_repository: Path | None = None,
     expected_campaign_id: str | None = None,
     final: bool = False,
     publication_mode: str | None = None,
@@ -1570,9 +2327,10 @@ def collect_release_doctor_report(  # noqa: PLR0913
             raise ValueError("publication_mode must be pre-publication or final")
         final = publication_mode == "final"
     cardinality_override = final and expected_cells != FULL_RELEASE_EXPECTED_EPISODE_CELLS
-    manifest_check, manifest, cfg = _manifest_check(
+    manifest_check, manifest, cfg = _manifest_check_for_repo(
         manifest_path,
         FULL_RELEASE_EXPECTED_EPISODE_CELLS if cardinality_override else expected_cells,
+        repo,
     )
     if cardinality_override:
         manifest_check = ReleaseDoctorCheck(
@@ -1591,6 +2349,7 @@ def collect_release_doctor_report(  # noqa: PLR0913
             expected_campaign_id=expected_campaign_id,
             queue_path=private_queue,
             repo=repo,
+            private_ops_repository=private_ops_repository,
         )
     else:
         # Preserve the lightweight preparation-mode contract for callers that
@@ -1604,19 +2363,12 @@ def collect_release_doctor_report(  # noqa: PLR0913
             "admission",
         )
     else:
-        checkpoint_kwargs = (
-            {
-                "repo_root": repo,
-                "checkpoint_path_map": checkpoint_path_map,
-            }
-            if checkpoint_path_map
-            else {}
-        )
-        checkpoint_check = _checkpoint_check(
+        checkpoint_check = _checkpoint_check_for_repo(
             cfg,
             manifest,
             checkpoint_receipt,
-            **checkpoint_kwargs,
+            repository_root=repo,
+            checkpoint_path_map=checkpoint_path_map,
         )
     checks = [
         _git_check(repo, expected_release_sha),

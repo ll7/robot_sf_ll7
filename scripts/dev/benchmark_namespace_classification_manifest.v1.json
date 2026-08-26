@@ -211,6 +211,7 @@
     "predictive_baseline_contract.py",
     "proxemic_ablation_report.py",
     "public_requirement_events.py",
+    "published_release_audit.py",
     "radius_binding_canary.py",
     "radius_rank_stability.py",
     "radius_sensitivity_gate0_audit.py",

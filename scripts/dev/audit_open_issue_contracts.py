@@ -200,11 +200,7 @@ def _fixture_pagination(
     if any(any(not isinstance(row, dict) for row in page) for page in raw_pages):
         raise ValueError("every fixture page row must be an object")
     pages = raw_pages[:max_pages]
-    complete = (
-        bool(pages)
-        and len(raw_pages) <= max_pages
-        and len(pages[-1]) < page_size
-    )
+    complete = bool(pages) and len(raw_pages) <= max_pages and len(pages[-1]) < page_size
     errors = []
     if not complete:
         errors.append("fixture pagination is incomplete under the configured page-size/page-limit")

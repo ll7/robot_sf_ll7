@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import io
 import json
+import subprocess
+import sys
+import tarfile
 import zipfile
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
@@ -15,9 +19,6 @@ from robot_sf.benchmark.published_release_audit import (
     _verify_internal_checksums,
     audit_published,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _write_bytes(path: Path, data: bytes) -> None:
@@ -158,3 +159,104 @@ def test_receipt_is_deterministic(tmp_path: Path) -> None:
         sort_keys=True,
     )
     assert first == second
+
+
+def test_tar_bundle_extraction(tmp_path: Path) -> None:
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    github.mkdir(parents=True)
+    zenodo.mkdir(parents=True)
+    bundle_path = github / "bundle.tar.gz"
+    with tarfile.open(bundle_path, "w:gz") as tf:
+        data = b"member-data"
+        info = tarfile.TarInfo("manifest.json")
+        info.size = len(data)
+        tf.addfile(info, io.BytesIO(data))
+    _write_bytes(zenodo / "bundle.tar.gz", bundle_path.read_bytes())
+    receipt = audit_published(tag="t", doi="10.5281/zenodo.1", github_dir=github, zenodo_dir=zenodo)
+    assert receipt["ok"] is True
+    assert receipt["observations"]["bundle"] == "bundle.tar.gz"
+    assert receipt["observations"]["bundle_member_count"] == 1
+
+
+def test_checksums_json_sidecar(tmp_path: Path) -> None:
+    extracted = tmp_path / "extracted"
+    extracted.mkdir(parents=True)
+    (extracted / "file.txt").write_text("content")
+    (extracted / "checksums.json").write_text(
+        json.dumps({"file.txt": sha256_file(extracted / "file.txt")})
+    )
+    problems = _verify_internal_checksums(extracted, ["file.txt", "checksums.json"])
+    assert problems == []
+
+
+def test_checksums_json_malformed_reports(tmp_path: Path) -> None:
+    extracted = tmp_path / "extracted"
+    extracted.mkdir(parents=True)
+    (extracted / "checksums.json").write_text("{not-json")
+    problems = _verify_internal_checksums(extracted, ["checksums.json"])
+    assert any("not valid JSON" in problem for problem in problems)
+
+
+def test_cli_main_passes(tmp_path: Path) -> None:
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    for channel in (github, zenodo):
+        _make_bundle(channel / "bundle.zip")
+    script = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "published_release_audit.py"
+    )
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--tag",
+            "paper-matrix-v2-h600-s30",
+            "--doi",
+            "10.5281/zenodo.1234567",
+            "--github-dir",
+            str(github),
+            "--zenodo-dir",
+            str(zenodo),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0
+    receipt = json.loads(proc.stdout)
+    assert receipt["ok"] is True
+
+
+def test_cli_main_missing_channel_returns_one(tmp_path: Path) -> None:
+    github = tmp_path / "github"
+    github.mkdir()
+    script = (
+        Path(__file__).resolve().parents[2]
+        / "robot_sf"
+        / "benchmark"
+        / "published_release_audit.py"
+    )
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--tag",
+            "t",
+            "--doi",
+            "10.5281/zenodo.1",
+            "--github-dir",
+            str(github),
+            "--zenodo-dir",
+            str(tmp_path / "missing"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 1
+    receipt = json.loads(proc.stdout)
+    assert receipt["ok"] is False

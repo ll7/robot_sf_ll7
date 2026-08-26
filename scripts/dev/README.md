@@ -88,6 +88,26 @@ helpers (issue #7666):
 Focused tests live in `tests/dev/test_ci_helpers.py`; the workflow-contract parity
 checks live in `tests/test_ci_script_contract.py`.
 
+## Open-issue goal-autopilot preparation
+
+[`prepare_open_issue_contracts.py`](prepare_open_issue_contracts.py) consumes the
+report-only `open_issue_contract_audit.v1` output from
+[`audit_open_issue_contracts.py`](audit_open_issue_contracts.py) and emits per-issue
+`goal-autopilot` preparation packets (issue #7929). Plan, render, and verify modes
+are report-only; apply requires an explicit reviewed plan and a bounded, CAS-guarded
+batch.
+
+```bash
+uv run python scripts/dev/prepare_open_issue_contracts.py \
+  --audit-json /tmp/open_issue_audit.json \
+  --plan-json /tmp/open_issue_preparation_plan.json \
+  --batch-id <stable-batch-id>
+```
+
+See [`docs/ai/open-issue-contract-preparation.md`](../../docs/ai/open-issue-contract-preparation.md)
+for the operator contract. Focused offline tests live in
+`tests/dev/test_prepare_open_issue_contracts.py`.
+
 ## Classification rule
 
 - Required automatic enforcement belongs in an explicit workflow or readiness

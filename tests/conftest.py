@@ -407,6 +407,18 @@ _FAST_FILES = {
     # exact-head changed-coverage gate (see #7282).
     "test_occupancy_grid.py",
     "test_occupancy_grid_helpers.py",
+    # Published-release audit tests are deterministic pure-contract coverage
+    # for the changed release audit module; keep them in fast shards for the
+    # exact-head changed-coverage gate (issue #7936).
+    "test_published_release_audit.py",
+    # Effective algorithm-branch tests are deterministic pure-contract coverage
+    # for the changed release branch module; keep them in fast shards for the
+    # exact-head changed-coverage gate (issue #7937).
+    "test_effective_algorithm_branches.py",
+    # Release tag/SHA identity tests are deterministic pure-contract coverage
+    # for the changed release identity module; keep them in fast shards for the
+    # exact-head changed-coverage gate (issue #7938).
+    "test_release_tag_identity.py",
     # The trace-dossier contract tests exercise lightweight, diagnostic-only
     # export/render paths required by the exact-head changed-coverage gate.
     "test_export_trace_dossier.py",

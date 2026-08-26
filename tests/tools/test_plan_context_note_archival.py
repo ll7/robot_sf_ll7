@@ -11,6 +11,7 @@ import pytest
 import yaml
 
 from scripts.tools import plan_context_note_archival as planner
+from tests.support.environment_guards import configure_git_identity, git_identity_environment
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -27,14 +28,11 @@ def _write(repo: Path, path: str, text: str) -> None:
 
 
 def _commit(repo: Path, message: str, *, iso_date: str) -> None:
-    env = {
-        "GIT_AUTHOR_DATE": iso_date,
-        "GIT_COMMITTER_DATE": iso_date,
-        "GIT_AUTHOR_NAME": "Test Author",
-        "GIT_AUTHOR_EMAIL": "test@example.com",
-        "GIT_COMMITTER_NAME": "Test Author",
-        "GIT_COMMITTER_EMAIL": "test@example.com",
-    }
+    env = git_identity_environment(
+        {"GIT_AUTHOR_DATE": iso_date, "GIT_COMMITTER_DATE": iso_date},
+        name="Test Author",
+        email="test@example.com",
+    )
     _run(repo, "git", "add", ".")
     _run(repo, "git", "commit", "-m", message, env=env)
 
@@ -43,8 +41,7 @@ def _repo(tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
     repo.mkdir()
     _run(repo, "git", "init")
-    _run(repo, "git", "config", "user.name", "Test Author")
-    _run(repo, "git", "config", "user.email", "test@example.com")
+    configure_git_identity(repo, name="Test Author", email="test@example.com")
     _write(repo, "docs/context/INDEX.md", "# Index\n")
     _write(repo, "docs/context/README.md", "# Context\n")
     _commit(repo, "base", iso_date="2026-01-01T00:00:00+00:00")

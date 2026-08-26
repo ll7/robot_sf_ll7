@@ -14,8 +14,11 @@ import math
 import re
 from collections import Counter
 from collections.abc import Mapping
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from robot_sf.benchmark.analysis_trace import normalize_telemetry_profile
 from robot_sf.benchmark.camera_ready._config import (
@@ -34,7 +37,13 @@ from robot_sf.benchmark.camera_ready._run_state import (
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.map_runner.map_runner_trace import _scenario_id as _producer_scenario_id
 from robot_sf.benchmark.map_runner_identity import suite_key as _producer_suite_key
+from robot_sf.benchmark.map_runner_policies.map_runner_policy_resolution import (
+    _is_policy_search_candidate_manifest,
+    _parse_algo_config,
+    _resolve_policy_search_candidate_runtime,
+)
 from robot_sf.benchmark.release_protocol import (
     STRESS_SMOKE_EXPECTED_DT,
     STRESS_SMOKE_EXPECTED_EPISODE_CELLS,
@@ -414,11 +423,16 @@ def _read_campaign_summary(campaign_root: Path) -> tuple[dict[str, Any] | None, 
     try:
         path = resolve_campaign_artifact_path(campaign_root, "reports/campaign_summary.json")
     except (OSError, ValueError) as exc:
-        return None, f"campaign summary cannot be read: {exc}"
+        category = (
+            "symlink is unsafe" if "symlink" in str(exc).lower() else "path is missing or unsafe"
+        )
+        return None, f"campaign summary cannot be read: campaign_summary.json {category}"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return None, f"campaign summary cannot be read: {exc}"
+    except OSError:
+        return None, "campaign summary cannot be read"
+    except json.JSONDecodeError:
+        return None, "campaign summary contains invalid JSON"
     if not isinstance(payload, dict):
         return None, "campaign summary must be a JSON object"
     return payload, None
@@ -438,13 +452,13 @@ def _read_episode_rows(path: Path) -> tuple[list[dict[str, Any]], str | None]:
                     continue
                 try:
                     payload = json.loads(raw_line)
-                except json.JSONDecodeError as exc:
-                    return [], f"{path}:{line_number}: invalid JSON: {exc}"
+                except json.JSONDecodeError:
+                    return [], f"episode artifact line {line_number}: invalid JSON"
                 if not isinstance(payload, dict):
-                    return [], f"{path}:{line_number}: episode row must be an object"
+                    return [], f"episode artifact line {line_number}: episode row must be an object"
                 rows.append(payload)
-    except OSError as exc:
-        return [], f"{path}: cannot read episode artifact: {exc}"
+    except OSError:
+        return [], "cannot read episode artifact"
     return rows, None
 
 
@@ -461,14 +475,22 @@ def _read_campaign_object(
         return None, f"{filename} contains a symlink component"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return None, f"{filename} cannot be read: {exc}"
+    except OSError:
+        return None, f"{filename} cannot be read"
+    except json.JSONDecodeError:
+        return None, f"{filename} contains invalid JSON"
     if not isinstance(payload, dict):
         return None, f"{filename} must contain a JSON object"
     return payload, None
 
 
-def _declared_path_matches(raw_path: Any, *, expected_path: Path, campaign_root: Path) -> bool:
+def _declared_path_matches(
+    raw_path: Any,
+    *,
+    expected_path: Path,
+    campaign_root: Path,
+    source_repository_root: Path | None = None,
+) -> bool:
     """Match a producer path against a trusted repository asset.
 
     Returns:
@@ -478,15 +500,47 @@ def _declared_path_matches(raw_path: Any, *, expected_path: Path, campaign_root:
         return False
     candidate = Path(raw_path.strip())
     expected = expected_path.resolve()
+    trusted_root = Path(source_repository_root or get_repository_root()).resolve()
     candidates = (
         (candidate.resolve(),)
         if candidate.is_absolute()
         else (
-            (get_repository_root() / candidate).resolve(),
+            (trusted_root / candidate).resolve(),
             (campaign_root / candidate).resolve(),
         )
     )
     return any(item == expected for item in candidates)
+
+
+def _source_repository_path(raw_path: Any, source_repository_root: Path) -> Path:
+    """Resolve a canonical source path relative to the trusted source checkout.
+
+    Returns:
+        Absolute path anchored at ``source_repository_root``.
+
+    Raises:
+        ValueError: If an absolute path is outside both the trusted source and validator roots.
+    """
+    path = Path(str(raw_path))
+    source_root = source_repository_root.resolve()
+    validator_root = get_repository_root().resolve()
+    if not path.is_absolute():
+        resolved = (source_root / path).resolve()
+        try:
+            resolved.relative_to(source_root)
+        except ValueError as exc:
+            raise ValueError("source path escapes trusted repository root") from exc
+        return resolved
+    resolved = path.resolve()
+    try:
+        relative = resolved.relative_to(source_root)
+    except ValueError:
+        try:
+            relative = resolved.relative_to(validator_root)
+        except ValueError as exc:
+            raise ValueError("source path is outside trusted repositories") from exc
+        return (source_root / relative).resolve()
+    return (source_root / relative).resolve()
 
 
 def _stress_seed_policy_payload(
@@ -710,6 +764,7 @@ def _stress_episode_provenance_blockers(  # noqa: C901, PLR0912, PLR0913, PLR091
     episodes_path: Path,
     *,
     campaign_root: Path,
+    source_repository_root: Path | None = None,
     planner_key: str,
     expected_algo: str,
     expected_source_commit: str,
@@ -725,19 +780,20 @@ def _stress_episode_provenance_blockers(  # noqa: C901, PLR0912, PLR0913, PLR091
         Blockers for missing, stale, or mismatched sidecar bindings.
     """
     blockers: list[str] = []
+    trusted_source_root = Path(source_repository_root or get_repository_root()).resolve()
     sidecar_path = episodes_path.with_name(f"{episodes_path.name}.provenance.json")
     if _path_has_symlink_component(sidecar_path) or not sidecar_path.is_file():
         return [f"planner {planner_key} episode provenance sidecar is missing"]
     try:
         payload = json.loads(sidecar_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        return [f"planner {planner_key} episode provenance sidecar cannot be read: {exc}"]
+    except (OSError, json.JSONDecodeError):
+        return [f"planner {planner_key} episode provenance sidecar cannot be read"]
     if not isinstance(payload, Mapping):
         return [f"planner {planner_key} episode provenance sidecar must be an object"]
     try:
         validate_result_provenance_manifest(payload)
-    except (TypeError, ValueError) as exc:
-        blockers.append(f"planner {planner_key} episode provenance schema rejected: {exc}")
+    except (TypeError, ValueError):
+        blockers.append(f"planner {planner_key} episode provenance schema rejected")
 
     run = payload.get("run")
     run = run if isinstance(run, Mapping) else {}
@@ -762,7 +818,7 @@ def _stress_episode_provenance_blockers(  # noqa: C901, PLR0912, PLR0913, PLR091
     expected_identity_config = _config_hash(
         {
             "schema_path": str(
-                get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+                trusted_source_root / "robot_sf/benchmark/schemas/episode.schema.v1.json"
             ),
             "algo": expected_algo,
             "algo_config_path": str(expected_algo_config_path)
@@ -779,11 +835,14 @@ def _stress_episode_provenance_blockers(  # noqa: C901, PLR0912, PLR0913, PLR091
 
     inputs = payload.get("inputs")
     inputs = inputs if isinstance(inputs, Mapping) else {}
-    schema_path = get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+    schema_path = trusted_source_root / "robot_sf/benchmark/schemas/episode.schema.v1.json"
     schema_input = inputs.get("schema_path")
     schema_input = schema_input if isinstance(schema_input, Mapping) else {}
     if not _declared_path_matches(
-        schema_input.get("path"), expected_path=schema_path, campaign_root=campaign_root
+        schema_input.get("path"),
+        expected_path=schema_path,
+        campaign_root=campaign_root,
+        source_repository_root=trusted_source_root,
     ):
         blockers.append(f"planner {planner_key} sidecar schema path is not repository-pinned")
     try:
@@ -799,6 +858,7 @@ def _stress_episode_provenance_blockers(  # noqa: C901, PLR0912, PLR0913, PLR091
         scenario_input.get("path"),
         expected_path=expected_scenario_path,
         campaign_root=campaign_root,
+        source_repository_root=trusted_source_root,
     ):
         blockers.append(f"planner {planner_key} sidecar scenario path is not release-pinned")
     if str(scenario_input.get("sha256", "")).strip().lower() != expected_scenario_hash:
@@ -820,6 +880,7 @@ def _stress_episode_provenance_blockers(  # noqa: C901, PLR0912, PLR0913, PLR091
             config_input.get("path"),
             expected_path=expected_algo_config_path,
             campaign_root=campaign_root,
+            source_repository_root=trusted_source_root,
         ):
             blockers.append(f"planner {planner_key} sidecar algorithm config path is not pinned")
         try:
@@ -841,7 +902,10 @@ def _stress_episode_provenance_blockers(  # noqa: C901, PLR0912, PLR0913, PLR091
     else:
         artifact = episode_artifacts[0]
         if not _declared_path_matches(
-            artifact.get("path"), expected_path=episodes_path, campaign_root=campaign_root
+            artifact.get("path"),
+            expected_path=episodes_path,
+            campaign_root=campaign_root,
+            source_repository_root=trusted_source_root,
         ):
             blockers.append(f"planner {planner_key} sidecar raw artifact is not the run artifact")
         try:
@@ -899,6 +963,7 @@ def _stress_episode_provenance_blockers(  # noqa: C901, PLR0912, PLR0913, PLR091
             sidecar_row.get("raw_artifact"),
             expected_path=episodes_path,
             campaign_root=campaign_root,
+            source_repository_root=trusted_source_root,
         ):
             blockers.append(
                 f"planner {planner_key} sidecar row {row_index} raw artifact is not bound"
@@ -1584,6 +1649,7 @@ def _result_provenance_scenarios(
 def _resolve_expected_matrix_axes(  # noqa: C901
     manifest: Any,
     campaign_config: Any | None,
+    source_repository_root: Path | None = None,
 ) -> tuple[tuple[str, ...], tuple[int, ...], list[str]]:
     """Resolve the exact scenario/seed axes pinned by the manifest and campaign config.
 
@@ -1595,16 +1661,19 @@ def _resolve_expected_matrix_axes(  # noqa: C901
         config_path = getattr(manifest, "canonical_campaign_config_path", None)
         if config_path is not None:
             try:
-                campaign_config = load_campaign_config(config_path)
-            except (OSError, ValueError, KeyError, TypeError) as exc:
-                blockers.append(f"canonical campaign config cannot be resolved: {exc}")
+                source_root = Path(source_repository_root or get_repository_root()).resolve()
+                campaign_config = load_campaign_config(
+                    _source_repository_path(config_path, source_root)
+                )
+            except (OSError, ValueError, KeyError, TypeError):
+                blockers.append("canonical campaign config cannot be resolved")
     if campaign_config is not None:
         try:
             scenarios = _load_campaign_scenarios(campaign_config)
             scenario_ids = tuple(_scenario_id(scenario) for scenario in scenarios)
             seeds = tuple(_resolved_seed_inventory(scenarios))
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            blockers.append(f"resolved campaign matrix cannot be loaded: {exc}")
+        except (OSError, ValueError, KeyError, TypeError):
+            blockers.append("resolved campaign matrix cannot be loaded")
             return (), (), blockers
         if any(not scenario_id for scenario_id in scenario_ids):
             blockers.append("resolved campaign matrix contains an empty scenario identifier")
@@ -1653,7 +1722,9 @@ def _full_release_planner_items(candidates: Any) -> tuple[tuple[Any, Any], ...]:
 
 
 def _full_release_planner_candidates(
-    manifest: Any, campaign_config: Any | None
+    manifest: Any,
+    campaign_config: Any | None,
+    source_repository_root: Path | None = None,
 ) -> tuple[Any, list[str]]:
     """Resolve the source of the publication planner roster.
 
@@ -1671,14 +1742,21 @@ def _full_release_planner_candidates(
     if config_path is None:
         return None, blockers
     try:
-        candidates = getattr(load_campaign_config(config_path), "planners", None)
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        blockers.append(f"canonical campaign planner roster cannot be resolved: {exc}")
+        source_root = Path(source_repository_root or get_repository_root()).resolve()
+        candidates = getattr(
+            load_campaign_config(_source_repository_path(config_path, source_root)),
+            "planners",
+            None,
+        )
+    except (OSError, ValueError, KeyError, TypeError):
+        blockers.append("canonical campaign planner roster cannot be resolved")
     return candidates, blockers
 
 
 def _full_release_campaign_config(
-    manifest: Any, campaign_config: Any | None
+    manifest: Any,
+    campaign_config: Any | None,
+    source_repository_root: Path | None = None,
 ) -> tuple[Any | None, list[str]]:
     """Resolve the canonical config required for arm-bound publication provenance.
 
@@ -1691,20 +1769,26 @@ def _full_release_campaign_config(
     if config_path is None:
         return None, ["canonical campaign config is required for full-release provenance"]
     try:
-        return load_campaign_config(config_path), []
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        return None, [f"canonical campaign config cannot be resolved for provenance: {exc}"]
+        source_root = Path(source_repository_root or get_repository_root()).resolve()
+        return load_campaign_config(_source_repository_path(config_path, source_root)), []
+    except (OSError, ValueError, KeyError, TypeError):
+        return None, ["canonical campaign config cannot be resolved for provenance"]
 
 
 def _full_release_algorithm_roster(
-    manifest: Any, campaign_config: Any | None, planner_keys: tuple[str, ...]
+    manifest: Any,
+    campaign_config: Any | None,
+    planner_keys: tuple[str, ...],
+    source_repository_root: Path | None = None,
 ) -> tuple[dict[str, str], list[str]]:
     """Resolve the expected algorithm for every publication-grade planner arm.
 
     Returns:
         An arm-to-algorithm mapping and blockers for an unavailable or conflicting roster.
     """
-    candidates, blockers = _full_release_planner_candidates(manifest, campaign_config)
+    candidates, blockers = _full_release_planner_candidates(
+        manifest, campaign_config, source_repository_root
+    )
     algorithms: dict[str, str] = {}
     items = _full_release_planner_items(candidates)
     for raw_key, raw_algo in items:
@@ -1727,6 +1811,161 @@ def _full_release_algorithm_roster(
         if unexpected:
             blockers.append(f"full-release planner algorithm roster has unexpected {unexpected!r}")
     return algorithms, blockers
+
+
+def _full_release_nested_config_path(
+    raw_path: Any,
+    *,
+    config_anchor: Path,
+    source_repository_root: Path,
+    label: str,
+) -> Path:
+    """Resolve a candidate's nested config path inside the trusted source checkout.
+
+    The producer resolver accepts absolute paths and otherwise falls back to the process
+    working directory.  That is appropriate for an interactive run, but it is not a safe
+    publication provenance boundary: a validator must not resolve a nested candidate config
+    from an unrelated checkout or an external file.  Prefer the producer's config-relative
+    lookup when it exists, then apply the producer's repository-relative convention explicitly
+    against ``source_repository_root``.
+
+    Returns:
+        The resolved regular file path inside ``source_repository_root``.
+
+    Raises:
+        ValueError: If the declaration is malformed, escapes the source root, is symlinked, or
+            does not name a regular file.
+    """
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise ValueError(f"{label} must be a non-empty string")
+    source_root = source_repository_root.resolve()
+    raw = Path(raw_path.strip())
+    if raw.is_absolute():
+        lexical_candidate = raw.absolute()
+        if _path_has_symlink_component(lexical_candidate):
+            raise ValueError(f"{label} contains a symlink component")
+        candidate = raw.resolve()
+    else:
+        lexical_anchored = config_anchor / raw
+        if _path_has_symlink_component(lexical_anchored):
+            raise ValueError(f"{label} contains a symlink component")
+        anchored = lexical_anchored.resolve()
+        if anchored.is_file():
+            candidate = anchored
+        else:
+            lexical_source = source_root / raw
+            if _path_has_symlink_component(lexical_source):
+                raise ValueError(f"{label} contains a symlink component")
+            candidate = lexical_source.resolve()
+    try:
+        candidate.relative_to(source_root)
+    except ValueError as exc:
+        raise ValueError(f"{label} is outside trusted source repository root") from exc
+    if _path_has_symlink_component(candidate):
+        raise ValueError(f"{label} contains a symlink component")
+    if not candidate.is_file():
+        raise ValueError(f"{label} does not name a regular file")
+    return candidate
+
+
+def _full_release_candidate_config(  # noqa: C901
+    *,
+    planner_spec: Any,
+    source_repository_root: Path,
+    allowed_scenario_ids: set[str] | None = None,
+) -> tuple[Path | None, dict[str, Any] | None, str | None]:
+    """Load and structurally validate one arm's policy-search candidate config.
+
+    Returns:
+        The trusted top-level config path, normalized manifest, and an optional blocker.  All
+        nested ``base_config_path`` declarations are rewritten to source-root absolute paths so
+        the producer resolver cannot fall back to the validator process working directory.
+    """
+    raw_config_path = getattr(planner_spec, "algo_config_path", None)
+    if raw_config_path is None:
+        return None, None, None
+    source_root = source_repository_root.resolve()
+    try:
+        config_path = _source_repository_path(raw_config_path, source_root)
+        if _path_has_symlink_component(config_path) or not config_path.is_file():
+            raise ValueError("candidate algorithm config is not a regular trusted source file")
+        manifest = _parse_algo_config(str(config_path))
+        if not _is_policy_search_candidate_manifest(manifest):
+            return config_path, manifest, None
+
+        normalized = deepcopy(manifest)
+        if "base_config_path" in normalized:
+            normalized["base_config_path"] = str(
+                _full_release_nested_config_path(
+                    normalized["base_config_path"],
+                    config_anchor=config_path.parent,
+                    source_repository_root=source_root,
+                    label="candidate base_config_path",
+                )
+            )
+
+        raw_overrides = normalized.get("scenario_algo_overrides")
+        if raw_overrides is not None:
+            if not isinstance(raw_overrides, Mapping):
+                raise TypeError("scenario_algo_overrides must be a mapping")
+            validated_overrides: dict[str, Any] = {}
+            for raw_scenario_id, raw_override in raw_overrides.items():
+                if not isinstance(raw_scenario_id, str) or not raw_scenario_id.strip():
+                    raise TypeError("scenario_algo_overrides keys must be non-empty strings")
+                scenario_id = raw_scenario_id.strip()
+                if allowed_scenario_ids is not None and scenario_id not in allowed_scenario_ids:
+                    raise ValueError(
+                        "scenario_algo_overrides key is not in the canonical campaign matrix: "
+                        f"{scenario_id!r}"
+                    )
+                if not isinstance(raw_override, Mapping):
+                    raise TypeError(
+                        f"scenario_algo_overrides entries must be mappings ({scenario_id!r})"
+                    )
+                override = deepcopy(dict(raw_override))
+                if "algo" in override and (
+                    not isinstance(override["algo"], str) or not override["algo"].strip()
+                ):
+                    raise TypeError(
+                        f"scenario_algo_overrides[{scenario_id!r}].algo must be a non-empty string"
+                    )
+                if "params" in override and not isinstance(override["params"], Mapping):
+                    raise TypeError(
+                        f"scenario_algo_overrides[{scenario_id!r}].params must be a mapping"
+                    )
+                if "base_config_path" in override:
+                    override["base_config_path"] = str(
+                        _full_release_nested_config_path(
+                            override["base_config_path"],
+                            config_anchor=config_path.parent,
+                            source_repository_root=source_root,
+                            label=(f"scenario_algo_overrides[{scenario_id!r}].base_config_path"),
+                        )
+                    )
+                validated_overrides[scenario_id] = override
+            normalized["scenario_algo_overrides"] = validated_overrides
+        return config_path, normalized, None
+    except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
+        reason = str(exc)
+        safe_reason = next(
+            (
+                marker
+                for marker in (
+                    "scenario_algo_overrides entries must be mappings",
+                    "scenario_algo_overrides keys must be non-empty strings",
+                    "scenario_algo_overrides key is not in the canonical campaign matrix",
+                    "scenario_algo_overrides entries must be mappings",
+                    "scenario_algo_overrides algo must be a non-empty string",
+                    "scenario_algo_overrides params must be a mapping",
+                    "outside trusted source repository root",
+                    "contains a symlink component",
+                    "does not name a regular file",
+                )
+                if marker in reason
+            ),
+            "invalid canonical policy configuration",
+        )
+        return None, None, f"canonical planner policy config validation failed: {safe_reason}"
 
 
 def _full_release_row_contract_blockers(
@@ -1871,6 +2110,57 @@ def _full_release_row_contract_blockers(
         if not str(result_provenance.get("repo_commit", "")).strip():
             blockers.append(f"{prefix}: result_provenance.repo_commit is missing")
     return blockers
+
+
+def _full_release_effective_algorithm(
+    *,
+    planner_spec: Any,
+    base_algorithm: str,
+    scenario: Mapping[str, Any],
+    source_repository_root: Path | None = None,
+    allowed_scenario_ids: set[str] | None = None,
+) -> tuple[str | None, str | None]:
+    """Resolve one row's expected algorithm through the producer's policy resolver.
+
+    Policy-search arms may intentionally replace their base algorithm for a named scenario.
+    The release gate must therefore compare row metadata with the effective runtime algorithm,
+    while retaining the arm's base algorithm for sidecar/config binding.  Reusing the producer
+    resolver keeps the two paths deterministic and makes malformed candidate manifests fail
+    closed instead of silently falling back to the base algorithm.
+
+    Returns:
+        ``(algorithm, None)`` for a valid resolution, or ``(None, blocker)`` when the canonical
+        planner/config/scenario binding cannot be resolved.
+    """
+    scenario_id = _producer_scenario_id(dict(scenario))
+    if not scenario_id or scenario_id == "unknown":
+        return None, "canonical scenario is missing a producer-resolvable identifier"
+    try:
+        config_path, candidate_config, config_error = _full_release_candidate_config(
+            planner_spec=planner_spec,
+            source_repository_root=Path(source_repository_root or get_repository_root()).resolve(),
+            allowed_scenario_ids=allowed_scenario_ids,
+        )
+        if config_error is not None:
+            return None, f"{config_error} for scenario {scenario_id!r}"
+        effective_algorithm, _effective_config = _resolve_policy_search_candidate_runtime(
+            default_algo=str(base_algorithm).strip(),
+            algo_config_path=str(config_path) if config_path is not None else None,
+            scenario=dict(scenario),
+            algo_config=candidate_config,
+        )
+    except (OSError, TypeError, ValueError, yaml.YAMLError):
+        return (
+            None,
+            f"canonical planner policy resolution failed for scenario {scenario_id!r}",
+        )
+    normalized = str(effective_algorithm or "").strip().lower()
+    if not normalized:
+        return (
+            None,
+            f"canonical planner policy resolution returned an empty algorithm for {scenario_id!r}",
+        )
+    return normalized, None
 
 
 def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
@@ -2305,6 +2595,7 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
     *,
     manifest: Any,
     campaign_config: Any | None = None,
+    source_repository_root: Path | None = None,
 ) -> dict[str, Any]:
     """Validate the publication-grade S30/H600 campaign contract.
 
@@ -2326,6 +2617,12 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         }
 
     blockers: list[str] = []
+    trusted_source_root = Path(source_repository_root or get_repository_root()).resolve()
+    if not trusted_source_root.is_dir():
+        _append_blocker(
+            blockers,
+            "trusted source repository root is not a directory",
+        )
     expected_cells = getattr(manifest, "expected_episode_cells", None)
     expected_horizon = getattr(manifest, "expected_horizon_steps", None)
     planner_keys = tuple(str(key) for key in getattr(manifest, "planner_keys", ()))
@@ -2351,17 +2648,17 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
             f"manifest kinematics must be [{FULL_RELEASE_KINEMATICS!r}]",
         )
     resolved_campaign_config, config_resolution_blockers = _full_release_campaign_config(
-        manifest, campaign_config
+        manifest, campaign_config, trusted_source_root
     )
     for blocker in config_resolution_blockers:
         _append_blocker(blockers, blocker)
     expected_algorithms, algorithm_roster_blockers = _full_release_algorithm_roster(
-        manifest, resolved_campaign_config, planner_keys
+        manifest, resolved_campaign_config, planner_keys, trusted_source_root
     )
     for blocker in algorithm_roster_blockers:
         _append_blocker(blockers, blocker)
     scenario_ids, resolved_seeds, axis_blockers = _resolve_expected_matrix_axes(
-        manifest, resolved_campaign_config
+        manifest, resolved_campaign_config, trusted_source_root
     )
     for blocker in axis_blockers:
         _append_blocker(blockers, blocker)
@@ -2375,6 +2672,8 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         )
 
     planner_specs: dict[str, Any] = {}
+    resolved_scenarios: list[dict[str, Any]] = []
+    scenarios_by_producer_id: dict[str, dict[str, Any]] = {}
     expected_scenario_identity = ""
     expected_scenario_path: Path | None = None
     expected_scenario_hash = ""
@@ -2385,22 +2684,41 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         }
         try:
             resolved_scenarios = _load_campaign_scenarios(resolved_campaign_config)
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            _append_blocker(
-                blockers, f"campaign scenarios cannot be resolved for provenance: {exc}"
-            )
+        except (OSError, ValueError, KeyError, TypeError):
+            _append_blocker(blockers, "campaign scenarios cannot be resolved for provenance")
         else:
+            for scenario in resolved_scenarios:
+                if not isinstance(scenario, Mapping):
+                    _append_blocker(
+                        blockers,
+                        "campaign scenarios must be mappings for effective algorithm resolution",
+                    )
+                    continue
+                producer_scenario_id = _producer_scenario_id(dict(scenario))
+                if producer_scenario_id in scenarios_by_producer_id:
+                    _append_blocker(
+                        blockers,
+                        f"campaign scenarios contain duplicate producer identifier {producer_scenario_id!r}",
+                    )
+                    continue
+                scenarios_by_producer_id[producer_scenario_id] = dict(scenario)
             effective_scenarios = _result_provenance_scenarios(
                 resolved_campaign_config,
                 resolved_scenarios,
                 kinematics=FULL_RELEASE_KINEMATICS,
             )
             expected_scenario_identity = _config_hash(effective_scenarios)
-        expected_scenario_path = Path(resolved_campaign_config.scenario_matrix_path)
         try:
-            expected_scenario_hash = sha256_file(expected_scenario_path)
-        except OSError as exc:
-            _append_blocker(blockers, f"campaign scenario matrix cannot be hashed: {exc}")
+            expected_scenario_path = _source_repository_path(
+                resolved_campaign_config.scenario_matrix_path, trusted_source_root
+            )
+        except ValueError:
+            _append_blocker(blockers, "canonical scenario matrix path is not trusted")
+        try:
+            if expected_scenario_path is not None:
+                expected_scenario_hash = sha256_file(expected_scenario_path)
+        except OSError:
+            _append_blocker(blockers, "campaign scenario matrix cannot be hashed")
 
     summary, summary_error = _read_campaign_summary(campaign_root.resolve())
     if summary_error:
@@ -2472,6 +2790,8 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
         FULL_RELEASE_EXPECTED_EPISODE_CELLS // len(expected_arms) if expected_arms else 0
     )
     expected_source = str(campaign.get("git_hash", "")).strip().lower()
+    effective_algorithm_cache: dict[tuple[str, str], tuple[str | None, str | None]] = {}
+    allowed_scenario_ids = set(scenarios_by_producer_id)
 
     for index, entry in enumerate(runs):
         if not isinstance(entry, Mapping):
@@ -2521,8 +2841,8 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
                 if resolved_campaign_config is not None
                 else _resolve_integrity_artifact_path(campaign_root.resolve(), raw_path)
             )
-        except (OSError, ValueError) as exc:
-            _append_blocker(blockers, f"runs[{index}] episodes_path rejected: {exc}")
+        except (OSError, ValueError):
+            _append_blocker(blockers, f"runs[{index}] episodes_path rejected as missing or unsafe")
             continue
         rows, error = _read_episode_rows(episodes_path)
         if error:
@@ -2550,6 +2870,18 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
                     f"runs[{index}] cannot validate arm-bound provenance without scenarios",
                 )
             else:
+                try:
+                    expected_algo_config_path = (
+                        _source_repository_path(algo_config_path, trusted_source_root)
+                        if algo_config_path is not None
+                        else None
+                    )
+                except ValueError:
+                    expected_algo_config_path = None
+                    _append_blocker(
+                        blockers,
+                        f"runs[{index}] canonical algorithm config path is not trusted",
+                    )
                 for blocker in _stress_episode_provenance_blockers(
                     episodes_path,
                     campaign_root=campaign_root,
@@ -2559,18 +2891,43 @@ def validate_full_benchmark_release_acceptance(  # noqa: C901, PLR0912, PLR0915
                     expected_scenario_path=expected_scenario_path,
                     expected_scenario_hash=expected_scenario_hash,
                     expected_scenario_identity=expected_scenario_identity,
-                    expected_algo_config_path=(
-                        Path(algo_config_path) if algo_config_path is not None else None
-                    ),
+                    expected_algo_config_path=expected_algo_config_path,
+                    source_repository_root=trusted_source_root,
                     expected_rows=rows,
                 ):
                     _append_blocker(blockers, blocker)
         arm_identities: set[tuple[str, str, str, int]] = set()
         for row_index, row in enumerate(rows):
+            row_scenario_id = str(row.get("scenario_id", "")).strip()
+            row_expected_algo = expected_algo
+            if resolved_campaign_config is not None:
+                canonical_scenario = scenarios_by_producer_id.get(row_scenario_id)
+                if canonical_scenario is None:
+                    _append_blocker(
+                        blockers,
+                        f"runs[{index}].rows[{row_index}] scenario is not in the canonical campaign matrix",
+                    )
+                else:
+                    cache_key = (arm[0], row_scenario_id)
+                    if cache_key not in effective_algorithm_cache:
+                        effective_algorithm_cache[cache_key] = _full_release_effective_algorithm(
+                            planner_spec=planner_specs.get(arm[0]),
+                            base_algorithm=expected_algo,
+                            scenario=canonical_scenario,
+                            source_repository_root=trusted_source_root,
+                            allowed_scenario_ids=allowed_scenario_ids,
+                        )
+                    row_expected_algo, resolution_error = effective_algorithm_cache[cache_key]
+                    if resolution_error is not None:
+                        _append_blocker(
+                            blockers,
+                            f"runs[{index}].rows[{row_index}] {resolution_error}",
+                        )
+                        row_expected_algo = expected_algo
             for blocker in _full_release_row_contract_blockers(
                 row,
                 prefix=f"runs[{index}].rows[{row_index}]",
-                expected_algo=expected_algo,
+                expected_algo=row_expected_algo or expected_algo,
             ):
                 _append_blocker(blockers, blocker)
             for marker_path, marker in _status_markers(

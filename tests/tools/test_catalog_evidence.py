@@ -7,6 +7,9 @@ pin the safety contract: deterministic inference, conservative
 idempotence.
 """
 
+# evidence-writer-exempt: tests write throwaway tmp_path evidence-catalog fixtures
+# for proposer diagnostics; nothing generated is committed as repository evidence.
+
 from __future__ import annotations
 
 import subprocess
@@ -28,6 +31,7 @@ from scripts.tools.catalog_evidence import (
     render_dry_run,
     render_entry_block,
 )
+from tests.support.environment_guards import configure_git_identity
 
 _EVIDENCE = "docs/context/evidence"
 
@@ -38,12 +42,7 @@ _EVIDENCE = "docs/context/evidence"
 def _make_git_repo(tmp_path: Path) -> Path:
     """Create a minimal git repo rooted at tmp_path and return it."""
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.name", "Test"], cwd=tmp_path, check=True, capture_output=True
-    )
-    subprocess.run(
-        ["git", "config", "user.email", "t@t"], cwd=tmp_path, check=True, capture_output=True
-    )
+    configure_git_identity(tmp_path, name="Test", email="t@t")
     return tmp_path
 
 

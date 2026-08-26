@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from robot_sf.adversarial.public_projection import find_offending_paths
 from robot_sf.benchmark.artifact_publication import (
     PublicationPreflightError,
     export_publication_bundle,
@@ -70,10 +71,83 @@ HISTORICAL_RELEASE_IDENTITY_TOKENS = frozenset({"0.0.3.post1", *HISTORICAL_ZENOD
 _TEXT_ARTIFACT_SUFFIXES = frozenset(
     {".cff", ".csv", ".html", ".json", ".jsonl", ".md", ".tex", ".tsv", ".txt", ".yaml", ".yml"}
 )
+_CAMPAIGN_LOCAL_PATH_FIELDS = frozenset(
+    {
+        "campaign_root",
+        "summary_json",
+        "table_csv",
+        "table_md",
+        "report_md",
+        "snqi_diagnostics_json",
+        "snqi_diagnostics_md",
+        "snqi_sensitivity_csv",
+        "assurance_fragment_json",
+        "assurance_fragment_md",
+        "assurance_fragment_svg",
+        "matrix_summary_json",
+        "matrix_summary_csv",
+        "seed_variability_json",
+        "seed_variability_csv",
+        "seed_episode_rows_csv",
+        "statistical_sufficiency_json",
+        "actuation_envelope_json",
+        "actuation_envelope_md",
+        "publication_bundle",
+    }
+)
+_CAMPAIGN_PUBLIC_RESULT_FIELDS = frozenset(
+    {
+        "campaign_id",
+        "total_runs",
+        "successful_runs",
+        "non_success_runs",
+        "accepted_unavailable_runs",
+        "unexpected_failed_runs",
+        "campaign_execution_status",
+        "evidence_status",
+        "row_status_summary",
+        "benchmark_success",
+        "status",
+        "status_reason",
+        "exit_code",
+        "benchmark_success_basis",
+        "core_successful_runs",
+        "core_total_runs",
+        "total_episodes",
+        "runtime_sec",
+        "campaign_integrity",
+        "warnings",
+        "soft_contract_warning",
+    }
+)
+_PUBLIC_RELEASE_ACCEPTANCE_FIELDS = frozenset(
+    {
+        "schema_version",
+        "status",
+        "benchmark_success",
+        "claim_boundary",
+        "expected_planner_arms",
+        "successful_planner_arms",
+        "expected_scenario_count",
+        "expected_seed_count",
+        "expected_episode_cells",
+        "observed_episode_rows",
+        "unique_episode_identities",
+        "missing_episode_identities",
+        "unexpected_episode_identities",
+        "source_commits",
+        "forbidden_status_counts",
+        "blockers",
+    }
+)
 
 
 class ReleaseArtifactIdentityError(ValueError):
     """Raised when a campaign artifact still carries a predecessor identity."""
+
+
+class ReleaseResultPrivacyError(ValueError):
+    """Raised when a release result could expose machine-local filesystem state."""
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -88,6 +162,44 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     """Write a JSON object to disk."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _public_campaign_result(run_payload: dict[str, Any]) -> dict[str, Any]:
+    """Project a campaign runner result onto its public, path-free release fields."""
+    unknown = set(run_payload) - _CAMPAIGN_LOCAL_PATH_FIELDS - _CAMPAIGN_PUBLIC_RESULT_FIELDS
+    if unknown:
+        raise ReleaseResultPrivacyError("campaign runner returned unsupported result fields")
+    projected = {
+        key: run_payload[key] for key in _CAMPAIGN_PUBLIC_RESULT_FIELDS if key in run_payload
+    }
+    if find_offending_paths(projected):
+        raise ReleaseResultPrivacyError("campaign runner result contains private filesystem data")
+    return projected
+
+
+def _print_public_result_file(path: Path) -> None:
+    """Emit the persisted public result after a second private-path check."""
+    payload = _read_json(path)
+    if find_offending_paths(payload):
+        raise ReleaseResultPrivacyError("persisted release result contains private filesystem data")
+    print(json.dumps(payload, indent=2))
+
+
+def _public_release_acceptance(acceptance: dict[str, Any]) -> dict[str, Any]:
+    """Project validator output onto its path-free publication contract."""
+    unknown = set(acceptance) - _PUBLIC_RELEASE_ACCEPTANCE_FIELDS
+    projected = {
+        key: acceptance[key] for key in _PUBLIC_RELEASE_ACCEPTANCE_FIELDS if key in acceptance
+    }
+    if unknown or find_offending_paths(projected):
+        return {
+            "schema_version": str(acceptance.get("schema_version", "unknown")),
+            "status": "invalid",
+            "benchmark_success": False,
+            "claim_boundary": "release acceptance diagnostics must be public and path-free",
+            "blockers": ["release acceptance diagnostics contained non-public fields"],
+        }
+    return projected
 
 
 def _campaign_summary_path(campaign_root: Path) -> Path:
@@ -112,6 +224,26 @@ def _required_repo_relative(path: Path) -> str:
         return resolved.relative_to(get_repository_root().resolve()).as_posix()
     except ValueError as exc:
         raise ValueError("release input must be inside the repository worktree") from exc
+
+
+def _public_release_invocation(manifest_argument: str, mode: str) -> str:
+    """Return a reproducible public entrypoint without machine-local launch paths.
+
+    The complete scheduler invocation remains in private campaign provenance.  The
+    publication record intentionally omits operational arguments such as output
+    roots and receipt locations because those values identify local filesystems.
+    """
+    manifest_path = _repo_relative(Path(manifest_argument))
+    return shlex.join(
+        [
+            "python",
+            "scripts/tools/run_benchmark_release.py",
+            "--manifest",
+            manifest_path,
+            "--mode",
+            mode,
+        ]
+    )
 
 
 def _current_source_commit() -> str:
@@ -669,8 +801,29 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         skip_publication_bundle=True,
         invoked_command=invoked_command,
     )
-    result.update(run_payload)
     campaign_root = Path(str(run_payload["campaign_root"])).resolve()
+    try:
+        result.update(_public_campaign_result(run_payload))
+    except ReleaseResultPrivacyError:
+        result.update(
+            {
+                "benchmark_success": False,
+                "status": "release_result_privacy_rejected",
+                "status_reason": "campaign result could not be projected without private paths",
+                "campaign_execution_status": "completed",
+                "evidence_status": "blocked",
+                "release_status": "release_result_privacy_rejected",
+                "release_status_reason": (
+                    "campaign result could not be projected without private paths"
+                ),
+                "release_benchmark_success": False,
+                "release_exit_code": 2,
+            }
+        )
+        release_dir = campaign_root / "release"
+        _write_json(release_dir / "release_result.json", result)
+        print(json.dumps(result, indent=2))
+        return 2
 
     post_manifest_validation: dict[str, Any] | None = None
     if stress_smoke:
@@ -708,7 +861,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
 
     release_provenance_kwargs: dict[str, Any] = {
         "campaign_root": campaign_root,
-        "invoked_command": invoked_command,
+        "invoked_command": _public_release_invocation(args.manifest, args.mode),
     }
     if stress_smoke:
         release_provenance_kwargs["source_commit"] = runtime_source_commit
@@ -808,10 +961,12 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         print(json.dumps(result, indent=2))
         return int(result["release_exit_code"])
 
-    release_acceptance = validate_full_benchmark_release_acceptance(
-        campaign_root,
-        manifest=manifest,
-        campaign_config=cfg,
+    release_acceptance = _public_release_acceptance(
+        validate_full_benchmark_release_acceptance(
+            campaign_root,
+            manifest=manifest,
+            campaign_config=cfg,
+        )
     )
     _record_release_acceptance(campaign_root, release_acceptance)
     result["release_acceptance"] = release_acceptance
@@ -936,13 +1091,14 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
                 "publication bundle failed the final self-consistency preflight"
             )
             result["release_exit_code"] = 2
-            _write_json(release_dir / "release_result.json", result)
-            print(json.dumps(result, indent=2))
+            release_result_path = release_dir / "release_result.json"
+            _write_json(release_result_path, result)
+            _print_public_result_file(release_result_path)
             return 2
     else:
         _write_json(release_dir / "release_result.json", result)
 
-    print(json.dumps(result, indent=2))
+    _print_public_result_file(release_dir / "release_result.json")
     return int(result["release_exit_code"])
 
 

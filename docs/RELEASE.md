@@ -279,6 +279,27 @@ S30/H600 config and manifest identity, but they do not change `pyproject.toml`,
 fresh Zenodo concept, checksums, claim boundary, and full-run evidence have been
 reviewed.
 
+### Benchmark-data tag identity (source-SHA binding)
+
+For future benchmark-data releases, any SHA-like component in the release tag
+must be derived from the **final immutable source SHA** — never from a
+preliminary planning/base SHA. The workflow:
+
+1. Freeze the final source commit first; record it as `source_sha` in the
+   manifest (the manifest also stores any `planning_base_sha` as a separate
+   provenance field).
+2. Derive SHA-bearing tag names from that final SHA (e.g.
+   `paper-matrix-<...>-<40-hex source_sha>`), or use an explicit semantic
+   identifier scheme that contains no SHA-like component.
+3. `robot-sf release doctor` rejects a SHA-bearing tag whose component
+   disagrees with the manifest `source_sha`; a planning/base SHA in a
+   SHA-bearing tag never satisfies the check. Short hex abbreviations must be
+   a prefix of the final source SHA or they fail closed.
+
+The published August 2026 tag (`paper-matrix-v2-h600-s30-2026-08-cd831d7582c1`)
+is immutable; its authoritative source identity is the manifest/bundle SHA
+(`b1d5ab6d…`), not the tag suffix. Do not rename or retarget it.
+
 ## Archive and Citation
 
 - ensure `CITATION.cff` remains current (aligned to the latest full release tag)

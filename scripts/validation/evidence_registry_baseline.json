@@ -290,6 +290,7 @@
       "uncommitted_artifact_missing_location": 2
     },
     "docs/context/evidence/issue_4683_release_assurance_case_example.json": {
+      "artifact_hash_mismatch": 1,
       "hash_without_artifact_path": 6
     },
     "docs/context/evidence/issue_4848_group_crossing_exemplars_2026-07/goal/classic_group_crossing_high_seed24_best/metadata.json": {
@@ -363,12 +364,12 @@
       "hash_without_artifact_path": 1
     }
   },
-  "generated_at": "2026-08-25T14:29:54Z",
+  "generated_at": "2026-08-26T04:32:19Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
     "by_code": {
-      "artifact_hash_mismatch": 15,
+      "artifact_hash_mismatch": 16,
       "config_missing_at_commit": 6,
       "dangling_commit": 20,
       "duplicate_campaign_id": 7,
@@ -380,6 +381,6 @@
       "uncommitted_artifact_missing_location": 150
     },
     "files_with_findings": 95,
-    "total_findings": 429
+    "total_findings": 430
   }
 }

@@ -27,6 +27,7 @@ from robot_sf.benchmark.release_protocol import (
     load_release_manifest,
     validate_release_manifest,
 )
+from robot_sf.benchmark.release_tag_identity import check_tag_source_consistency
 from robot_sf.benchmark.zenodo_publisher import build_session, read_token_file
 
 # These are the two repository-wide security and correctness workflows that
@@ -405,6 +406,10 @@ def _checkpoint_check(
 def _release_identity_check(manifest: Any, expected_base_sha: str, tag: str) -> ReleaseDoctorCheck:
     """Require the final v0.2 manifest to bind the exact source and tag.
 
+    Also enforces the prospective tag/SHA identity contract (issue #7938): a
+    SHA-bearing tag must be derived from the final immutable source SHA; a
+    planning/base SHA must never satisfy the tag identity check.
+
     Returns:
         Sanitized check result.
     """
@@ -418,6 +423,13 @@ def _release_identity_check(manifest: Any, expected_base_sha: str, tag: str) -> 
         problems.append("manifest latest-main base commit does not match")
     if manifest is None or getattr(manifest, "release_tag", None) != tag:
         problems.append("manifest release tag does not match")
+    source_sha = (
+        getattr(manifest, "source_sha", None)
+        or getattr(manifest, "release_sha", None)
+        or expected_base_sha
+    )
+    if isinstance(source_sha, str) and source_sha:
+        problems.extend(check_tag_source_consistency(tag, source_sha))
     return ReleaseDoctorCheck(
         "release_identity",
         "pass" if not problems else "fail",

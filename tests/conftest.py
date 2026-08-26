@@ -504,6 +504,10 @@ _FAST_FILES = {
     "sim_config_test.py",
     "unicycle_drive_test.py",
     "zone_sampling_test.py",
+    # Incident-to-scenario provenance contract tests are deterministic schema
+    # coverage for the changed benchmark producer; keep them in the exact-head
+    # fast lane for changed-coverage admission.
+    "test_incident_scenario_provenance.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

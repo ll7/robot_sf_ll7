@@ -230,6 +230,7 @@
     "release_resume_admission.py",
     "release_suite_contract.py",
     "release_suite_reference_validation.py",
+    "release_tag_identity.py",
     "report_crosswalk.py",
     "report_table.py",
     "research_answerability.py",

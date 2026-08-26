@@ -30,13 +30,9 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.common.optional_import import try_import
 
-try:  # pragma: no cover - availability depends on the merged base
-    from robot_sf.benchmark.release_tag_identity import (
-        check_tag_source_consistency,
-    )
-except ModuleNotFoundError:  # older bases before issue #7938 merged
-    check_tag_source_consistency = None  # type: ignore[assignment]
+_release_tag_identity = try_import("robot_sf.benchmark.release_tag_identity")
 
 SCHEMA = "published_release_audit.v1"
 
@@ -161,8 +157,8 @@ def _check_tag_source(tag: str, source_sha: str) -> list[str]:
     Returns:
         Problem strings; empty when the tag is consistent.
     """
-    if check_tag_source_consistency is not None:
-        return check_tag_source_consistency(tag, source_sha)
+    if _release_tag_identity is not None:
+        return _release_tag_identity.check_tag_source_consistency(tag, source_sha)
     suffix_match = re.search(r"[_-](?P<sha>[0-9a-f]{40})$", tag)
     if suffix_match and suffix_match.group("sha") != source_sha:
         return [

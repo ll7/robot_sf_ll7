@@ -71,6 +71,14 @@ def _v02_payload() -> dict[str, Any]:
             lambda payload: payload.update(latest_main_base_commit="short"),
             "latest_main_base_commit",
         ),
+        (
+            lambda payload: payload.update(source_sha="not-a-sha"),
+            "source_sha",
+        ),
+        (
+            lambda payload: payload.update(planning_base_sha="not-a-sha"),
+            "planning_base_sha",
+        ),
         (lambda payload: payload.update(matrix={}), "matrix.expected_episode_cells"),
         (lambda payload: payload["matrix"].pop("horizon_steps"), "matrix.horizon_steps"),
         (lambda payload: payload.update(publication=[]), "publication must be a mapping"),
@@ -150,3 +158,30 @@ def test_v02_validation_reports_pinned_asset_and_identity_drift(
     report = release_protocol.validate_release_manifest(drifted, campaign_config=cfg)
     assert report["status"] == "invalid"
     assert any(match in problem for problem in report["problems"])
+
+
+def test_future_benchmark_data_v02_requires_final_source_sha(tmp_path: Path) -> None:
+    """A future benchmark-data manifest cannot omit its final source identity."""
+    payload = _v02_payload()
+    payload["release_kind"] = "benchmark-data"
+    payload["release_tag"] = "future-benchmark-data"
+    path = tmp_path / "release-v0.2.yaml"
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="source_sha is required"):
+        release_protocol.load_release_manifest(path)
+
+
+def test_v02_manifest_keeps_source_and_planning_shas_separate(tmp_path: Path) -> None:
+    """The final source and planning/base identities are parsed independently."""
+    payload = _v02_payload()
+    source_sha = "b" * 40
+    planning_sha = "a" * 40
+    payload.update(source_sha=source_sha, planning_base_sha=planning_sha)
+    path = tmp_path / "release-v0.2.yaml"
+    path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    manifest = release_protocol.load_release_manifest(path)
+
+    assert manifest.source_sha == source_sha
+    assert manifest.planning_base_sha == planning_sha

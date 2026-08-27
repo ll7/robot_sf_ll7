@@ -295,6 +295,10 @@ preliminary planning/base SHA. The workflow:
    disagrees with the manifest `source_sha`; a planning/base SHA in a
    SHA-bearing tag never satisfies the check. Short hex abbreviations must be
    a prefix of the final source SHA or they fail closed.
+4. The publication contract cross-checks the final `source_sha` across the
+   campaign result, resolved manifest, publication provenance, and derived
+   receipt. Missing or conflicting future identity is a publication blocker;
+   an explicit semantic tag still requires the same source provenance.
 
 The published August 2026 tag (`paper-matrix-v2-h600-s30-2026-08-cd831d7582c1`)
 is immutable; its authoritative source identity is the manifest/bundle SHA

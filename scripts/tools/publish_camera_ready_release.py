@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import quote
 
 from loguru import logger
 
@@ -16,6 +18,7 @@ from robot_sf.benchmark.release_protocol import resolve_campaign_artifact_path
 from robot_sf.benchmark.release_publication_contract import (
     validate_release_publication_contract,
 )
+from robot_sf.benchmark.release_tag_identity import check_tag_source_consistency
 from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
@@ -155,6 +158,67 @@ def _validate_prerequisites(
     return archive_path, checksums_path, manifest_path, summary
 
 
+def _summary_source_sha(summary: dict[str, object]) -> str | None:  # noqa: C901
+    """Return one exact source SHA declared by the campaign summary.
+
+    Returns:
+        One normalized source SHA, or ``None`` when no source is declared.
+    """
+    candidates: list[str] = []
+    campaign = summary.get("campaign")
+    if isinstance(campaign, dict):
+        for key in ("source_sha", "source_commit", "git_hash"):
+            value = campaign.get(key)
+            if isinstance(value, str) and value.strip():
+                candidates.append(value.strip().lower())
+    release = summary.get("benchmark_release")
+    if isinstance(release, dict):
+        for key in ("source_sha", "source_commit"):
+            value = release.get(key)
+            if isinstance(value, str) and value.strip():
+                candidates.append(value.strip().lower())
+    acceptance = summary.get("full_release_acceptance")
+    if isinstance(acceptance, dict):
+        values = acceptance.get("source_commits")
+        if isinstance(values, list):
+            candidates.extend(
+                value.strip().lower()
+                for value in values
+                if isinstance(value, str) and value.strip()
+            )
+    if not candidates:
+        return None
+    if any(re.fullmatch(r"[0-9a-f]{40}", value) is None for value in candidates):
+        raise ValueError("campaign summary source identity must use exact 40-character Git SHAs")
+    distinct = set(candidates)
+    if len(distinct) != 1:
+        raise ValueError("campaign summary source identity fields disagree")
+    return next(iter(distinct))
+
+
+def _validate_source_identity(
+    summary: dict[str, object], *, tag: str, expected_source_sha: str | None
+) -> str | None:
+    """Bind the requested tag to the final source recorded by the campaign."""
+    expected = expected_source_sha.strip().lower() if expected_source_sha else None
+    if expected is not None and re.fullmatch(r"[0-9a-f]{40}", expected) is None:
+        raise ValueError("--expected-source-sha must be an exact 40-character lowercase SHA")
+    declared = _summary_source_sha(summary)
+    if expected is not None and declared is not None and declared != expected:
+        raise ValueError(
+            f"campaign summary source SHA {declared!r} does not match expected source {expected!r}"
+        )
+    source_sha = expected or declared
+    if source_sha is None:
+        raise ValueError(
+            "publication source SHA is missing; record the final immutable source before upload"
+        )
+    problems = check_tag_source_consistency(tag, source_sha)
+    if problems:
+        raise ValueError("Release tag/source identity blocked: " + "; ".join(problems))
+    return source_sha
+
+
 def _build_release_payload(
     *,
     campaign_root: Path,
@@ -284,8 +348,16 @@ def _check_release_collision(
             capture_output=True,
             text=True,
         )
-    except subprocess.CalledProcessError:
-        # `gh release view` exits non-zero when the release does not exist.
+    except subprocess.CalledProcessError as exc:
+        # Only an explicit not-found response means that creation is safe.
+        # Authentication, transport, or malformed-query errors are ambiguous
+        # live state and must not be treated as an unused tag.
+        detail = str(exc.stderr or exc.output or "")
+        if not re.search(r"(?:not found|does not exist|HTTP 404|status 404)", detail, re.I):
+            return (
+                f"cannot determine whether release {tag} exists: {detail or 'unknown error'}",
+                False,
+            )
         return None, False
     try:
         existing = json.loads(result.stdout)
@@ -304,7 +376,26 @@ def _check_release_collision(
     return None, True
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def _check_tag_collision(*, repo: str, tag: str, dry_run: bool) -> str | None:
+    """Fail closed when GitHub already has the tag planned for creation."""
+    if dry_run:
+        return None
+    endpoint = f"repos/{repo}/git/ref/tags/{quote(tag, safe='')}"
+    result = subprocess.run(
+        ["gh", "api", endpoint],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return f"tag {tag} already exists; refusing to retarget or overwrite it"
+    detail = str(result.stderr or result.stdout or "")
+    if re.search(r"(?:not found|does not exist|HTTP 404|status 404)", detail, re.I):
+        return None
+    return f"cannot determine whether tag {tag} exists: {detail or 'unknown error'}"
+
+
+def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
     """Run guided publication workflow and return POSIX exit code."""
     parser = _build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
@@ -318,6 +409,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     archive_path, checksums_path, manifest_path, summary = _validate_prerequisites(
         campaign_root, expected_release_tag=str(args.tag)
     )
+    source_sha = _validate_source_identity(
+        summary,
+        tag=str(args.tag),
+        expected_source_sha=(
+            str(args.expected_source_sha) if args.expected_source_sha is not None else None
+        ),
+    )
     payload = _build_release_payload(
         campaign_root=campaign_root,
         repo=str(args.repo),
@@ -327,10 +425,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         manifest_path=manifest_path,
         summary=summary,
     )
+    payload["source_sha"] = source_sha
 
     draft_create_command: list[str] | None = None
     if args.create_draft:
-        source_sha = str(args.expected_source_sha).strip().lower()
+        assert source_sha is not None
         title, notes = _resolve_release_identity(
             summary,
             tag=str(args.tag),
@@ -345,6 +444,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         if blocker is not None:
             raise SystemExit(f"Release draft admission blocked: {blocker}")
+        if not exists_at_target:
+            blocker = _check_tag_collision(
+                repo=str(args.repo),
+                tag=str(args.tag),
+                dry_run=not args.execute_upload,
+            )
+            if blocker is not None:
+                raise SystemExit(f"Release tag admission blocked: {blocker}")
         draft_create_command = (
             None
             if exists_at_target

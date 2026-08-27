@@ -157,6 +157,43 @@ def test_zero_distance_guard_stops_and_reports_degraded() -> None:
     assert "zero_distance_stop" in diagnostics["active_constraints"]
 
 
+def test_goal_reached_stops_without_inventing_a_heading() -> None:
+    planner = ForceCoupledPotentialFieldPlanner()
+    planner.plan(_observation(goal=(4.0, 0.0)))
+
+    command = planner.plan(_observation(robot=(4.0, 0.0, math.pi / 2), goal=(4.0, 0.0)))
+    diagnostics = planner.diagnostics()
+
+    assert command == (0.0, 0.0)
+    assert diagnostics["raw_command"] == [0.0, 0.0]
+    assert diagnostics["goal_reached"] is True
+    assert diagnostics["force_cancellation_guard"] is False
+    assert diagnostics["status"] == "ok"
+    assert "goal_reached_stop" in diagnostics["active_constraints"]
+
+
+def test_force_cancellation_stops_and_reports_degraded() -> None:
+    planner = ForceCoupledPotentialFieldPlanner()
+    command = planner.plan(
+        _observation(
+            robot=(0.0, 0.0, math.pi / 2),
+            goal=(4.0, 0.0),
+            # With the default weights and influence radius, d=1.2 m makes
+            # the -x repulsion exactly cancel the unit +x attraction.
+            obstacles=[(1.2, 0.0)],
+        )
+    )
+    diagnostics = planner.diagnostics()
+
+    assert command == (0.0, 0.0)
+    assert diagnostics["raw_command"] == [0.0, 0.0]
+    assert diagnostics["goal_reached"] is False
+    assert diagnostics["force_cancellation_guard"] is True
+    assert diagnostics["status"] == "degraded"
+    assert diagnostics["step_degraded"] is True
+    assert "force_cancellation_stop" in diagnostics["active_constraints"]
+
+
 def test_speed_and_rate_limits_are_hard_predicates() -> None:
     config = ForceCoupledPotentialFieldConfig(
         max_linear_speed=0.5,
@@ -427,6 +464,44 @@ def test_invalid_occupancy_grid_values_fail_closed(invalid_value: float) -> None
     }
 
     with pytest.raises(ValueError, match=r"finite and within \[0, 1\]"):
+        planner.plan(observation)
+    assert planner.diagnostics()["status"] == "invalid_input"
+
+
+@pytest.mark.parametrize(
+    "grid_update",
+    [
+        {"occupancy_grid": np.zeros((3, 3), dtype=np.float32)},
+        {
+            "occupancy_grid": np.zeros((3, 3, 3), dtype=np.float32),
+            "occupancy_grid_meta_origin": None,
+            "occupancy_grid_meta_resolution": None,
+            "occupancy_grid_meta_size": None,
+            "occupancy_grid_meta_use_ego_frame": None,
+            "occupancy_grid_meta_center_on_robot": None,
+            "occupancy_grid_meta_channel_indices": None,
+            "occupancy_grid_meta_robot_pose": None,
+        },
+    ],
+)
+def test_supplied_malformed_occupancy_grid_fails_closed(grid_update: dict[str, object]) -> None:
+    planner = ForceCoupledPotentialFieldPlanner()
+    observation = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+        "goal": {"current": [4.0, 0.0]},
+        "pedestrians": {"positions": [], "count": [0]},
+        "occupancy_grid": np.zeros((3, 3, 3), dtype=np.float32),
+        "occupancy_grid_meta_origin": [-1.5, -1.5],
+        "occupancy_grid_meta_resolution": [1.0],
+        "occupancy_grid_meta_size": [3.0, 3.0],
+        "occupancy_grid_meta_use_ego_frame": [1.0],
+        "occupancy_grid_meta_center_on_robot": [1.0],
+        "occupancy_grid_meta_channel_indices": [0, 1, -1, 2],
+        "occupancy_grid_meta_robot_pose": [0.0, 0.0, 0.0],
+    }
+    observation.update(grid_update)
+
+    with pytest.raises(ValueError, match="occupancy grid"):
         planner.plan(observation)
     assert planner.diagnostics()["status"] == "invalid_input"
 

@@ -211,16 +211,26 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         total_force = attractive + obstacle_repulsive + pedestrian_repulsive
         saturated = self._saturate(total_force)
 
-        desired_heading = math.atan2(saturated[1], saturated[0])
-        heading_error = wrap_angle_pi(desired_heading - robot[2])
         distance = float(np.hypot(goal[0] - robot[0], goal[1] - robot[1]))
-
-        raw_linear = float(self.config.look_ahead_gain * distance)
-        raw_angular = float(heading_error)
+        force_norm = float(np.hypot(saturated[0], saturated[1]))
+        goal_reached = distance <= self.config.numerical_epsilon
+        force_cancellation_guard = force_norm <= self.config.numerical_epsilon and not goal_reached
+        if goal_reached or force_cancellation_guard:
+            # atan2(0, 0) would silently invent the world-frame +x direction.
+            # Stop at the goal, and fail closed at a potential-field local minimum.
+            raw_linear = 0.0
+            raw_angular = 0.0
+        else:
+            desired_heading = math.atan2(saturated[1], saturated[0])
+            heading_error = wrap_angle_pi(desired_heading - robot[2])
+            raw_linear = float(self.config.look_ahead_gain * distance)
+            raw_angular = float(heading_error)
 
         zero_distance_stop = bool(obstacle_zero_distance or pedestrian_zero_distance)
         linear, angular = (
-            (0.0, 0.0) if zero_distance_stop else self._constrain_command(raw_linear, raw_angular)
+            (0.0, 0.0)
+            if zero_distance_stop or goal_reached or force_cancellation_guard
+            else self._constrain_command(raw_linear, raw_angular)
         )
         self._last_diagnostics = self._build_diagnostics(
             state=(robot, goal, target),
@@ -242,6 +252,8 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
                     "pedestrians": pedestrian_zero_distance,
                 },
             ),
+            goal_reached=goal_reached,
+            force_cancellation_guard=force_cancellation_guard,
         )
         self._last_linear = linear
         self._last_angular = angular
@@ -465,6 +477,10 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         """
         payload = self._extract_grid_payload(observation)
         if payload is None:
+            if observation.get("occupancy_grid") is not None:
+                raise ValueError(
+                    "supplied occupancy grid must be a three-dimensional tensor with metadata"
+                )
             return None
         grid, raw_meta = payload
         if not isinstance(raw_meta, dict):
@@ -634,6 +650,8 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         command: tuple[float, float],
         previous_command: tuple[float, float],
         visibility: tuple[list[str], dict[str, int]],
+        goal_reached: bool,
+        force_cancellation_guard: bool,
     ) -> dict[str, Any]:
         """Build the versioned diagnostics payload for one planning step.
 
@@ -656,6 +674,8 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
             current_degradation_reasons.append(
                 "zero-distance overlap stop: " + ", ".join(overlapping_sources)
             )
+        if force_cancellation_guard:
+            current_degradation_reasons.append("near-zero total force local-minimum stop")
         for reason in current_degradation_reasons:
             if reason not in self._degradation_reasons:
                 self._degradation_reasons.append(reason)
@@ -665,6 +685,10 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         )
         if overlapping_sources:
             active_constraints.append("zero_distance_stop")
+        if goal_reached:
+            active_constraints.append("goal_reached_stop")
+        if force_cancellation_guard:
+            active_constraints.append("force_cancellation_stop")
         return {
             "diagnostics_schema": "force_coupled_potential_field.v1",
             "planner_type": self.planner_type,
@@ -682,6 +706,8 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
             "constrained_command": [float(linear), float(angular)],
             "active_constraints": active_constraints,
             "zero_distance_guards": zero_distance_guards,
+            "goal_reached": goal_reached,
+            "force_cancellation_guard": force_cancellation_guard,
             "missing_inputs": list(missing_inputs),
             "invalid_input": False,
             "non_finite_input": False,

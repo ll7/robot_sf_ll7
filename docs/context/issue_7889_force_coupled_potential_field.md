@@ -34,6 +34,9 @@ fixtures. It is a comparator core for future planner evaluation — nothing more
   for `numerical_epsilon < d <= influence_radius_m`.
 - A zero-distance obstacle or pedestrian is treated as an overlap: the planner emits an immediate
   `(0, 0)` stop and records sticky `status: degraded`; it does not invent a repulsion direction.
+- Reaching the goal emits a nominal immediate `(0, 0)` stop. A near-zero total force away from the
+  goal is treated as a potential-field local minimum: the planner stops, records sticky
+  `status: degraded`, and does not pass the undefined `atan2(0, 0)` direction into control.
 - Total force saturated at `force_saturation` magnitude.
 - Desired heading: `atan2(fy, fx)`; command `linear = look_ahead_gain * goal_distance`,
   `angular = wrap_pi(desired_heading - robot_theta)`.
@@ -43,7 +46,8 @@ fixtures. It is a comparator core for future planner evaluation — nothing more
   to the nearest configured point count inside the influence radius. The explicit obstacle channel
   and its finite, shape-consistent metadata are required; combined occupancy is not treated as a
   static-obstacle substitute.
-- Numerical guards: `numerical_epsilon` for overlap and division; non-finite inputs raise.
+- Numerical guards: `numerical_epsilon` for overlap, division, goal arrival, and total-force
+  cancellation; non-finite inputs raise.
 
 ## Deviations and unsupported elements
 
@@ -94,5 +98,5 @@ commands and diagnostics.
 
 The full focused validation also covers goal approach, separate obstacle and pedestrian force
 components, symmetric tie-breaking, zero-distance stop semantics, sticky episode degradation, hard
-speed/rate predicates, rotation/translation consistency, canonical lifecycle behavior, and
-occupancy-grid-backed opt-in map-runner registration.
+speed/rate predicates, goal and force-cancellation stops, rotation/translation consistency,
+canonical lifecycle behavior, and occupancy-grid-backed opt-in map-runner registration.

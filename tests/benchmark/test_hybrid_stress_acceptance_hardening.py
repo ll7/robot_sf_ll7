@@ -19,7 +19,10 @@ from robot_sf.benchmark.camera_ready._preflight import _config_hash_payload, _sc
 from robot_sf.benchmark.camera_ready._run_state import validate_campaign_integrity
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.identity.hash_utils import sha256_file
-from robot_sf.benchmark.release_acceptance import validate_diagnostic_stress_smoke_acceptance
+from robot_sf.benchmark.release_acceptance import (
+    _stress_effective_branch_coverage,
+    validate_diagnostic_stress_smoke_acceptance,
+)
 from robot_sf.benchmark.release_protocol import (
     STRESS_SMOKE_EXPECTED_SCENARIO_IDS,
     load_release_manifest,
@@ -404,6 +407,137 @@ def test_malformed_effective_override_is_fail_closed(
 
     assert report["status"] == "invalid"
     assert any("must be a mapping" in blocker for blocker in report["blockers"])
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_blocker"),
+    (
+        ("unknown_planner", "names unknown planner arm"),
+        ("config_error", "effective branch config for"),
+        ("unavailable", "effective branch config for"),
+        ("path_mismatch", "config path does not match its pin"),
+        ("read_error", "effective branch config cannot be read"),
+        ("hash_mismatch", "effective branch config hash does not match its pin"),
+        ("overrides_not_mapping", "scenario_algo_overrides must be a mapping"),
+        ("override_key_invalid", "scenario_algo_overrides has an invalid key"),
+    ),
+)
+def test_effective_branch_inventory_failures_are_exercised(
+    stress_fixture: tuple[Path, Any, Any],
+    mutation: str,
+    expected_blocker: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every pinned-config failure path remains covered and fail-closed."""
+    root, manifest, campaign_config = stress_fixture
+    if mutation == "unknown_planner":
+        pins = list(manifest.stress_smoke_hybrid_config_pins)
+        pins[0] = replace(pins[0], planner_key="unknown_arm")
+        manifest = replace(manifest, stress_smoke_hybrid_config_pins=tuple(pins))
+
+    def _candidate_config(**_kwargs: Any) -> tuple[Path | None, Any, str | None]:
+        if mutation == "config_error":
+            return None, None, "forced config failure"
+        if mutation == "unavailable":
+            return None, None, None
+        overrides: Any = {"synthetic": {"algo": "orca"}}
+        if mutation == "overrides_not_mapping":
+            overrides = "not-a-mapping"
+        elif mutation == "override_key_invalid":
+            overrides = {1: {"algo": "orca"}}
+        return (
+            root / "pyproject.toml" if mutation == "path_mismatch" else MANIFEST_PATH,
+            {"scenario_algo_overrides": overrides},
+            None,
+        )
+
+    monkeypatch.setattr(release_acceptance, "_full_release_candidate_config", _candidate_config)
+    if mutation == "read_error":
+        monkeypatch.setattr(
+            release_acceptance,
+            "sha256_file",
+            lambda _path: (_ for _ in ()).throw(OSError("forced read failure")),
+        )
+    elif mutation == "hash_mismatch":
+        monkeypatch.setattr(release_acceptance, "sha256_file", lambda _path: "0" * 64)
+
+    result = _stress_effective_branch_coverage(
+        manifest=manifest,
+        campaign_config=campaign_config,
+        source_repository_root=root,
+    )
+
+    assert any(expected_blocker in blocker for blocker in result["blockers"])
+
+
+def test_branch_witness_mapping_is_normalized(
+    stress_fixture: tuple[Path, Any, Any],
+) -> None:
+    """Mapping-shaped witnesses use the same coverage path as dataclass witnesses."""
+    root, manifest, campaign_config = stress_fixture
+    first = manifest.stress_smoke_branch_witnesses[0]
+    mapping = {
+        "kind": first.kind,
+        "arm": first.arm,
+        "scenario": first.scenario,
+        "algorithm": first.algorithm,
+        "branch_key": first.branch_key,
+        "config_path": str(first.config_path),
+        "config_sha256": first.config_sha256,
+    }
+    manifest = replace(
+        manifest,
+        stress_smoke_branch_witnesses=(mapping, *manifest.stress_smoke_branch_witnesses[1:]),
+    )
+
+    result = _stress_effective_branch_coverage(
+        manifest=manifest,
+        campaign_config=campaign_config,
+        source_repository_root=root,
+    )
+
+    assert result["witnesses"][0]["branch_key"] == first.branch_key
+
+
+def test_non_mapping_branch_witness_is_fail_closed(
+    stress_fixture: tuple[Path, Any, Any],
+) -> None:
+    """A non-mapping witness cannot be treated as branch coverage."""
+    root, manifest, campaign_config = stress_fixture
+    manifest = replace(
+        manifest,
+        stress_smoke_branch_witnesses=(object(), *manifest.stress_smoke_branch_witnesses[1:]),
+    )
+
+    result = _stress_effective_branch_coverage(
+        manifest=manifest,
+        campaign_config=campaign_config,
+        source_repository_root=root,
+    )
+
+    assert any("branch witness 0 is not a mapping" in blocker for blocker in result["blockers"])
+
+
+def test_branch_witness_config_path_is_bound_to_its_pin(
+    stress_fixture: tuple[Path, Any, Any],
+) -> None:
+    """A witness path that differs from its arm pin is rejected."""
+    root, manifest, campaign_config = stress_fixture
+    first = manifest.stress_smoke_branch_witnesses[0]
+    witnesses = list(manifest.stress_smoke_branch_witnesses)
+    witnesses[0] = replace(first, config_path=MANIFEST_PATH)
+    manifest = replace(manifest, stress_smoke_branch_witnesses=tuple(witnesses))
+
+    result = _stress_effective_branch_coverage(
+        manifest=manifest,
+        campaign_config=campaign_config,
+        source_repository_root=root,
+    )
+
+    assert any(
+        "branch witness 0 config path does not match its arm pin" in blocker
+        for blocker in result["blockers"]
+    )
 
 
 @pytest.mark.parametrize("status", ("collision", "failure"))

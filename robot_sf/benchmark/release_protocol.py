@@ -17,6 +17,9 @@ from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
 from robot_sf.benchmark.camera_ready._preflight import _resolved_seed_inventory
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, load_campaign_config
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
+from robot_sf.benchmark.release_tag_identity import (
+    HISTORICAL_RELEASE_TAG,
+)
 from robot_sf.common.artifact_paths import get_repository_root
 
 RELEASE_MANIFEST_SCHEMA_VERSION = "benchmark-release-manifest.v0.1"
@@ -156,6 +159,8 @@ class BenchmarkReleaseManifest:
     concept_doi: str | None = None
     version_doi: str | None = None
     release_kind: str | None = None
+    source_sha: str | None = None
+    planning_base_sha: str | None = None
     metadata_path: Path | None = None
     metadata_sha256: str | None = None
     stress_smoke_review_base_commit: str | None = None
@@ -799,7 +804,7 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
     }
 
 
-def _load_v02_contract(  # noqa: C901
+def _load_v02_contract(  # noqa: C901, PLR0912
     manifest_path: Path,
     payload: dict[str, Any],
     *,
@@ -812,6 +817,8 @@ def _load_v02_contract(  # noqa: C901
     """
     defaults = {
         "latest_main_base_commit": None,
+        "source_sha": None,
+        "planning_base_sha": None,
         "expected_episode_cells": None,
         "expected_horizon_steps": None,
         "publication_channel": None,
@@ -832,6 +839,25 @@ def _load_v02_contract(  # noqa: C901
     latest_main_base_commit = str(payload.get("latest_main_base_commit", "")).strip().lower()
     if re.fullmatch(r"[0-9a-f]{40}", latest_main_base_commit) is None:
         raise ValueError("latest_main_base_commit must be an exact 40-character Git SHA")
+    source_sha_value = payload.get("source_sha")
+    source_sha = str(source_sha_value).strip().lower() if source_sha_value is not None else None
+    if source_sha_value is not None and re.fullmatch(r"[0-9a-f]{40}", source_sha or "") is None:
+        raise ValueError("source_sha must be an exact 40-character Git SHA")
+    planning_base_sha_value = payload.get("planning_base_sha")
+    planning_base_sha = (
+        str(planning_base_sha_value).strip().lower()
+        if planning_base_sha_value is not None
+        else None
+    )
+    if (
+        planning_base_sha_value is not None
+        and re.fullmatch(r"[0-9a-f]{40}", planning_base_sha or "") is None
+    ):
+        raise ValueError("planning_base_sha must be an exact 40-character Git SHA")
+    release_kind = str(payload.get("release_kind", "")).strip()
+    if release_kind == "benchmark-data" and payload.get("release_tag") != HISTORICAL_RELEASE_TAG:
+        if source_sha is None:
+            raise ValueError("source_sha is required for future benchmark-data v0.2 releases")
     matrix = payload.get("matrix")
     if not isinstance(matrix, dict) or not isinstance(matrix.get("expected_episode_cells"), int):
         raise ValueError("matrix.expected_episode_cells must be an integer")
@@ -894,6 +920,8 @@ def _load_v02_contract(  # noqa: C901
             raise ValueError("publication.metadata_sha256 does not match publication.metadata_path")
     return {
         "latest_main_base_commit": latest_main_base_commit,
+        "source_sha": source_sha,
+        "planning_base_sha": planning_base_sha,
         "expected_episode_cells": int(matrix["expected_episode_cells"]),
         "expected_horizon_steps": horizon_steps,
         "publication_channel": str(publication["channel"]),
@@ -1452,7 +1480,7 @@ def _validate_release_planners(
         problems.append("planners.groups does not match campaign config")
 
 
-def _validate_v02_contract(  # noqa: C901
+def _validate_v02_contract(  # noqa: C901, PLR0912
     manifest: BenchmarkReleaseManifest,
     cfg: CampaignConfig,
     problems: list[str],
@@ -1462,6 +1490,23 @@ def _validate_v02_contract(  # noqa: C901
     """Validate stricter hashes, matrix size, seed inventory, and DOI separation for v0.2."""
     if manifest.schema_version != RELEASE_MANIFEST_SCHEMA_VERSION_V0_2:
         return
+    if manifest.source_sha is not None and _GIT_SHA_RE.fullmatch(manifest.source_sha) is None:
+        problems.append("source_sha must be an exact 40-character Git SHA")
+    if (
+        manifest.planning_base_sha is not None
+        and _GIT_SHA_RE.fullmatch(manifest.planning_base_sha) is None
+    ):
+        problems.append("planning_base_sha must be an exact 40-character Git SHA")
+    if manifest.planning_base_sha is not None and (
+        manifest.latest_main_base_commit != manifest.planning_base_sha
+    ):
+        problems.append("planning_base_sha does not match latest_main_base_commit")
+    if (
+        manifest.release_kind == "benchmark-data"
+        and manifest.source_sha is None
+        and manifest.release_tag != HISTORICAL_RELEASE_TAG
+    ):
+        problems.append("source_sha is required for future benchmark-data v0.2 releases")
     path_hashes = (
         (manifest.suite_policy_path, manifest.suite_policy_sha256, "scenario.suite_policy_sha256"),
         (
@@ -1610,6 +1655,25 @@ def validate_stress_smoke_runtime_identity(
     }
 
 
+def _resolve_release_source_sha(
+    manifest: BenchmarkReleaseManifest, source_commit: str | None
+) -> str | None:
+    """Resolve one validated final source SHA for emitted release artifacts.
+
+    Returns:
+        One normalized final source SHA, or ``None`` when no source is declared.
+    """
+    explicit = str(source_commit).strip().lower() if source_commit is not None else None
+    declared = manifest.source_sha
+    if explicit is not None and _GIT_SHA_RE.fullmatch(explicit) is None:
+        raise ValueError("source_commit must be an exact 40-character Git SHA")
+    if declared is not None and _GIT_SHA_RE.fullmatch(declared) is None:
+        raise ValueError("manifest source_sha must be an exact 40-character Git SHA")
+    if explicit is not None and declared is not None and explicit != declared:
+        raise ValueError("source_commit does not match manifest source_sha")
+    return explicit or declared
+
+
 def build_release_provenance(
     manifest: BenchmarkReleaseManifest,
     *,
@@ -1650,8 +1714,14 @@ def build_release_provenance(
         ),
         "metadata_sha256": manifest.metadata_sha256,
     }
-    if source_commit is not None:
-        payload["source_commit"] = str(source_commit).strip().lower()
+    source_sha = _resolve_release_source_sha(manifest, source_commit)
+    if source_sha is not None:
+        payload["source_sha"] = source_sha
+        # Keep the historical source_commit key for consumers of v0.1 while
+        # making source_sha the unambiguous release identity field.
+        payload["source_commit"] = source_sha
+    if manifest.planning_base_sha is not None:
+        payload["planning_base_sha"] = manifest.planning_base_sha
     if is_diagnostic_stress_smoke(manifest):
         payload["stress_smoke_contract"] = {
             "review_base_commit": manifest.stress_smoke_review_base_commit,
@@ -1805,8 +1875,12 @@ def build_resolved_release_manifest(
         },
         "release_kind": manifest.release_kind,
     }
-    if source_commit is not None:
-        payload["provenance"]["source_commit"] = str(source_commit).strip().lower()
+    source_sha = _resolve_release_source_sha(manifest, source_commit)
+    if source_sha is not None:
+        payload["provenance"]["source_sha"] = source_sha
+        payload["provenance"]["source_commit"] = source_sha
+    if manifest.planning_base_sha is not None:
+        payload["provenance"]["planning_base_sha"] = manifest.planning_base_sha
     if is_diagnostic_stress_smoke(manifest):
         payload["provenance"]["stress_smoke_contract"] = {
             "review_base_commit": manifest.stress_smoke_review_base_commit,

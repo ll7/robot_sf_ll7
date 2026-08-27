@@ -471,6 +471,7 @@ def test_stress_resolved_provenance_contains_pinned_assets_and_runtime_commit() 
         source_commit=runtime_commit,
     )
     contract = resolved["provenance"]["stress_smoke_contract"]
+    assert resolved["provenance"]["source_sha"] == runtime_commit
     assert resolved["provenance"]["source_commit"] == runtime_commit
     assert contract["review_base_commit"] == SOURCE_COMMIT
     assert len(contract["scenario_sources"]) == 5
@@ -482,6 +483,7 @@ def test_stress_resolved_provenance_contains_pinned_assets_and_runtime_commit() 
         invoked_command="test",
         source_commit=runtime_commit,
     )
+    assert provenance["source_sha"] == runtime_commit
     assert provenance["source_commit"] == runtime_commit
     assert provenance["stress_smoke_contract"] == contract
 

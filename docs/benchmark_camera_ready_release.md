@@ -161,19 +161,27 @@ uv run python scripts/tools/publish_camera_ready_release.py \
   --output-json output/benchmarks/camera_ready/<campaign_id>/reports/release_publish_plan.json
 ```
 
-2. Execute asset upload:
+2. Execute asset upload (first publication: create the draft release first):
 
 ```bash
 uv run python scripts/tools/publish_camera_ready_release.py \
   --campaign-root output/benchmarks/camera_ready/<campaign_id> \
   --repo ll7/robot_sf_ll7 \
   --tag <release_tag> \
+  --create-draft \
+  --expected-source-sha <exact-40-char-source-sha> \
   --execute-upload
 ```
 
-The upload helper creates or updates a draft GitHub Release only. It does not
-reserve, upload to, or publish Zenodo. Use the direct Zenodo CLI for the
-reserved deposition after the bundle has passed the independent cold check:
+The upload helper uploads into a draft GitHub Release only. Use `--create-draft`
+(which requires `--expected-source-sha`) to create the missing tag-targeted draft
+before the first upload; it fails closed when the tag already exists at a
+different target or a non-draft release is present, and skips creation when an
+exact-SHA draft already exists. Dry-run (without `--execute-upload`) prints the
+planned `gh release create`/`gh release upload` commands without touching GitHub.
+The helper never reserves, uploads to, or publishes Zenodo. Use the direct
+Zenodo CLI for the reserved deposition after the bundle has passed the
+independent cold check:
 
 ```bash
 # Keep this file outside Git with mode 0600; never print its contents.

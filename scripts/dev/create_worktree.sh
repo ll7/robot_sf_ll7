@@ -121,6 +121,31 @@ if [[ "$dry_run" -eq 1 ]]; then
   exit 0
 fi
 
+# Git derives linked-worktree administrative directory names from the target
+# basename. Independent callers with distinct full paths but the same basename
+# can therefore race while Git allocates (or prunes) entries under the shared
+# common directory. Serialize the complete orphan-recovery/prune/add
+# transaction per repository; capacity inspection above remains parallel and
+# read-only.
+if ! command -v flock >/dev/null 2>&1; then
+  echo "create_worktree: flock is required for concurrency-safe worktree creation" >&2
+  exit 2
+fi
+git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
+worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
+exec {worktree_lock_fd}>"$worktree_lock_path"
+if ! flock "$worktree_lock_fd"; then
+  echo "create_worktree: failed to acquire repository worktree-creation lock" >&2
+  exit 2
+fi
+
+# A concurrent creator may have populated this exact target while this process
+# waited for the repository lock. Recheck under the lock before any mutation.
+if [[ -e "$worktree_path" || -L "$worktree_path" ]]; then
+  echo "refusing to overwrite existing worktree target: $worktree_path" >&2
+  exit 2
+fi
+
 # Recover from a prior interrupted checkout: git can die mid-"Updating files"
 # (e.g. SIGPIPE when output is piped through head), leaving the branch ref
 # present without a registered worktree. The next retry would otherwise fail
@@ -146,6 +171,8 @@ git worktree prune
 # ``git branch --set-upstream-to``; creation itself must remain safe when
 # several workers create worktrees concurrently.
 git worktree add --no-track -b "$branch_name" "$worktree_path" "$base_ref"
+flock -u "$worktree_lock_fd"
+exec {worktree_lock_fd}>&-
 echo "create_worktree: created $worktree_path on branch $branch_name from $base_ref"
 echo "create_worktree: use scripts/dev/run_worktree_shared_venv.sh for targeted validation."
 

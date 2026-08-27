@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+
+from scripts.dev import autopilot_state_snapshot as snapshot
 from scripts.dev.autopilot_state_snapshot import classify_worker_inactivity
 
 
@@ -109,3 +112,125 @@ def test_malformed_or_unbounded_input_fails_closed_without_stalled_claim() -> No
     assert report["errors"] == [
         "observation 1: elapsed_seconds must be a finite non-negative number"
     ]
+
+
+def test_malformed_signal_shapes_fail_closed() -> None:
+    """Malformed signal objects and path entries cannot become inactivity evidence."""
+    malformed_wait = _observation(0)
+    malformed_wait["wait_status"] = []
+    missing_scope = _observation(0)
+    missing_scope["scoped_git"] = {"changed_paths": []}
+    missing_artifacts = _observation(0)
+    missing_artifacts["required_artifacts"] = {}
+    malformed_path = _observation(0)
+    malformed_path["scoped_git"] = {"scope_ok": True, "changed_paths": [7]}
+
+    for observation, expected_error in (
+        (malformed_wait, "observation 0: wait_status must be an object"),
+        (missing_scope, "observation 0: scoped_git.scope_ok must be boolean"),
+        (
+            missing_artifacts,
+            "observation 0: required_artifacts.present_paths is required",
+        ),
+        (malformed_path, "observation 0: scoped_git.changed_paths[0] must be a string"),
+    ):
+        report = classify_worker_inactivity([observation])
+
+        assert report["classification"] == "insufficient_evidence"
+        assert report["recommended_action"] == "parent_fallback"
+        assert report["errors"] == [expected_error]
+
+
+def test_preexisting_git_and_artifact_paths_are_not_progress_without_a_delta() -> None:
+    """Initial snapshots need an explicit progress signal or a later observed delta."""
+    report = classify_worker_inactivity(
+        [
+            _observation(0, changed_paths=("preexisting.py",), present_paths=("result.json",)),
+            _observation(60, changed_paths=("preexisting.py",), present_paths=("result.json",)),
+        ],
+        inactivity_after_seconds=30,
+    )
+
+    assert report["classification"] == "stalled"
+    assert report["recommended_action"] == "interrupt"
+    assert report["consecutive_no_progress_observations"] == 2
+
+
+def test_signal_payload_limits_fail_closed() -> None:
+    """Path and last-input payload limits keep diagnostic output bounded."""
+    long_path = _observation(0, changed_paths=("x" * 513,))
+    long_input = _observation(0, last_input="x" * 4097)
+
+    path_report = classify_worker_inactivity([long_path])
+    input_report = classify_worker_inactivity([long_input])
+
+    assert path_report["classification"] == "insufficient_evidence"
+    assert path_report["errors"] == [
+        "observation 0: scoped_git.changed_paths[0] exceeds 512 characters"
+    ]
+    assert input_report["classification"] == "insufficient_evidence"
+    assert input_report["errors"] == [
+        "observation 0: wait_status.last_input exceeds 4096 characters"
+    ]
+
+
+def test_missing_worker_observation_file_fails_closed(tmp_path) -> None:
+    """Unavailable observation files produce diagnostic fallback evidence."""
+    report = snapshot.worker_inactivity_snapshot(tmp_path / "missing.json")
+
+    assert report["status"] == "unavailable"
+    assert report["classification"] == "insufficient_evidence"
+    assert report["recommended_action"] == "parent_fallback"
+    assert report["errors"]
+
+
+def test_worker_observation_file_is_a_bounded_snapshot_entrypoint(tmp_path) -> None:
+    """The canonical state snapshot can emit a stalled worker diagnostic from JSON input."""
+    path = tmp_path / "worker-observations.json"
+    path.write_text(
+        json.dumps(
+            {
+                "observations": [_observation(0), _observation(360)],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = snapshot.worker_inactivity_snapshot(path)
+
+    assert report["status"] == "ok"
+    assert report["classification"] == "stalled"
+    assert report["recommended_action"] == "interrupt"
+    assert report["route_evidence_only"] is True
+    assert snapshot._build_parser().parse_args(
+        ["--worker-observation", str(path)]
+    ).worker_observation == [str(path)]
+
+
+def test_build_snapshot_includes_worker_inactivity_report(monkeypatch, tmp_path) -> None:
+    """Full autopilot snapshots carry the worker diagnostic without lifecycle side effects."""
+    path = tmp_path / "worker-observations.json"
+    path.write_text(
+        json.dumps({"observations": [_observation(0), _observation(360)]}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        snapshot,
+        "git_snapshot",
+        lambda **_kwargs: (
+            {"branch": "test", "head_sha": "head", "origin_main_sha": "main"},
+            [],
+            [],
+        ),
+    )
+    monkeypatch.setattr(snapshot, "claim_snapshot", lambda *_args, **_kwargs: ([], [], []))
+    monkeypatch.setattr(
+        snapshot, "issue_queue_snapshot", lambda *_args, **_kwargs: ([], [], [], [])
+    )
+    monkeypatch.setattr(snapshot, "pr_snapshot", lambda *_args, **_kwargs: ([], [], []))
+    args = snapshot._build_parser().parse_args(["--worker-observation", str(path)])
+
+    payload = snapshot.build_snapshot(args)
+
+    assert payload["ok"] is True
+    assert payload["worker_inactivity"][0]["classification"] == "stalled"

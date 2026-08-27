@@ -66,6 +66,13 @@ DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_REMOTE = "origin"
 WORKER_INACTIVITY_SCHEMA = "worker_inactivity.v1"
 MAX_WORKER_INACTIVITY_OBSERVATIONS = 32
+MAX_WORKER_AGENT_ID_LENGTH = 256
+MAX_WORKER_STATE_LENGTH = 64
+MAX_WORKER_ACTIVITY_LENGTH = 128
+MAX_WORKER_LAST_INPUT_LENGTH = 4096
+MAX_WORKER_SIGNAL_PATHS = 64
+MAX_WORKER_SIGNAL_PATH_LENGTH = 512
+MAX_WORKER_OBSERVATION_FILE_BYTES = 256 * 1024
 _PRODUCTIVE_ACTIVITIES = frozenset(
     {
         "analysis_running",
@@ -94,20 +101,35 @@ class _WorkerInactivityObservation:
     signal_summary: dict[str, Any]
 
 
-def _worker_signal_paths(value: Any) -> tuple[str, ...]:
-    """Normalize a path-like signal to a deterministic tuple."""
+def _worker_signal_paths(value: Any, *, field_name: str) -> tuple[str, ...] | str:
+    """Validate and normalize a bounded path signal."""
     if isinstance(value, str):
         values = (value,)
     elif isinstance(value, (list, tuple, set, frozenset)):
         values = value
     else:
-        return ()
-    return tuple(sorted({str(item) for item in values if str(item).strip()}))
+        return f"{field_name} must be a string or a sequence of strings"
+    if len(values) > MAX_WORKER_SIGNAL_PATHS:
+        return f"{field_name} exceeds {MAX_WORKER_SIGNAL_PATHS} paths"
+
+    normalized: list[str] = []
+    for index, item in enumerate(values):
+        if not isinstance(item, str):
+            return f"{field_name}[{index}] must be a string"
+        path = item.strip()
+        if not path:
+            return f"{field_name}[{index}] must not be empty"
+        if len(path) > MAX_WORKER_SIGNAL_PATH_LENGTH:
+            return f"{field_name}[{index}] exceeds {MAX_WORKER_SIGNAL_PATH_LENGTH} characters"
+        normalized.append(path)
+    return tuple(sorted(set(normalized)))
 
 
-def _worker_mapping(value: Any) -> Mapping[str, Any]:
-    """Return a mapping signal or an empty mapping for malformed optional input."""
-    return value if isinstance(value, Mapping) else {}
+def _worker_signal_mapping(value: Any, *, field_name: str) -> Mapping[str, Any] | str:
+    """Validate a required worker signal mapping."""
+    if not isinstance(value, Mapping):
+        return f"{field_name} must be an object"
+    return value
 
 
 def _worker_explicit_true(signal: Mapping[str, Any], *keys: str) -> bool:
@@ -115,13 +137,31 @@ def _worker_explicit_true(signal: Mapping[str, Any], *keys: str) -> bool:
     return any(signal.get(key) is True for key in keys)
 
 
-def _normalize_worker_inactivity_observation(  # noqa: C901
+def _worker_validate_bool_fields(signal: Mapping[str, Any], *, field_name: str) -> str | None:
+    """Reject malformed boolean progress flags instead of silently ignoring them."""
+    for key in (
+        "productive",
+        "progress",
+        "progress_signal",
+        "quiet",
+        "output_quiet",
+        "quiet_output",
+    ):
+        if key in signal and not isinstance(signal[key], bool):
+            return f"{field_name}.{key} must be boolean"
+    return None
+
+
+def _normalize_worker_inactivity_observation(  # noqa: C901, PLR0912, PLR0915
     raw: Mapping[str, Any], *, previous: _WorkerInactivityObservation | None
 ) -> _WorkerInactivityObservation | str:
     """Normalize one synthetic worker observation or return a compact error."""
     agent_id = raw.get("agent_id")
     if not isinstance(agent_id, str) or not agent_id.strip():
         return "agent_id is required"
+    agent_id = agent_id.strip()
+    if len(agent_id) > MAX_WORKER_AGENT_ID_LENGTH:
+        return f"agent_id exceeds {MAX_WORKER_AGENT_ID_LENGTH} characters"
 
     elapsed = raw.get("elapsed_seconds", raw.get("elapsed_interval_seconds"))
     if isinstance(elapsed, bool) or not isinstance(elapsed, (int, float)):
@@ -132,43 +172,125 @@ def _normalize_worker_inactivity_observation(  # noqa: C901
     if previous is not None and elapsed_seconds < previous.elapsed_seconds:
         return "elapsed_seconds must be monotonic"
 
-    wait_raw = raw.get("wait_status", raw.get("status", {}))
-    wait = {"state": wait_raw} if isinstance(wait_raw, str) else _worker_mapping(wait_raw)
-    state = str(wait.get("state", wait.get("status", "unknown"))).strip().lower() or "unknown"
+    wait_key = "wait_status" if "wait_status" in raw else "status" if "status" in raw else None
+    if wait_key is None:
+        return "wait_status is required"
+    wait_raw = raw[wait_key]
+    if isinstance(wait_raw, str):
+        wait: Mapping[str, Any] = {"state": wait_raw}
+    else:
+        wait_result = _worker_signal_mapping(wait_raw, field_name=wait_key)
+        if isinstance(wait_result, str):
+            return wait_result
+        wait = wait_result
+    state_raw = wait.get("state", wait.get("status"))
+    if not isinstance(state_raw, str) or not state_raw.strip():
+        return f"{wait_key}.state is required"
+    state = state_raw.strip().lower()
+    if len(state) > MAX_WORKER_STATE_LENGTH:
+        return f"{wait_key}.state exceeds {MAX_WORKER_STATE_LENGTH} characters"
+    bool_error = _worker_validate_bool_fields(wait, field_name=wait_key)
+    if bool_error:
+        return bool_error
     last_input = wait.get("last_input", raw.get("last_input"))
     if last_input is not None and not isinstance(last_input, str):
-        last_input = str(last_input)
-    activity = str(wait.get("activity", wait.get("operation", ""))).strip().lower()
+        return f"{wait_key}.last_input must be a string or null"
+    if last_input is not None and len(last_input) > MAX_WORKER_LAST_INPUT_LENGTH:
+        return f"{wait_key}.last_input exceeds {MAX_WORKER_LAST_INPUT_LENGTH} characters"
+    activity_raw = wait.get("activity", wait.get("operation", ""))
+    if activity_raw is None:
+        activity_raw = ""
+    if not isinstance(activity_raw, str):
+        return f"{wait_key}.activity must be a string or null"
+    activity = activity_raw.strip().lower()
+    if len(activity) > MAX_WORKER_ACTIVITY_LENGTH:
+        return f"{wait_key}.activity exceeds {MAX_WORKER_ACTIVITY_LENGTH} characters"
     wait_productive = _worker_explicit_true(wait, "productive", "progress", "progress_signal")
     wait_productive = wait_productive or activity in _PRODUCTIVE_ACTIVITIES
     quiet_output = _worker_explicit_true(wait, "quiet", "output_quiet", "quiet_output")
 
-    git = _worker_mapping(raw.get("scoped_git", raw.get("git", {})))
-    git_scope_ok = git.get("scope_ok", True) is True
-    git_paths = _worker_signal_paths(
-        git.get("changed_paths", git.get("modified_paths", git.get("changed_files", ())))
+    git_key = "scoped_git" if "scoped_git" in raw else "git" if "git" in raw else None
+    if git_key is None:
+        return "scoped_git is required"
+    git_result = _worker_signal_mapping(raw[git_key], field_name=git_key)
+    if isinstance(git_result, str):
+        return git_result
+    git = git_result
+    if "scope_ok" not in git or not isinstance(git["scope_ok"], bool):
+        return f"{git_key}.scope_ok must be boolean"
+    git_scope_ok = git["scope_ok"]
+    git_paths_value = next(
+        (git[key] for key in ("changed_paths", "modified_paths", "changed_files") if key in git),
+        None,
     )
-    git_progress_paths = _worker_signal_paths(
-        git.get("progress_paths", git.get("new_paths", git.get("updated_paths", ())))
+    if git_paths_value is None:
+        return f"{git_key}.changed_paths is required"
+    git_paths_result = _worker_signal_paths(git_paths_value, field_name=f"{git_key}.changed_paths")
+    if isinstance(git_paths_result, str):
+        return git_paths_result
+    git_paths = git_paths_result
+    git_progress_value = next(
+        (git[key] for key in ("progress_paths", "new_paths", "updated_paths") if key in git),
+        (),
     )
+    git_progress_paths_result = _worker_signal_paths(
+        git_progress_value, field_name=f"{git_key}.progress_paths"
+    )
+    if isinstance(git_progress_paths_result, str):
+        return git_progress_paths_result
+    git_progress_paths = git_progress_paths_result
+    bool_error = _worker_validate_bool_fields(git, field_name=git_key)
+    if bool_error:
+        return bool_error
     git_progress = _worker_explicit_true(git, "progress", "productive")
     git_progress = git_progress or bool(git_progress_paths)
-    if git_scope_ok and git_paths and (previous is None or git_paths != previous.git_paths):
+    if git_scope_ok and previous is not None and git_paths and git_paths != previous.git_paths:
         git_progress = True
 
-    artifacts = _worker_mapping(raw.get("required_artifacts", raw.get("artifacts", {})))
-    artifact_paths = _worker_signal_paths(
-        artifacts.get("present_paths", artifacts.get("present", ()))
+    artifacts_key = (
+        "required_artifacts"
+        if "required_artifacts" in raw
+        else "artifacts"
+        if "artifacts" in raw
+        else None
     )
-    artifact_progress_paths = _worker_signal_paths(
-        artifacts.get(
-            "progress_paths",
-            artifacts.get("created_paths", artifacts.get("updated_paths", ())),
-        )
+    if artifacts_key is None:
+        return "required_artifacts is required"
+    artifacts_result = _worker_signal_mapping(raw[artifacts_key], field_name=artifacts_key)
+    if isinstance(artifacts_result, str):
+        return artifacts_result
+    artifacts = artifacts_result
+    artifact_paths_value = next(
+        (artifacts[key] for key in ("present_paths", "present") if key in artifacts), None
     )
+    if artifact_paths_value is None:
+        return f"{artifacts_key}.present_paths is required"
+    artifact_paths_result = _worker_signal_paths(
+        artifact_paths_value, field_name=f"{artifacts_key}.present_paths"
+    )
+    if isinstance(artifact_paths_result, str):
+        return artifact_paths_result
+    artifact_paths = artifact_paths_result
+    artifact_progress_value = next(
+        (
+            artifacts[key]
+            for key in ("progress_paths", "created_paths", "updated_paths")
+            if key in artifacts
+        ),
+        (),
+    )
+    artifact_progress_paths_result = _worker_signal_paths(
+        artifact_progress_value, field_name=f"{artifacts_key}.progress_paths"
+    )
+    if isinstance(artifact_progress_paths_result, str):
+        return artifact_progress_paths_result
+    artifact_progress_paths = artifact_progress_paths_result
+    bool_error = _worker_validate_bool_fields(artifacts, field_name=artifacts_key)
+    if bool_error:
+        return bool_error
     artifact_progress = _worker_explicit_true(artifacts, "progress", "productive")
     artifact_progress = artifact_progress or bool(artifact_progress_paths)
-    if artifact_paths and (previous is None or artifact_paths != previous.artifact_paths):
+    if previous is not None and artifact_paths and artifact_paths != previous.artifact_paths:
         artifact_progress = True
 
     progress_reasons: list[str] = []
@@ -200,7 +322,7 @@ def _normalize_worker_inactivity_observation(  # noqa: C901
         "progress_reasons": progress_reasons,
     }
     return _WorkerInactivityObservation(
-        agent_id=agent_id.strip(),
+        agent_id=agent_id,
         elapsed_seconds=elapsed_seconds,
         state=state,
         last_input=last_input,
@@ -341,6 +463,47 @@ def classify_worker_inactivity(  # noqa: C901, PLR0912
         "inactivity_after_seconds": float(inactivity_after_seconds),
         "required_no_progress_observations": required_no_progress_observations,
         "bounded_observation_limit": MAX_WORKER_INACTIVITY_OBSERVATIONS,
+    }
+
+
+def worker_inactivity_snapshot(observation_path: str | Path) -> dict[str, Any]:
+    """Load one bounded worker observation file for the canonical state snapshot."""
+    path = Path(observation_path).resolve(strict=False)
+    base = {
+        "observation_path": str(path),
+        "route_evidence_only": True,
+        "status": "unavailable",
+        "classification": "insufficient_evidence",
+        "recommended_action": "parent_fallback",
+        "errors": [],
+    }
+    try:
+        if path.stat().st_size > MAX_WORKER_OBSERVATION_FILE_BYTES:
+            return {
+                **base,
+                "errors": [f"observation file exceeds {MAX_WORKER_OBSERVATION_FILE_BYTES} bytes"],
+            }
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {**base, "errors": [f"worker observation unavailable: {exc}"]}
+
+    if isinstance(raw, list):
+        observations = raw
+    elif isinstance(raw, Mapping) and "observations" in raw:
+        observations = raw["observations"]
+    else:
+        return {
+            **base,
+            "status": "malformed",
+            "errors": ["worker observation must be an array or object with observations"],
+        }
+
+    report = classify_worker_inactivity(observations)
+    return {
+        **report,
+        "observation_path": str(path),
+        "route_evidence_only": True,
+        "status": "ok" if not report["errors"] else "malformed",
     }
 
 
@@ -1231,6 +1394,16 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
     blocker_receipts = blocker_receipt_snapshot(getattr(args, "blocker_decision", []))
     errors.extend(f"blocker decision artifact: {error}" for error in blocker_receipts["errors"])
 
+    worker_inactivity: list[dict[str, Any]] = []
+    for observation_path in getattr(args, "worker_observation", []):
+        report = worker_inactivity_snapshot(observation_path)
+        worker_inactivity.append(report)
+        if report["status"] != "ok":
+            errors.extend(
+                f"worker observation {report['observation_path']}: {error}"
+                for error in report["errors"]
+            )
+
     checkpoint = controller_checkpoint(
         git=git,
         claims=claims,
@@ -1258,6 +1431,7 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
         "issues_truncated": issue_truncations,
         "prs": prs,
         "route_failures": route_failures,
+        "worker_inactivity": worker_inactivity,
         "blocker_receipts": blocker_receipts,
         "controller_checkpoint": checkpoint,
         "errors": errors,
@@ -1302,6 +1476,13 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help="external blocker-decision JSON artifact to summarize; may be repeated",
+    )
+    parser.add_argument(
+        "--worker-observation",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="bounded worker-observation JSON file to classify; may be repeated",
     )
     parser.add_argument("--remote", default="origin", help="git remote used for claim refs")
     parser.add_argument(

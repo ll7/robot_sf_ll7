@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
+import subprocess
 import sys
+import time
 from pathlib import Path
 
-from scripts.dev.run_compact_validation import main, run_compact_validation
+import pytest
+
+from scripts.dev.run_compact_validation import INTERRUPTED_EXIT_CODE, main, run_compact_validation
 
 
 def test_run_compact_validation_bounds_failure_output(tmp_path: Path, capsys) -> None:
@@ -209,6 +215,58 @@ def test_run_compact_validation_timeout_handles_descendant_output_handles(tmp_pa
     assert summary["timed_out"] is True
     assert summary["cleanup_status"] == "process_group_terminated_and_waited"
     assert "spawned descendant" in "\n".join(summary["failure_excerpt"])
+
+
+def test_run_compact_validation_interrupt_terminates_process_group(tmp_path: Path) -> None:
+    """SIGINT should clean up a live child and grandchild before returning."""
+    artifact_dir = tmp_path / "artifacts"
+    child_pid_path = tmp_path / "child.pid"
+    grandchild_pid_path = tmp_path / "grandchild.pid"
+    fixture = (
+        "import os, subprocess, sys, time\n"
+        f"grandchild = subprocess.Popen([sys.executable, '-c', "
+        "'import os, pathlib, sys, time; pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(30)', "
+        f"'{grandchild_pid_path}'])\n"
+        f"pathlib.Path(sys.argv[1]).write_text(str(os.getpid()))\n"
+        "time.sleep(30)"
+    )
+    fixture = "import pathlib\n" + fixture
+    command = [sys.executable, "-c", fixture, str(child_pid_path)]
+    runner = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from scripts.dev.run_compact_validation import main; "
+            "raise SystemExit(main(sys.argv[1:]))",
+            "--artifact-dir",
+            str(artifact_dir),
+            "--",
+            *command,
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 5
+        while not child_pid_path.exists() or not grandchild_pid_path.exists():
+            assert time.monotonic() < deadline, runner.communicate(timeout=1)[0]
+            time.sleep(0.02)
+        os.kill(runner.pid, signal.SIGINT)
+        stdout, _ = runner.communicate(timeout=5)
+        assert runner.returncode == INTERRUPTED_EXIT_CODE
+        assert "Exit code: 130" in stdout
+        summary = json.loads(next(artifact_dir.glob("*.summary.json")).read_text())
+        assert summary["interrupted"] is True
+        assert summary["timed_out"] is False
+        assert summary["cleanup_status"] == "process_group_terminated_and_waited"
+        for pid_path in (child_pid_path, grandchild_pid_path):
+            pid = int(pid_path.read_text())
+            with pytest.raises(ProcessLookupError):
+                os.kill(pid, 0)
+    finally:
+        if runner.poll() is None:
+            runner.kill()
 
 
 def test_run_compact_validation_rejects_non_positive_timeout() -> None:

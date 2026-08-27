@@ -22,6 +22,7 @@ SCHEMA_VERSION = "compact_validation_summary.v2"
 DEFAULT_EXCERPT_LINES = 40
 DEFAULT_EXCERPT_WIDTH = 240
 TIMEOUT_EXIT_CODE = 124
+INTERRUPTED_EXIT_CODE = 130
 
 FAILURE_PATTERNS = re.compile(
     r"(FAILED|ERROR|FAILURES|Traceback|AssertionError|Exception|short test summary|"
@@ -119,6 +120,7 @@ def run_compact_validation(
 
     started = time.monotonic()
     timed_out = False
+    interrupted = False
     timeout_message = ""
     cleanup_status = "not_needed"
     try:
@@ -137,6 +139,12 @@ def run_compact_validation(
                 returncode = TIMEOUT_EXIT_CODE
                 cleanup_status = _terminate_process_group(process)
                 timeout_message = f"Command timed out after {exc.timeout:g} seconds."
+                log_file.write(f"\n{timeout_message}\n".encode("utf-8", errors="replace"))
+            except KeyboardInterrupt:
+                interrupted = True
+                returncode = INTERRUPTED_EXIT_CODE
+                cleanup_status = _terminate_process_group(process)
+                timeout_message = "Command interrupted by user."
                 log_file.write(f"\n{timeout_message}\n".encode("utf-8", errors="replace"))
     except subprocess.TimeoutExpired as exc:
         timed_out = True
@@ -159,6 +167,7 @@ def run_compact_validation(
         "exit_code": returncode,
         "elapsed_seconds": round(elapsed, 3),
         "timed_out": timed_out,
+        "interrupted": interrupted,
         "timeout_seconds": timeout_seconds,
         "timeout_message": timeout_message,
         "cleanup_status": cleanup_status,

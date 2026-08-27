@@ -40,7 +40,7 @@ def _valid_record(**overrides: object) -> dict:
         "record_id": "record-1",
         "source": {
             "identity": "incident-report-2026-0001",
-            "digest_sha256": "a" * 64,
+            "digest_sha256": "0123456789abcdef" * 4,
             "observed_facts": [FACT],
         },
         "extraction": {
@@ -57,9 +57,9 @@ def _valid_record(**overrides: object) -> dict:
         "scenario_parameters": [PARAMETER_MAPPING],
         "execution": {
             "claimed": True,
-            "scenario_config_digest_sha256": "b" * 64,
+            "scenario_config_digest_sha256": "fedcba9876543210" * 4,
             "seed": 42,
-            "software_commit": "c" * 40,
+            "software_commit": "0123456789abcdef0123456789abcdef01234567",
             "replay_identity": "replay-1",
             "observed_outcome": {"kind": "near_miss", "detail": "Minimum distance 0.4 m."},
         },
@@ -94,7 +94,7 @@ def test_every_transformation_step_is_traceable() -> None:
     assert mapping["unit"] == "m/s"
     assert mapping["status"] == "mapped"
     # The fixture resolves to an immutable configuration digest and seed.
-    assert record["execution"]["scenario_config_digest_sha256"] == "b" * 64
+    assert record["execution"]["scenario_config_digest_sha256"] == "fedcba9876543210" * 4
     assert record["execution"]["seed"] == 42
     # A synthetic fixture does not need to run a campaign.
     assert record["execution"]["claimed"] is True
@@ -139,6 +139,38 @@ def test_unverified_generated_content_cannot_be_verified_without_record() -> Non
     assert any("verification_record" in violation for violation in violations)
     with pytest.raises(IncidentScenarioProvenanceError):
         validate_incident_scenario_provenance(record)
+
+
+def test_unsupported_parameter_requires_unavailable_confidence() -> None:
+    record = _valid_record(
+        scenario_parameters=[{**PARAMETER_MAPPING, "status": "unsupported", "confidence": "low"}],
+        admission="unsupported",
+    )
+    violations = reconcile_incident_scenario_provenance(record)
+    assert any("confidence='unavailable'" in violation for violation in violations)
+
+
+def test_admitted_record_rejects_unsupported_mapping() -> None:
+    record = _valid_record(
+        scenario_parameters=[
+            {**PARAMETER_MAPPING, "status": "unsupported", "confidence": "unavailable"}
+        ],
+    )
+    violations = reconcile_incident_scenario_provenance(record)
+    assert any("admission='admitted'" in violation for violation in violations)
+
+
+def test_admitted_record_rejects_rejected_extraction() -> None:
+    record = _valid_record(
+        extraction={
+            "status": "rejected",
+            "actors": [ACTOR],
+            "hypotheses": [HYPOTHESIS],
+            "simulator_assumptions": [ASSUMPTION],
+        },
+    )
+    violations = reconcile_incident_scenario_provenance(record)
+    assert any("extraction.status='rejected'" in violation for violation in violations)
 
 
 def test_unverified_status_is_accepted_without_record() -> None:

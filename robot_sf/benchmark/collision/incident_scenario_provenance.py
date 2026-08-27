@@ -98,6 +98,8 @@ def reconcile_incident_scenario_provenance(record: Mapping[str, Any]) -> list[st
     violations: list[str] = []
     violations.extend(_normative_fault_violations(record))
     violations.extend(_verification_violations(record))
+    violations.extend(_parameter_mapping_violations(record))
+    violations.extend(_admission_violations(record))
     violations.extend(_execution_violations(record))
     return violations
 
@@ -145,6 +147,48 @@ def _verification_violations(record: Mapping[str, Any]) -> list[str]:
             f"extraction.status={status!r} requires an explicit extraction.verification_record "
             "(human review evidence); LLM output alone cannot be marked verified"
         ]
+    return []
+
+
+def _parameter_mapping_violations(record: Mapping[str, Any]) -> list[str]:
+    """Keep parameter confidence and unsupported status semantically aligned.
+
+    Returns:
+        Violations for unsupported mappings that carry a misleading confidence.
+    """
+    mappings = record.get("scenario_parameters")
+    if not isinstance(mappings, list):
+        return []
+    violations: list[str] = []
+    for index, mapping in enumerate(mappings):
+        if not isinstance(mapping, Mapping):
+            continue
+        if mapping.get("status") == "unsupported" and mapping.get("confidence") != "unavailable":
+            violations.append(
+                f"scenario_parameters[{index}] with status='unsupported' must use "
+                "confidence='unavailable'"
+            )
+    return violations
+
+
+def _admission_violations(record: Mapping[str, Any]) -> list[str]:
+    """Reject an admitted record that contains explicitly non-admissible content.
+
+    Returns:
+        Violations for an admitted record with rejected extraction or unsupported mappings.
+    """
+    if record.get("admission") != "admitted":
+        return []
+    extraction = record.get("extraction")
+    extraction_status = extraction.get("status") if isinstance(extraction, Mapping) else None
+    if extraction_status == "rejected":
+        return ["admission='admitted' conflicts with extraction.status='rejected'"]
+    mappings = record.get("scenario_parameters")
+    if isinstance(mappings, list) and any(
+        isinstance(mapping, Mapping) and mapping.get("status") == "unsupported"
+        for mapping in mappings
+    ):
+        return ["admission='admitted' conflicts with an unsupported scenario parameter mapping"]
     return []
 
 

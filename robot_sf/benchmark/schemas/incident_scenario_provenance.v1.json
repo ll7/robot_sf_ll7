@@ -120,7 +120,14 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["parameter", "source_field", "transformation", "unit", "status"],
+        "required": [
+          "parameter",
+          "source_field",
+          "transformation",
+          "unit",
+          "status",
+          "confidence"
+        ],
         "properties": {
           "parameter": {"type": "string", "minLength": 1},
           "source_field": {"type": "string", "minLength": 1},
@@ -148,7 +155,10 @@
           "pattern": "^[0-9a-f]{64}$"
         },
         "seed": {"type": "integer", "minimum": 0},
-        "software_commit": {"type": "string", "minLength": 1},
+        "software_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
         "replay_identity": {"type": "string", "minLength": 1},
         "observed_outcome": {
           "type": "object",

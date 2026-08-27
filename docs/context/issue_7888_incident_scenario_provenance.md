@@ -33,8 +33,8 @@ hypothesis, or assumption produced *which* scenario parameter.
 | --- | --- | --- |
 | `source` | Immutable source identity, SHA-256 digest, observed facts | digest must be a full 64-hex SHA-256 |
 | `extraction` | Status (`verified` / `human_corrected` / `unverified` / `rejected`), actor roles, hypotheses, simulator assumptions | `verified` / `human_corrected` require an explicit `verification_record` (human review) |
-| `scenario_parameters` | Parameter mappings with source field, transformation, unit, status, confidence | `unsupported` mappings must not masquerade as mapped |
-| `execution` | Claimed execution identity: config digest, seed, software commit, replay identity, observed outcome | `claimed=true` requires all four identity fields |
+| `scenario_parameters` | Parameter mappings with source field, transformation, unit, status, confidence | confidence is required; `unsupported` mappings must use `unavailable` confidence and must not be admitted |
+| `execution` | Claimed execution identity: config digest, seed, software commit, replay identity, observed outcome | `claimed=true` requires all four identity fields and a full 40-hex software commit |
 | `normative_fault` | Always `not_assessed` | schema `const` plus a semantic second net |
 
 ## 3. Actor-role boundary

@@ -73,7 +73,7 @@ def test_full_release_roster_resolution_helpers_fail_closed(
     )
     config, blockers = release_acceptance._full_release_campaign_config(manifest, None)
     assert config is None
-    assert blockers == ["canonical campaign config cannot be resolved for provenance: bad config"]
+    assert blockers == ["canonical campaign config cannot be resolved for provenance"]
     missing_config, missing_blockers = release_acceptance._full_release_campaign_config(
         SimpleNamespace(), None
     )
@@ -203,7 +203,16 @@ def _write_provenance_bound_full_campaign(
     campaign_root = _write_full_campaign(tmp_path)
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    scenario_path = tmp_path / "classic_interactions_francis2023.yaml"
+    source_repository_root = tmp_path / "frozen-source"
+    schema_path = source_repository_root / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+    schema_path.parent.mkdir(parents=True, exist_ok=True)
+    schema_path.write_bytes(
+        (get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json").read_bytes()
+    )
+    scenario_path = (
+        source_repository_root / "configs/scenarios/classic_interactions_francis2023.yaml"
+    )
+    scenario_path.parent.mkdir(parents=True, exist_ok=True)
     scenario_path.write_text("scenarios: []\n", encoding="utf-8")
     resolved_scenarios = [{"id": scenario_id} for scenario_id in _SCENARIO_IDS]
     monkeypatch.setattr(
@@ -224,7 +233,6 @@ def _write_provenance_bound_full_campaign(
         for scenario in effective_scenarios:
             scenario["telemetry"] = dict(telemetry)
             scenario["metadata"] = {"telemetry": dict(telemetry)}
-    schema_path = get_repository_root() / "robot_sf/benchmark/schemas/episode.schema.v1.json"
     planner_specs: list[SimpleNamespace] = []
     for run in summary["runs"]:
         planner_key = run["planner"]["key"]
@@ -232,7 +240,7 @@ def _write_provenance_bound_full_campaign(
         algo_config_path: Path | None = None
         if shared_first_algorithm and planner_key in {"planner_00", "planner_01"}:
             expected_algo = "hybrid_rule_local_planner"
-            algo_config_path = tmp_path / "algo-configs" / f"{planner_key}.yaml"
+            algo_config_path = source_repository_root / "configs/algos" / f"{planner_key}.yaml"
             algo_config_path.parent.mkdir(parents=True, exist_ok=True)
             algo_config_path.write_text(f"planner_key: {planner_key}\n", encoding="utf-8")
         planner_specs.append(
@@ -294,6 +302,135 @@ def _write_provenance_bound_full_campaign(
         scenario_matrix_path=scenario_path,
         holonomic_command_mode="vx_vy",
         telemetry=telemetry,
+        source_repository_root=source_repository_root,
+    )
+    return campaign_root, config
+
+
+def _write_effective_component_campaign(  # noqa: C901
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    override_mode: str = "valid",
+) -> tuple[Path, SimpleNamespace]:
+    """Build a full fixture whose first arm selects ORCA for one canonical scenario."""
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+    candidate_path = (
+        config.source_repository_root / "configs/policy_search/scenario_adaptive_candidate.yaml"
+    )
+    candidate_path.parent.mkdir(parents=True, exist_ok=True)
+    base_config_path = config.source_repository_root / "configs/algos/hybrid.yaml"
+    override_config_path = config.source_repository_root / "configs/algos/orca.yaml"
+    base_config_path.parent.mkdir(parents=True, exist_ok=True)
+    base_config_path.write_text("planner: hybrid\n", encoding="utf-8")
+    override_config_path.write_text("planner: orca\n", encoding="utf-8")
+    if override_mode == "valid":
+        override_payload = (
+            "scenario_algo_overrides:\n"
+            "  scenario_00:\n"
+            "    algo: orca\n"
+            "    base_config_path: configs/algos/orca.yaml\n"
+        )
+    elif override_mode == "malformed":
+        override_payload = "scenario_algo_overrides:\n  scenario_00: orca\n"
+    elif override_mode == "malformed_base":
+        override_payload = "scenario_algo_overrides:\n  scenario_00: orca\n"
+    elif override_mode == "external":
+        external_config_path = tmp_path / "external.yaml"
+        external_config_path.write_text("planner: external\n", encoding="utf-8")
+        override_payload = (
+            "scenario_algo_overrides:\n"
+            "  scenario_00:\n"
+            f"    base_config_path: {external_config_path}\n"
+        )
+    elif override_mode == "symlink":
+        symlink_config_path = config.source_repository_root / "configs/algos/orca-link.yaml"
+        symlink_config_path.symlink_to(override_config_path)
+        override_payload = (
+            "scenario_algo_overrides:\n"
+            "  scenario_00:\n"
+            "    algo: orca\n"
+            "    base_config_path: configs/algos/orca-link.yaml\n"
+        )
+    elif override_mode == "unknown":
+        override_payload = "scenario_algo_overrides:\n  unknown_scenario:\n    algo: orca\n"
+    else:
+        override_payload = ""
+    candidate_path.write_text(
+        "algo: hybrid_rule_local_planner\n"
+        "base_config_path: configs/algos/hybrid.yaml\n"
+        "params: {}\n" + override_payload,
+        encoding="utf-8",
+    )
+    planner_specs = []
+    for planner in config.planners:
+        if planner.key != "planner_00":
+            planner_specs.append(planner)
+            continue
+        planner_specs.append(
+            SimpleNamespace(
+                key=planner.key,
+                algo="hybrid_rule_local_planner",
+                algo_config_path=candidate_path,
+            )
+        )
+    config.planners = tuple(planner_specs)
+
+    episode_path = campaign_root / "runs" / "planner_00__differential_drive" / "episodes.jsonl"
+    rows = [json.loads(line) for line in episode_path.read_text(encoding="utf-8").splitlines()]
+    for row in rows:
+        row["algo"] = "hybrid_rule_local_planner"
+        row["algorithm_metadata"].update(
+            {
+                "algorithm": "hybrid_rule_local_planner",
+                "canonical_algorithm": "hybrid_rule_local_planner",
+                "planner_contract": {"planner_id": "hybrid_rule_local_planner"},
+            }
+        )
+        if row["scenario_id"] == "scenario_00" and override_mode not in {
+            "malformed_base",
+            "external",
+            "unknown",
+        }:
+            row["algo"] = "orca"
+            row["algorithm_metadata"].update(
+                {
+                    "algorithm": "orca",
+                    "canonical_algorithm": "orca",
+                    "planner_contract": {"planner_id": "orca"},
+                }
+            )
+    episode_path.write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+    sidecar = build_result_provenance_manifest(
+        out_path=episode_path,
+        episode_records=rows,
+        schema_path=(
+            config.source_repository_root / "robot_sf/benchmark/schemas/episode.schema.v1.json"
+        ),
+        scenario_path=config.scenario_matrix_path,
+        scenarios=release_acceptance._result_provenance_scenarios(
+            config,
+            [{"id": scenario_id} for scenario_id in _SCENARIO_IDS],
+            kinematics="differential_drive",
+        ),
+        algo="hybrid_rule_local_planner",
+        algo_config_path=candidate_path,
+        benchmark_profile="release-acceptance-test",
+        suite_key="classic_interactions",
+        total_jobs=len(rows),
+        written=len(rows),
+        horizon=600,
+        dt=0.1,
+        record_forces=False,
+        active_observation_mode=None,
+        active_observation_level=None,
+    )
+    sidecar["run"]["repo_commit"] = _SOURCE_SHA
+    write_result_provenance_manifest(
+        episode_path.with_name(f"{episode_path.name}.provenance.json"), sidecar
     )
     return campaign_root, config
 
@@ -308,6 +445,7 @@ def test_full_release_acceptance_requires_all_arms_and_episode_cells(
         campaign_root,
         manifest=_full_manifest(),
         campaign_config=config,
+        source_repository_root=config.source_repository_root,
     )
 
     assert result["status"] == "valid"
@@ -317,6 +455,248 @@ def test_full_release_acceptance_requires_all_arms_and_episode_cells(
     assert result["unique_episode_identities"] == 20_160
     assert result["source_commits"] == [_SOURCE_SHA]
     assert result["blockers"] == []
+
+
+def test_full_release_acceptance_uses_frozen_source_repository_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A validator checkout must resolve canonical sidecars against the execution checkout."""
+    campaign_root, config = _write_provenance_bound_full_campaign(tmp_path, monkeypatch)
+
+    default_result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+    )
+    assert default_result["status"] == "invalid"
+    assert any("trusted" in blocker for blocker in default_result["blockers"])
+
+    source_result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+    assert source_result["status"] == "valid"
+    assert source_result["blockers"] == []
+
+
+def test_full_release_acceptance_does_not_persist_trusted_source_paths(tmp_path: Path) -> None:
+    """A rejected trusted source is reported without leaking its machine-local path."""
+    private_source = tmp_path / "private-source-marker" / "missing"
+
+    result = validate_full_benchmark_release_acceptance(
+        tmp_path / "campaign",
+        manifest=_full_manifest(),
+        source_repository_root=private_source,
+    )
+
+    assert result["status"] == "invalid"
+    assert any("trusted source repository root" in item for item in result["blockers"])
+    assert str(private_source) not in json.dumps(result)
+
+
+def test_source_repository_path_retargets_validator_paths_and_rejects_external_paths(
+    tmp_path: Path,
+) -> None:
+    """Source binding maps validator-root absolutes but rejects unrelated absolute paths."""
+    source_root = tmp_path / "frozen-source"
+    validator_path = get_repository_root() / "configs/scenarios/example.yaml"
+    assert release_acceptance._source_repository_path(validator_path, source_root) == (
+        source_root / "configs/scenarios/example.yaml"
+    )
+    with pytest.raises(ValueError, match="outside trusted repositories"):
+        release_acceptance._source_repository_path(tmp_path.parent / "external.yaml", source_root)
+
+
+def test_full_release_accepts_effective_policy_search_component_algorithm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A canonical scenario override may replace an arm's base algorithm in episode rows."""
+    campaign_root, config = _write_effective_component_campaign(tmp_path, monkeypatch)
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+
+    assert result["status"] == "valid"
+    assert result["blockers"] == []
+
+
+def test_full_release_rejects_malformed_scenario_override_when_rows_use_base_algorithm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Malformed overrides cannot be hidden by rows that happen to use the base algorithm."""
+    campaign_root, config = _write_effective_component_campaign(
+        tmp_path,
+        monkeypatch,
+        override_mode="malformed_base",
+    )
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+
+    assert result["status"] == "invalid"
+    assert any(
+        "scenario_algo_overrides entries must be mappings" in item for item in result["blockers"]
+    )
+
+
+def test_full_release_rejects_external_nested_candidate_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Nested candidate configs must remain inside the explicit trusted source checkout."""
+    campaign_root, config = _write_effective_component_campaign(
+        tmp_path,
+        monkeypatch,
+        override_mode="external",
+    )
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+
+    assert result["status"] == "invalid"
+    assert any("outside trusted source repository root" in item for item in result["blockers"])
+
+
+def test_full_release_rejects_symlinked_nested_candidate_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Nested candidate config symlinks are rejected before resolution can hide the link."""
+    campaign_root, config = _write_effective_component_campaign(
+        tmp_path,
+        monkeypatch,
+        override_mode="symlink",
+    )
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+
+    assert result["status"] == "invalid"
+    assert any("contains a symlink component" in item for item in result["blockers"])
+
+
+def test_full_release_rejects_unknown_scenario_override_when_rows_use_base_algorithm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unused override keys cannot bypass the canonical scenario matrix binding."""
+    campaign_root, config = _write_effective_component_campaign(
+        tmp_path,
+        monkeypatch,
+        override_mode="unknown",
+    )
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+
+    assert result["status"] == "invalid"
+    assert any("not in the canonical campaign matrix" in item for item in result["blockers"])
+
+
+@pytest.mark.parametrize("override_mode", ["missing", "malformed"])
+def test_full_release_rejects_unbound_effective_policy_search_component(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    override_mode: str,
+) -> None:
+    """Rows cannot claim ORCA when the canonical candidate has no valid scenario override."""
+    campaign_root, config = _write_effective_component_campaign(
+        tmp_path,
+        monkeypatch,
+        override_mode=override_mode,
+    )
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+
+    assert result["status"] == "invalid"
+    assert any("planner algorithm aliases do not match" in item for item in result["blockers"])
+
+
+def test_full_release_rejects_effective_component_on_wrong_scenario_or_arm(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The effective algorithm is bound to both its canonical scenario and containing arm."""
+    campaign_root, config = _write_effective_component_campaign(tmp_path, monkeypatch)
+    first_path = campaign_root / "runs" / "planner_00__differential_drive" / "episodes.jsonl"
+    first_rows = [json.loads(line) for line in first_path.read_text(encoding="utf-8").splitlines()]
+    first_rows[len(_SEEDS)]["algo"] = "orca"
+    first_rows[len(_SEEDS)]["algorithm_metadata"].update(
+        {
+            "algorithm": "orca",
+            "canonical_algorithm": "orca",
+            "planner_contract": {"planner_id": "orca"},
+        }
+    )
+    first_path.write_text(
+        "\n".join(json.dumps(row) for row in first_rows) + "\n",
+        encoding="utf-8",
+    )
+    first_sidecar_path = first_path.with_name(f"{first_path.name}.provenance.json")
+    first_sidecar = json.loads(first_sidecar_path.read_text(encoding="utf-8"))
+    first_sidecar["raw_artifacts"][0]["sha256"] = sha256_file(first_path)
+    first_sidecar_path.write_text(json.dumps(first_sidecar), encoding="utf-8")
+
+    second_path = campaign_root / "runs" / "planner_01__differential_drive" / "episodes.jsonl"
+    second_rows = [
+        json.loads(line) for line in second_path.read_text(encoding="utf-8").splitlines()
+    ]
+    second_rows[0]["algo"] = "orca"
+    second_rows[0]["algorithm_metadata"].update(
+        {
+            "algorithm": "orca",
+            "canonical_algorithm": "orca",
+            "planner_contract": {"planner_id": "orca"},
+        }
+    )
+    second_path.write_text(
+        "\n".join(json.dumps(row) for row in second_rows) + "\n",
+        encoding="utf-8",
+    )
+    second_sidecar_path = second_path.with_name(f"{second_path.name}.provenance.json")
+    second_sidecar = json.loads(second_sidecar_path.read_text(encoding="utf-8"))
+    second_sidecar["raw_artifacts"][0]["sha256"] = sha256_file(second_path)
+    second_sidecar_path.write_text(json.dumps(second_sidecar), encoding="utf-8")
+
+    result = validate_full_benchmark_release_acceptance(
+        campaign_root,
+        manifest=_full_manifest(),
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
+    )
+
+    assert result["status"] == "invalid"
+    assert sum("planner algorithm aliases do not match" in item for item in result["blockers"]) >= 2
 
 
 def test_full_release_rejects_unrecognized_episode_status(
@@ -340,6 +720,7 @@ def test_full_release_rejects_unrecognized_episode_status(
         campaign_root,
         manifest=_full_manifest(),
         campaign_config=config,
+        source_repository_root=config.source_repository_root,
     )
 
     assert result["status"] == "invalid"
@@ -370,6 +751,7 @@ def test_full_release_rejects_conflicting_present_provenance_alias(
         campaign_root,
         manifest=_full_manifest(),
         campaign_config=config,
+        source_repository_root=config.source_repository_root,
     )
 
     assert result["status"] == "invalid"
@@ -395,6 +777,7 @@ def test_full_release_sidecar_identity_matches_telemetry_enabled_producer(
         campaign_root,
         manifest=_full_manifest(),
         campaign_config=config,
+        source_repository_root=config.source_repository_root,
     )
 
     assert result["status"] == "valid"
@@ -438,7 +821,10 @@ def test_full_release_binds_same_algorithm_artifacts_to_exact_arms(
     )
     manifest = _full_manifest()
     baseline = validate_full_benchmark_release_acceptance(
-        campaign_root, manifest=manifest, campaign_config=config
+        campaign_root,
+        manifest=manifest,
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
     )
     assert baseline["status"] == "valid"
 
@@ -456,7 +842,10 @@ def test_full_release_binds_same_algorithm_artifacts_to_exact_arms(
     second_sidecar.write_bytes(first_sidecar_payload)
 
     result = validate_full_benchmark_release_acceptance(
-        campaign_root, manifest=manifest, campaign_config=config
+        campaign_root,
+        manifest=manifest,
+        campaign_config=config,
+        source_repository_root=config.source_repository_root,
     )
 
     assert result["status"] == "invalid"
@@ -1041,3 +1430,18 @@ def test_release_acceptance_bounds_duplicate_blockers() -> None:
 
     assert blockers[0] == "same blocker"
     assert len(blockers) == 100
+
+
+def test_campaign_summary_reader_reports_invalid_json_without_private_path(
+    tmp_path: Path,
+) -> None:
+    """Malformed summary diagnostics remain useful without exposing their location."""
+    summary_path = tmp_path / "reports" / "campaign_summary.json"
+    summary_path.parent.mkdir(parents=True)
+    summary_path.write_text("{invalid\n", encoding="utf-8")
+
+    payload, error = release_acceptance._read_campaign_summary(tmp_path)
+
+    assert payload is None
+    assert error == "campaign summary contains invalid JSON"
+    assert str(tmp_path) not in error

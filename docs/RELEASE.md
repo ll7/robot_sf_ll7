@@ -197,6 +197,41 @@ pending, or failed, the doctor fails closed and lists the blocking run IDs. To r
 blocking workflow run without altering workflow history, trigger a clean run for that exact ref
 (`gh workflow run <workflow>.yml --ref <ref>`) and allow it to finish.
 
+### Preserved post-execution evidence
+
+If a fixed campaign completed scientifically but the terminal job failed only
+at the publication validator gate, use the separate post-execution doctor. It
+validates the reviewed derived revalidation receipt, the checksummed bundle and
+preflight, and the historical checkpoint, runtime-smoke, stress, queue, and
+job records. It binds the evidence to the frozen source, release tag, base,
+campaign, and consumed job identity. The failed queue row is intentionally not
+required to be dispatchable; a new benchmark submission is not authorized by
+this mode.
+
+```bash
+uv run robot-sf release doctor --post-execution \
+  --repo "$PWD" \
+  --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
+  --expected-release-sha b1d5ab6de708385c0828c99501a9d1c29727ec11 \
+  --expected-base-sha cd831d7582c117ac9529065e7d1c60386933c92d \
+  --tag paper-matrix-v2-h600-s30-2026-08-cd831d7582c1 \
+  --expected-campaign-id issue7742_release_full-s30-h600-b1d5ab6de708-v1_20260825 \
+  --expected-job-id 14890 \
+  --derived-revalidation-receipt <derived-revalidation-receipt.json> \
+  --publication-bundle <publication-bundle-directory> \
+  --publication-archive <publication-bundle.tar.gz> \
+  --publication-preflight <publication-preflight.json> \
+  --private-launch-packet <private-launch-packet.yaml> \
+  --private-queue <private-ops-queue.yaml> \
+  --private-jobs <private-ops-jobs.yaml> \
+  --private-evaluation-receipt <private-derived-evaluation-receipt.json> \
+  --expected-validator-sha bd4bc4b4018b24c887c8e91ad834bc6898d7aad2
+```
+
+This mode is read-only and emits no credentials. A passing report is still
+only an acceptance gate: publication requires the independent GitHub/Zenodo
+cold-download checks below, and SNQI remains advisory when calibration fails.
+
 For a future release, reserve a fresh benchmark-data
 concept/version before freezing the DOI into its v0.2 manifest:
 
@@ -243,6 +278,27 @@ S30/H600 config and manifest identity, but they do not change `pyproject.toml`,
 `CITATION.cff`, or the package version. Publish benchmark data only after the
 fresh Zenodo concept, checksums, claim boundary, and full-run evidence have been
 reviewed.
+
+### Benchmark-data tag identity (source-SHA binding)
+
+For future benchmark-data releases, any SHA-like component in the release tag
+must be derived from the **final immutable source SHA** — never from a
+preliminary planning/base SHA. The workflow:
+
+1. Freeze the final source commit first; record it as `source_sha` in the
+   manifest (the manifest also stores any `planning_base_sha` as a separate
+   provenance field).
+2. Derive SHA-bearing tag names from that final SHA (e.g.
+   `paper-matrix-<...>-<40-hex source_sha>`), or use an explicit semantic
+   identifier scheme that contains no SHA-like component.
+3. `robot-sf release doctor` rejects a SHA-bearing tag whose component
+   disagrees with the manifest `source_sha`; a planning/base SHA in a
+   SHA-bearing tag never satisfies the check. Short hex abbreviations must be
+   a prefix of the final source SHA or they fail closed.
+
+The published August 2026 tag (`paper-matrix-v2-h600-s30-2026-08-cd831d7582c1`)
+is immutable; its authoritative source identity is the manifest/bundle SHA
+(`b1d5ab6d…`), not the tag suffix. Do not rename or retarget it.
 
 ## Archive and Citation
 

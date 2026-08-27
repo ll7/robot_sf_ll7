@@ -920,7 +920,26 @@ def verify(  # noqa: C901, PLR0912, PLR0915
 
     expected_files, file_problems = _file_inventory(state)
     problems.extend(file_problems)
-    remote_files_value = remote.get("files")
+    file_inventory_source = remote
+    if remote_submitted is True:
+        record_id = state.get("record_id")
+        public_record = _json_object(
+            session.get(f"{api_base.rstrip('/')}/records/{record_id}", timeout=60),
+            "verify published record",
+        )
+        if public_record.get("id") != record_id:
+            problems.append("published record id does not match reserved state")
+        if str(public_record.get("conceptrecid") or "") != str(
+            state.get("concept_record_id") or ""
+        ):
+            problems.append("published record concept id does not match reserved state")
+        if public_record.get("doi") != state.get("doi"):
+            problems.append("published record DOI does not match reserved state")
+        if public_record.get("status") != "published":
+            problems.append("published record status is not published")
+        file_inventory_source = public_record
+
+    remote_files_value = file_inventory_source.get("files")
     remote_files = remote_files_value if isinstance(remote_files_value, list) else []
     if not remote_files:
         problems.append("remote file inventory is empty")
@@ -945,12 +964,18 @@ def verify(  # noqa: C901, PLR0912, PLR0915
         if remote_file is None:
             continue
         remote_size = remote_file.get("size")
-        if isinstance(remote_size, int) and remote_size != expected.get("size"):
-            problems.append(f"remote file {name} size does not match uploaded bytes")
-        if isinstance(remote_size, int) and remote_size <= 0:
+        if not isinstance(remote_size, int) or isinstance(remote_size, bool):
+            problems.append(f"remote file {name} has an invalid size")
+        elif remote_size <= 0:
             problems.append(f"remote file {name} is empty")
+        elif remote_size != expected.get("size"):
+            problems.append(f"remote file {name} size does not match uploaded bytes")
         links = remote_file.get("links")
-        download_url = links.get("download") if isinstance(links, Mapping) else None
+        download_url = (
+            (links.get("self") if remote_submitted is True else links.get("download"))
+            if isinstance(links, Mapping)
+            else None
+        )
         if not isinstance(download_url, str) or not download_url.startswith("https://"):
             problems.append(f"remote file {name} has no secure download URL")
             continue

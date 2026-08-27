@@ -15,11 +15,20 @@ from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_s
 
 
 def _observation() -> dict:
+    grid = np.zeros((3, 9, 9), dtype=np.float32)
+    grid[0, 4, 5] = 1.0
     return {
         "robot": {"position": [0.0, 0.0], "heading": [0.0]},
         "goal": {"current": [4.0, 0.0]},
-        "obstacles": {"positions": [[1.5, 0.5]]},
         "pedestrians": {"positions": [[1.0, 0.0]], "count": [1]},
+        "occupancy_grid": grid,
+        "occupancy_grid_meta_origin": [-4.5, -4.5],
+        "occupancy_grid_meta_resolution": [1.0],
+        "occupancy_grid_meta_size": [9.0, 9.0],
+        "occupancy_grid_meta_use_ego_frame": [1.0],
+        "occupancy_grid_meta_center_on_robot": [1.0],
+        "occupancy_grid_meta_channel_indices": [0, 1, -1, 2],
+        "occupancy_grid_meta_robot_pose": [0.0, 0.0, 0.0],
     }
 
 
@@ -37,7 +46,10 @@ def test_registered_builder_is_opt_in_and_map_runner_resolvable() -> None:
     assert np.all(np.isfinite(command))
     assert meta["algorithm"] == "force_coupled_potential_field"
     assert meta["planner_kinematics"]["testing_only_adapter"] is True
-    assert policy._planner_stats()["status"] == "ok"
+    diagnostics = policy._planner_stats()
+    assert diagnostics["status"] == "ok"
+    assert diagnostics["missing_inputs"] == []
+    assert diagnostics["obstacle_repulsive_force"][0] < 0.0
 
 
 def test_readiness_and_method_metadata_preserve_smoke_only_boundary() -> None:

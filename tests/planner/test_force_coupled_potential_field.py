@@ -51,6 +51,10 @@ def test_config_rejects_invalid_values() -> None:
         ForceCoupledPotentialFieldConfig(look_ahead_min_m=3.0, look_ahead_max_m=1.0)
     with pytest.raises(ValueError):
         ForceCoupledPotentialFieldConfig(obstacle_input_mode="bogus")
+    with pytest.raises(ValueError):
+        ForceCoupledPotentialFieldConfig(obstacle_grid_threshold=1.1)
+    with pytest.raises(ValueError):
+        ForceCoupledPotentialFieldConfig(obstacle_grid_max_points=0)
 
 
 def test_config_digest_is_stable() -> None:
@@ -133,9 +137,9 @@ def test_repulsive_force_points_away_from_obstacle() -> None:
     assert repulsive[0] < 0.0  # away from obstacle at +x
 
 
-def test_zero_distance_guard_reports_finite_force() -> None:
+def test_zero_distance_guard_stops_and_reports_degraded() -> None:
     planner = ForceCoupledPotentialFieldPlanner()
-    planner.plan(
+    command = planner.plan(
         _observation(
             robot=(0.0, 0.0, 0.0),
             goal=(4.0, 0.0),
@@ -144,8 +148,13 @@ def test_zero_distance_guard_reports_finite_force() -> None:
     )
     diagnostics = planner.diagnostics()
     repulsive = np.asarray(diagnostics["repulsive_force"])
+    assert command == (0.0, 0.0)
     assert np.all(np.isfinite(repulsive))
     assert diagnostics["zero_distance_guards"] == {"obstacles": 1, "pedestrians": 0}
+    assert diagnostics["status"] == "degraded"
+    assert diagnostics["step_degraded"] is True
+    assert diagnostics["ever_degraded"] is True
+    assert "zero_distance_stop" in diagnostics["active_constraints"]
 
 
 def test_speed_and_rate_limits_are_hard_predicates() -> None:
@@ -326,6 +335,76 @@ def test_missing_optional_visibility_is_explicitly_degraded() -> None:
     assert diagnostics["status"] == "degraded"
     assert diagnostics["degraded"] is True
     assert diagnostics["missing_inputs"] == ["obstacles", "pedestrians"]
+
+
+def test_degraded_status_is_sticky_until_reset() -> None:
+    planner = ForceCoupledPotentialFieldPlanner()
+    planner.plan({"robot": [0.0, 0.0, 0.0], "goal": [4.0, 0.0]})
+
+    planner.plan(_observation())
+    diagnostics = planner.diagnostics()
+    assert diagnostics["status"] == "degraded"
+    assert diagnostics["step_degraded"] is False
+    assert diagnostics["ever_degraded"] is True
+    assert diagnostics["status_reason"].startswith("episode previously degraded")
+
+    planner.reset(seed=7)
+    planner.plan(_observation())
+    diagnostics = planner.diagnostics()
+    assert diagnostics["status"] == "ok"
+    assert diagnostics["ever_degraded"] is False
+
+
+def test_ego_occupancy_grid_supplies_static_obstacles() -> None:
+    planner = ForceCoupledPotentialFieldPlanner()
+    grid = np.zeros((3, 9, 9), dtype=np.float32)
+    grid[0, 4, 5] = 1.0
+    observation = {
+        "robot": {"position": [3.0, -2.0], "heading": [math.pi / 2]},
+        "goal": {"current": [3.0, 2.0]},
+        "pedestrians": {"positions": [], "count": [0]},
+        "occupancy_grid": grid,
+        "occupancy_grid_meta_origin": [-4.5, -4.5],
+        "occupancy_grid_meta_resolution": [1.0],
+        "occupancy_grid_meta_size": [9.0, 9.0],
+        "occupancy_grid_meta_use_ego_frame": [1.0],
+        "occupancy_grid_meta_center_on_robot": [1.0],
+        "occupancy_grid_meta_channel_indices": [0, 1, -1, 2],
+        "occupancy_grid_meta_robot_pose": [3.0, -2.0, math.pi / 2],
+    }
+
+    planner.plan(observation)
+    diagnostics = planner.diagnostics()
+    obstacle_force = np.asarray(diagnostics["obstacle_repulsive_force"])
+    assert diagnostics["status"] == "ok"
+    assert diagnostics["missing_inputs"] == []
+    assert abs(obstacle_force[0]) < 1e-9
+    assert obstacle_force[1] < 0.0
+
+
+def test_occupied_robot_grid_cell_triggers_overlap_stop() -> None:
+    planner = ForceCoupledPotentialFieldPlanner()
+    grid = np.zeros((3, 9, 9), dtype=np.float32)
+    grid[0, 4, 4] = 1.0
+    observation = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+        "goal": {"current": [4.0, 0.0]},
+        "pedestrians": {"positions": [], "count": [0]},
+        "occupancy_grid": grid,
+        "occupancy_grid_meta_origin": [-4.5, -4.5],
+        "occupancy_grid_meta_resolution": [1.0],
+        "occupancy_grid_meta_size": [9.0, 9.0],
+        "occupancy_grid_meta_use_ego_frame": [1.0],
+        "occupancy_grid_meta_center_on_robot": [1.0],
+        "occupancy_grid_meta_channel_indices": [0, 1, -1, 2],
+        "occupancy_grid_meta_robot_pose": [0.0, 0.0, 0.0],
+    }
+
+    command = planner.plan(observation)
+    diagnostics = planner.diagnostics()
+    assert command == (0.0, 0.0)
+    assert diagnostics["status"] == "degraded"
+    assert diagnostics["zero_distance_guards"]["obstacles"] == 1
 
 
 def test_pedestrian_repulsion_within_observation_contract() -> None:

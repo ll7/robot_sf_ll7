@@ -13,14 +13,15 @@ field-guided and force-coupled adaptive pure pursuit approach" (Scientific Repor
 Plain-language summary: an opt-in local planner that steers a unicycle robot by combining an
 attractive force toward a look-ahead target with repulsive forces from obstacles and pedestrians,
 saturating the total force, and issuing a speed/steering command that respects configured speed and
-rate limits as hard predicates. It is a comparator core for future planner evaluation — nothing
-more.
+rate limits as hard predicates. The registered map-runner path reads static obstacles from the
+canonical occupancy-grid obstacle channel; direct point inputs remain available for analytic smoke
+fixtures. It is a comparator core for future planner evaluation — nothing more.
 
 ## Source-to-implementation map
 
 | Source element | Implementation | Notes |
 | --- | --- | --- |
-| velocity-adaptive local path / look-ahead selection | `implemented` (approximated) | look-ahead distance scales with remaining goal distance, clamped to `[look_ahead_min_m, look_ahead_max_m]` |
+| goal-distance-adaptive local path / look-ahead selection | `implemented` (approximated) | look-ahead distance scales with remaining goal distance, not velocity, and is clamped to `[look_ahead_min_m, look_ahead_max_m]` |
 | dynamic potential-field refinement | `approximated` | classic attractive + inverse-distance repulsive field; no time-varying field update |
 | force-coupled target selection | `implemented` | combined saturated force direction sets the desired heading |
 | bounded forward-kinematic command generation | `implemented` | unicycle `(linear, angular)` with speed limits |
@@ -30,12 +31,17 @@ more.
 
 - Attractive force: `attractive_weight * (target - robot) / |target - robot|`.
 - Repulsive force per source point: `repulsive_weight * (1/d - 1/influence_radius_m) * (robot - p) / d`
-  for `d <= influence_radius_m`; zero-distance points push along `+x` (guarded, finite).
+  for `numerical_epsilon < d <= influence_radius_m`.
+- A zero-distance obstacle or pedestrian is treated as an overlap: the planner emits an immediate
+  `(0, 0)` stop and records sticky `status: degraded`; it does not invent a repulsion direction.
 - Total force saturated at `force_saturation` magnitude.
 - Desired heading: `atan2(fy, fx)`; command `linear = look_ahead_gain * goal_distance`,
   `angular = wrap_pi(desired_heading - robot_theta)`.
 - Units: metres, seconds, radians. Sign convention: left-hand positive angular rate.
-- Numerical guards: `numerical_epsilon` for zero-distance and division; non-finite inputs raise.
+- Static-obstacle input: direct world-frame points for analytic fixtures, otherwise occupied cell
+  centres from the map runner's canonical occupancy-grid obstacle channel, thresholded and bounded
+  to the nearest configured point count inside the influence radius.
+- Numerical guards: `numerical_epsilon` for overlap and division; non-finite inputs raise.
 
 ## Deviations and unsupported elements
 
@@ -49,6 +55,8 @@ more.
 
 The receipt below is implementation-integrity evidence only. It does not measure collision,
 time-to-collision, comfort, social compliance, planner ranking, or fidelity to the source paper.
+It is retained as a historical receipt for the named source commit and is not exact-head evidence
+after the fail-closed occupancy/overlap corrections.
 
 - Code/source commit: `3c3cca655652050c97771f10b7176cb0a07ebad8`.
 - Comparison base: `31552ec8d3f2e963ba857b34b0efe65f49311fc9` (`origin/main`).
@@ -78,10 +86,11 @@ commands and diagnostics.
 | --- | --- | --- |
 | success | observed | both fixed analytic fixtures returned finite, bounded commands with `status: ok` |
 | invalid | observed | missing, malformed, and non-finite required inputs raise `ValueError` after recording `status: invalid_input` |
-| degraded | observed | absent optional obstacle/pedestrian visibility is explicit as `status: degraded`; it is not nominal success or benchmark evidence |
+| degraded | observed | absent optional visibility or a zero-distance overlap is explicit and sticky for the episode as `status: degraded`; overlap emits an immediate stop and is not nominal success or benchmark evidence |
 | collision | not evaluated | analytic command smoke has no simulator rollout, so no collision outcome is claimed |
 | timeout | not evaluated | bounded analytic execution has no timeout outcome; no campaign/runtime claim is made |
 
 The full focused validation also covers goal approach, separate obstacle and pedestrian force
-components, symmetric tie-breaking, zero-distance guards, hard speed/rate predicates,
-rotation/translation consistency, canonical lifecycle behavior, and opt-in map-runner registration.
+components, symmetric tie-breaking, zero-distance stop semantics, sticky episode degradation, hard
+speed/rate predicates, rotation/translation consistency, canonical lifecycle behavior, and
+occupancy-grid-backed opt-in map-runner registration.

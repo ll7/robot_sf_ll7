@@ -25,6 +25,8 @@ from typing import Any
 import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi
+from robot_sf.nav.occupancy_grid_utils import ego_to_world
+from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
 
 PLANNER_TYPE = "force_coupled_potential_field"
 
@@ -51,6 +53,8 @@ class ForceCoupledPotentialFieldConfig:
     max_angular_rate: float = 1.5
     control_dt: float = 0.2
     numerical_epsilon: float = 1e-6
+    obstacle_grid_threshold: float = 0.5
+    obstacle_grid_max_points: int = 256
     obstacle_input_mode: str = "observation_contract"
     pedestrian_input_mode: str = "observation_contract"
 
@@ -76,6 +80,16 @@ class ForceCoupledPotentialFieldConfig:
                 raise ValueError(f"{name} must be a positive finite number")
         if self.look_ahead_min_m > self.look_ahead_max_m:
             raise ValueError("look_ahead_min_m must not exceed look_ahead_max_m")
+        if not math.isfinite(float(self.obstacle_grid_threshold)) or not (
+            0.0 <= float(self.obstacle_grid_threshold) <= 1.0
+        ):
+            raise ValueError("obstacle_grid_threshold must be a finite number in [0, 1]")
+        if (
+            isinstance(self.obstacle_grid_max_points, bool)
+            or not isinstance(self.obstacle_grid_max_points, int)
+            or self.obstacle_grid_max_points <= 0
+        ):
+            raise ValueError("obstacle_grid_max_points must be a positive integer")
         if self.obstacle_input_mode not in {"observation_contract", "oracle"}:
             raise ValueError("obstacle_input_mode must be observation_contract or oracle")
         if self.pedestrian_input_mode not in {"observation_contract", "oracle"}:
@@ -124,7 +138,7 @@ def _as_2d_points(value: Any) -> np.ndarray:
     return arr
 
 
-class ForceCoupledPotentialFieldPlanner:
+class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
     """Opt-in force-coupled dynamic potential-field local planner.
 
     Implements the canonical :class:`LocalPlannerProtocol`:
@@ -143,6 +157,7 @@ class ForceCoupledPotentialFieldPlanner:
         self._last_linear: float = 0.0
         self._last_angular: float = 0.0
         self._last_diagnostics: dict[str, Any] = {}
+        self._degradation_reasons: list[str] = []
         self._closed = False
 
     # -- lifecycle ---------------------------------------------------------
@@ -154,6 +169,7 @@ class ForceCoupledPotentialFieldPlanner:
         self._last_linear = 0.0
         self._last_angular = 0.0
         self._last_diagnostics = {}
+        self._degradation_reasons = []
 
     def close(self) -> None:
         """Release held resources. Idempotent."""
@@ -202,7 +218,10 @@ class ForceCoupledPotentialFieldPlanner:
         raw_linear = float(self.config.look_ahead_gain * distance)
         raw_angular = float(heading_error)
 
-        linear, angular = self._constrain_command(raw_linear, raw_angular)
+        zero_distance_stop = bool(obstacle_zero_distance or pedestrian_zero_distance)
+        linear, angular = (
+            (0.0, 0.0) if zero_distance_stop else self._constrain_command(raw_linear, raw_angular)
+        )
         self._last_diagnostics = self._build_diagnostics(
             state=(robot, goal, target),
             forces={
@@ -256,7 +275,16 @@ class ForceCoupledPotentialFieldPlanner:
         robot, goal = self._robot_and_goal(observation)
         obstacles_raw, pedestrians_raw, missing_inputs = self._visibility_inputs(observation)
         if self.config.obstacle_input_mode == "observation_contract":
-            obstacles = self._as_obstacles(obstacles_raw)
+            grid_obstacles = (
+                self._obstacles_from_occupancy_grid(observation, robot)
+                if "obstacles" in missing_inputs
+                else None
+            )
+            if grid_obstacles is None:
+                obstacles = self._as_obstacles(obstacles_raw)
+            else:
+                obstacles = grid_obstacles
+                missing_inputs.remove("obstacles")
         else:
             obstacles = _as_2d_points(obstacles_raw)
         if self.config.pedestrian_input_mode == "observation_contract":
@@ -365,6 +393,60 @@ class ForceCoupledPotentialFieldPlanner:
             return positions[:count]
         return _as_2d_points(value)
 
+    def _obstacles_from_occupancy_grid(
+        self,
+        observation: dict[str, Any],
+        robot: np.ndarray,
+    ) -> np.ndarray | None:
+        """Return nearby world-frame static-obstacle cell centers when a grid is present.
+
+        Returns:
+            Nearby obstacle centers, an empty array for a valid obstacle-free grid, or
+            ``None`` when the observation has no valid static-obstacle grid contract.
+        """
+        payload = self._obstacle_grid_payload(observation)
+        if payload is None:
+            return None
+        grid, meta, channel_idx, resolution = payload
+        threshold = float(self.config.obstacle_grid_threshold)
+        obstacle_mask = grid[channel_idx] >= threshold
+        robot_cell_occupied = self._grid_value(robot[:2], grid, meta, channel_idx) >= threshold
+        indices = np.argwhere(obstacle_mask)
+        if indices.size == 0:
+            return np.zeros((0, 2), dtype=float)
+
+        origin = self._as_1d_float(meta.get("origin", [0.0, 0.0]), pad=2)
+        centers = np.column_stack(
+            (
+                origin[0] + (indices[:, 1] + 0.5) * resolution,
+                origin[1] + (indices[:, 0] + 0.5) * resolution,
+            )
+        )
+        use_ego = bool(self._as_1d_float(meta.get("use_ego_frame", [0.0]), pad=1)[0] > 0.5)
+        if use_ego:
+            pose = self._as_1d_float(
+                meta.get("robot_pose", [robot[0], robot[1], robot[2]]),
+                pad=3,
+            )
+            robot_pose = ((float(pose[0]), float(pose[1])), float(pose[2]))
+            centers = np.asarray(
+                [ego_to_world(float(x), float(y), robot_pose) for x, y in centers],
+                dtype=float,
+            )
+
+        offsets = centers - robot[:2]
+        distance_sq = np.einsum("ij,ij->i", offsets, offsets)
+        within_influence = distance_sq <= self.config.influence_radius_m**2
+        centers = centers[within_influence]
+        distance_sq = distance_sq[within_influence]
+        if robot_cell_occupied and not np.any(distance_sq <= self.config.numerical_epsilon**2):
+            centers = np.vstack((robot[:2], centers))
+            distance_sq = np.concatenate(([0.0], distance_sq))
+        if centers.shape[0] > self.config.obstacle_grid_max_points:
+            order = np.argsort(distance_sq, kind="stable")[: self.config.obstacle_grid_max_points]
+            centers = centers[order]
+        return centers
+
     def _select_target(self, robot: np.ndarray, goal: np.ndarray) -> np.ndarray:
         """Select the look-ahead target along the robot-to-goal direction.
 
@@ -406,9 +488,8 @@ class ForceCoupledPotentialFieldPlanner:
             delta = robot[:2] - point
             distance = float(np.hypot(delta[0], delta[1]))
             if distance <= self.config.numerical_epsilon:
-                delta = np.asarray([1.0, 0.0])
-                distance = self.config.numerical_epsilon
                 zero_distance_guards += 1
+                continue
             if distance > self.config.influence_radius_m:
                 continue
             magnitude = self.config.repulsive_weight * (
@@ -481,6 +562,27 @@ class ForceCoupledPotentialFieldPlanner:
         missing_inputs, zero_distance_guards = visibility
         raw_linear, raw_angular = raw_command
         linear, angular = command
+        current_degradation_reasons: list[str] = []
+        if missing_inputs:
+            current_degradation_reasons.append(
+                "optional visibility inputs unavailable: " + ", ".join(missing_inputs)
+            )
+        overlapping_sources = [
+            source for source, count in zero_distance_guards.items() if count > 0
+        ]
+        if overlapping_sources:
+            current_degradation_reasons.append(
+                "zero-distance overlap stop: " + ", ".join(overlapping_sources)
+            )
+        for reason in current_degradation_reasons:
+            if reason not in self._degradation_reasons:
+                self._degradation_reasons.append(reason)
+        ever_degraded = bool(self._degradation_reasons)
+        active_constraints = self._active_constraints(
+            linear, angular, raw_linear, raw_angular, previous_command
+        )
+        if overlapping_sources:
+            active_constraints.append("zero_distance_stop")
         return {
             "diagnostics_schema": "force_coupled_potential_field.v1",
             "planner_type": self.planner_type,
@@ -496,20 +598,25 @@ class ForceCoupledPotentialFieldPlanner:
             "saturated_force": _force_list(forces["saturated"]),
             "raw_command": [float(raw_linear), float(raw_angular)],
             "constrained_command": [float(linear), float(angular)],
-            "active_constraints": self._active_constraints(
-                linear, angular, raw_linear, raw_angular, previous_command
-            ),
+            "active_constraints": active_constraints,
             "zero_distance_guards": zero_distance_guards,
             "missing_inputs": list(missing_inputs),
             "invalid_input": False,
             "non_finite_input": False,
             "fallback": False,
-            "degraded": bool(missing_inputs),
-            "status": "degraded" if missing_inputs else "ok",
+            "step_degraded": bool(current_degradation_reasons),
+            "ever_degraded": ever_degraded,
+            "degradation_reasons": list(self._degradation_reasons),
+            "degraded": ever_degraded,
+            "status": "degraded" if ever_degraded else "ok",
             "status_reason": (
-                "optional visibility inputs unavailable: " + ", ".join(missing_inputs)
-                if missing_inputs
-                else "nominal"
+                "; ".join(current_degradation_reasons)
+                if current_degradation_reasons
+                else (
+                    "episode previously degraded: " + "; ".join(self._degradation_reasons)
+                    if ever_degraded
+                    else "nominal"
+                )
             ),
         }
 
@@ -554,6 +661,9 @@ class ForceCoupledPotentialFieldPlanner:
             "non_finite_input": "non-finite" in reason,
             "fallback": False,
             "degraded": status == "degraded",
+            "step_degraded": status == "degraded",
+            "ever_degraded": bool(self._degradation_reasons) or status == "degraded",
+            "degradation_reasons": list(self._degradation_reasons),
         }
 
 

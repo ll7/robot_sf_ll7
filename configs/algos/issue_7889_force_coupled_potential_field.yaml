@@ -17,5 +17,7 @@ max_linear_rate: 0.8
 max_angular_rate: 1.5
 control_dt: 0.2
 numerical_epsilon: 1.0e-6
+obstacle_grid_threshold: 0.5
+obstacle_grid_max_points: 256
 obstacle_input_mode: observation_contract
 pedestrian_input_mode: observation_contract

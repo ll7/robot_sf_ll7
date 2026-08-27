@@ -8,12 +8,35 @@ The repository separates automated dependency updates by compatibility risk so a
 - scripts/validation/dependabot_update_policy.v1.json maps direct packages to risk, lane, rollback, and existing CI evidence.
 - scripts/dev/check_dependabot_update_policy.py validates the three surfaces together and reuses
   the coherence helper's frozen supported-profile comparison for lock changes.
+- The same checker owns the workflow action-pin guard: it compares full-SHA external action refs in
+  changed `.github/workflows/*.yml` or `.yaml` files against the exact base and searches the tracked
+  HEAD tree for stale old refs.
 - scripts/validation/dependency_coherence.v1.json maps each declaration to its required lock and supported profile owners.
 - scripts/dev/check_dependency_coherence.py checks that map against the exact pull-request base.
 - .github/workflows/pr-contract-check.yml runs the checker for every pull request.
 - .github/workflows/ci.yml owns the required compatibility evidence; the policy does not create a second dependency test suite.
 
 The checker also covers the standalone fast-pysf project files. A new direct package must be added to the manifest with a reviewed class before it can pass the policy check. Unknown transitive lock rows remain visible and route through the conservative compatibility jobs.
+
+## Workflow action-pin coupling
+
+For each changed workflow YAML file, the checker compares `uses: owner/action@<40-hex-SHA>` entries
+in the exact base tree with `HEAD`. When the same external action moves from one full SHA to another,
+the checker searches every tracked `HEAD` file for the old exact `action@SHA` reference. A match
+blocks the pull request and names the workflow, old and new refs, and matching paths so coupled
+contract tests or other active references can be updated together. New or unchanged pins and
+workflow edits that do not replace a full-SHA action are not scanned as replacements.
+
+This is a coupling check, not a replacement for the existing action-pin audit: it does not select
+action versions, validate release comments, or allow tag-based refs. The PR-wide entry point is
+already `.github/workflows/pr-contract-check.yml`; run it locally with:
+
+```bash
+uv run python scripts/dev/check_dependabot_update_policy.py --base-ref origin/main --json
+```
+
+The guard was added after the CodeQL drift repaired by #7903/#7910; #7616/#7618 is the earlier
+immediate repair with the same class of mismatch.
 
 ## Update lanes
 

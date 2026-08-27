@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import jsonschema
@@ -13,6 +14,7 @@ from scripts.dev.check_dependabot_update_policy import (
     _diff_vs_head,
     changed_files,
     changed_lock_package_names,
+    check_workflow_action_pin_guard,
     classify_package_names,
     evaluate_update,
     filter_normalization_only_classifications,
@@ -27,6 +29,52 @@ from scripts.dev.check_dependabot_update_policy import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 POLICY_PATH = REPO_ROOT / "scripts/validation/dependabot_update_policy.v1.json"
 SCHEMA_PATH = REPO_ROOT / "scripts/validation/dependabot_update_policy.v1.schema.json"
+ACTION_REF = "example/demo-action"
+OLD_ACTION_REF = f"{ACTION_REF}@{'a' * 40}"
+NEW_ACTION_REF = f"{ACTION_REF}@{'b' * 40}"
+
+
+def _run_git(repo_root: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def _make_workflow_pin_repo(
+    tmp_path: Path,
+    *,
+    head_workflow: str,
+    base_workflow: str | None = None,
+    base_contract: str = OLD_ACTION_REF,
+    head_contract: str | None = None,
+) -> str:
+    workflow_path = tmp_path / ".github/workflows/ci.yml"
+    contract_path = tmp_path / "tests/dev/contract.py"
+    workflow_path.parent.mkdir(parents=True)
+    contract_path.parent.mkdir(parents=True)
+    base_workflow = base_workflow or f"jobs:\n  test:\n    steps:\n      - uses: {OLD_ACTION_REF}\n"
+    workflow_path.write_text(base_workflow, encoding="utf-8")
+    contract_path.write_text(base_contract + "\n", encoding="utf-8")
+
+    _run_git(tmp_path, "init", "--quiet")
+    _run_git(tmp_path, "config", "user.name", "Dependabot policy test")
+    _run_git(tmp_path, "config", "user.email", "dependabot-policy-test@example.invalid")
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "-c", "commit.gpgSign=false", "commit", "--quiet", "-m", "base")
+    base_sha = _run_git(tmp_path, "rev-parse", "HEAD")
+
+    workflow_path.write_text(head_workflow, encoding="utf-8")
+    contract_path.write_text(
+        (head_contract if head_contract is not None else base_contract) + "\n", encoding="utf-8"
+    )
+    _run_git(tmp_path, "add", ".")
+    _run_git(tmp_path, "-c", "commit.gpgSign=false", "commit", "--quiet", "-m", "head")
+    return base_sha
 
 
 def test_policy_matches_its_schema() -> None:
@@ -169,6 +217,100 @@ def test_diff_vs_head_three_dot_preferred_when_available(
     assert calls[0][-1] == "origin/main...HEAD"
 
 
+def test_workflow_action_pin_guard_rejects_stale_head_reference(tmp_path: Path) -> None:
+    """A replaced workflow pin cannot remain in a tracked contract surface."""
+    head_workflow = f"jobs:\n  test:\n    steps:\n      - uses: {NEW_ACTION_REF}\n"
+    base_sha = _make_workflow_pin_repo(tmp_path, head_workflow=head_workflow)
+
+    with pytest.raises(
+        PolicyError, match=f"{OLD_ACTION_REF}.*{NEW_ACTION_REF}.*tests/dev/contract.py"
+    ):
+        check_workflow_action_pin_guard(
+            repo_root=tmp_path,
+            base_ref=base_sha,
+            changed_files=[".github/workflows/ci.yml"],
+        )
+
+
+def test_workflow_action_pin_guard_allows_clean_replacement(tmp_path: Path) -> None:
+    """A replaced workflow pin passes after coupled references move to the new pin."""
+    head_workflow = f"jobs:\n  test:\n    steps:\n      - uses: {NEW_ACTION_REF}\n"
+    base_sha = _make_workflow_pin_repo(
+        tmp_path,
+        head_workflow=head_workflow,
+        head_contract=NEW_ACTION_REF,
+    )
+
+    report = check_workflow_action_pin_guard(
+        repo_root=tmp_path,
+        base_ref=base_sha,
+        changed_files=[".github/workflows/ci.yml"],
+    )
+
+    assert report["status"] == "pass"
+    assert report["replacements"] == [
+        {
+            "workflow_file": ".github/workflows/ci.yml",
+            "old_ref": OLD_ACTION_REF,
+            "new_ref": NEW_ACTION_REF,
+        }
+    ]
+    assert report["stale_references"] == []
+
+
+def test_workflow_action_pin_guard_ignores_non_pin_workflow_changes(tmp_path: Path) -> None:
+    """Unchanged pins do not force unrelated tracked references to move."""
+    base_workflow = f"jobs:\n  test:\n    steps:\n      - uses: {OLD_ACTION_REF}\n"
+    base_sha = _make_workflow_pin_repo(
+        tmp_path,
+        head_workflow=base_workflow + "# unrelated workflow comment\n",
+    )
+
+    report = check_workflow_action_pin_guard(
+        repo_root=tmp_path,
+        base_ref=base_sha,
+        changed_files=[".github/workflows/ci.yml"],
+    )
+
+    assert report["status"] == "not_applicable"
+    assert report["replacements"] == []
+
+
+def test_workflow_action_pin_guard_ignores_block_scalar_text(tmp_path: Path) -> None:
+    """Text that resembles ``uses`` inside a shell block is not an action declaration."""
+    base_workflow = (
+        f"jobs:\n  test:\n    steps:\n      - run: |\n          uses: {OLD_ACTION_REF}\n"
+    )
+    head_workflow = base_workflow.replace(OLD_ACTION_REF, NEW_ACTION_REF)
+    base_sha = _make_workflow_pin_repo(
+        tmp_path,
+        base_workflow=base_workflow,
+        head_workflow=head_workflow,
+    )
+
+    report = check_workflow_action_pin_guard(
+        repo_root=tmp_path,
+        base_ref=base_sha,
+        changed_files=[".github/workflows/ci.yml"],
+    )
+
+    assert report["status"] == "not_applicable"
+    assert report["replacements"] == []
+
+
+def test_workflow_action_pin_guard_fails_closed_without_base_ref(tmp_path: Path) -> None:
+    """A changed workflow cannot bypass the guard when the exact base is unavailable."""
+    head_workflow = f"jobs:\n  test:\n    steps:\n      - uses: {NEW_ACTION_REF}\n"
+    _make_workflow_pin_repo(tmp_path, head_workflow=head_workflow)
+
+    with pytest.raises(PolicyError, match="unable to resolve workflow action-pin base ref"):
+        check_workflow_action_pin_guard(
+            repo_root=tmp_path,
+            base_ref="missing-base",
+            changed_files=[".github/workflows/ci.yml"],
+        )
+
+
 def test_workflow_step_uses_the_policy_checker() -> None:
     """The existing PR contract workflow must execute the policy checker."""
     workflow = (REPO_ROOT / ".github/workflows/pr-contract-check.yml").read_text(encoding="utf-8")
@@ -237,6 +379,7 @@ version = "3.3.7"
     report = evaluate_update(repo_root=tmp_path, base_ref="origin/main", policy=policy)
 
     assert report["status"] == "pass"
+    assert report["workflow_action_pin_guard"]["status"] == "not_applicable"
     assert report["normalization_only_packages"] == ["numpy"]
     assert [item["name"] for item in report["effective_changed_packages"]] == ["pylint"]
     assert report["direct_risk_classes"] == ["developer-tooling"]

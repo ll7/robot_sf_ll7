@@ -47,9 +47,41 @@ more.
 
 ## Deterministic smoke
 
-- Command and diagnostics are deterministic for a fixed observation sequence and seed
-  (`reset(*, seed=...)`), excluding timestamps.
-- Test fixtures: goal approach, obstacle repulsion, pedestrian repulsion, symmetric obstacle
-  tie-break, zero-distance guard, speed/rate hard-predicate bounds, rotation/translation
-  consistency.
-- Outcome status: `ok` on success; `ValueError` (fail closed) on missing/non-finite inputs.
+The receipt below is implementation-integrity evidence only. It does not measure collision,
+time-to-collision, comfort, social compliance, planner ranking, or fidelity to the source paper.
+
+- Code/source commit: `3c3cca655652050c97771f10b7176cb0a07ebad8`.
+- Comparison base: `31552ec8d3f2e963ba857b34b0efe65f49311fc9` (`origin/main`).
+- Config digest (SHA-256):
+  `ba14509401c6eb4b78c2f9af7575a0c8422b2eb374e3fc8d488c28d85c1340c3`.
+- Environment: Python 3.12.8, NumPy 2.4.6,
+  Linux 6.8.0-87-generic x86_64, glibc 2.39.
+- Exact fixed-smoke command:
+
+  ```bash
+  scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- uv run --no-sync pytest -q \
+    tests/planner/test_force_coupled_potential_field.py::test_fixed_smoke_scenarios
+  ```
+
+| Scenario ID | Seed | Observed command `(m/s, rad/s)` | Status | Outcome |
+| --- | ---: | --- | --- | --- |
+| `analytic_static_obstacle` | 1 | `(0.16, -0.30)` | `ok` | deterministic success |
+| `analytic_pedestrian_interaction` | 7 | `(0.16, -0.30)` | `ok` | deterministic success |
+
+Both cases reported `linear_rate_limit` and `angular_rate_limit` as active on their first step,
+with no fallback, degradation, or zero-distance guard. Repeated seeded replay produced identical
+commands and diagnostics.
+
+### Outcome-state boundary
+
+| State | Receipt classification | Evidence or limitation |
+| --- | --- | --- |
+| success | observed | both fixed analytic fixtures returned finite, bounded commands with `status: ok` |
+| invalid | observed | missing, malformed, and non-finite required inputs raise `ValueError` after recording `status: invalid_input` |
+| degraded | observed | absent optional obstacle/pedestrian visibility is explicit as `status: degraded`; it is not nominal success or benchmark evidence |
+| collision | not evaluated | analytic command smoke has no simulator rollout, so no collision outcome is claimed |
+| timeout | not evaluated | bounded analytic execution has no timeout outcome; no campaign/runtime claim is made |
+
+The full focused validation also covers goal approach, separate obstacle and pedestrian force
+components, symmetric tie-breaking, zero-distance guards, hard speed/rate predicates,
+rotation/translation consistency, canonical lifecycle behavior, and opt-in map-runner registration.

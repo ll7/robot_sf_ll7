@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from robot_sf.benchmark import release_acceptance
+from robot_sf.benchmark import release_acceptance, release_protocol
 from robot_sf.benchmark.camera_ready._config import (
     _load_campaign_scenarios,
     _scenario_with_kinematics,
@@ -39,6 +39,68 @@ MANIFEST_PATH = REPO_ROOT / (
     "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_hybrid_stress_smoke_v0_1.yaml"
 )
 SOURCE_COMMIT = "a" * 40
+
+
+def test_stress_manifest_loader_honors_explicit_repository_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stress witness paths use the caller's frozen source root, not global tooling root."""
+    validator_root = tmp_path / "validator"
+    validator_root.mkdir()
+    monkeypatch.setattr(release_protocol, "get_repository_root", lambda: validator_root)
+
+    contract = release_protocol._load_stress_smoke_contract(
+        MANIFEST_PATH,
+        release_protocol._load_mapping(MANIFEST_PATH),
+        repository_root=REPO_ROOT,
+    )
+
+    assert len(contract["stress_smoke_branch_witnesses"]) == 2
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_blocker"),
+    (
+        ("missing", "missing diagnostic witness for effective branch"),
+        ("wrong_arm", "names unknown planner arm"),
+        ("wrong_algorithm", "names an unconfigured effective branch"),
+    ),
+)
+def test_manifest_preflight_rejects_incomplete_branch_witnesses(
+    stress_fixture: tuple[Path, Any, Any],
+    mutation: str,
+    expected_blocker: str,
+) -> None:
+    """Branch witness coverage fails before any diagnostic campaign can execute."""
+    _root, manifest, campaign_config = stress_fixture
+    witnesses = list(manifest.stress_smoke_branch_witnesses)
+    if mutation == "missing":
+        witnesses.pop()
+    elif mutation == "wrong_arm":
+        witnesses[0] = replace(
+            witnesses[0],
+            arm="wrong_arm",
+            branch_key="wrong_arm|francis2023_leave_group|orca",
+        )
+    else:
+        witnesses[0] = replace(
+            witnesses[0],
+            algorithm="hybrid_rule_local_planner",
+            branch_key=(
+                "scenario_adaptive_hybrid_orca_v2_bottleneck_yield|"
+                "francis2023_leave_group|hybrid_rule_local_planner"
+            ),
+        )
+    manifest = replace(manifest, stress_smoke_branch_witnesses=tuple(witnesses))
+
+    validation = release_protocol.validate_release_manifest(
+        manifest,
+        campaign_config=campaign_config,
+        repository_root=REPO_ROOT,
+    )
+
+    assert validation["status"] == "invalid"
+    assert any(expected_blocker in problem for problem in validation["problems"])
 
 
 def _write_json(path: Path, payload: Any) -> None:

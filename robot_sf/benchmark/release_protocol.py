@@ -552,6 +552,8 @@ def _load_stress_smoke_branch_witnesses(  # noqa: C901
     manifest_path: Path,
     raw_witnesses: Any,
     hybrid_config_pins: tuple[StressSmokeAssetPin, ...],
+    *,
+    repository_root: Path | None = None,
 ) -> tuple[StressSmokeBranchWitness, ...]:
     """Load exact branch witnesses and bind them to pinned candidate configs.
 
@@ -615,6 +617,7 @@ def _load_stress_smoke_branch_witnesses(  # noqa: C901
             manifest_path,
             raw_witness.get("config_path"),
             f"stress_smoke_contract.branch_witnesses[{index}].config_path",
+            repository_root=repository_root,
         )
         config_sha256 = str(raw_witness.get("config_sha256", "")).strip().lower()
         if _SHA256_RE.fullmatch(config_sha256) is None:
@@ -903,6 +906,7 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
         manifest_path,
         contract.get("branch_witnesses"),
         hybrid_config_pins,
+        repository_root=repository_root,
     )
 
     return {
@@ -1231,6 +1235,21 @@ def validate_release_manifest(
         problems,
         repository_root=repository_root,
     )
+    if manifest.release_kind == DIAGNOSTIC_STRESS_RELEASE_KIND:
+        # Keep the effective-branch admission check in the manifest validation path so
+        # preflight and release-doctor callers reject incomplete witnesses before a campaign
+        # can execute.  The local import avoids the release_protocol/release_acceptance cycle.
+        from robot_sf.benchmark.release_acceptance import (  # noqa: PLC0415
+            _stress_effective_branch_coverage,
+        )
+
+        branch_coverage = _stress_effective_branch_coverage(
+            manifest=manifest,
+            campaign_config=cfg,
+            source_repository_root=repository_root,
+        )
+        for blocker in branch_coverage["blockers"]:
+            problems.append(f"effective algorithm branches: {blocker}")
     _validate_release_campaign_contract(manifest, cfg, problems)
     _validate_release_seed_policy(manifest, cfg, problems)
     _validate_release_planners(manifest, cfg, problems)

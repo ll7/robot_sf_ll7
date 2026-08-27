@@ -208,6 +208,15 @@ Treat it as a reviewer-lens pass, not another full test suite:
   `diffstat.txt`, `status.txt`, and `validation.txt`; wrapper success, zero exit, and manifest
   presence are still route evidence only, not task acceptance.
 
+For a bounded inactivity check, pass one or more JSON observation files to the canonical snapshot
+with `--worker-observation <path>`, or call `classify_worker_inactivity` from
+`scripts/dev/autopilot_state_snapshot.py` directly. Each file contains an `observations` array with
+`agent_id`, `elapsed_seconds`, `wait_status`, `scoped_git`, and `required_artifacts`. Two
+consecutive no-progress observations are required before a running worker is reported as stalled.
+An explicit productive test/edit status, scoped path change, or required-artifact change resets that
+streak; quiet output alone is not a stall signal. The report is diagnostic route evidence and
+recommends `interrupt`, `close`, or `parent_fallback` without performing any lifecycle action.
+
 ### 7. Open the PR
 
 Use `gh-pr-opener` after the branch has been synced with the latest `origin/main`. For higher-risk

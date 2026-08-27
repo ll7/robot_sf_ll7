@@ -404,14 +404,10 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
             Nearby obstacle centers, an empty array for a valid obstacle-free grid, or
             ``None`` when the observation has no valid static-obstacle grid contract.
         """
-        payload = self._obstacle_grid_payload(observation)
+        payload = self._validated_obstacle_grid_payload(observation)
         if payload is None:
             return None
         grid, meta, channel_idx, resolution = payload
-        if not math.isfinite(resolution):
-            raise ValueError("occupancy grid resolution must be finite")
-        if not np.all(np.isfinite(grid)) or np.any(grid < 0.0) or np.any(grid > 1.0):
-            raise ValueError("occupancy grid values must be finite and within [0, 1]")
         threshold = float(self.config.obstacle_grid_threshold)
         obstacle_mask = grid[channel_idx] >= threshold
         robot_cell_occupied = self._grid_value(robot[:2], grid, meta, channel_idx) >= threshold
@@ -454,6 +450,84 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
             order = np.argsort(distance_sq, kind="stable")[: self.config.obstacle_grid_max_points]
             centers = centers[order]
         return centers
+
+    def _validated_obstacle_grid_payload(  # noqa: C901
+        self, observation: dict[str, Any]
+    ) -> tuple[np.ndarray, dict[str, Any], int, float] | None:
+        """Validate the canonical grid contract without treating combined occupancy as static.
+
+        Returns:
+            Validated grid, metadata, explicit obstacle-channel index, and resolution, or
+            ``None`` when no explicit obstacle channel is available.
+
+        Raises:
+            ValueError: When a supplied obstacle-grid payload is malformed.
+        """
+        payload = self._extract_grid_payload(observation)
+        if payload is None:
+            return None
+        grid, raw_meta = payload
+        if not isinstance(raw_meta, dict):
+            raise ValueError("occupancy grid metadata must be a mapping")
+        if grid.ndim != 3 or any(dimension <= 0 for dimension in grid.shape):
+            raise ValueError("occupancy grid must have a non-empty [channels, height, width] shape")
+        if not np.all(np.isfinite(grid)) or np.any(grid < 0.0) or np.any(grid > 1.0):
+            raise ValueError("occupancy grid values must be finite and within [0, 1]")
+
+        self._required_grid_metadata(raw_meta, "origin", 2)
+        resolution = float(self._required_grid_metadata(raw_meta, "resolution", 1)[0])
+        size = self._required_grid_metadata(raw_meta, "size", 2)
+        use_ego_frame = self._required_grid_metadata(raw_meta, "use_ego_frame", 1)[0]
+        center_on_robot = self._required_grid_metadata(raw_meta, "center_on_robot", 1)[0]
+        channel_indices = self._required_grid_metadata(
+            raw_meta, "channel_indices", len(self._CHANNEL_KEYS)
+        )
+        self._required_grid_metadata(raw_meta, "robot_pose", 3)
+        if resolution <= 0.0:
+            raise ValueError("occupancy grid resolution must be positive")
+        if np.any(size <= 0.0):
+            raise ValueError("occupancy grid size must be positive")
+        frame_flags = np.asarray([use_ego_frame, center_on_robot])
+        if not np.all(np.isin(frame_flags, [0.0, 1.0])):
+            raise ValueError("occupancy grid frame flags must be boolean values")
+        grid_extent = np.asarray([grid.shape[2] * resolution, grid.shape[1] * resolution])
+        extent_tolerance = max(1e-6, resolution * 1e-5)
+        if np.any(size > grid_extent + extent_tolerance) or np.any(
+            grid_extent - size >= resolution - extent_tolerance
+        ):
+            raise ValueError("occupancy grid size does not match shape and resolution")
+
+        if not np.all(np.equal(channel_indices, np.floor(channel_indices))):
+            raise ValueError("occupancy grid channel indices must be integers")
+        channel_indices_int = channel_indices.astype(int)
+        present_indices = channel_indices_int[channel_indices_int >= 0]
+        if np.any(channel_indices_int < -1) or np.any(channel_indices_int >= grid.shape[0]):
+            raise ValueError("occupancy grid channel indices are out of range")
+        if len(np.unique(present_indices)) != len(present_indices):
+            raise ValueError("occupancy grid channel indices must be unique")
+        channel_idx = int(channel_indices_int[0])
+        if channel_idx < 0:
+            return None
+        return grid, raw_meta, channel_idx, resolution
+
+    @staticmethod
+    def _required_grid_metadata(meta: dict[str, Any], key: str, expected_size: int) -> np.ndarray:
+        """Read one exact-size, finite numeric occupancy-grid metadata field.
+
+        Returns:
+            The validated metadata values as a one-dimensional float array.
+        """
+        if key not in meta:
+            raise ValueError(f"occupancy grid metadata missing {key}")
+        try:
+            values = np.asarray(meta[key], dtype=float).reshape(-1)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"occupancy grid metadata {key} must be numeric") from exc
+        if values.size != expected_size or not np.all(np.isfinite(values)):
+            raise ValueError(
+                f"occupancy grid metadata {key} must contain exactly {expected_size} finite values"
+            )
+        return values
 
     def _select_target(self, robot: np.ndarray, goal: np.ndarray) -> np.ndarray:
         """Select the look-ahead target along the robot-to-goal direction.

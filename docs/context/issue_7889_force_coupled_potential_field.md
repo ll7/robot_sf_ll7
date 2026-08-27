@@ -40,7 +40,9 @@ fixtures. It is a comparator core for future planner evaluation — nothing more
 - Units: metres, seconds, radians. Sign convention: left-hand positive angular rate.
 - Static-obstacle input: direct world-frame points for analytic fixtures, otherwise occupied cell
   centres from the map runner's canonical occupancy-grid obstacle channel, thresholded and bounded
-  to the nearest configured point count inside the influence radius.
+  to the nearest configured point count inside the influence radius. The explicit obstacle channel
+  and its finite, shape-consistent metadata are required; combined occupancy is not treated as a
+  static-obstacle substitute.
 - Numerical guards: `numerical_epsilon` for overlap and division; non-finite inputs raise.
 
 ## Deviations and unsupported elements

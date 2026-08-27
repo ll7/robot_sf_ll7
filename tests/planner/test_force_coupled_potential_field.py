@@ -417,9 +417,9 @@ def test_invalid_occupancy_grid_values_fail_closed(invalid_value: float) -> None
         "goal": {"current": [4.0, 0.0]},
         "pedestrians": {"positions": [], "count": [0]},
         "occupancy_grid": grid,
-        "occupancy_grid_meta_origin": [-1.5, -1.5],
+        "occupancy_grid_meta_origin": [-1.25, -1.25],
         "occupancy_grid_meta_resolution": [1.0],
-        "occupancy_grid_meta_size": [3.0, 3.0],
+        "occupancy_grid_meta_size": [2.5, 2.5],
         "occupancy_grid_meta_use_ego_frame": [1.0],
         "occupancy_grid_meta_center_on_robot": [1.0],
         "occupancy_grid_meta_channel_indices": [0, 1, -1, 2],
@@ -429,6 +429,67 @@ def test_invalid_occupancy_grid_values_fail_closed(invalid_value: float) -> None
     with pytest.raises(ValueError, match=r"finite and within \[0, 1\]"):
         planner.plan(observation)
     assert planner.diagnostics()["status"] == "invalid_input"
+
+
+@pytest.mark.parametrize(
+    ("metadata_key", "metadata_value"),
+    [
+        ("origin", [0.0]),
+        ("resolution", [0.0]),
+        ("size", [float("nan"), 3.0]),
+        ("channel_indices", [0.5, 1.0, -1.0, 2.0]),
+        ("robot_pose", [0.0, 0.0]),
+    ],
+)
+def test_malformed_occupancy_grid_metadata_fails_closed(
+    metadata_key: str, metadata_value: list[float]
+) -> None:
+    planner = ForceCoupledPotentialFieldPlanner()
+    grid = np.zeros((3, 3, 3), dtype=np.float32)
+    observation = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+        "goal": {"current": [4.0, 0.0]},
+        "pedestrians": {"positions": [], "count": [0]},
+        "occupancy_grid": grid,
+        "occupancy_grid_meta_origin": [-1.25, -1.25],
+        "occupancy_grid_meta_resolution": [1.0],
+        "occupancy_grid_meta_size": [2.5, 2.5],
+        "occupancy_grid_meta_use_ego_frame": [1.0],
+        "occupancy_grid_meta_center_on_robot": [1.0],
+        "occupancy_grid_meta_channel_indices": [0, 1, -1, 2],
+        "occupancy_grid_meta_robot_pose": [0.0, 0.0, 0.0],
+    }
+    observation[f"occupancy_grid_meta_{metadata_key}"] = metadata_value
+
+    with pytest.raises(ValueError, match="occupancy grid"):
+        planner.plan(observation)
+    assert planner.diagnostics()["status"] == "invalid_input"
+
+
+def test_combined_grid_without_explicit_obstacle_channel_stays_degraded() -> None:
+    planner = ForceCoupledPotentialFieldPlanner()
+    grid = np.zeros((3, 3, 3), dtype=np.float32)
+    grid[2, 1, 1] = 1.0  # combined channel contains robot occupancy, not a static obstacle
+    observation = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+        "goal": {"current": [4.0, 0.0]},
+        "pedestrians": {"positions": [], "count": [0]},
+        "occupancy_grid": grid,
+        "occupancy_grid_meta_origin": [-1.25, -1.25],
+        "occupancy_grid_meta_resolution": [1.0],
+        "occupancy_grid_meta_size": [2.5, 2.5],
+        "occupancy_grid_meta_use_ego_frame": [1.0],
+        "occupancy_grid_meta_center_on_robot": [1.0],
+        "occupancy_grid_meta_channel_indices": [-1, -1, 0, 2],
+        "occupancy_grid_meta_robot_pose": [0.0, 0.0, 0.0],
+    }
+
+    command = planner.plan(observation)
+    diagnostics = planner.diagnostics()
+    assert command != (0.0, 0.0)
+    assert diagnostics["status"] == "degraded"
+    assert diagnostics["missing_inputs"] == ["obstacles"]
+    assert diagnostics["zero_distance_guards"]["obstacles"] == 0
 
 
 def test_pedestrian_repulsion_within_observation_contract() -> None:

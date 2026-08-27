@@ -12,6 +12,8 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from scripts.dev import check_worktree_capacity as capacity
 from tests.support.environment_guards import git_identity_environment
 
@@ -440,6 +442,64 @@ def test_create_worktree_recovers_orphan_branch_before_add(tmp_path: Path) -> No
         )
     finally:
         _cleanup_owned_worktree(tmp_path / "new-worktree", branch)
+
+
+def test_create_worktree_lock_covers_orphan_recovery_and_add(tmp_path: Path) -> None:
+    """The repository lock must cover branch cleanup through worktree registration."""
+    fcntl = pytest.importorskip("fcntl")
+    branch = _unique_branch(tmp_path, "locked-orphan-recover")
+    target = tmp_path / "new-worktree"
+    common_dir = Path(
+        subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+    lock_path = common_dir / "robot-sf-create-worktree.lock"
+    process: subprocess.Popen[str] | None = None
+    try:
+        _create_orphan_branch(branch)
+        with lock_path.open("a+", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            process = subprocess.Popen(
+                [
+                    str(CREATE_WORKTREE),
+                    "--path",
+                    str(target),
+                    "--branch",
+                    branch,
+                    "--minimum-free-bytes",
+                    "0",
+                ],
+                cwd=REPO_ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            time.sleep(0.5)
+            assert process.poll() is None, "creator did not wait for the repository lock"
+            assert not target.exists()
+            assert (
+                subprocess.run(
+                    ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
+                    cwd=REPO_ROOT,
+                    check=False,
+                ).returncode
+                == 0
+            )
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+        stdout, stderr = process.communicate(timeout=60)
+        assert process.returncode == 0, f"stdout={stdout!r} stderr={stderr!r}"
+        assert target.is_dir()
+    finally:
+        if process is not None and process.poll() is None:
+            process.kill()
+            process.communicate()
+        _cleanup_owned_worktree(target, branch)
 
 
 def test_create_worktree_hints_when_orphan_branch_diverged(tmp_path: Path) -> None:

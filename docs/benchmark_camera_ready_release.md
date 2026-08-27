@@ -252,6 +252,24 @@ the operator receipt; never put a token or authorization header in that receipt.
 Perform these checks from a clean temporary directory that contains neither
 the build output nor the source worktree:
 
+For the public, credential-free discovery and download step, run:
+
+```bash
+uv run robot-sf release audit-published \
+  --tag <release_tag> \
+  --doi <version-doi> \
+  --output /tmp/published-release-audit.json
+```
+
+The command uses only unauthenticated HTTPS `GET` requests, bounds streamed
+downloads, and writes no release or Zenodo state. It checks the exact public
+tag/release and Zenodo version record before passing both channel directories
+to the offline audit core. A receipt with `status: unavailable` is a transport
+or service condition, not a failed release; retry it. A `pass` is a repeatable
+identity/download check, not full benchmark evidence and does not authorize
+publication. The command cannot reserve, upload, edit, publish, or rename a
+release.
+
 1. Download the GitHub Release archive and its checksum/manifest assets. Extract
    the archive and run `sha256sum -c checksums.sha256` from the bundle root.
 2. Confirm that `payload/release/release_manifest.resolved.json` and

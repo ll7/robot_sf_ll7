@@ -29,7 +29,11 @@ from robot_sf.benchmark.release_protocol import (
     load_release_manifest,
     validate_release_manifest,
 )
-from robot_sf.benchmark.release_tag_identity import check_tag_source_consistency
+from robot_sf.benchmark.release_tag_identity import (
+    HISTORICAL_RELEASE_SOURCE_SHA,
+    HISTORICAL_RELEASE_TAG,
+    check_tag_source_consistency,
+)
 from robot_sf.benchmark.zenodo_publisher import build_session, read_token_file
 
 # These are the two repository-wide security and correctness workflows that
@@ -607,7 +611,12 @@ def _checkpoint_check_for_repo(
     return _checkpoint_check(cfg, manifest, receipt, **kwargs)
 
 
-def _release_identity_check(manifest: Any, expected_base_sha: str, tag: str) -> ReleaseDoctorCheck:
+def _release_identity_check(  # noqa: C901
+    manifest: Any,
+    expected_base_sha: str,
+    tag: str,
+    expected_source_sha: str | None = None,
+) -> ReleaseDoctorCheck:
     """Require the final v0.2 manifest to bind the exact source and tag.
 
     Also enforces the prospective tag/SHA identity contract (issue #7938): a
@@ -627,13 +636,37 @@ def _release_identity_check(manifest: Any, expected_base_sha: str, tag: str) -> 
         problems.append("manifest latest-main base commit does not match")
     if manifest is None or getattr(manifest, "release_tag", None) != tag:
         problems.append("manifest release tag does not match")
-    source_sha = (
-        getattr(manifest, "source_sha", None)
-        or getattr(manifest, "release_sha", None)
-        or expected_base_sha
+    declared_source_sha = getattr(manifest, "source_sha", None) or getattr(
+        manifest, "release_sha", None
     )
-    if isinstance(source_sha, str) and source_sha:
+    if expected_source_sha is not None:
+        expected_source_sha = str(expected_source_sha).strip().lower()
+        if _COMMIT_SHA_RE.fullmatch(expected_source_sha) is None:
+            problems.append("expected final source SHA is not an exact 40-character Git SHA")
+    if isinstance(declared_source_sha, str) and declared_source_sha:
+        declared_source_sha = declared_source_sha.strip().lower()
+        if _COMMIT_SHA_RE.fullmatch(declared_source_sha) is None:
+            problems.append("manifest source_sha is not an exact 40-character Git SHA")
+        if expected_source_sha is not None and declared_source_sha != expected_source_sha:
+            problems.append("manifest source_sha does not match expected final source SHA")
+
+    source_sha = declared_source_sha or expected_source_sha
+    is_historical = tag == HISTORICAL_RELEASE_TAG
+    if is_historical:
+        # The August release predates this contract and is immutable.  Verify
+        # its independently recorded source, but never rewrite its stale tag.
+        if expected_source_sha is not None and expected_source_sha != HISTORICAL_RELEASE_SOURCE_SHA:
+            problems.append("historical release source SHA does not match published source")
+        if declared_source_sha is not None and declared_source_sha != HISTORICAL_RELEASE_SOURCE_SHA:
+            problems.append("historical manifest source SHA does not match published source")
+    elif isinstance(source_sha, str) and source_sha:
         problems.extend(check_tag_source_consistency(tag, source_sha))
+    elif getattr(manifest, "release_kind", None) == "benchmark-data":
+        problems.append("future benchmark-data release requires manifest source_sha")
+
+    planning_base_sha = getattr(manifest, "planning_base_sha", None)
+    if planning_base_sha is not None and planning_base_sha != expected_base_sha:
+        problems.append("manifest planning_base_sha does not match expected planning/base SHA")
     return ReleaseDoctorCheck(
         "release_identity",
         "pass" if not problems else "fail",
@@ -2440,7 +2473,7 @@ def collect_release_doctor_report(  # noqa: PLR0913
         _ci_check(repo, expected_release_sha),
         _tag_check(repo, tag),
         manifest_check,
-        _release_identity_check(manifest, expected_base_sha, tag),
+        _release_identity_check(manifest, expected_base_sha, tag, expected_release_sha),
         checkpoint_check,
         cluster_check,
         _disk_check(repo, minimum_free_gib),

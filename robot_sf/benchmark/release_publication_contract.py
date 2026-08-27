@@ -19,6 +19,12 @@ from robot_sf.benchmark.release_protocol import (
     resolve_campaign_artifact_path,
     resolve_regular_directory_path,
 )
+from robot_sf.benchmark.release_tag_identity import (
+    HISTORICAL_RELEASE_SOURCE_SHA,
+    HISTORICAL_RELEASE_TAG,
+    check_tag_source_consistency,
+    extract_tag_sha_component,
+)
 
 CONTRACT_SCHEMA_VERSION = "benchmark-release-publication-contract.v1"
 
@@ -249,6 +255,139 @@ def _add_commit_blockers(
         blockers.append("provenance.commit_reconciliation.explanation is required")
 
 
+def _collect_source_sha_fields(  # noqa: C901
+    *,
+    summary: Mapping[str, Any],
+    campaign: Mapping[str, Any],
+    release_result: Mapping[str, Any],
+    publication: Mapping[str, Any],
+    release_manifest: Mapping[str, Any],
+    receipt: Mapping[str, Any] | None,
+) -> list[tuple[str, Any]]:
+    """Collect explicit final-source fields from every publication surface.
+
+    Returns:
+        Labeled source identity values found in the publication surfaces.
+    """
+    fields: list[tuple[str, Any]] = []
+
+    def add_mapping(label: str, payload: Mapping[str, Any]) -> None:
+        for key in ("source_sha", "source_commit", "git_hash"):
+            if key in payload:
+                fields.append((f"{label}.{key}", payload.get(key)))
+
+    add_mapping("campaign", campaign)
+    summary_release = summary.get("benchmark_release")
+    if isinstance(summary_release, Mapping):
+        add_mapping("summary.benchmark_release", summary_release)
+    add_mapping("release_result", release_result)
+    result_release = release_result.get("benchmark_release")
+    if isinstance(result_release, Mapping):
+        add_mapping("release_result.benchmark_release", result_release)
+    acceptance = release_result.get("release_acceptance")
+    if isinstance(acceptance, Mapping) and "source_commits" in acceptance:
+        fields.append(
+            ("release_result.release_acceptance.source_commits", acceptance["source_commits"])
+        )
+
+    manifest_provenance = release_manifest.get("provenance")
+    add_mapping("release_manifest", release_manifest)
+    if isinstance(manifest_provenance, Mapping):
+        add_mapping("release_manifest.provenance", manifest_provenance)
+
+    publication_provenance = publication.get("provenance")
+    if isinstance(publication_provenance, Mapping):
+        add_mapping("publication.provenance", publication_provenance)
+        repository = publication_provenance.get("repository")
+        if isinstance(repository, Mapping) and "commit" in repository:
+            fields.append(("publication.provenance.repository.commit", repository["commit"]))
+
+    if isinstance(receipt, Mapping):
+        add_mapping("receipt", receipt)
+        receipt_source = receipt.get("source")
+        if isinstance(receipt_source, Mapping):
+            add_mapping("receipt.source", receipt_source)
+            if "execution_commit" in receipt_source:
+                fields.append(
+                    ("receipt.source.execution_commit", receipt_source["execution_commit"])
+                )
+        if "execution_commit" in receipt:
+            fields.append(("receipt.execution_commit", receipt["execution_commit"]))
+    return fields
+
+
+def _add_source_identity_blockers(  # noqa: C901
+    blockers: list[str],
+    *,
+    expected_release_tag: str,
+    summary: Mapping[str, Any],
+    campaign: Mapping[str, Any],
+    release_result: Mapping[str, Any],
+    publication: Mapping[str, Any],
+    release_manifest: Mapping[str, Any],
+    receipt: Mapping[str, Any] | None,
+) -> None:
+    """Cross-check final source SHA fields and SHA-bearing tag identity."""
+    identity = extract_tag_sha_component(expected_release_tag)
+    fields = _collect_source_sha_fields(
+        summary=summary,
+        campaign=campaign,
+        release_result=release_result,
+        publication=publication,
+        release_manifest=release_manifest,
+        receipt=receipt,
+    )
+    explicit_fields = [(label, value) for label, value in fields if value not in (None, "", [])]
+    source_bound = identity.scheme != "semantic" or bool(
+        any(label.rsplit(".", 1)[-1] in {"source_sha", "source_commit"} for label, _ in fields)
+    )
+    if not source_bound:
+        return
+
+    source_values: list[tuple[str, str]] = []
+    for label, value in explicit_fields:
+        values = value if label.endswith("source_commits") else [value]
+        if not isinstance(values, list):
+            values = [values]
+        if not values:
+            blockers.append(f"{label} must contain a final source SHA")
+            continue
+        for candidate in values:
+            normalized = str(candidate).strip().lower() if isinstance(candidate, str) else ""
+            if re.fullmatch(r"[0-9a-f]{40}", normalized) is None:
+                blockers.append(f"{label} must contain an exact 40-character source SHA")
+                continue
+            source_values.append((label, normalized))
+
+    distinct = {value for _, value in source_values}
+    if not distinct:
+        blockers.append("publication surfaces are missing the final source SHA")
+        return
+    if len(distinct) > 1:
+        details = ", ".join(f"{label}={value}" for label, value in source_values)
+        blockers.append(f"publication source SHA fields disagree: {details}")
+        return
+
+    source_sha = next(iter(distinct))
+    if expected_release_tag == HISTORICAL_RELEASE_TAG:
+        if source_sha != HISTORICAL_RELEASE_SOURCE_SHA:
+            blockers.append(
+                "historical release source SHA does not match its immutable published source"
+            )
+        return
+
+    blockers.extend(check_tag_source_consistency(expected_release_tag, source_sha))
+    required_surfaces = {
+        "campaign": any(label.startswith("campaign.") for label, _ in source_values),
+        "release_result": any(label.startswith("release_result.") for label, _ in source_values),
+        "release_manifest": any(label.startswith("release_manifest") for label, _ in source_values),
+        "publication": any(label.startswith("publication.") for label, _ in source_values),
+    }
+    for surface, present in required_surfaces.items():
+        if not present:
+            blockers.append(f"publication source SHA is missing from {surface}")
+
+
 def _add_goal_timeout_blockers(
     blockers: list[str], *, goal_timeout_rows: int, provenance: Mapping[str, Any]
 ) -> None:
@@ -276,7 +415,7 @@ def _add_goal_timeout_blockers(
         blockers.append("provenance.goal_timeout_boundary.status must be 'resolved' or 'excluded'")
 
 
-def validate_release_publication_contract(  # noqa: C901
+def validate_release_publication_contract(  # noqa: C901, PLR0912, PLR0915
     campaign_root: Path,
     bundle_dir: Path,
     *,
@@ -345,6 +484,7 @@ def validate_release_publication_contract(  # noqa: C901
     provenance = publication.get("provenance")
     provenance = provenance if isinstance(provenance, Mapping) else {}
     release_manifest = {}
+    receipt: Mapping[str, Any] | None = None
     release_manifest_candidate = (
         bundle_dir / "payload" / "release" / "release_manifest.resolved.json"
     )
@@ -369,6 +509,28 @@ def validate_release_publication_contract(  # noqa: C901
         except ValueError as exc:
             blockers.append(str(exc))
 
+    receipt_candidate = bundle_dir / "payload" / "provenance" / "derived_revalidation_receipt.json"
+    try:
+        receipt_path = resolve_campaign_artifact_path(
+            bundle_dir, "payload/provenance/derived_revalidation_receipt.json"
+        )
+    except (OSError, ValueError) as exc:
+        optional_missing = (
+            isinstance(exc, ValueError)
+            and "not a regular file" in str(exc)
+            and "symlink components" not in str(exc)
+            and not receipt_candidate.exists()
+            and not receipt_candidate.is_symlink()
+        )
+        if not optional_missing:
+            blockers.append(f"derived receipt path is unsafe: {exc}")
+        receipt_path = None
+    if receipt_path is not None:
+        try:
+            receipt = _read_json(receipt_path)
+        except ValueError as exc:
+            blockers.append(str(exc))
+
     _add_placeholder_blockers(
         blockers,
         expected_release_tag=expected_release_tag,
@@ -387,6 +549,16 @@ def validate_release_publication_contract(  # noqa: C901
             ),
             "release_tag": channels.get("release_tag"),
         },
+    )
+    _add_source_identity_blockers(
+        blockers,
+        expected_release_tag=expected_release_tag,
+        summary=summary,
+        campaign=campaign,
+        release_result=release_result,
+        publication=publication,
+        release_manifest=release_manifest,
+        receipt=receipt,
     )
     try:
         commits, goal_timeout_rows = _episode_provenance(campaign_root)

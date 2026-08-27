@@ -5,13 +5,20 @@ from __future__ import annotations
 import pytest
 
 from robot_sf.benchmark.release_tag_identity import (
+    HISTORICAL_RELEASE_TAG,
     check_tag_source_consistency,
     derive_sha_tag,
     extract_tag_sha_component,
+    is_historical_release_tag,
 )
 
 SOURCE_SHA = "b1d5ab6de708385c0828c99501a9d1c29727ec11"
 PLANNING_SHA = "cd831d7582c117ac9529065e7d1c60386933c92d"
+
+
+def test_historical_release_tag_is_an_explicit_compatibility_exception() -> None:
+    assert is_historical_release_tag(HISTORICAL_RELEASE_TAG) is True
+    assert is_historical_release_tag("paper-matrix-v2-h600-s30-2026-09") is False
 
 
 def test_extract_full_sha_suffix() -> None:

@@ -96,6 +96,17 @@ def _draft(*, submitted: bool = False, metadata: dict[str, Any] | None = None) -
     }
 
 
+def _published_record(files: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return one published-record API payload."""
+    return {
+        "id": 7,
+        "conceptrecid": "6",
+        "doi": "10.5281/zenodo.7",
+        "status": "published",
+        "files": files,
+    }
+
+
 def test_token_file_missing_and_empty_are_rejected(tmp_path: Path) -> None:
     """Token input must exist and contain non-empty text."""
     with pytest.raises(publisher.ZenodoPublisherError, match="not found"):
@@ -258,41 +269,136 @@ def test_verify_reports_inventory_transport_and_checksum_mismatches(tmp_path: Pa
     state = publisher._seal_state(state)
     remote = _draft(submitted=True)
     remote["metadata"] = {**_metadata(), "title": "different"}
-    remote["files"] = [
+    published_files = [
         {
-            "filename": bundle.name,
+            "key": bundle.name,
             "size": bundle.stat().st_size,
-            "links": {"download": "http://insecure"},
+            "links": {"self": "http://insecure"},
         },
-        {"filename": "unexpected.tar", "links": {}},
+        {"key": "unexpected.tar", "links": {}},
     ]
     session = _Session()
-    session.gets = [_Response(remote)]
+    session.gets = [_Response(remote), _Response(_published_record(published_files))]
     report = publisher.verify(session, state, _metadata())
     assert report["status"] == "fail"
     assert report["problem_count"] >= 3
 
-    remote["files"] = [
+    published_files = [
         {
-            "filename": bundle.name,
+            "key": bundle.name,
             "size": bundle.stat().st_size,
-            "links": {"download": "https://download"},
+            "links": {"self": "https://download"},
         }
     ]
-    session.gets = [_Response(remote), _Response({}, status_code=503)]
+    session.gets = [
+        _Response(remote),
+        _Response(_published_record(published_files)),
+        _Response({}, status_code=503),
+    ]
     report = publisher.verify(session, state, _metadata())
     assert any("download failed" in problem for problem in report["problems"])
 
-    session.gets = [_Response(remote), _Response({}, content=b"wrong")]
+    session.gets = [
+        _Response(remote),
+        _Response(_published_record(published_files)),
+        _Response({}, content=b"wrong"),
+    ]
     report = publisher.verify(session, state, _metadata())
     assert any("SHA-256" in problem for problem in report["problems"])
 
-    remote["files"] = []
     session = _Session()
-    session.gets = [_Response(remote)]
+    session.gets = [_Response(remote), _Response(_published_record([]))]
     report = publisher.verify(session, state, _metadata())
     assert report["status"] == "fail"
     assert any("inventory is empty" in problem for problem in report["problems"])
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "problem"),
+    [
+        ("id", 8, "published record id does not match reserved state"),
+        ("conceptrecid", "8", "published record concept id does not match reserved state"),
+        ("doi", "10.5281/zenodo.8", "published record DOI does not match reserved state"),
+        ("status", "draft", "published record status is not published"),
+    ],
+)
+def test_verify_rejects_published_record_identity_drift(
+    field: str, value: Any, problem: str
+) -> None:
+    """Published-file verification remains bound to the reserved record identity."""
+    state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "doi": "10.5281/zenodo.7",
+            "concept_record_id": "6",
+            "submitted": True,
+            "files": [],
+        }
+    )
+    published_record = _published_record([])
+    published_record[field] = value
+    session = _Session()
+    session.gets = [_Response(_draft(submitted=True)), _Response(published_record)]
+
+    report = publisher.verify(session, state, _metadata())
+
+    assert report["status"] == "fail"
+    assert problem in report["problems"]
+
+
+@pytest.mark.parametrize(
+    ("remote_size", "problem"),
+    [
+        (None, "has an invalid size"),
+        ("8", "has an invalid size"),
+        ({"value": 8}, "has an invalid size"),
+        (True, "has an invalid size"),
+        (0, "is empty"),
+        (9, "size does not match uploaded bytes"),
+    ],
+)
+def test_verify_rejects_invalid_published_file_size(
+    tmp_path: Path, remote_size: Any, problem: str
+) -> None:
+    """Published file sizes are required positive integers bound to uploaded bytes."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"expected")
+    state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "doi": "10.5281/zenodo.7",
+            "concept_record_id": "6",
+            "submitted": True,
+            "files": [
+                {
+                    "name": bundle.name,
+                    "size": bundle.stat().st_size,
+                    "sha256": publisher._sha256_file(bundle),
+                }
+            ],
+        }
+    )
+    public_file: dict[str, Any] = {
+        "key": bundle.name,
+        "links": {"self": "https://zenodo.org/api/records/7/files/bundle/content"},
+    }
+    if remote_size is not None:
+        public_file["size"] = remote_size
+    session = _Session()
+    session.gets = [
+        _Response(_draft(submitted=True)),
+        _Response(_published_record([public_file])),
+        _Response({}, content=bundle.read_bytes()),
+    ]
+
+    report = publisher.verify(session, state, _metadata())
+
+    assert report["status"] == "fail"
+    assert any(problem in item for item in report["problems"])
 
 
 def test_verify_rejects_missing_state_identity() -> None:

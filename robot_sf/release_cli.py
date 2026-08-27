@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from robot_sf.benchmark import zenodo_publisher
+from robot_sf.benchmark.post_execution_release_doctor import (
+    EXPECTED_CAMPAIGN_ID,
+    EXPECTED_VALIDATOR_SHA,
+    collect_post_execution_release_doctor_report,
+)
 from robot_sf.benchmark.release_doctor import collect_release_doctor_report
 from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
 
@@ -40,7 +45,11 @@ def build_subparser(subparsers: Any) -> None:
             parser.add_argument("files", nargs="+", type=Path)
     doctor = modes.add_parser("doctor", help="Fail-closed full benchmark-release diagnostics.")
     doctor.add_argument("--repo", type=Path, default=Path.cwd())
-    doctor.add_argument("--manifest", type=Path, required=True)
+    doctor.add_argument(
+        "--manifest",
+        type=Path,
+        help="Validated release manifest (required for the pre-execution doctor path).",
+    )
     doctor.add_argument("--expected-release-sha", required=True)
     doctor.add_argument("--expected-base-sha", required=True)
     doctor.add_argument("--tag", required=True)
@@ -69,6 +78,22 @@ def build_subparser(subparsers: Any) -> None:
             "the packet-pinned commit."
         ),
     )
+    doctor.add_argument(
+        "--post-execution",
+        action="store_true",
+        help=(
+            "Validate preserved derived evidence after a terminal campaign; this mode does not "
+            "require the historical queue row to remain dispatchable."
+        ),
+    )
+    doctor.add_argument("--derived-revalidation-receipt", type=Path)
+    doctor.add_argument("--publication-bundle", type=Path)
+    doctor.add_argument("--publication-archive", type=Path)
+    doctor.add_argument("--publication-preflight", type=Path)
+    doctor.add_argument("--private-jobs", type=Path)
+    doctor.add_argument("--private-evaluation-receipt", type=Path)
+    doctor.add_argument("--expected-job-id", default="14890")
+    doctor.add_argument("--expected-validator-sha")
     doctor.add_argument("--dissertation", type=Path)
     doctor.add_argument("--token-file", type=Path)
     doctor.add_argument("--expected-cells", type=int, default=20160)
@@ -134,7 +159,43 @@ def _repo_relative_path(path: Path | None, repo: Path) -> Path | None:
     return (repo / path).resolve()
 
 
-def handle(args: argparse.Namespace) -> int:
+def _handle_post_execution_doctor(args: argparse.Namespace, repo_root: Path) -> int:
+    """Run the read-only preserved-evidence doctor path.
+
+    Returns:
+        Process-style exit code.
+    """
+    report = collect_post_execution_release_doctor_report(
+        repo=repo_root,
+        manifest_path=_repo_relative_path(args.manifest, repo_root),
+        derived_revalidation_receipt=_repo_relative_path(
+            args.derived_revalidation_receipt, repo_root
+        ),
+        publication_bundle=_repo_relative_path(args.publication_bundle, repo_root),
+        publication_archive=_repo_relative_path(args.publication_archive, repo_root),
+        publication_preflight=_repo_relative_path(args.publication_preflight, repo_root),
+        private_queue=_repo_relative_path(args.private_queue, repo_root),
+        private_jobs=_repo_relative_path(args.private_jobs, repo_root),
+        private_launch_packet=_repo_relative_path(args.private_launch_packet, repo_root),
+        private_evaluation_receipt=_repo_relative_path(args.private_evaluation_receipt, repo_root),
+        dissertation=_repo_relative_path(args.dissertation, repo_root),
+        token_file=_repo_relative_path(args.token_file, repo_root),
+        minimum_free_gib=args.minimum_free_gib,
+        require_zenodo_webhook_disabled=(
+            args.require_zenodo_webhook_disabled or args.final or args.publication_mode == "final"
+        ),
+        expected_source_sha=args.expected_release_sha,
+        expected_base_sha=args.expected_base_sha,
+        tag=args.tag,
+        expected_campaign_id=args.expected_campaign_id or EXPECTED_CAMPAIGN_ID,
+        expected_job_id=args.expected_job_id,
+        expected_validator_sha=args.expected_validator_sha or EXPECTED_VALIDATOR_SHA,
+    )
+    _print(report)
+    return 0 if report["status"] == "pass" else 2
+
+
+def handle(args: argparse.Namespace) -> int:  # noqa: C901
     """Dispatch release operations and return a process exit code.
 
     Returns:
@@ -142,6 +203,13 @@ def handle(args: argparse.Namespace) -> int:
     """
     if args.release_cmd == "doctor":
         repo_root = args.repo.resolve()
+        if getattr(args, "post_execution", False):
+            return _handle_post_execution_doctor(args, repo_root)
+        if args.manifest is None:
+            _print(
+                {"status": "blocked", "reason": "--manifest is required without --post-execution"}
+            )
+            return 2
         report = collect_release_doctor_report(
             repo=repo_root,
             manifest_path=_repo_relative_path(args.manifest, repo_root),

@@ -150,6 +150,7 @@ def test_load_release_manifest_rejects_missing_file() -> None:
         ("branch_witness_field", "does not match branch_key"),
         ("branch_witness_config", "must match a pinned hybrid config"),
         ("branch_witness_hash", "does not match its pinned hybrid config"),
+        ("branch_witness_kind", "kind has unsupported value"),
     ),
 )
 def test_diagnostic_stress_contract_rejects_malformed_pins(  # noqa: C901, PLR0912, PLR0915
@@ -223,6 +224,8 @@ def test_diagnostic_stress_contract_rejects_malformed_pins(  # noqa: C901, PLR09
         contract["branch_witnesses"][0]["config_path"] = contract["scenario_sources"][0]["path"]
     elif case == "branch_witness_hash":
         contract["branch_witnesses"][0]["config_sha256"] = "0" * 64
+    elif case == "branch_witness_kind":
+        contract["branch_witnesses"][0]["kind"] = "unsupported"
     else:
         pins = contract["hybrid_configs"]
         assert isinstance(pins, list)

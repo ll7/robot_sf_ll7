@@ -499,6 +499,29 @@ def test_branch_witness_mapping_is_normalized(
     assert result["witnesses"][0]["branch_key"] == first.branch_key
 
 
+def test_unsupported_extra_branch_witness_is_fail_closed(
+    stress_fixture: tuple[Path, Any, Any],
+) -> None:
+    """An unsupported witness kind cannot pass when a valid witness covers the branch."""
+    root, manifest, campaign_config = stress_fixture
+    first = manifest.stress_smoke_branch_witnesses[0]
+    manifest = replace(
+        manifest,
+        stress_smoke_branch_witnesses=(
+            *manifest.stress_smoke_branch_witnesses,
+            replace(first, kind="unsupported"),
+        ),
+    )
+
+    result = _stress_effective_branch_coverage(
+        manifest=manifest,
+        campaign_config=campaign_config,
+        source_repository_root=root,
+    )
+
+    assert any("unsupported kind 'unsupported'" in blocker for blocker in result["blockers"])
+
+
 def test_non_mapping_branch_witness_is_fail_closed(
     stress_fixture: tuple[Path, Any, Any],
 ) -> None:

@@ -36,6 +36,7 @@ from robot_sf.benchmark.camera_ready._run_state import (
 )
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
 from robot_sf.benchmark.effective_algorithm_branches import (
+    WITNESS_KINDS,
     check_witness_coverage,
     enumerate_effective_branches,
 )
@@ -2082,6 +2083,12 @@ def _stress_effective_branch_coverage(  # noqa: C901, PLR0912, PLR0915
             _append_blocker(blockers, f"branch witness {index} is not a mapping")
             continue
         witness_records.append(record)
+        kind = str(record.get("kind") or "").strip()
+        if kind not in WITNESS_KINDS:
+            _append_blocker(
+                blockers,
+                f"branch witness {index} has unsupported kind {kind!r}",
+            )
         arm = str(record.get("arm", "")).strip()
         pin = pins_by_arm.get(arm)
         if pin is None:

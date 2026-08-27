@@ -16,6 +16,7 @@ import yaml
 from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
 from robot_sf.benchmark.camera_ready._preflight import _resolved_seed_inventory
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, load_campaign_config
+from robot_sf.benchmark.effective_algorithm_branches import WITNESS_KINDS
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.release_tag_identity import (
     HISTORICAL_RELEASE_TAG,
@@ -570,6 +571,12 @@ def _load_stress_smoke_branch_witnesses(  # noqa: C901
             raise ValueError(
                 f"stress_smoke_contract.branch_witnesses[{index}].kind must be a non-empty string"
             )
+        kind = kind.strip()
+        if kind not in WITNESS_KINDS:
+            raise ValueError(
+                f"stress_smoke_contract.branch_witnesses[{index}].kind has unsupported value "
+                f"{kind!r}"
+            )
         branch_key = raw_witness.get("branch_key")
         if not isinstance(branch_key, str) or not branch_key.strip():
             raise ValueError(
@@ -628,7 +635,7 @@ def _load_stress_smoke_branch_witnesses(  # noqa: C901
             )
         witnesses.append(
             StressSmokeBranchWitness(
-                kind=kind.strip(),
+                kind=kind,
                 arm=arm,
                 scenario=scenario,
                 algorithm=algorithm,

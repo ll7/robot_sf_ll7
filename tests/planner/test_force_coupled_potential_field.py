@@ -407,6 +407,29 @@ def test_occupied_robot_grid_cell_triggers_overlap_stop() -> None:
     assert diagnostics["zero_distance_guards"]["obstacles"] == 1
 
 
+def test_non_finite_occupancy_grid_fails_closed() -> None:
+    planner = ForceCoupledPotentialFieldPlanner()
+    grid = np.zeros((3, 3, 3), dtype=np.float32)
+    grid[0, 1, 1] = np.nan
+    observation = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+        "goal": {"current": [4.0, 0.0]},
+        "pedestrians": {"positions": [], "count": [0]},
+        "occupancy_grid": grid,
+        "occupancy_grid_meta_origin": [-1.5, -1.5],
+        "occupancy_grid_meta_resolution": [1.0],
+        "occupancy_grid_meta_size": [3.0, 3.0],
+        "occupancy_grid_meta_use_ego_frame": [1.0],
+        "occupancy_grid_meta_center_on_robot": [1.0],
+        "occupancy_grid_meta_channel_indices": [0, 1, -1, 2],
+        "occupancy_grid_meta_robot_pose": [0.0, 0.0, 0.0],
+    }
+
+    with pytest.raises(ValueError, match="occupancy grid and resolution must be finite"):
+        planner.plan(observation)
+    assert planner.diagnostics()["status"] == "invalid_input"
+
+
 def test_pedestrian_repulsion_within_observation_contract() -> None:
     planner = ForceCoupledPotentialFieldPlanner()
     planner.plan(

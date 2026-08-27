@@ -408,14 +408,18 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         if payload is None:
             return None
         grid, meta, channel_idx, resolution = payload
+        if not math.isfinite(resolution) or not np.all(np.isfinite(grid)):
+            raise ValueError("occupancy grid and resolution must be finite")
         threshold = float(self.config.obstacle_grid_threshold)
         obstacle_mask = grid[channel_idx] >= threshold
         robot_cell_occupied = self._grid_value(robot[:2], grid, meta, channel_idx) >= threshold
         indices = np.argwhere(obstacle_mask)
         if indices.size == 0:
-            return np.zeros((0, 2), dtype=float)
+            return robot[:2].reshape(1, 2) if robot_cell_occupied else np.zeros((0, 2), dtype=float)
 
         origin = self._as_1d_float(meta.get("origin", [0.0, 0.0]), pad=2)
+        if not np.all(np.isfinite(origin[:2])):
+            raise ValueError("occupancy grid origin must be finite")
         centers = np.column_stack(
             (
                 origin[0] + (indices[:, 1] + 0.5) * resolution,
@@ -428,6 +432,8 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
                 meta.get("robot_pose", [robot[0], robot[1], robot[2]]),
                 pad=3,
             )
+            if not np.all(np.isfinite(pose[:3])):
+                raise ValueError("occupancy grid robot_pose must be finite")
             robot_pose = ((float(pose[0]), float(pose[1])), float(pose[2]))
             centers = np.asarray(
                 [ego_to_world(float(x), float(y), robot_pose) for x, y in centers],

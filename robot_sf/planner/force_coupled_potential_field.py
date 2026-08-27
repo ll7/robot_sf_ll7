@@ -19,7 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from typing import Any
 
 import numpy as np
@@ -29,7 +29,7 @@ from robot_sf.common.math_utils import wrap_angle_pi
 PLANNER_TYPE = "force_coupled_potential_field"
 
 
-@dataclass
+@dataclass(frozen=True)
 class ForceCoupledPotentialFieldConfig:
     """Immutable experimental configuration for the force-coupled planner.
 
@@ -91,6 +91,24 @@ class ForceCoupledPotentialFieldConfig:
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def build_force_coupled_potential_field_config(
+    cfg: dict[str, Any] | None,
+) -> ForceCoupledPotentialFieldConfig:
+    """Build the immutable planner config from an algorithm mapping.
+
+    Runner-only keys such as ``allow_testing_algorithms`` and ``planner_variant``
+    are intentionally ignored so the durable YAML can be passed directly.
+
+    Returns:
+        The validated force-coupled planner configuration.
+    """
+    payload = cfg if isinstance(cfg, dict) else {}
+    allowed = {field.name for field in fields(ForceCoupledPotentialFieldConfig)}
+    return ForceCoupledPotentialFieldConfig(
+        **{key: value for key, value in payload.items() if key in allowed}
+    )
+
+
 def _as_2d_points(value: Any) -> np.ndarray:
     """Coerce a raw position payload into an ``(N, 2)`` finite float array.
 
@@ -130,9 +148,9 @@ class ForceCoupledPotentialFieldPlanner:
     # -- lifecycle ---------------------------------------------------------
 
     def reset(self, *, seed: int | None = None) -> None:
-        """Reset planner state, forwarding ``seed`` when provided."""
+        """Reset deterministic planner state while accepting the canonical seed."""
         if seed is not None:
-            np.random.seed(int(seed))
+            int(seed)
         self._last_linear = 0.0
         self._last_angular = 0.0
         self._last_diagnostics = {}
@@ -159,13 +177,22 @@ class ForceCoupledPotentialFieldPlanner:
                 non-finite (fail closed; never a silent nominal success).
         """
         if self._closed:
+            self._record_failure(status="unavailable", reason="planner is closed")
             raise ValueError("planner is closed")
-        robot, goal, obstacles, pedestrians = self._observation_fields(observation)
+        try:
+            robot, goal, obstacles, pedestrians, missing_inputs = self._observation_fields(
+                observation
+            )
+        except (IndexError, TypeError, ValueError) as exc:
+            self._record_failure(status="invalid_input", reason=str(exc))
+            raise ValueError(str(exc)) from exc
 
         target = self._select_target(robot, goal)
         attractive = self._attractive_force(robot, target)
-        repulsive = self._repulsive_force(robot, obstacles, pedestrians)
-        total_force = attractive + repulsive
+        obstacle_repulsive, obstacle_zero_distance = self._repulsive_force(robot, obstacles)
+        pedestrian_repulsive, pedestrian_zero_distance = self._repulsive_force(robot, pedestrians)
+        repulsive = obstacle_repulsive + pedestrian_repulsive
+        total_force = attractive + obstacle_repulsive + pedestrian_repulsive
         saturated = self._saturate(total_force)
 
         desired_heading = math.atan2(saturated[1], saturated[0])
@@ -176,21 +203,29 @@ class ForceCoupledPotentialFieldPlanner:
         raw_angular = float(heading_error)
 
         linear, angular = self._constrain_command(raw_linear, raw_angular)
-        self._last_linear = linear
-        self._last_angular = angular
         self._last_diagnostics = self._build_diagnostics(
-            robot=robot,
-            goal=goal,
-            target=target,
+            state=(robot, goal, target),
             forces={
                 "attractive": attractive,
+                "obstacle_repulsive": obstacle_repulsive,
+                "pedestrian_repulsive": pedestrian_repulsive,
                 "repulsive": repulsive,
                 "total": total_force,
                 "saturated": saturated,
             },
             raw_command=(raw_linear, raw_angular),
             command=(linear, angular),
+            previous_command=(self._last_linear, self._last_angular),
+            visibility=(
+                missing_inputs,
+                {
+                    "obstacles": obstacle_zero_distance,
+                    "pedestrians": pedestrian_zero_distance,
+                },
+            ),
         )
+        self._last_linear = linear
+        self._last_angular = angular
         return (linear, angular)
 
     def diagnostics(self) -> dict[str, Any]:
@@ -207,28 +242,19 @@ class ForceCoupledPotentialFieldPlanner:
 
     def _observation_fields(
         self, observation: dict[str, Any]
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list[str]]:
         """Extract and validate robot, goal, obstacle, and pedestrian fields.
 
         Returns:
-            The ``(robot, goal, obstacles, pedestrians)`` tuple.
+            The ``(robot, goal, obstacles, pedestrians, missing_inputs)`` tuple.
 
         Raises:
             ValueError: When required fields are missing or non-finite.
         """
-        robot_raw = observation.get("robot")
-        goal_raw = observation.get("goal")
-        if robot_raw is None or goal_raw is None:
-            raise ValueError("observation requires robot and goal fields")
-        robot = np.asarray(robot_raw, dtype=float).reshape(-1)
-        goal = np.asarray(goal_raw, dtype=float).reshape(-1)
-        if robot.shape[0] < 3 or goal.shape[0] < 2:
-            raise ValueError("robot requires [x, y, theta]; goal requires [x, y]")
-        if not np.all(np.isfinite(robot[:3])) or not np.all(np.isfinite(goal[:2])):
-            raise ValueError("non-finite robot or goal payload")
-
-        obstacles_raw = observation.get("obstacles", [])
-        pedestrians_raw = observation.get("pedestrians", [])
+        if not isinstance(observation, dict):
+            raise ValueError("observation must be a mapping")
+        robot, goal = self._robot_and_goal(observation)
+        obstacles_raw, pedestrians_raw, missing_inputs = self._visibility_inputs(observation)
         if self.config.obstacle_input_mode == "observation_contract":
             obstacles = self._as_obstacles(obstacles_raw)
         else:
@@ -237,7 +263,67 @@ class ForceCoupledPotentialFieldPlanner:
             pedestrians = self._as_pedestrians(pedestrians_raw)
         else:
             pedestrians = _as_2d_points(pedestrians_raw)
-        return robot[:3], goal[:2], obstacles, pedestrians
+        return robot, goal, obstacles, pedestrians, missing_inputs
+
+    @staticmethod
+    def _robot_and_goal(observation: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
+        """Extract finite robot pose and goal vectors from nested or flat state.
+
+        Returns:
+            The validated ``(robot_pose, goal_position)`` pair.
+        """
+        robot_raw = observation.get("robot")
+        goal_raw = observation.get("goal")
+        if isinstance(robot_raw, dict):
+            position = robot_raw.get("position")
+            heading = robot_raw.get("heading")
+            if position is not None and heading is not None:
+                robot_raw = [*np.asarray(position, dtype=float).reshape(-1)[:2], _scalar(heading)]
+        if isinstance(goal_raw, dict):
+            goal_raw = goal_raw.get("current")
+        if robot_raw is None and "robot_position" in observation:
+            robot_raw = [
+                *np.asarray(observation.get("robot_position"), dtype=float).reshape(-1)[:2],
+                _scalar(observation.get("robot_heading"), field="robot_heading"),
+            ]
+        if goal_raw is None:
+            goal_raw = observation.get("goal_current")
+        if robot_raw is None or goal_raw is None:
+            raise ValueError("observation requires robot and goal fields")
+        robot = np.asarray(robot_raw, dtype=float).reshape(-1)
+        goal = np.asarray(goal_raw, dtype=float).reshape(-1)
+        if robot.shape[0] < 3 or goal.shape[0] < 2:
+            raise ValueError("robot requires [x, y, theta]; goal requires [x, y]")
+        if not np.all(np.isfinite(robot[:3])) or not np.all(np.isfinite(goal[:2])):
+            raise ValueError("non-finite robot or goal payload")
+        return robot[:3], goal[:2]
+
+    @staticmethod
+    def _visibility_inputs(observation: dict[str, Any]) -> tuple[Any, Any, list[str]]:
+        """Resolve optional obstacle/pedestrian payloads and missing-input labels.
+
+        Returns:
+            The obstacle payload, pedestrian payload, and missing-input names.
+        """
+        missing_inputs: list[str] = []
+        if "obstacles" in observation:
+            obstacles_raw = observation["obstacles"]
+        elif "obstacles_positions" in observation:
+            obstacles_raw = {"positions": observation["obstacles_positions"]}
+        else:
+            obstacles_raw = []
+            missing_inputs.append("obstacles")
+        if "pedestrians" in observation:
+            pedestrians_raw = observation["pedestrians"]
+        elif "pedestrians_positions" in observation:
+            pedestrians_raw = {
+                "positions": observation["pedestrians_positions"],
+                "count": observation.get("pedestrians_count"),
+            }
+        else:
+            pedestrians_raw = []
+            missing_inputs.append("pedestrians")
+        return obstacles_raw, pedestrians_raw, missing_inputs
 
     @staticmethod
     def _as_obstacles(value: Any) -> np.ndarray:
@@ -247,7 +333,9 @@ class ForceCoupledPotentialFieldPlanner:
             The ``(N, 2)`` float array.
         """
         if isinstance(value, dict):
-            value = value.get("positions", [])
+            if "positions" not in value:
+                raise ValueError("obstacles mapping requires positions")
+            value = value["positions"]
         return _as_2d_points(value)
 
     @staticmethod
@@ -258,9 +346,23 @@ class ForceCoupledPotentialFieldPlanner:
             The active ``(N, 2)`` float array.
         """
         if isinstance(value, dict):
-            positions = value.get("positions", [])
-            count = int(np.asarray(value.get("count", [len(positions)]), dtype=int).reshape(-1)[0])
-            return _as_2d_points(positions)[:count]
+            if "positions" not in value:
+                raise ValueError("pedestrians mapping requires positions")
+            positions = _as_2d_points(value["positions"])
+            count_raw = value.get("count")
+            if count_raw is None:
+                count = len(positions)
+            else:
+                count_values = np.asarray(count_raw, dtype=float).reshape(-1)
+                if count_values.size != 1:
+                    raise ValueError("pedestrian count must contain exactly one value")
+                count_value = float(count_values[0])
+                if not math.isfinite(count_value) or not count_value.is_integer():
+                    raise ValueError("pedestrian count must be a finite integer")
+                count = int(count_value)
+            if not 0 <= count <= len(positions):
+                raise ValueError("pedestrian count must be between zero and positions length")
+            return positions[:count]
         return _as_2d_points(value)
 
     def _select_target(self, robot: np.ndarray, goal: np.ndarray) -> np.ndarray:
@@ -292,30 +394,28 @@ class ForceCoupledPotentialFieldPlanner:
             return np.zeros(2, dtype=float)
         return self.config.attractive_weight * delta / distance
 
-    def _repulsive_force(
-        self, robot: np.ndarray, obstacles: np.ndarray, pedestrians: np.ndarray
-    ) -> np.ndarray:
-        """Return the combined obstacle and pedestrian repulsive force.
+    def _repulsive_force(self, robot: np.ndarray, points: np.ndarray) -> tuple[np.ndarray, int]:
+        """Return one source family's repulsive force and zero-distance guard count.
 
         Returns:
-            The ``(fx, fy)`` repulsive force.
+            The ``(force, zero_distance_guard_count)`` tuple.
         """
         total = np.zeros(2, dtype=float)
-        for source in (obstacles, pedestrians):
-            for point in source:
-                delta = robot[:2] - point
-                distance = float(np.hypot(delta[0], delta[1]))
-                if distance <= self.config.numerical_epsilon:
-                    # Zero-distance guard: push along a fixed axis.
-                    delta = np.asarray([1.0, 0.0])
-                    distance = self.config.numerical_epsilon
-                if distance > self.config.influence_radius_m:
-                    continue
-                magnitude = self.config.repulsive_weight * (
-                    1.0 / distance - 1.0 / self.config.influence_radius_m
-                )
-                total = total + magnitude * delta / distance
-        return total
+        zero_distance_guards = 0
+        for point in points:
+            delta = robot[:2] - point
+            distance = float(np.hypot(delta[0], delta[1]))
+            if distance <= self.config.numerical_epsilon:
+                delta = np.asarray([1.0, 0.0])
+                distance = self.config.numerical_epsilon
+                zero_distance_guards += 1
+            if distance > self.config.influence_radius_m:
+                continue
+            magnitude = self.config.repulsive_weight * (
+                1.0 / distance - 1.0 / self.config.influence_radius_m
+            )
+            total = total + magnitude * delta / distance
+        return total, zero_distance_guards
 
     def _saturate(self, force: np.ndarray) -> np.ndarray:
         """Saturate the combined force magnitude.
@@ -365,40 +465,61 @@ class ForceCoupledPotentialFieldPlanner:
     def _build_diagnostics(
         self,
         *,
-        robot: np.ndarray,
-        goal: np.ndarray,
-        target: np.ndarray,
+        state: tuple[np.ndarray, np.ndarray, np.ndarray],
         forces: dict[str, np.ndarray],
         raw_command: tuple[float, float],
         command: tuple[float, float],
+        previous_command: tuple[float, float],
+        visibility: tuple[list[str], dict[str, int]],
     ) -> dict[str, Any]:
         """Build the versioned diagnostics payload for one planning step.
 
         Returns:
             The diagnostics dict with force components, commands, and status.
         """
+        robot, goal, target = state
+        missing_inputs, zero_distance_guards = visibility
         raw_linear, raw_angular = raw_command
         linear, angular = command
         return {
+            "diagnostics_schema": "force_coupled_potential_field.v1",
             "planner_type": self.planner_type,
             "config_digest": self.config.digest(),
             "robot": [float(robot[0]), float(robot[1]), float(robot[2])],
             "goal": [float(goal[0]), float(goal[1])],
             "selected_target": [float(target[0]), float(target[1])],
             "attractive_force": _force_list(forces["attractive"]),
+            "obstacle_repulsive_force": _force_list(forces["obstacle_repulsive"]),
+            "pedestrian_repulsive_force": _force_list(forces["pedestrian_repulsive"]),
             "repulsive_force": _force_list(forces["repulsive"]),
             "total_force": _force_list(forces["total"]),
             "saturated_force": _force_list(forces["saturated"]),
             "raw_command": [float(raw_linear), float(raw_angular)],
             "constrained_command": [float(linear), float(angular)],
             "active_constraints": self._active_constraints(
-                linear, angular, raw_linear, raw_angular
+                linear, angular, raw_linear, raw_angular, previous_command
             ),
-            "status": "ok",
+            "zero_distance_guards": zero_distance_guards,
+            "missing_inputs": list(missing_inputs),
+            "invalid_input": False,
+            "non_finite_input": False,
+            "fallback": False,
+            "degraded": bool(missing_inputs),
+            "status": "degraded" if missing_inputs else "ok",
+            "status_reason": (
+                "optional visibility inputs unavailable: " + ", ".join(missing_inputs)
+                if missing_inputs
+                else "nominal"
+            ),
         }
 
     def _active_constraints(
-        self, linear: float, angular: float, raw_linear: float, raw_angular: float
+        self,
+        linear: float,
+        angular: float,
+        raw_linear: float,
+        raw_angular: float,
+        previous_command: tuple[float, float],
     ) -> list[str]:
         """Report which hard constraints were active on the last step.
 
@@ -410,8 +531,8 @@ class ForceCoupledPotentialFieldPlanner:
             active.append("linear_speed_limit")
         if abs(angular) >= self.config.max_angular_speed - self.config.numerical_epsilon:
             active.append("angular_speed_limit")
-        linear_rate = abs(linear - self._last_linear) / max(self.config.control_dt, 1e-9)
-        angular_rate = abs(angular - self._last_angular) / max(self.config.control_dt, 1e-9)
+        linear_rate = abs(linear - previous_command[0]) / max(self.config.control_dt, 1e-9)
+        angular_rate = abs(angular - previous_command[1]) / max(self.config.control_dt, 1e-9)
         if linear_rate >= self.config.max_linear_rate - self.config.numerical_epsilon:
             active.append("linear_rate_limit")
         if angular_rate >= self.config.max_angular_rate - self.config.numerical_epsilon:
@@ -419,6 +540,21 @@ class ForceCoupledPotentialFieldPlanner:
         if not (math.isfinite(raw_linear) and math.isfinite(raw_angular)):
             active.append("non_finite_raw_command")
         return active
+
+    def _record_failure(self, *, status: str, reason: str) -> None:
+        """Record a stable fail-closed diagnostic before raising to the caller."""
+        self._last_diagnostics = {
+            "diagnostics_schema": "force_coupled_potential_field.v1",
+            "planner_type": self.planner_type,
+            "config_digest": self.config.digest(),
+            "status": status,
+            "status_reason": reason,
+            "missing_inputs": [],
+            "invalid_input": status == "invalid_input",
+            "non_finite_input": "non-finite" in reason,
+            "fallback": False,
+            "degraded": status == "degraded",
+        }
 
 
 def _force_list(force: np.ndarray) -> list[float]:
@@ -428,3 +564,11 @@ def _force_list(force: np.ndarray) -> list[float]:
         The ``[fx, fy]`` list.
     """
     return [float(force[0]), float(force[1])]
+
+
+def _scalar(value: Any, *, field: str = "heading") -> float:
+    """Return exactly one finite scalar from an observation payload."""
+    values = np.asarray(value, dtype=float).reshape(-1)
+    if values.size != 1 or not math.isfinite(float(values[0])):
+        raise ValueError(f"{field} must contain exactly one finite value")
+    return float(values[0])

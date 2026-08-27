@@ -3,14 +3,28 @@
 from __future__ import annotations
 
 import math
+from dataclasses import FrozenInstanceError
+from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 
+from robot_sf.planner import (
+    ForceCoupledPotentialFieldConfig as PublicConfig,
+)
+from robot_sf.planner import (
+    ForceCoupledPotentialFieldPlanner as PublicPlanner,
+)
+from robot_sf.planner import (
+    build_force_coupled_potential_field_config as public_build_config,
+)
 from robot_sf.planner.force_coupled_potential_field import (
     ForceCoupledPotentialFieldConfig,
     ForceCoupledPotentialFieldPlanner,
+    build_force_coupled_potential_field_config,
 )
+from robot_sf.planner.protocol import LocalPlannerProtocol
 
 
 def _observation(
@@ -45,6 +59,23 @@ def test_config_digest_is_stable() -> None:
     assert ForceCoupledPotentialFieldConfig(repulsive_weight=3.0).digest() != config.digest()
 
 
+def test_config_is_immutable_and_builds_from_durable_yaml() -> None:
+    config_path = (
+        Path(__file__).resolve().parents[2]
+        / "configs"
+        / "algos"
+        / "issue_7889_force_coupled_potential_field.yaml"
+    )
+    payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config = build_force_coupled_potential_field_config(payload)
+    assert config == public_build_config(payload)
+    assert PublicConfig is ForceCoupledPotentialFieldConfig
+    assert PublicPlanner is ForceCoupledPotentialFieldPlanner
+    assert isinstance(ForceCoupledPotentialFieldPlanner(config), LocalPlannerProtocol)
+    with pytest.raises(FrozenInstanceError):
+        config.max_linear_speed = 2.0
+
+
 def test_lifecycle_plan_reset_diagnostics_close() -> None:
     planner = ForceCoupledPotentialFieldPlanner()
     planner.reset(seed=42)
@@ -67,6 +98,8 @@ def test_plan_requires_robot_and_goal() -> None:
         planner.plan({})
     with pytest.raises(ValueError):
         planner.plan({"robot": [0.0, 0.0, 0.0]})
+    assert planner.diagnostics()["status"] == "invalid_input"
+    assert planner.diagnostics()["fallback"] is False
 
 
 def test_plan_fails_closed_on_non_finite_inputs() -> None:
@@ -112,6 +145,7 @@ def test_zero_distance_guard_reports_finite_force() -> None:
     diagnostics = planner.diagnostics()
     repulsive = np.asarray(diagnostics["repulsive_force"])
     assert np.all(np.isfinite(repulsive))
+    assert diagnostics["zero_distance_guards"] == {"obstacles": 1, "pedestrians": 0}
 
 
 def test_speed_and_rate_limits_are_hard_predicates() -> None:
@@ -124,11 +158,14 @@ def test_speed_and_rate_limits_are_hard_predicates() -> None:
     )
     planner = ForceCoupledPotentialFieldPlanner(config)
     planner.reset()
-    linear, angular = planner.plan(_observation(goal=(50.0, 0.0)))
+    linear, angular = planner.plan(_observation(goal=(0.0, 50.0)))
     assert abs(linear) <= config.max_linear_speed + 1e-9
     assert abs(angular) <= config.max_angular_speed + 1e-9
     # Second step: rate limit bounds the change from the first command.
-    linear2, angular2 = planner.plan(_observation(goal=(50.0, 0.0)))
+    assert {"linear_rate_limit", "angular_rate_limit"}.issubset(
+        planner.diagnostics()["active_constraints"]
+    )
+    linear2, angular2 = planner.plan(_observation(goal=(0.0, 50.0)))
     assert abs(linear2 - linear) <= config.max_linear_rate * config.control_dt + 1e-9
     assert abs(angular2 - angular) <= config.max_angular_rate * config.control_dt + 1e-9
 
@@ -141,11 +178,22 @@ def test_deterministic_replay_produces_identical_commands() -> None:
         _observation(robot=(0.5, 0.1, 0.2), goal=(4.0, 0.0), obstacles=[(2.0, 0.0)]),
         _observation(robot=(1.0, -0.2, -0.1), goal=(4.0, 0.0), pedestrians=[(2.5, 0.3)]),
     ]
+    planner_a.reset(seed=7)
+    planner_b.reset(seed=7)
+    commands_a = [planner_a.plan(obs) for obs in observations]
+    planner_a.reset(seed=7)
+    diagnostics_a = []
+    replay_a = []
     for obs in observations:
-        planner_a.reset(seed=7)
-        planner_b.reset(seed=7)
-        assert planner_a.plan(obs) == planner_b.plan(obs)
-        assert planner_a.diagnostics() == planner_b.diagnostics()
+        replay_a.append(planner_a.plan(obs))
+        diagnostics_a.append(planner_a.diagnostics())
+    diagnostics_b = []
+    commands_b = []
+    for obs in observations:
+        commands_b.append(planner_b.plan(obs))
+        diagnostics_b.append(planner_b.diagnostics())
+    assert commands_a == replay_a == commands_b
+    assert diagnostics_a == diagnostics_b
 
 
 def test_symmetric_obstacle_fixture_is_deterministic() -> None:
@@ -160,16 +208,31 @@ def test_symmetric_obstacle_fixture_is_deterministic() -> None:
     planner.reset(seed=1)
     second = planner.plan(obs)
     assert first == second
+    assert first[1] == pytest.approx(0.0)
+    assert planner.diagnostics()["repulsive_force"][1] == pytest.approx(0.0)
 
 
-def test_rotation_transforms_force_consistently() -> None:
+def test_rotation_and_translation_transform_force_and_command_consistently() -> None:
     planner = ForceCoupledPotentialFieldPlanner()
-    # Robot facing +y toward a goal at +y: attractive force points +y.
-    planner.plan(_observation(robot=(0.0, 0.0, math.pi / 2), goal=(0.0, 4.0)))
-    diagnostics = planner.diagnostics()
-    attractive = np.asarray(diagnostics["attractive_force"])
-    assert attractive[1] > 0.0
-    assert abs(attractive[0]) < 1e-9
+    base = _observation(
+        robot=(0.0, 0.0, 0.0),
+        goal=(4.0, 0.0),
+        obstacles=[(1.0, 0.5)],
+    )
+    transformed = _observation(
+        robot=(3.0, -2.0, math.pi / 2),
+        goal=(3.0, 2.0),
+        obstacles=[(2.5, -1.0)],
+    )
+    planner.reset(seed=1)
+    base_command = planner.plan(base)
+    base_force = np.asarray(planner.diagnostics()["total_force"])
+    planner.reset(seed=1)
+    transformed_command = planner.plan(transformed)
+    transformed_force = np.asarray(planner.diagnostics()["total_force"])
+    expected_rotated_force = np.asarray([-base_force[1], base_force[0]])
+    assert transformed_force == pytest.approx(expected_rotated_force)
+    assert transformed_command == pytest.approx(base_command)
 
 
 def test_missing_required_inputs_do_not_produce_nominal_success() -> None:
@@ -185,6 +248,59 @@ def test_missing_required_inputs_do_not_produce_nominal_success() -> None:
                 "obstacles": {"positions": [1.0, 2.0, 3.0]},
             }
         )
+    assert planner.diagnostics()["status"] == "invalid_input"
+
+
+@pytest.mark.parametrize("count", [-1, 1.5, [], [2]])
+def test_malformed_pedestrian_count_fails_closed(count: object) -> None:
+    planner = ForceCoupledPotentialFieldPlanner()
+    observation = _observation(pedestrians=[(1.0, 0.0)])
+    observation["pedestrians"]["count"] = count
+    with pytest.raises(ValueError, match="pedestrian count"):
+        planner.plan(observation)
+    diagnostics = planner.diagnostics()
+    assert diagnostics["status"] == "invalid_input"
+    assert diagnostics["invalid_input"] is True
+
+
+def test_malformed_visibility_mapping_fails_closed() -> None:
+    planner = ForceCoupledPotentialFieldPlanner()
+    observation = _observation()
+    observation["obstacles"] = {}
+    with pytest.raises(ValueError, match="obstacles mapping requires positions"):
+        planner.plan(observation)
+
+
+def test_flat_and_nested_socnav_observations_are_supported() -> None:
+    flat = {
+        "robot_position": [0.0, 0.0],
+        "robot_heading": [0.0],
+        "goal_current": [4.0, 0.0],
+        "obstacles_positions": [[1.5, 0.5]],
+        "pedestrians_positions": [[1.0, 0.0]],
+        "pedestrians_count": [1],
+    }
+    nested = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+        "goal": {"current": [4.0, 0.0]},
+        "obstacles": {"positions": [[1.5, 0.5]]},
+        "pedestrians": {"positions": [[1.0, 0.0]], "count": [1]},
+    }
+    planner = ForceCoupledPotentialFieldPlanner()
+    planner.reset(seed=7)
+    flat_command = planner.plan(flat)
+    planner.reset(seed=7)
+    assert planner.plan(nested) == flat_command
+    assert planner.diagnostics()["status"] == "ok"
+
+
+def test_missing_optional_visibility_is_explicitly_degraded() -> None:
+    planner = ForceCoupledPotentialFieldPlanner()
+    planner.plan({"robot": [0.0, 0.0, 0.0], "goal": [4.0, 0.0]})
+    diagnostics = planner.diagnostics()
+    assert diagnostics["status"] == "degraded"
+    assert diagnostics["degraded"] is True
+    assert diagnostics["missing_inputs"] == ["obstacles", "pedestrians"]
 
 
 def test_pedestrian_repulsion_within_observation_contract() -> None:
@@ -198,3 +314,7 @@ def test_pedestrian_repulsion_within_observation_contract() -> None:
     )
     repulsive = np.asarray(planner.diagnostics()["repulsive_force"])
     assert repulsive[0] < 0.0
+    obstacle = np.asarray(planner.diagnostics()["obstacle_repulsive_force"])
+    pedestrian = np.asarray(planner.diagnostics()["pedestrian_repulsive_force"])
+    assert np.allclose(obstacle, [0.0, 0.0])
+    assert pedestrian[0] < 0.0

@@ -12,6 +12,7 @@
       "robot_sf/benchmark/map_runner/map_runner.py": 2,
       "robot_sf/benchmark/map_runner/map_runner_batch_runner.py": 3,
       "robot_sf/benchmark/map_runner/map_runner_env.py": 1,
+      "robot_sf/benchmark/published_release_audit.py": 6,
       "robot_sf/benchmark/runner.py": 9,
       "robot_sf/benchmark/scenario_generation/portfolio_selector.py": 1,
       "robot_sf/benchmark/snqi/cli.py": 3,
@@ -106,7 +107,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 179
+    "total": 185
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -271,6 +272,60 @@
       "lineno": 84,
       "path": "robot_sf/benchmark/map_runner/map_runner_env.py",
       "source": "except Exception as exc:  # noqa: BLE001 - provenance must never break a benchmark run."
+    },
+    {
+      "col_offset": 4,
+      "context": "_clear_public_session_cookies",
+      "fingerprint": "2abfd347f71280a9",
+      "handler": "Exception",
+      "lineno": 436,
+      "path": "robot_sf/benchmark/published_release_audit.py",
+      "source": "except Exception as exc:"
+    },
+    {
+      "col_offset": 8,
+      "context": "_prepare_public_session",
+      "fingerprint": "aaa75f959eacfd2b",
+      "handler": "Exception",
+      "lineno": 475,
+      "path": "robot_sf/benchmark/published_release_audit.py",
+      "source": "except Exception as exc:"
+    },
+    {
+      "col_offset": 4,
+      "context": "_public_get",
+      "fingerprint": "a8e4dc106fb71d4b",
+      "handler": "Exception",
+      "lineno": 547,
+      "path": "robot_sf/benchmark/published_release_audit.py",
+      "source": "except Exception as exc:"
+    },
+    {
+      "col_offset": 8,
+      "context": "_public_json",
+      "fingerprint": "581ea578032c0d32",
+      "handler": "Exception",
+      "lineno": 571,
+      "path": "robot_sf/benchmark/published_release_audit.py",
+      "source": "except Exception as exc:"
+    },
+    {
+      "col_offset": 12,
+      "context": "_download_public_asset",
+      "fingerprint": "066b27d134a26a4a",
+      "handler": "Exception",
+      "lineno": 834,
+      "path": "robot_sf/benchmark/published_release_audit.py",
+      "source": "except Exception as exc:"
+    },
+    {
+      "col_offset": 4,
+      "context": "audit_published_network",
+      "fingerprint": "87bded7b7010dba5",
+      "handler": "Exception",
+      "lineno": 1088,
+      "path": "robot_sf/benchmark/published_release_audit.py",
+      "source": "except Exception as exc:  # noqa: BLE001 - final fail-closed receipt boundary"
     },
     {
       "col_offset": 4,

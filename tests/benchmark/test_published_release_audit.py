@@ -20,6 +20,10 @@ from robot_sf.benchmark.published_release_audit import (
     audit_published,
 )
 
+_CLI_SCRIPT = (
+    Path(__file__).resolve().parents[2] / "scripts" / "benchmark" / "published_release_audit.py"
+)
+
 
 def _write_bytes(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -203,16 +207,10 @@ def test_cli_main_passes(tmp_path: Path) -> None:
     zenodo = tmp_path / "zenodo"
     for channel in (github, zenodo):
         _make_bundle(channel / "bundle.zip")
-    script = (
-        Path(__file__).resolve().parents[2]
-        / "robot_sf"
-        / "benchmark"
-        / "published_release_audit.py"
-    )
     proc = subprocess.run(
         [
             sys.executable,
-            str(script),
+            str(_CLI_SCRIPT),
             "--tag",
             "paper-matrix-v2-h600-s30",
             "--doi",
@@ -225,6 +223,7 @@ def test_cli_main_passes(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        cwd=tmp_path,
     )
     assert proc.returncode == 0
     receipt = json.loads(proc.stdout)
@@ -234,16 +233,10 @@ def test_cli_main_passes(tmp_path: Path) -> None:
 def test_cli_main_missing_channel_returns_one(tmp_path: Path) -> None:
     github = tmp_path / "github"
     github.mkdir()
-    script = (
-        Path(__file__).resolve().parents[2]
-        / "robot_sf"
-        / "benchmark"
-        / "published_release_audit.py"
-    )
     proc = subprocess.run(
         [
             sys.executable,
-            str(script),
+            str(_CLI_SCRIPT),
             "--tag",
             "t",
             "--doi",
@@ -256,6 +249,7 @@ def test_cli_main_missing_channel_returns_one(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        cwd=tmp_path,
     )
     assert proc.returncode == 1
     receipt = json.loads(proc.stdout)

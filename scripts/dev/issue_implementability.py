@@ -50,6 +50,7 @@ REVIEW_LABELS = frozenset({"needs-review", "state:review"})
 BLOCKING_LABELS = frozenset(
     {
         "blocked",
+        "deferred",
         "duplicate",
         "evidence:blocked",
         "invalid",
@@ -57,6 +58,7 @@ BLOCKING_LABELS = frozenset(
         "state:blocked",
         "state:hold",
         "state:parked",
+        "state:deferred",
         "wontfix",
     }
 )

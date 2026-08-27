@@ -1,22 +1,54 @@
 {
   "aggregate_counts": {
-    "agent": 6,
-    "completed": 85,
-    "merge-ready": 94,
-    "needs-review": 5,
-    "pr_closed_unmerged": 115
+    "agent": 7,
+    "completed": 82,
+    "dependency:has-blockers": 1,
+    "merge-ready": 100,
+    "needs-review": 1,
+    "pr_closed_unmerged": 5,
+    "pr_merged": 113
+  },
+  "aggregate_counts_by": {
+    "item_kind": {
+      "issue": 82,
+      "pull_request": 118
+    },
+    "label": {
+      "agent": 7,
+      "dependency:has-blockers": 1,
+      "merge-ready": 100,
+      "needs-review": 1
+    },
+    "terminal_class": {
+      "completed": 82,
+      "pr_closed_unmerged": 5,
+      "pr_merged": 113
+    },
+    "verdict": {
+      "changes_required": 200
+    }
   },
   "ambiguous_labels": [],
   "command": "python scripts/dev/terminal_label_reconcile.py --inventory terminal --repo ll7/robot_sf_ll7 --report output/terminal_label_plan.json --max-items 200",
+  "completeness": "diagnostic-only bounded sample; pagination.complete=false and bounded_by_max_items=true",
+  "exit_status": 0,
   "full_report_pointer": "output/terminal_label_plan.json (ignored, worktree-local)",
-  "full_report_sha256": "8e49fc670ae2286ed4bf4f69de83a75c97aad99fa8322725a5ea94dc3427d4dd",
+  "full_report_sha256": "275b8d4acca8ba65aac9f1dcca03776d431e6c365bf622acda89129f96e9382e",
   "mutation_authorized": false,
+  "observed_at": "2026-08-27T14:01:49.629706+00:00",
   "pagination": {
     "bounded_by_max_items": true,
+    "complete": false,
     "item_count": 200,
-    "pages_read": 2
+    "pages_read": 2,
+    "termination": "max_items"
   },
-  "repository_commit": "77f44d99f61cb108c4d430b2d0b459db1a4149eb",
+  "repository_commit": "a7158eb1e8a4782a95b10fa499b4d3b4bc9b3193",
   "schema": "terminal_label_inventory_receipt.v1",
+  "source": {
+    "api": "github-rest-v3",
+    "exact_item_endpoint": "repos/ll7/robot_sf_ll7/issues/{number}",
+    "list_endpoint": "repos/ll7/robot_sf_ll7/issues?state=closed&per_page=100&page={page}"
+  },
   "zero_mutation_proof": "inventory mode never calls add_label/remove_label; verified by test_inventory_zero_mutation_proof"
 }

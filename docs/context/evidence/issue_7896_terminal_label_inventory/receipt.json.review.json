@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_7896_terminal_label_inventory/receipt.json",
-  "artifact_sha256": "7f724eb3004a2d0724663f0cfba45349061a9c09a14d3d85463691abfa22e7da",
+  "artifact_sha256": "963ecd3e79683f36be195d8cd99ac5872e63f413b3481c76fc5f08f4fa740e61",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

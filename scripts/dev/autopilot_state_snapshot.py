@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -62,6 +64,284 @@ TOKEN_EFFICIENCY_ACTIONS = (
 )
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_REMOTE = "origin"
+WORKER_INACTIVITY_SCHEMA = "worker_inactivity.v1"
+MAX_WORKER_INACTIVITY_OBSERVATIONS = 32
+_PRODUCTIVE_ACTIVITIES = frozenset(
+    {
+        "analysis_running",
+        "build_running",
+        "compile_running",
+        "edit_in_progress",
+        "editing",
+        "pytest_running",
+        "test_running",
+        "tests_running",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _WorkerInactivityObservation:
+    """Normalized, bounded input for the worker-inactivity classifier."""
+
+    agent_id: str
+    elapsed_seconds: float
+    state: str
+    last_input: str | None
+    productive: bool
+    git_paths: tuple[str, ...]
+    artifact_paths: tuple[str, ...]
+    signal_summary: dict[str, Any]
+
+
+def _worker_signal_paths(value: Any) -> tuple[str, ...]:
+    """Normalize a path-like signal to a deterministic tuple."""
+    if isinstance(value, str):
+        values = (value,)
+    elif isinstance(value, (list, tuple, set, frozenset)):
+        values = value
+    else:
+        return ()
+    return tuple(sorted({str(item) for item in values if str(item).strip()}))
+
+
+def _worker_mapping(value: Any) -> Mapping[str, Any]:
+    """Return a mapping signal or an empty mapping for malformed optional input."""
+    return value if isinstance(value, Mapping) else {}
+
+
+def _worker_explicit_true(signal: Mapping[str, Any], *keys: str) -> bool:
+    """Accept only literal true flags, avoiding truthy strings in synthetic input."""
+    return any(signal.get(key) is True for key in keys)
+
+
+def _normalize_worker_inactivity_observation(  # noqa: C901
+    raw: Mapping[str, Any], *, previous: _WorkerInactivityObservation | None
+) -> _WorkerInactivityObservation | str:
+    """Normalize one synthetic worker observation or return a compact error."""
+    agent_id = raw.get("agent_id")
+    if not isinstance(agent_id, str) or not agent_id.strip():
+        return "agent_id is required"
+
+    elapsed = raw.get("elapsed_seconds", raw.get("elapsed_interval_seconds"))
+    if isinstance(elapsed, bool) or not isinstance(elapsed, (int, float)):
+        return "elapsed_seconds must be a finite non-negative number"
+    elapsed_seconds = float(elapsed)
+    if not math.isfinite(elapsed_seconds) or elapsed_seconds < 0:
+        return "elapsed_seconds must be a finite non-negative number"
+    if previous is not None and elapsed_seconds < previous.elapsed_seconds:
+        return "elapsed_seconds must be monotonic"
+
+    wait_raw = raw.get("wait_status", raw.get("status", {}))
+    wait = {"state": wait_raw} if isinstance(wait_raw, str) else _worker_mapping(wait_raw)
+    state = str(wait.get("state", wait.get("status", "unknown"))).strip().lower() or "unknown"
+    last_input = wait.get("last_input", raw.get("last_input"))
+    if last_input is not None and not isinstance(last_input, str):
+        last_input = str(last_input)
+    activity = str(wait.get("activity", wait.get("operation", ""))).strip().lower()
+    wait_productive = _worker_explicit_true(wait, "productive", "progress", "progress_signal")
+    wait_productive = wait_productive or activity in _PRODUCTIVE_ACTIVITIES
+    quiet_output = _worker_explicit_true(wait, "quiet", "output_quiet", "quiet_output")
+
+    git = _worker_mapping(raw.get("scoped_git", raw.get("git", {})))
+    git_scope_ok = git.get("scope_ok", True) is True
+    git_paths = _worker_signal_paths(
+        git.get("changed_paths", git.get("modified_paths", git.get("changed_files", ())))
+    )
+    git_progress_paths = _worker_signal_paths(
+        git.get("progress_paths", git.get("new_paths", git.get("updated_paths", ())))
+    )
+    git_progress = _worker_explicit_true(git, "progress", "productive")
+    git_progress = git_progress or bool(git_progress_paths)
+    if git_scope_ok and git_paths and (previous is None or git_paths != previous.git_paths):
+        git_progress = True
+
+    artifacts = _worker_mapping(raw.get("required_artifacts", raw.get("artifacts", {})))
+    artifact_paths = _worker_signal_paths(
+        artifacts.get("present_paths", artifacts.get("present", ()))
+    )
+    artifact_progress_paths = _worker_signal_paths(
+        artifacts.get(
+            "progress_paths",
+            artifacts.get("created_paths", artifacts.get("updated_paths", ())),
+        )
+    )
+    artifact_progress = _worker_explicit_true(artifacts, "progress", "productive")
+    artifact_progress = artifact_progress or bool(artifact_progress_paths)
+    if artifact_paths and (previous is None or artifact_paths != previous.artifact_paths):
+        artifact_progress = True
+
+    progress_reasons: list[str] = []
+    if wait_productive:
+        progress_reasons.append("wait_status")
+    if git_scope_ok and git_progress:
+        progress_reasons.append("scoped_git")
+    if artifact_progress:
+        progress_reasons.append("required_artifacts")
+    productive = bool(progress_reasons)
+    signal_summary = {
+        "wait_status": {
+            "state": state,
+            "activity": activity or None,
+            "productive": wait_productive,
+            "quiet_output": quiet_output,
+        },
+        "scoped_git": {
+            "scope_ok": git_scope_ok,
+            "changed_paths": list(git_paths),
+            "progress": git_scope_ok and git_progress,
+        },
+        "required_artifacts": {
+            "present_paths": list(artifact_paths),
+            "progress_paths": list(artifact_progress_paths),
+            "progress": artifact_progress,
+        },
+        "progress": productive,
+        "progress_reasons": progress_reasons,
+    }
+    return _WorkerInactivityObservation(
+        agent_id=agent_id.strip(),
+        elapsed_seconds=elapsed_seconds,
+        state=state,
+        last_input=last_input,
+        productive=productive,
+        git_paths=git_paths if git_scope_ok else (),
+        artifact_paths=artifact_paths,
+        signal_summary=signal_summary,
+    )
+
+
+def classify_worker_inactivity(  # noqa: C901, PLR0912
+    observations: Sequence[Mapping[str, Any]],
+    *,
+    inactivity_after_seconds: float = 300.0,
+    required_no_progress_observations: int = 2,
+) -> dict[str, Any]:
+    """Classify bounded synthetic worker observations for deterministic recovery.
+
+    Two consecutive observations without a productive wait/status, scoped-Git, or required-artifact
+    signal are required before a running worker can be called stalled.  Quiet output alone never
+    overrides an explicit productive test/edit status.  The function is pure and does not spawn
+    agents, read Git, or contact GitHub.
+    """
+    base = {
+        "schema": WORKER_INACTIVITY_SCHEMA,
+        "classification": "insufficient_evidence",
+        "recommended_action": "parent_fallback",
+        "agent_id": None,
+        "elapsed_seconds": None,
+        "elapsed_interval_seconds": None,
+        "observations_evaluated": 0,
+        "consecutive_no_progress_observations": 0,
+        "observed_signals": {},
+        "observation_history": [],
+        "last_input": None,
+        "errors": [],
+    }
+    if (
+        isinstance(inactivity_after_seconds, bool)
+        or not isinstance(inactivity_after_seconds, (int, float))
+        or not math.isfinite(float(inactivity_after_seconds))
+        or float(inactivity_after_seconds) < 0
+    ):
+        base["errors"] = ["inactivity_after_seconds must be a finite non-negative number"]
+        return base
+    if (
+        isinstance(required_no_progress_observations, bool)
+        or not isinstance(required_no_progress_observations, int)
+        or required_no_progress_observations < 2
+    ):
+        base["errors"] = ["required_no_progress_observations must be at least 2"]
+        return base
+    if not isinstance(observations, Sequence) or isinstance(observations, (str, bytes)):
+        base["errors"] = ["observations must be a sequence"]
+        return base
+    if not observations:
+        base["errors"] = ["at least one observation is required"]
+        return base
+    if len(observations) > MAX_WORKER_INACTIVITY_OBSERVATIONS:
+        base["errors"] = [
+            f"observations exceed bounded limit of {MAX_WORKER_INACTIVITY_OBSERVATIONS}"
+        ]
+        return base
+
+    normalized: list[_WorkerInactivityObservation] = []
+    errors: list[str] = []
+    for index, raw in enumerate(observations):
+        if not isinstance(raw, Mapping):
+            errors.append(f"observation {index}: expected a mapping")
+            break
+        current = _normalize_worker_inactivity_observation(
+            raw, previous=normalized[-1] if normalized else None
+        )
+        if isinstance(current, str):
+            errors.append(f"observation {index}: {current}")
+            break
+        if normalized and current.agent_id != normalized[0].agent_id:
+            errors.append(f"observation {index}: agent_id changed")
+            break
+        normalized.append(current)
+    if errors:
+        base["agent_id"] = normalized[0].agent_id if normalized else None
+        base["observations_evaluated"] = len(normalized)
+        base["errors"] = errors
+        return base
+
+    current = normalized[-1]
+    streak = 0
+    for observation in reversed(normalized):
+        if observation.productive:
+            break
+        streak += 1
+    no_progress_interval = (
+        current.elapsed_seconds - normalized[-streak].elapsed_seconds if streak else 0.0
+    )
+    threshold_met = streak >= required_no_progress_observations and no_progress_interval >= float(
+        inactivity_after_seconds
+    )
+    if current.productive:
+        classification, action, reason = "productive", "continue", "productive signal observed"
+    elif threshold_met and current.state == "running":
+        classification, action, reason = (
+            "stalled",
+            "interrupt",
+            "two consecutive no-progress observations exceeded the inactivity interval",
+        )
+    elif threshold_met and current.state in {"interrupted", "cancelled", "closed"}:
+        classification, action, reason = (
+            "stalled",
+            "close",
+            "worker is no longer running after the inactivity interval",
+        )
+    elif threshold_met:
+        classification, action, reason = (
+            "stalled",
+            "parent_fallback",
+            "worker state is not safely interruptible from the observed status",
+        )
+    else:
+        classification, action, reason = (
+            "monitoring",
+            "continue",
+            "insufficient consecutive no-progress evidence for recovery",
+        )
+    return {
+        **base,
+        "classification": classification,
+        "recommended_action": action,
+        "agent_id": current.agent_id,
+        "elapsed_seconds": current.elapsed_seconds,
+        "elapsed_interval_seconds": no_progress_interval,
+        "observations_evaluated": len(normalized),
+        "consecutive_no_progress_observations": streak,
+        "observed_signals": current.signal_summary,
+        "observation_history": [observation.signal_summary for observation in normalized],
+        "last_input": current.last_input,
+        "action_reason": reason,
+        "inactivity_after_seconds": float(inactivity_after_seconds),
+        "required_no_progress_observations": required_no_progress_observations,
+        "bounded_observation_limit": MAX_WORKER_INACTIVITY_OBSERVATIONS,
+    }
 
 
 @dataclass(frozen=True)

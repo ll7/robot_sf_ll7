@@ -581,6 +581,104 @@ def test_release_identity_check_rejects_planning_sha_when_final_source_differs()
     assert "disagrees with" in check.summary
 
 
+def test_release_identity_check_rejects_invalid_source_identity_fields() -> None:
+    """Final source identity fields must be exact Git SHAs and agree."""
+    invalid_expected = release_doctor._release_identity_check(
+        SimpleNamespace(
+            schema_version="benchmark-release-manifest.v0.2",
+            latest_main_base_commit="a" * 40,
+            release_tag="paper-matrix-future-2026-09",
+        ),
+        "a" * 40,
+        "paper-matrix-future-2026-09",
+        "not-a-sha",
+    )
+    assert invalid_expected.status == "fail"
+    assert "expected final source SHA" in invalid_expected.summary
+
+    invalid_declared = release_doctor._release_identity_check(
+        SimpleNamespace(
+            schema_version="benchmark-release-manifest.v0.2",
+            latest_main_base_commit="a" * 40,
+            release_tag="paper-matrix-future-2026-09",
+            source_sha="not-a-sha",
+        ),
+        "a" * 40,
+        "paper-matrix-future-2026-09",
+        "b" * 40,
+    )
+    assert invalid_declared.status == "fail"
+    assert "manifest source_sha is not an exact 40-character Git SHA" in invalid_declared.summary
+
+
+def test_release_identity_check_rejects_source_sha_mismatch() -> None:
+    check = release_doctor._release_identity_check(
+        SimpleNamespace(
+            schema_version="benchmark-release-manifest.v0.2",
+            latest_main_base_commit="a" * 40,
+            release_tag="paper-matrix-future-2026-09",
+            source_sha="b" * 40,
+        ),
+        "a" * 40,
+        "paper-matrix-future-2026-09",
+        "c" * 40,
+    )
+
+    assert check.status == "fail"
+    assert "does not match expected final source SHA" in check.summary
+
+
+def test_release_identity_check_rejects_mismatched_historical_source() -> None:
+    check = release_doctor._release_identity_check(
+        SimpleNamespace(
+            schema_version="benchmark-release-manifest.v0.2",
+            latest_main_base_commit="c" * 40,
+            release_tag=release_doctor.HISTORICAL_RELEASE_TAG,
+            release_kind="benchmark-data",
+            source_sha="a" * 40,
+        ),
+        "c" * 40,
+        release_doctor.HISTORICAL_RELEASE_TAG,
+        "b" * 40,
+    )
+
+    assert check.status == "fail"
+    assert "historical release source SHA" in check.summary
+    assert "historical manifest source SHA" in check.summary
+
+
+def test_release_identity_check_requires_source_for_future_benchmark_data() -> None:
+    check = release_doctor._release_identity_check(
+        SimpleNamespace(
+            schema_version="benchmark-release-manifest.v0.2",
+            latest_main_base_commit="a" * 40,
+            release_tag="paper-matrix-future-2026-09",
+            release_kind="benchmark-data",
+        ),
+        "a" * 40,
+        "paper-matrix-future-2026-09",
+    )
+
+    assert check.status == "fail"
+    assert "requires manifest source_sha" in check.summary
+
+
+def test_release_identity_check_rejects_planning_base_mismatch() -> None:
+    check = release_doctor._release_identity_check(
+        SimpleNamespace(
+            schema_version="benchmark-release-manifest.v0.2",
+            latest_main_base_commit="a" * 40,
+            release_tag="paper-matrix-future-2026-09",
+            planning_base_sha="b" * 40,
+        ),
+        "a" * 40,
+        "paper-matrix-future-2026-09",
+    )
+
+    assert check.status == "fail"
+    assert "planning_base_sha" in check.summary
+
+
 def test_release_identity_check_accepts_immutable_historical_exception() -> None:
     """The already-published stale-suffix tag remains readable but immutable."""
     check = release_doctor._release_identity_check(

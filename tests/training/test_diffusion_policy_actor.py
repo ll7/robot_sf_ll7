@@ -47,6 +47,17 @@ def _map_runner_obs() -> dict[str, object]:
     }
 
 
+def _assert_training_subprocess_succeeded(
+    completed: subprocess.CompletedProcess[str],
+) -> None:
+    """Include both captured output streams when the training command fails."""
+    assert completed.returncode == 0, (
+        f"diffusion-policy training subprocess failed with exit code {completed.returncode}\n"
+        f"stdout:\n{completed.stdout}\n"
+        f"stderr:\n{completed.stderr}"
+    )
+
+
 def test_smoke_config_rejects_non_cpu_scale_values() -> None:
     """The smoke trainer validates the narrow first-slice action contract."""
     with pytest.raises(ValueError, match="training_steps"):
@@ -131,15 +142,46 @@ def test_training_script_entrypoint_writes_manifest_path(tmp_path) -> None:
             "--output-dir",
             str(output_dir),
         ],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
     )
 
+    _assert_training_subprocess_succeeded(completed)
     payload = json.loads(completed.stdout)
     manifest_path = output_dir / "cli_smoke.manifest.json"
     assert payload == {"manifest_path": str(manifest_path)}
     assert manifest_path.exists()
+
+
+def test_training_subprocess_failure_reports_captured_output() -> None:
+    """A failed training subprocess assertion includes stdout and stderr."""
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; "
+                "print('issue7951 stdout marker'); "
+                "print('issue7951 stderr marker', file=sys.stderr); "
+                "sys.exit(7)"
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 7
+
+    with pytest.raises(AssertionError) as exc_info:
+        _assert_training_subprocess_succeeded(completed)
+
+    message = str(exc_info.value)
+    assert "exit code 7" in message
+    assert "stdout:" in message
+    assert "issue7951 stdout marker" in message
+    assert "stderr:" in message
+    assert "issue7951 stderr marker" in message
 
 
 def test_training_script_can_write_diagnostic_packet(tmp_path) -> None:
@@ -166,11 +208,12 @@ def test_training_script_can_write_diagnostic_packet(tmp_path) -> None:
             str(output_dir),
             "--write-diagnostic-packet",
         ],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
     )
 
+    _assert_training_subprocess_succeeded(completed)
     payload = json.loads(completed.stdout)
     packet_path = output_dir / "cli_packet.manifest.diagnostic_packet.json"
     packet = json.loads(packet_path.read_text(encoding="utf-8"))
@@ -267,11 +310,12 @@ def test_training_script_can_write_multimodal_probe_and_packet(tmp_path) -> None
             "48",
             "--write-diagnostic-packet",
         ],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
     )
 
+    _assert_training_subprocess_succeeded(completed)
     payload = json.loads(completed.stdout)
     probe_path = output_dir / "cli_multimodal.manifest.multimodal_probe.json"
     packet_path = output_dir / "cli_multimodal.manifest.diagnostic_packet.json"
@@ -311,11 +355,12 @@ def test_training_script_can_write_representative_rollout_and_packet(tmp_path) -
             "6",
             "--write-diagnostic-packet",
         ],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
     )
 
+    _assert_training_subprocess_succeeded(completed)
     payload = json.loads(completed.stdout)
     rollout_path = output_dir / "cli_rollout.manifest.representative_rollout.json"
     packet_path = output_dir / "cli_rollout.manifest.diagnostic_packet.json"

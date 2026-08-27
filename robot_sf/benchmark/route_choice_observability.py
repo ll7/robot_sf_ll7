@@ -45,6 +45,7 @@ UNAVAILABLE_REASONS = frozenset(
         "invalid_neutral_band",
         "invalid_progress_interval",
         "invalid_reference",
+        "invalid_path",
         "unknown",
     }
 )
@@ -53,6 +54,13 @@ UNAVAILABLE_REASONS = frozenset(
 DEFAULT_SIDE_TOLERANCE_M = 0.05
 #: Default neutral-band half-width around the reference axis.
 DEFAULT_NEUTRAL_BAND_M = 0.2
+#: Versioned JSON-ready diagnostic record emitted by :func:`diagnostic_record`.
+DIAGNOSTIC_SCHEMA_VERSION = "route_choice_observability.v1"
+#: Conservative interpretation boundary carried by every diagnostic record.
+DIAGNOSTIC_CLAIM_BOUNDARY = (
+    "planner-route observability only; not pedestrian preference, response, comfort, "
+    "or general human predictability"
+)
 
 
 @dataclass(frozen=True)
@@ -111,6 +119,8 @@ class TemporalConsistencyReport:
     dominant_topology: str | None
     consistency_fraction: float
     denominator: int
+    availability_fraction: float
+    availability_denominator: int
     side_valid_count: int
     topology_valid_count: int
     side_denominator: int
@@ -131,6 +141,8 @@ class TemporalConsistencyReport:
             "dominant_topology": self.dominant_topology,
             "consistency_fraction": self.consistency_fraction,
             "denominator": self.denominator,
+            "availability_fraction": self.availability_fraction,
+            "availability_denominator": self.availability_denominator,
             "side_valid_count": self.side_valid_count,
             "topology_valid_count": self.topology_valid_count,
             "side_denominator": self.side_denominator,
@@ -162,16 +174,24 @@ def _reference_axis(
 def _cross_axis(axis: tuple[float, float]) -> tuple[float, float]:
     """Return the left-hand perpendicular of the directed axis.
 
-    Facing the goal along ``axis``, the left-hand side is the clockwise
-    perpendicular.  For the unit axis ``(1, 0)`` this returns ``(0, -1)`` so
-    negative y is left.
+    Robot SF's global and ego XY frames use the standard counter-clockwise
+    convention: for the unit axis ``(1, 0)``, ``(0, 1)`` is left.
     """
-    return (axis[1], -axis[0])
+    return (-axis[1], axis[0])
 
 
-def _finite_path(path: list[tuple[float, float]]) -> bool:
-    """Return whether every path point is finite."""
-    return all(np.isfinite(float(point[0])) and np.isfinite(float(point[1])) for point in path)
+def _path_problem(path: list[tuple[float, float]]) -> str | None:
+    """Return a fail-closed path-shape or finiteness reason, if any."""
+    for point in path:
+        try:
+            x, y = point
+            x_value = float(x)
+            y_value = float(y)
+        except (TypeError, ValueError):
+            return "invalid_path"
+        if not np.isfinite(x_value) or not np.isfinite(y_value):
+            return "non_finite"
+    return None
 
 
 def _path_geometry(
@@ -182,7 +202,7 @@ def _path_geometry(
     """Return the directed path axis or ``None`` when geometry is degenerate."""
     if len(path) < 2:
         return None
-    if not _finite_path(path):
+    if _path_problem(path) is not None:
         return None
     dx = float(path[-1][0]) - float(path[0][0])
     dy = float(path[-1][1]) - float(path[0][1])
@@ -254,24 +274,48 @@ def _valid_progress_interval(value: Any) -> tuple[float, float] | None:
     return (lo, hi)
 
 
-def _bucket_signed(
-    signed: float,
+def _signed_range_over_progress_interval(
+    path: list[tuple[float, float]],
     *,
-    neutral_band_m: float,
-    left_seen: bool,
-    right_seen: bool,
-    neutral_seen: bool,
-) -> tuple[bool, bool, bool]:
-    """Bucket one signed perpendicular distance into side flags.
+    start: tuple[float, float],
+    normal: tuple[float, float],
+    progress_interval: tuple[float, float],
+) -> tuple[float, float] | None:
+    """Return signed-distance extrema over an arc-length-clipped path interval.
 
-    Returns:
-        Updated ``(left_seen, right_seen, neutral_seen)`` flags.
+    Treating progress as normalized cumulative arc length makes the result
+    invariant to repeated points and to inserting samples along existing
+    segments.  Evaluating the clipped segment endpoints is sufficient because
+    signed distance varies linearly along each segment.
     """
-    if abs(signed) <= neutral_band_m:
-        return left_seen, right_seen, True
-    if signed > 0:
-        return True, right_seen, neutral_seen
-    return left_seen, True, neutral_seen
+    points = np.asarray(path, dtype=float)
+    segment_lengths = np.linalg.norm(np.diff(points, axis=0), axis=1)
+    total_length = float(np.sum(segment_lengths))
+    if not np.isfinite(total_length) or total_length <= 0.0:
+        return None
+
+    cumulative = np.concatenate(([0.0], np.cumsum(segment_lengths))) / total_length
+    start_arr = np.asarray(start, dtype=float)
+    normal_arr = np.asarray(normal, dtype=float)
+    lo, hi = progress_interval
+    signed_values: list[float] = []
+    for index, segment_length in enumerate(segment_lengths):
+        if segment_length <= 0.0:
+            continue
+        segment_lo = float(cumulative[index])
+        segment_hi = float(cumulative[index + 1])
+        overlap_lo = max(lo, segment_lo)
+        overlap_hi = min(hi, segment_hi)
+        if overlap_lo > overlap_hi:
+            continue
+        denominator = segment_hi - segment_lo
+        for progress in (overlap_lo, overlap_hi):
+            fraction = (progress - segment_lo) / denominator
+            point = points[index] + fraction * (points[index + 1] - points[index])
+            signed_values.append(float(np.dot(point - start_arr, normal_arr)))
+    if not signed_values:
+        return None
+    return min(signed_values), max(signed_values)
 
 
 def classify_route_side(  # noqa: C901 - fail-closed parameter and geometry gates
@@ -339,8 +383,8 @@ def classify_route_side(  # noqa: C901 - fail-closed parameter and geometry gate
         reason = "empty_path"
     elif len(path) == 1:
         reason = "single_point"
-    elif not _finite_path(path):
-        reason = "non_finite"
+    elif (path_problem := _path_problem(path)) is not None:
+        reason = path_problem
     elif axis is None:
         reason = "degenerate_reference"
     elif _path_geometry(path, tolerance_m=tolerance_m) is None:
@@ -360,29 +404,13 @@ def classify_route_side(  # noqa: C901 - fail-closed parameter and geometry gate
         )
 
     normal = _cross_axis(axis)
-    start_arr = np.asarray(start, dtype=float)
-    left_seen = False
-    right_seen = False
-    neutral_seen = False
-    classified = 0
-    lo, hi = progress_interval
-    total = max(len(path) - 1, 1)
-    for index, point in enumerate(path):
-        progress = index / total if total else 0.0
-        if progress < lo or progress > hi:
-            continue
-        offset = np.asarray(point, dtype=float) - start_arr
-        signed = float(np.dot(offset, normal))
-        left_seen, right_seen, neutral_seen = _bucket_signed(
-            signed,
-            neutral_band_m=neutral_band_m,
-            left_seen=left_seen,
-            right_seen=right_seen,
-            neutral_seen=neutral_seen,
-        )
-        classified += 1
-
-    if classified == 0:
+    signed_range = _signed_range_over_progress_interval(
+        path,
+        start=start,
+        normal=normal,
+        progress_interval=progress_interval,
+    )
+    if signed_range is None:
         return _unavailable_report(
             "insufficient_progress",
             coordinate_frame=coordinate_frame,
@@ -394,8 +422,11 @@ def classify_route_side(  # noqa: C901 - fail-closed parameter and geometry gate
             progress_interval=progress_interval,
         )
 
+    minimum_signed, maximum_signed = signed_range
+    left_seen = maximum_signed > neutral_band_m
+    right_seen = minimum_signed < -neutral_band_m
     return RouteSideReport(
-        side=_side_from_flags(left_seen, right_seen, neutral_seen),
+        side=_side_from_flags(left_seen, right_seen, not left_seen and not right_seen),
         reason=None,
         coordinate_frame=coordinate_frame,
         start=start,
@@ -460,7 +491,7 @@ def topology_signature(
     )
 
 
-def homotopy_identity(  # noqa: C901 - fail-closed map, path, and threshold gates
+def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and threshold gates
     path: list[tuple[float, float]],
     blocked: np.ndarray,
     *,
@@ -485,8 +516,8 @@ def homotopy_identity(  # noqa: C901 - fail-closed map, path, and threshold gate
         return HomotopyObservation(identity=None, unavailable_reason="empty_path")
     if len(path) == 1:
         return HomotopyObservation(identity=None, unavailable_reason="single_point")
-    if not _finite_path(path):
-        return HomotopyObservation(identity=None, unavailable_reason="non_finite")
+    if (path_problem := _path_problem(path)) is not None:
+        return HomotopyObservation(identity=None, unavailable_reason=path_problem)
     try:
         blocked_map = np.asarray(blocked)
     except (TypeError, ValueError):
@@ -517,10 +548,16 @@ def homotopy_identity(  # noqa: C901 - fail-closed map, path, and threshold gate
     rows, cols = blocked_map.shape
     grid_path: list[tuple[int, int]] = []
     for point in path:
-        row = round(float(point[0]))
-        col = round(float(point[1]))
+        row_value = float(point[0])
+        col_value = float(point[1])
+        if not row_value.is_integer() or not col_value.is_integer():
+            return HomotopyObservation(identity=None, unavailable_reason="non_integral_grid_cell")
+        row = int(row_value)
+        col = int(col_value)
         if row < 0 or row >= rows or col < 0 or col >= cols:
             return HomotopyObservation(identity=None, unavailable_reason="out_of_bounds")
+        if blocked_map[row, col]:
+            return HomotopyObservation(identity=None, unavailable_reason="path_intersects_blocked")
         grid_path.append((row, col))
 
     clearance_map = GridRoutePlannerAdapter._compute_clearance_map(blocked_map)
@@ -565,6 +602,8 @@ def temporal_consistency(
             dominant_topology=None,
             consistency_fraction=0.0,
             denominator=0,
+            availability_fraction=0.0,
+            availability_denominator=max(side_denominator, topology_denominator),
             side_valid_count=sum(report.side != "unavailable" for report in side_reports),
             topology_valid_count=sum(obs.identity is not None for obs in homotopy_observations),
             side_denominator=side_denominator,
@@ -609,19 +648,20 @@ def temporal_consistency(
 
     dominant_side = _dominant(valid_sides)
     dominant_topology = _dominant(valid_topologies)
-    consistency_fraction = float(valid_count / aligned_count) if aligned_count else 0.0
+    valid_pairs = [
+        (side_reports[index].side, str(homotopy_observations[index].identity))
+        for index in valid_pair_indices
+    ]
+    pair_counts: dict[tuple[str, str], int] = {}
+    for pair in valid_pairs:
+        pair_counts[pair] = pair_counts.get(pair, 0) + 1
+    consistency_fraction = float(max(pair_counts.values()) / valid_count) if valid_count else 0.0
+    availability_fraction = float(valid_count / aligned_count) if aligned_count else 0.0
 
-    first_stable_step: int | None = None
-    if len(valid_sides) >= 2:
-        first_stable = valid_sides[0]
-        stable_run = 0
-        for index, side in enumerate(valid_sides):
-            if side == first_stable:
-                stable_run += 1
-            else:
-                break
-        if stable_run == len(valid_sides):
-            first_stable_step = 0
+    aligned_pairs: list[tuple[str, str] | None] = [None] * aligned_count
+    for index, pair in zip(valid_pair_indices, valid_pairs, strict=True):
+        aligned_pairs[index] = pair
+    first_stable_step = _first_stable_pair_step(aligned_pairs)
 
     return TemporalConsistencyReport(
         valid_count=valid_count,
@@ -631,7 +671,9 @@ def temporal_consistency(
         dominant_side=dominant_side,
         dominant_topology=dominant_topology,
         consistency_fraction=consistency_fraction,
-        denominator=aligned_count,
+        denominator=valid_count,
+        availability_fraction=availability_fraction,
+        availability_denominator=aligned_count,
         side_valid_count=len(side_valid_indices),
         topology_valid_count=len(topology_valid_indices),
         side_denominator=side_denominator,
@@ -641,6 +683,46 @@ def temporal_consistency(
         alignment_reason=None,
         first_stable_step=first_stable_step,
     )
+
+
+def diagnostic_record(
+    side_reports: list[RouteSideReport],
+    homotopy_observations: list[HomotopyObservation],
+) -> dict[str, Any]:
+    """Return one versioned JSON-ready route-choice diagnostic record.
+
+    The record intentionally carries observation and availability semantics,
+    not a benchmark result or social-compliance score.
+    """
+    temporal = temporal_consistency(side_reports, homotopy_observations)
+    status = (
+        "available" if temporal.alignment_valid and temporal.valid_count > 0 else "not_available"
+    )
+    return {
+        "schema_version": DIAGNOSTIC_SCHEMA_VERSION,
+        "evidence_tier": "analysis-only",
+        "result_classification": "diagnostic-only",
+        "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+        "status": status,
+        "route_side_observations": [report.as_dict() for report in side_reports],
+        "homotopy_observations": [observation.as_dict() for observation in homotopy_observations],
+        "temporal_consistency": temporal.as_dict(),
+    }
+
+
+def _first_stable_pair_step(values: list[tuple[str, str] | None]) -> int | None:
+    """Return the first step beginning a stable two-sample route-choice suffix.
+
+    Unavailable samples invalidate the suffix instead of being bridged.  A
+    single final observation is insufficient to establish stability.
+    """
+    for index in range(max(len(values) - 1, 0)):
+        value = values[index]
+        if value is None or values[index + 1] != value:
+            continue
+        if all(candidate == value for candidate in values[index:]):
+            return index
+    return None
 
 
 def _dominant(values: list[str]) -> str | None:

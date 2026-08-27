@@ -50,6 +50,7 @@ from robot_sf.benchmark.release_protocol import (
     parse_release_args,
     resolve_campaign_artifact_path,
     validate_release_manifest,
+    validate_release_planner_roster,
     validate_stress_smoke_runtime_identity,
 )
 from robot_sf.benchmark.release_resume_admission import (
@@ -545,6 +546,294 @@ def _print_publication_identity_rejection() -> None:
     )
 
 
+def _normalize_repository_input(path: Path, *, field_name: str) -> Path:
+    """Resolve one release input from the repository root and reject external paths."""
+    repository_root = get_repository_root().resolve()
+    candidate = path if path.is_absolute() else repository_root / path
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(repository_root)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be inside the repository worktree") from exc
+    return resolved
+
+
+def _normalize_rehearsal_args(args: Any) -> None:
+    """Normalize all read-only rehearsal inputs before any admission is attempted."""
+    args.manifest = _normalize_repository_input(args.manifest, field_name="manifest")
+    if args.checkpoint_receipt is not None:
+        args.checkpoint_receipt = _normalize_repository_input(
+            args.checkpoint_receipt,
+            field_name="checkpoint receipt",
+        )
+    if args.runtime_smoke_receipt is not None:
+        args.runtime_smoke_receipt = _normalize_repository_input(
+            args.runtime_smoke_receipt,
+            field_name="runtime smoke receipt",
+        )
+
+
+def _rehearsal_failure(
+    *,
+    status: str,
+    reason: str,
+    evidence: dict[str, Any] | None = None,
+) -> int:
+    """Emit a path-free fail-closed rehearsal result."""
+    result: dict[str, Any] = {
+        "mode": "rehearsal",
+        "status": status,
+        "status_reason": reason,
+        "benchmark_success": False,
+        "release_benchmark_success": False,
+        "campaign_execution_status": "not_started",
+        "campaign_output_created": False,
+        "publication_requested": False,
+        "scheduler_requested": False,
+        "evidence_status": "blocked",
+        "release_exit_code": 2,
+    }
+    if evidence:
+        result.update(evidence)
+    if find_offending_paths(result):
+        result["status_reason"] = "release rehearsal admission failed without public path details"
+        for key in tuple(result):
+            if key not in {
+                "mode",
+                "status",
+                "status_reason",
+                "benchmark_success",
+                "release_benchmark_success",
+                "campaign_execution_status",
+                "campaign_output_created",
+                "publication_requested",
+                "scheduler_requested",
+                "evidence_status",
+                "release_exit_code",
+            }:
+                result.pop(key)
+    print(json.dumps(result, indent=2))
+    return 2
+
+
+def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912
+    """Run all release admissions and stop before campaign execution or output creation."""
+    unsupported = {
+        "output_root": args.output_root,
+        "label": args.label,
+        "campaign_id": args.campaign_id,
+        "resume_receipt": args.resume_receipt,
+    }
+    supplied = sorted(name.replace("_", "-") for name, value in unsupported.items() if value)
+    if supplied:
+        return _rehearsal_failure(
+            status="unsupported_combination",
+            reason=(
+                "rehearsal mode does not accept campaign allocation or resume options: "
+                + ", ".join(supplied)
+            ),
+        )
+
+    try:
+        manifest = load_release_manifest(args.manifest)
+    except (OSError, TypeError, ValueError, KeyError) as exc:
+        return _rehearsal_failure(
+            status="manifest_rejected",
+            reason="release manifest could not be admitted: " + str(exc),
+        )
+    if getattr(manifest, "schema_version", None) != "benchmark-release-manifest.v0.2":
+        return _rehearsal_failure(
+            status="unsupported_manifest",
+            reason="rehearsal mode requires benchmark-release-manifest.v0.2",
+        )
+
+    try:
+        cfg = load_campaign_config(manifest.canonical_campaign_config_path)
+        source_commit = _current_source_commit()
+        worktree_clean = _current_worktree_clean()
+    except (OSError, TypeError, ValueError, KeyError, ReleaseResumeAdmissionError) as exc:
+        return _rehearsal_failure(
+            status="startup_admission_failed",
+            reason="release rehearsal startup admission failed: " + str(exc),
+        )
+
+    startup_admission = {
+        "schema_version": "benchmark-release-rehearsal-startup-admission.v1",
+        "status": "valid",
+        "source_commit": source_commit,
+        "worktree_clean": worktree_clean,
+        "blockers": [],
+    }
+    if not worktree_clean:
+        startup_admission["status"] = "invalid"
+        startup_admission["blockers"] = ["release source worktree is not clean"]
+    if source_commit != getattr(manifest, "source_sha", None):
+        startup_admission["status"] = "invalid"
+        startup_admission["blockers"] = [
+            "checked-out source SHA does not match manifest source_sha"
+        ]
+    if startup_admission["status"] != "valid":
+        return _rehearsal_failure(
+            status="startup_admission_failed",
+            reason=str(startup_admission["blockers"][0]),
+            evidence={"startup_admission": startup_admission},
+        )
+
+    try:
+        check_orca_rvo2_preflight(cfg)
+    except OrcaRvo2PreflightError as exc:
+        return _rehearsal_failure(
+            status="startup_admission_failed",
+            reason="ORCA runtime preflight failed: " + str(exc),
+            evidence={"startup_admission": {**startup_admission, "status": "invalid"}},
+        )
+
+    try:
+        manifest_validation = validate_release_manifest(manifest, campaign_config=cfg)
+        planner_admission = validate_release_planner_roster(manifest, cfg)
+        evidence: dict[str, Any] = {
+            "startup_admission": startup_admission,
+            "manifest_validation": manifest_validation,
+            "planner_roster_admission": planner_admission,
+            "release_inputs": {
+                "source_commit": source_commit,
+                "manifest_path": _required_repo_relative(manifest.path),
+                "manifest_sha256": sha256_file(manifest.path),
+                "canonical_campaign_config": _required_repo_relative(
+                    manifest.canonical_campaign_config_path
+                ),
+                "canonical_campaign_config_sha256": sha256_file(
+                    manifest.canonical_campaign_config_path
+                ),
+            },
+        }
+    except (OSError, TypeError, ValueError, KeyError) as exc:
+        return _rehearsal_failure(
+            status="manifest_rejected",
+            reason="release manifest admission failed: " + str(exc),
+            evidence={"startup_admission": startup_admission},
+        )
+    if manifest_validation.get("status") != "valid":
+        return _rehearsal_failure(
+            status="manifest_rejected",
+            reason="release manifest validation failed",
+            evidence=evidence,
+        )
+    if planner_admission["status"] != "valid":
+        return _rehearsal_failure(
+            status="planner_roster_rejected",
+            reason=str(planner_admission["blockers"][0]),
+            evidence=evidence,
+        )
+
+    if args.checkpoint_receipt is None:
+        return _rehearsal_failure(
+            status="checkpoint_receipt_missing",
+            reason="rehearsal mode requires an enforced-staged checkpoint receipt",
+            evidence=evidence,
+        )
+    if args.runtime_smoke_receipt is None:
+        return _rehearsal_failure(
+            status="runtime_smoke_receipt_missing",
+            reason="rehearsal mode requires an exact-source runtime smoke receipt",
+            evidence=evidence,
+        )
+
+    try:
+        checkpoint_receipt = validate_checkpoint_staging_receipt(
+            cfg,
+            args.checkpoint_receipt,
+            campaign_config_path=manifest.canonical_campaign_config_path,
+            max_age_hours=args.checkpoint_receipt_max_age_hours,
+            repo_root=get_repository_root(),
+        )
+        if checkpoint_receipt.get("submit_safe") is not True:
+            raise CheckpointStagingReceiptError("checkpoint receipt is not submit-safe")
+        evidence["checkpoint_staging_admission"] = {
+            "schema_version": "benchmark-release-rehearsal-checkpoint-admission.v1",
+            "status": "admitted",
+            "path": _required_repo_relative(args.checkpoint_receipt),
+            "sha256": sha256_file(args.checkpoint_receipt),
+            "generated_at_utc": checkpoint_receipt.get("generated_at_utc"),
+            "submit_safe": True,
+            "arm_count": len(checkpoint_receipt.get("arms", [])),
+        }
+    except (OSError, TypeError, ValueError, KeyError, CheckpointStagingReceiptError) as exc:
+        evidence["checkpoint_staging_admission"] = {
+            "schema_version": "benchmark-release-rehearsal-checkpoint-admission.v1",
+            "status": "rejected",
+            "blockers": [str(exc)],
+        }
+        return _rehearsal_failure(
+            status="checkpoint_receipt_rejected",
+            reason="checkpoint staging admission failed: " + str(exc),
+            evidence=evidence,
+        )
+
+    try:
+        smoke_admission = validate_runtime_smoke_result(
+            args.runtime_smoke_receipt,
+            repo_root=get_repository_root(),
+            expected_source_commit=source_commit,
+            expected_planner_keys=tuple(manifest.planner_keys),
+            max_age_hours=args.runtime_smoke_receipt_max_age_hours,
+        )
+    except (OSError, TypeError, ValueError, KeyError, RuntimeSmokeAdmissionError) as exc:
+        evidence["runtime_smoke_admission"] = {
+            "schema_version": "benchmark-release-rehearsal-runtime-smoke-admission.v1",
+            "status": "rejected",
+            "blockers": [str(exc)],
+        }
+        return _rehearsal_failure(
+            status="runtime_smoke_receipt_rejected",
+            reason="runtime smoke admission failed: " + str(exc),
+            evidence=evidence,
+        )
+    evidence["runtime_smoke_admission"] = {
+        "schema_version": "benchmark-release-rehearsal-runtime-smoke-admission.v1",
+        **smoke_admission,
+    }
+
+    try:
+        resolved_manifest = build_resolved_release_manifest(
+            manifest,
+            campaign_config=cfg,
+            source_commit=source_commit,
+        )
+    except (OSError, TypeError, ValueError, KeyError) as exc:
+        return _rehearsal_failure(
+            status="release_identity_rejected",
+            reason="release identity binding failed: " + str(exc),
+            evidence=evidence,
+        )
+
+    result = {
+        "mode": "rehearsal",
+        "status": "release_rehearsal_passed",
+        "status_reason": (
+            "release admissions passed; campaign execution, episode creation, publication, "
+            "and scheduler submission were intentionally not started"
+        ),
+        "benchmark_success": False,
+        "release_benchmark_success": False,
+        "campaign_execution_status": "not_started",
+        "campaign_output_created": False,
+        "publication_requested": False,
+        "scheduler_requested": False,
+        "evidence_status": "preflight_valid",
+        "release_exit_code": 0,
+        "resolved_manifest": resolved_manifest,
+        **evidence,
+    }
+    if find_offending_paths(result):
+        return _rehearsal_failure(
+            status="release_identity_rejected",
+            reason="release rehearsal evidence contained private path data",
+        )
+    print(json.dumps(result, indent=2))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
     """Run the benchmark release entrypoint and return a POSIX exit code."""
     raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
@@ -552,6 +841,16 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
 
     logger.remove()
     logger.add(sys.stderr, level="INFO")
+
+    if args.mode == "rehearsal":
+        try:
+            _normalize_rehearsal_args(args)
+        except (OSError, TypeError, ValueError) as exc:
+            return _rehearsal_failure(
+                status="unsupported_input",
+                reason="release rehearsal input normalization failed: " + str(exc),
+            )
+        return _run_release_rehearsal(args)
 
     invoked_command = shlex.join([sys.executable, str(Path(__file__)), *raw_argv])
 

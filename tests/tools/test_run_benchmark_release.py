@@ -133,6 +133,242 @@ def _admit_checkpoint_receipt(monkeypatch, tmp_path: Path) -> Path:
     return receipt
 
 
+def _rehearsal_fixture(tmp_path: Path) -> tuple[SimpleNamespace, SimpleNamespace, Path, Path]:
+    """Create repository-local inputs for no-campaign rehearsal tests."""
+    manifest_path = tmp_path / "configs" / "release.yaml"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text("schema_version: benchmark-release-manifest.v0.2\n", encoding="utf-8")
+    config_path = tmp_path / "configs" / "campaign.yaml"
+    config_path.write_text("name: rehearsal\n", encoding="utf-8")
+    planner = SimpleNamespace(
+        key="goal",
+        algo="goal",
+        planner_group="core",
+        enabled=True,
+    )
+    cfg = SimpleNamespace(planners=(planner,), kinematics_matrix=("differential_drive",))
+    manifest = SimpleNamespace(
+        path=manifest_path,
+        schema_version="benchmark-release-manifest.v0.2",
+        source_sha="a" * 40,
+        canonical_campaign_config_path=config_path,
+        planner_keys=("goal",),
+        planner_groups={"goal": "core"},
+        expected_kinematics_matrix=("differential_drive",),
+    )
+    checkpoint = tmp_path / "receipt.json"
+    checkpoint.write_text("{}\n", encoding="utf-8")
+    smoke = tmp_path / "smoke" / "release_result.json"
+    smoke.parent.mkdir()
+    smoke.write_text("{}\n", encoding="utf-8")
+    return manifest, cfg, checkpoint, smoke
+
+
+def _patch_valid_rehearsal_admissions(monkeypatch, tmp_path: Path) -> None:
+    """Patch external and release-data admissions while retaining roster logic."""
+    monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: tmp_path)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: object())
+    monkeypatch.setattr(run_benchmark_release, "_current_source_commit", lambda: "a" * 40)
+    monkeypatch.setattr(run_benchmark_release, "_current_worktree_clean", lambda: True)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: {"status": "valid", "problem_count": 0, "problems": []},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_checkpoint_staging_receipt",
+        lambda *args, **kwargs: {
+            "generated_at_utc": "2026-08-27T00:00:00Z",
+            "submit_safe": True,
+            "arms": [{"planner_key": "goal"}],
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_runtime_smoke_result",
+        lambda *args, **kwargs: {
+            "status": "admitted",
+            "result_sha256": "b" * 64,
+            "source_commit": "a" * 40,
+            "planner_arms": 1,
+            "episode_cells": 1,
+            "fallback_or_degraded_rows": 0,
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_resolved_release_manifest",
+        lambda *args, **kwargs: {"release_id": "rehearsal"},
+    )
+
+
+def test_release_rehearsal_admits_inputs_without_campaign_side_effects(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """A successful rehearsal reports every gate and never starts campaign execution."""
+    manifest, cfg, _checkpoint, _smoke = _rehearsal_fixture(tmp_path)
+    unrelated_cwd = tmp_path / "unrelated-cwd"
+    unrelated_cwd.mkdir()
+    monkeypatch.chdir(unrelated_cwd)
+    called = {"campaign": False, "preflight": False}
+    _patch_valid_rehearsal_admissions(monkeypatch, tmp_path)
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *args, **kwargs: called.__setitem__("campaign", True),
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "prepare_campaign_preflight",
+        lambda *args, **kwargs: called.__setitem__("preflight", True),
+    )
+
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "configs/release.yaml",
+            "--mode",
+            "rehearsal",
+            "--checkpoint-receipt",
+            "receipt.json",
+            "--runtime-smoke-receipt",
+            "smoke/release_result.json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["status"] == "release_rehearsal_passed"
+    assert payload["campaign_execution_status"] == "not_started"
+    assert payload["campaign_output_created"] is False
+    assert payload["checkpoint_staging_admission"]["status"] == "admitted"
+    assert payload["runtime_smoke_admission"]["status"] == "admitted"
+    assert payload["planner_roster_admission"]["status"] == "valid"
+    assert payload["release_inputs"]["manifest_path"] == "configs/release.yaml"
+    assert called == {"campaign": False, "preflight": False}
+
+
+def test_release_rehearsal_rejects_stale_planner_roster_before_receipt_admission(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """A planner-roster drift cannot reach checkpoint or campaign execution."""
+    manifest, cfg, _checkpoint, _smoke = _rehearsal_fixture(tmp_path)
+    cfg.planners = (SimpleNamespace(key="orca", algo="orca", planner_group="core", enabled=True),)
+    _patch_valid_rehearsal_admissions(monkeypatch, tmp_path)
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    called = {"checkpoint": False, "runtime": False, "campaign": False}
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_checkpoint_staging_receipt",
+        lambda *args, **kwargs: called.__setitem__("checkpoint", True),
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_runtime_smoke_result",
+        lambda *args, **kwargs: called.__setitem__("runtime", True),
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *args, **kwargs: called.__setitem__("campaign", True),
+    )
+
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "configs/release.yaml",
+            "--mode",
+            "rehearsal",
+            "--checkpoint-receipt",
+            "receipt.json",
+            "--runtime-smoke-receipt",
+            "smoke/release_result.json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "planner_roster_rejected"
+    assert payload["planner_roster_admission"]["status"] == "invalid"
+    assert called == {"checkpoint": False, "runtime": False, "campaign": False}
+
+
+def test_release_rehearsal_serializes_manifest_admission_failure(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """Unexpected manifest I/O is still reported as a structured stop receipt."""
+    manifest, cfg, _checkpoint, _smoke = _rehearsal_fixture(tmp_path)
+    _patch_valid_rehearsal_admissions(monkeypatch, tmp_path)
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("manifest disappeared")),
+    )
+
+    exit_code = run_benchmark_release.main(
+        ["--manifest", "configs/release.yaml", "--mode", "rehearsal"]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "manifest_rejected"
+    assert payload["campaign_execution_status"] == "not_started"
+
+
+def test_release_rehearsal_fails_closed_on_checkpoint_receipt(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """Checkpoint admission failure stops the no-campaign path before runtime smoke."""
+    manifest, cfg, _checkpoint, _smoke = _rehearsal_fixture(tmp_path)
+    _patch_valid_rehearsal_admissions(monkeypatch, tmp_path)
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    called = {"runtime": False, "campaign": False}
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_checkpoint_staging_receipt",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            run_benchmark_release.CheckpointStagingReceiptError("stale receipt")
+        ),
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_runtime_smoke_result",
+        lambda *args, **kwargs: called.__setitem__("runtime", True),
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "run_campaign",
+        lambda *args, **kwargs: called.__setitem__("campaign", True),
+    )
+
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "configs/release.yaml",
+            "--mode",
+            "rehearsal",
+            "--checkpoint-receipt",
+            "receipt.json",
+            "--runtime-smoke-receipt",
+            "smoke/release_result.json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "checkpoint_receipt_rejected"
+    assert payload["checkpoint_staging_admission"]["status"] == "rejected"
+    assert called == {"runtime": False, "campaign": False}
+
+
 def test_release_input_path_rejects_external_location_without_leaking_it(
     monkeypatch, tmp_path: Path
 ) -> None:

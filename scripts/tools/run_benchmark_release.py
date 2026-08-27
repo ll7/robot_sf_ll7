@@ -604,6 +604,42 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
             }
             print(json.dumps(result, indent=2))
             return 2
+    elif getattr(manifest, "source_sha", None) is not None:
+        # Future v0.2 manifests freeze the final immutable source before the
+        # campaign starts.  Do not let a planning/base checkout produce
+        # artifacts that claim the frozen source identity.
+        try:
+            runtime_source_commit = _current_source_commit()
+        except (ReleaseResumeAdmissionError, ValueError) as exc:
+            result = {
+                "mode": args.mode,
+                "status": "release_source_rejected",
+                "status_reason": str(exc),
+                "benchmark_success": False,
+                "release_benchmark_success": False,
+                "release_status": "release_source_rejected",
+                "release_status_reason": str(exc),
+                "release_exit_code": 2,
+            }
+            print(json.dumps(result, indent=2))
+            return 2
+        if runtime_source_commit != manifest.source_sha:
+            reason = (
+                "checked-out source SHA does not match manifest source_sha; "
+                "planning/base SHA cannot satisfy final source identity"
+            )
+            result = {
+                "mode": args.mode,
+                "status": "release_source_rejected",
+                "status_reason": reason,
+                "benchmark_success": False,
+                "release_benchmark_success": False,
+                "release_status": "release_source_rejected",
+                "release_status_reason": reason,
+                "release_exit_code": 2,
+            }
+            print(json.dumps(result, indent=2))
+            return 2
     try:
         check_orca_rvo2_preflight(cfg)
     except OrcaRvo2PreflightError as exc:
@@ -632,7 +668,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     validation = validate_release_manifest(manifest, campaign_config=cfg)
 
     resolved_manifest_kwargs: dict[str, Any] = {"campaign_config": cfg}
-    if stress_smoke:
+    if runtime_source_commit is not None:
         resolved_manifest_kwargs["source_commit"] = runtime_source_commit
     resolved_manifest = build_resolved_release_manifest(manifest, **resolved_manifest_kwargs)
     if args.mode == "preflight":
@@ -863,7 +899,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         "campaign_root": campaign_root,
         "invoked_command": _public_release_invocation(args.manifest, args.mode),
     }
-    if stress_smoke:
+    if runtime_source_commit is not None:
         release_provenance_kwargs["source_commit"] = runtime_source_commit
     release_provenance = build_release_provenance(
         manifest,

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from robot_sf.benchmark.camera_ready._run_state import _resolve_path
+from robot_sf.benchmark.release_protocol import _scenario_matrix_include_paths
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -41,3 +42,14 @@ def test_explicit_release_root_rejects_existing_relative_sidecar_escape(tmp_path
             base_dir=tooling_config,
             repository_root=repository_root,
         )
+
+
+def test_explicit_release_root_rejects_scenario_matrix_escape(tmp_path: Path) -> None:
+    """Scenario traversal must use the frozen checkout rather than the tooling checkout."""
+    repository_root = tmp_path / "frozen-release"
+    repository_root.mkdir()
+    escaped = tmp_path / "outside.yaml"
+    escaped.write_text("scenarios: []\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="scenario matrix include escapes repository"):
+        _scenario_matrix_include_paths(escaped, repository_root=repository_root)

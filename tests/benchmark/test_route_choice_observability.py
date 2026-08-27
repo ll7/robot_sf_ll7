@@ -164,6 +164,22 @@ def test_degenerate_reference_fails_closed_unavailable() -> None:
     assert report.reason == "degenerate_reference"
 
 
+@pytest.mark.parametrize(
+    ("kwargs", "reason"),
+    [
+        ({"tolerance_m": -1.0}, "invalid_tolerance"),
+        ({"neutral_band_m": float("nan")}, "invalid_neutral_band"),
+        ({"progress_interval": (0.9, 0.1)}, "invalid_progress_interval"),
+    ],
+)
+def test_route_side_rejects_invalid_numeric_contract(
+    kwargs: dict[str, object], reason: str
+) -> None:
+    report = classify_route_side(_neutral_route(), start=START, goal=GOAL, **kwargs)
+    assert report.side == "unavailable"
+    assert report.reason == reason
+
+
 def test_homotopy_identity_is_stable_across_discovery_order() -> None:
     left = homotopy_identity(_left_route_grid(), SYMMETRIC_BLOCKED)
     right = homotopy_identity(_right_route_grid(), SYMMETRIC_BLOCKED)
@@ -191,6 +207,33 @@ def test_homotopy_identity_fails_closed() -> None:
     ).unavailable_reason == ("missing_blocked_map")
 
 
+def test_homotopy_identity_uses_canonical_clearance_fallback() -> None:
+    blocked = np.zeros((5, 5), dtype=bool)
+    blocked[2, 2] = True
+    path = [(1.0, 0.0), (1.0, 1.0), (1.0, 2.0), (1.0, 3.0)]
+    observation = homotopy_identity(path, blocked, clearance_threshold_cells=1)
+    assert observation.identity == "1,2"
+    assert observation.unavailable_reason is None
+
+
+@pytest.mark.parametrize(
+    ("blocked", "reason"),
+    [
+        (np.zeros((5,), dtype=bool), "malformed_blocked_map"),
+        (np.array([[0.0, 2.0]], dtype=float), "invalid_blocked_map"),
+    ],
+)
+def test_homotopy_identity_rejects_malformed_blocked_map(blocked: np.ndarray, reason: str) -> None:
+    assert homotopy_identity(_left_route_grid(), blocked).unavailable_reason == reason
+
+
+def test_homotopy_identity_rejects_invalid_threshold() -> None:
+    observation = homotopy_identity(
+        _left_route_grid(), SYMMETRIC_BLOCKED, clearance_threshold_cells=0
+    )
+    assert observation.unavailable_reason == "invalid_clearance_threshold"
+
+
 def test_temporal_consistency_separates_valid_and_unavailable() -> None:
     sides = [
         classify_route_side(_left_route(), start=START, goal=GOAL),
@@ -209,6 +252,41 @@ def test_temporal_consistency_separates_valid_and_unavailable() -> None:
     assert report.side_transition_count == 1
     assert report.topology_transition_count == 1
     assert report.consistency_fraction == pytest.approx(2 / 3)
+    assert report.side_valid_count == 2
+    assert report.topology_valid_count == 2
+    assert report.aligned_count == 3
+    assert report.alignment_valid is True
+
+
+def test_temporal_consistency_does_not_bridge_unavailable_samples() -> None:
+    sides = [
+        classify_route_side(_left_route(), start=START, goal=GOAL),
+        classify_route_side([], start=START, goal=GOAL),
+        classify_route_side(_right_route(), start=START, goal=GOAL),
+    ]
+    homotopies = [
+        homotopy_identity(_left_route_grid(), SYMMETRIC_BLOCKED),
+        _unavailable_homotopy(),
+        homotopy_identity(_right_route_grid(), SYMMETRIC_BLOCKED),
+    ]
+    report = temporal_consistency(sides, homotopies)
+    assert report.valid_count == 2
+    assert report.side_transition_count == 0
+    assert report.topology_transition_count == 0
+    assert report.consistency_fraction == pytest.approx(2 / 3)
+
+
+def test_temporal_consistency_rejects_unaligned_observations() -> None:
+    report = temporal_consistency(
+        [classify_route_side(_left_route(), start=START, goal=GOAL)],
+        [],
+    )
+    assert report.alignment_valid is False
+    assert report.alignment_reason == "length_mismatch"
+    assert report.aligned_count == 0
+    assert report.denominator == 0
+    assert report.valid_count == 0
+    assert report.consistency_fraction == 0.0
 
 
 def test_temporal_consistency_consistent_sequence() -> None:

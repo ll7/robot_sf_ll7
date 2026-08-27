@@ -23,10 +23,11 @@ blocked-cell topology, not from discovery order or ephemeral names.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from itertools import pairwise
 from typing import Any
 
 import numpy as np
+
+from robot_sf.planner.grid_route import GridRoutePlannerAdapter
 
 #: Bounded route-side vocabulary.
 ROUTE_SIDES = frozenset({"left", "right", "neutral", "mixed", "unavailable"})
@@ -40,6 +41,10 @@ UNAVAILABLE_REASONS = frozenset(
         "non_finite",
         "degenerate_reference",
         "insufficient_progress",
+        "invalid_tolerance",
+        "invalid_neutral_band",
+        "invalid_progress_interval",
+        "invalid_reference",
         "unknown",
     }
 )
@@ -106,6 +111,13 @@ class TemporalConsistencyReport:
     dominant_topology: str | None
     consistency_fraction: float
     denominator: int
+    side_valid_count: int
+    topology_valid_count: int
+    side_denominator: int
+    topology_denominator: int
+    aligned_count: int
+    alignment_valid: bool
+    alignment_reason: str | None
     first_stable_step: int | None
 
     def as_dict(self) -> dict[str, Any]:
@@ -119,6 +131,13 @@ class TemporalConsistencyReport:
             "dominant_topology": self.dominant_topology,
             "consistency_fraction": self.consistency_fraction,
             "denominator": self.denominator,
+            "side_valid_count": self.side_valid_count,
+            "topology_valid_count": self.topology_valid_count,
+            "side_denominator": self.side_denominator,
+            "topology_denominator": self.topology_denominator,
+            "aligned_count": self.aligned_count,
+            "alignment_valid": self.alignment_valid,
+            "alignment_reason": self.alignment_reason,
             "first_stable_step": self.first_stable_step,
         }
 
@@ -202,6 +221,39 @@ def _unavailable_report(
     )
 
 
+def _finite_nonnegative(value: Any) -> float | None:
+    """Return a finite non-negative float, or ``None`` for invalid input."""
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(parsed) or parsed < 0.0:
+        return None
+    return parsed
+
+
+def _finite_point(value: Any) -> tuple[float, float] | None:
+    """Return a finite two-dimensional point, or ``None`` for malformed input."""
+    try:
+        point = (float(value[0]), float(value[1]))
+    except (IndexError, TypeError, ValueError):
+        return None
+    if not np.isfinite(point[0]) or not np.isfinite(point[1]):
+        return None
+    return point
+
+
+def _valid_progress_interval(value: Any) -> tuple[float, float] | None:
+    """Return a strictly increasing normalized progress interval, or ``None``."""
+    try:
+        lo, hi = (float(item) for item in value)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(lo) or not np.isfinite(hi) or not 0.0 <= lo < hi <= 1.0:
+        return None
+    return (lo, hi)
+
+
 def _bucket_signed(
     signed: float,
     *,
@@ -222,7 +274,7 @@ def _bucket_signed(
     return left_seen, True, neutral_seen
 
 
-def classify_route_side(
+def classify_route_side(  # noqa: C901 - fail-closed parameter and geometry gates
     path: list[tuple[float, float]],
     *,
     start: tuple[float, float],
@@ -244,6 +296,43 @@ def classify_route_side(
     Returns:
         A :class:`RouteSideReport` with the bounded side vocabulary.
     """
+
+    normalized_tolerance = _finite_nonnegative(tolerance_m)
+    normalized_band = _finite_nonnegative(neutral_band_m)
+    normalized_interval = _valid_progress_interval(progress_interval)
+    normalized_start = _finite_point(start)
+    normalized_goal = _finite_point(goal)
+    invalid_reason: str | None = None
+    if normalized_tolerance is None:
+        invalid_reason = "invalid_tolerance"
+    elif normalized_band is None:
+        invalid_reason = "invalid_neutral_band"
+    elif normalized_interval is None:
+        invalid_reason = "invalid_progress_interval"
+    elif normalized_start is None or normalized_goal is None:
+        invalid_reason = "invalid_reference"
+    if invalid_reason is not None:
+        return _unavailable_report(
+            invalid_reason,
+            coordinate_frame=coordinate_frame,
+            start=normalized_start or (0.0, 0.0),
+            goal=normalized_goal or (0.0, 0.0),
+            units=units,
+            tolerance_m=normalized_tolerance or 0.0,
+            neutral_band_m=normalized_band or 0.0,
+            progress_interval=normalized_interval or (0.0, 1.0),
+        )
+
+    assert normalized_tolerance is not None
+    assert normalized_band is not None
+    assert normalized_interval is not None
+    assert normalized_start is not None
+    assert normalized_goal is not None
+    tolerance_m = normalized_tolerance
+    neutral_band_m = normalized_band
+    progress_interval = normalized_interval
+    start = normalized_start
+    goal = normalized_goal
 
     axis = _reference_axis(start, goal, tolerance_m=tolerance_m)
     if not path:
@@ -333,7 +422,45 @@ def _side_from_flags(left_seen: bool, right_seen: bool, neutral_seen: bool) -> s
     return "neutral"
 
 
-def homotopy_identity(
+def topology_signature(
+    path: list[tuple[int, int]],
+    blocked: np.ndarray,
+    clearance_map: np.ndarray,
+    *,
+    clearance_threshold_cells: int,
+) -> frozenset[tuple[int, int]]:
+    """Return the canonical low-clearance corridor signature for a grid path.
+
+    Choke cells take precedence, matching the original topology diagnostic.  If
+    no choke cell is present, the same diagnostic falls back to path cells whose
+    finite clearance is within ``clearance_threshold_cells``.  Keeping this
+    implementation shared prevents route observability and topology diagnostics
+    from silently acquiring different identity semantics.
+    """
+
+    if blocked.ndim != 2 or clearance_map.shape != blocked.shape:
+        return frozenset()
+    choke_cells: set[tuple[int, int]] = set()
+    rows, cols = blocked.shape
+    for row, col in path:
+        up_blocked = row <= 0 or bool(blocked[row - 1, col])
+        down_blocked = row >= rows - 1 or bool(blocked[row + 1, col])
+        left_blocked = col <= 0 or bool(blocked[row, col - 1])
+        right_blocked = col >= cols - 1 or bool(blocked[row, col + 1])
+        if (up_blocked and down_blocked) or (left_blocked and right_blocked):
+            choke_cells.add((row, col))
+    if choke_cells:
+        return frozenset(choke_cells)
+
+    threshold = max(int(clearance_threshold_cells), 1)
+    return frozenset(
+        cell
+        for cell in path
+        if np.isfinite(float(clearance_map[cell])) and float(clearance_map[cell]) <= threshold
+    )
+
+
+def homotopy_identity(  # noqa: C901 - fail-closed map, path, and threshold gates
     path: list[tuple[float, float]],
     blocked: np.ndarray,
     *,
@@ -360,26 +487,53 @@ def homotopy_identity(
         return HomotopyObservation(identity=None, unavailable_reason="single_point")
     if not _finite_path(path):
         return HomotopyObservation(identity=None, unavailable_reason="non_finite")
-    if blocked.size == 0:
+    try:
+        blocked_map = np.asarray(blocked)
+    except (TypeError, ValueError):
+        return HomotopyObservation(identity=None, unavailable_reason="malformed_blocked_map")
+    if blocked_map.ndim != 2:
+        return HomotopyObservation(identity=None, unavailable_reason="malformed_blocked_map")
+    if blocked_map.size == 0:
         return HomotopyObservation(identity=None, unavailable_reason="missing_blocked_map")
+    if np.issubdtype(blocked_map.dtype, np.number):
+        if not np.isfinite(blocked_map).all() or not np.isin(blocked_map, [0, 1]).all():
+            return HomotopyObservation(identity=None, unavailable_reason="invalid_blocked_map")
+    elif blocked_map.dtype != np.dtype(bool):
+        return HomotopyObservation(identity=None, unavailable_reason="invalid_blocked_map")
 
-    rows, cols = blocked.shape
-    choke_cells: set[tuple[int, int]] = set()
+    try:
+        threshold_value = float(clearance_threshold_cells)
+    except (TypeError, ValueError):
+        return HomotopyObservation(identity=None, unavailable_reason="invalid_clearance_threshold")
+    if (
+        not np.isfinite(threshold_value)
+        or threshold_value < 1.0
+        or not threshold_value.is_integer()
+    ):
+        return HomotopyObservation(identity=None, unavailable_reason="invalid_clearance_threshold")
+
+    blocked_map = blocked_map.astype(bool, copy=False)
+
+    rows, cols = blocked_map.shape
+    grid_path: list[tuple[int, int]] = []
     for point in path:
         row = round(float(point[0]))
         col = round(float(point[1]))
         if row < 0 or row >= rows or col < 0 or col >= cols:
-            continue
-        up_blocked = row <= 0 or bool(blocked[row - 1, col])
-        down_blocked = row >= rows - 1 or bool(blocked[row + 1, col])
-        left_blocked = col <= 0 or bool(blocked[row, col - 1])
-        right_blocked = col >= cols - 1 or bool(blocked[row, col + 1])
-        if (up_blocked and down_blocked) or (left_blocked and right_blocked):
-            choke_cells.add((row, col))
-    if not choke_cells:
+            return HomotopyObservation(identity=None, unavailable_reason="out_of_bounds")
+        grid_path.append((row, col))
+
+    clearance_map = GridRoutePlannerAdapter._compute_clearance_map(blocked_map)
+    signature = topology_signature(
+        grid_path,
+        blocked_map,
+        clearance_map,
+        clearance_threshold_cells=int(threshold_value),
+    )
+    if not signature:
         return HomotopyObservation(identity=None, unavailable_reason="no_choke_cells")
     # Canonical, order-independent identity: sorted choke cells joined by '|'.
-    identity = ";".join(f"{row},{col}" for row, col in sorted(choke_cells))
+    identity = ";".join(f"{row},{col}" for row, col in sorted(signature))
     return HomotopyObservation(identity=identity, unavailable_reason=None)
 
 
@@ -398,18 +552,64 @@ def temporal_consistency(
         A :class:`TemporalConsistencyReport`.
     """
 
-    valid_sides = [report.side for report in side_reports if report.side != "unavailable"]
-    valid_topologies = [obs.identity for obs in homotopy_observations if obs.identity is not None]
-    unavailable_count = len(side_reports) - len(valid_sides)
-    denominator = len(side_reports)
-    valid_count = len(valid_sides)
+    side_denominator = len(side_reports)
+    topology_denominator = len(homotopy_observations)
+    alignment_valid = side_denominator == topology_denominator
+    if not alignment_valid:
+        return TemporalConsistencyReport(
+            valid_count=0,
+            unavailable_count=max(side_denominator, topology_denominator),
+            side_transition_count=0,
+            topology_transition_count=0,
+            dominant_side=None,
+            dominant_topology=None,
+            consistency_fraction=0.0,
+            denominator=0,
+            side_valid_count=sum(report.side != "unavailable" for report in side_reports),
+            topology_valid_count=sum(obs.identity is not None for obs in homotopy_observations),
+            side_denominator=side_denominator,
+            topology_denominator=topology_denominator,
+            aligned_count=0,
+            alignment_valid=False,
+            alignment_reason="length_mismatch",
+            first_stable_step=None,
+        )
 
-    side_transitions = sum(1 for a, b in pairwise(valid_sides) if a != b)
-    topology_transitions = sum(1 for a, b in pairwise(valid_topologies) if a != b)
+    aligned_count = side_denominator
+    side_valid_indices = [
+        index for index, report in enumerate(side_reports) if report.side != "unavailable"
+    ]
+    topology_valid_indices = [
+        index for index, observation in enumerate(homotopy_observations) if observation.identity
+    ]
+    valid_pair_indices = [
+        index
+        for index in range(aligned_count)
+        if index in side_valid_indices and index in topology_valid_indices
+    ]
+    valid_sides = [side_reports[index].side for index in side_valid_indices]
+    valid_topologies = [homotopy_observations[index].identity for index in topology_valid_indices]
+    valid_count = len(valid_pair_indices)
+    unavailable_count = aligned_count - valid_count
+
+    side_transitions = sum(
+        1
+        for index in range(1, aligned_count)
+        if index in side_valid_indices
+        and index - 1 in side_valid_indices
+        and side_reports[index].side != side_reports[index - 1].side
+    )
+    topology_transitions = sum(
+        1
+        for index in range(1, aligned_count)
+        if index in topology_valid_indices
+        and index - 1 in topology_valid_indices
+        and homotopy_observations[index].identity != homotopy_observations[index - 1].identity
+    )
 
     dominant_side = _dominant(valid_sides)
     dominant_topology = _dominant(valid_topologies)
-    consistency_fraction = float(valid_count / denominator) if denominator else 0.0
+    consistency_fraction = float(valid_count / aligned_count) if aligned_count else 0.0
 
     first_stable_step: int | None = None
     if len(valid_sides) >= 2:
@@ -431,7 +631,14 @@ def temporal_consistency(
         dominant_side=dominant_side,
         dominant_topology=dominant_topology,
         consistency_fraction=consistency_fraction,
-        denominator=denominator,
+        denominator=aligned_count,
+        side_valid_count=len(side_valid_indices),
+        topology_valid_count=len(topology_valid_indices),
+        side_denominator=side_denominator,
+        topology_denominator=topology_denominator,
+        aligned_count=aligned_count,
+        alignment_valid=True,
+        alignment_reason=None,
         first_stable_step=first_stable_step,
     )
 

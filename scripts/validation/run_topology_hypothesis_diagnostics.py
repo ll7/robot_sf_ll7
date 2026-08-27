@@ -19,6 +19,7 @@ from robot_sf.benchmark.map_runner.map_runner import (
     _policy_command_to_env_action,
     _scenario_with_episode_seed_defaults,
 )
+from robot_sf.benchmark.route_choice_observability import topology_signature as _topology_signature
 from robot_sf.benchmark.termination_reason import route_complete_success
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
@@ -137,35 +138,6 @@ def _distinct_path(
     return True
 
 
-def _topology_signature(
-    path: list[tuple[int, int]],
-    blocked: np.ndarray,
-    clearance_map: np.ndarray,
-    *,
-    clearance_threshold_cells: int,
-) -> frozenset[tuple[int, int]]:
-    """Return low-clearance path cells used as a compact corridor signature."""
-    choke_cells: set[tuple[int, int]] = set()
-    rows, cols = blocked.shape
-    for row, col in path:
-        up_blocked = row <= 0 or bool(blocked[row - 1, col])
-        down_blocked = row >= rows - 1 or bool(blocked[row + 1, col])
-        left_blocked = col <= 0 or bool(blocked[row, col - 1])
-        right_blocked = col >= cols - 1 or bool(blocked[row, col + 1])
-        if (up_blocked and down_blocked) or (left_blocked and right_blocked):
-            choke_cells.add((row, col))
-    if choke_cells:
-        return frozenset(choke_cells)
-
-    threshold = max(int(clearance_threshold_cells), 1)
-    signature = {
-        cell
-        for cell in path
-        if np.isfinite(float(clearance_map[cell])) and float(clearance_map[cell]) <= threshold
-    }
-    return frozenset(signature)
-
-
 def _block_path_cell(
     blocked: np.ndarray,
     cell: tuple[int, int],
@@ -231,20 +203,20 @@ def _find_alternative_paths(
         )
         clearance = adapter._compute_clearance_map(perturbed)
         path = adapter._astar(perturbed, start, goal, clearance_map=clearance)
-        topology_signature = _topology_signature(
+        signature = _topology_signature(
             path,
             blocked,
             base_clearance,
             clearance_threshold_cells=max(block_radius_cells, 1),
         )
-        if len(path) < 2 or not _distinct_path(path, topology_signature, hypotheses):
+        if len(path) < 2 or not _distinct_path(path, signature, hypotheses):
             continue
         hypotheses.append(
             _RouteHypothesisPath(
                 hypothesis_id=f"masked_cell_{blocked_cell[0]}_{blocked_cell[1]}",
                 path=path,
                 clearance_map=clearance,
-                topology_signature=topology_signature,
+                topology_signature=signature,
                 blocked_cell=blocked_cell,
             )
         )

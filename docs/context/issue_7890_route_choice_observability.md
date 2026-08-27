@@ -36,21 +36,25 @@ perpendicular of the directed axis (facing the goal).  A path that traverses bot
 `mixed` — never whichever side has the last sample.  Missing, non-finite, zero-length,
 single-point, or degenerate geometry fails closed as `unavailable` with an explicit reason
 (`empty_path`, `single_point`, `zero_length`, `non_finite`, `degenerate_reference`,
-`insufficient_progress`).
+`insufficient_progress`, `invalid_tolerance`, `invalid_neutral_band`,
+`invalid_progress_interval`, `invalid_reference`).
 
 ## 3. Homotopy identity
 
-Reuses the compact corridor-signature idea from the topology-hypothesis diagnostics: choke cells of
-the path relative to the blocked map.  The identity is a canonical, order-independent string of
-choke cells (`row,col` pairs sorted and joined).  It is stable across discovery order and does not
-depend on ephemeral route names such as `primary_route` or `masked_cell_*`.
+Reuses the canonical corridor-signature helper from the topology-hypothesis diagnostics: choke
+cells of the path relative to the blocked map, with the same finite-clearance fallback when no
+choke cell exists. The identity is a canonical, order-independent string of `row,col` pairs sorted
+and joined. It is stable across discovery order and does not depend on ephemeral route names such
+as `primary_route` or `masked_cell_*`. Malformed maps and invalid thresholds fail closed.
 
 ## 4. Temporal consistency
 
 For a sequence of replanned paths, the report records valid/unavailable counts separately,
 side-transition and topology-transition counts, dominant side/topology, consistency fraction with
-an explicit denominator, and the first stable-decision step when defined.  Outputs are never merged
-into a single social-compliance score.
+explicit side, topology, and aligned denominators, and the first stable-decision step when
+defined. Side/topology transitions do not bridge unavailable samples, and length-mismatched
+sequences are returned as alignment-invalid with zero admissible denominator. Outputs are never
+merged into a single social-compliance score.
 
 ## 5. Claim boundary
 

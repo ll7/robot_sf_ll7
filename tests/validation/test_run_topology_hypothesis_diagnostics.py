@@ -14,6 +14,8 @@ from scripts.validation.run_topology_hypothesis_diagnostics import (
     _find_alternative_paths,
     _first_float,
     _path_dynamic_clearance,
+    _route_choice_observations,
+    _RouteHypothesisInputs,
     _RouteHypothesisPath,
     _summarize_hypotheses,
     _terminal_outcome,
@@ -131,6 +133,64 @@ def test_find_alternative_paths_fails_closed_with_single_gap() -> None:
     )
 
     assert [route.hypothesis_id for route in paths] == ["primary_route"]
+
+
+def test_route_choice_observations_use_selected_path_and_grid_context() -> None:
+    """The operational diagnostic should convert a selected route to both metrics."""
+    blocked = np.zeros((10, 10), dtype=bool)
+    blocked[3:7, 4:6] = True
+    route = _RouteHypothesisPath(
+        hypothesis_id="bottom_corridor",
+        path=[(8, column) for column in range(10)],
+        clearance_map=GridRoutePlannerAdapter._compute_clearance_map(blocked),
+        topology_signature=frozenset(),
+    )
+    inputs = _RouteHypothesisInputs(
+        routes=[route],
+        blocked=blocked,
+        meta={"origin": [0.0, 0.0], "resolution": [1.0], "use_ego_frame": [0.0]},
+        robot_pos=np.array([0.5, 4.5]),
+        heading=0.0,
+        goal=np.array([9.5, 4.5]),
+    )
+
+    side_report, homotopy_observation = _route_choice_observations(
+        _adapter(),
+        inputs,
+        selected_hypothesis_id="bottom_corridor",
+        reference_start=(0.5, 4.5),
+        reference_goal=(9.5, 4.5),
+    )
+
+    assert side_report.side == "left"
+    assert side_report.coordinate_frame == "global_xy"
+    assert homotopy_observation.identity is not None
+    assert homotopy_observation.unavailable_reason is None
+
+
+def test_route_choice_observations_fail_closed_without_selected_path() -> None:
+    """An unselected or unavailable route must not be credited as an observation."""
+    inputs = _RouteHypothesisInputs(
+        routes=[],
+        blocked=np.zeros((4, 4), dtype=bool),
+        meta={"origin": [0.0, 0.0], "resolution": [1.0], "use_ego_frame": [0.0]},
+        robot_pos=np.array([0.5, 0.5]),
+        heading=0.0,
+        goal=np.array([3.5, 0.5]),
+    )
+
+    side_report, homotopy_observation = _route_choice_observations(
+        _adapter(),
+        inputs,
+        selected_hypothesis_id=None,
+        reference_start=(0.5, 0.5),
+        reference_goal=(3.5, 0.5),
+    )
+
+    assert side_report.side == "unavailable"
+    assert side_report.reason == "empty_path"
+    assert homotopy_observation.identity is None
+    assert homotopy_observation.unavailable_reason == "empty_path"
 
 
 def test_topology_signature_prefers_choke_cells_over_same_gap_wiggles() -> None:

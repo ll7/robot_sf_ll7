@@ -963,6 +963,25 @@ def test_diagnostic_stress_rejects_launch_source_mismatch(
     assert payload["stress_smoke_runtime_identity"]["status"] == "invalid"
 
 
+def test_future_release_rejects_checkout_drift_from_manifest_source(monkeypatch, capsys) -> None:
+    """A future release cannot execute from a checkout different from source_sha."""
+    manifest = SimpleNamespace(
+        canonical_campaign_config_path=Path("campaign.yaml"),
+        source_sha="b" * 40,
+    )
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: object())
+    monkeypatch.setattr(run_benchmark_release, "_current_source_commit", lambda: "a" * 40)
+
+    exit_code = run_benchmark_release.main(["--manifest", "manifest.yaml"])
+
+    assert exit_code == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "release_source_rejected"
+    assert "does not match manifest source_sha" in payload["status_reason"]
+    assert payload["release_benchmark_success"] is False
+
+
 def test_full_release_acceptance_failure_blocks_publication(
     monkeypatch,
     capsys,

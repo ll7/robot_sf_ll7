@@ -560,6 +560,44 @@ def test_release_identity_check_reports_each_mismatch() -> None:
     assert admitted.status == "pass"
 
 
+def test_release_identity_check_rejects_planning_sha_when_final_source_differs() -> None:
+    """Doctor compares a SHA-bearing tag with final source, not planning/base SHA."""
+    source_sha = "b" * 40
+    planning_sha = "a" * 40
+    tag = f"paper-matrix-future-{planning_sha}"
+    check = release_doctor._release_identity_check(
+        SimpleNamespace(
+            schema_version="benchmark-release-manifest.v0.2",
+            latest_main_base_commit=planning_sha,
+            release_tag=tag,
+            release_kind="benchmark-data",
+        ),
+        planning_sha,
+        tag,
+        source_sha,
+    )
+
+    assert check.status == "fail"
+    assert "disagrees with" in check.summary
+
+
+def test_release_identity_check_accepts_immutable_historical_exception() -> None:
+    """The already-published stale-suffix tag remains readable but immutable."""
+    check = release_doctor._release_identity_check(
+        SimpleNamespace(
+            schema_version="benchmark-release-manifest.v0.2",
+            latest_main_base_commit="c" * 40,
+            release_tag=release_doctor.HISTORICAL_RELEASE_TAG,
+            release_kind="benchmark-data",
+        ),
+        "c" * 40,
+        release_doctor.HISTORICAL_RELEASE_TAG,
+        release_doctor.HISTORICAL_RELEASE_SOURCE_SHA,
+    )
+
+    assert check.status == "pass"
+
+
 @pytest.mark.parametrize("suffix", [".json", ".yaml"])
 def test_load_mapping_supports_json_and_yaml(tmp_path: Path, suffix: str) -> None:
     """Private launch packets may use either supported serialization."""

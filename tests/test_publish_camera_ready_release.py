@@ -25,6 +25,7 @@ def _summary_payload(*, tag: str = "v0.0.1") -> dict[str, object]:
         "campaign": {
             "release_id": "test_release_01",
             "release_tag": tag,
+            "git_hash": _SOURCE_SHA,
             "repository_url": "https://github.com/ll7/robot_sf_ll7",
             "doi": "10.5281/zenodo.0000001",
         },
@@ -109,6 +110,8 @@ def test_create_draft_then_upload_order(tmp_path: Path) -> None:
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"]:
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
         if cmd[:3] == ["gh", "release", "view"]:
             raise subprocess.CalledProcessError(1, cmd, output="", stderr="not found")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
@@ -163,6 +166,8 @@ def test_existing_exact_sha_draft_allows_upload(tmp_path: Path) -> None:
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"]:
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
         if cmd[:3] == ["gh", "release", "view"]:
             return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
@@ -181,6 +186,8 @@ def test_missing_release_creates_draft(tmp_path: Path) -> None:
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"]:
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
         if cmd[:3] == ["gh", "release", "view"]:
             raise subprocess.CalledProcessError(1, cmd, output="", stderr="not found")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
@@ -191,6 +198,36 @@ def test_missing_release_creates_draft(tmp_path: Path) -> None:
     upload_calls = [c for c in calls if c[:3] == ["gh", "release", "upload"]]
     assert len(create_calls) == 1
     assert len(upload_calls) == 1
+
+
+def test_existing_git_tag_blocks_draft_creation(tmp_path: Path) -> None:
+    """A Git tag collision is never silently adopted by draft creation."""
+    existing = json.dumps({"isDraft": True, "targetCommitish": _SOURCE_SHA})
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if cmd[:3] == ["gh", "release", "view"]:
+            raise subprocess.CalledProcessError(1, cmd, output="", stderr="release not found")
+        if cmd[:2] == ["gh", "api"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    with patch("subprocess.run", side_effect=_fake_run), pytest.raises(SystemExit) as exc_info:
+        _run(tmp_path, "--create-draft", "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    assert "tag" in str(exc_info.value)
+    assert "already exists" in str(exc_info.value)
+
+
+def test_ambiguous_release_lookup_blocks_draft_creation(tmp_path: Path) -> None:
+    """An authentication/transport error is not interpreted as release absence."""
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if cmd[:3] == ["gh", "release", "view"]:
+            raise subprocess.CalledProcessError(1, cmd, output="", stderr="authentication failed")
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    with patch("subprocess.run", side_effect=_fake_run), pytest.raises(SystemExit) as exc_info:
+        _run(tmp_path, "--create-draft", "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    assert "cannot determine whether release" in str(exc_info.value)
 
 
 def test_release_identity_derives_title_and_notes() -> None:
@@ -223,3 +260,25 @@ def test_upload_without_create_draft_is_unchanged(tmp_path: Path) -> None:
     assert "draft_create_command" not in payload
     assert len(calls) == 1
     assert calls[0][:3] == ["gh", "release", "upload"]
+
+
+def test_publisher_rejects_provisional_sha_in_requested_tag() -> None:
+    """Publication cannot use a planning/base SHA as the tag identity."""
+    summary = _summary_payload()
+    with pytest.raises(ValueError, match="tag SHA component"):
+        publisher._validate_source_identity(
+            summary,
+            tag=f"paper-matrix-future-{'b' * 40}",
+            expected_source_sha=_SOURCE_SHA,
+        )
+
+
+def test_publisher_rejects_immutable_historical_tag_upload() -> None:
+    """The historical stale-suffix release cannot be mutated by the publisher."""
+    summary = _summary_payload()
+    with pytest.raises(ValueError, match="tag abbreviation"):
+        publisher._validate_source_identity(
+            summary,
+            tag="paper-matrix-v2-h600-s30-2026-08-cd831d7582c1",
+            expected_source_sha=_SOURCE_SHA,
+        )

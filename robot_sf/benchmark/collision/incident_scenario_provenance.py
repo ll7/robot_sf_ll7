@@ -21,14 +21,9 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from robot_sf.errors import RobotSfError
+import jsonschema
 
-try:
-    import jsonschema
-except ImportError as exc:  # pragma: no cover - dependency is declared in pyproject
-    raise RuntimeError(
-        "jsonschema package required for incident scenario provenance validation"
-    ) from exc
+from robot_sf.errors import RobotSfError
 
 INCIDENT_SCENARIO_PROVENANCE_SCHEMA_VERSION = "incident_scenario_provenance.v1"
 INCIDENT_SCENARIO_PROVENANCE_SCHEMA_FILE = (

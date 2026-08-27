@@ -11,8 +11,10 @@
     "source",
     "extraction",
     "scenario_parameters",
+    "scenario_config",
     "execution",
-    "normative_fault"
+    "normative_fault",
+    "admission"
   ],
   "properties": {
     "schema_version": {
@@ -122,6 +124,8 @@
         "additionalProperties": false,
         "required": [
           "parameter",
+          "source_kind",
+          "source_id",
           "source_field",
           "transformation",
           "unit",
@@ -130,6 +134,15 @@
         ],
         "properties": {
           "parameter": {"type": "string", "minLength": 1},
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "observed_fact",
+              "extracted_hypothesis",
+              "simulator_assumption"
+            ]
+          },
+          "source_id": {"type": "string", "minLength": 1},
           "source_field": {"type": "string", "minLength": 1},
           "transformation": {"type": "string", "minLength": 1},
           "unit": {"type": "string", "minLength": 1},
@@ -144,17 +157,26 @@
         }
       }
     },
+    "scenario_config": {
+      "description": "Immutable generated scenario configuration identity, kept separate from execution identity and outcome.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "digest_sha256", "seed"],
+      "properties": {
+        "identity": {"type": "string", "minLength": 1},
+        "digest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "seed": {"type": "integer", "minimum": 0}
+      }
+    },
     "execution": {
       "type": "object",
       "additionalProperties": false,
       "required": ["claimed"],
       "properties": {
         "claimed": {"type": "boolean"},
-        "scenario_config_digest_sha256": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{64}$"
-        },
-        "seed": {"type": "integer", "minimum": 0},
         "software_commit": {
           "type": "string",
           "pattern": "^[0-9a-f]{40}$"

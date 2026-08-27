@@ -57,6 +57,14 @@ ADMISSION_DISPOSITIONS = frozenset({"admitted", "rejected", "ambiguous", "unsupp
 #: Parameter-mapping statuses.
 PARAMETER_STATUSES = frozenset({"mapped", "estimated", "defaulted", "unsupported"})
 
+#: Provenance collections that a parameter mapping may reference. Each value
+#: names the record path, collection identifier field, and human-facing label.
+PARAMETER_SOURCE_KINDS = {
+    "observed_fact": ("source", "observed_facts", "fact_id"),
+    "extracted_hypothesis": ("extraction", "hypotheses", "hypothesis_id"),
+    "simulator_assumption": ("extraction", "simulator_assumptions", "assumption_id"),
+}
+
 #: Outcome kinds for a claimed execution.
 OUTCOME_KINDS = frozenset({"collision", "near_miss", "completed", "unavailable"})
 
@@ -151,10 +159,10 @@ def _verification_violations(record: Mapping[str, Any]) -> list[str]:
 
 
 def _parameter_mapping_violations(record: Mapping[str, Any]) -> list[str]:
-    """Keep parameter confidence and unsupported status semantically aligned.
+    """Keep parameter confidence and source provenance semantically aligned.
 
     Returns:
-        Violations for unsupported mappings that carry a misleading confidence.
+        Violations for misleading confidence or unresolved source references.
     """
     mappings = record.get("scenario_parameters")
     if not isinstance(mappings, list):
@@ -167,6 +175,32 @@ def _parameter_mapping_violations(record: Mapping[str, Any]) -> list[str]:
             violations.append(
                 f"scenario_parameters[{index}] with status='unsupported' must use "
                 "confidence='unavailable'"
+            )
+        source_kind = mapping.get("source_kind")
+        source_id = mapping.get("source_id")
+        source_field = mapping.get("source_field")
+        source_spec = PARAMETER_SOURCE_KINDS.get(source_kind)
+        if source_spec is None:
+            continue
+        owner_key, collection_key, identifier_key = source_spec
+        owner = record.get(owner_key)
+        collection = owner.get(collection_key) if isinstance(owner, Mapping) else None
+        if not isinstance(collection, list):
+            continue
+        matches = [
+            item
+            for item in collection
+            if isinstance(item, Mapping) and item.get(identifier_key) == source_id
+        ]
+        if len(matches) != 1:
+            violations.append(
+                f"scenario_parameters[{index}] source reference {source_kind}:{source_id} "
+                f"must resolve to exactly one {owner_key}.{collection_key} entry"
+            )
+        elif source_field not in matches[0]:
+            violations.append(
+                f"scenario_parameters[{index}].source_field={source_field!r} does not exist "
+                f"on {source_kind}:{source_id}"
             )
     return violations
 
@@ -181,15 +215,32 @@ def _admission_violations(record: Mapping[str, Any]) -> list[str]:
         return []
     extraction = record.get("extraction")
     extraction_status = extraction.get("status") if isinstance(extraction, Mapping) else None
-    if extraction_status == "rejected":
-        return ["admission='admitted' conflicts with extraction.status='rejected'"]
+    violations: list[str] = []
+    if extraction_status not in {"verified", "human_corrected"}:
+        violations.append(
+            "admission='admitted' requires extraction.status to be 'verified' or 'human_corrected'"
+        )
     mappings = record.get("scenario_parameters")
     if isinstance(mappings, list) and any(
         isinstance(mapping, Mapping) and mapping.get("status") == "unsupported"
         for mapping in mappings
     ):
-        return ["admission='admitted' conflicts with an unsupported scenario parameter mapping"]
-    return []
+        violations.append(
+            "admission='admitted' conflicts with an unsupported scenario parameter mapping"
+        )
+
+    source = record.get("source")
+    observed_facts = source.get("observed_facts") if isinstance(source, Mapping) else None
+    actors = extraction.get("actors") if isinstance(extraction, Mapping) else None
+    required_nonempty = {
+        "source.observed_facts": observed_facts,
+        "extraction.actors": actors,
+        "scenario_parameters": mappings,
+    }
+    for field, value in required_nonempty.items():
+        if not isinstance(value, list) or not value:
+            violations.append(f"admission='admitted' requires non-empty {field}")
+    return violations
 
 
 def _execution_violations(record: Mapping[str, Any]) -> list[str]:
@@ -204,14 +255,9 @@ def _execution_violations(record: Mapping[str, Any]) -> list[str]:
         return []
     if not execution.get("claimed"):
         return []
-    required_fields = (
-        "scenario_config_digest_sha256",
-        "seed",
-        "software_commit",
-        "replay_identity",
-    )
+    required_fields = ("software_commit", "replay_identity")
     missing = [key for key in required_fields if key not in execution or execution[key] is None]
-    for key in ("scenario_config_digest_sha256", "software_commit", "replay_identity"):
+    for key in ("software_commit", "replay_identity"):
         value = execution.get(key)
         if key not in missing and (not isinstance(value, str) or not value.strip()):
             missing.append(key)

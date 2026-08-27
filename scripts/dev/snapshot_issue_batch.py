@@ -63,7 +63,7 @@ UNCLAIMABLE_LABELS = {
     "state:review",
     "state:running",
     "wontfix",
-}
+} | set(issue_implementability.BLOCKING_LABELS | issue_implementability.PARENT_LABELS)
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:

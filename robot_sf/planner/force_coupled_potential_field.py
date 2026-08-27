@@ -408,8 +408,10 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         if payload is None:
             return None
         grid, meta, channel_idx, resolution = payload
-        if not math.isfinite(resolution) or not np.all(np.isfinite(grid)):
-            raise ValueError("occupancy grid and resolution must be finite")
+        if not math.isfinite(resolution):
+            raise ValueError("occupancy grid resolution must be finite")
+        if not np.all(np.isfinite(grid)) or np.any(grid < 0.0) or np.any(grid > 1.0):
+            raise ValueError("occupancy grid values must be finite and within [0, 1]")
         threshold = float(self.config.obstacle_grid_threshold)
         obstacle_mask = grid[channel_idx] >= threshold
         robot_cell_occupied = self._grid_value(robot[:2], grid, meta, channel_idx) >= threshold

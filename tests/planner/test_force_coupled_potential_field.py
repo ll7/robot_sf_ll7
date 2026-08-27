@@ -407,10 +407,11 @@ def test_occupied_robot_grid_cell_triggers_overlap_stop() -> None:
     assert diagnostics["zero_distance_guards"]["obstacles"] == 1
 
 
-def test_non_finite_occupancy_grid_fails_closed() -> None:
+@pytest.mark.parametrize("invalid_value", [float("nan"), -0.1, 1.1])
+def test_invalid_occupancy_grid_values_fail_closed(invalid_value: float) -> None:
     planner = ForceCoupledPotentialFieldPlanner()
     grid = np.zeros((3, 3, 3), dtype=np.float32)
-    grid[0, 1, 1] = np.nan
+    grid[0, 1, 1] = invalid_value
     observation = {
         "robot": {"position": [0.0, 0.0], "heading": [0.0]},
         "goal": {"current": [4.0, 0.0]},
@@ -425,7 +426,7 @@ def test_non_finite_occupancy_grid_fails_closed() -> None:
         "occupancy_grid_meta_robot_pose": [0.0, 0.0, 0.0],
     }
 
-    with pytest.raises(ValueError, match="occupancy grid and resolution must be finite"):
+    with pytest.raises(ValueError, match=r"finite and within \[0, 1\]"):
         planner.plan(observation)
     assert planner.diagnostics()["status"] == "invalid_input"
 

@@ -269,6 +269,60 @@ def test_run_compact_validation_interrupt_terminates_process_group(tmp_path: Pat
             runner.kill()
 
 
+def test_run_compact_validation_interrupt_kills_sigterm_ignoring_descendant(
+    tmp_path: Path,
+) -> None:
+    """SIGKILL escalation should clean up a descendant that ignores SIGTERM."""
+    artifact_dir = tmp_path / "artifacts"
+    child_pid_path = tmp_path / "child.pid"
+    grandchild_pid_path = tmp_path / "grandchild.pid"
+    fixture = (
+        "import os, pathlib, signal, subprocess, sys, time\n"
+        "grandchild = subprocess.Popen([sys.executable, '-c', "
+        "'import os, pathlib, signal, sys, time; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(30)', "
+        f"'{grandchild_pid_path}'])\n"
+        f"pathlib.Path(sys.argv[1]).write_text(str(os.getpid()))\n"
+        "time.sleep(30)"
+    )
+    command = [sys.executable, "-c", fixture, str(child_pid_path)]
+    runner = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from scripts.dev.run_compact_validation import main; "
+            "raise SystemExit(main(sys.argv[1:]))",
+            "--artifact-dir",
+            str(artifact_dir),
+            "--",
+            *command,
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 5
+        while not child_pid_path.exists() or not grandchild_pid_path.exists():
+            assert time.monotonic() < deadline, runner.communicate(timeout=1)[0]
+            time.sleep(0.02)
+        os.kill(runner.pid, signal.SIGINT)
+        stdout, _ = runner.communicate(timeout=10)
+        assert runner.returncode == INTERRUPTED_EXIT_CODE
+        assert "Exit code: 130" in stdout
+        summary = json.loads(next(artifact_dir.glob("*.summary.json")).read_text())
+        assert summary["interrupted"] is True
+        assert summary["timed_out"] is False
+        assert summary["cleanup_status"] == "process_group_killed_and_waited"
+        pid = int(grandchild_pid_path.read_text())
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
+    finally:
+        if runner.poll() is None:
+            runner.kill()
+
+
 def test_run_compact_validation_rejects_non_positive_timeout() -> None:
     """Timeout configuration should fail before running a command when invalid."""
     try:

@@ -484,7 +484,7 @@ def worker_inactivity_snapshot(observation_path: str | Path) -> dict[str, Any]:
                 "errors": [f"observation file exceeds {MAX_WORKER_OBSERVATION_FILE_BYTES} bytes"],
             }
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         return {**base, "errors": [f"worker observation unavailable: {exc}"]}
 
     if isinstance(raw, list):

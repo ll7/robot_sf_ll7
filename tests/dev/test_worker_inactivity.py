@@ -184,6 +184,19 @@ def test_missing_worker_observation_file_fails_closed(tmp_path) -> None:
     assert report["errors"]
 
 
+def test_invalid_utf8_worker_observation_fails_closed(tmp_path) -> None:
+    """Unreadable observation bytes produce bounded unavailable evidence."""
+    path = tmp_path / "invalid-utf8.json"
+    path.write_bytes(b"\xff")
+
+    report = snapshot.worker_inactivity_snapshot(path)
+
+    assert report["status"] == "unavailable"
+    assert report["classification"] == "insufficient_evidence"
+    assert report["recommended_action"] == "parent_fallback"
+    assert "worker observation unavailable" in report["errors"][0]
+
+
 def test_worker_observation_file_is_a_bounded_snapshot_entrypoint(tmp_path) -> None:
     """The canonical state snapshot can emit a stalled worker diagnostic from JSON input."""
     path = tmp_path / "worker-observations.json"

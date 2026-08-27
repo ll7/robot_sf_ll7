@@ -300,6 +300,29 @@ The published August 2026 tag (`paper-matrix-v2-h600-s30-2026-08-cd831d7582c1`)
 is immutable; its authoritative source identity is the manifest/bundle SHA
 (`b1d5ab6d…`), not the tag suffix. Do not rename or retarget it.
 
+## Credential-free public audit
+
+After publication, a reviewer can start the cold audit with only the exact
+public GitHub tag and Zenodo version DOI:
+
+```bash
+uv run robot-sf release audit-published \
+  --tag paper-matrix-v2-h600-s30-2026-08-cd831d7582c1 \
+  --doi 10.5281/zenodo.22077448 \
+  --output /tmp/published-release-audit.json
+```
+
+This command performs unauthenticated HTTPS `GET` requests, resolves the
+published GitHub release and tag commit, checks the Zenodo version/concept DOI
+and source-tag relation, then streams the public assets into isolated temporary
+directories before calling the offline audit core. Downloads are bounded and
+the command never reserves, uploads, edits, publishes, or renames a release;
+it accepts no token or deposition-state path. The JSON receipt reports
+`pass`, `invalid`, or `unavailable`. `unavailable` means the public service or
+transport could not be checked and must be retried; neither a network pass nor
+an unavailable result replaces the full benchmark and publication evidence
+checks below.
+
 ## Archive and Citation
 
 - ensure `CITATION.cff` remains current (aligned to the latest full release tag)

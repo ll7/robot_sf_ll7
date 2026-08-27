@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import io
 import json
 import subprocess
@@ -12,12 +14,15 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.benchmark import published_release_audit as published_audit_module
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.published_release_audit import (
+    NETWORK_SCHEMA,
     SCHEMA,
     _extract_members,
     _verify_internal_checksums,
     audit_published,
+    audit_published_network,
 )
 
 _CLI_SCRIPT = (
@@ -254,3 +259,466 @@ def test_cli_main_missing_channel_returns_one(tmp_path: Path) -> None:
     assert proc.returncode == 1
     receipt = json.loads(proc.stdout)
     assert receipt["ok"] is False
+
+
+class _PublicResponse:
+    """Small response double for public discovery and streamed downloads."""
+
+    def __init__(
+        self,
+        *,
+        payload: object = None,
+        chunks: tuple[bytes, ...] = (),
+        url: str,
+        status_code: int = 200,
+    ) -> None:
+        self._payload = payload
+        self._chunks = chunks
+        self.url = url
+        self.status_code = status_code
+        self.closed = False
+
+    def json(self) -> object:
+        return self._payload
+
+    def iter_content(self, *, chunk_size: int):
+        del chunk_size
+        yield from self._chunks
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _PublicSession:
+    """Route-only session double that records every request and its options."""
+
+    def __init__(self, routes: dict[str, _PublicResponse | Exception]) -> None:
+        self.routes = routes
+        self.headers = {"Authorization": "Bearer should-not-be-sent", "X-token": "secret"}
+        self.auth = object()
+        self.cookies = {"session": "secret"}
+        self.params = {"token": "secret"}
+        self.proxies = {"https": "https://user:secret@proxy.test"}
+        self.trust_env = True
+        self.calls: list[tuple[str, dict[str, object], dict[str, str]]] = []
+
+    def get(self, url: str, **kwargs: object) -> _PublicResponse:
+        self.calls.append((url, kwargs, dict(self.headers)))
+        route = self.routes[url]
+        if isinstance(route, Exception):
+            raise route
+        return route
+
+
+def _network_fixture(
+    tmp_path: Path,
+    *,
+    zenodo_name: str = "bundle.zip",
+    zenodo_doi: str = "10.5281/zenodo.1234567",
+) -> tuple[_PublicSession, bytes, str, str, str]:
+    """Build a complete mocked GitHub/Zenodo public response set."""
+    del tmp_path
+    github_base = "https://github.test"
+    zenodo_base = "https://zenodo.test/api"
+    tag = "paper-matrix-v2-h600-s30"
+    source_sha = "b" * 40
+    bundle_buffer = io.BytesIO()
+    with zipfile.ZipFile(bundle_buffer, "w") as archive:
+        archive.writestr("manifest.json", b"network-fixture")
+    bundle = bundle_buffer.getvalue()
+    digest = hashlib.sha256(bundle).hexdigest()
+    github_release_url = f"{github_base}/repos/ll7/robot_sf_ll7/releases/tags/{tag}"
+    github_ref_url = f"{github_base}/repos/ll7/robot_sf_ll7/git/ref/tags/{tag}"
+    github_asset_url = f"https://cdn.github.test/{tag}/bundle.zip"
+    zenodo_record_url = f"{zenodo_base}/records/1234567"
+    zenodo_asset_url = "https://zenodo.test/api/records/1234567/files/bundle.zip/content"
+    source_tag_url = f"https://github.com/ll7/robot_sf_ll7/releases/tag/{tag}"
+    routes: dict[str, _PublicResponse | Exception] = {
+        github_release_url: _PublicResponse(
+            payload={
+                "id": 7944,
+                "tag_name": tag,
+                "draft": False,
+                "prerelease": False,
+                "body": f"Source SHA: {source_sha}",
+                "assets": [
+                    {
+                        "name": "bundle.zip",
+                        "size": len(bundle),
+                        "digest": f"sha256:{digest}",
+                        "browser_download_url": github_asset_url,
+                    }
+                ],
+            },
+            url=github_release_url,
+        ),
+        github_ref_url: _PublicResponse(
+            payload={
+                "ref": f"refs/tags/{tag}",
+                "object": {"type": "commit", "sha": source_sha},
+            },
+            url=github_ref_url,
+        ),
+        zenodo_record_url: _PublicResponse(
+            payload={
+                "id": 1234567,
+                "doi": zenodo_doi,
+                "conceptdoi": "10.5281/zenodo.1234566",
+                "state": "done",
+                "status": "published",
+                "metadata": {
+                    "doi": zenodo_doi,
+                    "conceptdoi": "10.5281/zenodo.1234566",
+                    "related_identifiers": [
+                        {"identifier": source_tag_url, "relation": "isSupplementTo"}
+                    ],
+                },
+                "files": [
+                    {
+                        "filename": None,
+                        "key": zenodo_name,
+                        "size": len(bundle),
+                        "links": {"self": zenodo_asset_url},
+                    }
+                ],
+            },
+            url=zenodo_record_url,
+        ),
+        github_asset_url: _PublicResponse(
+            chunks=(bundle[:3], bundle[3:]),
+            url="https://cdn.github.test/final/bundle.zip",
+        ),
+        zenodo_asset_url: _PublicResponse(
+            chunks=(bundle[:5], bundle[5:]),
+            url="https://zenodo.test/cdn/final/bundle.zip",
+        ),
+    }
+    return _PublicSession(routes), bundle, tag, github_base, zenodo_base
+
+
+def test_network_audit_discovers_and_streams_public_assets(tmp_path: Path) -> None:
+    session, bundle, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+        download_chunk_size=7,
+    )
+    assert receipt["schema"] == NETWORK_SCHEMA
+    assert receipt["status"] == "pass"
+    assert receipt["ok"] is True
+    assert receipt["source_sha"] == "b" * 40
+    assert receipt["downloads"]["bytes"] == len(bundle) * 2
+    assert receipt["discovery"]["common_asset_names"] == ["bundle.zip"]
+    assert all(not headers for _, _, headers in session.calls)
+    assert session.cookies == {}
+    assert session.params == {}
+    assert session.proxies == {}
+    assert session.trust_env is False
+    assert all(kwargs["allow_redirects"] is True for _, kwargs, _ in session.calls)
+    assert all("stream" in kwargs for url, kwargs, _ in session.calls if "bundle.zip" in url)
+    assert "robot-sf-published-audit-" not in json.dumps(receipt)
+
+
+def test_network_audit_rejects_renamed_channel_asset_before_download(tmp_path: Path) -> None:
+    session, _, tag, github_base, zenodo_base = _network_fixture(
+        tmp_path, zenodo_name="renamed.zip"
+    )
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+    assert receipt["status"] == "invalid"
+    assert any("named public GitHub" in problem for problem in receipt["problems"])
+    assert not any("bundle.zip" in url for url, _, _ in session.calls[2:])
+
+
+def test_network_audit_separates_transport_unavailability(tmp_path: Path) -> None:
+    session, _, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    first_url = next(iter(session.routes))
+    session.routes[first_url] = OSError("network down")
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+    assert receipt["status"] == "unavailable"
+    assert receipt["ok"] is False
+    assert receipt["audit"] is None
+
+
+def test_network_audit_rejects_partial_stream(tmp_path: Path) -> None:
+    session, _, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    asset_url = next(url for url in session.routes if "cdn.github.test" in url)
+    response = session.routes[asset_url]
+    assert isinstance(response, _PublicResponse)
+    response._chunks = (b"partial",)
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+    assert receipt["status"] == "invalid"
+    assert any("size mismatch" in problem for problem in receipt["problems"])
+
+
+def test_network_audit_resolves_annotated_tag(tmp_path: Path) -> None:
+    session, _, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    ref_url = f"{github_base}/repos/ll7/robot_sf_ll7/git/ref/tags/{tag}"
+    annotation_sha = "c" * 40
+    source_sha = "b" * 40
+    annotated_url = f"{github_base}/repos/ll7/robot_sf_ll7/git/tags/{annotation_sha}"
+    ref_response = session.routes[ref_url]
+    assert isinstance(ref_response, _PublicResponse)
+    ref_response._payload = {
+        "ref": f"refs/tags/{tag}",
+        "object": {"type": "tag", "sha": annotation_sha},
+    }
+    session.routes[annotated_url] = _PublicResponse(
+        payload={"object": {"type": "commit", "sha": source_sha}},
+        url=annotated_url,
+    )
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+    assert receipt["status"] == "pass"
+    assert receipt["source_sha"] == source_sha
+
+
+def test_network_audit_rejects_doi_drift_and_secret_headers(tmp_path: Path) -> None:
+    session, _, tag, github_base, zenodo_base = _network_fixture(
+        tmp_path, zenodo_doi="10.5281/zenodo.7654321"
+    )
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+    assert receipt["status"] == "invalid"
+    assert any("DOI does not match" in problem for problem in receipt["problems"])
+    assert all("Authorization" not in json.dumps(headers) for _, _, headers in session.calls)
+    assert "secret" not in json.dumps(receipt)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"tag": "bad/tag"}, "path-safe"),
+        ({"repo": "bad-repository"}, "owner/name"),
+        ({"doi": "not-a-doi"}, "10.5281"),
+        ({"max_download_bytes": 0}, "max_download_bytes"),
+        ({"download_chunk_size": 0}, "download_chunk_size"),
+        ({"timeout": 0}, "timeout"),
+        ({"github_api_base": "https://github.test?token=secret"}, "query"),
+    ],
+)
+def test_network_audit_rejects_invalid_inputs(
+    tmp_path: Path, overrides: dict[str, object], message: str
+) -> None:
+    _, _, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    kwargs: dict[str, object] = {
+        "tag": tag,
+        "doi": "10.5281/zenodo.1234567",
+        "github_api_base": github_base,
+        "zenodo_api_base": zenodo_base,
+    }
+    kwargs.update(overrides)
+    receipt = audit_published_network(**kwargs)  # type: ignore[arg-type]
+    assert receipt["status"] == "invalid"
+    assert message in receipt["problems"][0]
+
+
+@pytest.mark.parametrize(
+    "status_code, status", [(503, "unavailable"), (404, "invalid"), (302, "invalid")]
+)
+def test_network_audit_maps_public_http_statuses(
+    tmp_path: Path, status_code: int, status: str
+) -> None:
+    session, _, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    release_url = next(url for url in session.routes if "/releases/tags/" in url)
+    release = session.routes[release_url]
+    assert isinstance(release, _PublicResponse)
+    release.status_code = status_code
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+    assert receipt["status"] == status
+    assert receipt["audit"] is None
+
+
+@pytest.mark.parametrize("variant", ["no_assets", "malformed_asset", "duplicate", "size", "digest"])
+def test_network_audit_rejects_malformed_github_assets(tmp_path: Path, variant: str) -> None:
+    session, _, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    release_url = next(url for url in session.routes if "/releases/tags/" in url)
+    release = session.routes[release_url]
+    assert isinstance(release, _PublicResponse)
+    payload = copy.deepcopy(release._payload)
+    assert isinstance(payload, dict)
+    if variant == "no_assets":
+        payload["assets"] = []
+    elif variant == "malformed_asset":
+        payload["assets"] = ["not-an-object"]
+    elif variant == "duplicate":
+        payload["assets"] = [payload["assets"][0], copy.deepcopy(payload["assets"][0])]
+    elif variant == "size":
+        payload["assets"][0]["size"] = -1
+    else:
+        payload["assets"][0]["digest"] = "sha256:not-a-digest"
+    release._payload = payload
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+    assert receipt["status"] == "invalid"
+
+
+def test_network_audit_public_helpers_fail_closed(monkeypatch) -> None:
+    monkeypatch.setattr(published_audit_module, "try_import", lambda _: None)
+    with pytest.raises(published_audit_module.PublishedAuditUnavailable, match="requests"):
+        published_audit_module._prepare_public_session(None)
+
+
+def test_network_failure_receipt_redacts_invalid_identifiers() -> None:
+    receipt = audit_published_network(
+        tag="https://user:secret@example.test/release?token=secret",
+        doi="https://doi.org/10.5281/zenodo.1234567?token=secret",
+    )
+    assert receipt["status"] == "invalid"
+    assert receipt["tag"] == "<invalid-tag>"
+    assert receipt["doi"] == "<invalid-doi>"
+    assert "secret" not in json.dumps(receipt)
+
+
+def test_release_cli_exposes_network_audit_and_writes_receipt(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    from robot_sf import cli
+
+    receipt = {
+        "schema": NETWORK_SCHEMA,
+        "ok": True,
+        "status": "pass",
+        "tag": "tag",
+        "doi": "10.5281/zenodo.1",
+        "source_sha": "a" * 40,
+        "problems": [],
+    }
+    seen: dict[str, object] = {}
+
+    def fake_audit(**kwargs: object) -> dict[str, object]:
+        seen.update(kwargs)
+        return receipt
+
+    monkeypatch.setattr(
+        "robot_sf.release_cli.published_release_audit.audit_published_network", fake_audit
+    )
+    output = tmp_path / "receipt.json"
+    code = cli.main(
+        [
+            "release",
+            "audit-published",
+            "--tag",
+            "tag",
+            "--doi",
+            "10.5281/zenodo.1",
+            "--output",
+            str(output),
+        ]
+    )
+    assert code == 0
+    assert seen["tag"] == "tag"
+    assert json.loads(output.read_text()) == receipt
+    assert json.loads(capsys.readouterr().out) == receipt
+
+
+@pytest.mark.parametrize("status, expected_code", [("invalid", 1), ("unavailable", 2)])
+def test_release_cli_maps_network_failure_statuses(
+    tmp_path: Path, monkeypatch, capsys, status: str, expected_code: int
+) -> None:
+    from robot_sf import cli
+
+    receipt = {
+        "schema": NETWORK_SCHEMA,
+        "ok": False,
+        "status": status,
+        "tag": "tag",
+        "doi": "10.5281/zenodo.1",
+        "problems": ["public service condition"],
+    }
+    monkeypatch.setattr(
+        "robot_sf.release_cli.published_release_audit.audit_published_network",
+        lambda **kwargs: receipt,
+    )
+    code = cli.main(
+        [
+            "release",
+            "audit-published",
+            "--tag",
+            "tag",
+            "--doi",
+            "10.5281/zenodo.1",
+        ]
+    )
+    assert code == expected_code
+    assert json.loads(capsys.readouterr().out) == receipt
+
+
+def test_release_cli_returns_two_when_receipt_write_fails(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    from robot_sf import cli
+
+    receipt = {
+        "schema": NETWORK_SCHEMA,
+        "ok": True,
+        "status": "pass",
+        "tag": "tag",
+        "doi": "10.5281/zenodo.1",
+        "problems": [],
+    }
+    monkeypatch.setattr(
+        "robot_sf.release_cli.published_release_audit.audit_published_network",
+        lambda **kwargs: receipt,
+    )
+    monkeypatch.setattr(
+        "robot_sf.release_cli.published_release_audit.write_network_receipt",
+        lambda *args: (_ for _ in ()).throw(OSError("write denied")),
+    )
+    code = cli.main(
+        [
+            "release",
+            "audit-published",
+            "--tag",
+            "tag",
+            "--doi",
+            "10.5281/zenodo.1",
+            "--output",
+            str(tmp_path / "receipt.json"),
+        ]
+    )
+    assert code == 2
+    output = json.loads(capsys.readouterr().out)
+    assert output["status"] == "error"
+    assert "write denied" not in json.dumps(output)

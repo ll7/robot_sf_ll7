@@ -10,6 +10,7 @@ from scripts.dev.terminal_label_reconcile import (
     INVENTORY_SCHEMA,
     STATE_QUALIFIER_CLASSIFICATION,
     TERMINAL_CLASSES,
+    _collect_closed_items,
     _terminal_class_from_state,
     fetch_item_state,
     plan_for_terminal,
@@ -187,6 +188,132 @@ def test_fetch_item_state_parses_labels() -> None:
     assert state["ok"] is True
     assert state["reason"] == "completed"
     assert state["labels"] == ["state:running", "type:docs"]
+    assert state["is_pull_request"] is False
+
+
+def test_fetch_item_state_preserves_pull_request_merge_identity() -> None:
+    """Exact-item reads retain enough PR identity to classify merged rows."""
+    payload = {
+        "number": 8,
+        "state": "closed",
+        "state_reason": None,
+        "labels": [],
+        "pull_request": {"merged_at": "2026-08-01T00:00:00Z"},
+    }
+    with patch("scripts.dev.terminal_label_reconcile.gh_api_get") as mock_get:
+        mock_get.return_value = type(
+            "R", (), {"returncode": 0, "stdout": json.dumps(payload), "stderr": ""}
+        )()
+        state = fetch_item_state(8, repo="o/r")
+    assert state["ok"] is True
+    assert state["is_pull_request"] is True
+    assert state["merged_at"] == "2026-08-01T00:00:00Z"
+    assert _terminal_class_from_state(state) == "pr_merged"
+
+
+def test_inventory_rejects_malformed_listing_labels() -> None:
+    """Malformed label entries make an inventory non-applicable."""
+    item = _closed_item(17, labels=["type:docs"])
+    item["labels"] = [{"not_name": "type:docs"}]
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="label entry 0 was malformed"):
+        run_terminal_inventory(fixture=[item], observed_at="2026-08-25T00:00:00Z")
+
+
+def test_inventory_rejects_exact_item_state_drift() -> None:
+    """A reopen between listing and exact read fails closed."""
+    listed = _closed_item(18, labels=["type:docs"])
+    exact = {**listed, "state": "open", "state_reason": "reopened"}
+    responses = [
+        type("R", (), {"returncode": 0, "stdout": json.dumps([listed]), "stderr": ""})(),
+        type("R", (), {"returncode": 0, "stdout": json.dumps(exact), "stderr": ""})(),
+    ]
+    import pytest as _pytest
+
+    with (
+        patch("scripts.dev.terminal_label_reconcile.gh_api_get", side_effect=responses),
+        _pytest.raises(ValueError, match="inconsistent terminal state"),
+    ):
+        run_terminal_inventory(repo="o/r", observed_at="2026-08-25T00:00:00Z")
+
+
+def test_inventory_rejects_exact_item_label_drift() -> None:
+    """A concurrent label change between listing and exact read fails closed."""
+    listed = _closed_item(19, labels=["type:docs"])
+    exact = {**listed, "labels": [{"name": "type:research"}]}
+    responses = [
+        type("R", (), {"returncode": 0, "stdout": json.dumps([listed]), "stderr": ""})(),
+        type("R", (), {"returncode": 0, "stdout": json.dumps(exact), "stderr": ""})(),
+    ]
+    import pytest as _pytest
+
+    with (
+        patch("scripts.dev.terminal_label_reconcile.gh_api_get", side_effect=responses),
+        _pytest.raises(ValueError, match="inconsistent labels"),
+    ):
+        run_terminal_inventory(repo="o/r", observed_at="2026-08-25T00:00:00Z")
+
+
+def test_inventory_rejects_rate_limit_or_rest_error() -> None:
+    """REST and rate-limit failures are surfaced as non-applicable inventory."""
+    response = type("R", (), {"returncode": 1, "stdout": "", "stderr": "API rate limit exceeded"})()
+    import pytest as _pytest
+
+    with (
+        patch("scripts.dev.terminal_label_reconcile.gh_api_get", return_value=response),
+        _pytest.raises(ValueError, match="pagination read failed"),
+    ):
+        run_terminal_inventory(repo="o/r", observed_at="2026-08-25T00:00:00Z")
+
+
+def test_inventory_complete_multi_page_fixture_and_aggregates() -> None:
+    """A full page followed by a short page is complete and classified."""
+    first_page = [_closed_item(number, labels=[]) for number in range(20, 120)]
+    second_page = [_closed_item(120, labels=["agent"], is_pr=True, merged=True, reason=None)]
+    report = run_terminal_inventory(
+        fixture_pages=[first_page, second_page],
+        observed_at="2026-08-25T00:00:00Z",
+    )
+    assert report["pagination"] == {
+        "pages_read": 2,
+        "item_count": 101,
+        "complete": True,
+        "bounded_by_max_items": False,
+        "termination": "short_page",
+    }
+    assert report["source"]["api"] == "github-rest-v3"
+    assert report["aggregate_counts_by"]["item_kind"] == {"issue": 100, "pull_request": 1}
+    assert report["aggregate_counts_by"]["verdict"] == {
+        "changes_required": 101,
+    }
+    assert report["aggregate_counts_by"]["label"] == {"agent": 1}
+
+
+def test_inventory_truncated_fixture_fails_closed() -> None:
+    """A full page budget without a terminating page is truncation."""
+    pages = [
+        [_closed_item(number, labels=[]) for number in range(130, 230)],
+        [_closed_item(230, labels=[])],
+    ]
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="pagination truncated"):
+        run_terminal_inventory(
+            fixture_pages=pages,
+            max_pages=1,
+            observed_at="2026-08-25T00:00:00Z",
+        )
+
+
+def test_collect_closed_items_rejects_invalid_limits() -> None:
+    """Pagination limits are explicit positive integers."""
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="max_pages must be positive"):
+        _collect_closed_items("o/r", max_pages=0, max_items=None, fixture=None, fixture_pages=None)
+    with _pytest.raises(ValueError, match="max_items must be positive"):
+        _collect_closed_items("o/r", max_pages=1, max_items=0, fixture=None, fixture_pages=None)
 
 
 # --- issue #7896: terminal-label inventory mode ---

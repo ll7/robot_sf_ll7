@@ -33,6 +33,7 @@ from scripts.dev.gh_pr_label_rest import add_label, remove_label
 
 SCHEMA = "terminal_label_reconcile.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
+REST_API_VERSION = "github-rest-v3"
 
 # Terminal classes supported by the planner.
 TERMINAL_CLASSES = frozenset(
@@ -154,6 +155,24 @@ def plan_for_terminal(
     }
 
 
+def _label_names_from_payload(payload: dict[str, Any], *, context: str) -> list[str]:
+    """Normalize and validate a REST label list before it enters a plan."""
+    raw_labels = payload.get("labels")
+    if not isinstance(raw_labels, list):
+        raise ValueError(f"{context} labels were not a list")
+    names: list[str] = []
+    for index, entry in enumerate(raw_labels):
+        if not isinstance(entry, dict) or not isinstance(entry.get("name"), str):
+            raise ValueError(f"{context} label entry {index} was malformed")
+        name = entry["name"]
+        if not name:
+            raise ValueError(f"{context} label entry {index} had an empty name")
+        names.append(name)
+    if len(names) != len(set(names)):
+        raise ValueError(f"{context} labels contained duplicates")
+    return names
+
+
 def fetch_item_state(number: int, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
     """Read the live issue/PR row and normalized labels via REST.
 
@@ -166,22 +185,26 @@ def fetch_item_state(number: int, *, repo: str = DEFAULT_REPO) -> dict[str, Any]
         return {"ok": False, "error": error}
     if not isinstance(payload, dict):
         return {"ok": False, "error": f"issue #{number} response was not an object"}
-    raw_labels = payload.get("labels")
-    names = (
-        [
-            entry["name"]
-            for entry in raw_labels
-            if isinstance(entry, dict) and isinstance(entry.get("name"), str)
-        ]
-        if isinstance(raw_labels, list)
-        else []
-    )
+    try:
+        names = _label_names_from_payload(payload, context=f"issue #{number}")
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+    pull_request = payload.get("pull_request")
+    if pull_request is not None and not isinstance(pull_request, dict):
+        return {"ok": False, "error": f"issue #{number} pull_request field was malformed"}
+    is_pull_request = isinstance(pull_request, dict)
+    merged_at = payload.get("merged_at")
+    if merged_at is None and is_pull_request:
+        merged_at = pull_request.get("merged_at")
     return {
         "ok": True,
         "number": number,
         "state": str(payload.get("state") or "").lower(),
         "reason": str(payload.get("state_reason") or "").lower() or None,
         "labels": names,
+        "is_pull_request": is_pull_request,
+        "pull_request": pull_request,
+        "merged_at": merged_at,
         "html_url": str(payload.get("html_url") or ""),
     }
 
@@ -382,7 +405,11 @@ def _terminal_class_from_state(
     """
     state = str(item.get("state") or "").lower()
     reason = str(item.get("state_reason") or item.get("reason") or "").lower() or None
-    merged = item.get("pull_request") is not None and bool(item.get("merged_at"))
+    pull_request = item.get("pull_request")
+    if pull_request is not None and not isinstance(pull_request, dict):
+        return None
+    is_pull_request, merged_at = _pull_request_identity(item)
+    merged = is_pull_request and bool(merged_at)
     if state == "closed":
         if merged:
             return "pr_merged"
@@ -400,6 +427,18 @@ def _terminal_class_from_state(
     if state == "open":
         return "reopened"
     return None
+
+
+def _pull_request_identity(item: dict[str, Any]) -> tuple[bool, Any]:
+    """Return pull-request identity and merge timestamp from a REST row."""
+    pull_request = item.get("pull_request")
+    is_pull_request = item.get("is_pull_request")
+    if not isinstance(is_pull_request, bool):
+        is_pull_request = isinstance(pull_request, dict)
+    merged_at = item.get("merged_at")
+    if merged_at is None and isinstance(pull_request, dict):
+        merged_at = pull_request.get("merged_at")
+    return is_pull_request, merged_at
 
 
 def _page_closed_items(repo: str, page: int, *, per_page: int = _PAGE_SIZE) -> list[dict[str, Any]]:
@@ -420,29 +459,23 @@ def _inventory_row_for_item(
     item: dict[str, Any],
     *,
     repo: str,
-    fixture: list[dict[str, Any]] | None,
+    offline: bool,
     label_classifications: dict[str, str],
     ambiguous_labels: list[str],
 ) -> tuple[dict[str, Any], str, list[str], list[str]]:
     """Compute the plan row for one item, returning (row, terminal_class, removals, reasons)."""
     number = int(item.get("number") or 0)
-    terminal_class = _terminal_class_from_state(item)
-    if terminal_class is None:
+    listed_terminal_class = _terminal_class_from_state(item)
+    if listed_terminal_class is None:
         raise ValueError(f"item #{number} has no trustworthy terminal class")
-    live = (
-        fetch_item_state(number, repo=repo)
-        if fixture is None
-        else {
-            "ok": True,
-            "number": number,
-            "state": str(item.get("state") or "").lower(),
-            "reason": str(item.get("state_reason") or "").lower() or None,
-            "labels": [e["name"] for e in item.get("labels", []) if isinstance(e, dict)],
-            "html_url": str(item.get("html_url") or ""),
-        }
+    listed_labels = _label_names_from_payload(item, context=f"item #{number} listing")
+    live = _exact_item_state(item, number=number, repo=repo, offline=offline, labels=listed_labels)
+    terminal_class = _validate_exact_item_state(
+        number,
+        listed_terminal_class=listed_terminal_class,
+        listed_labels=listed_labels,
+        live=live,
     )
-    if not live.get("ok"):
-        raise ValueError(f"exact-item re-read failed for #{number}: {live.get('error')}")
 
     for label in live["labels"]:
         if label.startswith("state:"):
@@ -469,8 +502,57 @@ def _inventory_row_for_item(
         "remove": plan["remove"],
         "preserved": plan["preserved"],
         "after": sorted(set(live["labels"]) - set(plan["remove"]) | set(plan["add"])),
+        "verdict": "changes_required" if plan["add"] or plan["remove"] else "no_changes",
     }
     return row, terminal_class, plan["remove"], live.get("reason")
+
+
+def _exact_item_state(
+    item: dict[str, Any],
+    *,
+    number: int,
+    repo: str,
+    offline: bool,
+    labels: list[str],
+) -> dict[str, Any]:
+    """Read exact state from REST or construct the equivalent offline fixture row."""
+    if not offline:
+        return fetch_item_state(number, repo=repo)
+    pull_request = item.get("pull_request")
+    return {
+        "ok": True,
+        "number": number,
+        "state": str(item.get("state") or "").lower(),
+        "reason": str(item.get("state_reason") or "").lower() or None,
+        "labels": labels,
+        "is_pull_request": isinstance(pull_request, dict),
+        "pull_request": pull_request,
+        "merged_at": item.get("merged_at"),
+        "html_url": str(item.get("html_url") or ""),
+    }
+
+
+def _validate_exact_item_state(
+    number: int,
+    *,
+    listed_terminal_class: str,
+    listed_labels: list[str],
+    live: dict[str, Any],
+) -> str:
+    """Ensure the exact read still matches the listing used for pagination."""
+    if not live.get("ok"):
+        raise ValueError(f"exact-item re-read failed for #{number}: {live.get('error')}")
+    exact_terminal_class = _terminal_class_from_state(live)
+    if exact_terminal_class is None:
+        raise ValueError(f"exact-item re-read for #{number} had no trustworthy terminal class")
+    if exact_terminal_class != listed_terminal_class:
+        raise ValueError(
+            f"inconsistent terminal state for #{number}: "
+            f"listing={listed_terminal_class}, exact={exact_terminal_class}"
+        )
+    if set(live["labels"]) != set(listed_labels):
+        raise ValueError(f"inconsistent labels between listing and exact re-read for #{number}")
+    return exact_terminal_class
 
 
 def _collect_closed_items(
@@ -479,34 +561,137 @@ def _collect_closed_items(
     max_pages: int,
     max_items: int | None,
     fixture: list[dict[str, Any]] | None,
-) -> tuple[list[dict[str, Any]], int]:
+    fixture_pages: list[list[dict[str, Any]]] | None,
+) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
     """Page closed items (or use a fixture) and fail closed on truncation/duplicates.
 
     ``max_items`` bounds the returned rows for practical live runs; a ``None``
     bound pages to completion.  When the bound stops the paging loop before an
     empty page, the caller records the bound as an explicit completeness limit.
     """
+    if max_pages < 1:
+        raise ValueError("max_pages must be positive")
+    if max_items is not None and max_items < 1:
+        raise ValueError("max_items must be positive")
+    if fixture is not None and fixture_pages is not None:
+        raise ValueError("fixture and fixture_pages are mutually exclusive")
     if fixture is not None:
         items = list(fixture)
         _reject_duplicate_numbers(items)
-        return items, 1
+        return _pagination_result(
+            items,
+            pages_read=1,
+            complete=True,
+            bounded_by_max_items=False,
+            termination="offline_fixture",
+        )
+    if fixture_pages is not None:
+        return _collect_fixture_pages(
+            fixture_pages,
+            max_pages=max_pages,
+            max_items=max_items,
+        )
+    return _collect_live_pages(repo, max_pages=max_pages, max_items=max_items)
+
+
+def _pagination_result(
+    items: list[dict[str, Any]],
+    *,
+    pages_read: int,
+    complete: bool,
+    bounded_by_max_items: bool,
+    termination: str,
+) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
+    """Package rows and explicit pagination completeness metadata."""
+    _reject_duplicate_numbers(items)
+    return (
+        items,
+        pages_read,
+        {
+            "complete": complete,
+            "bounded_by_max_items": bounded_by_max_items,
+            "termination": termination,
+        },
+    )
+
+
+def _collect_fixture_pages(
+    fixture_pages: list[list[dict[str, Any]]],
+    *,
+    max_pages: int,
+    max_items: int | None,
+) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
+    """Collect deterministic offline pages using the same termination rules as REST."""
     items: list[dict[str, Any]] = []
-    pages_read = 0
-    for page in range(1, max_pages + 1):
-        page_items = _page_closed_items(repo, page)
-        pages_read = page
+    for page_number, page_items in enumerate(fixture_pages, start=1):
+        if page_number > max_pages:
+            raise ValueError("pagination truncated: max_pages exhausted before fixture ended")
+        if not isinstance(page_items, list):
+            raise ValueError(f"offline fixture page {page_number} was not a list")
         if not page_items:
-            break
+            return _pagination_result(
+                items,
+                pages_read=page_number,
+                complete=True,
+                bounded_by_max_items=False,
+                termination="empty_page",
+            )
         items.extend(page_items)
         if max_items is not None and len(items) >= max_items:
-            items = items[:max_items]
-            break
+            return _pagination_result(
+                items[:max_items],
+                pages_read=page_number,
+                complete=False,
+                bounded_by_max_items=True,
+                termination="max_items",
+            )
         if len(page_items) < _PAGE_SIZE:
-            break
-    else:
-        raise ValueError("pagination truncated: max_pages exhausted before an empty page")
-    _reject_duplicate_numbers(items)
-    return items, pages_read
+            return _pagination_result(
+                items,
+                pages_read=page_number,
+                complete=True,
+                bounded_by_max_items=False,
+                termination="short_page",
+            )
+    raise ValueError("pagination truncated: fixture ended before a short or empty page")
+
+
+def _collect_live_pages(
+    repo: str,
+    *,
+    max_pages: int,
+    max_items: int | None,
+) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
+    """Collect live REST pages with explicit completeness and bound handling."""
+    items: list[dict[str, Any]] = []
+    for page in range(1, max_pages + 1):
+        page_items = _page_closed_items(repo, page)
+        if not page_items:
+            return _pagination_result(
+                items,
+                pages_read=page,
+                complete=True,
+                bounded_by_max_items=False,
+                termination="empty_page",
+            )
+        items.extend(page_items)
+        if max_items is not None and len(items) >= max_items:
+            return _pagination_result(
+                items[:max_items],
+                pages_read=page,
+                complete=False,
+                bounded_by_max_items=True,
+                termination="max_items",
+            )
+        if len(page_items) < _PAGE_SIZE:
+            return _pagination_result(
+                items,
+                pages_read=page,
+                complete=True,
+                bounded_by_max_items=False,
+                termination="short_page",
+            )
+    raise ValueError("pagination truncated: max_pages exhausted before an empty page")
 
 
 def _reject_duplicate_numbers(items: list[dict[str, Any]]) -> None:
@@ -531,6 +716,7 @@ def run_terminal_inventory(
     max_items: int | None = None,
     observed_at: str | None = None,
     fixture: list[dict[str, Any]] | None = None,
+    fixture_pages: list[list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     """Page closed issues and PRs and compute exact terminal-label plans.
 
@@ -542,28 +728,45 @@ def run_terminal_inventory(
     """
     import datetime as _dt
 
-    items, pages_read = _collect_closed_items(
-        repo, max_pages=max_pages, max_items=max_items, fixture=fixture
+    items, pages_read, pagination = _collect_closed_items(
+        repo,
+        max_pages=max_pages,
+        max_items=max_items,
+        fixture=fixture,
+        fixture_pages=fixture_pages,
     )
-    bounded = max_items is not None and len(items) >= max_items
 
     rows: list[dict[str, Any]] = []
     label_classifications: dict[str, str] = {}
     ambiguous_labels: list[str] = []
     aggregate: dict[str, int] = {}
+    aggregate_by: dict[str, dict[str, int]] = {
+        "terminal_class": {},
+        "label": {},
+        "item_kind": {},
+        "verdict": {},
+    }
 
     for item in items:
         row, terminal_class, removals, _reason = _inventory_row_for_item(
             item,
             repo=repo,
-            fixture=fixture,
+            offline=fixture is not None or fixture_pages is not None,
             label_classifications=label_classifications,
             ambiguous_labels=ambiguous_labels,
         )
         rows.append(row)
         for label in removals:
             aggregate[label] = aggregate.get(label, 0) + 1
+            aggregate_by["label"][label] = aggregate_by["label"].get(label, 0) + 1
         aggregate[terminal_class] = aggregate.get(terminal_class, 0) + 1
+        aggregate_by["terminal_class"][terminal_class] = (
+            aggregate_by["terminal_class"].get(terminal_class, 0) + 1
+        )
+        kind = row["kind"]
+        aggregate_by["item_kind"][kind] = aggregate_by["item_kind"].get(kind, 0) + 1
+        verdict = row["verdict"]
+        aggregate_by["verdict"][verdict] = aggregate_by["verdict"].get(verdict, 0) + 1
 
     if ambiguous_labels:
         raise ValueError(
@@ -576,13 +779,21 @@ def run_terminal_inventory(
         "mutation_authorized": False,
         "repository": repo,
         "observed_at": observed_at or _dt.datetime.now(_dt.UTC).isoformat(),
+        "source": {
+            "api": REST_API_VERSION,
+            "list_endpoint": f"repos/{repo}/issues?state=closed&per_page={_PAGE_SIZE}&page={{page}}",
+            "exact_item_endpoint": f"repos/{repo}/issues/{{number}}",
+        },
         "pagination": {
             "pages_read": pages_read,
             "item_count": len(rows),
-            "bounded_by_max_items": bounded,
+            **pagination,
         },
         "label_classifications": dict(sorted(label_classifications.items())),
         "aggregate_counts": dict(sorted(aggregate.items())),
+        "aggregate_counts_by": {
+            name: dict(sorted(values.items())) for name, values in aggregate_by.items()
+        },
         "items": rows,
     }
 
@@ -617,13 +828,21 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Bound the live terminal inventory to this many items (recorded as a limit).",
     )
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=200,
+        help="Fail closed if the closed-item inventory needs more pages than this limit.",
+    )
     args = parser.parse_args(argv)
 
     if args.inventory == "terminal":
         if args.items or args.apply:
             parser.error("--inventory terminal cannot be combined with --item or --apply")
         try:
-            report = run_terminal_inventory(args.repo, max_items=args.max_items)
+            report = run_terminal_inventory(
+                args.repo, max_pages=args.max_pages, max_items=args.max_items
+            )
         except (OSError, ValueError) as exc:
             print(
                 json.dumps(

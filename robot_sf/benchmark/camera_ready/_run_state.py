@@ -541,15 +541,28 @@ def _resolve_path(
     if not raw_path:
         return None
     path = Path(raw_path)
-    if path.is_absolute():
-        return path
+    explicit_root = repository_root.resolve() if repository_root is not None else None
 
-    candidate = (base_dir / path).resolve()
+    def require_contained(candidate: Path) -> Path:
+        resolved = candidate.resolve()
+        if explicit_root is not None:
+            try:
+                resolved.relative_to(explicit_root)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Configured path '{raw_path}' escapes repository_root '{explicit_root}'"
+                ) from exc
+        return resolved
+
+    if path.is_absolute():
+        return require_contained(path)
+
+    candidate = require_contained(base_dir / path)
     if candidate.exists():
         return candidate
 
-    repo_root = (repository_root or get_repository_root()).resolve()
-    repo_candidate = (repo_root / path).resolve()
+    repo_root = explicit_root or get_repository_root().resolve()
+    repo_candidate = require_contained(repo_root / path)
     if repo_candidate.exists():
         return repo_candidate
 

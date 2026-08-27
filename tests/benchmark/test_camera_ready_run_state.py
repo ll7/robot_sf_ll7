@@ -563,6 +563,33 @@ class TestResolvePath:
         assert result == (tmp_path / "nope.yaml").resolve()
         assert not result.exists()
 
+    def test_explicit_repository_root_rejects_absolute_escape(self, tmp_path: Path) -> None:
+        repository_root = tmp_path / "frozen-release"
+        repository_root.mkdir()
+        escaped = tmp_path / "outside.yaml"
+        escaped.write_text("outside\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="escapes repository_root"):
+            _resolve_path(
+                str(escaped),
+                base_dir=repository_root / "configs",
+                repository_root=repository_root,
+            )
+
+    def test_explicit_repository_root_rejects_existing_base_escape(self, tmp_path: Path) -> None:
+        repository_root = tmp_path / "frozen-release"
+        repository_root.mkdir()
+        tooling_config = tmp_path / "tooling" / "configs"
+        tooling_config.mkdir(parents=True)
+        (tooling_config / "sidecar.yaml").write_text("outside\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="escapes repository_root"):
+            _resolve_path(
+                "sidecar.yaml",
+                base_dir=tooling_config,
+                repository_root=repository_root,
+            )
+
 
 # ---------------------------------------------------------------------------
 # _resolve_observation_noise

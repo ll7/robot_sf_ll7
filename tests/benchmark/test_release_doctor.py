@@ -766,6 +766,81 @@ def test_cross_checkout_doctor_keeps_mapped_checksum_mismatch_distinct(
     assert "verifier-location" not in summary
 
 
+def _write_final_private_ops_fixture(
+    tmp_path: Path,
+    *,
+    source_sha: str,
+    result_path: str,
+    result_sha: str,
+    queue_id: str,
+    campaign_id: str,
+) -> tuple[Path, str]:
+    """Write object-addressed private ledgers required by final admission."""
+    repository = tmp_path / "private-ops"
+    (repository / "ops/jobs").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "doctor@example.invalid"],
+        cwd=repository,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "release-doctor-test"],
+        cwd=repository,
+        check=True,
+    )
+    preservation_digest = "c" * 64
+    terminal_status = {
+        "execution_status": "passed",
+        "artifact_status": "verified",
+        "evaluation_status": "canary_passed",
+        "completion_status": "complete",
+    }
+    job = {
+        "job_id": "14884",
+        "public_commit": source_sha,
+        "campaign": campaign_id,
+        "state": "retrieved",
+        "slurm_state": "COMPLETED",
+        "exit_code": "0:0",
+        "derived_exit_code": "0:0",
+        "startup_status": "started",
+        "evaluation_receipt_digest": f"sha256:{result_sha}",
+        "submitted_at": datetime.now(UTC).isoformat(),
+        **terminal_status,
+    }
+    queue = {
+        "queue_id": queue_id,
+        "campaign": campaign_id,
+        "state": "complete",
+        "expected_public_commit": source_sha,
+        "preservation_state": "preserved",
+        "preservation_artifact": "wandb://example/runtime:v1",
+        "preservation_digest": f"sha256:{preservation_digest}",
+        "submit_args": f"--sbatch-arg --export=ALL,SMOKE_RELEASE_RESULT_PATH={result_path}",
+        **terminal_status,
+    }
+    (repository / "ops/jobs/jobs.yaml").write_text(yaml.safe_dump([job]), encoding="utf-8")
+    (repository / "ops/jobs/queue.yaml").write_text(yaml.safe_dump([queue]), encoding="utf-8")
+    subprocess.run(
+        ["git", "add", "ops/jobs/jobs.yaml", "ops/jobs/queue.yaml"],
+        cwd=repository,
+        check=True,
+    )
+    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=repository, check=True)
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repository, text=True
+    ).strip()
+    return repository, commit
+
+
+def _final_cluster_check(packet_path: Path, expected_sha: str, **kwargs: Any) -> ReleaseDoctorCheck:
+    """Run a cluster check with the fixture's explicit private-ops repository."""
+    if kwargs.get("final") is True:
+        kwargs.setdefault("private_ops_repository", packet_path.parent / "private-ops")
+    return release_doctor._cluster_check(packet_path, expected_sha, **kwargs)
+
+
 def _write_final_packet_fixture(
     tmp_path: Path,
     *,
@@ -803,6 +878,17 @@ def _write_final_packet_fixture(
         "startup_sentinel_sha256": "b" * 64,
         "admission_helper_sha256": "b" * 64,
     }
+    runtime_queue_id = "runtime-queue-14884"
+    runtime_campaign_id = "runtime-campaign-14884"
+    runtime_result_path = "configs/runtime_smoke_receipt"
+    _, private_ops_commit = _write_final_private_ops_fixture(
+        tmp_path,
+        source_sha=source_sha,
+        result_path=runtime_result_path,
+        result_sha=identity_fields["runtime_smoke_receipt_sha256"],
+        queue_id=runtime_queue_id,
+        campaign_id=runtime_campaign_id,
+    )
     resources = {
         "licca": {
             "cluster": "licca",
@@ -838,6 +924,7 @@ def _write_final_packet_fixture(
         "dispatchable": True,
         "execution_contract": {
             **resources,
+            "private_ops_reviewed_base_commit": private_ops_commit,
             "resources_exact": True,
             "release_label": "release-label",
             "force_cpu": True,
@@ -848,7 +935,22 @@ def _write_final_packet_fixture(
         },
         "identity": {
             "public_source_commit": source_sha,
+            "runtime_smoke_queue_id": runtime_queue_id,
+            "runtime_smoke_campaign_id": runtime_campaign_id,
+            "runtime_smoke_receipt_path": runtime_result_path,
             **identity_fields,
+        },
+        "accepted_runtime_smoke": {
+            "status": "accepted_preserved_verified",
+            "job_id": "14884",
+            "queue_id": runtime_queue_id,
+            "campaign_id": runtime_campaign_id,
+            "public_source_commit": source_sha,
+            "release_result_path": runtime_result_path,
+            "release_result_sha256": identity_fields["runtime_smoke_receipt_sha256"],
+            "preservation_artifact": "wandb://example/runtime:v1",
+            "preservation_manifest_digest": f"sha256:{'c' * 64}",
+            "fallback_or_degraded_rows": 0,
         },
         "inputs": {
             name: {
@@ -968,7 +1070,7 @@ def _write_final_packet_fixture(
 def test_final_cluster_check_validates_packet_queue_and_launch_contract(tmp_path: Path) -> None:
     """Final mode admits only a concrete packet and matching dispatch row."""
     packet, queue = _write_final_packet_fixture(tmp_path)
-    check = release_doctor._cluster_check(
+    check = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -983,7 +1085,7 @@ def test_final_cluster_check_validates_packet_queue_and_launch_contract(tmp_path
     payload = json.loads(packet.read_text(encoding="utf-8"))
     payload["execution_contract"]["partition"] = "wrong"
     packet.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -997,12 +1099,63 @@ def test_final_cluster_check_validates_packet_queue_and_launch_contract(tmp_path
     assert "resource contract mismatch" in rejected.summary
 
 
+def test_final_cluster_check_requires_packet_pinned_private_evidence(tmp_path: Path) -> None:
+    """Final admission cannot fall back to a generic packet-and-queue fixture."""
+    packet, queue = _write_final_packet_fixture(tmp_path)
+    payload = json.loads(packet.read_text(encoding="utf-8"))
+    del payload["execution_contract"]["private_ops_reviewed_base_commit"]
+    packet.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+
+    rejected = release_doctor._cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+
+    assert rejected.status == "fail"
+    assert "private ops reviewed base commit is not a concrete Git commit" in rejected.summary
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "summary"),
+    [
+        ("runtime_smoke_queue_id", "other-queue", "queue identity"),
+        ("runtime_smoke_campaign_id", "other-campaign", "campaign identity"),
+    ],
+)
+def test_final_cluster_check_rejects_runtime_smoke_identity_alias_drift(
+    tmp_path: Path, field: str, value: str, summary: str
+) -> None:
+    """Final admission binds packet identity aliases to accepted private evidence."""
+    packet, queue = _write_final_packet_fixture(tmp_path)
+    payload = json.loads(packet.read_text(encoding="utf-8"))
+    payload["identity"][field] = value
+    packet.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+
+    rejected = _final_cluster_check(
+        packet,
+        "a" * 40,
+        final=True,
+        expected_tag="release-tag",
+        expected_campaign_id="campaign-1",
+        queue_path=queue,
+        repo=tmp_path,
+    )
+
+    assert rejected.status == "fail"
+    assert summary in rejected.summary
+
+
 def test_final_cluster_check_accepts_frozen_imech192_packet(tmp_path: Path) -> None:
     """The doctor admits the exact imech192/L40S route without LiCCA defaults."""
     packet, queue = _write_final_packet_fixture(
         tmp_path, resource_profile="imech192", frozen_status=True
     )
-    check = release_doctor._cluster_check(
+    check = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1025,7 +1178,7 @@ def test_final_cluster_check_accepts_count_only_gpu_gres(tmp_path: Path) -> None
         "--gres=gpu:l40s:1", "--gres=gpu:1"
     )
     queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
-    check = release_doctor._cluster_check(
+    check = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1103,7 +1256,7 @@ def test_final_cluster_check_rejects_imech192_resource_drift(
         queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
         queue_payload[0]["route_id" if drift_target == "queue_route_id" else "cpus"] = drift_value
         queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1138,7 +1291,7 @@ def test_final_cluster_check_rejects_imech192_scheduler_arg_drift(
     queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
     queue_payload[0]["submit_args"] = queue_payload[0]["submit_args"].replace(original, replacement)
     queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1161,7 +1314,7 @@ def test_final_cluster_check_rejects_substring_packet_hash_binding(tmp_path: Pat
         "RELEASE_LAUNCH_PACKET_SHA256=", "XRELEASE_LAUNCH_PACKET_SHA256=", 1
     )
     queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1182,7 +1335,7 @@ def test_final_cluster_check_rejects_artifact_manifest_hash_drift(tmp_path: Path
     artifact_path = artifact_manifest.split(" sha256:", 1)[0]
     queue_payload[0]["artifact_manifest"] = f"{artifact_path} sha256:{'0' * 64}"
     queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1204,7 +1357,7 @@ def test_final_cluster_check_rejects_digest_less_artifact_manifest(tmp_path: Pat
     # Strip the digest binding entirely (the previous bypass path).
     queue_payload[0]["artifact_manifest"] = artifact_path
     queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1253,7 +1406,7 @@ def test_final_cluster_check_rejects_duplicate_release_export(tmp_path: Path, fi
         "--export=ALL,", f"--export=ALL,{field}={duplicate},", 1
     )
     queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1282,7 +1435,7 @@ def test_final_cluster_check_requires_wrapper_identity_exports(tmp_path: Path, f
     )
     queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
 
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1325,7 +1478,7 @@ def test_final_cluster_check_rejects_wrapper_identity_drift(
     queue_payload[0]["submit_args"] = submit_args
     queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
 
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1383,7 +1536,7 @@ def test_final_cluster_check_rejects_queue_qos_drift(tmp_path: Path) -> None:
     queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
     queue_payload[0]["qos"] = "other-qos"
     queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1407,7 +1560,7 @@ def test_final_cluster_check_rejects_non_strict_integer_queue_resource(
     queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
     queue_payload[0]["cpus"] = value
     queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1431,7 +1584,7 @@ def test_final_cluster_check_rejects_nonpositive_estimated_elapsed(
     queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
     queue_payload[0]["estimated_elapsed_sec"] = value
     queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1453,7 +1606,7 @@ def test_final_cluster_check_rejects_nonpositive_packet_wall_clock(tmp_path: Pat
     packet_payload["execution_contract"]["wall_clock"] = "00:00:00"
     packet_payload["execution_contract"]["wall_clock_seconds"] = 0
     packet.write_text(json.dumps(packet_payload, sort_keys=True), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1472,7 +1625,7 @@ def test_final_cluster_check_rejects_fractional_runtime_smoke_max_age(tmp_path: 
     packet_payload = json.loads(packet.read_text(encoding="utf-8"))
     packet_payload["execution_contract"]["runtime_smoke_receipt_max_age_hours"] = 24.9
     packet.write_text(json.dumps(packet_payload, sort_keys=True), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1495,7 +1648,7 @@ def test_final_cluster_check_accepts_exact_scheduler_time_as_duration_evidence(
     queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
     queue_payload[0].pop("estimated_elapsed_sec")
     queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
-    check = release_doctor._cluster_check(
+    check = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1521,7 +1674,7 @@ def test_final_cluster_check_rejects_missing_duration_without_exact_scheduler_ti
         "--time=36:00:00", "--time=12:00:00"
     )
     queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1538,7 +1691,7 @@ def test_final_cluster_check_rejects_missing_public_input(tmp_path: Path) -> Non
     """Final packet admission cannot defer missing public files to the wrapper."""
     packet, queue = _write_final_packet_fixture(tmp_path)
     (tmp_path / "configs" / "release_manifest").unlink()
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1560,7 +1713,7 @@ def test_final_cluster_check_rejects_each_undeclared_public_input(
     payload = json.loads(packet.read_text(encoding="utf-8"))
     del payload["inputs"][input_name]
     packet.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1592,7 +1745,7 @@ def test_final_cluster_check_requires_concrete_packet_and_row_queue_ids(
     queue_payload = yaml.safe_load(queue.read_text(encoding="utf-8"))
     queue_payload[0]["queue_id"] = row_queue_id
     queue.write_text(yaml.safe_dump(queue_payload, sort_keys=False), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1611,7 +1764,7 @@ def test_final_cluster_check_rejects_runtime_smoke_identity_drift(tmp_path: Path
     payload = json.loads(packet.read_text(encoding="utf-8"))
     payload["identity"]["runtime_smoke_receipt_sha256"] = "c" * 64
     packet.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1631,7 +1784,7 @@ def test_final_cluster_check_rejects_runtime_smoke_receipt_mutation(
     packet, queue = _write_final_packet_fixture(tmp_path)
     receipt = tmp_path / "configs" / "runtime_smoke_receipt"
     receipt.write_text("mutated after packet creation\n", encoding="utf-8")
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1647,7 +1800,7 @@ def test_final_cluster_check_rejects_runtime_smoke_receipt_mutation(
 def test_packet_private_evidence_rejects_missing_receipt_file(tmp_path: Path) -> None:
     """A final packet without its pinned checkpoint receipt fails closed."""
     packet, queue = _write_final_packet_fixture(tmp_path)
-    check = release_doctor._cluster_check(
+    check = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1667,7 +1820,7 @@ def test_packet_private_evidence_rejects_receipt_drift(tmp_path: Path) -> None:
     receipt = tmp_path / "configs" / "checkpoint_staging_receipt"
     drifted = tmp_path / "configs" / "drifted-receipt.json"
     drifted.write_text(receipt.read_text(encoding="utf-8") + "\n# drifted\n", encoding="utf-8")
-    check = release_doctor._cluster_check(
+    check = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1684,7 +1837,7 @@ def test_packet_private_evidence_rejects_receipt_drift(tmp_path: Path) -> None:
 def test_packet_private_evidence_accepts_pinned_receipt(tmp_path: Path) -> None:
     """An exact packet-pinned receipt passes the private-evidence check."""
     packet, queue = _write_final_packet_fixture(tmp_path)
-    check = release_doctor._cluster_check(
+    check = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1702,7 +1855,7 @@ def test_runtime_smoke_receipt_mutation_fails_closed(tmp_path: Path) -> None:
     packet, queue = _write_final_packet_fixture(tmp_path)
     smoke_receipt = tmp_path / "configs" / "runtime_smoke_receipt"
     # Pass the exact pinned receipt first.
-    check = release_doctor._cluster_check(
+    check = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,
@@ -1719,7 +1872,7 @@ def test_runtime_smoke_receipt_mutation_fails_closed(tmp_path: Path) -> None:
         smoke_receipt.read_text(encoding="utf-8") + "# post-packet mutation\n",
         encoding="utf-8",
     )
-    rejected = release_doctor._cluster_check(
+    rejected = _final_cluster_check(
         packet,
         "a" * 40,
         final=True,

@@ -85,6 +85,8 @@ def _private_ops_fixture(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
         "execution_contract": {"private_ops_reviewed_base_commit": commit},
         "identity": {
             "public_source_commit": source_sha,
+            "runtime_smoke_queue_id": queue_id,
+            "runtime_smoke_campaign_id": campaign,
             "runtime_smoke_receipt_path": result_path,
             "runtime_smoke_receipt_sha256": result_sha,
         },
@@ -166,6 +168,35 @@ def test_private_ops_evidence_reads_packet_pinned_git_blobs_only(
     assert evidence.reviewed_commit == commit
     assert evidence.runtime_smoke_job["job_id"] == "14884"
     assert evidence.runtime_smoke_queue["state"] == "complete"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "summary"),
+    [
+        ("runtime_smoke_queue_id", "other-queue", "queue identity"),
+        ("runtime_smoke_campaign_id", "other-campaign", "campaign identity"),
+    ],
+)
+def test_private_ops_evidence_rejects_packet_identity_alias_drift(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    field: str,
+    value: str,
+    summary: str,
+) -> None:
+    """Packet identity aliases must match accepted smoke and pinned ledger rows."""
+    repository, packet, _ = _private_ops_fixture(tmp_path)
+    monkeypatch.setattr(
+        release_doctor,
+        "_utc_now",
+        lambda: datetime(2026, 8, 25, 12, 0, tzinfo=UTC),
+    )
+    packet["identity"][field] = value
+
+    evidence, problems = release_doctor._private_ops_evidence(packet, "a" * 40, repository)
+
+    assert evidence is None
+    assert any(summary in problem for problem in problems)
 
 
 @pytest.mark.parametrize(

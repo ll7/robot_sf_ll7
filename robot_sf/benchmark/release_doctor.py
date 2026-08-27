@@ -825,6 +825,9 @@ def _private_ops_evidence(  # noqa: C901, PLR0912, PLR0915
     else:
         job = job_matches[0]
     queue_id = str(accepted.get("queue_id") or "").strip()
+    identity_queue_id = str(identity.get("runtime_smoke_queue_id") or "").strip()
+    if not identity_queue_id or identity_queue_id != queue_id:
+        problems.append("runtime-smoke queue identity is not consistent across packet fields")
     queue_matches = [row for row in queues if row.get("queue_id") == queue_id]
     if not queue_id or len(queue_matches) != 1:
         problems.append(
@@ -835,6 +838,9 @@ def _private_ops_evidence(  # noqa: C901, PLR0912, PLR0915
         queue = queue_matches[0]
 
     expected_campaign = str(accepted.get("campaign_id") or "").strip()
+    identity_campaign = str(identity.get("runtime_smoke_campaign_id") or "").strip()
+    if not identity_campaign or identity_campaign != expected_campaign:
+        problems.append("runtime-smoke campaign identity is not consistent across packet fields")
     expected_result_path = str(
         accepted.get("release_result_path") or identity.get("runtime_smoke_receipt_path") or ""
     ).strip()
@@ -2135,7 +2141,7 @@ def _validate_packet_contract(  # noqa: PLR0913
     return list(dict.fromkeys(problems))
 
 
-def _cluster_check(  # noqa: C901, PLR0912, PLR0913
+def _cluster_check(  # noqa: C901, PLR0913
     packet_path: Path | None,
     expected_sha: str,
     *,
@@ -2180,16 +2186,12 @@ def _cluster_check(  # noqa: C901, PLR0912, PLR0913
     queue_rows: list[dict[str, Any]] | None = None
     private_evidence: _PrivateOpsEvidence | None = None
     if final:
-        if private_ops_repository is not None or (
-            isinstance(packet.get("execution_contract"), dict)
-            and packet["execution_contract"].get("private_ops_reviewed_base_commit")
-        ):
-            private_evidence, evidence_problems = _private_ops_evidence(
-                packet,
-                expected_sha,
-                private_ops_repository,
-            )
-            problems.extend(evidence_problems)
+        private_evidence, evidence_problems = _private_ops_evidence(
+            packet,
+            expected_sha,
+            private_ops_repository,
+        )
+        problems.extend(evidence_problems)
         if queue_path is not None:
             try:
                 queue_rows = _load_queue_rows(queue_path)
@@ -2207,7 +2209,7 @@ def _cluster_check(  # noqa: C901, PLR0912, PLR0913
                     packet_queue_exports = {}
         else:
             packet_queue_exports = {}
-        if private_evidence is not None:
+        if private_evidence is not None and packet.get("status") == "admitted_frozen":
             packet, normalization_problems = _normalize_legacy_packet_aliases(
                 packet,
                 expected_sha=expected_sha,

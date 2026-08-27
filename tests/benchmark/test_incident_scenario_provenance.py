@@ -195,6 +195,12 @@ def test_missing_scenario_digest_fails_closed_when_execution_claimed() -> None:
         validate_incident_scenario_provenance(record)
 
 
+def test_zero_seed_is_valid_when_execution_is_claimed() -> None:
+    record = _valid_record()
+    record["execution"]["seed"] = 0
+    assert reconcile_incident_scenario_provenance(record) == []
+
+
 def test_normative_fault_cannot_be_anything_but_not_assessed() -> None:
     record = _valid_record(normative_fault="assessed")
     violations = reconcile_incident_scenario_provenance(record)

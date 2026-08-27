@@ -204,16 +204,17 @@ def _execution_violations(record: Mapping[str, Any]) -> list[str]:
         return []
     if not execution.get("claimed"):
         return []
-    missing = [
-        key
-        for key in (
-            "scenario_config_digest_sha256",
-            "seed",
-            "software_commit",
-            "replay_identity",
-        )
-        if not execution.get(key)
-    ]
+    required_fields = (
+        "scenario_config_digest_sha256",
+        "seed",
+        "software_commit",
+        "replay_identity",
+    )
+    missing = [key for key in required_fields if key not in execution or execution[key] is None]
+    for key in ("scenario_config_digest_sha256", "software_commit", "replay_identity"):
+        value = execution.get(key)
+        if key not in missing and (not isinstance(value, str) or not value.strip()):
+            missing.append(key)
     if missing:
         return ["execution.claimed=true requires field(s): " + ", ".join(missing)]
     return []

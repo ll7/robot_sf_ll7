@@ -3,12 +3,85 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from typing import TYPE_CHECKING
 
 import pytest
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+    from pathlib import Path
+
+# Deterministic identity used by test-only temporary Git repositories so
+# fixtures never depend on ambient developer or CI-runner Git configuration.
+GIT_TEST_IDENTITY_NAME = "Robot SF test"
+GIT_TEST_IDENTITY_EMAIL = "robot-sf-test@example.invalid"
+
+
+def git_identity_environment(
+    env: Mapping[str, str] | None = None,
+    *,
+    name: str = GIT_TEST_IDENTITY_NAME,
+    email: str = GIT_TEST_IDENTITY_EMAIL,
+) -> dict[str, str]:
+    """Return a hermetic environment for Git subprocess calls in tests.
+
+    The returned environment carries a deterministic author/committer identity
+    and disables global and system Git configuration so temporary repositories
+    never depend on (or mutate) ambient developer configuration.
+
+    Args:
+        env: Base environment to extend (defaults to ``os.environ``).
+        name: Author/committer name for the temporary repositories.
+        email: Author/committer email for the temporary repositories.
+
+    Returns:
+        A fresh dict with the identity and config-isolation variables set.
+    """
+    base = dict(os.environ if env is None else env)
+    base.update(
+        {
+            "GIT_AUTHOR_NAME": name,
+            "GIT_AUTHOR_EMAIL": email,
+            "GIT_COMMITTER_NAME": name,
+            "GIT_COMMITTER_EMAIL": email,
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+        }
+    )
+    return base
+
+
+def configure_git_identity(
+    repo: Path,
+    *,
+    name: str = GIT_TEST_IDENTITY_NAME,
+    email: str = GIT_TEST_IDENTITY_EMAIL,
+) -> None:
+    """Configure deterministic local Git identity in a temporary repository.
+
+    Runs ``git config`` for the repository-local identity so subsequent
+    ``git commit`` calls inside ``repo`` do not depend on ambient identity.
+
+    Args:
+        repo: Temporary repository root that already has ``git init`` applied.
+        name: Author/committer name for the temporary repository.
+        email: Author/committer email for the temporary repository.
+    """
+    subprocess.run(
+        ["git", "config", "user.name", name],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", email],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
 
 def is_github_actions(env: Mapping[str, str] | None = None) -> bool:

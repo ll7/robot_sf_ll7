@@ -1,0 +1,63 @@
+{
+  "already_migrated_exclusions": "families whose members already declare base_config (e.g. expert_ppo, asymmetric_critic_only) are excluded from candidates",
+  "candidate_families": [
+    {
+      "common_resolved_path_count": 38,
+      "estimated_reduction": 0.949,
+      "family": "hybrid_rule",
+      "member_count": 5,
+      "member_paths": [
+        "configs/algos/hybrid_rule_v0_minimal.yaml",
+        "configs/algos/hybrid_rule_v3_static_margin0_waypoint2.yaml",
+        "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml",
+        "configs/algos/hybrid_rule_v3_teb_like_rollout_proxemic_costmap.yaml",
+        "configs/algos/hybrid_rule_v4_recovery_aware.yaml"
+      ]
+    },
+    {
+      "common_resolved_path_count": 54,
+      "estimated_reduction": 0.93,
+      "family": "tentabot",
+      "member_count": 4,
+      "member_paths": [
+        "configs/algos/tentabot_value_scorer_v0.yaml",
+        "configs/algos/tentabot_value_scorer_v1_static_gated.yaml",
+        "configs/algos/tentabot_value_scorer_v2_route_arc.yaml",
+        "configs/algos/tentabot_value_scorer_v3_trace_recovery.yaml"
+      ]
+    }
+  ],
+  "disposition": "one_family_ready_for_child",
+  "full_report_pointer": "output/config_family_inventory.json (ignored, worktree-local)",
+  "full_report_sha256": "2e2226304eac6c2648d77f7873e0337676ecd8cda8f6f1fed6d8bdfa313b77f4",
+  "no_production_change": true,
+  "no_training_or_benchmark_execution": true,
+  "open_owner_check": "no open issue or PR owns hybrid_rule or tentabot families",
+  "proposed_child": {
+    "before_lines": 335,
+    "common_resolved_path_count": 38,
+    "estimated_after_lines": 17,
+    "family": "hybrid_rule",
+    "member_paths": [
+      "configs/algos/hybrid_rule_v0_minimal.yaml",
+      "configs/algos/hybrid_rule_v3_static_margin0_waypoint2.yaml",
+      "configs/algos/hybrid_rule_v3_teb_like_rollout.yaml",
+      "configs/algos/hybrid_rule_v3_teb_like_rollout_proxemic_costmap.yaml",
+      "configs/algos/hybrid_rule_v4_recovery_aware.yaml"
+    ],
+    "proof_plan": "freeze resolved mappings for all 5 members (pre-change digests); introduce ONE new shared base YAML (proposed filename hybrid_rule_base, under configs/algos/) containing only byte-identical paths; re-resolve and diff digests; parity tests for missing-base and cycle fail-closed; no training/benchmark execution",
+    "risk_flags": [
+      "estimated_reduction is heuristic; must be confirmed by the frozen-resolved-mapping proof before the child executes"
+    ]
+  },
+  "repository_commit": "77f44d99f61cb108c4d430b2d0b459db1a4149eb",
+  "resolver": "scripts.training.train_ppo._load_expert_training_config_mapping (canonical)",
+  "scan": {
+    "file_count": 376,
+    "resolved_count": 372,
+    "resolver_error_count": 0,
+    "unsupported_count": 4
+  },
+  "scan_command": "python scripts/dev/audit_config_families.py --report output/config_family_inventory.json",
+  "schema": "config_family_inventory_receipt.v1"
+}

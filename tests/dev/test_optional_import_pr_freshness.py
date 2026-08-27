@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.environment_guards import configure_git_identity
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "dev" / "check_optional_import_pr_freshness.py"
 
@@ -41,8 +43,7 @@ def test_script_enforces_snapshot_update_on_change(tmp_path: Path) -> None:
     repo.mkdir()
 
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=repo, check=True)
-    subprocess.run(["git", "config", "user.name", "Test Agent"], cwd=repo, check=True)
+    configure_git_identity(repo, name="Test Agent", email="test@example.invalid")
 
     # 1. Create initial state
     robot_sf = repo / "robot_sf"

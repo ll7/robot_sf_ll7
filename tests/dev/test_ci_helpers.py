@@ -228,6 +228,40 @@ def test_needs_fails_on_skipped_cancelled_failed_missing() -> None:
         assert "fast-feedback" in failures, bad
 
 
+def test_needs_cancelled_is_superseded_when_opt_in() -> None:
+    """Issue #7926: cancelled dependencies (latest-main-wins) must not go red."""
+    results = {
+        **_all_success(),
+        "fast-feedback": "cancelled",
+        "coverage-gate": "success",
+        "changed-coverage-gate": "success",
+    }
+    # Default is fail-closed: cancelled still fails.
+    assert "fast-feedback" in check_ci_needs.evaluate_needs(results, "push")
+    # Opt-in treats cancelled as superseded.
+    assert check_ci_needs.evaluate_needs(results, "push", treat_cancelled_as_superseded=True) == []
+
+
+def test_needs_cancelled_superseded_still_fails_on_real_failure() -> None:
+    """Issue #7926: a genuine failure stays red even with the superseded opt-in."""
+    results = {
+        **_all_success(),
+        "fast-feedback": "failure",
+        "examples-smoke": "cancelled",
+        "coverage-gate": "success",
+    }
+    failures = check_ci_needs.evaluate_needs(results, "push", treat_cancelled_as_superseded=True)
+    assert "fast-feedback" in failures
+    assert "examples-smoke" not in failures
+
+
+def test_needs_cancelled_superseded_applies_to_coverage_gates() -> None:
+    """Issue #7926: cancelled coverage gates are superseded too when opted in."""
+    results = {**_all_success(), "coverage-gate": "cancelled"}
+    assert check_ci_needs.evaluate_needs(results, "push", treat_cancelled_as_superseded=True) == []
+    assert check_ci_needs.evaluate_needs(results, "push") == ["coverage-gate"]
+
+
 def test_needs_main_requires_every_required_job() -> None:
     """Every job in REQUIRED_JOBS must appear in a passing main run."""
     results = {**_all_success(), "coverage-gate": "success", "changed-coverage-gate": "skipped"}

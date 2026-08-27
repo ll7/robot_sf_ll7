@@ -1,0 +1,40 @@
+{
+  "candidate_cluster_count": 1,
+  "disposition": "no_safe_cluster",
+  "duplicate_owner_check": "no overlap with #6462, #7607, or an open PR",
+  "full_report_pointer": "output/validation_helper_inventory.json (ignored, worktree-local)",
+  "full_report_sha256": "74e21a365d761b287ff9737a8a2c3385362d88e502b4c16fd4b9951087b1aa15",
+  "no_benchmark_execution": true,
+  "no_production_change": true,
+  "only_cluster_sample": {
+    "call_sites": 1,
+    "features": {
+      "bool_policy": "unknown",
+      "coercion": "unknown",
+      "empty_string_policy": "unknown",
+      "error_aggregation": "unknown",
+      "exception_type": [],
+      "mapping_subclass_policy": "unknown",
+      "non_finite_handling": false,
+      "none_policy": "unknown",
+      "object_float_behavior": "unknown",
+      "strips_whitespace": false
+    },
+    "layer": "other",
+    "module": "feature_extractor",
+    "normalized_body_hash": "dad8c2d2cacf956891cacaefc6042b6929ce5ec8bb54546eb4aa300320fc5a4a",
+    "qualified_name": "feature_extractor.__getattr__",
+    "raises": [],
+    "return_paths": 2,
+    "signature": "(name)",
+    "source_digest": "02bcec3075be405e6fc9608c7c56dda3a9f41df7b402ba5aaca75dc94ecfb62e"
+  },
+  "rationale": "8,673 helper candidates scanned; the only identical-body cluster is a generic __getattr__ accessor family (11 definitions), not a validation/coercion contract; no cluster of >=3 behavior-identical validation helpers with stdlib-only consolidation exists",
+  "repository_commit": "77f44d99f61cb108c4d430b2d0b459db1a4149eb",
+  "scan": {
+    "file_count": 933,
+    "helper_count": 8673
+  },
+  "scan_command": "python scripts/dev/audit_validation_helpers.py --root robot_sf --report output/validation_helper_inventory.json",
+  "schema": "validation_helper_inventory_receipt.v1"
+}

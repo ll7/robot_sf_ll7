@@ -23,7 +23,7 @@ blocked-cell topology, not from discovery order or ephemeral names.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -367,16 +367,11 @@ def classify_route_side(  # noqa: C901 - fail-closed parameter and geometry gate
             progress_interval=normalized_interval or (0.0, 1.0),
         )
 
-    assert normalized_tolerance is not None
-    assert normalized_band is not None
-    assert normalized_interval is not None
-    assert normalized_start is not None
-    assert normalized_goal is not None
-    tolerance_m = normalized_tolerance
-    neutral_band_m = normalized_band
-    progress_interval = normalized_interval
-    start = normalized_start
-    goal = normalized_goal
+    tolerance_m = cast("float", normalized_tolerance)
+    neutral_band_m = cast("float", normalized_band)
+    progress_interval = cast("tuple[float, float]", normalized_interval)
+    start = cast("tuple[float, float]", normalized_start)
+    goal = cast("tuple[float, float]", normalized_goal)
 
     axis = _reference_axis(start, goal, tolerance_m=tolerance_m)
     if not path:

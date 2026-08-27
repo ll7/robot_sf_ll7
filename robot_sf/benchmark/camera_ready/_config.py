@@ -734,7 +734,9 @@ def _apply_radius_sweep_binding(
     return patched_scenarios
 
 
-def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
+def _load_campaign_scenarios(
+    cfg: CampaignConfig, repository_root: Path | None = None
+) -> list[dict[str, Any]]:
     """Load campaign scenarios, seed overrides, and radius treatment binding.
 
     Returns:
@@ -746,7 +748,7 @@ def _load_campaign_scenarios(cfg: CampaignConfig) -> list[dict[str, Any]]:
     )
     matrix_root = cfg.scenario_matrix_path.parent
     normalized: list[dict[str, Any]] = []
-    repo_root = get_repository_root().resolve()
+    repo_root = (repository_root or get_repository_root()).resolve()
     for scenario in scenarios:
         patched = dict(scenario)
         map_file = patched.get("map_file")
@@ -1005,7 +1007,9 @@ def _validate_campaign_config(cfg: CampaignConfig) -> None:  # noqa: C901, PLR09
             raise ValueError("paper_facing=true requires comparability_mapping path")
 
 
-def _resolve_scenario_matrix_path(payload: dict[str, Any], *, config_path: Path) -> Path:
+def _resolve_scenario_matrix_path(
+    payload: dict[str, Any], *, config_path: Path, repository_root: Path | None = None
+) -> Path:
     """Resolve the campaign scenario-matrix path, failing closed when unset.
 
     Returns:
@@ -1020,7 +1024,11 @@ def _resolve_scenario_matrix_path(payload: dict[str, Any], *, config_path: Path)
     matrix_raw = payload.get("scenario_matrix")
     if not isinstance(matrix_raw, str) or not matrix_raw.strip():
         raise ValueError("Campaign config requires a non-empty 'scenario_matrix' string")
-    scenario_matrix_path = _resolve_path(matrix_raw, base_dir=config_path.parent)
+    scenario_matrix_path = _resolve_path(
+        matrix_raw,
+        base_dir=config_path.parent,
+        repository_root=repository_root,
+    )
     if scenario_matrix_path is None:
         raise FileNotFoundError(
             f"Could not resolve scenario_matrix '{matrix_raw}' from config '{config_path}'.",
@@ -1028,7 +1036,9 @@ def _resolve_scenario_matrix_path(payload: dict[str, Any], *, config_path: Path)
     return scenario_matrix_path
 
 
-def _parse_planner_specs(planners_raw: Any, *, base_dir: Path) -> list[PlannerSpec]:
+def _parse_planner_specs(
+    planners_raw: Any, *, base_dir: Path, repository_root: Path | None = None
+) -> list[PlannerSpec]:
     """Parse and validate the campaign ``planners`` list.
 
     Returns:
@@ -1068,7 +1078,11 @@ def _parse_planner_specs(planners_raw: Any, *, base_dir: Path) -> list[PlannerSp
                     label="Planner entry 'human_model_source'",
                 ),
                 benchmark_profile=str(entry.get("benchmark_profile", "baseline-safe")),
-                algo_config_path=_resolve_path(entry.get("algo_config"), base_dir=base_dir),
+                algo_config_path=_resolve_path(
+                    entry.get("algo_config"),
+                    base_dir=base_dir,
+                    repository_root=repository_root,
+                ),
                 socnav_missing_prereq_policy=str(
                     entry.get("socnav_missing_prereq_policy", "fail-fast"),
                 ),
@@ -1104,7 +1118,9 @@ def _parse_planner_specs(planners_raw: Any, *, base_dir: Path) -> list[PlannerSp
     return planner_specs
 
 
-def _build_seed_policy(payload: dict[str, Any], *, base_dir: Path) -> SeedPolicy:
+def _build_seed_policy(
+    payload: dict[str, Any], *, base_dir: Path, repository_root: Path | None = None
+) -> SeedPolicy:
     """Parse the campaign ``seed_policy`` block into a ``SeedPolicy``.
 
     Returns:
@@ -1122,12 +1138,17 @@ def _build_seed_policy(payload: dict[str, Any], *, base_dir: Path) -> SeedPolicy
     seeds = seed_policy_raw.get("seeds") if isinstance(seed_policy_raw.get("seeds"), list) else []
     seed_sets_path_raw = seed_policy_raw.get("seed_sets_path")
     seed_sets_path = (
-        _resolve_path(str(seed_sets_path_raw), base_dir=base_dir)
+        _resolve_path(
+            str(seed_sets_path_raw),
+            base_dir=base_dir,
+            repository_root=repository_root,
+        )
         if isinstance(seed_sets_path_raw, str) and seed_sets_path_raw.strip()
         else None
     )
     if seed_sets_path is None:
-        seed_sets_path = (get_repository_root() / DEFAULT_SEED_SETS_PATH).resolve()
+        root = (repository_root or get_repository_root()).resolve()
+        seed_sets_path = (root / DEFAULT_SEED_SETS_PATH).resolve()
     return SeedPolicy(
         mode=mode,
         seed_set=str(seed_set) if seed_set is not None else None,
@@ -1140,6 +1161,7 @@ def _resolve_campaign_paths(
     payload: dict[str, Any],
     *,
     base_dir: Path,
+    repository_root: Path | None = None,
 ) -> tuple[
     Path | None,
     Path | None,
@@ -1159,27 +1181,40 @@ def _resolve_campaign_paths(
         _resolve_path,
     )
 
-    snqi_weights = _resolve_path(payload.get("snqi_weights"), base_dir=base_dir)
-    snqi_baseline = _resolve_path(payload.get("snqi_baseline"), base_dir=base_dir)
+    snqi_weights = _resolve_path(
+        payload.get("snqi_weights"),
+        base_dir=base_dir,
+        repository_root=repository_root,
+    )
+    snqi_baseline = _resolve_path(
+        payload.get("snqi_baseline"),
+        base_dir=base_dir,
+        repository_root=repository_root,
+    )
     scenario_horizons = _resolve_path(
         payload.get("scenario_horizons"),
         base_dir=base_dir,
+        repository_root=repository_root,
     )
     route_clearance_certifications_path = _resolve_path(
         payload.get("route_clearance_certifications"),
         base_dir=base_dir,
+        repository_root=repository_root,
     )
     comparability_mapping_path = _resolve_path(
         payload.get("comparability_mapping"),
         base_dir=base_dir,
+        repository_root=repository_root,
     )
     retained_metric_contract_path = _resolve_path(
         payload.get("retained_metric_contract"),
         base_dir=base_dir,
+        repository_root=repository_root,
     )
     if comparability_mapping_path is None:
+        root = (repository_root or get_repository_root()).resolve()
         default_mapping_path = (
-            get_repository_root() / "configs/benchmarks/alyassi_comparability_map_v1.yaml"
+            root / "configs/benchmarks/alyassi_comparability_map_v1.yaml"
         ).resolve()
         if default_mapping_path.exists():
             comparability_mapping_path = default_mapping_path
@@ -1197,6 +1232,7 @@ def _resolve_campaign_observation_noise(
     payload: dict[str, Any],
     *,
     base_dir: Path,
+    repository_root: Path | None = None,
 ) -> dict[str, Any] | None:
     """Resolve the campaign observation-noise profile relative to the config directory.
 
@@ -1207,7 +1243,11 @@ def _resolve_campaign_observation_noise(
         _resolve_observation_noise,
     )
 
-    return _resolve_observation_noise(payload.get("observation_noise"), base_dir=base_dir)
+    return _resolve_observation_noise(
+        payload.get("observation_noise"),
+        base_dir=base_dir,
+        repository_root=repository_root,
+    )
 
 
 def _parse_amv_required_dimensions(amv_raw: dict[str, Any]) -> dict[str, tuple[str, ...]]:
@@ -1529,6 +1569,7 @@ def _assemble_campaign_config(
     payload: dict[str, Any],
     config_path: Path,
     source_config_sha256: str,
+    repository_root: Path | None = None,
 ) -> CampaignConfig:
     """Assemble the final ``CampaignConfig`` from parsed components and scalar defaults.
 
@@ -1594,7 +1635,11 @@ def _assemble_campaign_config(
         route_clearance_certifications_path=parsed.route_clearance_certifications_path,
         retained_metric_contract_path=parsed.retained_metric_contract_path,
         snqi_contract=_build_snqi_contract_config(parsed.snqi_contract_raw),
-        observation_noise=_resolve_campaign_observation_noise(payload, base_dir=config_path.parent),
+        observation_noise=_resolve_campaign_observation_noise(
+            payload,
+            base_dir=config_path.parent,
+            repository_root=repository_root,
+        ),
         tuning_effort_enforcement=(
             str(payload.get("tuning_effort_enforcement", "off")).strip().lower() or "off"
         ),
@@ -1610,7 +1655,7 @@ def _assemble_campaign_config(
     )
 
 
-def load_campaign_config(path: Path) -> CampaignConfig:
+def load_campaign_config(path: Path, *, repository_root: Path | None = None) -> CampaignConfig:
     """Load and validate a camera-ready benchmark campaign YAML config.
 
     Returns:
@@ -1624,9 +1669,23 @@ def load_campaign_config(path: Path) -> CampaignConfig:
 
     base_dir = config_path.parent
     name = str(payload.get("name") or config_path.stem)
-    scenario_matrix_path = _resolve_scenario_matrix_path(payload, config_path=config_path)
-    planner_specs = tuple(_parse_planner_specs(payload.get("planners"), base_dir=base_dir))
-    seed_policy = _build_seed_policy(payload, base_dir=base_dir)
+    scenario_matrix_path = _resolve_scenario_matrix_path(
+        payload,
+        config_path=config_path,
+        repository_root=repository_root,
+    )
+    planner_specs = tuple(
+        _parse_planner_specs(
+            payload.get("planners"),
+            base_dir=base_dir,
+            repository_root=repository_root,
+        )
+    )
+    seed_policy = _build_seed_policy(
+        payload,
+        base_dir=base_dir,
+        repository_root=repository_root,
+    )
     (
         snqi_weights_path,
         snqi_baseline_path,
@@ -1634,7 +1693,11 @@ def load_campaign_config(path: Path) -> CampaignConfig:
         route_clearance_certifications_path,
         comparability_mapping_path,
         retained_metric_contract_path,
-    ) = _resolve_campaign_paths(payload, base_dir=base_dir)
+    ) = _resolve_campaign_paths(
+        payload,
+        base_dir=base_dir,
+        repository_root=repository_root,
+    )
     amv_raw = payload.get("amv_profile") if isinstance(payload.get("amv_profile"), dict) else {}
     snqi_contract_raw = (
         payload.get("snqi_contract") if isinstance(payload.get("snqi_contract"), dict) else {}
@@ -1683,6 +1746,7 @@ def load_campaign_config(path: Path) -> CampaignConfig:
         payload=payload,
         config_path=config_path,
         source_config_sha256=hashlib.sha256(source_config_bytes).hexdigest(),
+        repository_root=repository_root,
     )
     _validate_campaign_config(cfg)
     return cfg

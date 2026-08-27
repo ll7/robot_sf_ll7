@@ -145,6 +145,12 @@ def test_load_release_manifest_rejects_missing_file() -> None:
         ("scenario_source_hash", r"scenario_sources\[0\].sha256"),
         ("hybrid_planner_missing", r"hybrid_configs\[0\].planner_key"),
         ("hybrid_planner_duplicate", "duplicate planner keys"),
+        ("branch_witnesses_empty", "branch_witnesses must be a non-empty list"),
+        ("branch_witness_key", r"branch_witnesses\[0\].branch_key"),
+        ("branch_witness_field", "does not match branch_key"),
+        ("branch_witness_config", "must match a pinned hybrid config"),
+        ("branch_witness_hash", "does not match its pinned hybrid config"),
+        ("branch_witness_kind", "kind has unsupported value"),
     ),
 )
 def test_diagnostic_stress_contract_rejects_malformed_pins(  # noqa: C901, PLR0912, PLR0915
@@ -208,6 +214,18 @@ def test_diagnostic_stress_contract_rejects_malformed_pins(  # noqa: C901, PLR09
         contract["scenario_sources"][0]["sha256"] = "bad"
     elif case == "hybrid_planner_missing":
         contract["hybrid_configs"][0].pop("planner_key")
+    elif case == "branch_witnesses_empty":
+        contract["branch_witnesses"] = []
+    elif case == "branch_witness_key":
+        contract["branch_witnesses"][0]["branch_key"] = "not-a-branch-key"
+    elif case == "branch_witness_field":
+        contract["branch_witnesses"][0]["algorithm"] = "hybrid_rule_local_planner"
+    elif case == "branch_witness_config":
+        contract["branch_witnesses"][0]["config_path"] = contract["scenario_sources"][0]["path"]
+    elif case == "branch_witness_hash":
+        contract["branch_witnesses"][0]["config_sha256"] = "0" * 64
+    elif case == "branch_witness_kind":
+        contract["branch_witnesses"][0]["kind"] = "unsupported"
     else:
         pins = contract["hybrid_configs"]
         assert isinstance(pins, list)

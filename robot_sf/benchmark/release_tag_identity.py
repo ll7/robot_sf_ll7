@@ -18,6 +18,12 @@ _SHA_SUFFIX_RE = re.compile(r"[_-](?P<sha>[0-9a-f]{40})$")
 #: Full 40-hex SHA anywhere in the tag (strict identity carrier).
 _SHA_ANYWHERE_RE = re.compile(r"\b[0-9a-f]{40}\b")
 
+# This release predates the source-SHA tag contract.  It is retained only as
+# an explicit read-only compatibility exception; no future release may use
+# this exception or mutate the published tag/assets.
+HISTORICAL_RELEASE_TAG = "paper-matrix-v2-h600-s30-2026-08-cd831d7582c1"
+HISTORICAL_RELEASE_SOURCE_SHA = "b1d5ab6de708385c0828c99501a9d1c29727ec11"
+
 
 @dataclass(frozen=True)
 class TagShaIdentity:
@@ -36,6 +42,11 @@ class TagShaIdentity:
             "full_sha_present": self.full_sha_present,
             "scheme": self.scheme,
         }
+
+
+def is_historical_release_tag(tag: str) -> bool:
+    """Return whether ``tag`` is the immutable pre-contract release tag."""
+    return tag == HISTORICAL_RELEASE_TAG
 
 
 def extract_tag_sha_component(tag: str) -> TagShaIdentity:

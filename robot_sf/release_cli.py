@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from robot_sf.benchmark import zenodo_publisher
+from robot_sf.benchmark import published_release_audit, zenodo_publisher
 from robot_sf.benchmark.post_execution_release_doctor import (
     EXPECTED_CAMPAIGN_ID,
     EXPECTED_VALIDATOR_SHA,
@@ -43,6 +43,46 @@ def build_subparser(subparsers: Any) -> None:
             parser.add_argument("--deposition-id", type=int, required=True)
         if mode == "upload":
             parser.add_argument("files", nargs="+", type=Path)
+    audit = modes.add_parser(
+        "audit-published",
+        help="Read-only credential-free audit of a public GitHub/Zenodo release.",
+    )
+    audit.add_argument("--tag", required=True, help="Exact public GitHub release tag.")
+    audit.add_argument("--doi", required=True, help="Exact Zenodo version DOI.")
+    audit.add_argument(
+        "--repo",
+        default="ll7/robot_sf_ll7",
+        help="GitHub repository in owner/name form (default: ll7/robot_sf_ll7).",
+    )
+    audit.add_argument("--output", type=Path, help="Optional path for the JSON audit receipt.")
+    audit.add_argument(
+        "--github-api-base",
+        default=published_release_audit.GITHUB_API_BASE,
+        help="Public GitHub API base (HTTPS; useful for controlled test mirrors).",
+    )
+    audit.add_argument(
+        "--zenodo-api-base",
+        default=published_release_audit.ZENODO_API_BASE,
+        help="Public Zenodo API base (HTTPS; useful for controlled test mirrors).",
+    )
+    audit.add_argument(
+        "--max-download-bytes",
+        type=int,
+        default=published_release_audit.DEFAULT_MAX_DOWNLOAD_BYTES,
+        help="Cumulative download limit (default: 2 GiB).",
+    )
+    audit.add_argument(
+        "--download-chunk-size",
+        type=int,
+        default=published_release_audit.DEFAULT_DOWNLOAD_CHUNK_SIZE,
+        help="Streaming chunk size in bytes (default: 1 MiB).",
+    )
+    audit.add_argument(
+        "--timeout",
+        type=float,
+        default=published_release_audit.DEFAULT_NETWORK_TIMEOUT,
+        help="Per-request timeout in seconds (default: 60).",
+    )
     doctor = modes.add_parser("doctor", help="Fail-closed full benchmark-release diagnostics.")
     doctor.add_argument("--repo", type=Path, default=Path.cwd())
     doctor.add_argument(
@@ -195,12 +235,52 @@ def _handle_post_execution_doctor(args: argparse.Namespace, repo_root: Path) -> 
     return 0 if report["status"] == "pass" else 2
 
 
+def _handle_published_audit(args: argparse.Namespace) -> int:
+    """Run the public, read-only published-release audit.
+
+    Returns:
+        Process-style exit status (0 for pass, 1 for invalid evidence, 2 for unavailable/error).
+    """
+    receipt = published_release_audit.audit_published_network(
+        tag=args.tag,
+        doi=args.doi,
+        repo=args.repo,
+        github_api_base=args.github_api_base,
+        zenodo_api_base=args.zenodo_api_base,
+        max_download_bytes=args.max_download_bytes,
+        download_chunk_size=args.download_chunk_size,
+        timeout=args.timeout,
+    )
+    try:
+        if args.output is not None:
+            published_release_audit.write_network_receipt(receipt, args.output)
+    except OSError as exc:
+        _print(
+            {
+                "schema": published_release_audit.NETWORK_SCHEMA,
+                "ok": False,
+                "status": "error",
+                "problems": [f"could not write audit receipt ({type(exc).__name__})"],
+            }
+        )
+        return 2
+    _print(receipt)
+    sys.stderr.write(published_release_audit.network_audit_summary(receipt) + "\n")
+    if receipt["status"] == "pass":
+        return 0
+    if receipt["status"] == "invalid":
+        return 1
+    return 2
+
+
 def handle(args: argparse.Namespace) -> int:  # noqa: C901
     """Dispatch release operations and return a process exit code.
 
     Returns:
         Zero for success and two for a blocked or failed publication operation.
     """
+    if args.release_cmd == "audit-published":
+        return _handle_published_audit(args)
     if args.release_cmd == "doctor":
         repo_root = args.repo.resolve()
         if getattr(args, "post_execution", False):

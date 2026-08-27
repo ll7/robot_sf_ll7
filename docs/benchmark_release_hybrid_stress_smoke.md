@@ -77,6 +77,18 @@ invoke another planner, and are therefore not fallback or degraded execution.
 They remain outcome evidence: preserve and report the count, and never
 reinterpret them as success or suppress their effect on component metrics.
 
+Before row admission, the validator also enumerates every
+`scenario_algo_overrides` entry in the hash-pinned hybrid candidate configs,
+including scenarios intentionally omitted from the five executed stress cells.
+Each non-default branch must have a manifest `branch_witnesses` entry bound to
+the exact `planner arm | scenario | effective algorithm` key and the same
+candidate config path and SHA-256. The planner arm remains the containing
+identity even when the effective algorithm is `orca`; these identities must not
+be collapsed. Missing, wrong-arm, wrong-algorithm, malformed, or unsupported
+witness entries fail closed and name the uncovered branch. The witnesses are
+diagnostic admission evidence only and do not expand the 70-cell matrix or
+authorize a benchmark claim.
+
 Guarded PPO has one similarly narrow historical label: `fallback_safe` means
 that its declared Risk-DWA safety-shield component supplied a command that
 passed the shield. Admission permits only that exact native composite-planner

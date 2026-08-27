@@ -92,6 +92,23 @@ stress_smoke_contract:
     - scenario_adaptive_hybrid_orca_v2_collision_guard
     - hybrid_rule_v3_fast_progress_static_escape
     - hybrid_rule_v3_fast_progress_static_escape_continuous
+  # These branch-level witnesses keep the planner arm identity while proving
+  # the effective ORCA algorithm configured for the omitted leave-group cell.
+  branch_witnesses:
+    - kind: scenario_cell
+      arm: scenario_adaptive_hybrid_orca_v2_bottleneck_yield
+      scenario: francis2023_leave_group
+      algorithm: orca
+      branch_key: scenario_adaptive_hybrid_orca_v2_bottleneck_yield|francis2023_leave_group|orca
+      config_path: ../../policy_search/candidates/scenario_adaptive_hybrid_orca_v2_bottleneck_yield_s30_h600_release.yaml
+      config_sha256: "895cd46ff26c0b03fd51d5e5fb6e77f16ad2c6f6cd1fcead7089c8dda8c7966d"
+    - kind: scenario_cell
+      arm: scenario_adaptive_hybrid_orca_v2_collision_guard
+      scenario: francis2023_leave_group
+      algorithm: orca
+      branch_key: scenario_adaptive_hybrid_orca_v2_collision_guard|francis2023_leave_group|orca
+      config_path: ../../policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard_s30_h600_release.yaml
+      config_sha256: "90bc08cffe40e7f5b38c371db7c2a22790970c6817792dc7865686686c0a7dc3"
   forbidden_row_markers:
     - fallback
     - degraded

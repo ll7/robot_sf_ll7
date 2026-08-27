@@ -16,6 +16,7 @@ import yaml
 from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
 from robot_sf.benchmark.camera_ready._preflight import _resolved_seed_inventory
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, load_campaign_config
+from robot_sf.benchmark.effective_algorithm_branches import WITNESS_KINDS
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.release_tag_identity import (
     HISTORICAL_RELEASE_TAG,
@@ -116,6 +117,19 @@ class StressSmokeAssetPin:
 
 
 @dataclass(frozen=True)
+class StressSmokeBranchWitness:
+    """One manifest-declared witness for an effective algorithm branch."""
+
+    kind: str
+    arm: str
+    scenario: str
+    algorithm: str
+    branch_key: str
+    config_path: Path
+    config_sha256: str
+
+
+@dataclass(frozen=True)
 class BenchmarkReleaseManifest:
     """Canonical release manifest for benchmark publication workflows."""
 
@@ -178,6 +192,7 @@ class BenchmarkReleaseManifest:
     stress_smoke_route_certification_sha256: str | None = None
     stress_smoke_scenario_source_pins: tuple[StressSmokeAssetPin, ...] = ()
     stress_smoke_hybrid_config_pins: tuple[StressSmokeAssetPin, ...] = ()
+    stress_smoke_branch_witnesses: tuple[StressSmokeBranchWitness, ...] = ()
 
 
 def _resolve_required_file(
@@ -533,6 +548,108 @@ def _load_manifest_release_metadata(payload: dict[str, Any]) -> dict[str, str | 
     }
 
 
+def _load_stress_smoke_branch_witnesses(  # noqa: C901
+    manifest_path: Path,
+    raw_witnesses: Any,
+    hybrid_config_pins: tuple[StressSmokeAssetPin, ...],
+    *,
+    repository_root: Path | None = None,
+) -> tuple[StressSmokeBranchWitness, ...]:
+    """Load exact branch witnesses and bind them to pinned candidate configs.
+
+    Returns:
+        Normalized witness records bound to the pinned candidate config assets.
+    """
+    if not isinstance(raw_witnesses, list) or not raw_witnesses:
+        raise ValueError("stress_smoke_contract.branch_witnesses must be a non-empty list")
+    pins_by_path = {pin.path.resolve(): pin for pin in hybrid_config_pins}
+    witnesses: list[StressSmokeBranchWitness] = []
+    seen_branch_keys: set[str] = set()
+    for index, raw_witness in enumerate(raw_witnesses):
+        if not isinstance(raw_witness, Mapping):
+            raise ValueError(f"stress_smoke_contract.branch_witnesses[{index}] must be a mapping")
+        kind = raw_witness.get("kind")
+        if not isinstance(kind, str) or not kind.strip():
+            raise ValueError(
+                f"stress_smoke_contract.branch_witnesses[{index}].kind must be a non-empty string"
+            )
+        kind = kind.strip()
+        if kind not in WITNESS_KINDS:
+            raise ValueError(
+                f"stress_smoke_contract.branch_witnesses[{index}].kind has unsupported value "
+                f"{kind!r}"
+            )
+        branch_key = raw_witness.get("branch_key")
+        if not isinstance(branch_key, str) or not branch_key.strip():
+            raise ValueError(
+                f"stress_smoke_contract.branch_witnesses[{index}].branch_key must be a non-empty string"
+            )
+        branch_key = branch_key.strip()
+        parts = tuple(part.strip() for part in branch_key.split("|"))
+        if len(parts) != 3 or any(not part for part in parts):
+            raise ValueError(
+                f"stress_smoke_contract.branch_witnesses[{index}].branch_key must be arm|scenario|algorithm"
+            )
+        arm, scenario, algorithm = parts
+        for field_name, expected in (
+            ("arm", arm),
+            ("scenario", scenario),
+            ("algorithm", algorithm),
+        ):
+            value = raw_witness.get(field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(
+                    f"stress_smoke_contract.branch_witnesses[{index}].{field_name} "
+                    "must be a non-empty string"
+                )
+            if value.strip() != expected:
+                raise ValueError(
+                    f"stress_smoke_contract.branch_witnesses[{index}] {field_name} "
+                    "does not match branch_key"
+                )
+        if branch_key in seen_branch_keys:
+            raise ValueError(
+                "stress_smoke_contract.branch_witnesses contains duplicate branch keys"
+            )
+        seen_branch_keys.add(branch_key)
+
+        config_path = _resolve_stress_contract_file(
+            manifest_path,
+            raw_witness.get("config_path"),
+            f"stress_smoke_contract.branch_witnesses[{index}].config_path",
+            repository_root=repository_root,
+        )
+        config_sha256 = str(raw_witness.get("config_sha256", "")).strip().lower()
+        if _SHA256_RE.fullmatch(config_sha256) is None:
+            raise ValueError(
+                f"stress_smoke_contract.branch_witnesses[{index}].config_sha256 "
+                "must be a 64-character SHA-256"
+            )
+        pinned_config = pins_by_path.get(config_path.resolve())
+        if pinned_config is None:
+            raise ValueError(
+                f"stress_smoke_contract.branch_witnesses[{index}].config_path "
+                "must match a pinned hybrid config"
+            )
+        if config_sha256 != pinned_config.sha256:
+            raise ValueError(
+                f"stress_smoke_contract.branch_witnesses[{index}].config_sha256 "
+                "does not match its pinned hybrid config"
+            )
+        witnesses.append(
+            StressSmokeBranchWitness(
+                kind=kind,
+                arm=arm,
+                scenario=scenario,
+                algorithm=algorithm,
+                branch_key=branch_key,
+                config_path=config_path,
+                config_sha256=config_sha256,
+            )
+        )
+    return tuple(witnesses)
+
+
 def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
     manifest_path: Path,
     payload: dict[str, Any],
@@ -565,6 +682,7 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
         "stress_smoke_route_certification_sha256": None,
         "stress_smoke_scenario_source_pins": (),
         "stress_smoke_hybrid_config_pins": (),
+        "stress_smoke_branch_witnesses": (),
     }
     if str(payload.get("release_kind", "")).strip() != DIAGNOSTIC_STRESS_RELEASE_KIND:
         return defaults
@@ -783,6 +901,14 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
             )
         return tuple(pins)
 
+    hybrid_config_pins = _asset_pins("hybrid_configs", planner_key_required=True)
+    branch_witnesses = _load_stress_smoke_branch_witnesses(
+        manifest_path,
+        contract.get("branch_witnesses"),
+        hybrid_config_pins,
+        repository_root=repository_root,
+    )
+
     return {
         "stress_smoke_review_base_commit": review_base_commit,
         "stress_smoke_source_policy": source_policy,
@@ -800,7 +926,8 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
         "stress_smoke_scenario_source_pins": _asset_pins(
             "scenario_sources", planner_key_required=False
         ),
-        "stress_smoke_hybrid_config_pins": _asset_pins("hybrid_configs", planner_key_required=True),
+        "stress_smoke_hybrid_config_pins": hybrid_config_pins,
+        "stress_smoke_branch_witnesses": branch_witnesses,
     }
 
 
@@ -1108,6 +1235,21 @@ def validate_release_manifest(
         problems,
         repository_root=repository_root,
     )
+    if manifest.release_kind == DIAGNOSTIC_STRESS_RELEASE_KIND:
+        # Keep the effective-branch admission check in the manifest validation path so
+        # preflight and release-doctor callers reject incomplete witnesses before a campaign
+        # can execute.  The local import avoids the release_protocol/release_acceptance cycle.
+        from robot_sf.benchmark.release_acceptance import (  # noqa: PLC0415
+            _stress_effective_branch_coverage,
+        )
+
+        branch_coverage = _stress_effective_branch_coverage(
+            manifest=manifest,
+            campaign_config=cfg,
+            source_repository_root=repository_root,
+        )
+        for blocker in branch_coverage["blockers"]:
+            problems.append(f"effective algorithm branches: {blocker}")
     _validate_release_campaign_contract(manifest, cfg, problems)
     _validate_release_seed_policy(manifest, cfg, problems)
     _validate_release_planners(manifest, cfg, problems)
@@ -1200,6 +1342,23 @@ def _validate_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
         problems.append("stress_smoke_contract.expected_dt must be 0.1")
     if manifest.stress_smoke_expected_kinematics != STRESS_SMOKE_EXPECTED_KINEMATICS:
         problems.append("stress_smoke_contract.expected_kinematics must be 'differential_drive'")
+    if not manifest.stress_smoke_branch_witnesses:
+        problems.append("stress_smoke_contract.branch_witnesses must be non-empty")
+    pinned_configs_by_path = {
+        pin.path.resolve(): pin for pin in manifest.stress_smoke_hybrid_config_pins
+    }
+    for index, witness in enumerate(manifest.stress_smoke_branch_witnesses):
+        pin = pinned_configs_by_path.get(witness.config_path.resolve())
+        if pin is None:
+            problems.append(
+                "stress_smoke_contract.branch_witnesses config path is not a pinned hybrid config: "
+                f"{witness.config_path}"
+            )
+        elif witness.config_sha256 != pin.sha256:
+            problems.append(
+                "stress_smoke_contract.branch_witnesses config hash does not match its pin: "
+                f"index {index}"
+            )
 
     enabled_planners = tuple(planner for planner in cfg.planners if planner.enabled)
     if len(enabled_planners) != STRESS_SMOKE_EXPECTED_PLANNER_ARMS:
@@ -1731,6 +1890,18 @@ def build_release_provenance(
             "expected_dt": manifest.stress_smoke_expected_dt,
             "expected_kinematics": manifest.stress_smoke_expected_kinematics,
             "required_hybrid_arms": list(manifest.stress_smoke_required_hybrid_arms),
+            "branch_witnesses": [
+                {
+                    "kind": witness.kind,
+                    "arm": witness.arm,
+                    "scenario": witness.scenario,
+                    "algorithm": witness.algorithm,
+                    "branch_key": witness.branch_key,
+                    "config_path": _repo_relative(witness.config_path),
+                    "config_sha256": witness.config_sha256,
+                }
+                for witness in manifest.stress_smoke_branch_witnesses
+            ],
             "suite_policy": {
                 "path": _repo_relative(manifest.stress_smoke_suite_policy_path)
                 if manifest.stress_smoke_suite_policy_path is not None
@@ -1890,6 +2061,18 @@ def build_resolved_release_manifest(
             "expected_dt": manifest.stress_smoke_expected_dt,
             "expected_kinematics": manifest.stress_smoke_expected_kinematics,
             "required_hybrid_arms": list(manifest.stress_smoke_required_hybrid_arms),
+            "branch_witnesses": [
+                {
+                    "kind": witness.kind,
+                    "arm": witness.arm,
+                    "scenario": witness.scenario,
+                    "algorithm": witness.algorithm,
+                    "branch_key": witness.branch_key,
+                    "config_path": _repo_relative(witness.config_path),
+                    "config_sha256": witness.config_sha256,
+                }
+                for witness in manifest.stress_smoke_branch_witnesses
+            ],
             "suite_policy": {
                 "path": _repo_relative(manifest.stress_smoke_suite_policy_path)
                 if manifest.stress_smoke_suite_policy_path is not None
@@ -2040,6 +2223,7 @@ __all__ = [
     "SUPPORTED_RELEASE_MANIFEST_SCHEMA_VERSIONS",
     "BenchmarkReleaseManifest",
     "StressSmokeAssetPin",
+    "StressSmokeBranchWitness",
     "build_release_provenance",
     "build_resolved_release_manifest",
     "is_diagnostic_stress_smoke",

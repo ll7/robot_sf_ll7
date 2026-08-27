@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "incident_scenario_provenance.v1.json",
+  "title": "Incident-to-Scenario Provenance (v1)",
+  "description": "Versioned, fail-closed contract that transforms one incident description into one replayable Robot SF scenario record while preserving the distinction between source facts, extracted hypotheses, simulator assumptions, parameter mappings, generated configuration, execution identity, and observed outcome. It never assigns legal or moral fault: normative_fault is always not_assessed. Cross-field fail-closed rules live in robot_sf/benchmark/collision/incident_scenario_provenance.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "record_id",
+    "source",
+    "extraction",
+    "scenario_parameters",
+    "scenario_config",
+    "execution",
+    "normative_fault",
+    "admission"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "incident_scenario_provenance.v1"
+    },
+    "record_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "digest_sha256"],
+      "properties": {
+        "identity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "observed_facts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["fact_id", "statement"],
+            "properties": {
+              "fact_id": {"type": "string", "minLength": 1},
+              "statement": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "extraction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "actors", "hypotheses", "simulator_assumptions"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["verified", "human_corrected", "unverified", "rejected"]
+        },
+        "verification_record": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["reviewer", "method", "at"],
+          "properties": {
+            "reviewer": {"type": "string", "minLength": 1},
+            "method": {"type": "string", "minLength": 1},
+            "at": {"type": "string", "minLength": 1}
+          }
+        },
+        "actors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["actor_id", "role"],
+            "properties": {
+              "actor_id": {"type": "string", "minLength": 1},
+              "role": {
+                "type": "string",
+                "enum": [
+                  "ego",
+                  "pedestrian_initiator",
+                  "affected_pedestrian",
+                  "infrastructure",
+                  "unknown"
+                ]
+              }
+            }
+          }
+        },
+        "hypotheses": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["hypothesis_id", "statement"],
+            "properties": {
+              "hypothesis_id": {"type": "string", "minLength": 1},
+              "statement": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "simulator_assumptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["assumption_id", "statement"],
+            "properties": {
+              "assumption_id": {"type": "string", "minLength": 1},
+              "statement": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "scenario_parameters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "parameter",
+          "source_kind",
+          "source_id",
+          "source_field",
+          "transformation",
+          "unit",
+          "status",
+          "confidence"
+        ],
+        "properties": {
+          "parameter": {"type": "string", "minLength": 1},
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "observed_fact",
+              "extracted_hypothesis",
+              "simulator_assumption"
+            ]
+          },
+          "source_id": {"type": "string", "minLength": 1},
+          "source_field": {"type": "string", "minLength": 1},
+          "transformation": {"type": "string", "minLength": 1},
+          "unit": {"type": "string", "minLength": 1},
+          "status": {
+            "type": "string",
+            "enum": ["mapped", "estimated", "defaulted", "unsupported"]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low", "unavailable"]
+          }
+        }
+      }
+    },
+    "scenario_config": {
+      "description": "Immutable generated scenario configuration identity, kept separate from execution identity and outcome.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "digest_sha256", "seed"],
+      "properties": {
+        "identity": {"type": "string", "minLength": 1},
+        "digest_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "seed": {"type": "integer", "minimum": 0}
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claimed"],
+      "properties": {
+        "claimed": {"type": "boolean"},
+        "software_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "replay_identity": {"type": "string", "minLength": 1},
+        "observed_outcome": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": ["collision", "near_miss", "completed", "unavailable"]
+            },
+            "detail": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "normative_fault": {
+      "description": "Always not_assessed. Robot SF artifacts never derive legal or moral fault from scenario geometry or simulation outcomes.",
+      "const": "not_assessed"
+    },
+    "admission": {
+      "type": "string",
+      "enum": ["admitted", "rejected", "ambiguous", "unsupported"]
+    }
+  }
+}

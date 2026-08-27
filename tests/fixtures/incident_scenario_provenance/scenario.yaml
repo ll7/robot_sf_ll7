@@ -1,0 +1,17 @@
+scenarios:
+  - name: incident_provenance_synthetic_crossing
+    map_file: ../../../maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg
+    simulation_config:
+      max_episode_steps: 400
+      ped_density: 0.0
+    single_pedestrians:
+      - id: h1
+        goal_poi: poi_h1_goal
+        speed_m_s: 0.8
+    robot_config: {}
+    metadata:
+      archetype: synthetic_incident_crossing
+      evidence_tier: diagnostic
+      claim_boundary: contract_fixture_only
+    seeds:
+      - 42

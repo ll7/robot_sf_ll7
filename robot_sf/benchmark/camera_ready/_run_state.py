@@ -527,7 +527,12 @@ def _resolve_campaign_id(
     return _campaign_id(cfg, label=label)
 
 
-def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
+def _resolve_path(
+    raw_path: str | None,
+    *,
+    base_dir: Path,
+    repository_root: Path | None = None,
+) -> Path | None:
     """Resolve paths relative to ``base_dir``.
 
     Returns:
@@ -536,21 +541,40 @@ def _resolve_path(raw_path: str | None, *, base_dir: Path) -> Path | None:
     if not raw_path:
         return None
     path = Path(raw_path)
-    if path.is_absolute():
-        return path
+    explicit_root = repository_root.resolve() if repository_root is not None else None
 
-    candidate = (base_dir / path).resolve()
+    def require_contained(candidate: Path) -> Path:
+        resolved = candidate.resolve()
+        if explicit_root is not None:
+            try:
+                resolved.relative_to(explicit_root)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Configured path '{raw_path}' escapes repository_root '{explicit_root}'"
+                ) from exc
+        return resolved
+
+    if path.is_absolute():
+        return require_contained(path)
+
+    candidate = require_contained(base_dir / path)
     if candidate.exists():
         return candidate
 
-    repo_candidate = (get_repository_root() / path).resolve()
+    repo_root = explicit_root or get_repository_root().resolve()
+    repo_candidate = require_contained(repo_root / path)
     if repo_candidate.exists():
         return repo_candidate
 
     return candidate
 
 
-def _resolve_observation_noise(raw: Any, *, base_dir: Path) -> dict[str, Any] | None:
+def _resolve_observation_noise(
+    raw: Any,
+    *,
+    base_dir: Path,
+    repository_root: Path | None = None,
+) -> dict[str, Any] | None:
     """Resolve an optional inline or file-backed observation-noise config.
 
     Returns:
@@ -561,7 +585,7 @@ def _resolve_observation_noise(raw: Any, *, base_dir: Path) -> dict[str, Any] | 
     if isinstance(raw, dict):
         return normalize_observation_noise_spec(raw)
     if isinstance(raw, str) and raw.strip():
-        path = _resolve_path(raw, base_dir=base_dir)
+        path = _resolve_path(raw, base_dir=base_dir, repository_root=repository_root)
         if path is None or not path.is_file():
             raise FileNotFoundError(f"Could not resolve observation_noise '{raw}'")
         return load_observation_noise_spec(path)

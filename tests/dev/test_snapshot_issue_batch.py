@@ -56,7 +56,16 @@ def test_expand_issue_numbers_treats_two_values_as_range() -> None:
 
 @pytest.mark.parametrize(
     "label",
-    ["blocked:needs-maintainer", "blocked:needs-campaign", "state:review", "needs-triage"],
+    [
+        "blocked:needs-maintainer",
+        "blocked:needs-campaign",
+        "state:review",
+        "needs-triage",
+        "deferred",
+        "state:deferred",
+        "state:parked",
+        "parent",
+    ],
 )
 def test_explicit_dispatch_stop_labels_are_not_claimable(label: str) -> None:
     """Every explicit dispatch-stop label must fence autonomous claim dispatch."""

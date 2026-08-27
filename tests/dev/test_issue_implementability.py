@@ -128,6 +128,9 @@ def test_alias_prefixed_headings_do_not_satisfy_contract(
     ("labels", "classification"),
     [
         (["state:ready", "state:blocked"], "blocked"),
+        (["state:ready", "deferred"], "blocked"),
+        (["state:ready", "state:deferred"], "blocked"),
+        (["state:ready", "state:parked"], "blocked"),
         (["state:ready", "decision-required"], "human_decision"),
         (["state:ready", "parent"], "parent"),
         (["state:ready", "resource:slurm"], "needs_compute"),

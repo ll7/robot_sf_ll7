@@ -17,6 +17,9 @@ from robot_sf.benchmark.camera_ready._config import _load_campaign_scenarios
 from robot_sf.benchmark.camera_ready._preflight import _resolved_seed_inventory
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, load_campaign_config
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
+from robot_sf.benchmark.release_tag_identity import (
+    HISTORICAL_RELEASE_TAG,
+)
 from robot_sf.common.artifact_paths import get_repository_root
 
 RELEASE_MANIFEST_SCHEMA_VERSION = "benchmark-release-manifest.v0.1"
@@ -72,10 +75,10 @@ def _load_mapping(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _repo_relative(path: Path) -> str:
+def _repo_relative(path: Path, repository_root: Path | None = None) -> str:
     """Return a stable repository-relative path string when possible."""
     resolved = path.resolve()
-    repo_root = get_repository_root().resolve()
+    repo_root = (repository_root or get_repository_root()).resolve()
     try:
         return resolved.relative_to(repo_root).as_posix()
     except ValueError:
@@ -169,6 +172,8 @@ class BenchmarkReleaseManifest:
     concept_doi: str | None = None
     version_doi: str | None = None
     release_kind: str | None = None
+    source_sha: str | None = None
+    planning_base_sha: str | None = None
     metadata_path: Path | None = None
     metadata_sha256: str | None = None
     stress_smoke_review_base_commit: str | None = None
@@ -189,7 +194,13 @@ class BenchmarkReleaseManifest:
     stress_smoke_branch_witnesses: tuple[StressSmokeBranchWitness, ...] = ()
 
 
-def _resolve_required_file(manifest_path: Path, value: Any, field_name: str) -> Path:
+def _resolve_required_file(
+    manifest_path: Path,
+    value: Any,
+    field_name: str,
+    *,
+    repository_root: Path | None = None,
+) -> Path:
     """Resolve and validate a required manifest-relative file path.
 
     Returns:
@@ -205,14 +216,21 @@ def _resolve_required_file(manifest_path: Path, value: Any, field_name: str) -> 
         raise FileNotFoundError(f"{field_name} not found: {resolved}")
     if not resolved.is_file():
         raise ValueError(f"{field_name} must be a file path, got non-file path: {resolved}")
+    root = (repository_root or get_repository_root()).resolve()
     try:
-        resolved.relative_to(get_repository_root().resolve())
+        resolved.relative_to(root)
     except ValueError as exc:
         raise ValueError(f"{field_name} must be contained by the repository checkout") from exc
     return resolved
 
 
-def _resolve_stress_contract_file(manifest_path: Path, value: Any, field_name: str) -> Path:
+def _resolve_stress_contract_file(
+    manifest_path: Path,
+    value: Any,
+    field_name: str,
+    *,
+    repository_root: Path | None = None,
+) -> Path:
     """Resolve one stress asset inside this checkout, rejecting symlink escapes.
 
     Returns:
@@ -225,7 +243,7 @@ def _resolve_stress_contract_file(manifest_path: Path, value: Any, field_name: s
     if _has_symlink_component(candidate):
         raise ValueError(f"{field_name} must not contain symlink components: {candidate}")
     resolved = candidate.resolve()
-    repository_root = get_repository_root().resolve()
+    repository_root = (repository_root or get_repository_root()).resolve()
     if not resolved.exists():
         raise FileNotFoundError(f"{field_name} not found: {resolved}")
     if not resolved.is_file():
@@ -278,7 +296,10 @@ def _load_manifest_identity(payload: dict[str, Any]) -> dict[str, str]:
 
 
 def _load_manifest_scenario_section(
-    manifest_path: Path, payload: dict[str, Any]
+    manifest_path: Path,
+    payload: dict[str, Any],
+    *,
+    repository_root: Path | None = None,
 ) -> tuple[Path, str]:
     """Load and validate the scenario section.
 
@@ -292,6 +313,7 @@ def _load_manifest_scenario_section(
         manifest_path,
         scenario.get("matrix_path"),
         "scenario.matrix_path",
+        repository_root=repository_root,
     )
     scenario_matrix_sha256 = str(scenario.get("matrix_sha256", "")).strip()
     if not scenario_matrix_sha256:
@@ -300,7 +322,10 @@ def _load_manifest_scenario_section(
 
 
 def _load_manifest_metrics_section(
-    manifest_path: Path, payload: dict[str, Any]
+    manifest_path: Path,
+    payload: dict[str, Any],
+    *,
+    repository_root: Path | None = None,
 ) -> dict[str, Path | str | None]:
     """Load and validate the metrics section.
 
@@ -312,14 +337,20 @@ def _load_manifest_metrics_section(
         metrics = {}
     snqi_weights_path = (
         _resolve_required_file(
-            manifest_path, metrics.get("snqi_weights_path"), "metrics.snqi_weights_path"
+            manifest_path,
+            metrics.get("snqi_weights_path"),
+            "metrics.snqi_weights_path",
+            repository_root=repository_root,
         )
         if metrics.get("snqi_weights_path") is not None
         else None
     )
     snqi_baseline_path = (
         _resolve_required_file(
-            manifest_path, metrics.get("snqi_baseline_path"), "metrics.snqi_baseline_path"
+            manifest_path,
+            metrics.get("snqi_baseline_path"),
+            "metrics.snqi_baseline_path",
+            repository_root=repository_root,
         )
         if metrics.get("snqi_baseline_path") is not None
         else None
@@ -610,7 +641,10 @@ def _load_stress_smoke_branch_witnesses(  # noqa: C901
 
 
 def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
-    manifest_path: Path, payload: dict[str, Any]
+    manifest_path: Path,
+    payload: dict[str, Any],
+    *,
+    repository_root: Path | None = None,
 ) -> dict[str, Any]:
     """Load the diagnostic stress contract without pretending to pin its own commit.
 
@@ -715,6 +749,7 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
         manifest_path,
         scenario_section.get("suite_policy_path"),
         "scenario.suite_policy_path",
+        repository_root=repository_root,
     )
     suite_policy_sha256 = str(scenario_section.get("suite_policy_sha256", "")).strip().lower()
     if _SHA256_RE.fullmatch(suite_policy_sha256) is None:
@@ -723,6 +758,7 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
         manifest_path,
         seed_policy.get("seed_sets_path"),
         "seed_policy.seed_sets_path",
+        repository_root=repository_root,
     )
     seed_sets_sha256 = str(seed_policy.get("seed_sets_sha256", "")).strip().lower()
     if _SHA256_RE.fullmatch(seed_sets_sha256) is None:
@@ -731,6 +767,7 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
         manifest_path,
         scenario_section.get("route_certification_path"),
         "scenario.route_certification_path",
+        repository_root=repository_root,
     )
     route_certification_sha256 = (
         str(scenario_section.get("route_certification_sha256", "")).strip().lower()
@@ -750,6 +787,7 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
             manifest_path,
             raw_asset.get("path") or raw_asset.get(f"{name}_path"),
             f"stress_smoke_contract.pinned_assets.{name}_path",
+            repository_root=repository_root,
         )
         sha256 = (
             str(raw_asset.get("sha256") or raw_asset.get(f"{name}_sha256") or "").strip().lower()
@@ -773,6 +811,7 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
             manifest_path,
             pinned_assets.get("seed_sets_path"),
             "stress_smoke_contract.pinned_assets.seed_sets_path",
+            repository_root=repository_root,
         )
         seed_pin_sha256 = str(pinned_assets.get("seed_sets_sha256", "")).strip().lower()
         if _SHA256_RE.fullmatch(seed_pin_sha256) is None:
@@ -786,6 +825,7 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
             manifest_path,
             pinned_assets.get("route_certification_path"),
             "stress_smoke_contract.pinned_assets.route_certification_path",
+            repository_root=repository_root,
         )
         route_pin_sha256 = str(pinned_assets.get("route_certification_sha256", "")).strip().lower()
         if _SHA256_RE.fullmatch(route_pin_sha256) is None:
@@ -816,6 +856,7 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
                 manifest_path,
                 raw_asset.get("path"),
                 f"stress_smoke_contract.{field_name}[{index}].path",
+                repository_root=repository_root,
             )
             if path in seen_paths:
                 raise ValueError(
@@ -879,8 +920,11 @@ def _load_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
     }
 
 
-def _load_v02_contract(  # noqa: C901
-    manifest_path: Path, payload: dict[str, Any]
+def _load_v02_contract(  # noqa: C901, PLR0912
+    manifest_path: Path,
+    payload: dict[str, Any],
+    *,
+    repository_root: Path | None = None,
 ) -> dict[str, Any]:
     """Load the stricter v0.2 release identity and publication contract.
 
@@ -889,6 +933,8 @@ def _load_v02_contract(  # noqa: C901
     """
     defaults = {
         "latest_main_base_commit": None,
+        "source_sha": None,
+        "planning_base_sha": None,
         "expected_episode_cells": None,
         "expected_horizon_steps": None,
         "publication_channel": None,
@@ -909,6 +955,25 @@ def _load_v02_contract(  # noqa: C901
     latest_main_base_commit = str(payload.get("latest_main_base_commit", "")).strip().lower()
     if re.fullmatch(r"[0-9a-f]{40}", latest_main_base_commit) is None:
         raise ValueError("latest_main_base_commit must be an exact 40-character Git SHA")
+    source_sha_value = payload.get("source_sha")
+    source_sha = str(source_sha_value).strip().lower() if source_sha_value is not None else None
+    if source_sha_value is not None and re.fullmatch(r"[0-9a-f]{40}", source_sha or "") is None:
+        raise ValueError("source_sha must be an exact 40-character Git SHA")
+    planning_base_sha_value = payload.get("planning_base_sha")
+    planning_base_sha = (
+        str(planning_base_sha_value).strip().lower()
+        if planning_base_sha_value is not None
+        else None
+    )
+    if (
+        planning_base_sha_value is not None
+        and re.fullmatch(r"[0-9a-f]{40}", planning_base_sha or "") is None
+    ):
+        raise ValueError("planning_base_sha must be an exact 40-character Git SHA")
+    release_kind = str(payload.get("release_kind", "")).strip()
+    if release_kind == "benchmark-data" and payload.get("release_tag") != HISTORICAL_RELEASE_TAG:
+        if source_sha is None:
+            raise ValueError("source_sha is required for future benchmark-data v0.2 releases")
     matrix = payload.get("matrix")
     if not isinstance(matrix, dict) or not isinstance(matrix.get("expected_episode_cells"), int):
         raise ValueError("matrix.expected_episode_cells must be an integer")
@@ -961,6 +1026,7 @@ def _load_v02_contract(  # noqa: C901
             manifest_path,
             publication.get("metadata_path"),
             "publication.metadata_path",
+            repository_root=repository_root,
         )
         metadata_sha256 = str(publication.get("metadata_sha256", "")).strip().lower()
         if _SHA256_RE.fullmatch(metadata_sha256) is None:
@@ -970,17 +1036,23 @@ def _load_v02_contract(  # noqa: C901
             raise ValueError("publication.metadata_sha256 does not match publication.metadata_path")
     return {
         "latest_main_base_commit": latest_main_base_commit,
+        "source_sha": source_sha,
+        "planning_base_sha": planning_base_sha,
         "expected_episode_cells": int(matrix["expected_episode_cells"]),
         "expected_horizon_steps": horizon_steps,
         "publication_channel": str(publication["channel"]),
         "suite_policy_path": _resolve_required_file(
-            manifest_path, scenario.get("suite_policy_path"), "scenario.suite_policy_path"
+            manifest_path,
+            scenario.get("suite_policy_path"),
+            "scenario.suite_policy_path",
+            repository_root=repository_root,
         ),
         "suite_policy_sha256": str(scenario.get("suite_policy_sha256", "")).strip(),
         "route_certification_path": _resolve_required_file(
             manifest_path,
             scenario.get("route_certification_path"),
             "scenario.route_certification_path",
+            repository_root=repository_root,
         ),
         "route_certification_sha256": str(scenario.get("route_certification_sha256", "")).strip(),
         "seed_sets_sha256": str(seed_policy.get("seed_sets_sha256", "")).strip(),
@@ -993,7 +1065,12 @@ def _load_v02_contract(  # noqa: C901
     }
 
 
-def _load_manifest_paths_section(manifest_path: Path, payload: dict[str, Any]) -> dict[str, Path]:
+def _load_manifest_paths_section(
+    manifest_path: Path,
+    payload: dict[str, Any],
+    *,
+    repository_root: Path | None = None,
+) -> dict[str, Path]:
     """Load required manifest-side file paths.
 
     Returns:
@@ -1004,27 +1081,33 @@ def _load_manifest_paths_section(manifest_path: Path, payload: dict[str, Any]) -
             manifest_path,
             payload.get("canonical_campaign_config"),
             "canonical_campaign_config",
+            repository_root=repository_root,
         ),
         "citation_path": _resolve_required_file(
             manifest_path,
             payload.get("citation_path"),
             "citation_path",
+            repository_root=repository_root,
         ),
         "release_checklist_path": _resolve_required_file(
             manifest_path,
             payload.get("release_checklist_path"),
             "release_checklist_path",
+            repository_root=repository_root,
         ),
     }
 
 
-def load_release_manifest(path: str | Path) -> BenchmarkReleaseManifest:
+def load_release_manifest(
+    path: str | Path, *, repository_root: Path | None = None
+) -> BenchmarkReleaseManifest:
     """Load, normalize, and validate a benchmark release manifest.
 
     Returns:
         Parsed benchmark release manifest.
     """
     manifest_path = Path(path).resolve()
+    repository_root = (repository_root or get_repository_root()).resolve()
     if not manifest_path.exists():
         raise FileNotFoundError(f"Benchmark release manifest not found: {manifest_path}")
     payload = _load_mapping(manifest_path)
@@ -1042,8 +1125,16 @@ def load_release_manifest(path: str | Path) -> BenchmarkReleaseManifest:
     for field in ("seed_policy", "planners", "kinematics", "artifacts", "provenance"):
         if not isinstance(payload.get(field), dict):
             raise ValueError(f"{field} must be a mapping")
-    v02_contract = _load_v02_contract(manifest_path, payload)
-    stress_contract = _load_stress_smoke_contract(manifest_path, payload)
+    v02_contract = _load_v02_contract(
+        manifest_path,
+        payload,
+        repository_root=repository_root,
+    )
+    stress_contract = _load_stress_smoke_contract(
+        manifest_path,
+        payload,
+        repository_root=repository_root,
+    )
 
     config_sha256 = str(release_metadata["campaign_config_sha256"] or "").strip()
     if not config_sha256:
@@ -1052,7 +1143,11 @@ def load_release_manifest(path: str | Path) -> BenchmarkReleaseManifest:
     seed_policy = payload.get("seed_policy")
     if not isinstance(seed_policy, dict):
         raise ValueError("seed_policy must be a mapping")
-    metrics = _load_manifest_metrics_section(manifest_path, payload)
+    metrics = _load_manifest_metrics_section(
+        manifest_path,
+        payload,
+        repository_root=repository_root,
+    )
     planner_keys, planner_groups = _load_manifest_planner_section(payload)
     expected_kinematics_matrix, expected_holonomic_command_mode = _load_manifest_kinematics_section(
         payload
@@ -1062,8 +1157,13 @@ def load_release_manifest(path: str | Path) -> BenchmarkReleaseManifest:
     scenario_matrix_path, scenario_matrix_sha256 = _load_manifest_scenario_section(
         manifest_path,
         payload,
+        repository_root=repository_root,
     )
-    path_section = _load_manifest_paths_section(manifest_path, payload)
+    path_section = _load_manifest_paths_section(
+        manifest_path,
+        payload,
+        repository_root=repository_root,
+    )
 
     return BenchmarkReleaseManifest(
         path=manifest_path,
@@ -1104,24 +1204,34 @@ def validate_release_manifest(
     manifest: BenchmarkReleaseManifest,
     *,
     campaign_config: CampaignConfig | None = None,
+    repository_root: Path | None = None,
 ) -> dict[str, Any]:
     """Validate a release manifest against the referenced campaign config and files.
 
     Returns:
         Validation payload with status and problem list.
     """
-    cfg = campaign_config or load_campaign_config(manifest.canonical_campaign_config_path)
+    repository_root = (repository_root or get_repository_root()).resolve()
+    cfg = campaign_config or load_campaign_config(
+        manifest.canonical_campaign_config_path,
+        repository_root=repository_root,
+    )
     problems: list[str] = []
     _validate_release_hashes_and_assets(manifest, cfg, problems)
-    _validate_stress_smoke_contract(manifest, cfg, problems)
+    _validate_stress_smoke_contract(
+        manifest,
+        cfg,
+        problems,
+        repository_root=repository_root,
+    )
     _validate_release_campaign_contract(manifest, cfg, problems)
     _validate_release_seed_policy(manifest, cfg, problems)
     _validate_release_planners(manifest, cfg, problems)
-    _validate_v02_contract(manifest, cfg, problems)
+    _validate_v02_contract(manifest, cfg, problems, repository_root=repository_root)
     _validate_release_metadata_contract(manifest, problems)
 
     return {
-        "manifest_path": _repo_relative(manifest.path),
+        "manifest_path": _repo_relative(manifest.path, repository_root),
         "status": "valid" if not problems else "invalid",
         "problem_count": len(problems),
         "problems": problems,
@@ -1129,7 +1239,10 @@ def validate_release_manifest(
 
 
 def _scenario_matrix_include_paths(  # noqa: C901
-    path: Path, *, visited: set[Path] | None = None
+    path: Path,
+    *,
+    visited: set[Path] | None = None,
+    repository_root: Path | None = None,
 ) -> tuple[Path, ...]:
     """Resolve scenario matrix include files for stress-contract binding.
 
@@ -1140,8 +1253,9 @@ def _scenario_matrix_include_paths(  # noqa: C901
     if _has_symlink_component(path):
         raise ValueError(f"scenario matrix include path contains a symlink: {path}")
     resolved = path.resolve()
+    root = (repository_root or get_repository_root()).resolve()
     try:
-        resolved.relative_to(get_repository_root().resolve())
+        resolved.relative_to(root)
     except ValueError as exc:
         raise ValueError(f"scenario matrix include escapes repository: {resolved}") from exc
     if resolved in seen:
@@ -1170,7 +1284,13 @@ def _scenario_matrix_include_paths(  # noqa: C901
         nested: list[Path] = []
         for include in includes:
             nested.append(include)
-            nested.extend(_scenario_matrix_include_paths(include, visited=seen))
+            nested.extend(
+                _scenario_matrix_include_paths(
+                    include,
+                    visited=seen,
+                    repository_root=root,
+                )
+            )
         return tuple(nested)
     finally:
         seen.remove(resolved)
@@ -1180,6 +1300,8 @@ def _validate_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
     manifest: BenchmarkReleaseManifest,
     cfg: CampaignConfig,
     problems: list[str],
+    *,
+    repository_root: Path | None = None,
 ) -> None:
     """Validate diagnostic stress source assets without pinning the final commit."""
     if manifest.release_kind != DIAGNOSTIC_STRESS_RELEASE_KIND:
@@ -1220,7 +1342,7 @@ def _validate_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
     ):
         problems.append("stress smoke campaign kinematics must be differential_drive only")
     try:
-        scenarios = _load_campaign_scenarios(cfg)
+        scenarios = _load_campaign_scenarios(cfg, repository_root=repository_root)
         scenario_ids = tuple(
             str(
                 scenario.get("id") or scenario.get("scenario_id") or scenario.get("name") or ""
@@ -1308,7 +1430,12 @@ def _validate_stress_smoke_contract(  # noqa: C901, PLR0912, PLR0915
                 )
 
     try:
-        included_paths = set(_scenario_matrix_include_paths(manifest.scenario_matrix_path))
+        included_paths = set(
+            _scenario_matrix_include_paths(
+                manifest.scenario_matrix_path,
+                repository_root=repository_root,
+            )
+        )
     except (OSError, ValueError, TypeError, yaml.YAMLError) as exc:
         problems.append(f"stress smoke scenario includes cannot be resolved: {exc}")
     else:
@@ -1486,14 +1613,33 @@ def _validate_release_planners(
         problems.append("planners.groups does not match campaign config")
 
 
-def _validate_v02_contract(  # noqa: C901
+def _validate_v02_contract(  # noqa: C901, PLR0912
     manifest: BenchmarkReleaseManifest,
     cfg: CampaignConfig,
     problems: list[str],
+    *,
+    repository_root: Path | None = None,
 ) -> None:
     """Validate stricter hashes, matrix size, seed inventory, and DOI separation for v0.2."""
     if manifest.schema_version != RELEASE_MANIFEST_SCHEMA_VERSION_V0_2:
         return
+    if manifest.source_sha is not None and _GIT_SHA_RE.fullmatch(manifest.source_sha) is None:
+        problems.append("source_sha must be an exact 40-character Git SHA")
+    if (
+        manifest.planning_base_sha is not None
+        and _GIT_SHA_RE.fullmatch(manifest.planning_base_sha) is None
+    ):
+        problems.append("planning_base_sha must be an exact 40-character Git SHA")
+    if manifest.planning_base_sha is not None and (
+        manifest.latest_main_base_commit != manifest.planning_base_sha
+    ):
+        problems.append("planning_base_sha does not match latest_main_base_commit")
+    if (
+        manifest.release_kind == "benchmark-data"
+        and manifest.source_sha is None
+        and manifest.release_tag != HISTORICAL_RELEASE_TAG
+    ):
+        problems.append("source_sha is required for future benchmark-data v0.2 releases")
     path_hashes = (
         (manifest.suite_policy_path, manifest.suite_policy_sha256, "scenario.suite_policy_sha256"),
         (
@@ -1512,7 +1658,7 @@ def _validate_v02_contract(  # noqa: C901
         or _sha256_file(seed_sets_path) != manifest.seed_sets_sha256
     ):
         problems.append("seed_policy.seed_sets_sha256 does not match campaign config")
-    scenarios = _load_campaign_scenarios(cfg)
+    scenarios = _load_campaign_scenarios(cfg, repository_root=repository_root)
     resolved_seeds = tuple(_resolved_seed_inventory(scenarios))
     if resolved_seeds != manifest.resolved_seeds:
         problems.append("seed_policy.resolved_seeds does not match campaign config")
@@ -1642,6 +1788,25 @@ def validate_stress_smoke_runtime_identity(
     }
 
 
+def _resolve_release_source_sha(
+    manifest: BenchmarkReleaseManifest, source_commit: str | None
+) -> str | None:
+    """Resolve one validated final source SHA for emitted release artifacts.
+
+    Returns:
+        One normalized final source SHA, or ``None`` when no source is declared.
+    """
+    explicit = str(source_commit).strip().lower() if source_commit is not None else None
+    declared = manifest.source_sha
+    if explicit is not None and _GIT_SHA_RE.fullmatch(explicit) is None:
+        raise ValueError("source_commit must be an exact 40-character Git SHA")
+    if declared is not None and _GIT_SHA_RE.fullmatch(declared) is None:
+        raise ValueError("manifest source_sha must be an exact 40-character Git SHA")
+    if explicit is not None and declared is not None and explicit != declared:
+        raise ValueError("source_commit does not match manifest source_sha")
+    return explicit or declared
+
+
 def build_release_provenance(
     manifest: BenchmarkReleaseManifest,
     *,
@@ -1682,8 +1847,14 @@ def build_release_provenance(
         ),
         "metadata_sha256": manifest.metadata_sha256,
     }
-    if source_commit is not None:
-        payload["source_commit"] = str(source_commit).strip().lower()
+    source_sha = _resolve_release_source_sha(manifest, source_commit)
+    if source_sha is not None:
+        payload["source_sha"] = source_sha
+        # Keep the historical source_commit key for consumers of v0.1 while
+        # making source_sha the unambiguous release identity field.
+        payload["source_commit"] = source_sha
+    if manifest.planning_base_sha is not None:
+        payload["planning_base_sha"] = manifest.planning_base_sha
     if is_diagnostic_stress_smoke(manifest):
         payload["stress_smoke_contract"] = {
             "review_base_commit": manifest.stress_smoke_review_base_commit,
@@ -1849,8 +2020,12 @@ def build_resolved_release_manifest(
         },
         "release_kind": manifest.release_kind,
     }
-    if source_commit is not None:
-        payload["provenance"]["source_commit"] = str(source_commit).strip().lower()
+    source_sha = _resolve_release_source_sha(manifest, source_commit)
+    if source_sha is not None:
+        payload["provenance"]["source_sha"] = source_sha
+        payload["provenance"]["source_commit"] = source_sha
+    if manifest.planning_base_sha is not None:
+        payload["provenance"]["planning_base_sha"] = manifest.planning_base_sha
     if is_diagnostic_stress_smoke(manifest):
         payload["provenance"]["stress_smoke_contract"] = {
             "review_base_commit": manifest.stress_smoke_review_base_commit,

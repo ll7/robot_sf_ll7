@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from robot_sf.benchmark.release_publication_contract import (
+    _add_source_identity_blockers,
     validate_release_publication_contract,
 )
 
@@ -414,3 +415,70 @@ def test_missing_campaign_object_blocks_publication(tmp_path: Path) -> None:
 
     assert report["status"] == "blocked"
     assert any("missing object field 'campaign'" in blocker for blocker in report["blockers"])
+
+
+def test_source_identity_match_binds_future_tag_and_receipt() -> None:
+    """A future SHA-bearing tag passes only when every source surface agrees."""
+    source_sha = "a" * 40
+    tag = f"paper-matrix-future-{source_sha}"
+    campaign = {"git_hash": source_sha}
+    release_result = {
+        "benchmark_release": {"source_sha": source_sha},
+        "release_acceptance": {"source_commits": [source_sha]},
+    }
+    publication = {"provenance": {"repository": {"commit": source_sha}}}
+    release_manifest = {"provenance": {"source_sha": source_sha}}
+    receipt = {"source": {"execution_commit": source_sha}}
+    blockers: list[str] = []
+
+    _add_source_identity_blockers(
+        blockers,
+        expected_release_tag=tag,
+        summary={"benchmark_release": {"source_sha": source_sha}},
+        campaign=campaign,
+        release_result=release_result,
+        publication=publication,
+        release_manifest=release_manifest,
+        receipt=receipt,
+    )
+
+    assert blockers == []
+
+
+def test_source_identity_mismatch_between_manifest_and_receipt_blocks() -> None:
+    """A receipt source drift cannot be hidden by matching manifest metadata."""
+    source_sha = "a" * 40
+    tag = f"paper-matrix-future-{source_sha}"
+    blockers: list[str] = []
+
+    _add_source_identity_blockers(
+        blockers,
+        expected_release_tag=tag,
+        summary={"benchmark_release": {"source_sha": source_sha}},
+        campaign={"git_hash": source_sha},
+        release_result={"benchmark_release": {"source_sha": source_sha}},
+        publication={"provenance": {"repository": {"commit": source_sha}}},
+        release_manifest={"provenance": {"source_sha": source_sha}},
+        receipt={"source": {"execution_commit": "b" * 40}},
+    )
+
+    assert any("source SHA fields disagree" in blocker for blocker in blockers)
+
+
+def test_historical_source_identity_is_verified_without_retagging() -> None:
+    """The published stale-suffix tag is checked against its recorded source only."""
+    source_sha = "b1d5ab6de708385c0828c99501a9d1c29727ec11"
+    blockers: list[str] = []
+
+    _add_source_identity_blockers(
+        blockers,
+        expected_release_tag="paper-matrix-v2-h600-s30-2026-08-cd831d7582c1",
+        summary={"benchmark_release": {"source_sha": source_sha}},
+        campaign={"git_hash": source_sha},
+        release_result={"benchmark_release": {"source_sha": source_sha}},
+        publication={"provenance": {"repository": {"commit": source_sha}}},
+        release_manifest={},
+        receipt={"source": {"execution_commit": source_sha}},
+    )
+
+    assert blockers == []

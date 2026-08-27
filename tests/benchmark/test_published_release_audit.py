@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import io
 import json
@@ -13,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.benchmark import published_release_audit as published_audit_module
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.published_release_audit import (
     NETWORK_SCHEMA,
@@ -511,6 +513,91 @@ def test_network_audit_rejects_doi_drift_and_secret_headers(tmp_path: Path) -> N
     assert "secret" not in json.dumps(receipt)
 
 
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"tag": "bad/tag"}, "path-safe"),
+        ({"repo": "bad-repository"}, "owner/name"),
+        ({"doi": "not-a-doi"}, "10.5281"),
+        ({"max_download_bytes": 0}, "max_download_bytes"),
+        ({"download_chunk_size": 0}, "download_chunk_size"),
+        ({"timeout": 0}, "timeout"),
+        ({"github_api_base": "https://github.test?token=secret"}, "query"),
+    ],
+)
+def test_network_audit_rejects_invalid_inputs(
+    tmp_path: Path, overrides: dict[str, object], message: str
+) -> None:
+    _, _, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    kwargs: dict[str, object] = {
+        "tag": tag,
+        "doi": "10.5281/zenodo.1234567",
+        "github_api_base": github_base,
+        "zenodo_api_base": zenodo_base,
+    }
+    kwargs.update(overrides)
+    receipt = audit_published_network(**kwargs)  # type: ignore[arg-type]
+    assert receipt["status"] == "invalid"
+    assert message in receipt["problems"][0]
+
+
+@pytest.mark.parametrize(
+    "status_code, status", [(503, "unavailable"), (404, "invalid"), (302, "invalid")]
+)
+def test_network_audit_maps_public_http_statuses(
+    tmp_path: Path, status_code: int, status: str
+) -> None:
+    session, _, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    release_url = next(url for url in session.routes if "/releases/tags/" in url)
+    release = session.routes[release_url]
+    assert isinstance(release, _PublicResponse)
+    release.status_code = status_code
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+    assert receipt["status"] == status
+    assert receipt["audit"] is None
+
+
+@pytest.mark.parametrize("variant", ["no_assets", "malformed_asset", "duplicate", "size", "digest"])
+def test_network_audit_rejects_malformed_github_assets(tmp_path: Path, variant: str) -> None:
+    session, _, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    release_url = next(url for url in session.routes if "/releases/tags/" in url)
+    release = session.routes[release_url]
+    assert isinstance(release, _PublicResponse)
+    payload = copy.deepcopy(release._payload)
+    assert isinstance(payload, dict)
+    if variant == "no_assets":
+        payload["assets"] = []
+    elif variant == "malformed_asset":
+        payload["assets"] = ["not-an-object"]
+    elif variant == "duplicate":
+        payload["assets"] = [payload["assets"][0], copy.deepcopy(payload["assets"][0])]
+    elif variant == "size":
+        payload["assets"][0]["size"] = -1
+    else:
+        payload["assets"][0]["digest"] = "sha256:not-a-digest"
+    release._payload = payload
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+    assert receipt["status"] == "invalid"
+
+
+def test_network_audit_public_helpers_fail_closed(monkeypatch) -> None:
+    monkeypatch.setattr(published_audit_module, "try_import", lambda _: None)
+    with pytest.raises(published_audit_module.PublishedAuditUnavailable, match="requests"):
+        published_audit_module._prepare_public_session(None)
+
+
 def test_release_cli_exposes_network_audit_and_writes_receipt(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
@@ -551,3 +638,74 @@ def test_release_cli_exposes_network_audit_and_writes_receipt(
     assert seen["tag"] == "tag"
     assert json.loads(output.read_text()) == receipt
     assert json.loads(capsys.readouterr().out) == receipt
+
+
+@pytest.mark.parametrize("status, expected_code", [("invalid", 1), ("unavailable", 2)])
+def test_release_cli_maps_network_failure_statuses(
+    tmp_path: Path, monkeypatch, capsys, status: str, expected_code: int
+) -> None:
+    from robot_sf import cli
+
+    receipt = {
+        "schema": NETWORK_SCHEMA,
+        "ok": False,
+        "status": status,
+        "tag": "tag",
+        "doi": "10.5281/zenodo.1",
+        "problems": ["public service condition"],
+    }
+    monkeypatch.setattr(
+        "robot_sf.release_cli.published_release_audit.audit_published_network",
+        lambda **kwargs: receipt,
+    )
+    code = cli.main(
+        [
+            "release",
+            "audit-published",
+            "--tag",
+            "tag",
+            "--doi",
+            "10.5281/zenodo.1",
+        ]
+    )
+    assert code == expected_code
+    assert json.loads(capsys.readouterr().out) == receipt
+
+
+def test_release_cli_returns_two_when_receipt_write_fails(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    from robot_sf import cli
+
+    receipt = {
+        "schema": NETWORK_SCHEMA,
+        "ok": True,
+        "status": "pass",
+        "tag": "tag",
+        "doi": "10.5281/zenodo.1",
+        "problems": [],
+    }
+    monkeypatch.setattr(
+        "robot_sf.release_cli.published_release_audit.audit_published_network",
+        lambda **kwargs: receipt,
+    )
+    monkeypatch.setattr(
+        "robot_sf.release_cli.published_release_audit.write_network_receipt",
+        lambda *args: (_ for _ in ()).throw(OSError("write denied")),
+    )
+    code = cli.main(
+        [
+            "release",
+            "audit-published",
+            "--tag",
+            "tag",
+            "--doi",
+            "10.5281/zenodo.1",
+            "--output",
+            str(tmp_path / "receipt.json"),
+        ]
+    )
+    assert code == 2
+    output = json.loads(capsys.readouterr().out)
+    assert output["status"] == "error"
+    assert "write denied" not in json.dumps(output)

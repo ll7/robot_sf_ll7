@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 from robot_sf.benchmark import release_doctor
 
@@ -21,6 +23,87 @@ def _result(
 ) -> subprocess.CompletedProcess[str]:
     """Build a deterministic subprocess result fixture."""
     return subprocess.CompletedProcess(command, returncode, stdout, stderr)
+
+
+def _private_ops_fixture(tmp_path: Path) -> tuple[Path, dict[str, object], str]:
+    """Create a packet and object-addressed private ledger fixture."""
+    repository = tmp_path / "private-ops"
+    (repository / "ops/jobs").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "doctor@example.invalid"], cwd=repository, check=True
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "release-doctor-test"], cwd=repository, check=True
+    )
+    source_sha = "a" * 40
+    result_sha = "b" * 64
+    preservation_sha = "c" * 64
+    queue_id = "runtime-queue-14884"
+    campaign = "runtime-campaign-14884"
+    result_path = "output/runtime/release_result.json"
+    queue = {
+        "queue_id": queue_id,
+        "campaign": campaign,
+        "state": "complete",
+        "expected_public_commit": source_sha,
+        "preservation_state": "preserved",
+        "preservation_artifact": "wandb://example/runtime:v1",
+        "preservation_digest": f"sha256:{preservation_sha}",
+        "submit_args": (f"--sbatch-arg --export=ALL,SMOKE_RELEASE_RESULT_PATH={result_path}"),
+        "execution_status": "passed",
+        "artifact_status": "verified",
+        "evaluation_status": "canary_passed",
+        "completion_status": "complete",
+    }
+    job = {
+        "job_id": "14884",
+        "public_commit": source_sha,
+        "campaign": campaign,
+        "state": "retrieved",
+        "slurm_state": "COMPLETED",
+        "exit_code": "0:0",
+        "derived_exit_code": "0:0",
+        "startup_status": "started",
+        "execution_status": "passed",
+        "artifact_status": "verified",
+        "evaluation_status": "canary_passed",
+        "completion_status": "complete",
+        "evaluation_receipt_digest": f"sha256:{result_sha}",
+        "submitted_at": "2026-08-25T08:00:00+00:00",
+    }
+    (repository / "ops/jobs/jobs.yaml").write_text(yaml.safe_dump([job]), encoding="utf-8")
+    (repository / "ops/jobs/queue.yaml").write_text(yaml.safe_dump([queue]), encoding="utf-8")
+    subprocess.run(
+        ["git", "add", "ops/jobs/jobs.yaml", "ops/jobs/queue.yaml"], cwd=repository, check=True
+    )
+    subprocess.run(["git", "commit", "-qm", "fixture"], cwd=repository, check=True)
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repository, text=True
+    ).strip()
+    packet = {
+        "execution_contract": {"private_ops_reviewed_base_commit": commit},
+        "identity": {
+            "public_source_commit": source_sha,
+            "runtime_smoke_queue_id": queue_id,
+            "runtime_smoke_campaign_id": campaign,
+            "runtime_smoke_receipt_path": result_path,
+            "runtime_smoke_receipt_sha256": result_sha,
+        },
+        "accepted_runtime_smoke": {
+            "status": "accepted_preserved_verified",
+            "job_id": "14884",
+            "queue_id": queue_id,
+            "campaign_id": campaign,
+            "public_source_commit": source_sha,
+            "release_result_path": result_path,
+            "release_result_sha256": result_sha,
+            "preservation_artifact": "wandb://example/runtime:v1",
+            "preservation_manifest_digest": f"sha256:{preservation_sha}",
+            "fallback_or_degraded_rows": 0,
+        },
+    }
+    return repository, packet, commit
 
 
 @pytest.mark.parametrize(
@@ -65,6 +148,173 @@ def test_git_check_fails_when_git_commands_are_unavailable(
     check = release_doctor._git_check(tmp_path, "a" * 40)
     assert check.status == "fail"
     assert "could not be inspected" in check.summary
+
+
+def test_private_ops_evidence_reads_packet_pinned_git_blobs_only(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Working-tree edits cannot replace exact job/queue blobs used for freshness."""
+    repository, packet, commit = _private_ops_fixture(tmp_path)
+    monkeypatch.setattr(
+        release_doctor,
+        "_utc_now",
+        lambda: datetime(2026, 8, 25, 12, 0, tzinfo=UTC),
+    )
+    queue_path = repository / "ops/jobs/queue.yaml"
+    queue_path.write_text("- queue_id: tampered\n", encoding="utf-8")
+    evidence, problems = release_doctor._private_ops_evidence(packet, "a" * 40, repository)
+    assert not problems
+    assert evidence is not None
+    assert evidence.reviewed_commit == commit
+    assert evidence.runtime_smoke_job["job_id"] == "14884"
+    assert evidence.runtime_smoke_queue["state"] == "complete"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "summary"),
+    [
+        ("runtime_smoke_queue_id", "other-queue", "queue identity"),
+        ("runtime_smoke_campaign_id", "other-campaign", "campaign identity"),
+    ],
+)
+def test_private_ops_evidence_rejects_packet_identity_alias_drift(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    field: str,
+    value: str,
+    summary: str,
+) -> None:
+    """Packet identity aliases must match accepted smoke and pinned ledger rows."""
+    repository, packet, _ = _private_ops_fixture(tmp_path)
+    monkeypatch.setattr(
+        release_doctor,
+        "_utc_now",
+        lambda: datetime(2026, 8, 25, 12, 0, tzinfo=UTC),
+    )
+    packet["identity"][field] = value
+
+    evidence, problems = release_doctor._private_ops_evidence(packet, "a" * 40, repository)
+
+    assert evidence is None
+    assert any(summary in problem for problem in problems)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "stale",
+        "future",
+        "result_digest",
+        "job_source",
+        "queue_state",
+        "duplicate_job",
+    ],
+)
+def test_private_ops_evidence_rejects_stale_or_inconsistent_terminal_rows(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, mutation: str
+) -> None:
+    """Freshness and every packet/ledger identity binding fail closed."""
+    repository, packet, _ = _private_ops_fixture(tmp_path)
+    monkeypatch.setattr(
+        release_doctor,
+        "_utc_now",
+        lambda: datetime(2026, 8, 25, 12, 0, tzinfo=UTC),
+    )
+    if mutation in {"stale", "future"}:
+        submitted_at = (
+            "2026-08-24T11:59:59+00:00" if mutation == "stale" else "2026-08-25T12:00:01+00:00"
+        )
+        jobs = yaml.safe_load((repository / "ops/jobs/jobs.yaml").read_text(encoding="utf-8"))
+        jobs[0]["submitted_at"] = submitted_at
+        (repository / "ops/jobs/jobs.yaml").write_text(yaml.safe_dump(jobs), encoding="utf-8")
+    elif mutation == "result_digest":
+        jobs = yaml.safe_load((repository / "ops/jobs/jobs.yaml").read_text(encoding="utf-8"))
+        jobs[0]["evaluation_receipt_digest"] = "sha256:" + "d" * 64
+        (repository / "ops/jobs/jobs.yaml").write_text(yaml.safe_dump(jobs), encoding="utf-8")
+    elif mutation == "job_source":
+        jobs = yaml.safe_load((repository / "ops/jobs/jobs.yaml").read_text(encoding="utf-8"))
+        jobs[0]["public_commit"] = "e" * 40
+        (repository / "ops/jobs/jobs.yaml").write_text(yaml.safe_dump(jobs), encoding="utf-8")
+    elif mutation == "queue_state":
+        queues = yaml.safe_load((repository / "ops/jobs/queue.yaml").read_text(encoding="utf-8"))
+        queues[0]["state"] = "failed"
+        (repository / "ops/jobs/queue.yaml").write_text(yaml.safe_dump(queues), encoding="utf-8")
+    elif mutation == "duplicate_job":
+        jobs = yaml.safe_load((repository / "ops/jobs/jobs.yaml").read_text(encoding="utf-8"))
+        jobs.append(dict(jobs[0]))
+        (repository / "ops/jobs/jobs.yaml").write_text(yaml.safe_dump(jobs), encoding="utf-8")
+    subprocess.run(
+        ["git", "add", "ops/jobs/jobs.yaml", "ops/jobs/queue.yaml"],
+        cwd=repository,
+        check=True,
+    )
+    subprocess.run(["git", "commit", "-qm", f"mutation-{mutation}"], cwd=repository, check=True)
+    packet["execution_contract"]["private_ops_reviewed_base_commit"] = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repository, text=True
+    ).strip()
+    evidence, problems = release_doctor._private_ops_evidence(packet, "a" * 40, repository)
+    assert evidence is None
+    assert problems
+
+
+def test_legacy_packet_aliases_normalize_only_after_strict_equality(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Legacy inputs/startup fields are synthesized only from agreeing aliases."""
+    repository, packet, _ = _private_ops_fixture(tmp_path)
+    monkeypatch.setattr(
+        release_doctor,
+        "_utc_now",
+        lambda: datetime(2026, 8, 25, 12, 0, tzinfo=UTC),
+    )
+    evidence, problems = release_doctor._private_ops_evidence(packet, "a" * 40, repository)
+    assert evidence is not None, problems
+    wrapper_sha = "f" * 64
+    helper_sha = "e" * 64
+    sentinel_sha = "d" * 64
+    packet["execution_contract"].update(
+        {
+            "canonical_entrypoint": "/private/ops/submit_and_record.sh",
+            "private_script": "/private/ops/submit_release.sh",
+            "private_ops_reviewed_base_commit": evidence.reviewed_commit,
+        }
+    )
+    packet["identity"].update(
+        {
+            "private_wrapper_sha256": wrapper_sha,
+            "admission_helper_sha256": helper_sha,
+            "startup_sentinel_sha256": sentinel_sha,
+        }
+    )
+    queue_exports = {
+        "RELEASE_RUNTIME_SMOKE_RECEIPT_PATH": ["output/runtime/release_result.json"],
+        "RELEASE_RUNTIME_SMOKE_RECEIPT_SHA256": ["b" * 64],
+        "RELEASE_WRAPPER_SHA256": [wrapper_sha],
+        "RELEASE_STARTUP_HELPER_SHA256": [helper_sha],
+        "RELEASE_STARTUP_SENTINEL_SHA256": [sentinel_sha],
+        "RELEASE_EXPECTED_PRIVATE_OPS_COMMIT": [evidence.reviewed_commit],
+    }
+    normalized, problems = release_doctor._normalize_legacy_packet_aliases(
+        packet,
+        expected_sha="a" * 40,
+        private_evidence=evidence,
+        packet_queue_exports=queue_exports,
+    )
+    assert not problems
+    assert normalized["inputs"]["source"]["public_commit"] == "a" * 40
+    assert normalized["inputs"]["runtime_smoke_receipt"]["sha256"] == "b" * 64
+    assert normalized["inputs"]["private_wrapper"]["sha256"] == wrapper_sha
+    assert normalized["execution_contract"]["startup_sentinel_required"] is True
+    assert normalized["sentinel_traceability"]["required"] is True
+
+    queue_exports["RELEASE_WRAPPER_SHA256"] = ["0" * 64]
+    _, problems = release_doctor._normalize_legacy_packet_aliases(
+        packet,
+        expected_sha="a" * 40,
+        private_evidence=evidence,
+        packet_queue_exports=queue_exports,
+    )
+    assert any("private wrapper hash" in problem for problem in problems)
 
 
 @pytest.mark.parametrize(
@@ -579,6 +829,91 @@ def test_ci_check_accepts_successful_run_despite_later_concurrency_cancellations
     assert "green" in check.summary
     assert "32807916917" in check.summary
     assert "32807916918" in check.summary
+
+
+def test_ci_check_blocks_nonterminal_cancellation_even_with_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Only completed cancellations are tolerated after independent success."""
+    expected_sha = "a" * 40
+    result = _result(
+        [],
+        stdout=json.dumps(
+            [
+                {
+                    "databaseId": 60001,
+                    "headSha": expected_sha,
+                    "status": "queued",
+                    "conclusion": "cancelled",
+                    "workflowName": "CI",
+                },
+                {
+                    "databaseId": 60002,
+                    "headSha": expected_sha,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "workflowName": "CI",
+                },
+                {
+                    "databaseId": 60003,
+                    "headSha": expected_sha,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "workflowName": "CodeQL",
+                },
+            ]
+        ),
+    )
+    monkeypatch.setattr(release_doctor, "_run", lambda *args: result)
+
+    check = release_doctor._ci_check(tmp_path, expected_sha)
+
+    assert check.status == "fail"
+    assert "CI pending" in check.summary
+    assert "blocking exact-source run IDs: CI=60001" in check.summary
+
+
+def test_ci_check_blocks_genuine_failure_alongside_success_for_same_workflow(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A later genuine failure cannot be hidden by an earlier same-workflow success."""
+    expected_sha = "a" * 40
+    result = _result(
+        [],
+        stdout=json.dumps(
+            [
+                {
+                    "databaseId": 70001,
+                    "headSha": expected_sha,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "workflowName": "CI",
+                },
+                {
+                    "databaseId": 70002,
+                    "headSha": expected_sha,
+                    "status": "completed",
+                    "conclusion": "failure",
+                    "workflowName": "CI",
+                },
+                {
+                    "databaseId": 70003,
+                    "headSha": expected_sha,
+                    "status": "completed",
+                    "conclusion": "success",
+                    "workflowName": "CodeQL",
+                },
+            ]
+        ),
+    )
+    monkeypatch.setattr(release_doctor, "_run", lambda *args: result)
+
+    check = release_doctor._ci_check(tmp_path, expected_sha)
+
+    assert check.status == "fail"
+    assert "CI failed" in check.summary
+    assert "supporting exact-source run IDs: CI=70001, CodeQL=70003" in check.summary
+    assert "blocking exact-source run IDs: CI=70002" in check.summary
 
 
 def test_ci_check_fails_closed_when_only_cancelled_runs_exist(

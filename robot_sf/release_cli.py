@@ -111,6 +111,14 @@ def build_subparser(subparsers: Any) -> None:
     doctor.add_argument("--private-launch-packet", type=Path)
     doctor.add_argument("--private-queue", type=Path)
     doctor.add_argument(
+        "--private-ops-repository",
+        type=Path,
+        help=(
+            "Trusted private-ops Git checkout used only for object-addressed ledger reads at "
+            "the packet-pinned commit."
+        ),
+    )
+    doctor.add_argument(
         "--post-execution",
         action="store_true",
         help=(
@@ -293,6 +301,11 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
             checkpoint_path_map=getattr(args, "checkpoint_path_map", None),
             private_launch_packet=_repo_relative_path(args.private_launch_packet, repo_root),
             private_queue=_repo_relative_path(getattr(args, "private_queue", None), repo_root),
+            private_ops_repository=(
+                args.private_ops_repository.resolve()
+                if getattr(args, "private_ops_repository", None) is not None
+                else None
+            ),
             dissertation=_repo_relative_path(args.dissertation, repo_root),
             token_file=_repo_relative_path(args.token_file, repo_root),
             expected_cells=args.expected_cells,

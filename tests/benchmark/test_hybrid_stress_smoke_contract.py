@@ -113,6 +113,14 @@ def test_stress_contract_pins_source_axes_and_fail_closed_policy() -> None:
     assert contract["expected_dt"] == pytest.approx(0.1)
     assert contract["expected_kinematics"] == "differential_drive"
     assert tuple(contract["required_hybrid_arms"]) == EXPECTED_HYBRID_ARMS
+    assert [witness["branch_key"] for witness in contract["branch_witnesses"]] == [
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield|francis2023_leave_group|orca",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard|francis2023_leave_group|orca",
+    ]
+    assert [witness["config_sha256"] for witness in contract["branch_witnesses"]] == [
+        "895cd46ff26c0b03fd51d5e5fb6e77f16ad2c6f6cd1fcead7089c8dda8c7966d",
+        "90bc08cffe40e7f5b38c371db7c2a22790970c6817792dc7865686686c0a7dc3",
+    ]
     assert tuple(contract["forbidden_row_markers"]) == FORBIDDEN_STATUSES
     assert tuple(contract["forbidden_runtime_markers"]) == FORBIDDEN_RUNTIME_MARKERS
     assert contract["fail_closed"] is True
@@ -475,6 +483,7 @@ def test_stress_resolved_provenance_contains_pinned_assets_and_runtime_commit() 
     assert contract["review_base_commit"] == SOURCE_COMMIT
     assert len(contract["scenario_sources"]) == 5
     assert len(contract["hybrid_configs"]) == 4
+    assert len(contract["branch_witnesses"]) == 2
 
     provenance = build_release_provenance(
         manifest,

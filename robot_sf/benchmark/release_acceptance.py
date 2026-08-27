@@ -35,6 +35,10 @@ from robot_sf.benchmark.camera_ready._run_state import (
     validate_campaign_integrity,
 )
 from robot_sf.benchmark.camera_ready_campaign import load_campaign_config
+from robot_sf.benchmark.effective_algorithm_branches import (
+    check_witness_coverage,
+    enumerate_effective_branches,
+)
 from robot_sf.benchmark.fallback_policy import runtime_fallback_or_degraded_marker
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.map_runner.map_runner_trace import _scenario_id as _producer_scenario_id
@@ -52,6 +56,7 @@ from robot_sf.benchmark.release_protocol import (
     STRESS_SMOKE_EXPECTED_PLANNER_ARMS,
     STRESS_SMOKE_EXPECTED_SCENARIO_IDS,
     STRESS_SMOKE_EXPECTED_SEED,
+    StressSmokeBranchWitness,
     resolve_campaign_artifact_path,
 )
 from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
@@ -1968,6 +1973,154 @@ def _full_release_candidate_config(  # noqa: C901
         return None, None, f"canonical planner policy config validation failed: {safe_reason}"
 
 
+def _stress_effective_branch_coverage(  # noqa: C901, PLR0912, PLR0915
+    *,
+    manifest: Any,
+    campaign_config: Any,
+    source_repository_root: Path | None = None,
+) -> dict[str, Any]:
+    """Check every pinned stress candidate override against manifest witnesses.
+
+    The five executed stress scenarios intentionally remain bounded.  Branches are instead
+    enumerated over the complete set of pinned hybrid candidate configs, so an override for an
+    omitted scenario cannot silently evade diagnostic admission.  Witnesses carry the same
+    candidate path/hash binding as the manifest pin and are checked by the shared branch helper.
+
+    Returns:
+        JSON-safe branch inventory, witness inventory, and deterministic blockers.
+    """
+    blockers: list[str] = []
+    branch_records: list[dict[str, str]] = []
+    branches: list[dict[str, str]] = []
+    trusted_source_root = Path(source_repository_root or get_repository_root()).resolve()
+    planners = {
+        str(getattr(planner, "key", "")).strip(): planner
+        for planner in getattr(campaign_config, "planners", ())
+    }
+    pins = tuple(getattr(manifest, "stress_smoke_hybrid_config_pins", ()))
+    pins_by_arm = {
+        str(getattr(pin, "planner_key", "")).strip(): pin
+        for pin in pins
+        if str(getattr(pin, "planner_key", "")).strip()
+    }
+
+    for pin in pins:
+        arm = str(getattr(pin, "planner_key", "")).strip()
+        planner_spec = planners.get(arm)
+        if planner_spec is None:
+            _append_blocker(blockers, f"effective branch config names unknown planner arm {arm!r}")
+            continue
+        config_path, candidate_config, config_error = _full_release_candidate_config(
+            planner_spec=planner_spec,
+            source_repository_root=trusted_source_root,
+            allowed_scenario_ids=None,
+        )
+        if config_error is not None:
+            _append_blocker(blockers, f"effective branch config for {arm!r}: {config_error}")
+            continue
+        if config_path is None or not isinstance(candidate_config, Mapping):
+            _append_blocker(blockers, f"effective branch config for {arm!r} is unavailable")
+            continue
+        if config_path.resolve() != pin.path.resolve():
+            _append_blocker(
+                blockers,
+                f"effective branch config path does not match its pin for {arm!r}",
+            )
+        try:
+            observed_config_sha256 = sha256_file(config_path)
+        except OSError:
+            observed_config_sha256 = ""
+            _append_blocker(blockers, f"effective branch config cannot be read for {arm!r}")
+        if observed_config_sha256 != str(getattr(pin, "sha256", "")).strip().lower():
+            _append_blocker(
+                blockers, f"effective branch config hash does not match its pin for {arm!r}"
+            )
+
+        candidate_payload = deepcopy(dict(candidate_config))
+        candidate_payload["id"] = arm
+        candidate_payload.setdefault("algo", getattr(planner_spec, "algo", ""))
+        raw_overrides = candidate_payload.get("scenario_algo_overrides")
+        if raw_overrides is not None and not isinstance(raw_overrides, Mapping):
+            _append_blocker(blockers, f"scenario_algo_overrides must be a mapping for {arm!r}")
+            continue
+        if isinstance(raw_overrides, Mapping):
+            for scenario_id, override in raw_overrides.items():
+                if not isinstance(scenario_id, str) or not scenario_id.strip():
+                    _append_blocker(
+                        blockers, f"scenario_algo_overrides has an invalid key for {arm!r}"
+                    )
+                elif not isinstance(override, Mapping):
+                    _append_blocker(
+                        blockers,
+                        f"scenario_algo_overrides[{scenario_id!r}] must be a mapping for {arm!r}",
+                    )
+        enumerated = enumerate_effective_branches(candidate_payload, allowed_scenario_ids=None)
+        for branch in enumerated:
+            branch_copy = {
+                **branch,
+                "config_path": str(pin.path),
+                "config_sha256": str(getattr(pin, "sha256", "")).strip().lower(),
+            }
+            branches.append(branch)
+            branch_records.append(branch_copy)
+
+    witness_records: list[dict[str, Any]] = []
+    for index, witness in enumerate(getattr(manifest, "stress_smoke_branch_witnesses", ())):
+        if isinstance(witness, StressSmokeBranchWitness):
+            record = {
+                "kind": witness.kind,
+                "arm": witness.arm,
+                "scenario": witness.scenario,
+                "algorithm": witness.algorithm,
+                "branch_key": witness.branch_key,
+                "config_path": str(witness.config_path),
+                "config_sha256": witness.config_sha256,
+            }
+        elif isinstance(witness, Mapping):
+            record = dict(witness)
+        else:
+            _append_blocker(blockers, f"branch witness {index} is not a mapping")
+            continue
+        witness_records.append(record)
+        arm = str(record.get("arm", "")).strip()
+        pin = pins_by_arm.get(arm)
+        if pin is None:
+            _append_blocker(blockers, f"branch witness {index} names unknown planner arm {arm!r}")
+            continue
+        config_path = str(record.get("config_path", "")).strip()
+        if config_path != str(pin.path):
+            _append_blocker(
+                blockers, f"branch witness {index} config path does not match its arm pin"
+            )
+        config_sha256 = str(record.get("config_sha256", "")).strip().lower()
+        if config_sha256 != str(getattr(pin, "sha256", "")).strip().lower():
+            _append_blocker(
+                blockers, f"branch witness {index} config hash does not match its arm pin"
+            )
+
+    expected_keys = {
+        (branch["arm"], branch["scenario"], branch["algorithm"]) for branch in branches
+    }
+    for witness in witness_records:
+        arm = str(witness.get("arm", "")).strip()
+        scenario = str(witness.get("scenario", "")).strip()
+        algorithm = str(witness.get("algorithm", "")).strip()
+        if arm and scenario and algorithm and (arm, scenario, algorithm) not in expected_keys:
+            _append_blocker(
+                blockers,
+                "diagnostic witness names an unconfigured effective branch "
+                f"{arm}|{scenario}|{algorithm}",
+            )
+    for blocker in check_witness_coverage(branches, witness_records):
+        _append_blocker(blockers, blocker)
+
+    return {
+        "branches": branch_records,
+        "witnesses": witness_records,
+        "blockers": blockers,
+    }
+
+
 def _full_release_row_contract_blockers(
     row: Mapping[str, Any],
     *,
@@ -2306,6 +2459,12 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
         str(getattr(planner, "key", "")).strip(): planner
         for planner in getattr(campaign_config, "planners", ())
     }
+    branch_coverage = _stress_effective_branch_coverage(
+        manifest=manifest,
+        campaign_config=campaign_config,
+    )
+    for blocker in branch_coverage["blockers"]:
+        _append_blocker(blockers, f"effective algorithm branches: {blocker}")
     for run_index, run in enumerate(runs):
         if not isinstance(run, Mapping):
             _append_blocker(blockers, f"runs[{run_index}] must be an object")
@@ -2584,6 +2743,8 @@ def validate_diagnostic_stress_smoke_acceptance(  # noqa: C901, PLR0912, PLR0915
         "expected_episode_cells": expected_cells,
         "observed_episode_rows": observed_rows,
         "unique_episode_identities": len(identities),
+        "effective_algorithm_branches": branch_coverage["branches"],
+        "diagnostic_branch_witnesses": branch_coverage["witnesses"],
         "source_provenance": source_report,
         "claim_boundary": "diagnostic execution evidence only; no benchmark, ranking, or SNQI claim",
         "blockers": blockers,

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -277,6 +279,131 @@ def test_complete_stress_campaign_is_admitted(stress_fixture: tuple[Path, Any, A
     assert report["status"] == "valid", report["blockers"]
     assert report["diagnostic_success"] is True
     assert report["observed_episode_rows"] == 70
+    assert [branch["scenario"] for branch in report["effective_algorithm_branches"]] == [
+        "francis2023_leave_group",
+        "francis2023_leave_group",
+    ]
+    assert {
+        (witness["arm"], witness["algorithm"]) for witness in report["diagnostic_branch_witnesses"]
+    } == {
+        ("scenario_adaptive_hybrid_orca_v2_bottleneck_yield", "orca"),
+        ("scenario_adaptive_hybrid_orca_v2_collision_guard", "orca"),
+    }
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_blocker"),
+    (
+        (
+            "missing",
+            "scenario_adaptive_hybrid_orca_v2_collision_guard|francis2023_leave_group|orca",
+        ),
+        (
+            "wrong_arm",
+            "scenario_adaptive_hybrid_orca_v2_bottleneck_yield|francis2023_leave_group|orca",
+        ),
+        (
+            "wrong_algorithm",
+            "scenario_adaptive_hybrid_orca_v2_bottleneck_yield|francis2023_leave_group|orca",
+        ),
+        (
+            "unknown_kind",
+            "scenario_adaptive_hybrid_orca_v2_bottleneck_yield|francis2023_leave_group|orca",
+        ),
+        ("config_hash", "branch witness 0 config hash does not match its arm pin"),
+    ),
+)
+def test_branch_witness_identity_failures_are_closed(
+    stress_fixture: tuple[Path, Any, Any],
+    mutation: str,
+    expected_blocker: str,
+) -> None:
+    """A witness cannot cover a branch with the wrong identity or config pin."""
+    root, manifest, campaign_config = stress_fixture
+    witnesses = list(manifest.stress_smoke_branch_witnesses)
+    if mutation == "missing":
+        witnesses.pop()
+    elif mutation == "wrong_arm":
+        witnesses[0] = replace(
+            witnesses[0],
+            arm="wrong_arm",
+            branch_key="wrong_arm|francis2023_leave_group|orca",
+        )
+    elif mutation == "wrong_algorithm":
+        witnesses[0] = replace(
+            witnesses[0],
+            algorithm="hybrid_rule_local_planner",
+            branch_key=(
+                "scenario_adaptive_hybrid_orca_v2_bottleneck_yield|"
+                "francis2023_leave_group|hybrid_rule_local_planner"
+            ),
+        )
+    elif mutation == "unknown_kind":
+        witnesses[0] = replace(witnesses[0], kind="unsupported")
+    else:
+        witnesses[0] = replace(witnesses[0], config_sha256="0" * 64)
+    manifest = replace(manifest, stress_smoke_branch_witnesses=tuple(witnesses))
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "invalid"
+    assert any(expected_blocker in blocker for blocker in report["blockers"])
+
+
+def test_synthetic_effective_override_is_not_uncovered(
+    stress_fixture: tuple[Path, Any, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A newly added configured override is immediately a diagnostic blocker."""
+    root, manifest, campaign_config = stress_fixture
+    original = release_acceptance._full_release_candidate_config
+
+    def _candidate_with_synthetic_override(**kwargs: Any) -> tuple[Any, Any, Any]:
+        path, candidate, error = original(**kwargs)
+        planner_spec = kwargs["planner_spec"]
+        if (
+            getattr(planner_spec, "key", "") == "scenario_adaptive_hybrid_orca_v2_bottleneck_yield"
+            and candidate is not None
+        ):
+            candidate = deepcopy(candidate)
+            candidate.setdefault("scenario_algo_overrides", {})["synthetic_new"] = {"algo": "orca"}
+        return path, candidate, error
+
+    monkeypatch.setattr(
+        release_acceptance, "_full_release_candidate_config", _candidate_with_synthetic_override
+    )
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "invalid"
+    assert any("synthetic_new" in blocker for blocker in report["blockers"])
+
+
+def test_malformed_effective_override_is_fail_closed(
+    stress_fixture: tuple[Path, Any, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Malformed override entries cannot disappear inside branch enumeration."""
+    root, manifest, campaign_config = stress_fixture
+    original = release_acceptance._full_release_candidate_config
+
+    def _candidate_with_malformed_override(**kwargs: Any) -> tuple[Any, Any, Any]:
+        path, candidate, error = original(**kwargs)
+        planner_spec = kwargs["planner_spec"]
+        if (
+            getattr(planner_spec, "key", "") == "scenario_adaptive_hybrid_orca_v2_bottleneck_yield"
+            and candidate is not None
+        ):
+            candidate = deepcopy(candidate)
+            candidate.setdefault("scenario_algo_overrides", {})["malformed"] = "not-a-mapping"
+        return path, candidate, error
+
+    monkeypatch.setattr(
+        release_acceptance, "_full_release_candidate_config", _candidate_with_malformed_override
+    )
+
+    report = _acceptance(root, manifest, campaign_config)
+
+    assert report["status"] == "invalid"
+    assert any("must be a mapping" in blocker for blocker in report["blockers"])
 
 
 @pytest.mark.parametrize("status", ("collision", "failure"))

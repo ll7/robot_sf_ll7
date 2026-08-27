@@ -212,6 +212,31 @@ def test_symmetric_obstacle_fixture_is_deterministic() -> None:
     assert planner.diagnostics()["repulsive_force"][1] == pytest.approx(0.0)
 
 
+@pytest.mark.parametrize(
+    ("scenario_id", "seed", "obstacles", "pedestrians"),
+    [
+        ("analytic_static_obstacle", 1, [(1.0, 0.5)], []),
+        ("analytic_pedestrian_interaction", 7, [], [(1.0, 0.0)]),
+    ],
+)
+def test_fixed_smoke_scenarios(
+    scenario_id: str,
+    seed: int,
+    obstacles: list[tuple[float, float]],
+    pedestrians: list[tuple[float, float]],
+) -> None:
+    """Replay the two durable issue #7889 smoke-receipt fixtures."""
+    planner = ForceCoupledPotentialFieldPlanner()
+    planner.reset(seed=seed)
+    command = planner.plan(_observation(obstacles=obstacles, pedestrians=pedestrians))
+    assert scenario_id in {"analytic_static_obstacle", "analytic_pedestrian_interaction"}
+    assert command == pytest.approx((0.16, -0.3))
+    diagnostics = planner.diagnostics()
+    assert diagnostics["status"] == "ok"
+    assert diagnostics["degraded"] is False
+    assert diagnostics["fallback"] is False
+
+
 def test_rotation_and_translation_transform_force_and_command_consistently() -> None:
     planner = ForceCoupledPotentialFieldPlanner()
     base = _observation(

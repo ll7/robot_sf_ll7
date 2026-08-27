@@ -302,6 +302,10 @@ class _PublicSession:
         self.routes = routes
         self.headers = {"Authorization": "Bearer should-not-be-sent", "X-token": "secret"}
         self.auth = object()
+        self.cookies = {"session": "secret"}
+        self.params = {"token": "secret"}
+        self.proxies = {"https": "https://user:secret@proxy.test"}
+        self.trust_env = True
         self.calls: list[tuple[str, dict[str, object], dict[str, str]]] = []
 
     def get(self, url: str, **kwargs: object) -> _PublicResponse:
@@ -415,6 +419,10 @@ def test_network_audit_discovers_and_streams_public_assets(tmp_path: Path) -> No
     assert receipt["downloads"]["bytes"] == len(bundle) * 2
     assert receipt["discovery"]["common_asset_names"] == ["bundle.zip"]
     assert all(not headers for _, _, headers in session.calls)
+    assert session.cookies == {}
+    assert session.params == {}
+    assert session.proxies == {}
+    assert session.trust_env is False
     assert all(kwargs["allow_redirects"] is True for _, kwargs, _ in session.calls)
     assert all("stream" in kwargs for url, kwargs, _ in session.calls if "bundle.zip" in url)
     assert "robot-sf-published-audit-" not in json.dumps(receipt)
@@ -596,6 +604,17 @@ def test_network_audit_public_helpers_fail_closed(monkeypatch) -> None:
     monkeypatch.setattr(published_audit_module, "try_import", lambda _: None)
     with pytest.raises(published_audit_module.PublishedAuditUnavailable, match="requests"):
         published_audit_module._prepare_public_session(None)
+
+
+def test_network_failure_receipt_redacts_invalid_identifiers() -> None:
+    receipt = audit_published_network(
+        tag="https://user:secret@example.test/release?token=secret",
+        doi="https://doi.org/10.5281/zenodo.1234567?token=secret",
+    )
+    assert receipt["status"] == "invalid"
+    assert receipt["tag"] == "<invalid-tag>"
+    assert receipt["doi"] == "<invalid-doi>"
+    assert "secret" not in json.dumps(receipt)
 
 
 def test_release_cli_exposes_network_audit_and_writes_receipt(

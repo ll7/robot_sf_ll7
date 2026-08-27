@@ -407,6 +407,57 @@ def _close_public_response(response: Any) -> None:
         close()
 
 
+def _clear_public_session_mapping(session: _PublicSession, attribute: str) -> None:
+    """Clear one inherited mapping such as session params or proxies."""
+    if getattr(session, attribute, None) is None:
+        return
+    try:
+        setattr(session, attribute, {})
+    except (AttributeError, TypeError) as exc:
+        raise PublishedAuditInvalid(f"public HTTP session {attribute} are not mutable") from exc
+    if getattr(session, attribute, None):
+        raise PublishedAuditInvalid(f"public HTTP session retains {attribute}")
+
+
+def _clear_public_session_cookies(session: _PublicSession) -> None:
+    """Clear inherited cookies from an injected public session."""
+    cookies = getattr(session, "cookies", None)
+    if cookies is None:
+        return
+    clear = getattr(cookies, "clear", None)
+    if not callable(clear):
+        raise PublishedAuditInvalid("public HTTP session cookies are not mutable")
+    try:
+        clear()
+        if cookies:
+            raise PublishedAuditInvalid("public HTTP session retains cookies")
+    except PublishedAuditInvalid:
+        raise
+    except Exception as exc:
+        raise PublishedAuditInvalid("public HTTP session cookies are not mutable") from exc
+
+
+def _disable_public_session_environment(session: _PublicSession) -> None:
+    """Prevent inherited proxy/environment configuration from affecting requests."""
+    if hasattr(session, "trust_env"):
+        try:
+            session.trust_env = False  # type: ignore[attr-defined]
+        except (AttributeError, TypeError) as exc:
+            raise PublishedAuditInvalid(
+                "public HTTP session environment access is not mutable"
+            ) from exc
+        if getattr(session, "trust_env", None) is not False:
+            raise PublishedAuditInvalid("public HTTP session retains environment access")
+
+
+def _sanitize_public_session_state(session: _PublicSession) -> None:
+    """Remove inherited request state that could carry credentials."""
+    for attribute in ("params", "proxies"):
+        _clear_public_session_mapping(session, attribute)
+    _clear_public_session_cookies(session)
+    _disable_public_session_environment(session)
+
+
 def _prepare_public_session(session: _PublicSession | None) -> _PublicSession:  # noqa: C901
     """Build or sanitize a session so every request remains credential-free.
 
@@ -423,6 +474,8 @@ def _prepare_public_session(session: _PublicSession | None) -> _PublicSession:  
             session = requests.Session()
         except Exception as exc:
             raise PublishedAuditUnavailable("public HTTP session could not be created") from exc
+
+    _sanitize_public_session_state(session)
 
     headers = getattr(session, "headers", None)
     if headers is not None:
@@ -826,14 +879,33 @@ def _failure_network_receipt(
         "schema": NETWORK_SCHEMA,
         "ok": False,
         "status": status,
-        "tag": tag,
-        "doi": doi,
+        "tag": _receipt_identifier(tag, kind="tag"),
+        "doi": _receipt_identifier(doi, kind="doi"),
         "source_sha": None,
         "problems": [problem],
         "discovery": dict(discovery or {}),
         "downloads": {"github": [], "zenodo": [], "bytes": 0},
         "audit": None,
     }
+
+
+def _receipt_identifier(value: str, *, kind: str) -> str:
+    """Return a safe public identifier for a failure receipt."""
+    candidate = str(value or "").strip()
+    if kind == "doi":
+        try:
+            return _normalise_version_doi(candidate)
+        except PublishedAuditInvalid:
+            return "<invalid-doi>"
+    if (
+        candidate
+        and "/" not in candidate
+        and "\\" not in candidate
+        and not any(character in candidate for character in "?#\x00@")
+        and not any(character.isspace() or ord(character) < 32 for character in candidate)
+    ):
+        return candidate
+    return "<invalid-tag>"
 
 
 def audit_published_network(  # noqa: C901, PLR0913

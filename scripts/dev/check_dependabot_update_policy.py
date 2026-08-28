@@ -921,6 +921,11 @@ def evaluate_update(
     resolution_evidence = build_resolution_evidence(repo_root, base_ref, dependency_files)
     changed_names.update(resolution_evidence["changed_packages"])
     if not changed_names and not resolution_evidence["material_fields"]:
+        if not (set(dependency_files) & set(LOCK_FILES)):
+            report["message"] = (
+                "project files changed without modifying dependency declarations or package requirements"
+            )
+            return report
         raise PolicyError(
             "dependency files changed but no package rows or direct declarations could be identified"
         )

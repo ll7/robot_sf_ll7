@@ -1562,16 +1562,90 @@ def detect_post_merge_incident(
     }
 
 
+def _build_ordinary_cas_evidence(
+    snapshot: Mapping[str, Any],
+    *,
+    pr_number: int,
+    repository: str,
+    current_main_sha: str,
+) -> dict[str, Any]:
+    """Bind ordinary selector, policy carrier, and immediate current-main CAS evidence."""
+    from scripts.dev.base_sensitive_selector import SELECTOR_VERSION, classify_changed_files
+    from scripts.dev.check_pr_current_base_cas import check_current_base_cas
+    from scripts.dev.merge_queue_gate import fetch_pr_changed_file_marker_inventory
+
+    ordinary_cas: dict[str, Any] = {"status": "not_required", "reason_codes": []}
+    if _string(snapshot.get("base_sha")).lower() == current_main_sha.lower():
+        return ordinary_cas
+
+    head_sha = _string(snapshot.get("head_sha"))
+    base_sha = _string(snapshot.get("base_sha"))
+    marker_inventory, marker_inventory_error = fetch_pr_changed_file_marker_inventory(
+        pr_number,
+        repo=repository,
+        base_sha=base_sha,
+        head_sha=head_sha,
+        current_main_sha=current_main_sha,
+    )
+    selector = classify_changed_files(
+        marker_inventory.get("changed_files")
+        if isinstance(marker_inventory, Mapping) and not marker_inventory_error
+        else None,
+        sensitive_files=marker_inventory.get("changed_sensitive_files", [])
+        if isinstance(marker_inventory, Mapping)
+        else [],
+    )
+    selector = {
+        **selector,
+        **(dict(marker_inventory) if isinstance(marker_inventory, Mapping) else {}),
+        "selector": selector.get("selector") or SELECTOR_VERSION,
+        **({"inventory_error": marker_inventory_error} if marker_inventory_error else {}),
+    }
+    policy_carrier = next(
+        (
+            match.group(0)
+            for text in snapshot.get("base_policy", [])
+            if isinstance(text, str)
+            for match in _FULL_ORDINARY_BASE_POLICY_RE.finditer(text)
+            if match.group(1).lower() == head_sha.lower()
+        ),
+        None,
+    )
+    policy_accepted = policy_carrier is not None
+    current_base_cas = check_current_base_cas(
+        str(pr_number),
+        repo=repository,
+        expected_head_sha=head_sha,
+        expected_main_sha=current_main_sha,
+    )
+    reason_codes: list[str] = []
+    if selector.get("status") != "ordinary":
+        reason_codes.append(f"selector_{selector.get('status') or 'unknown'}")
+    if not policy_accepted:
+        reason_codes.append("exact_head_ordinary_cas_policy_missing")
+    if current_base_cas.get("passed") is not True:
+        reason_codes.append("current_base_cas_not_passed")
+    return {
+        "status": "accepted" if not reason_codes else "blocked",
+        "reason_codes": reason_codes,
+        "selector": selector,
+        "base_policy": {
+            "carrier": policy_carrier,
+            "status": "accepted" if policy_accepted else "missing",
+            "policy": "ordinary-cas",
+            "head_sha": head_sha,
+        },
+        "current_base_cas": current_base_cas,
+    }
+
+
 def build_live_evidence(
     pr_number: int, *, repository: str
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Re-read canonical merge-gate evidence for a report/validate/apply run."""
-    from scripts.dev.base_sensitive_selector import SELECTOR_VERSION, classify_changed_files
-    from scripts.dev.check_pr_current_base_cas import check_current_base_cas
     from scripts.dev.merge_queue_gate import (  # local import avoids a module cycle for pure helpers
         evaluate_merge_gate,
         fetch_main_sha,
-        fetch_pr_changed_file_marker_inventory,
         fetch_pr_snapshot,
         fetch_threads_resolved,
     )
@@ -1591,67 +1665,9 @@ def build_live_evidence(
         if isinstance(snapshot.get("reviewers_requested"), bool)
         else None,
     )
-    ordinary_cas: dict[str, Any] = {"status": "not_required", "reason_codes": []}
-    if _string(snapshot.get("base_sha")).lower() != current_base_sha.lower():
-        head_sha = _string(snapshot.get("head_sha"))
-        base_sha = _string(snapshot.get("base_sha"))
-        marker_inventory, marker_inventory_error = fetch_pr_changed_file_marker_inventory(
-            pr_number,
-            repo=repository,
-            base_sha=base_sha,
-            head_sha=head_sha,
-            current_main_sha=current_base_sha,
-        )
-        selector = classify_changed_files(
-            marker_inventory.get("changed_files")
-            if isinstance(marker_inventory, Mapping) and not marker_inventory_error
-            else None,
-            sensitive_files=marker_inventory.get("changed_sensitive_files", [])
-            if isinstance(marker_inventory, Mapping)
-            else [],
-        )
-        selector = {
-            **selector,
-            **(dict(marker_inventory) if isinstance(marker_inventory, Mapping) else {}),
-            "selector": selector.get("selector") or SELECTOR_VERSION,
-            **({"inventory_error": marker_inventory_error} if marker_inventory_error else {}),
-        }
-        policy_carrier = next(
-            (
-                match.group(0)
-                for text in snapshot.get("base_policy", [])
-                if isinstance(text, str)
-                for match in _FULL_ORDINARY_BASE_POLICY_RE.finditer(text)
-                if match.group(1).lower() == head_sha.lower()
-            ),
-            None,
-        )
-        policy_accepted = policy_carrier is not None
-        current_base_cas = check_current_base_cas(
-            str(pr_number),
-            repo=repository,
-            expected_head_sha=head_sha,
-            expected_main_sha=current_base_sha,
-        )
-        reason_codes: list[str] = []
-        if selector.get("status") != "ordinary":
-            reason_codes.append(f"selector_{selector.get('status') or 'unknown'}")
-        if not policy_accepted:
-            reason_codes.append("exact_head_ordinary_cas_policy_missing")
-        if current_base_cas.get("passed") is not True:
-            reason_codes.append("current_base_cas_not_passed")
-        ordinary_cas = {
-            "status": "accepted" if not reason_codes else "blocked",
-            "reason_codes": reason_codes,
-            "selector": selector,
-            "base_policy": {
-                "carrier": policy_carrier,
-                "status": "accepted" if policy_accepted else "missing",
-                "policy": "ordinary-cas",
-                "head_sha": head_sha,
-            },
-            "current_base_cas": current_base_cas,
-        }
+    ordinary_cas = _build_ordinary_cas_evidence(
+        snapshot, pr_number=pr_number, repository=repository, current_main_sha=current_base_sha
+    )
     review_evidence = (
         snapshot.get("review_evidence")
         if isinstance(snapshot.get("review_evidence"), Mapping)

@@ -49,6 +49,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
+LABEL_PAGE_SIZE = 100
+LABEL_PAGE_CEILING = 10
 
 
 def _is_absent_label_delete(result: subprocess.CompletedProcess[str]) -> bool:
@@ -60,32 +62,47 @@ def _is_absent_label_delete(result: subprocess.CompletedProcess[str]) -> bool:
 
 
 def _get_label_names(number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30) -> dict[str, Any]:
-    """Return the current label names for *number* as a list, or an error dict."""
-    path = f"repos/{repo}/issues/{number}/labels"
-    result = _gh_api_get(path, timeout=timeout)
-    if result.returncode != 0:
-        detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
-        return {"status": "error", "error": f"could not read labels: {detail}"}
-    try:
-        data = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        snippet = result.stdout.strip()[:200]
-        return {
-            "status": "error",
-            "error": f"label response was not valid JSON: {exc}; stdout snippet: {snippet!r}",
-        }
-    if not isinstance(data, list):
-        return {
-            "status": "error",
-            "error": f"expected a list from labels endpoint, got {type(data).__name__}",
-        }
-    names = []
-    for entry in data:
-        if isinstance(entry, dict):
-            name = entry.get("name")
-            if isinstance(name, str):
-                names.append(name)
-    return {"status": "ok", "labels": names}
+    """Return a complete, strictly validated label inventory, or an error dict."""
+    names: list[str] = []
+    for page in range(1, LABEL_PAGE_CEILING + 1):
+        path = f"repos/{repo}/issues/{number}/labels?per_page={LABEL_PAGE_SIZE}&page={page}"
+        result = _gh_api_get(path, timeout=timeout)
+        if result.returncode != 0:
+            detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
+            return {"status": "error", "error": f"could not read labels page {page}: {detail}"}
+        try:
+            data = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            snippet = result.stdout.strip()[:200]
+            return {
+                "status": "error",
+                "error": f"label page {page} was not valid JSON: {exc}; "
+                f"stdout snippet: {snippet!r}",
+            }
+        if not isinstance(data, list):
+            return {
+                "status": "error",
+                "error": f"expected a list from labels page {page}, got {type(data).__name__}",
+            }
+        for row in data:
+            if not isinstance(row, dict):
+                return {
+                    "status": "error",
+                    "error": f"malformed label row on page {page}: expected an object",
+                }
+            name = row.get("name")
+            if not isinstance(name, str) or not name.strip():
+                return {
+                    "status": "error",
+                    "error": f"malformed label row on page {page}: name must be non-empty text",
+                }
+            names.append(name)
+        if len(data) < LABEL_PAGE_SIZE:
+            return {"status": "ok", "labels": names}
+    return {
+        "status": "error",
+        "error": f"label pagination exceeded the page ceiling of {LABEL_PAGE_CEILING}",
+    }
 
 
 def _guarded_merge_ready_write(

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Build the issue #7980 source-complete speed-tier interpretation packet.
+"""Build the issue #7980 speed-tier interpretation packet.
 
 This projects the 24 canonical issue #5578 synthesis decisions into the existing
-``result_interpretation_packet.v1`` contract.  It does not rerun the campaign or
-admit a benchmark claim.  The immutable synthesis member is bound through the
-reviewed issue #6102 recovery manifest, and every packet metric carries one
-versioned source-binding payload containing its canonical decision row in full.
+``result_interpretation_packet.v1`` contract. It does not rerun the campaign or
+admit a benchmark claim. A source-complete packet additionally requires an
+independent source-ingestion receipt and row crosswalk; without that receipt the
+output is explicitly diagnostic/pending.
 """
 
 from __future__ import annotations
@@ -61,6 +61,8 @@ EXPECTED_CLASSIFICATIONS = {
 }
 EXPECTED_SYNTHESIS_SCHEMA = "robot_sf.issue_5578_speed_tier_synthesis_adapter.v1"
 EXPECTED_EVIDENCE_STATUS = "native_grid_synthesis_complete_provenance_unverified"
+SOURCE_RECEIPT_SCHEMA = "issue_7980_source_ingestion_receipt.v1"
+SOURCE_PROOF_STATUSES = frozenset({"fixture_verified", "authenticated_immutable_source_hydrated"})
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -70,6 +72,67 @@ def _load_json(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"expected a JSON object: {path}")
     return payload
+
+
+def _row_digest(row: Mapping[str, Any]) -> str:
+    """Return the canonical digest used by the independent row crosswalk."""
+
+    return hashlib.sha256(
+        json.dumps(row, allow_nan=False, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _validate_row_crosswalk(crosswalk: object, rows: Sequence[Mapping[str, Any]]) -> None:
+    """Require the independent receipt to cover each canonical source row exactly once."""
+
+    if not isinstance(crosswalk, list) or len(crosswalk) != len(rows):
+        raise ValueError("source receipt must contain one digest crosswalk entry per source row")
+    expected = {str(row["test_id"]): _row_digest(row) for row in rows}
+    observed: dict[str, str] = {}
+    for entry in crosswalk:
+        if not isinstance(entry, Mapping):
+            raise ValueError("source receipt row crosswalk entries must be objects")
+        test_id = entry.get("test_id")
+        digest = entry.get("canonical_row_sha256")
+        if not isinstance(test_id, str) or not isinstance(digest, str):
+            raise ValueError(
+                "source receipt crosswalk entries need test_id and canonical_row_sha256"
+            )
+        if test_id in observed:
+            raise ValueError(f"source receipt contains duplicate row crosswalk entry: {test_id}")
+        observed[test_id] = digest
+    if observed != expected:
+        raise ValueError("source receipt row crosswalk does not match independently ingested rows")
+
+
+def _validate_source_receipt(
+    receipt: Mapping[str, Any],
+    *,
+    synthesis_sha256: str,
+    rows: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    """Validate independent source custody before emitting source-complete wording."""
+
+    if receipt.get("schema_version") != SOURCE_RECEIPT_SCHEMA:
+        raise ValueError("source receipt schema_version is unsupported")
+    status = receipt.get("source_ingestion_status")
+    if status not in SOURCE_PROOF_STATUSES:
+        raise ValueError(
+            "authenticated immutable source hydration is unavailable; "
+            "source-complete packet generation is refused"
+        )
+    if status == "authenticated_immutable_source_hydrated" and not isinstance(
+        receipt.get("immutable_hydration_receipt"), Mapping
+    ):
+        raise ValueError("authenticated source receipt is missing its immutable hydration receipt")
+    if receipt.get("independent_of_packet") is not True:
+        raise ValueError("source receipt must declare independence from the packet")
+    if not isinstance(receipt.get("source_artifact"), Mapping):
+        raise ValueError("source receipt must identify the independently ingested source artifact")
+    if receipt.get("synthesis_sha256") != synthesis_sha256:
+        raise ValueError("source receipt synthesis digest does not match supplied synthesis")
+    _validate_row_crosswalk(receipt.get("row_crosswalk"), rows)
+    return dict(receipt)
 
 
 def _sha256(path: Path) -> str:
@@ -308,6 +371,7 @@ def _source_binding(
     synthesis_sha256: str,
     paired_denominator: int,
     harm_threshold: float,
+    source_receipt: Mapping[str, Any] | None,
 ) -> str:
     """Encode one complete canonical row in the packet's versioned sensitivity binding."""
 
@@ -319,14 +383,11 @@ def _source_binding(
             "path": "configs/benchmarks/issue_5578_robot_speed_tier_preregistration.yaml",
             "schema_version": "robot_sf.issue_5578_robot_speed_tier_preregistration.v1",
         },
-        "source_artifact": {
-            "artifact": "ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0",
-            "artifact_location": (
-                "wandb-artifact://ll7/robot_sf/"
-                "campaign-issue5578-native-speed-tier-job-13828:v0/synthesis.json"
-            ),
-            "artifact_path": "synthesis.json",
-            "member": "synthesis.json",
+        "source_artifact": dict(source_receipt["source_artifact"])
+        if source_receipt is not None
+        else {
+            "status": "pending",
+            "reason": "independent source-ingestion receipt is unavailable",
             "sha256": synthesis_sha256,
         },
     }
@@ -352,6 +413,7 @@ def _metric_and_decision(
     synthesis_sha256: str,
     paired_denominator: int,
     harm_threshold: float,
+    source_receipt: Mapping[str, Any] | None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Project one canonical synthesis row into one metric and one fail-closed decision."""
 
@@ -364,6 +426,7 @@ def _metric_and_decision(
             synthesis_sha256=synthesis_sha256,
             paired_denominator=paired_denominator,
             harm_threshold=harm_threshold,
+            source_receipt=source_receipt,
         )
     ]
     uncertainty = {
@@ -386,7 +449,9 @@ def _metric_and_decision(
     }[metric_name]
     metric = {
         "metric_id": test_id,
-        "source_ids": ["recovery_manifest"],
+        "source_ids": ["recovery_manifest", "issue_7980_source_receipt"]
+        if source_receipt is not None
+        else ["recovery_manifest"],
         "unit": "paired_rate_delta",
         "desirability": desirability,
         "support": paired_denominator,
@@ -426,7 +491,7 @@ def _metric_and_decision(
         "outcome": "invalid" if is_invalid else "inconclusive",
         "rationale": (
             f"Canonical classification {row['classification']!r} is preserved for {test_id}; "
-            "this source-complete packet remains diagnostic_only and grants no admission."
+            "this diagnostic/pending packet grants no admission."
         ),
         "comparator": comparator,
         "contrast_result": contrast,
@@ -447,8 +512,9 @@ def build_packet(
     previous_packet_path: Path,
     preregistration_path: Path,
     producer_commit: str,
+    source_receipt_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Build and semantically validate the source-complete diagnostic packet."""
+    """Build a diagnostic packet, optionally backed by an independent source receipt."""
 
     synthesis_path = synthesis_path.resolve()
     recovery_manifest_path = _repo_path(recovery_manifest_path)
@@ -458,12 +524,24 @@ def build_packet(
     recovery_manifest = _load_json(recovery_manifest_path)
     previous_packet = _load_json(previous_packet_path)
     preregistration = _read_preregistration(preregistration_path)
+    source_receipt = None
+    if source_receipt_path is not None:
+        source_receipt = _load_json(_repo_path(source_receipt_path))
     synthesis_sha256 = _sha256(synthesis_path)
     rows, paired_denominator, thresholds = _validate_synthesis(
         synthesis,
         synthesis_sha256=synthesis_sha256,
         recovery_manifest=recovery_manifest,
         preregistration=preregistration,
+    )
+    if source_receipt is not None:
+        source_receipt = _validate_source_receipt(
+            source_receipt, synthesis_sha256=synthesis_sha256, rows=rows
+        )
+    source_complete = (
+        source_receipt is not None
+        and source_receipt.get("source_ingestion_status")
+        == "authenticated_immutable_source_hydrated"
     )
 
     recovery_source = next(
@@ -479,6 +557,7 @@ def build_packet(
             synthesis_sha256=synthesis_sha256,
             paired_denominator=paired_denominator,
             harm_threshold=thresholds[str(row["metric"])],
+            source_receipt=source_receipt,
         )
         metrics.append(metric)
         decisions.append(decision)
@@ -496,7 +575,7 @@ def build_packet(
         "question": {
             "question_id": "q_7980_robot_speed_tier_contrast_binding",
             "text": (
-                "What do the exact 24 source-bound speed-tier contrasts establish before any "
+                "What do the exact 24 speed-tier contrasts establish before any "
                 "separate benchmark-admission decision?"
             ),
             "issue_refs": [5578, 6102, 7980],
@@ -508,6 +587,8 @@ def build_packet(
             "rationale": (
                 "All registered statistics are source-complete and custody-bound, but this "
                 "packet intentionally preserves the existing non-admitted claim boundary."
+                if source_complete
+                else "Independent source-ingestion custody is pending; this packet is diagnostic only."
             ),
         },
         "sources": [dict(recovery_source)],
@@ -533,8 +614,12 @@ def build_packet(
             "allowed": [
                 "The immutable synthesis contains exactly 24 registered contrast rows.",
                 (
-                    "The source-complete classification accounting is "
-                    f"{counts['no_material_shift']} no_material_shift, "
+                    (
+                        "The source-complete classification accounting is "
+                        if source_complete
+                        else "The diagnostic/pending classification accounting is "
+                    )
+                    + f"{counts['no_material_shift']} no_material_shift, "
                     f"{counts['inconclusive']} inconclusive, and "
                     f"{counts['intervention_not_activated']} intervention_not_activated."
                 ),
@@ -552,11 +637,11 @@ def build_packet(
                 "uv run python scripts/analysis/build_issue_7980_speed_tier_packet.py "
                 "--synthesis <verified-wandb-v0-synthesis.json>"
             ),
-            "status": "draft",
+            "status": "draft" if source_complete else "pending_source_proof",
         },
         "findings": [
             "All 24 registered planner-by-tier-by-metric contrasts are present exactly once.",
-            "Every contrast binds the pooled effect, paired denominator, both directional tests and bounds, multiplicity, activation state, and immutable synthesis digest.",
+            "Every contrast binds the pooled effect, paired denominator, both directional tests and bounds, multiplicity, activation state, and the supplied synthesis digest.",
             "The canonical 10/8/6 classification accounting reconciles exactly.",
             "The six non-activated prediction-planner contrasts remain invalid exclusions.",
         ],
@@ -568,6 +653,7 @@ def build_packet(
         ],
         "fail_closed_changes": [
             "Missing, duplicate, non-native, digest-mismatched, or activation-inconsistent source rows stop packet generation.",
+            "Source-complete wording is emitted only with an independently validated source receipt; otherwise status remains diagnostic/pending.",
             "All activated source classifications remain non-admitted inconclusive decisions.",
             "All non-activated source classifications remain invalid decisions.",
             "Fallback and degraded execution remain forbidden and absent.",
@@ -617,6 +703,12 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--recovery-manifest", type=Path, default=DEFAULT_RECOVERY_MANIFEST)
     parser.add_argument("--previous-packet", type=Path, default=DEFAULT_PREVIOUS_PACKET)
     parser.add_argument("--preregistration", type=Path, default=DEFAULT_PREREGISTRATION)
+    parser.add_argument(
+        "--source-receipt",
+        type=Path,
+        default=None,
+        help="Independent source-ingestion receipt; omit to emit diagnostic/pending wording.",
+    )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--caption-output", type=Path, default=DEFAULT_CAPTION)
     parser.add_argument("--checksum-output", type=Path, default=DEFAULT_CHECKSUM)
@@ -646,6 +738,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         previous_packet_path=args.previous_packet,
         preregistration_path=args.preregistration,
         producer_commit=producer_commit,
+        source_receipt_path=args.source_receipt,
     )
     expected_packet = json.dumps(packet, allow_nan=False, sort_keys=True, separators=(",", ":"))
     if args.check:

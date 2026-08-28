@@ -53,6 +53,13 @@ visual assertion.
 
 ## Source-complete successor packet
 
+The tracked issue #7980 packet is diagnostic/pending: it does not claim that an
+authenticated immutable source was hydrated on this machine. The small
+`source_row_crosswalk.issue_7980.fixture.json` file is only a deterministic
+contract-test fixture. A source-complete regeneration must receive an
+independent source-ingestion receipt and matching row crosswalk; the builder
+fails closed when authenticated immutable hydration is unavailable.
+
 Issue #7980 adds
 `result_interpretation_packet.issue_7980.v1.json` without replacing or silently
 mutating the reviewed packet above. The successor has one metric and one fail-closed
@@ -68,7 +75,9 @@ the six inactive prediction-planner contrasts remain `invalid`. The tracked pack
 therefore improves auditability without admitting a null effect, ranking, causal,
 safety, dissertation, release, or paper-facing claim. Its deterministic caption and
 checksums are `result_interpretation_caption.issue_7980.txt` and
-`SHA256SUMS.issue_7980`. The packet, caption, and checksum manifest each have an
+`SHA256SUMS.issue_7980`. The exact packet identity is also recorded in
+`packet_digest_review.issue_7980.json`; it is diagnostic-only and non-approving.
+The packet, caption, checksum manifest, and digest review each have an
 exact-hash `*.review.json` sidecar from the shared evidence-writer convention; the
 caption and checksum manifest also carry inline `NEEDS-REVIEW` markers.
 

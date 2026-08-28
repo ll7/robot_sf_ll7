@@ -18,6 +18,7 @@ from robot_sf.benchmark.result_interpretation_packet import (
 from scripts.analysis.build_issue_7980_speed_tier_packet import (
     _review_sidecar_path,
     _review_sidecar_payload,
+    _validate_source_receipt,
     _validate_synthesis,
     decode_source_binding,
 )
@@ -245,6 +246,7 @@ def test_generated_artifacts_have_exact_review_sidecars() -> None:
         PACKET_PATH,
         EVIDENCE_DIR / "result_interpretation_caption.issue_7980.txt",
         EVIDENCE_DIR / "SHA256SUMS.issue_7980",
+        EVIDENCE_DIR / "packet_digest_review.issue_7980.json",
     )
     for artifact in artifacts:
         assert _load_json(_review_sidecar_path(artifact)) == _review_sidecar_payload(artifact)
@@ -259,6 +261,16 @@ def test_generated_artifacts_have_exact_review_sidecars() -> None:
         .read_text(encoding="utf-8")
         .startswith("# AI-GENERATED NEEDS-REVIEW\n")
     )
+
+
+def test_packet_digest_review_is_exact_and_non_approving() -> None:
+    """Keep the independently reviewable digest artifact bounded to identity only."""
+
+    review = _load_json(EVIDENCE_DIR / "packet_digest_review.issue_7980.json")
+
+    assert review["packet_digest"] == EXPECTED_PACKET_DIGEST
+    assert review["domain_approval"] is False
+    assert review["review_status"] == ("diagnostic_only_pending_source_proof_and_domain_approval")
 
 
 def test_validation_rejects_immutable_synthesis_digest_drift() -> None:
@@ -308,4 +320,47 @@ def test_validation_rejects_activation_classification_disagreement() -> None:
             synthesis_sha256=synthesis_sha,
             recovery_manifest=recovery,
             preregistration=preregistration,
+        )
+
+
+def test_independent_source_crosswalk_validates_rows_without_packet_reuse() -> None:
+    """Require a separately supplied crosswalk before calling rows source-complete."""
+
+    synthesis, synthesis_sha, _, _ = _validation_inputs()
+    receipt = _load_json(EVIDENCE_DIR / "source_row_crosswalk.issue_7980.fixture.json")
+    rows = sorted(synthesis["decision_table"], key=lambda item: item["test_id"])
+
+    validated = _validate_source_receipt(receipt, synthesis_sha256=synthesis_sha, rows=rows)
+
+    assert validated["source_ingestion_status"] == "fixture_verified"
+    assert validated["independent_of_packet"] is True
+
+
+def test_source_receipt_fails_closed_when_authenticated_hydration_is_unavailable() -> None:
+    """Do not let a manifest digest or packet-derived rows imply immutable source custody."""
+
+    synthesis, synthesis_sha, _, _ = _validation_inputs()
+    receipt = _load_json(EVIDENCE_DIR / "source_row_crosswalk.issue_7980.fixture.json")
+    receipt["source_ingestion_status"] = "recorded_but_not_hydrated"
+
+    with pytest.raises(ValueError, match="authenticated immutable source hydration is unavailable"):
+        _validate_source_receipt(
+            receipt,
+            synthesis_sha256=synthesis_sha,
+            rows=sorted(synthesis["decision_table"], key=lambda item: item["test_id"]),
+        )
+
+
+def test_source_crosswalk_tampering_is_rejected() -> None:
+    """A changed source row cannot inherit the independent receipt's digest."""
+
+    synthesis, synthesis_sha, _, _ = _validation_inputs()
+    receipt = _load_json(EVIDENCE_DIR / "source_row_crosswalk.issue_7980.fixture.json")
+    synthesis["decision_table"][0]["pooled_delta_mean"] += 0.001
+
+    with pytest.raises(ValueError, match="row crosswalk does not match"):
+        _validate_source_receipt(
+            receipt,
+            synthesis_sha256=synthesis_sha,
+            rows=sorted(synthesis["decision_table"], key=lambda item: item["test_id"]),
         )

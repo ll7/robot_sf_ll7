@@ -1,0 +1,9 @@
+{
+  "claim_boundary": "Exact packet identity only; no domain approval or benchmark claim.",
+  "domain_approval": false,
+  "packet_digest": "131943376ec40976b261bce8fbf8934b8d243a905ac01b2333ddb25d47d13a70",
+  "packet_path": "docs/context/evidence/issue_6102_robot_speed_tier_recovery/result_interpretation_packet.issue_7980.v1.json",
+  "review_status": "diagnostic_only_pending_source_proof_and_domain_approval",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "issue_7980_packet_digest_review.v1"
+}

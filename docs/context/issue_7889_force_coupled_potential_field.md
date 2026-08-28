@@ -13,9 +13,11 @@ field-guided and force-coupled adaptive pure pursuit approach" (Scientific Repor
 Plain-language summary: an opt-in local planner that steers a unicycle robot by combining an
 attractive force toward a look-ahead target with repulsive forces from obstacles and pedestrians,
 saturating the total force, and issuing a speed/steering command that respects configured speed and
-rate limits as hard predicates. The registered map-runner path reads static obstacles from the
-canonical occupancy-grid obstacle channel; direct point inputs remain available for analytic smoke
-fixtures. It is a comparator core for future planner evaluation — nothing more.
+ordinary-stop rate limits as hard predicates. A zero-distance overlap is an explicit immediate
+emergency stop and is the documented exception to the ordinary rate limit. The registered map-runner
+path reads static obstacles from the canonical occupancy-grid obstacle channel; direct point inputs
+remain available for analytic smoke fixtures. It is a comparator core for future planner evaluation
+— nothing more.
 
 ## Source-to-implementation map
 
@@ -25,7 +27,7 @@ fixtures. It is a comparator core for future planner evaluation — nothing more
 | dynamic potential-field refinement | `approximated` | classic attractive + inverse-distance repulsive field; no time-varying field update |
 | force-coupled target selection | `implemented` | combined saturated force direction sets the desired heading |
 | bounded forward-kinematic command generation | `implemented` | unicycle `(linear, angular)` with speed limits |
-| steering/angular-rate and rate-of-change constraints | `implemented` | speed and command-rate limits enforced as clips (hard predicates) |
+| steering/angular-rate and rate-of-change constraints | `implemented` | speed and ordinary-stop command-rate limits enforced as clips (hard predicates); overlap emergency stops are an explicit immediate-stop exception |
 
 ## Formulae and conventions
 
@@ -33,10 +35,13 @@ fixtures. It is a comparator core for future planner evaluation — nothing more
 - Repulsive force per source point: `repulsive_weight * (1/d - 1/influence_radius_m) * (robot - p) / d`
   for `numerical_epsilon < d <= influence_radius_m`.
 - A zero-distance obstacle or pedestrian is treated as an overlap: the planner emits an immediate
-  `(0, 0)` stop and records sticky `status: degraded`; it does not invent a repulsion direction.
-- Reaching the goal emits a nominal immediate `(0, 0)` stop. A near-zero total force away from the
-  goal is treated as a potential-field local minimum: the planner stops, records sticky
-  `status: degraded`, and does not pass the undefined `atan2(0, 0)` direction into control.
+  `(0, 0)` emergency stop, records sticky `status: degraded`, and explicitly records the
+  `emergency_stop` diagnostic; it does not invent a repulsion direction or wait for the ordinary
+  command-rate limiter.
+- Reaching the goal emits a rate-limited ordinary `(0, 0)` stop. A near-zero total force away from
+  the goal is treated as a potential-field local minimum: the planner emits a rate-limited stop,
+  records sticky `status: degraded`, and does not pass the undefined `atan2(0, 0)` direction into
+  control.
 - Total force saturated at `force_saturation` magnitude.
 - Desired heading: `atan2(fy, fx)`; command `linear = look_ahead_gain * goal_distance`,
   `angular = wrap_pi(desired_heading - robot_theta)`.
@@ -52,7 +57,8 @@ fixtures. It is a comparator core for future planner evaluation — nothing more
 ## Deviations and unsupported elements
 
 - No time-varying potential field (source's dynamic refinement is approximated by static fields).
-- No steering-rate *acceleration* profile beyond the configured per-step rate limits.
+- No steering-rate *acceleration* profile beyond the configured per-step rate limits; the explicit
+  overlap emergency stop may bypass the ordinary rate limit for immediate safety.
 - No pedestrian motion prediction; pedestrians repel at their observed positions only.
 - No global route integration; the local target is derived from the goal directly.
 - The source paper's vehicle-oriented results are not transferred as social-navigation evidence.

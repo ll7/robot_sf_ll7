@@ -154,7 +154,9 @@ def test_zero_distance_guard_stops_and_reports_degraded() -> None:
     assert diagnostics["status"] == "degraded"
     assert diagnostics["step_degraded"] is True
     assert diagnostics["ever_degraded"] is True
+    assert diagnostics["emergency_stop"] is True
     assert "zero_distance_stop" in diagnostics["active_constraints"]
+    assert "emergency_stop" in diagnostics["active_constraints"]
 
 
 def test_goal_reached_stops_without_inventing_a_heading() -> None:
@@ -170,6 +172,24 @@ def test_goal_reached_stops_without_inventing_a_heading() -> None:
     assert diagnostics["force_cancellation_guard"] is False
     assert diagnostics["status"] == "ok"
     assert "goal_reached_stop" in diagnostics["active_constraints"]
+
+
+def test_goal_reached_stop_is_rate_limited_after_command_ramp() -> None:
+    """Ordinary goal stops obey the configured command-rate predicate."""
+    config = ForceCoupledPotentialFieldConfig(max_linear_rate=0.8, control_dt=0.2)
+    planner = ForceCoupledPotentialFieldPlanner(config)
+    for _ in range(10):
+        previous_linear, previous_angular = planner.plan(_observation())
+
+    linear, angular = planner.plan(_observation(robot=(4.0, 0.0, math.pi / 2), goal=(4.0, 0.0)))
+    diagnostics = planner.diagnostics()
+
+    assert 0.0 < linear < previous_linear
+    assert abs(linear - previous_linear) <= config.max_linear_rate * config.control_dt + 1e-9
+    assert abs(angular - previous_angular) <= config.max_angular_rate * config.control_dt + 1e-9
+    assert diagnostics["emergency_stop"] is False
+    assert "goal_reached_stop" in diagnostics["active_constraints"]
+    assert "linear_rate_limit" in diagnostics["active_constraints"]
 
 
 def test_force_cancellation_stops_and_reports_degraded() -> None:

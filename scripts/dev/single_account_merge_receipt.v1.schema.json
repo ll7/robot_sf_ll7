@@ -19,7 +19,6 @@
     "holds",
     "waiver",
     "expected_head_cas",
-    "ordinary_cas",
     "observed_at",
     "merge_result",
     "receipt_digest",

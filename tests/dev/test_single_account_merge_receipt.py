@@ -225,6 +225,18 @@ def test_ready_receipts_match_the_versioned_json_schema() -> None:
     )
 
 
+def test_legacy_receipt_without_ordinary_cas_matches_versioned_json_schema() -> None:
+    """The v1 schema must accept receipts written before ordinary-CAS evidence existed."""
+    schema = json.loads(
+        Path("scripts/dev/single_account_merge_receipt.v1.schema.json").read_text(encoding="utf-8")
+    )
+    legacy = _receipt()
+    legacy.pop("ordinary_cas")
+    legacy["receipt_digest"] = receipt_digest(legacy)
+
+    Draft202012Validator(schema).validate(legacy)
+
+
 def test_each_hold_dimension_blocks_independently() -> None:
     for key in HOLD_KEYS:
         holds = _clear_holds()

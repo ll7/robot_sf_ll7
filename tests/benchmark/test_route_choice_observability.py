@@ -330,6 +330,54 @@ def test_homotopy_identity_survives_ego_grid_motion() -> None:
     assert topology_t0.identity_units == "m"
 
 
+def test_homotopy_identity_quantizes_fractional_ego_lattice_motion() -> None:
+    """Sub-cell movement maps the same choke geometry to one canonical global lattice."""
+    adapter = GridRoutePlannerAdapter()
+    blocked = np.zeros((11, 17), dtype=bool)
+    blocked[1:9, 7:10] = True
+    path = [(9, col) for col in range(2, 15)]
+    meta_t0 = {
+        "origin": [0.0, 0.0],
+        "resolution": [1.0],
+        "use_ego_frame": [1.0],
+        "robot_pose": [0.0, 0.0, 0.0],
+    }
+    meta_t1 = {**meta_t0, "robot_pose": [0.1, 0.0, 0.0]}
+    world_t0 = [tuple(adapter._grid_to_world(cell, meta_t0)) for cell in path]
+    world_t1 = [tuple(adapter._grid_to_world(cell, meta_t1)) for cell in path]
+
+    topology_t0 = homotopy_identity(
+        path,
+        blocked,
+        identity_coordinates=world_t0,
+        identity_coordinate_frame="global_xy",
+        identity_units="m",
+        identity_quantization=1.0,
+    )
+    topology_t1 = homotopy_identity(
+        path,
+        blocked,
+        identity_coordinates=world_t1,
+        identity_coordinate_frame="global_xy",
+        identity_units="m",
+        identity_quantization=1.0,
+    )
+
+    assert topology_t0.identity == topology_t1.identity
+    assert topology_t0.identity_quantization == 1.0
+
+
+@pytest.mark.parametrize("quantization", [0.0, -1.0, float("nan")])
+def test_homotopy_identity_rejects_invalid_quantization(quantization: float) -> None:
+    observation = homotopy_identity(
+        _left_route_grid(),
+        SYMMETRIC_BLOCKED,
+        identity_quantization=quantization,
+    )
+    assert observation.identity is None
+    assert observation.unavailable_reason == "invalid_identity_quantization"
+
+
 def test_homotopy_identity_rejects_misaligned_identity_coordinates() -> None:
     """An immutable-frame identity path must align one-for-one with grid cells."""
     observation = homotopy_identity(
@@ -517,6 +565,17 @@ def test_temporal_consistency_rejects_homotopy_frame_changes() -> None:
     assert report.alignment_valid is False
     assert report.alignment_reason == "identity_reference_mismatch"
     assert report.valid_count == 0
+
+
+def test_temporal_consistency_rejects_homotopy_quantization_changes() -> None:
+    side = classify_route_side(_left_route(), start=START, goal=GOAL)
+    first = homotopy_identity(_left_route_grid(), SYMMETRIC_BLOCKED, identity_quantization=1.0)
+    second = homotopy_identity(_left_route_grid(), SYMMETRIC_BLOCKED, identity_quantization=0.5)
+
+    report = temporal_consistency([side, side], [first, second])
+
+    assert report.alignment_valid is False
+    assert report.alignment_reason == "identity_reference_mismatch"
 
 
 def test_temporal_consistency_consistent_sequence() -> None:

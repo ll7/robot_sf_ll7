@@ -447,48 +447,87 @@ def _route_hypotheses_for_observation(
     return _format_route_hypotheses(adapter, obs, inputs)
 
 
-def _route_choice_observations(
-    adapter: GridRoutePlannerAdapter,
-    inputs: _RouteHypothesisInputs | None,
+def _route_choice_observations(  # noqa: C901 - fail-closed planner provenance validation
+    selected_route: dict[str, Any] | None,
     *,
-    selected_path: list[tuple[int, int]] | None,
     reference_start: tuple[float, float],
     reference_goal: tuple[float, float],
 ) -> tuple[RouteSideReport, HomotopyObservation]:
-    """Build one route-choice observation from the selected raw hypothesis."""
-    if inputs is None or not selected_path:
+    """Build one route-choice observation from the planner's exact selected-route payload."""
+
+    def _unavailable() -> tuple[RouteSideReport, HomotopyObservation]:
         return (
             _classify_route_side([], start=reference_start, goal=reference_goal),
             _homotopy_identity([], np.zeros((0, 0), dtype=bool)),
         )
 
+    if not isinstance(selected_route, dict):
+        return _unavailable()
+    grid_path = selected_route.get("route_path_grid")
+    world_path = selected_route.get("route_path_world")
+    if (
+        selected_route.get("route_path_coordinate_frame") != "occupancy_grid_rc"
+        or selected_route.get("route_path_world_coordinate_frame") != "global_xy"
+        or selected_route.get("route_path_world_units") != "m"
+        or not isinstance(grid_path, list)
+        or not isinstance(world_path, list)
+        or len(grid_path) < 2
+        or len(grid_path) != len(world_path)
+    ):
+        return _unavailable()
     try:
-        grid_path = []
-        for cell in selected_path:
+        for cell in grid_path:
             row, col = cell
-            grid_path.append((float(row), float(col)))
-        world_path = [
-            tuple(float(value) for value in adapter._grid_to_world(cell, inputs.meta)[:2])
-            for cell in grid_path
-        ]
-    except (IndexError, TypeError, ValueError):
-        return (
-            _classify_route_side([], start=reference_start, goal=reference_goal),
-            _homotopy_identity([], np.zeros((0, 0), dtype=bool)),
-        )
+            row_value = float(row)
+            col_value = float(col)
+            if not row_value.is_integer() or not col_value.is_integer():
+                return _unavailable()
+        normalized_world_path = []
+        for point in world_path:
+            x, y = point
+            normalized_point = (float(x), float(y))
+            if not np.isfinite(normalized_point).all():
+                return _unavailable()
+            normalized_world_path.append(normalized_point)
+    except (TypeError, ValueError):
+        return _unavailable()
+
+    homotopy_payload = selected_route.get("route_homotopy_observation")
+    if not isinstance(homotopy_payload, dict):
+        return _unavailable()
+    identity = homotopy_payload.get("identity")
+    unavailable_reason = homotopy_payload.get("unavailable_reason")
+    identity_frame = homotopy_payload.get("identity_coordinate_frame")
+    identity_units = homotopy_payload.get("identity_units")
+    identity_quantization = homotopy_payload.get("identity_quantization")
+    if identity_frame != "global_xy" or identity_units != "m":
+        return _unavailable()
+    try:
+        quantization_value = float(identity_quantization)
+    except (TypeError, ValueError):
+        return _unavailable()
+    if not np.isfinite(quantization_value) or quantization_value <= 0.0:
+        return _unavailable()
+    if identity is not None and (not isinstance(identity, str) or not identity.strip()):
+        return _unavailable()
+    if identity is None and not isinstance(unavailable_reason, str):
+        return _unavailable()
+    if identity is not None and unavailable_reason is not None:
+        return _unavailable()
+
     side_report = _classify_route_side(
-        world_path,
+        normalized_world_path,
         start=reference_start,
         goal=reference_goal,
         coordinate_frame="global_xy",
         units="m",
     )
-    homotopy_observation = _homotopy_identity(
-        grid_path,
-        inputs.blocked,
-        identity_coordinates=world_path,
-        identity_coordinate_frame="global_xy",
-        identity_units="m",
+    homotopy_observation = HomotopyObservation(
+        identity=identity,
+        unavailable_reason=unavailable_reason,
+        identity_coordinate_frame=identity_frame,
+        identity_units=identity_units,
+        identity_quantization=quantization_value,
     )
     return side_report, homotopy_observation
 
@@ -1172,13 +1211,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
                     planner_decision = last_decision()
             decision = planner_decision if isinstance(planner_decision, dict) else {}
             route_corridor = decision.get("route_corridor")
-            selected_path = (
-                route_corridor.get("route_path_grid") if isinstance(route_corridor, dict) else None
-            )
             side_report, homotopy_observation = _route_choice_observations(
-                route_adapter,
-                route_inputs,
-                selected_path=selected_path,
+                route_corridor if isinstance(route_corridor, dict) else None,
                 reference_start=reference_start,
                 reference_goal=reference_goal,
             )

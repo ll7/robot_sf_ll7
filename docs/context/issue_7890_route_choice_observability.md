@@ -54,17 +54,20 @@ therefore cannot change a label.
 Reuses the canonical corridor-signature helper from the topology-hypothesis diagnostics: choke
 cells of the path relative to the blocked map, with the same finite-clearance fallback when no
 choke cell exists. The identity is a canonical, order-independent string of coordinate pairs sorted
-and joined. Pure grid callers default to `occupancy_grid_rc` coordinates in cells. Production
-replanning supplies aligned `global_xy` cell-centre coordinates in metres, so the same world route
-keeps one identity when an ego-centred occupancy grid moves. Every observation records
-`identity_coordinate_frame` and `identity_units`.
+and joined. Pure grid callers default to `occupancy_grid_rc` coordinates in cells. The
+topology-guided planner computes the observation against its own selected path and blocked map,
+then maps aligned `global_xy` cell centres onto a canonical lattice whose bin width is the planner
+grid resolution. This suppresses false identity changes from fractional ego-grid lattice motion.
+Every observation records `identity_coordinate_frame`, `identity_units`, and
+`identity_quantization`; changing any of them invalidates a temporal comparison.
 
 Identity remains stable across discovery order and does not depend on ephemeral route names such as
-`primary_route` or `masked_cell_*`. The production diagnostic binds the exact path selected by the
-planner through `route_path_grid`; it does not regenerate alternatives and rejoin them by those
-names. Malformed maps, invalid thresholds, misaligned immutable-frame coordinates, and ambiguous
-frame metadata fail closed. Grid paths must be integral, stay in bounds, avoid blocked cells, and
-use duplicate or 8-connected consecutive steps; non-adjacent jumps fail closed.
+`primary_route` or `masked_cell_*`. The production diagnostic consumes the planner's exact
+`route_path_grid`, `route_path_world`, and `route_homotopy_observation` payload; it does not
+regenerate a blocked map or rejoin alternatives by those names. Malformed maps, invalid thresholds
+or quantization, misaligned coordinates, and ambiguous frame metadata fail closed. Grid paths must
+be integral, stay in bounds, avoid blocked cells, and use duplicate or 8-connected consecutive
+steps; non-adjacent jumps fail closed.
 
 Only a topology-guided planner decision that exposes this exact selected path can produce an
 operational homotopy observation. Base route-corridor diagnostics without selected-topology path

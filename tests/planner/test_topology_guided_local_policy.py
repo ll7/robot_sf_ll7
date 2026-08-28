@@ -192,6 +192,9 @@ def test_topology_guided_selector_finds_two_distinct_route_hypotheses() -> None:
     assert selected["route_corridor"]["route_path_cell_count"] > 1
     assert selected["route_corridor"]["route_path_grid"]
     assert selected["route_corridor"]["route_path_coordinate_frame"] == "occupancy_grid_rc"
+    assert selected["route_corridor"]["route_path_world"]
+    assert selected["route_corridor"]["route_path_world_coordinate_frame"] == "global_xy"
+    assert selected["route_corridor"]["route_path_world_units"] == "m"
     assert selected["route_corridor"]["route_waypoint_world"]
     assert selected["static_clearance_min_m"] is not None
     assert decision["selected_score"] == selected["score"]
@@ -485,6 +488,13 @@ def test_topology_guided_policy_records_selected_hypothesis_diagnostics() -> Non
     assert route_corridor["topology_status"] == "ok"
     assert route_corridor["route_path_grid"]
     assert route_corridor["route_path_coordinate_frame"] == "occupancy_grid_rc"
+    assert route_corridor["route_path_world"]
+    assert route_corridor["route_homotopy_observation"]["identity"]
+    assert route_corridor["route_homotopy_observation"]["identity_coordinate_frame"] == "global_xy"
+    assert route_corridor["route_homotopy_observation"]["identity_units"] == "m"
+    assert route_corridor["route_homotopy_observation"]["identity_quantization"] == pytest.approx(
+        0.2
+    )
     assert route_corridor["topology_guided_config"]["schema_version"] == (
         "topology_guided_hybrid_rule.v1"
     )

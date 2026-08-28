@@ -13,9 +13,9 @@ from scripts.validation.run_topology_hypothesis_diagnostics import (
     _extract_pedestrians,
     _find_alternative_paths,
     _first_float,
+    _homotopy_identity,
     _path_dynamic_clearance,
     _route_choice_observations,
-    _RouteHypothesisInputs,
     _RouteHypothesisPath,
     _summarize_hypotheses,
     _terminal_outcome,
@@ -145,19 +145,27 @@ def test_route_choice_observations_use_selected_path_and_grid_context() -> None:
         clearance_map=GridRoutePlannerAdapter._compute_clearance_map(blocked),
         topology_signature=frozenset(),
     )
-    inputs = _RouteHypothesisInputs(
-        routes=[route],
-        blocked=blocked,
-        meta={"origin": [0.0, 0.0], "resolution": [1.0], "use_ego_frame": [0.0]},
-        robot_pos=np.array([0.5, 4.5]),
-        heading=0.0,
-        goal=np.array([9.5, 4.5]),
+    meta = {"origin": [0.0, 0.0], "resolution": [1.0], "use_ego_frame": [0.0]}
+    world_path = [tuple(_adapter()._grid_to_world(cell, meta)) for cell in route.path]
+    homotopy = _homotopy_identity(
+        route.path,
+        blocked,
+        identity_coordinates=world_path,
+        identity_coordinate_frame="global_xy",
+        identity_units="m",
+        identity_quantization=1.0,
     )
+    selected_route = {
+        "route_path_grid": route.path,
+        "route_path_coordinate_frame": "occupancy_grid_rc",
+        "route_path_world": world_path,
+        "route_path_world_coordinate_frame": "global_xy",
+        "route_path_world_units": "m",
+        "route_homotopy_observation": homotopy.as_dict(),
+    }
 
     side_report, homotopy_observation = _route_choice_observations(
-        _adapter(),
-        inputs,
-        selected_path=route.path,
+        selected_route,
         reference_start=(0.5, 4.5),
         reference_goal=(9.5, 4.5),
     )
@@ -175,19 +183,26 @@ def test_route_choice_observations_do_not_rebind_by_ephemeral_hypothesis_id() ->
     blocked = np.zeros((10, 10), dtype=bool)
     blocked[3:7, 4:6] = True
     planner_selected_path = [(8, column) for column in range(10)]
-    inputs = _RouteHypothesisInputs(
-        routes=[],
-        blocked=blocked,
-        meta={"origin": [0.0, 0.0], "resolution": [1.0], "use_ego_frame": [0.0]},
-        robot_pos=np.array([0.5, 4.5]),
-        heading=0.0,
-        goal=np.array([9.5, 4.5]),
-    )
+    meta = {"origin": [0.0, 0.0], "resolution": [1.0], "use_ego_frame": [0.0]}
+    world_path = [tuple(_adapter()._grid_to_world(cell, meta)) for cell in planner_selected_path]
+    selected_route = {
+        "route_path_grid": planner_selected_path,
+        "route_path_coordinate_frame": "occupancy_grid_rc",
+        "route_path_world": world_path,
+        "route_path_world_coordinate_frame": "global_xy",
+        "route_path_world_units": "m",
+        "route_homotopy_observation": _homotopy_identity(
+            planner_selected_path,
+            blocked,
+            identity_coordinates=world_path,
+            identity_coordinate_frame="global_xy",
+            identity_units="m",
+            identity_quantization=1.0,
+        ).as_dict(),
+    }
 
     side_report, homotopy_observation = _route_choice_observations(
-        _adapter(),
-        inputs,
-        selected_path=planner_selected_path,
+        selected_route,
         reference_start=(0.5, 4.5),
         reference_goal=(9.5, 4.5),
     )
@@ -198,19 +213,8 @@ def test_route_choice_observations_do_not_rebind_by_ephemeral_hypothesis_id() ->
 
 def test_route_choice_observations_fail_closed_without_selected_path() -> None:
     """An unselected or unavailable route must not be credited as an observation."""
-    inputs = _RouteHypothesisInputs(
-        routes=[],
-        blocked=np.zeros((4, 4), dtype=bool),
-        meta={"origin": [0.0, 0.0], "resolution": [1.0], "use_ego_frame": [0.0]},
-        robot_pos=np.array([0.5, 0.5]),
-        heading=0.0,
-        goal=np.array([3.5, 0.5]),
-    )
-
     side_report, homotopy_observation = _route_choice_observations(
-        _adapter(),
-        inputs,
-        selected_path=None,
+        None,
         reference_start=(0.5, 0.5),
         reference_goal=(3.5, 0.5),
     )
@@ -219,6 +223,32 @@ def test_route_choice_observations_fail_closed_without_selected_path() -> None:
     assert side_report.reason == "empty_path"
     assert homotopy_observation.identity is None
     assert homotopy_observation.unavailable_reason == "empty_path"
+
+
+def test_route_choice_observations_reject_mismatched_planner_path_frames() -> None:
+    selected_route = {
+        "route_path_grid": [[1, 1], [1, 2]],
+        "route_path_coordinate_frame": "wrong_grid_frame",
+        "route_path_world": [[1.0, 1.0], [2.0, 1.0]],
+        "route_path_world_coordinate_frame": "global_xy",
+        "route_path_world_units": "m",
+        "route_homotopy_observation": {
+            "identity": "1,1",
+            "unavailable_reason": None,
+            "identity_coordinate_frame": "global_xy",
+            "identity_units": "m",
+            "identity_quantization": 1.0,
+        },
+    }
+
+    side_report, homotopy_observation = _route_choice_observations(
+        selected_route,
+        reference_start=(0.0, 0.0),
+        reference_goal=(3.0, 0.0),
+    )
+
+    assert side_report.side == "unavailable"
+    assert homotopy_observation.identity is None
 
 
 def test_topology_signature_prefers_choke_cells_over_same_gap_wiggles() -> None:

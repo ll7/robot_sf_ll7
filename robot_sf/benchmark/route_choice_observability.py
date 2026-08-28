@@ -101,6 +101,7 @@ class HomotopyObservation:
     unavailable_reason: str | None
     identity_coordinate_frame: str = "occupancy_grid_rc"
     identity_units: str = "cells"
+    identity_quantization: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         """Return a JSON-ready dictionary."""
@@ -109,6 +110,7 @@ class HomotopyObservation:
             "unavailable_reason": self.unavailable_reason,
             "identity_coordinate_frame": self.identity_coordinate_frame,
             "identity_units": self.identity_units,
+            "identity_quantization": self.identity_quantization,
         }
 
 
@@ -520,6 +522,7 @@ def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and thres
     identity_coordinates: list[tuple[float, float]] | None = None,
     identity_coordinate_frame: str = "occupancy_grid_rc",
     identity_units: str = "cells",
+    identity_quantization: float | None = None,
 ) -> HomotopyObservation:
     """Return a stable compact corridor identity for a grid-cell path.
 
@@ -546,7 +549,17 @@ def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and thres
             unavailable_reason=reason,
             identity_coordinate_frame=identity_coordinate_frame,
             identity_units=identity_units,
+            identity_quantization=quantization_value,
         )
+
+    quantization_value: float | None = None
+    if identity_quantization is not None:
+        try:
+            quantization_value = float(identity_quantization)
+        except (TypeError, ValueError):
+            return _unavailable("invalid_identity_quantization")
+        if not np.isfinite(quantization_value) or quantization_value <= 0.0:
+            return _unavailable("invalid_identity_quantization")
 
     if not path:
         return _unavailable("empty_path")
@@ -614,6 +627,14 @@ def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and thres
             if normalized_point is None:
                 return _unavailable("invalid_identity_coordinates")
             canonical_coordinates.append(normalized_point)
+    if quantization_value is not None:
+        canonical_coordinates = [
+            (
+                float(np.floor(first / quantization_value) * quantization_value),
+                float(np.floor(second / quantization_value) * quantization_value),
+            )
+            for first, second in canonical_coordinates
+        ]
 
     clearance_map = GridRoutePlannerAdapter._compute_clearance_map(blocked_map)
     signature = topology_signature(
@@ -645,6 +666,7 @@ def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and thres
         unavailable_reason=None,
         identity_coordinate_frame=identity_coordinate_frame,
         identity_units=identity_units,
+        identity_quantization=quantization_value,
     )
 
 
@@ -708,7 +730,11 @@ def temporal_consistency(
         return _alignment_failure("route_reference_mismatch")
 
     identity_references = {
-        (observation.identity_coordinate_frame, observation.identity_units)
+        (
+            observation.identity_coordinate_frame,
+            observation.identity_units,
+            observation.identity_quantization,
+        )
         for observation in homotopy_observations
         if observation.identity is not None
     }

@@ -6,6 +6,8 @@ import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from scripts.dev.gh_pr_label_rest import (
     LABEL_MAX_PAGES,
     LABEL_PAGE_SIZE,
@@ -388,10 +390,23 @@ class TestLabelReadback:
             "repos/ll7/robot_sf_ll7/issues/5220/labels?per_page=100&page=2"
         )
 
-    def test_rejects_malformed_row_without_returning_partial_labels(self) -> None:
-        """A malformed row must not be silently dropped from an authoritative read."""
+    @pytest.mark.parametrize(
+        "malformed_row",
+        [
+            {"id": 123},
+            "not-an-object",
+            {"name": "   "},
+        ],
+        ids=["missing-name", "non-object", "blank-name"],
+    )
+    def test_rejects_malformed_row_without_returning_partial_labels(
+        self, malformed_row: object
+    ) -> None:
+        """Malformed rows must not be silently dropped from an authoritative read."""
         with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
-            mock_run.return_value = _proc(stdout=json.dumps([{"name": "valid"}, {"id": 123}]))
+            mock_run.return_value = _proc(
+                stdout=json.dumps([{"name": "valid"}, malformed_row])
+            )
             result = _get_label_names(5220)
 
         assert result["status"] == "error"

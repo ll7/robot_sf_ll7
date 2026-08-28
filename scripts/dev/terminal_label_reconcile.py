@@ -47,6 +47,7 @@ TERMINAL_CLASSES = frozenset(
         "reopened",
     }
 )
+TERMINAL_CLASS_VALUES = ", ".join(sorted(TERMINAL_CLASSES))
 
 # Active execution/review labels that must not survive a verified terminal
 # transition (derived from docs/ai/label-taxonomy.md execution-state family).
@@ -385,7 +386,7 @@ def _parse_int_list(values: list[str]) -> list[tuple[int, str]]:
         if terminal_class not in TERMINAL_CLASSES:
             raise ValueError(
                 f"unknown terminal class {terminal_class!r}; expected one of "
-                + ", ".join(sorted(TERMINAL_CLASSES))
+                + TERMINAL_CLASS_VALUES
             )
         parsed.append((number, terminal_class))
     return parsed
@@ -805,7 +806,11 @@ def main(argv: list[str] | None = None) -> int:
         "--item",
         action="append",
         dest="items",
-        help="NUM=TERMINAL_CLASS pair; repeatable (e.g. 42=completed).",
+        metavar="NUM=CLASS",
+        help=(
+            "Repeatable item/class pair (e.g. 42=completed). "
+            f"Accepted classes: {TERMINAL_CLASS_VALUES}."
+        ),
     )
     parser.add_argument(
         "--inventory",

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from scripts.dev import merge_queue_gate as merge_queue_gate_module
 from scripts.dev.merge_queue_gate import (
     CI_PATHS_IGNORE_PATTERNS,
     _format_summary,
@@ -764,6 +766,7 @@ def test_fetch_pr_snapshot_rejects_incomplete_exact_head_check_runs() -> None:
                     }
                 )
             ),
+            _gh_response(stderr="gh: Not Found (HTTP 404)", returncode=1),
         ]
         snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
 
@@ -877,6 +880,294 @@ def test_fetch_pr_snapshot_preserves_long_gate_verdict_trailers(carrier: str) ->
     assert snapshot["gate_verdicts"] == [trailer]
     audit = evaluate_merge_gate(snapshot, main_sha=FULL_SHA, threads_resolved=True)
     assert audit.passed is True
+
+
+@pytest.mark.parametrize("carrier", ["comments", "reviews"])
+def test_fetch_pr_snapshot_preserves_trusted_exact_head_base_policy(carrier: str) -> None:
+    trailer = f"base-policy: ordinary-cas @ {FULL_SHA}"
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr(body=trailer, carrier=carrier))),
+            _gh_response(stdout=json.dumps({"base": {"sha": "older_base"}})),
+            _exact_changed_coverage_response(),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["base_policy"] == [trailer]
+
+
+def test_remote_head_only_marker_addition_is_base_sensitive() -> None:
+    marker_source = "import pytest\npytestmark = pytest.mark.base_sensitive\n"
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(
+                stdout=json.dumps(
+                    [
+                        {
+                            "filename": "tests/test_remote_marker.py",
+                            "status": "added",
+                        }
+                    ]
+                )
+            ),
+            _gh_response(stdout=json.dumps({"sha": "c" * 40})),
+            _gh_response(
+                stdout=json.dumps(
+                    {
+                        "encoding": "base64",
+                        "content": base64.b64encode(marker_source.encode()).decode(),
+                    }
+                )
+            ),
+            _gh_response(stderr="gh: Not Found (HTTP 404)", returncode=1),
+        ]
+
+        inventory, error = merge_queue_gate_module.fetch_pr_changed_file_marker_inventory(
+            42,
+            repo="owner/repo",
+            base_sha="b" * 40,
+            head_sha=FULL_SHA,
+            current_main_sha="c" * 40,
+        )
+
+    assert error is None
+    assert inventory is not None
+    assert inventory["changed_file_records"] == [
+        {
+            "filename": "tests/test_remote_marker.py",
+            "previous_filename": None,
+            "status": "added",
+        }
+    ]
+    assert inventory["changed_sensitive_files"] == ["tests/test_remote_marker.py"]
+    assert inventory["content_provenance"] == [
+        {
+            "base": None,
+            "current_main": [
+                {
+                    "contains_marker": False,
+                    "exists": False,
+                    "path": "tests/test_remote_marker.py",
+                    "ref": "c" * 40,
+                }
+            ],
+            "filename": "tests/test_remote_marker.py",
+            "head": {
+                "contains_marker": True,
+                "path": "tests/test_remote_marker.py",
+                "ref": FULL_SHA,
+            },
+            "previous_filename": None,
+            "status": "added",
+        }
+    ]
+
+
+def test_marker_removed_by_modified_test_remains_base_sensitive() -> None:
+    base_source = "import pytest\npytestmark = pytest.mark.base_sensitive\n"
+    head_source = "def test_still_exists():\n    assert True\n"
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(
+                stdout=json.dumps([{"filename": "tests/test_marker.py", "status": "modified"}])
+            ),
+            _gh_response(stdout=json.dumps({"sha": "c" * 40})),
+            _gh_response(
+                stdout=json.dumps(
+                    {
+                        "encoding": "base64",
+                        "content": base64.b64encode(base_source.encode()).decode(),
+                    }
+                )
+            ),
+            _gh_response(
+                stdout=json.dumps(
+                    {
+                        "encoding": "base64",
+                        "content": base64.b64encode(head_source.encode()).decode(),
+                    }
+                )
+            ),
+            _gh_response(
+                stdout=json.dumps(
+                    {
+                        "encoding": "base64",
+                        "content": base64.b64encode(head_source.encode()).decode(),
+                    }
+                )
+            ),
+        ]
+
+        inventory, error = merge_queue_gate_module.fetch_pr_changed_file_marker_inventory(
+            42,
+            repo="owner/repo",
+            base_sha="b" * 40,
+            head_sha=FULL_SHA,
+            current_main_sha="c" * 40,
+        )
+
+    assert error is None
+    assert inventory is not None
+    assert inventory["changed_sensitive_files"] == ["tests/test_marker.py"]
+    assert inventory["content_provenance"][0]["base"]["contains_marker"] is True
+    assert inventory["content_provenance"][0]["head"]["contains_marker"] is False
+
+
+def test_marker_added_only_on_current_main_is_base_sensitive() -> None:
+    ordinary_source = "def test_still_exists():\n    assert True\n"
+    current_source = "import pytest\npytestmark = pytest.mark.base_sensitive\n"
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(
+                stdout=json.dumps([{"filename": "tests/test_marker.py", "status": "modified"}])
+            ),
+            _gh_response(stdout=json.dumps({"sha": "c" * 40})),
+            *[
+                _gh_response(
+                    stdout=json.dumps(
+                        {
+                            "encoding": "base64",
+                            "content": base64.b64encode(source.encode()).decode(),
+                        }
+                    )
+                )
+                for source in (ordinary_source, ordinary_source, current_source)
+            ],
+        ]
+
+        inventory, error = merge_queue_gate_module.fetch_pr_changed_file_marker_inventory(
+            42,
+            repo="owner/repo",
+            base_sha="b" * 40,
+            head_sha=FULL_SHA,
+            current_main_sha="c" * 40,
+        )
+
+    assert error is None
+    assert inventory is not None
+    assert inventory["changed_sensitive_files"] == ["tests/test_marker.py"]
+    assert inventory["content_provenance"][0]["current_main"][0]["contains_marker"] is True
+
+
+def test_changed_file_inventory_fails_closed_at_github_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(merge_queue_gate_module, "_CHANGED_FILES_PAGE_SIZE", 2)
+    monkeypatch.setattr(merge_queue_gate_module, "_MAX_GITHUB_PR_FILES", 6, raising=False)
+    page = [
+        {"filename": "robot_sf/a.py", "status": "modified"},
+        {"filename": "robot_sf/b.py", "status": "modified"},
+    ]
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [_gh_response(stdout=json.dumps(page)) for _ in range(3)]
+
+        records, error = merge_queue_gate_module._fetch_pr_changed_file_records(
+            42, repo="owner/repo"
+        )
+
+    assert records is None
+    assert error == "changed-file inventory reached GitHub's 6-file cap"
+
+
+def test_renaming_sensitive_test_to_non_test_filename_remains_base_sensitive() -> None:
+    marker_source = "import pytest\npytestmark = pytest.mark.base_sensitive\n"
+    ordinary_source = "def helper():\n    return True\n"
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(
+                stdout=json.dumps(
+                    [
+                        {
+                            "filename": "robot_sf/marker_helper.py",
+                            "previous_filename": "tests/test_marker.py",
+                            "status": "renamed",
+                        }
+                    ]
+                )
+            ),
+            _gh_response(stdout=json.dumps({"sha": "c" * 40})),
+            *[
+                _gh_response(
+                    stdout=json.dumps(
+                        {
+                            "encoding": "base64",
+                            "content": base64.b64encode(source.encode()).decode(),
+                        }
+                    )
+                )
+                for source in (marker_source, ordinary_source)
+            ],
+            _gh_response(stderr="gh: Not Found (HTTP 404)", returncode=1),
+            _gh_response(
+                stdout=json.dumps(
+                    {
+                        "encoding": "base64",
+                        "content": base64.b64encode(marker_source.encode()).decode(),
+                    }
+                )
+            ),
+        ]
+
+        inventory, error = merge_queue_gate_module.fetch_pr_changed_file_marker_inventory(
+            42,
+            repo="owner/repo",
+            base_sha="b" * 40,
+            head_sha=FULL_SHA,
+            current_main_sha="c" * 40,
+        )
+
+    assert error is None
+    assert inventory is not None
+    assert inventory["changed_file_records"] == [
+        {
+            "filename": "robot_sf/marker_helper.py",
+            "previous_filename": "tests/test_marker.py",
+            "status": "renamed",
+        }
+    ]
+    assert inventory["candidate_files"] == ["robot_sf/marker_helper.py"]
+    assert inventory["changed_sensitive_files"] == ["robot_sf/marker_helper.py"]
+    assert inventory["content_provenance"][0]["previous_filename"] == "tests/test_marker.py"
+
+
+def test_invalid_current_main_ref_cannot_be_treated_as_path_absence() -> None:
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(
+                stdout=json.dumps([{"filename": "tests/test_marker.py", "status": "added"}])
+            ),
+            _gh_response(stderr="gh: Not Found (HTTP 404)", returncode=1),
+        ]
+
+        inventory, error = merge_queue_gate_module.fetch_pr_changed_file_marker_inventory(
+            42,
+            repo="owner/repo",
+            base_sha="b" * 40,
+            head_sha=FULL_SHA,
+            current_main_sha="c" * 40,
+        )
+
+    assert inventory is None
+    assert error == "gh: Not Found (HTTP 404)"
+
+
+def test_changed_file_marker_inventory_rejects_unknown_status() -> None:
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(
+            stdout=json.dumps([{"filename": "robot_sf/example.py", "status": "mystery"}])
+        )
+
+        inventory, error = merge_queue_gate_module.fetch_pr_changed_file_marker_inventory(
+            42,
+            repo="owner/repo",
+            base_sha="b" * 40,
+            head_sha=FULL_SHA,
+            current_main_sha="c" * 40,
+        )
+
+    assert inventory is None
+    assert error == "changed file has unsupported status mystery: robot_sf/example.py"
 
 
 @pytest.mark.parametrize("carrier", ["comments", "reviews"])

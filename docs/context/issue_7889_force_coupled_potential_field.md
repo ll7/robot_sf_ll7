@@ -13,8 +13,8 @@ field-guided and force-coupled adaptive pure pursuit approach" (Scientific Repor
 Plain-language summary: an opt-in local planner that steers a unicycle robot by combining an
 attractive force toward a look-ahead target with repulsive forces from obstacles and pedestrians,
 saturating the total force, and issuing a speed/steering command that respects configured speed and
-ordinary-stop rate limits as hard predicates. A zero-distance overlap is an explicit immediate
-emergency stop and is the documented exception to the ordinary rate limit. The registered map-runner
+rate limits as hard predicates. A zero-distance overlap triggers an explicit rate-limited stop
+request and degraded status. The registered map-runner
 path reads static obstacles from the canonical occupancy-grid obstacle channel; direct point inputs
 remain available for analytic smoke fixtures. It is a comparator core for future planner evaluation
 — nothing more.
@@ -27,17 +27,17 @@ remain available for analytic smoke fixtures. It is a comparator core for future
 | dynamic potential-field refinement | `approximated` | classic attractive + inverse-distance repulsive field; no time-varying field update |
 | force-coupled target selection | `implemented` | combined saturated force direction sets the desired heading |
 | bounded forward-kinematic command generation | `implemented` | unicycle `(linear, angular)` with speed limits |
-| steering/angular-rate and rate-of-change constraints | `implemented` | speed and ordinary-stop command-rate limits enforced as clips (hard predicates); overlap emergency stops are an explicit immediate-stop exception |
+| steering/angular-rate and rate-of-change constraints | `implemented` | speed and command-rate limits are enforced as clips (hard predicates), including overlap stop requests |
 
 ## Formulae and conventions
 
 - Attractive force: `attractive_weight * (target - robot) / |target - robot|`.
 - Repulsive force per source point: `repulsive_weight * (1/d - 1/influence_radius_m) * (robot - p) / d`
   for `numerical_epsilon < d <= influence_radius_m`.
-- A zero-distance obstacle or pedestrian is treated as an overlap: the planner emits an immediate
-  `(0, 0)` emergency stop, records sticky `status: degraded`, and explicitly records the
-  `emergency_stop` diagnostic; it does not invent a repulsion direction or wait for the ordinary
-  command-rate limiter.
+- A zero-distance obstacle or pedestrian is treated as an overlap: the planner requests `(0, 0)`,
+  applies the configured command-rate limits, records sticky `status: degraded`, and explicitly
+  records the `emergency_stop` trigger; it does not invent a repulsion direction or exceed the hard
+  rate predicate.
 - Reaching the goal emits a rate-limited ordinary `(0, 0)` stop. A near-zero total force away from
   the goal is treated as a potential-field local minimum: the planner emits a rate-limited stop,
   records sticky `status: degraded`, and does not pass the undefined `atan2(0, 0)` direction into
@@ -57,8 +57,7 @@ remain available for analytic smoke fixtures. It is a comparator core for future
 ## Deviations and unsupported elements
 
 - No time-varying potential field (source's dynamic refinement is approximated by static fields).
-- No steering-rate *acceleration* profile beyond the configured per-step rate limits; the explicit
-  overlap emergency stop may bypass the ordinary rate limit for immediate safety.
+- No steering-rate *acceleration* profile beyond the configured per-step rate limits.
 - No pedestrian motion prediction; pedestrians repel at their observed positions only.
 - No global route integration; the local target is derived from the goal directly.
 - The source paper's vehicle-oriented results are not transferred as social-navigation evidence.
@@ -98,7 +97,7 @@ commands and diagnostics.
 | --- | --- | --- |
 | success | observed | both fixed analytic fixtures returned finite, bounded commands with `status: ok` |
 | invalid | observed | missing, malformed, and non-finite required inputs raise `ValueError` after recording `status: invalid_input` |
-| degraded | observed | absent optional visibility or a zero-distance overlap is explicit and sticky for the episode as `status: degraded`; overlap emits an immediate stop and is not nominal success or benchmark evidence |
+| degraded | observed | absent optional visibility or a zero-distance overlap is explicit and sticky for the episode as `status: degraded`; overlap requests a rate-limited stop and is not nominal success or benchmark evidence |
 | collision | not evaluated | analytic command smoke has no simulator rollout, so no collision outcome is claimed |
 | timeout | not evaluated | bounded analytic execution has no timeout outcome; no campaign/runtime claim is made |
 

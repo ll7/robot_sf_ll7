@@ -228,13 +228,12 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
 
         zero_distance_stop = bool(obstacle_zero_distance or pedestrian_zero_distance)
         if zero_distance_stop:
-            # An overlap is an explicit safety stop: it may bypass the ordinary
-            # command-rate limit so the planner does not continue into a
-            # colliding obstacle or pedestrian. Goal and force-cancellation
-            # stops remain ordinary commands and are rate-limited below.
-            linear, angular = (0.0, 0.0)
-        else:
-            linear, angular = self._constrain_command(raw_linear, raw_angular)
+            # Request a stop without violating the issue contract's hard
+            # command-rate predicates. Diagnostics retain the overlap trigger
+            # while the constrained command decelerates deterministically.
+            raw_linear = 0.0
+            raw_angular = 0.0
+        linear, angular = self._constrain_command(raw_linear, raw_angular)
         self._last_diagnostics = self._build_diagnostics(
             state=(robot, goal, target),
             forces={
@@ -690,7 +689,6 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
             raw_linear,
             raw_angular,
             previous_command,
-            emergency_stop=emergency_stop,
         )
         if overlapping_sources:
             active_constraints.append("zero_distance_stop")
@@ -746,8 +744,6 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         raw_linear: float,
         raw_angular: float,
         previous_command: tuple[float, float],
-        *,
-        emergency_stop: bool = False,
     ) -> list[str]:
         """Report which hard constraints were active on the last step.
 
@@ -759,13 +755,12 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
             active.append("linear_speed_limit")
         if abs(angular) >= self.config.max_angular_speed - self.config.numerical_epsilon:
             active.append("angular_speed_limit")
-        if not emergency_stop:
-            linear_rate = abs(linear - previous_command[0]) / max(self.config.control_dt, 1e-9)
-            angular_rate = abs(angular - previous_command[1]) / max(self.config.control_dt, 1e-9)
-            if linear_rate >= self.config.max_linear_rate - self.config.numerical_epsilon:
-                active.append("linear_rate_limit")
-            if angular_rate >= self.config.max_angular_rate - self.config.numerical_epsilon:
-                active.append("angular_rate_limit")
+        linear_rate = abs(linear - previous_command[0]) / max(self.config.control_dt, 1e-9)
+        angular_rate = abs(angular - previous_command[1]) / max(self.config.control_dt, 1e-9)
+        if linear_rate >= self.config.max_linear_rate - self.config.numerical_epsilon:
+            active.append("linear_rate_limit")
+        if angular_rate >= self.config.max_angular_rate - self.config.numerical_epsilon:
+            active.append("angular_rate_limit")
         if not (math.isfinite(raw_linear) and math.isfinite(raw_angular)):
             active.append("non_finite_raw_command")
         return active

@@ -159,6 +159,24 @@ def test_zero_distance_guard_stops_and_reports_degraded() -> None:
     assert "emergency_stop" in diagnostics["active_constraints"]
 
 
+def test_zero_distance_overlap_stop_obeys_rate_limit_after_command_ramp() -> None:
+    """Overlap handling must preserve the issue's never-exceed rate predicate."""
+    config = ForceCoupledPotentialFieldConfig(max_linear_rate=0.8, control_dt=0.2)
+    planner = ForceCoupledPotentialFieldPlanner(config)
+    for _ in range(10):
+        previous_linear, previous_angular = planner.plan(_observation())
+
+    linear, angular = planner.plan(_observation(obstacles=[(0.0, 0.0)]))
+    diagnostics = planner.diagnostics()
+
+    assert 0.0 < linear < previous_linear
+    assert abs(linear - previous_linear) <= config.max_linear_rate * config.control_dt + 1e-9
+    assert abs(angular - previous_angular) <= config.max_angular_rate * config.control_dt + 1e-9
+    assert diagnostics["emergency_stop"] is True
+    assert "zero_distance_stop" in diagnostics["active_constraints"]
+    assert "linear_rate_limit" in diagnostics["active_constraints"]
+
+
 def test_goal_reached_stops_without_inventing_a_heading() -> None:
     planner = ForceCoupledPotentialFieldPlanner()
     planner.plan(_observation(goal=(4.0, 0.0)))

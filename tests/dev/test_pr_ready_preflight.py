@@ -117,7 +117,12 @@ def _make_fake_bin(repo: Path, *, fail: bool = True) -> None:
         )
     else:
         fake.write_text(
-            "#!/usr/bin/env bash\nexit 0\n",
+            "#!/usr/bin/env bash\n"
+            'payload=" $* "\n'
+            'if [[ "$payload" == *"check_cuda_runtime.py"* && "$payload" == *" --json "* ]]; then\n'
+            '  printf \'%s\\n\' \'{"schema":"cuda_runtime_readiness.v1","status":"unavailable","reason":"fixture"}\'\n'
+            "fi\n"
+            "exit 0\n",
             encoding="utf-8",
         )
     fake.chmod(0o755)

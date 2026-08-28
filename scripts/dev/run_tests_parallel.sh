@@ -33,6 +33,8 @@ Environment overrides:
   PYTEST_XDIST_DIST=load|worksteal|loadscope|loadfile|loadgroup
   PYTEST_ORDER_MODE=failed-first|new-first|none
   PYTEST_NUM_WORKERS=<int>|auto
+  ROBOT_SF_CUDA_RUNTIME_STATUS=usable|unavailable|unusable_nvml|unknown
+    Readiness preflight classification; usable CUDA defaults GPU-spawning lanes to one worker.
   PYTEST_SHARD_COUNT=<int>
     pytest-split shard count (default 1). When >1, runs a disjoint subset via
     `--splits N --group G`. Coverage remains off unless explicitly enabled;
@@ -224,6 +226,13 @@ if [[ -n "$worker_override" ]]; then
   requested_args=(--requested "$worker_override")
 fi
 
+cuda_runtime_args=()
+cuda_runtime_override="${ROBOT_SF_CUDA_RUNTIME_STATUS:-}"
+if [[ -n "$cuda_runtime_override" ]]; then
+  cuda_runtime_args=(--cuda-runtime "$cuda_runtime_override")
+  echo "Resolved CUDA runtime status: $cuda_runtime_override (source=ROBOT_SF_CUDA_RUNTIME_STATUS)" >&2
+fi
+
 if [[ "$worker_override" == "1" ]]; then
   # ``resolve_pytest_workers.py`` applies platform concurrency floors (for
   # example, two workers on macOS). An explicit one is a different semantic
@@ -232,7 +241,10 @@ if [[ "$worker_override" == "1" ]]; then
   echo "explicit override via PYTEST_NUM_WORKERS=1 (true no-xdist)" >&2
 else
   worker_spec="$(
-    uv run python "$SCRIPT_DIR/resolve_pytest_workers.py" ${requested_args[@]+"${requested_args[@]}"} \
+    uv run python "$SCRIPT_DIR/resolve_pytest_workers.py" \
+      --lane "$lane_mode" \
+      ${cuda_runtime_args[@]+"${cuda_runtime_args[@]}"} \
+      ${requested_args[@]+"${requested_args[@]}"} \
       --show-reason 2> >(cat >&2)
   )"
 fi

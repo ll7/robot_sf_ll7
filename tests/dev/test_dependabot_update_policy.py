@@ -390,3 +390,56 @@ version = "3.3.7"
     assert evidence["locks"]["uv.lock"]["profile_ids"]
     assert evidence["locks"]["uv.lock"]["owners"][0]["id"] == "root"
     assert evidence["changed_package_classifications"][0]["name"] == "numpy"
+
+
+def test_evaluate_update_non_dependency_project_file_change_is_not_applicable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-dependency edits to pyproject.toml (e.g. tool configs) are not_applicable."""
+    base_pyproject = """[project]
+name = "robot-sf"
+version = "0.1.0"
+dependencies = [
+    "numpy>=2.0.0",
+]
+"""
+    head_pyproject = """[project]
+name = "robot-sf"
+version = "0.1.0"
+dependencies = [
+    "numpy>=2.0.0",
+]
+
+[tool.ruff]
+exclude = [".worktrees", "mutants"]
+"""
+    (tmp_path / "pyproject.toml").write_text(head_pyproject, encoding="utf-8")
+    policy = load_policy()
+
+    monkeypatch.setattr(
+        "scripts.dev.check_dependabot_update_policy.direct_dependency_names",
+        lambda _repo_root: {"numpy"},
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_dependabot_update_policy.changed_files",
+        lambda *_args, **_kwargs: ["pyproject.toml"],
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_dependabot_update_policy.git_file_at_ref",
+        lambda _repo_root, _base_ref, relative_path: (
+            base_pyproject if relative_path == "pyproject.toml" else ""
+        ),
+    )
+    monkeypatch.setattr(
+        "scripts.dev.check_dependabot_update_policy._diff_vs_head",
+        lambda _repo_root, _base_ref, _options=None, pathspec=None: (
+            "+[tool.ruff]\n+exclude = [\".worktrees\", \"mutants\"]\n"
+        ),
+    )
+
+    report = evaluate_update(repo_root=tmp_path, base_ref="origin/main", policy=policy)
+
+    assert report["status"] == "not_applicable"
+    assert "without modifying dependency declarations" in report["message"]
+

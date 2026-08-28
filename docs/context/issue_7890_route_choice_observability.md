@@ -56,10 +56,12 @@ cells of the path relative to the blocked map, with the same finite-clearance fa
 choke cell exists. The identity is a canonical, order-independent string of coordinate pairs sorted
 and joined. Pure grid callers default to `occupancy_grid_rc` coordinates in cells. The
 topology-guided planner computes the observation against its own selected path and blocked map and
-emits the aligned `global_xy` choke-point set. Temporal reporting uses strict bounded symmetric
-Hausdorff matching with the planner grid resolution as tolerance and deterministic complete-link
-clusters, so every pair in one reported topology cluster matches. Moving cell representatives less
-than one cell apart remain one topology while corridors a full cell apart remain distinct.
+emits the aligned `global_xy` choke-point set. Temporal reporting uses chronological directed
+Hausdorff matching with the planner grid resolution as a strict tolerance and deterministic
+complete-link clusters. Every current point must match the prior route, while already-traversed
+choke points may disappear as the robot advances; same-corridor progress therefore is not counted
+as a topology switch. Moving cell representatives less than one cell apart remain one topology,
+while corridors a full cell apart and routes that gain unmatched choke points remain distinct.
 Every observation records `identity_coordinate_frame`, `identity_units`, `identity_points`, and
 `identity_match_tolerance`; changing any reference field invalidates a temporal comparison.
 
@@ -70,6 +72,11 @@ regenerate a blocked map or rejoin alternatives by those names. Malformed maps, 
 or match tolerances, misaligned coordinates, and ambiguous frame metadata fail closed. Grid paths must
 be integral, stay in bounds, avoid blocked cells, and use duplicate or 8-connected consecutive
 steps; non-adjacent jumps fail closed.
+
+Route-side and homotopy availability are independent once the selected world path and its frame are
+validated. A legitimate `no_choke_cells` homotopy result therefore preserves the route-side
+observation and its original topology-unavailable reason; malformed topology payloads fail only the
+topology observation.
 
 Only a topology-guided planner decision that exposes this exact selected path can produce an
 operational homotopy observation. Base route-corridor diagnostics without selected-topology path

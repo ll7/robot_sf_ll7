@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
+import pytest
+
 from scripts.dev.terminal_label_reconcile import (
     ACTIVE_LABELS,
     INVENTORY_SCHEMA,
@@ -13,6 +15,7 @@ from scripts.dev.terminal_label_reconcile import (
     _collect_closed_items,
     _terminal_class_from_state,
     fetch_item_state,
+    main,
     plan_for_terminal,
     reconcile_item,
     run_terminal_inventory,
@@ -21,6 +24,29 @@ from scripts.dev.terminal_label_reconcile import (
 
 def _labels(*names: str) -> list[str]:
     return sorted(names)
+
+
+def test_cli_help_lists_every_terminal_class(capsys: pytest.CaptureFixture[str]) -> None:
+    """The item syntax is discoverable without a failed live invocation."""
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--help"])
+
+    assert exc_info.value.code == 0
+    help_text = capsys.readouterr().out
+    for terminal_class in TERMINAL_CLASSES:
+        assert terminal_class in help_text
+
+
+def test_cli_rejects_unknown_terminal_class_before_live_reads(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Invalid classes fail before report construction can read GitHub state."""
+    with patch("scripts.dev.terminal_label_reconcile.build_report") as mock_build:
+        return_code = main(["--item", "42=merged"])
+
+    assert return_code == 2
+    mock_build.assert_not_called()
+    assert "unknown terminal class 'merged'" in capsys.readouterr().out
 
 
 def test_completed_removes_active_labels_and_adds_done() -> None:

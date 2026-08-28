@@ -181,6 +181,30 @@ The release entrypoint:
 The entrypoint is intentionally a release wrapper, not a second benchmark
 execution engine.
 
+For a no-campaign rehearsal of a v0.2 release, use the named `rehearsal` mode
+with both the enforced-staged checkpoint receipt and the exact-source runtime
+smoke receipt:
+
+```bash
+uv run python scripts/tools/run_benchmark_release.py \
+  --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
+  --mode rehearsal \
+  --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
+  --runtime-smoke-receipt output/benchmarks/camera_ready/<smoke_id>/release/release_result.json
+```
+
+Rehearsal normalizes repository-relative inputs, verifies the checked-out
+source/config/manifest identities, and reports startup, planner-roster,
+checkpoint, and runtime-smoke admissions. It returns success only when all
+admissions pass, while explicitly reporting `campaign_execution_status` as
+`not_started`; it creates no campaign output, episode, publication bundle, or
+scheduler submission. The runtime-smoke admission must carry the exact SHA-256
+of its own embedded staged-checkpoint receipt. The release and runtime-smoke
+receipts are validated independently; their wrapper hashes may differ because
+their campaign-config bindings differ, but their checkpoint arm identities and
+model-byte SHA-256 values must match. Allocation and resume options, including
+`--resume-receipt-max-age-hours`, are rejected in this mode.
+
 `release/release_result.json` preserves the wrapped campaign semantics in the
 top-level `status`, `status_reason`, `benchmark_success`, `exit_code`,
 `campaign_execution_status`, `evidence_status`, and `row_status_summary`

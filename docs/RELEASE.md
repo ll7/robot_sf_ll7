@@ -94,6 +94,27 @@ The expected output is
 (also referenced as `<smoke_id>` below). Runtime-smoke output is
 release-admission evidence only and is **not** full benchmark evidence.
 
+Before a full release attempt, the public runner also supports a no-campaign
+rehearsal. It requires the same staged checkpoint receipt and exact-source
+runtime-smoke receipt, then stops before campaign allocation:
+
+```bash
+uv run python scripts/tools/run_benchmark_release.py \
+  --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
+  --mode rehearsal \
+  --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
+  --runtime-smoke-receipt output/benchmarks/camera_ready/<smoke_id>/release/release_result.json
+```
+
+Successful rehearsal output is admission/preflight evidence only. It reports
+`campaign_execution_status: not_started` and must not be treated as benchmark
+evidence or publication authorization; no campaign output, episode, bundle, or
+scheduler submission is created. Both checkpoint receipts are validated
+independently; their wrapper hashes may differ because each is bound to its own
+campaign config, but their checkpoint arm identities and model-byte SHA-256
+values must match. Resume-only options, including
+`--resume-receipt-max-age-hours`, are rejected.
+
 ## Release Execution
 
 First stage every referenced checkpoint into durable shared storage and persist

@@ -248,6 +248,57 @@ class TestRemoveLabel:
         assert result["status"] == "error"
         assert "Bad credentials" in result["error"]
 
+    def test_treats_concurrent_absent_label_delete_as_idempotent(self) -> None:
+        """A verified already-absent label is a successful remove outcome."""
+        with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _proc(returncode=1, stderr="gh: Label does not exist (HTTP 404)"),
+                _proc(stdout=_mock_labels_payload("bug")),
+            ]
+            result = remove_label(5220, "state:running", repo="ll7/robot_sf_ll7")
+
+        assert result == {
+            "status": "ok",
+            "number": 5220,
+            "label": "state:running",
+            "action": "remove",
+            "repo": "ll7/robot_sf_ll7",
+            "idempotent": True,
+        }
+
+    def test_fails_closed_when_absent_delete_readback_still_has_label(self) -> None:
+        """The narrow 404 is not success when authoritative readback disagrees."""
+        with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _proc(returncode=1, stderr="gh: Label does not exist (HTTP 404)"),
+                _proc(stdout=_mock_labels_payload("state:running", "bug")),
+            ]
+            result = remove_label(5220, "state:running")
+
+        assert result["status"] == "error"
+        assert "was still found" in result["error"]
+
+    def test_fails_closed_on_unrelated_not_found_error(self) -> None:
+        """A generic 404 must not be mistaken for the absent-label race."""
+        with patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_del:
+            mock_del.return_value = _proc(returncode=1, stderr="gh: Not Found (HTTP 404)")
+            result = remove_label(5220, "state:running")
+
+        assert result["status"] == "error"
+        assert "Not Found" in result["error"]
+
+    def test_fails_closed_when_absent_delete_readback_fails(self) -> None:
+        """An idempotent response still requires a successful labels readback."""
+        with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _proc(returncode=1, stderr="gh: Label does not exist (HTTP 404)"),
+                _proc(returncode=1, stderr="HTTP 401: Bad credentials"),
+            ]
+            result = remove_label(5220, "state:running")
+
+        assert result["status"] == "error"
+        assert "could not read labels" in result["error"]
+
     def test_fails_closed_when_post_write_verification_fails(self) -> None:
         """A successful DELETE is insufficient when the re-read still has the label."""
         with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:

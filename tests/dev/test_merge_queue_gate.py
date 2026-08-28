@@ -11,6 +11,9 @@ import pytest
 from scripts.dev.merge_queue_gate import (
     CI_PATHS_IGNORE_PATTERNS,
     _format_summary,
+    _rest_check_rollup,
+    _rest_requested_reviewers,
+    _rest_reviews,
     _to_receipt_check_runs,
     evaluate_merge_gate,
     fetch_merge_queue_strategy,
@@ -213,6 +216,9 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
     assert snapshot["base_sha"] == "base_sha"
     assert snapshot["pr_state"] == "OPEN"
     assert snapshot["pr_merged_at"] is None
+    assert snapshot["data_source"] == "graphql"
+    assert snapshot["evidence_provenance"]["ordinary_facts"]["check_rollup"] == "graphql"
+    assert snapshot["evidence_provenance"]["ordinary_facts"]["base_sha"] == "rest"
     first_call = mock_gh.call_args_list[0].args[0]
     assert first_call[:3] == ["pr", "view", "42"]
     fields = first_call[first_call.index("--json") + 1]
@@ -257,7 +263,16 @@ def _rest_pull_response(*, head_sha: str = FULL_SHA, body: str = "") -> MagicMoc
 def _rest_comments_response(*bodies: str) -> MagicMock:
     """Build a REST issue-comments response with owner association."""
     return _gh_response(
-        stdout=json.dumps([{"body": body, "author_association": "OWNER"} for body in bodies])
+        stdout=json.dumps(
+            [
+                {
+                    "body": body,
+                    "author_association": "OWNER",
+                    "user": {"login": "maintainer"},
+                }
+                for body in bodies
+            ]
+        )
     )
 
 
@@ -290,6 +305,7 @@ def test_fetch_pr_snapshot_rest_fallback_when_graphql_quota_exhausted() -> None:
             _exact_changed_coverage_response(
                 head_sha=FULL_SHA
             ),  # commits/{sha}/check-runs (rollup)
+            _gh_response(stdout=json.dumps([])),  # commits/{sha}/statuses (legacy contexts)
             _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),  # base pulls/42
             _exact_changed_coverage_response(head_sha=FULL_SHA),  # changed-coverage check-runs
         ]
@@ -306,9 +322,132 @@ def test_fetch_pr_snapshot_rest_fallback_when_graphql_quota_exhausted() -> None:
     assert snapshot["requested_reviewers"] == ["external-reviewer"]
     assert snapshot["requested_teams"] == ["Core Reviewers"]
     assert snapshot["comment_snapshot"]["latest"][0]["body_excerpt"] == "comment one"
+    assert snapshot["data_source"] == "rest_fallback_graphql_quota"
+    assert snapshot["evidence_provenance"]["data_source"] == "rest_fallback_graphql_quota"
+    assert snapshot["evidence_provenance"]["ordinary_facts"]["check_rollup"] == "rest"
+    assert snapshot["evidence_provenance"]["ordinary_facts"]["labels"] == "rest"
+    assert snapshot["evidence_provenance"]["review_threads"] == {
+        "source": "graphql",
+        "status": "separate_query",
+    }
     # The REST fallback must be exercised (pr view hit with quota failure first).
     first_call = mock_gh.call_args_list[0].args[0]
     assert first_call[:3] == ["pr", "view", "42"]
+
+
+def test_rest_check_rollup_paginates_and_includes_legacy_statuses() -> None:
+    """The REST rollup must not discard later check runs or commit-status failures."""
+    check = {
+        "id": 7001,
+        "name": "CI",
+        "head_sha": FULL_SHA,
+        "status": "completed",
+        "conclusion": "success",
+    }
+    page_one = {"total_count": 101, "check_runs": [check] * 100}
+    page_two = {"total_count": 101, "check_runs": [check]}
+    status = {
+        "context": "legacy-gate",
+        "state": "failure",
+        "target_url": "https://example.test/status",
+    }
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(page_one)),
+            _gh_response(stdout=json.dumps(page_two)),
+            _gh_response(stdout=json.dumps([status])),
+        ]
+        rollup, error = _rest_check_rollup(owner="owner", name="repo", head_sha=FULL_SHA)
+
+    assert error is None
+    assert len(rollup) == 102
+    assert any(item["name"] == "legacy-gate" and item["conclusion"] == "FAILURE" for item in rollup)
+    assert "page=2" in mock_gh.call_args_list[1].args[0][-1]
+    assert mock_gh.call_args_list[2].args[0][-1].endswith("/statuses?per_page=100&page=1")
+
+
+def test_rest_check_rollup_rejects_incomplete_total_count() -> None:
+    """A short page that contradicts total_count cannot become a green rollup."""
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(
+            stdout=json.dumps(
+                {
+                    "total_count": 101,
+                    "check_runs": [
+                        {
+                            "name": "CI",
+                            "head_sha": FULL_SHA,
+                            "status": "completed",
+                            "conclusion": "success",
+                        }
+                    ],
+                }
+            )
+        )
+        rollup, error = _rest_check_rollup(owner="owner", name="repo", head_sha=FULL_SHA)
+
+    assert rollup == []
+    assert error is not None
+    assert "incomplete" in error
+
+
+def test_rest_reviews_reject_malformed_entry_and_paginates() -> None:
+    """Review state is complete only when every bounded page has valid identity data."""
+    valid_review = {
+        "id": 1,
+        "body": "",
+        "state": "APPROVED",
+        "user": {"login": "reviewer"},
+        "author_association": "OWNER",
+        "commit_id": FULL_SHA,
+    }
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps([valid_review] * 100)),
+            _gh_response(stdout=json.dumps([{**valid_review, "state": "CHANGES_REQUESTED"}])),
+        ]
+        reviews, error = _rest_reviews(owner="owner", name="repo", pr_number=42)
+
+    assert error is None
+    assert len(reviews) == 101
+    assert reviews[-1]["state"] == "CHANGES_REQUESTED"
+
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(
+            stdout=json.dumps([{"state": "APPROVED", "author_association": "OWNER"}])
+        )
+        reviews, error = _rest_reviews(owner="owner", name="repo", pr_number=42)
+
+    assert reviews == []
+    assert error is not None
+    assert "malformed" in error
+
+
+def test_rest_requested_reviewers_reject_malformed_objects() -> None:
+    """Missing reviewer identity must not be normalized to an empty request set."""
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(stdout=json.dumps({"users": [{}], "teams": []}))
+        reviewers, error = _rest_requested_reviewers(owner="owner", name="repo", pr_number=42)
+
+    assert reviewers == []
+    assert error is not None
+    assert "malformed" in error
+
+
+def test_fetch_pr_snapshot_does_not_fallback_on_transient_graphql_exhaustion() -> None:
+    """Only recognized GraphQL quota exhaustion may enter the REST fallback route."""
+    with (
+        patch(
+            "scripts.dev.merge_queue_gate._gh",
+            side_effect=[_gh_response(returncode=1, stderr="HTTP 503 Service Unavailable")] * 3,
+        ),
+        patch("scripts.dev.github_graphql_retry.time.sleep", lambda _seconds: None),
+    ):
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert snapshot == {}
+    assert error is not None
+    assert "after 3 attempts" in error
 
 
 def test_fetch_pr_snapshot_rest_fallback_fails_closed_on_rest_failure() -> None:

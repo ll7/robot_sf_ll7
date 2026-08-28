@@ -112,6 +112,7 @@ COMPLETED_STATUS = "completed"
 GATE_WORKFLOW_NAME = "Merge Queue Gate"
 GATE_JOB_NAME = "merge-queue-gate"
 CHANGED_COVERAGE_CHECK_NAME = "changed-coverage-gate"
+SNAPSHOT_PROVENANCE_SCHEMA = "single_account_merge_evidence_provenance.v1"
 # Keep this list in lockstep with the top-level ``paths-ignore`` filters in
 # ``.github/workflows/ci.yml``.  The merge gate may need to explain why that
 # workflow did not create an exact-head changed-coverage check for a PR.
@@ -119,6 +120,12 @@ CI_PATHS_IGNORE_PATTERNS = ("**/*.md", "docs/**")
 CHANGED_COVERAGE_NOT_REQUIRED = "not_required"
 _CHANGED_FILES_PAGE_SIZE = 100
 _MAX_CHANGED_FILES_PAGES = 100
+_REST_EVIDENCE_PAGE_SIZE = 100
+_MAX_REST_EVIDENCE_PAGES = 10
+_REST_CHECK_STATUSES = frozenset(
+    {"queued", "in_progress", "completed", "requested", "waiting", "pending"}
+)
+_REST_COMMIT_STATUS_STATES = frozenset({"error", "failure", "pending", "success"})
 
 # GitHub's native merge-queue ref is exposed as either the full
 # ``refs/heads/gh-readonly-queue/<base>/pr-<number>-<source-sha>`` ref or its
@@ -1059,14 +1066,27 @@ def _rest_labels(raw: Any) -> list[dict[str, Any]]:
 def _rest_json_list(
     *, owner: str, name: str, path: str, fail_message: str
 ) -> tuple[list[Any], str | None]:
-    """Fetch one REST JSON-list endpoint with fail-closed diagnostics."""
-    result = _gh(["api", f"repos/{owner}/{name}/{path}"], timeout=45)
-    if result.returncode != 0:
-        return [], result.stderr.strip() or fail_message
-    payload, err = _parse_json(result.stdout)
-    if err or not isinstance(payload, list):
-        return [], err or fail_message
-    return payload, None
+    """Fetch a bounded REST JSON-list endpoint with fail-closed pagination."""
+    rows: list[Any] = []
+    for page in range(1, _MAX_REST_EVIDENCE_PAGES + 1):
+        result = _gh(
+            [
+                "api",
+                f"repos/{owner}/{name}/{path}?per_page={_REST_EVIDENCE_PAGE_SIZE}&page={page}",
+            ],
+            timeout=45,
+        )
+        if result.returncode != 0:
+            return [], result.stderr.strip() or fail_message
+        payload, err = _parse_json(result.stdout)
+        if err or not isinstance(payload, list):
+            return [], err or fail_message
+        if any(not isinstance(item, dict) for item in payload):
+            return [], f"{fail_message}: response contains a malformed entry"
+        rows.extend(payload)
+        if len(payload) < _REST_EVIDENCE_PAGE_SIZE:
+            return rows, None
+    return [], f"{fail_message}: response exceeded the bounded pagination limit"
 
 
 def _rest_comments(
@@ -1081,14 +1101,31 @@ def _rest_comments(
     )
     if err:
         return [], err
-    return [
-        {
-            "body": str(comment.get("body") or ""),
-            "authorAssociation": str(comment.get("author_association") or "").upper(),
-        }
-        for comment in comments
-        if isinstance(comment, dict)
-    ], None
+    normalized: list[dict[str, Any]] = []
+    for index, comment in enumerate(comments):
+        user = comment.get("user")
+        body = comment.get("body")
+        association = comment.get("author_association")
+        if (
+            not isinstance(user, dict)
+            or not isinstance(user.get("login"), str)
+            or not user["login"].strip()
+            or not isinstance(body, str)
+            or not isinstance(association, str)
+            or not association.strip()
+        ):
+            return [], f"REST comment response contains a malformed entry at index {index}"
+        normalized.append(
+            {
+                "body": body,
+                "authorAssociation": association.upper(),
+                "author": {"login": user["login"]},
+                "user": {"login": user["login"]},
+                "createdAt": comment.get("created_at"),
+                "updatedAt": comment.get("updated_at"),
+            }
+        )
+    return normalized, None
 
 
 def _rest_reviews(
@@ -1103,20 +1140,39 @@ def _rest_reviews(
     )
     if err:
         return [], err
-    return [
-        {
-            "id": review.get("id"),
-            "body": str(review.get("body") or ""),
-            "state": str(review.get("state") or ""),
-            "author": {"login": str(review.get("user", {}).get("login") or "")},
-            "authorAssociation": str(review.get("author_association") or "").upper(),
-            "commit_id": review.get("commit_id"),
-            "submitted_at": review.get("submitted_at"),
-            "user": {"login": str(review.get("user", {}).get("login") or "")},
-        }
-        for review in reviews
-        if isinstance(review, dict)
-    ], None
+    normalized: list[dict[str, Any]] = []
+    for index, review in enumerate(reviews):
+        user = review.get("user")
+        state = review.get("state")
+        association = review.get("author_association")
+        commit_id = review.get("commit_id")
+        if (
+            not isinstance(user, dict)
+            or not isinstance(user.get("login"), str)
+            or not user["login"].strip()
+            or not isinstance(state, str)
+            or state.upper()
+            not in {"APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED", "PENDING"}
+            or not isinstance(association, str)
+            or not association.strip()
+            or not isinstance(commit_id, str)
+            or not re.fullmatch(r"[0-9a-fA-F]{40}", commit_id)
+            or not isinstance(review.get("body"), (str, type(None)))
+        ):
+            return [], f"REST review response contains a malformed entry at index {index}"
+        normalized.append(
+            {
+                "id": review.get("id"),
+                "body": review.get("body") or "",
+                "state": state.upper(),
+                "author": {"login": user["login"]},
+                "authorAssociation": association.upper(),
+                "commit_id": commit_id,
+                "submitted_at": review.get("submitted_at"),
+                "user": {"login": user["login"]},
+            }
+        )
+    return normalized, None
 
 
 def _rest_requested_reviewers(
@@ -1132,62 +1188,202 @@ def _rest_requested_reviewers(
     requested, err = _parse_json(requested_result.stdout)
     if err or not isinstance(requested, dict):
         return [], err or "REST requested-reviewer response is not a JSON object"
+    users = requested.get("users")
+    teams = requested.get("teams")
+    if not isinstance(users, list) or not isinstance(teams, list):
+        return [], "REST requested-reviewer response is missing users or teams lists"
     items: list[dict[str, Any]] = []
-    for user in requested.get("users", []) if isinstance(requested.get("users"), list) else []:
-        if isinstance(user, dict) and user.get("login"):
-            items.append(
-                {
-                    "user": {
-                        "__typename": "User",
-                        "login": str(user["login"]),
-                    }
+    for index, user in enumerate(users):
+        if (
+            not isinstance(user, dict)
+            or not isinstance(user.get("login"), str)
+            or not user["login"].strip()
+        ):
+            return [], f"REST requested-reviewer users contains a malformed entry at index {index}"
+        items.append(
+            {
+                "user": {
+                    "__typename": "User",
+                    "login": user["login"],
                 }
-            )
-    for team in requested.get("teams", []) if isinstance(requested.get("teams"), list) else []:
-        if isinstance(team, dict) and team.get("slug"):
-            items.append(
-                {
-                    "team": {
-                        "__typename": "Team",
-                        "slug": str(team["slug"]),
-                        "name": str(team.get("name") or team["slug"]),
-                    }
+            }
+        )
+    for index, team in enumerate(teams):
+        if (
+            not isinstance(team, dict)
+            or not isinstance(team.get("slug"), str)
+            or not team["slug"].strip()
+        ):
+            return [], f"REST requested-reviewer teams contains a malformed entry at index {index}"
+        items.append(
+            {
+                "team": {
+                    "__typename": "Team",
+                    "slug": team["slug"],
+                    "name": str(team.get("name") or team["slug"]),
                 }
-            )
+            }
+        )
     return items, None
+
+
+def _rest_check_runs_page(
+    *, owner: str, name: str, head_sha: str, page: int
+) -> tuple[list[dict[str, Any]], int | None, str | None]:
+    """Fetch and validate one exact-head check-run page."""
+    result = _gh(
+        [
+            "api",
+            f"repos/{owner}/{name}/commits/{head_sha}/check-runs?"
+            f"per_page={_REST_EVIDENCE_PAGE_SIZE}&page={page}",
+        ],
+        timeout=45,
+    )
+    if result.returncode != 0:
+        return [], None, result.stderr.strip() or "REST check-run fetch failed"
+    payload, err = _parse_json(result.stdout)
+    if err or not isinstance(payload, dict):
+        return [], None, err or "REST check-run response is not a JSON object"
+    page_rows = payload.get("check_runs")
+    if not isinstance(page_rows, list) or any(not isinstance(item, dict) for item in page_rows):
+        return [], None, "REST check-run response contains a malformed check_runs list"
+    for index, check in enumerate(page_rows):
+        check_error = _validate_rest_check_run(check, head_sha=head_sha, index=index)
+        if check_error:
+            return [], None, check_error
+    raw_total_count = payload.get("total_count")
+    if raw_total_count is not None and (type(raw_total_count) is not int or raw_total_count < 0):
+        return [], None, "REST check-run response has an invalid total_count"
+    return page_rows, raw_total_count, None
+
+
+def _rest_check_runs(
+    *, owner: str, name: str, head_sha: str
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Fetch every exact-head check-run page and validate its count contract."""
+    rows: list[dict[str, Any]] = []
+    total_count: int | None = None
+    for page in range(1, _MAX_REST_EVIDENCE_PAGES + 1):
+        page_rows, page_total_count, page_error = _rest_check_runs_page(
+            owner=owner, name=name, head_sha=head_sha, page=page
+        )
+        if page_error:
+            return [], page_error
+        if page_total_count is not None and total_count not in {None, page_total_count}:
+            return [], "REST check-run response has an inconsistent total_count"
+        total_count = page_total_count if page_total_count is not None else total_count
+        rows.extend(page_rows)
+        if total_count is not None and len(rows) > total_count:
+            return [], "REST check-run response contains more rows than total_count"
+        if total_count is not None and len(rows) == total_count:
+            return rows, None
+        if len(page_rows) < _REST_EVIDENCE_PAGE_SIZE:
+            if total_count is not None and len(rows) < total_count:
+                return [], "REST check-run response is incomplete"
+            return rows, None
+    return [], "REST check-run response exceeded the bounded pagination limit"
+
+
+def _validate_rest_check_run(check: dict[str, Any], *, head_sha: str, index: int) -> str | None:
+    """Validate one check-run object before it enters the fallback rollup."""
+    name_value = check.get("name")
+    status_value = check.get("status")
+    conclusion_value = check.get("conclusion")
+    reported_head = check.get("head_sha")
+    malformed = (
+        not isinstance(name_value, str)
+        or not name_value.strip()
+        or not isinstance(status_value, str)
+        or status_value.lower() not in _REST_CHECK_STATUSES
+        or (conclusion_value is not None and not isinstance(conclusion_value, str))
+        or (status_value.lower() == "completed" and not isinstance(conclusion_value, str))
+        or (
+            reported_head is not None
+            and (
+                not isinstance(reported_head, str)
+                or not re.fullmatch(r"[0-9a-fA-F]{40}", reported_head)
+                or reported_head.lower() != head_sha.lower()
+            )
+        )
+    )
+    if malformed:
+        return f"REST check-run response contains a malformed entry at index {index}"
+    return None
+
+
+def _rest_commit_statuses(
+    *, owner: str, name: str, head_sha: str
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Fetch and validate legacy commit-status contexts for the exact head."""
+    statuses, err = _rest_json_list(
+        owner=owner,
+        name=name,
+        path=f"commits/{head_sha}/statuses",
+        fail_message="REST commit-status response is invalid",
+    )
+    if err:
+        return [], err
+    normalized: list[dict[str, Any]] = []
+    for index, status in enumerate(statuses):
+        context = status.get("context")
+        state = status.get("state")
+        if (
+            not isinstance(context, str)
+            or not context.strip()
+            or not isinstance(state, str)
+            or state.lower() not in _REST_COMMIT_STATUS_STATES
+        ):
+            return [], f"REST commit-status response contains a malformed entry at index {index}"
+        state_upper = state.upper()
+        normalized.append(
+            {
+                "__typename": "StatusContext",
+                "name": context,
+                "context": context,
+                "status": "COMPLETED" if state.lower() != "pending" else "PENDING",
+                "state": state_upper,
+                "conclusion": state_upper,
+                "targetUrl": status.get("target_url"),
+                "createdAt": status.get("created_at"),
+                "updatedAt": status.get("updated_at"),
+                "head_sha": head_sha,
+            }
+        )
+    return normalized, None
 
 
 def _rest_check_rollup(
     *, owner: str, name: str, head_sha: str
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Fetch check-runs for the exact head in the ``statusCheckRollup`` shape."""
-    checks_result = _gh(
-        ["api", f"repos/{owner}/{name}/commits/{head_sha}/check-runs?per_page=100"],
-        timeout=45,
-    )
-    if checks_result.returncode != 0:
-        return [], checks_result.stderr.strip() or "REST check-run fetch failed"
-    checks, err = _parse_json(checks_result.stdout)
-    if err or not isinstance(checks, dict):
-        return [], err or "REST check-run response is not a JSON object"
-    check_runs = checks.get("check_runs", [])
-    if not isinstance(check_runs, list):
-        return [], "REST check-run response is missing a valid check_runs list"
-    return [
-        {
-            "name": str(check.get("name") or ""),
-            "status": str(check.get("status") or "").upper(),
-            "conclusion": str(check.get("conclusion") or "").upper(),
-            "startedAt": check.get("started_at"),
-            "completedAt": check.get("completed_at"),
-            "detailsUrl": check.get("details_url"),
-            "html_url": check.get("html_url"),
-            "app": check.get("app") if isinstance(check.get("app"), dict) else {},
-            "context": str(check.get("name") or ""),
-        }
-        for check in check_runs
-        if isinstance(check, dict)
-    ], None
+    check_runs, check_err = _rest_check_runs(owner=owner, name=name, head_sha=head_sha)
+    if check_err:
+        return [], check_err
+    statuses, status_err = _rest_commit_statuses(owner=owner, name=name, head_sha=head_sha)
+    if status_err:
+        return [], status_err
+    rollup: list[dict[str, Any]] = []
+    for check in check_runs:
+        name_value = check.get("name")
+        status_value = check.get("status")
+        conclusion_value = check.get("conclusion")
+        reported_head = check.get("head_sha")
+        rollup.append(
+            {
+                "__typename": "CheckRun",
+                "name": name_value,
+                "head_sha": reported_head or head_sha,
+                "status": status_value.upper(),
+                "conclusion": conclusion_value.upper() if isinstance(conclusion_value, str) else "",
+                "startedAt": check.get("started_at"),
+                "completedAt": check.get("completed_at"),
+                "detailsUrl": check.get("details_url"),
+                "html_url": check.get("html_url"),
+                "app": check.get("app") if isinstance(check.get("app"), dict) else {},
+                "context": name_value,
+            }
+        )
+    return [*rollup, *statuses], None
 
 
 def _rest_pull_core(
@@ -1220,6 +1416,14 @@ def _rest_pull_core(
     state = pull.get("state")
     if not isinstance(state, str) or not state.strip():
         return {}, "REST pull state is missing or malformed"
+    labels = pull.get("labels")
+    if not isinstance(labels, list) or any(
+        not isinstance(label, dict)
+        or not isinstance(label.get("name"), str)
+        or not label["name"].strip()
+        for label in labels
+    ):
+        return {}, "REST pull labels are missing or malformed"
     merged_at = pull.get("merged_at")
     if merged_at is not None and (not isinstance(merged_at, str) or not merged_at.strip()):
         return {}, "REST pull merged_at is malformed"
@@ -1232,7 +1436,7 @@ def _rest_pull_core(
         "mergedAt": merged_at,
         "isDraft": draft_value,
         "headRefOid": head_sha,
-        "labels": _rest_labels(pull.get("labels")),
+        "labels": _rest_labels(labels),
     }, None
 
 
@@ -1304,6 +1508,8 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         timeout=30,
     )
     result = retry.result
+    snapshot_data_source = "graphql"
+    graphql_fallback_diagnostic = ""
     if result.returncode != 0:
         if retry.quota_exhausted:
             # GraphQL quota is spent but REST reads remain available; rebuild the
@@ -1313,6 +1519,8 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
             if rest_err or not isinstance(rest_payload, dict):
                 return {}, rest_err or "REST snapshot fallback returned no payload"
             payload = rest_payload
+            snapshot_data_source = "rest_fallback_graphql_quota"
+            graphql_fallback_diagnostic = retry.terminal_diagnostic
         else:
             diagnostic = retry.terminal_diagnostic if retry.exhausted else result.stderr.strip()
             return {}, diagnostic or f"gh pr view failed (exit {result.returncode})"
@@ -1411,6 +1619,28 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         # team, or bot is "external"; this is conservative parity with the
         # gh-pr-merger preflight.
         "reviewers_requested": bool(review_requests),
+        "data_source": snapshot_data_source,
+        "evidence_provenance": {
+            "schema": SNAPSHOT_PROVENANCE_SCHEMA,
+            "data_source": snapshot_data_source,
+            "ordinary_facts": {
+                "pull_request": "rest" if snapshot_data_source.startswith("rest_") else "graphql",
+                "labels": "rest" if snapshot_data_source.startswith("rest_") else "graphql",
+                "comments": "rest" if snapshot_data_source.startswith("rest_") else "graphql",
+                "reviews": "rest" if snapshot_data_source.startswith("rest_") else "graphql",
+                "requested_reviewers": (
+                    "rest" if snapshot_data_source.startswith("rest_") else "graphql"
+                ),
+                "check_rollup": "rest" if snapshot_data_source.startswith("rest_") else "graphql",
+                "base_sha": "rest",
+                "changed_coverage": "rest",
+            },
+            "review_threads": {
+                "source": "graphql",
+                "status": "separate_query",
+            },
+            "fallback_diagnostic": graphql_fallback_diagnostic or None,
+        },
     }
     return snapshot, None
 

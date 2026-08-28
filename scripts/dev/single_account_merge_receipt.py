@@ -31,6 +31,9 @@ from typing import Any
 RECEIPT_SCHEMA = "single_account_merge_receipt.v1"
 VERIFY_SCHEMA = "single_account_merge_receipt_verification.v1"
 AUTHORITY_FIXTURE_SCHEMA = "single_account_merge_authority_fixture.v1"
+PROVENANCE_SCHEMA = "single_account_merge_evidence_provenance.v1"
+PROVENANCE_DATA_SOURCES = frozenset({"graphql", "rest_fallback_graphql_quota"})
+PROVENANCE_THREAD_STATUSES = frozenset({"separate_query", "resolved", "unresolved", "unavailable"})
 
 SUCCESS_CONCLUSIONS = frozenset({"success", "neutral", "skipped"})
 PENDING_STATUSES = frozenset(
@@ -521,12 +524,83 @@ def _normalize_thread_resolution(value: Any) -> dict[str, Any]:
         status = _string(value.get("status")).lower()
         if status not in {"resolved", "unresolved", "pending", "unavailable", "malformed"}:
             return {"status": "malformed", "unresolved": None}
-        return {
+        normalized = {
             "status": status,
             "unresolved": value.get("unresolved"),
             "evidence_digest": _string(value.get("evidence_digest")),
         }
+        reason_codes = value.get("reason_codes")
+        if isinstance(reason_codes, list):
+            normalized["reason_codes"] = sorted(str(item) for item in reason_codes if item)
+        for key in ("source", "diagnostic"):
+            text = _string(value.get(key))
+            if text:
+                normalized[key] = text
+        return normalized
     return {"status": "unavailable", "unresolved": None}
+
+
+def _normalize_evidence_provenance(value: Any) -> dict[str, Any] | None:
+    """Keep the source route for live evidence without treating it as approval."""
+    if value is None:
+        return None
+    if isinstance(value, Mapping):
+        return copy.deepcopy(dict(value))
+    return {
+        "schema": PROVENANCE_SCHEMA,
+        "data_source": "unavailable",
+        "ordinary_facts": {},
+        "review_threads": {"source": "unknown", "status": "unavailable"},
+        "reason_codes": ["evidence_provenance_malformed"],
+    }
+
+
+def _evidence_provenance_reasons(value: Any) -> list[str]:
+    """Validate optional source-route evidence and fail closed when malformed."""
+    if value is None:
+        return []
+    if not isinstance(value, Mapping):
+        return ["evidence_provenance_malformed"]
+    reasons: list[str] = []
+    if value.get("schema") != PROVENANCE_SCHEMA:
+        reasons.append("evidence_provenance_schema_mismatch")
+    if value.get("data_source") not in PROVENANCE_DATA_SOURCES:
+        reasons.append("evidence_provenance_source_invalid")
+    reasons.extend(_provenance_ordinary_fact_reasons(value.get("ordinary_facts")))
+    reasons.extend(_provenance_thread_reasons(value.get("review_threads")))
+    return sorted(set(reasons))
+
+
+def _provenance_ordinary_fact_reasons(value: Any) -> list[str]:
+    """Validate the source route for every ordinary merge-gate fact."""
+    if not isinstance(value, Mapping):
+        return ["evidence_provenance_ordinary_facts_missing"]
+    reasons = []
+    for field in (
+        "pull_request",
+        "labels",
+        "comments",
+        "reviews",
+        "requested_reviewers",
+        "check_rollup",
+        "base_sha",
+        "changed_coverage",
+    ):
+        if value.get(field) not in {"graphql", "rest"}:
+            reasons.append(f"evidence_provenance_{field}_source_invalid")
+    return reasons
+
+
+def _provenance_thread_reasons(value: Any) -> list[str]:
+    """Validate the GraphQL-only review-thread provenance state."""
+    if not isinstance(value, Mapping):
+        return ["evidence_provenance_review_threads_missing"]
+    reasons = []
+    if value.get("source") != "graphql":
+        reasons.append("evidence_provenance_review_threads_source_invalid")
+    if value.get("status") not in PROVENANCE_THREAD_STATUSES:
+        reasons.append("evidence_provenance_review_threads_status_invalid")
+    return reasons
 
 
 def _normalize_requested(value: Any, *, label: str) -> dict[str, Any]:
@@ -768,6 +842,7 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
     waiver: Any = None,
     expected_head_cas: Any = None,
     gate_audit: Mapping[str, Any] | None = None,
+    evidence_provenance: Any = None,
     pr_state: str | None = None,
     pr_merged_at: str | None = None,
     observed_at: str | None = None,
@@ -785,6 +860,7 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
         derive_holds({"holds": holds}) if isinstance(holds, Mapping) else derive_holds({})
     )
     normalized_waiver = _normalize_waiver(waiver, observed_at=timestamp)
+    normalized_provenance = _normalize_evidence_provenance(evidence_provenance)
     cas = _cas_request(repository, pr_number, head_sha, expected_head_cas)
     receipt: dict[str, Any] = {
         "schema": RECEIPT_SCHEMA,
@@ -808,6 +884,8 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
         "observed_at": timestamp,
         "merge_result": {"status": "not_applied", "returned_merged_sha": None},
     }
+    if normalized_provenance is not None:
+        receipt["evidence_provenance"] = normalized_provenance
     reasons = _premerge_reasons(receipt, structural_only=True)
     receipt["status"] = "ready" if not reasons else "blocked"
     receipt["reason_codes"] = reasons
@@ -917,6 +995,7 @@ def _premerge_reasons(  # noqa: C901, PLR0912, PLR0915 - every waiver/hold dimen
     )
     if threads.get("status") != "resolved":
         reasons.append(f"review_threads_{_string(threads.get('status')) or 'unavailable'}")
+    reasons.extend(_evidence_provenance_reasons(receipt.get("evidence_provenance")))
     for field in ("requested_reviewers", "requested_teams"):
         requests = receipt.get(field) if isinstance(receipt.get(field), Mapping) else {}
         if requests.get("status") != "clear":
@@ -1002,6 +1081,8 @@ def validate_receipt(receipt: Any) -> dict[str, Any]:
         reasons.append("holds_missing_or_malformed")
     else:
         reasons.extend(f"hold_field_missing:{key}" for key in HOLD_KEYS if key not in holds)
+    if "evidence_provenance" in receipt:
+        reasons.extend(_evidence_provenance_reasons(receipt.get("evidence_provenance")))
     status = "valid" if not reasons else "invalid"
     return {
         "schema": VERIFY_SCHEMA,
@@ -1081,6 +1162,10 @@ def verify_receipt(  # noqa: C901, PLR0912 - revalidation compares every immutab
             receipt.get("gate_audit")
         ):
             reasons.append("live_gate_audit_changed")
+        if "evidence_provenance" in receipt and _canonical_json(
+            live_evidence.get("evidence_provenance")
+        ) != _canonical_json(receipt.get("evidence_provenance")):
+            reasons.append("live_evidence_provenance_changed")
         fresh_holds = derive_holds(live_evidence)
         if _canonical_json(fresh_holds) != _canonical_json(receipt.get("holds")):
             reasons.append("live_hold_disposition_changed")
@@ -1237,8 +1322,6 @@ def build_live_evidence(
     if not current_base_sha:
         return None, "current main SHA unavailable"
     threads, thread_error = fetch_threads_resolved(pr_number, repo=repository)
-    if thread_error or threads is None:
-        return None, thread_error or "review-thread state unavailable"
     gate = evaluate_merge_gate(
         snapshot,
         main_sha=current_base_sha,
@@ -1259,6 +1342,47 @@ def build_live_evidence(
             **review_evidence,
         }
     )
+    if threads is None:
+        thread_resolution: dict[str, Any] = {
+            "status": "unavailable",
+            "unresolved": None,
+            "source": "graphql",
+            "reason_codes": ["review_threads_unavailable"],
+        }
+        if thread_error:
+            thread_resolution["diagnostic"] = thread_error
+    else:
+        thread_resolution = {
+            "status": "resolved" if threads else "unresolved",
+            "unresolved": 0 if threads else 1,
+            "source": "graphql",
+        }
+    raw_provenance = snapshot.get("evidence_provenance")
+    if isinstance(raw_provenance, Mapping):
+        evidence_provenance = copy.deepcopy(dict(raw_provenance))
+    else:
+        data_source = _string(snapshot.get("data_source")) or "graphql"
+        ordinary_source = "rest" if data_source.startswith("rest_") else "graphql"
+        evidence_provenance = {
+            "schema": PROVENANCE_SCHEMA,
+            "data_source": data_source,
+            "ordinary_facts": {
+                "pull_request": ordinary_source,
+                "labels": ordinary_source,
+                "comments": ordinary_source,
+                "reviews": ordinary_source,
+                "requested_reviewers": ordinary_source,
+                "check_rollup": ordinary_source,
+                "base_sha": "rest",
+                "changed_coverage": "rest",
+            },
+        }
+    evidence_provenance["review_threads"] = {
+        "source": "graphql",
+        "status": thread_resolution["status"],
+    }
+    if thread_error:
+        evidence_provenance["review_threads"]["diagnostic"] = thread_error
     return {
         "repository": repository,
         "pr_number": int(snapshot.get("number") or pr_number),
@@ -1270,10 +1394,11 @@ def build_live_evidence(
         "metadata_digest": snapshot.get("metadata_digest"),
         "required_checks": snapshot.get("required_checks"),
         "review_source": review_source,
-        "thread_resolution": {"status": "resolved" if threads else "unresolved"},
+        "thread_resolution": thread_resolution,
         "requested_reviewers": snapshot.get("requested_reviewers"),
         "requested_teams": snapshot.get("requested_teams"),
         "holds": derive_holds(snapshot),
+        "evidence_provenance": evidence_provenance,
         "gate_audit": gate.to_dict(),
     }, None
 

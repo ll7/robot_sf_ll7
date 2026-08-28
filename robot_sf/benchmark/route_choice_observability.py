@@ -518,6 +518,21 @@ def topology_signature(
     )
 
 
+def serialize_homotopy_identity_points(
+    identity_points: tuple[tuple[float, float], ...] | list[tuple[float, float]],
+) -> str:
+    """Return the canonical identity string for a finite two-dimensional point set."""
+
+    def _format_coordinate(value: float) -> str:
+        normalized = 0.0 if abs(value) <= 1e-12 else value
+        return format(normalized, ".12g")
+
+    return ";".join(
+        f"{_format_coordinate(first)},{_format_coordinate(second)}"
+        for first, second in sorted(identity_points)
+    )
+
+
 def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and threshold gates
     path: list[tuple[float, float]],
     blocked: np.ndarray,
@@ -647,15 +662,8 @@ def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and thres
         if not np.allclose(previous, coordinate, rtol=0.0, atol=1e-9):
             return _unavailable("invalid_identity_coordinates")
 
-    def _format_coordinate(value: float) -> str:
-        normalized = 0.0 if abs(value) <= 1e-12 else value
-        return format(normalized, ".12g")
-
     identity_points = sorted(coordinate_by_cell[cell] for cell in signature)
-    identity = ";".join(
-        f"{_format_coordinate(first)},{_format_coordinate(second)}"
-        for first, second in identity_points
-    )
+    identity = serialize_homotopy_identity_points(identity_points)
     return HomotopyObservation(
         identity=identity,
         unavailable_reason=None,

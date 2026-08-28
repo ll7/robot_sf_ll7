@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from scripts.validation.run_topology_hypothesis_diagnostics import (
@@ -297,6 +298,45 @@ def test_route_choice_observations_reject_three_dimensional_identity_points() ->
             "identity_units": "m",
             "identity_match_tolerance": 1.0,
             "identity_points": [[1.0, 1.0, 7.0]],
+        },
+    }
+
+    side_report, homotopy_observation = _route_choice_observations(
+        selected_route,
+        reference_start=(0.0, 0.0),
+        reference_goal=(3.0, 0.0),
+    )
+
+    assert side_report.side == "left"
+    assert homotopy_observation.identity is None
+    assert homotopy_observation.unavailable_reason == "invalid_homotopy_payload"
+
+
+@pytest.mark.parametrize(
+    ("identity", "identity_points"),
+    [
+        ("100,-100", [[100.0, -100.0]]),
+        ("forged-right-corridor", [[1.0, 1.0]]),
+    ],
+)
+def test_route_choice_observations_bind_homotopy_to_selected_world_path(
+    identity: str,
+    identity_points: list[list[float]],
+) -> None:
+    """Topology points and their canonical identity must come from the selected path."""
+    selected_route = {
+        "route_path_grid": [[1, 1], [1, 2]],
+        "route_path_coordinate_frame": "occupancy_grid_rc",
+        "route_path_world": [[1.0, 1.0], [2.0, 1.0]],
+        "route_path_world_coordinate_frame": "global_xy",
+        "route_path_world_units": "m",
+        "route_homotopy_observation": {
+            "identity": identity,
+            "unavailable_reason": None,
+            "identity_coordinate_frame": "global_xy",
+            "identity_units": "m",
+            "identity_match_tolerance": 1.0,
+            "identity_points": identity_points,
         },
     }
 

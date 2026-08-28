@@ -73,6 +73,10 @@ or match tolerances, misaligned coordinates, and ambiguous frame metadata fail c
 be integral, stay in bounds, avoid blocked cells, and use duplicate or 8-connected consecutive
 steps; non-adjacent jumps fail closed.
 
+The consumer also reconstructs the canonical identity string from the supplied identity points and
+requires every identity point to occur on the exact selected world path. Structurally valid but
+forged or path-unbound topology payloads therefore remain unavailable.
+
 Route-side and homotopy availability are independent once the selected world path and its frame are
 validated. A legitimate `no_choke_cells` homotopy result therefore preserves the route-side
 observation and its original topology-unavailable reason; malformed topology payloads fail only the

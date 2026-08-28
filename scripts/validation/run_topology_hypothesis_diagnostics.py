@@ -23,6 +23,7 @@ from robot_sf.benchmark.route_choice_observability import (
     HomotopyObservation,
     RouteSideReport,
     diagnostic_record,
+    serialize_homotopy_identity_points,
 )
 from robot_sf.benchmark.route_choice_observability import (
     classify_route_side as _classify_route_side,
@@ -553,10 +554,22 @@ def _route_choice_observations(  # noqa: C901, PLR0912 - fail-closed provenance 
         for point in identity_points:
             x, y = point
             normalized_identity_points_list.append((float(x), float(y)))
-        normalized_identity_points = tuple(normalized_identity_points_list)
+        normalized_identity_points = tuple(sorted(normalized_identity_points_list))
     except (TypeError, ValueError):
         return _invalid_homotopy()
     if not np.isfinite(normalized_identity_points).all():
+        return _invalid_homotopy()
+    if len(set(normalized_identity_points)) != len(normalized_identity_points):
+        return _invalid_homotopy()
+    if identity != serialize_homotopy_identity_points(normalized_identity_points):
+        return _invalid_homotopy()
+    selected_points = np.asarray(normalized_world_path, dtype=float)
+    identity_point_array = np.asarray(normalized_identity_points, dtype=float)
+    point_distances = np.linalg.norm(
+        identity_point_array[:, None, :] - selected_points[None, :, :],
+        axis=2,
+    )
+    if np.any(np.min(point_distances, axis=1) > 1e-9):
         return _invalid_homotopy()
     homotopy_observation = HomotopyObservation(
         identity=identity,

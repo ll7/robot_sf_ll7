@@ -114,6 +114,17 @@ def test_plan_fails_closed_on_non_finite_inputs() -> None:
         planner.plan(_observation(obstacles=[(1.0, float("inf"))]))
 
 
+def test_numeric_conversion_overflow_records_invalid_non_finite_diagnostics() -> None:
+    planner = ForceCoupledPotentialFieldPlanner()
+    with pytest.raises(ValueError, match="too large to convert to float"):
+        planner.plan(_observation(obstacles=[(10**400, 0)]))
+    diagnostics = planner.diagnostics()
+    assert diagnostics["status"] == "invalid_input"
+    assert diagnostics["invalid_input"] is True
+    assert diagnostics["non_finite_input"] is True
+    assert diagnostics["fallback"] is False
+
+
 def test_attractive_force_points_toward_target() -> None:
     planner = ForceCoupledPotentialFieldPlanner()
     planner.plan(_observation(robot=(0.0, 0.0, 0.0), goal=(4.0, 0.0)))
@@ -515,7 +526,7 @@ def test_ego_occupancy_grid_supplies_static_obstacles() -> None:
     assert obstacle_force[1] < 0.0
 
 
-def test_occupied_robot_grid_cell_triggers_overlap_stop() -> None:
+def test_occupied_robot_grid_cell_fails_closed_without_inventing_exact_overlap() -> None:
     planner = ForceCoupledPotentialFieldPlanner()
     grid = np.zeros((3, 9, 9), dtype=np.float32)
     grid[0, 4, 4] = 1.0
@@ -524,20 +535,22 @@ def test_occupied_robot_grid_cell_triggers_overlap_stop() -> None:
         "goal": {"current": [4.0, 0.0]},
         "pedestrians": {"positions": [], "count": [0]},
         "occupancy_grid": grid,
-        "occupancy_grid_meta_origin": [-4.5, -4.5],
-        "occupancy_grid_meta_resolution": [1.0],
-        "occupancy_grid_meta_size": [9.0, 9.0],
-        "occupancy_grid_meta_use_ego_frame": [1.0],
-        "occupancy_grid_meta_center_on_robot": [1.0],
+        "occupancy_grid_meta_origin": [-0.8, -0.8],
+        "occupancy_grid_meta_resolution": [0.2],
+        "occupancy_grid_meta_size": [1.8, 1.8],
+        "occupancy_grid_meta_use_ego_frame": [0.0],
+        "occupancy_grid_meta_center_on_robot": [0.0],
         "occupancy_grid_meta_channel_indices": [0, 1, -1, 2],
         "occupancy_grid_meta_robot_pose": [0.0, 0.0, 0.0],
     }
 
-    command = planner.plan(observation)
+    with pytest.raises(ValueError, match="occupied static-obstacle cell"):
+        planner.plan(observation)
     diagnostics = planner.diagnostics()
-    assert command == (0.0, 0.0)
-    assert diagnostics["status"] == "degraded"
-    assert diagnostics["zero_distance_guards"]["obstacles"] == 1
+    assert diagnostics["status"] == "invalid_input"
+    assert diagnostics["invalid_input"] is True
+    assert diagnostics["fallback"] is False
+    assert "zero_distance_guards" not in diagnostics
 
 
 def test_out_of_bounds_robot_grid_fails_closed_without_inventing_overlap() -> None:

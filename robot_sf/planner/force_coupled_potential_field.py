@@ -200,6 +200,10 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
                 observation
             )
             control_dt, control_dt_source = self._control_timestep(observation)
+        except OverflowError as exc:
+            reason = f"numeric conversion overflow: {exc}"
+            self._record_failure(status="invalid_input", reason=reason)
+            raise ValueError(reason) from exc
         except (IndexError, TypeError, ValueError) as exc:
             self._record_failure(status="invalid_input", reason=str(exc))
             raise ValueError(str(exc)) from exc
@@ -469,10 +473,14 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         if robot_grid_indices is None:
             raise ValueError("robot pose lies outside supplied occupancy grid")
         robot_row, robot_col = robot_grid_indices
-        robot_cell_occupied = bool(grid[channel_idx, robot_row, robot_col] >= threshold)
+        if bool(grid[channel_idx, robot_row, robot_col] >= threshold):
+            raise ValueError(
+                "robot pose maps to an occupied static-obstacle cell; "
+                "exact overlap geometry is unavailable"
+            )
         indices = np.argwhere(obstacle_mask)
         if indices.size == 0:
-            return robot[:2].reshape(1, 2) if robot_cell_occupied else np.zeros((0, 2), dtype=float)
+            return np.zeros((0, 2), dtype=float)
 
         origin = self._as_1d_float(meta.get("origin", [0.0, 0.0]), pad=2)
         if not np.all(np.isfinite(origin[:2])):
@@ -502,9 +510,6 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         within_influence = distance_sq <= self.config.influence_radius_m**2
         centers = centers[within_influence]
         distance_sq = distance_sq[within_influence]
-        if robot_cell_occupied and not np.any(distance_sq <= self.config.numerical_epsilon**2):
-            centers = np.vstack((robot[:2], centers))
-            distance_sq = np.concatenate(([0.0], distance_sq))
         if centers.shape[0] > self.config.obstacle_grid_max_points:
             order = np.argsort(distance_sq, kind="stable")[: self.config.obstacle_grid_max_points]
             centers = centers[order]

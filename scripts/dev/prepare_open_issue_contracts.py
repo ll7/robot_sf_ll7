@@ -363,7 +363,10 @@ def _verify_batch(plan: Mapping[str, Any], bodies: Mapping[str, str]) -> list[di
         # marker block; normalize the resulting boundary blank lines before
         # comparing against the source digest.
         normalized = re.sub(r"\n{3,}", "\n\n", stripped).strip("\n") + "\n"
-        if original_sha and _sha256_text(normalized) != original_sha:
+        candidates = (stripped, stripped.rstrip("\n"), normalized)
+        if original_sha and not any(
+            _sha256_text(candidate) == original_sha for candidate in candidates
+        ):
             findings.append({"issue": issue, "ok": False, "reason": "content drift outside marker"})
             continue
         findings.append({"issue": issue, "ok": True, "reason": ""})
@@ -598,8 +601,10 @@ def _live_body_writer(issue: int, block: str) -> None:
         raise RuntimeError(f"issue {issue} body read was not a string")
     if _MARKER_BLOCK_RE.search(current):
         body = _MARKER_BLOCK_RE.sub(block.rstrip("\n"), current)
+    elif current.endswith("\n"):
+        body = current + "\n" + block.rstrip("\n")
     else:
-        body = current.rstrip("\n") + "\n\n" + block.rstrip("\n")
+        body = current + block.rstrip("\n")
     write_result = _gh_rest.run_gh_api(endpoint, {"body": body}, method="PATCH")
     if write_result.returncode != 0:
         detail = write_result.stderr.strip() or write_result.stdout.strip() or "REST write failed"

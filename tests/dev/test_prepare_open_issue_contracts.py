@@ -204,7 +204,7 @@ def test_render_cli(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
 # --- Verify ------------------------------------------------------------------
 
 
-def _body_with_marker(body: str, number: int) -> str:
+def _body_with_marker(body: str, number: int, *, separator: str = "\n\n") -> str:
     item = {
         "number": number,
         "classification": "ready",
@@ -215,7 +215,7 @@ def _body_with_marker(body: str, number: int) -> str:
         "body_sha256": prep._sha256_text(body),
     }
     block = prep._render_marker_block(item, audit_digest="d1", batch_id="b1")
-    return body + "\n\n" + block
+    return body + separator + block
 
 
 def test_verify_ok_on_single_marker() -> None:
@@ -249,6 +249,17 @@ def test_verify_fails_on_content_drift() -> None:
     findings = prep._verify_batch(plan, {"1001": body})
     assert not findings[0]["ok"]
     assert "content drift" in findings[0]["reason"]
+
+
+def test_verify_accepts_body_without_trailing_newline() -> None:
+    """Exact body preservation also works when the source has no final newline."""
+    original = "# Title\n\nbody text"
+    body = _body_with_marker(original, 1001, separator="")
+    fixture = _audit_fixture()
+    fixture["items"][0]["body_sha256"] = prep._sha256_text(original)
+    plan = prep.build_plan(fixture, batch_id="b1")
+    findings = prep._verify_batch(plan, {"1001": body})
+    assert all(f["ok"] for f in findings)
 
 
 # --- Apply -------------------------------------------------------------------
@@ -329,13 +340,14 @@ def test_apply_writer_receives_block() -> None:
         assert prep.MARKER_END in block
 
 
+@pytest.mark.parametrize("current_body", ["# Issue\n\nbody\n", "# Issue\n\nbody"])
 def test_live_body_writer_uses_rest_path_and_verifies_readback(
     monkeypatch: pytest.MonkeyPatch,
+    current_body: str,
 ) -> None:
     """The live writer uses the shared REST signature and checks the returned body."""
     from scripts.dev import _gh_rest
 
-    current_body = "# Issue\n\nbody\n"
     calls: list[dict[str, object]] = []
 
     def fake_run_gh_api(

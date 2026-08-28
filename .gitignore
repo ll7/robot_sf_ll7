@@ -103,3 +103,6 @@ RESULT.md
 # (.github/workflows/mutation-testing.yml) regenerates it on each run, so it is
 # never committed.
 mutants/
+
+# Local linked worktrees
+.worktrees/

@@ -320,6 +320,27 @@ def test_release_rehearsal_rejects_resume_age_option(monkeypatch, capsys, tmp_pa
     assert "resume-receipt-max-age-hours" in payload["status_reason"]
 
 
+@pytest.mark.parametrize("empty_option", ["--label=", "--campaign-id="])
+def test_release_rehearsal_rejects_empty_allocation_options(
+    capsys, tmp_path: Path, empty_option: str
+) -> None:
+    """Empty allocation options are still explicit unsupported rehearsal inputs."""
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            str(tmp_path / "release.yaml"),
+            "--mode",
+            "rehearsal",
+            empty_option,
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "unsupported_combination"
+    assert empty_option.split("=", maxsplit=1)[0] in payload["status_reason"]
+
+
 def test_release_rehearsal_rejects_stale_planner_roster_before_receipt_admission(
     monkeypatch, capsys, tmp_path: Path
 ) -> None:

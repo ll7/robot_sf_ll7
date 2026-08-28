@@ -862,14 +862,25 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     logger.add(sys.stderr, level="INFO")
 
     if args.mode == "rehearsal":
-        if any(
-            argument == "--resume-receipt-max-age-hours"
-            or argument.startswith("--resume-receipt-max-age-hours=")
-            for argument in raw_argv
-        ):
+        unsupported_options = (
+            "--output-root",
+            "--label",
+            "--campaign-id",
+            "--resume-receipt",
+            "--resume-receipt-max-age-hours",
+        )
+        supplied_unsupported = sorted(
+            option
+            for option in unsupported_options
+            if any(argument == option or argument.startswith(f"{option}=") for argument in raw_argv)
+        )
+        if supplied_unsupported:
             return _rehearsal_failure(
                 status="unsupported_combination",
-                reason="rehearsal mode does not accept --resume-receipt-max-age-hours",
+                reason=(
+                    "rehearsal mode does not accept campaign allocation or resume options: "
+                    + ", ".join(supplied_unsupported)
+                ),
             )
         try:
             _normalize_rehearsal_args(args)

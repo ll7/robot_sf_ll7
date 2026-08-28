@@ -465,7 +465,11 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         grid, meta, channel_idx, resolution = payload
         threshold = float(self.config.obstacle_grid_threshold)
         obstacle_mask = grid[channel_idx] >= threshold
-        robot_cell_occupied = self._grid_value(robot[:2], grid, meta, channel_idx) >= threshold
+        robot_grid_indices = self._world_to_grid(robot[:2], meta, (grid.shape[1], grid.shape[2]))
+        robot_cell_occupied = False
+        if robot_grid_indices is not None:
+            robot_row, robot_col = robot_grid_indices
+            robot_cell_occupied = bool(grid[channel_idx, robot_row, robot_col] >= threshold)
         indices = np.argwhere(obstacle_mask)
         if indices.size == 0:
             return robot[:2].reshape(1, 2) if robot_cell_occupied else np.zeros((0, 2), dtype=float)

@@ -540,6 +540,31 @@ def test_occupied_robot_grid_cell_triggers_overlap_stop() -> None:
     assert diagnostics["zero_distance_guards"]["obstacles"] == 1
 
 
+def test_out_of_bounds_robot_grid_does_not_invent_overlap_stop() -> None:
+    """Out-of-bounds safety reads must not masquerade as robot-cell overlap."""
+    planner = ForceCoupledPotentialFieldPlanner()
+    observation = {
+        "robot": {"position": [10.0, 10.0], "heading": [0.0]},
+        "goal": {"current": [11.0, 10.0]},
+        "pedestrians": {"positions": [], "count": [0]},
+        "occupancy_grid": np.zeros((3, 3, 3), dtype=np.float32),
+        "occupancy_grid_meta_origin": [0.0, 0.0],
+        "occupancy_grid_meta_resolution": [1.0],
+        "occupancy_grid_meta_size": [3.0, 3.0],
+        "occupancy_grid_meta_use_ego_frame": [0.0],
+        "occupancy_grid_meta_center_on_robot": [0.0],
+        "occupancy_grid_meta_channel_indices": [0, 1, -1, 2],
+        "occupancy_grid_meta_robot_pose": [10.0, 10.0, 0.0],
+    }
+
+    command = planner.plan(observation)
+    diagnostics = planner.diagnostics()
+
+    assert command == pytest.approx((0.16, 0.0))
+    assert diagnostics["status"] == "ok"
+    assert diagnostics["zero_distance_guards"] == {"obstacles": 0, "pedestrians": 0}
+
+
 @pytest.mark.parametrize("invalid_value", [float("nan"), -0.1, 1.1])
 def test_invalid_occupancy_grid_values_fail_closed(invalid_value: float) -> None:
     planner = ForceCoupledPotentialFieldPlanner()

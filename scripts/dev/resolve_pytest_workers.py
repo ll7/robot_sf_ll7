@@ -68,7 +68,7 @@ def _probe_cuda_runtime() -> tuple[str, str]:
         from robot_sf.telemetry.gpu import classify_cuda_runtime
 
         classification = classify_cuda_runtime()
-    except Exception as exc:  # noqa: BLE001 - an uncertain probe must not leak into pytest
+    except (ImportError, OSError) as exc:
         return "unknown", f"CUDA runtime probe failed: {exc}"
     return classification.status, classification.reason
 

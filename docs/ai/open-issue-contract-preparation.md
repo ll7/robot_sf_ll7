@@ -50,7 +50,8 @@ uv run python scripts/dev/prepare_open_issue_contracts.py \
 
 The plan JSON (`open_issue_preparation_plan.v1`) contains per-issue packets
 with classification before/after, execution mode, worker route, next action,
-authority, proposed label plan, and skip reasons. `mutation_authorized` is
+authority, admission reason, proposed label plan, and skip reasons. Its summary
+retains the admission-reason histogram and `not_admitted` projection. `mutation_authorized` is
 always `false` in plan mode.
 
 ### 3. Render (report-only)

@@ -186,8 +186,9 @@ def test_build_snapshot_includes_queue_claim_pr_and_worktree_state(monkeypatch, 
         }
     ]
     assert payload["issues"][0]["labels"] == ["enhancement"]
-    assert payload["issues"][0]["admission"]["classification"] == "needs_ready_label"
+    assert payload["issues"][0]["admission"]["classification"] == "state_conflict"
     assert payload["issues"][0]["admission"]["claim_outcome"] == "not_checked"
+    assert payload["admission_reason_histogram"] == {"state_label_conflict": 1}
     assert payload["prs"][0]["checks"]["overall"] == "success"
     assert payload["sources"]
 

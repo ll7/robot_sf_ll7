@@ -17,6 +17,12 @@ The report therefore names a preparation action, not an approval. It does not cr
 issues, assign work, create sub-issues, authorize compute, resolve decisions, admit evidence, or
 make a merge/release/scientific judgment.
 
+The JSON summary includes `admission_reason_histogram` and `not_admitted`, so an empty claimable
+queue identifies the blocking reason (for example `wrong_owner_repo`, `external_input_missing`,
+`parent_not_leaf`, `needs_spec`, or `covering_pr_open`) instead of collapsing every row into one
+count. The report remains a candidate inventory until each proposed leaf passes a fresh
+`goal_issue_admission.py --check-only` call.
+
 ## Live audit
 
 Run from a current Robot SF checkout with authenticated `gh` read access and the canonical Git
@@ -36,6 +42,11 @@ The command pages through the REST issues endpoint, excludes pull requests, and 
 through the exact-item owner before calling the canonical implementability classifier. A full final
 page at the page limit, duplicate identity, malformed row, exact-read failure, unavailable claim
 state, or listing-to-exact-read drift makes the report non-applicable.
+
+For an explicitly multi-repository contract, pass a fresh route artifact with
+`--route-preflight-json`; absent or expired route evidence remains non-claimable. The artifact is
+checked for a selected route, config digest, and timezone-qualified timestamp within the 30-minute
+default TTL.
 
 Exit codes are:
 

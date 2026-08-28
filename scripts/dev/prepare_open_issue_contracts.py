@@ -62,6 +62,9 @@ _MAX_CLASSIFICATIONS = frozenset(
         "needs_dependency",
         "needs_compute",
         "blocked",
+        "wrong_owner_repo",
+        "state_conflict",
+        "stale_running",
         "assigned",
         "already_claimed",
         "working",
@@ -80,6 +83,9 @@ _EXECUTION_MODE = {
     "needs_dependency": "dependency",
     "needs_compute": "compute",
     "blocked": "blocker",
+    "wrong_owner_repo": "ownership",
+    "state_conflict": "lifecycle",
+    "stale_running": "lifecycle",
     "assigned": "active-handoff",
     "already_claimed": "active-handoff",
     "working": "active-handoff",
@@ -237,6 +243,7 @@ def build_plan(audit: Mapping[str, Any], *, batch_id: str) -> dict[str, Any]:
                 "claim_state": item.get("claim"),
                 "classification_before": item.get("observed_classification"),
                 "classification_after": item.get("classification"),
+                "admission_reason": item.get("admission_reason"),
                 "execution_mode": _EXECUTION_MODE.get(item.get("classification", "error")),
                 "worker_route": _worker_route(item),
                 "next_action": item.get("next_action", ""),
@@ -249,6 +256,9 @@ def build_plan(audit: Mapping[str, Any], *, batch_id: str) -> dict[str, Any]:
             }
         )
     counts = Counter(str(entry.get("classification_before") or "error") for entry in entries)
+    admission_reasons = Counter(
+        str(entry.get("admission_reason") or "unknown") for entry in entries
+    )
     route_counts = Counter(str(entry.get("worker_route") or "none") for entry in entries)
     plan = {
         "schema": PLAN_SCHEMA,
@@ -264,6 +274,14 @@ def build_plan(audit: Mapping[str, Any], *, batch_id: str) -> dict[str, Any]:
         "entries": entries,
         "summary": {
             "by_classification_before": dict(counts),
+            "admission_reason_histogram": dict(sorted(admission_reasons.items())),
+            "not_admitted": dict(
+                sorted(
+                    (reason, count)
+                    for reason, count in admission_reasons.items()
+                    if reason != "claimable"
+                )
+            ),
             "by_worker_route": dict(route_counts),
             "ready_items": sum(1 for e in entries if e["classification_before"] == "ready"),
             "dispatch_eligible": sum(1 for e in entries if e["dispatch_eligible"]),
@@ -312,6 +330,7 @@ def _render_plan_markdown(plan: Mapping[str, Any]) -> str:
         f"- Items: {plan.get('item_count')}",
         f"- Dispatch-eligible: {summary.get('dispatch_eligible')}",
         f"- Label operations: {summary.get('label_operations')}",
+        f"- Admission reasons: {summary.get('admission_reason_histogram')}",
         f"- By worker: {summary.get('by_worker_route')}",
         "",
         "## Per-issue packets",
@@ -321,7 +340,7 @@ def _render_plan_markdown(plan: Mapping[str, Any]) -> str:
         lines.append(
             f"- #{entry['issue']} [{entry['classification_before']} -> "
             f"{entry['classification_after']}] {entry['execution_mode']} / "
-            f"{entry['worker_route']} | {entry['next_action']}"
+            f"{entry['worker_route']} | {entry['admission_reason']} | {entry['next_action']}"
         )
     return "\n".join(lines) + "\n"
 

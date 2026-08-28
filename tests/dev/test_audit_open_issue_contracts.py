@@ -147,6 +147,8 @@ def test_ready_issue_uses_canonical_classifier_and_dispatch_handoff() -> None:
     assert item["dispatch_eligible"] is True
     assert item["next_action"] == "dispatch_via_goal_issue_admission"
     assert report["summary"]["claim_states"] == {"unclaimed": 1}
+    assert report["summary"]["admission_reason_histogram"] == {"claimable": 1}
+    assert report["summary"]["not_admitted"] == {}
     assert report["summary"]["executable_leaf_numbers"] == [1]
     assert report["mutation_authorized"] is False
 
@@ -163,6 +165,36 @@ def test_ready_label_is_not_sufficient_when_contract_field_is_missing() -> None:
     assert item["classification"] == "needs_spec"
     assert item["missing_fields"] == ["verification"]
     assert item["dispatch_eligible"] is False
+
+
+def test_wrong_owner_repo_is_reported_without_dispatch_authority() -> None:
+    """The repository audit must preserve an explicit cross-repository owner blocker."""
+    body = (
+        COMPLETE_BODY
+        + """
+## Execution
+```yaml
+execution:
+  owning_repo: ll7/codex-orchestrator
+  mutation_repos:
+    - ll7/codex-orchestrator
+  route_required: multi_repository
+  external_inputs: []
+```
+"""
+    )
+    report = _report(
+        _fixture(
+            [_raw_issue(1)],
+            exact={1: _exact_issue(1, body=body)},
+        )
+    )
+
+    item = report["items"][0]
+    assert item["classification"] == "wrong_owner_repo"
+    assert item["admission_reason"] == "wrong_owner_repo"
+    assert item["next_action"] == "move_or_split_cross_repository_issue"
+    assert report["summary"]["not_admitted"] == {"wrong_owner_repo": 1}
 
 
 def test_pull_requests_are_excluded_and_counted() -> None:
@@ -227,9 +259,9 @@ def test_listing_to_exact_read_drift_cannot_authorize_dispatch() -> None:
 def test_active_parent_decision_compute_and_blocked_states_remain_distinct() -> None:
     """Repository routing states must not collapse to one generic not-ready class."""
     rows = [
-        _raw_issue(1, labels=["parent"]),
-        _raw_issue(2, labels=["decision-required"]),
-        _raw_issue(3, labels=["resource:slurm"]),
+        _raw_issue(1, labels=["parent", "state:blocked"]),
+        _raw_issue(2, labels=["decision-required", "state:blocked"]),
+        _raw_issue(3, labels=["resource:slurm", "state:ready"]),
         _raw_issue(4, labels=["state:blocked"]),
         _raw_issue(5, labels=["state:working"]),
         _raw_issue(6, labels=["state:review"]),
@@ -251,6 +283,14 @@ def test_active_parent_decision_compute_and_blocked_states_remain_distinct() -> 
         "review",
     ]
     assert report["summary"]["executable_leaf_numbers"] == []
+    assert report["summary"]["admission_reason_histogram"] == {
+        "active_work": 1,
+        "blocked": 1,
+        "covering_pr_open": 1,
+        "human_decision": 1,
+        "needs_compute": 1,
+        "parent_not_leaf": 1,
+    }
 
 
 def test_claimed_assigned_and_unavailable_claim_states_are_distinct() -> None:

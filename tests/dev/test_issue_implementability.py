@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import datetime as dt
 import json
 import subprocess
 import sys
@@ -65,6 +66,149 @@ def test_complete_ready_issue_is_admitted() -> None:
     assert report["contract"]["missing_fields"] == []
 
 
+def _execution_body(
+    *,
+    owning_repo: str = REPOSITORY,
+    mutation_repos: list[str] | None = None,
+    route_required: str = "local",
+    external_inputs: list[object] | None = None,
+) -> str:
+    """Return a complete issue body with an explicit execution declaration."""
+    repos = mutation_repos if mutation_repos is not None else [REPOSITORY]
+    inputs = external_inputs if external_inputs is not None else []
+    repo_lines = "".join(f"    - {repo}\n" for repo in repos)
+    return (
+        COMPLETE_BODY
+        + f"""
+## Execution
+```yaml
+execution:
+  owning_repo: {owning_repo}
+  mutation_repos:
+{repo_lines}  route_required: {route_required}
+  external_inputs: {json.dumps(inputs)}
+```
+"""
+    )
+
+
+def test_explicit_local_execution_contract_is_admitted() -> None:
+    report = evaluate_issue(_issue(body=_execution_body()), _claim())
+
+    assert report["classification"] == "ready"
+    assert report["admission_reason"] == "claimable"
+    assert report["execution_contract"]["present"] is True
+    assert report["execution_contract"]["route_preflight"]["status"] == "not_required"
+
+
+def test_empty_execution_section_is_not_an_implicit_local_contract() -> None:
+    report = evaluate_issue(_issue(body=COMPLETE_BODY + "\n## Execution\n"), _claim())
+
+    assert report["classification"] == "needs_spec"
+    assert report["admission_reason"] == "needs_spec"
+    assert report["execution_contract"]["valid"] is False
+
+
+def test_wrong_owner_repo_fails_closed_without_route_preflight() -> None:
+    body = _execution_body(
+        owning_repo="ll7/codex-orchestrator",
+        mutation_repos=["ll7/codex-orchestrator"],
+        route_required="multi_repository",
+    )
+
+    report = evaluate_issue(_issue(body=body), _claim(), repository=REPOSITORY)
+
+    assert report["classification"] == "wrong_owner_repo"
+    assert report["admission_reason"] == "wrong_owner_repo"
+    assert report["execution_contract"]["route_preflight"]["status"] == "missing"
+    assert report["write_allowed"] is False
+
+
+def test_fresh_multi_repository_route_preflight_can_admit_owner_route() -> None:
+    now = dt.datetime(2026, 8, 28, 19, 10, tzinfo=dt.UTC)
+    route = {
+        "selected_route": {"provider": "codex", "model": "gpt-5.6-luna"},
+        "config_digest": "a" * 64,
+        "created_at": "2026-08-28T19:00:00Z",
+        "ttl_seconds": 1800,
+    }
+    body = _execution_body(
+        owning_repo="ll7/codex-orchestrator",
+        mutation_repos=["ll7/codex-orchestrator"],
+        route_required="multi_repository",
+    )
+
+    report = evaluate_issue(
+        _issue(body=body),
+        _claim(),
+        repository=REPOSITORY,
+        route_preflight=route,
+        now=now,
+    )
+
+    assert report["classification"] == "ready"
+    assert report["admission_reason"] == "claimable"
+    assert report["execution_contract"]["route_preflight"]["status"] == "fresh"
+
+
+def test_expired_multi_repository_route_preflight_fails_closed() -> None:
+    route = {
+        "selected_route": {"provider": "codex", "model": "gpt-5.6-luna"},
+        "config_digest": "a" * 64,
+        "created_at": "2026-08-28T18:00:00Z",
+        "ttl_seconds": 1800,
+    }
+    body = _execution_body(
+        owning_repo="ll7/codex-orchestrator",
+        mutation_repos=["ll7/codex-orchestrator"],
+        route_required="multi_repository",
+    )
+
+    report = evaluate_issue(
+        _issue(body=body),
+        _claim(),
+        repository=REPOSITORY,
+        route_preflight=route,
+        now=dt.datetime(2026, 8, 28, 19, 0, tzinfo=dt.UTC),
+    )
+
+    assert report["classification"] == "wrong_owner_repo"
+    assert report["admission_reason"] == "stale_route_state"
+    assert report["execution_contract"]["route_preflight"]["status"] == "stale"
+
+
+def test_non_executable_selected_route_fails_closed() -> None:
+    body = _execution_body(
+        owning_repo="ll7/codex-orchestrator",
+        mutation_repos=["ll7/codex-orchestrator"],
+        route_required="multi_repository",
+    )
+    report = evaluate_issue(
+        _issue(body=body),
+        _claim(),
+        route_preflight={
+            "selected_route": {"is_worker_executable": False},
+            "config_digest": "a" * 64,
+            "created_at": "2026-08-28T19:00:00Z",
+        },
+        now=dt.datetime(2026, 8, 28, 19, 10, tzinfo=dt.UTC),
+    )
+
+    assert report["classification"] == "wrong_owner_repo"
+    assert report["admission_reason"] == "stale_route_state"
+    assert report["execution_contract"]["route_preflight"]["status"] == "invalid"
+
+
+def test_declared_external_input_is_not_local_claimable_work() -> None:
+    report = evaluate_issue(
+        _issue(body=_execution_body(external_inputs=["source-bytes"])),
+        _claim(),
+    )
+
+    assert report["classification"] == "blocked"
+    assert report["admission_reason"] == "external_input_missing"
+
+
 def test_goal_problem_template_heading_is_admitted() -> None:
     """The canonical `Goal / Problem` template heading must satisfy the objective field."""
     body = COMPLETE_BODY.replace("## Objective", "## Goal / Problem")
@@ -87,8 +231,18 @@ def test_goal_problem_prefixed_heading_still_rejected() -> None:
 def test_state_ready_is_required() -> None:
     report = evaluate_issue(_issue(labels=["type:workflow"]), _claim())
 
-    assert report["classification"] == "needs_ready_label"
+    assert report["classification"] == "state_conflict"
+    assert report["admission_reason"] == "state_label_conflict"
     assert report["ready"] is False
+
+
+def test_exactly_one_state_label_is_required() -> None:
+    report = evaluate_issue(
+        _issue(labels=["type:workflow", "state:ready", "state:parked"]), _claim()
+    )
+
+    assert report["classification"] == "state_conflict"
+    assert report["admission_reason"] == "state_label_conflict"
 
 
 def test_missing_contract_field_returns_needs_spec() -> None:
@@ -127,14 +281,15 @@ def test_alias_prefixed_headings_do_not_satisfy_contract(
 @pytest.mark.parametrize(
     ("labels", "classification"),
     [
-        (["state:ready", "state:blocked"], "blocked"),
+        (["state:ready", "state:blocked"], "state_conflict"),
+        (["state:blocked-no-code-slice"], "blocked"),
         (["state:ready", "deferred"], "blocked"),
-        (["state:ready", "state:deferred"], "blocked"),
-        (["state:ready", "state:parked"], "blocked"),
+        (["state:ready", "state:deferred"], "state_conflict"),
+        (["state:ready", "state:parked"], "state_conflict"),
         (["state:ready", "decision-required"], "human_decision"),
         (["state:ready", "parent"], "parent"),
         (["state:ready", "resource:slurm"], "needs_compute"),
-        (["state:ready", "state:working"], "working"),
+        (["state:ready", "state:working"], "state_conflict"),
         (["state:ready", "needs-review"], "review"),
     ],
 )
@@ -143,6 +298,13 @@ def test_stop_labels_fail_closed(labels: list[str], classification: str) -> None
 
     assert report["classification"] == classification
     assert report["write_allowed"] is False
+
+
+def test_running_state_without_claim_is_stale() -> None:
+    report = evaluate_issue(_issue(labels=["state:running"]), _claim())
+
+    assert report["classification"] == "stale_running"
+    assert report["admission_reason"] == "stale_running_state"
 
 
 def test_parent_title_is_not_a_leaf() -> None:
@@ -274,7 +436,7 @@ def test_offline_cli_exercises_real_process_boundary(tmp_path: Path) -> None:
     assert ready.returncode == 0
     assert json.loads(ready.stdout)["classification"] == "ready"
     assert not_ready.returncode == 2
-    assert json.loads(not_ready.stdout)["classification"] == "needs_ready_label"
+    assert json.loads(not_ready.stdout)["classification"] == "state_conflict"
 
 
 @pytest.mark.parametrize(

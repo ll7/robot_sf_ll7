@@ -12,13 +12,14 @@ import json
 import math
 import subprocess
 import sys
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from scripts.dev import goal_issue_admission
+from scripts.dev import goal_issue_admission, issue_implementability
 from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.blocker_receipt import summarize_decisions
 from scripts.dev.check_pr_ci_status import _latest_check_runs
@@ -1109,13 +1110,33 @@ def _queue_issue_admission(
     if state != "OPEN":
         reason = f"issue state is {state or 'unknown'}; skip autonomous claim"
         classification = "closed" if state else "state_unknown"
-    elif "state:ready" not in labels:
-        reason = "required label 'state:ready' is absent; skip autonomous claim"
-        classification = "needs_ready_label"
-    elif not isinstance(number, int) or number <= 0:
-        reason = "issue number is invalid; skip autonomous claim"
-        classification = "error"
-    else:
+        return goal_issue_admission.compact_preflight(
+            {
+                "schema": "issue_implementability.v1",
+                "classification": classification,
+                "admission_reason": classification,
+                "reasons": [reason],
+                "ready": False,
+                "write_allowed": False,
+                "claim": None,
+            }
+        )
+    if not isinstance(number, int) or number <= 0:
+        return {
+            "schema": goal_issue_admission.SCHEMA,
+            "ok": False,
+            "outcome": "error",
+            "write_attempted": False,
+            "source_ref": goal_issue_admission.DEFAULT_SOURCE_REF,
+            "classification": "error",
+            "admission_reason": "error",
+            "reasons": ["issue number is invalid; skip autonomous claim"],
+            "ready": False,
+            "write_allowed": False,
+            "claim": None,
+            "claim_outcome": "unavailable",
+        }
+    if "state:ready" in labels:
         try:
             payload = goal_issue_admission.admit_issue(
                 number,
@@ -1132,6 +1153,7 @@ def _queue_issue_admission(
                 "write_attempted": False,
                 "source_ref": goal_issue_admission.DEFAULT_SOURCE_REF,
                 "classification": "error",
+                "admission_reason": "error",
                 "reasons": [str(exc)],
                 "ready": False,
                 "write_allowed": False,
@@ -1140,19 +1162,37 @@ def _queue_issue_admission(
             }
         return goal_issue_admission.compact_admission(payload)
 
-    return {
-        "schema": goal_issue_admission.SCHEMA,
-        "ok": False,
-        "outcome": "not_admitted",
-        "write_attempted": False,
-        "source_ref": goal_issue_admission.DEFAULT_SOURCE_REF,
-        "classification": classification,
-        "reasons": [reason],
-        "ready": False,
-        "write_allowed": False,
-        "claim": None,
-        "claim_outcome": "not_checked",
-    }
+    try:
+        preflight = issue_implementability.evaluate_issue(
+            {
+                "number": number,
+                "title": issue.get("title", "") or "",
+                "body": issue.get("body", "") or "",
+                "state": state,
+                "url": issue.get("url", "") or "",
+                "labels": issue.get("labels", []) or [],
+                "assignees": issue.get("assignees", []) or [],
+            },
+            {"ok": True, "claimed": False, "claim_ref": None, "sha": None},
+            repository=repo,
+        )
+    except (TypeError, ValueError) as exc:
+        return {
+            "schema": goal_issue_admission.SCHEMA,
+            "ok": False,
+            "outcome": "error",
+            "write_attempted": False,
+            "source_ref": goal_issue_admission.DEFAULT_SOURCE_REF,
+            "classification": "error",
+            "admission_reason": "error",
+            "reasons": [str(exc)],
+            "ready": False,
+            "write_allowed": False,
+            "claim": None,
+            "claim_outcome": "unavailable",
+        }
+    preflight["claim"] = None
+    return goal_issue_admission.compact_preflight(preflight)
 
 
 def issue_queue_snapshot(
@@ -1234,6 +1274,19 @@ def issue_queue_snapshot(
                 }
             )
     return rows, sources, errors, truncations
+
+
+def _admission_reason_histogram(issues: list[dict[str, Any]]) -> dict[str, int]:
+    """Summarize canonical admission reasons for the explicit issue queue."""
+    counts: Counter[str] = Counter()
+    for issue in issues:
+        admission = issue.get("admission")
+        if not isinstance(admission, dict):
+            counts["error"] += 1
+            continue
+        reason = admission.get("admission_reason") or admission.get("classification")
+        counts[str(reason or "unknown")] += 1
+    return dict(sorted(counts.items()))
 
 
 def _rollup_conclusion(check: dict[str, Any]) -> str:
@@ -1427,6 +1480,7 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
         "git": git,
         "claims": claims,
         "issues": issues,
+        "admission_reason_histogram": _admission_reason_histogram(issues),
         "issues_truncated_any": any(marker.get("truncated") for marker in issue_truncations),
         "issues_truncated": issue_truncations,
         "prs": prs,

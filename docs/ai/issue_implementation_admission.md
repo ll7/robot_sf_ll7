@@ -6,10 +6,39 @@ Autonomous implementation must use the repository label state and a complete iss
 
 An implementation worker may acquire `agent-claims/issue-<number>` only when the issue:
 
-- is open and labeled `state:ready`;
+- is open, has exactly one `state:*` lifecycle label, and is labeled `state:ready`;
 - is unassigned and has no existing atomic claim;
 - is not a parent, epic, decision, review, active-work, compute, campaign, external-input, or blocked issue;
 - contains non-empty sections for the objective, scope, inputs or affected surfaces, acceptance criteria, and verification.
+
+## Repository execution contract
+
+An explicit execution declaration keeps implementation ownership in one repository and makes
+cross-repository routing visible before a claim is acquired. Existing issue bodies without this
+section retain the historical single-repository-local default; new cross-repository work must
+declare the contract below under an `Execution` or `Execution contract` heading:
+
+```yaml
+execution:
+  owning_repo: ll7/robot_sf_ll7
+  mutation_repos:
+    - ll7/robot_sf_ll7
+  route_required: local
+  external_inputs: []
+```
+
+The live checker returns `wrong_owner_repo` when `owning_repo` or `mutation_repos` leaves the
+current repository, or when a local route declaration is inconsistent. It may accept an explicit
+`multi_repository` declaration only with a fresh route-plan artifact supplied through
+`--route-preflight-json`; the artifact must include a selected route, a routing-config digest, and
+a timezone-qualified timestamp no older than 30 minutes. The route configuration must be
+re-probed when its digest changes, at the start of a new autopilot cycle, after a new user request,
+or after the freshness window expires. A stale or missing route is not an implementation claim.
+
+`external_inputs` must be empty for local autonomous implementation. A non-empty declaration is
+reported as `external_input_missing` until its separate input contract is satisfied. A successful
+`goal_issue_admission.py --check-only` result is the only claimable verdict; a label-filtered
+snapshot is a candidate queue until that live check succeeds.
 
 The checker reports each missing field separately. It never converts a numeric completeness score into a pass.
 
@@ -46,6 +75,8 @@ uv run python scripts/dev/issue_implementability.py 1 \
 - `human_decision`: obtain the named ruling before implementation.
 - `needs_compute`: route through the compute owner, not the local implementation lane.
 - `blocked`, `working`, `review`, `assigned`, or `already_claimed`: do not start another implementation worker.
+- `wrong_owner_repo`, `state_conflict`, or `stale_running`: reconcile repository ownership or
+  lifecycle state before considering the issue again.
 - `error`: re-read the live state; do not infer readiness.
 
 ## Authority boundary

@@ -57,8 +57,9 @@ choke cell exists. The identity is a canonical, order-independent string of coor
 and joined. Pure grid callers default to `occupancy_grid_rc` coordinates in cells. The
 topology-guided planner computes the observation against its own selected path and blocked map and
 emits the aligned `global_xy` choke-point set. Temporal reporting uses strict bounded symmetric
-Hausdorff matching with the planner grid resolution as tolerance, so moving cell representatives
-less than one cell apart remain one topology while corridors a full cell apart remain distinct.
+Hausdorff matching with the planner grid resolution as tolerance and deterministic complete-link
+clusters, so every pair in one reported topology cluster matches. Moving cell representatives less
+than one cell apart remain one topology while corridors a full cell apart remain distinct.
 Every observation records `identity_coordinate_frame`, `identity_units`, `identity_points`, and
 `identity_match_tolerance`; changing any reference field invalidates a temporal comparison.
 

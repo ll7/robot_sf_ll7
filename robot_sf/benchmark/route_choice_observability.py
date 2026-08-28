@@ -767,22 +767,26 @@ def temporal_consistency(
         index for index, observation in enumerate(homotopy_observations) if observation.identity
     ]
     topology_cluster_labels: dict[int, str] = {}
-    topology_cluster_representatives: list[int] = []
+    topology_clusters: list[list[int]] = []
     for index in topology_valid_indices:
-        representative = next(
+        cluster = next(
             (
-                candidate
-                for candidate in topology_cluster_representatives
-                if _homotopy_equivalent(
-                    homotopy_observations[index], homotopy_observations[candidate]
+                candidate_cluster
+                for candidate_cluster in topology_clusters
+                if all(
+                    _homotopy_equivalent(
+                        homotopy_observations[index], homotopy_observations[candidate]
+                    )
+                    for candidate in candidate_cluster
                 )
             ),
             None,
         )
-        if representative is None:
-            representative = index
-            topology_cluster_representatives.append(index)
-        topology_cluster_labels[index] = str(homotopy_observations[representative].identity)
+        if cluster is None:
+            cluster = []
+            topology_clusters.append(cluster)
+        cluster.append(index)
+        topology_cluster_labels[index] = str(homotopy_observations[cluster[0]].identity)
     valid_pair_indices = [
         index
         for index in range(aligned_count)

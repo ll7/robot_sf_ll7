@@ -512,10 +512,12 @@ def _route_choice_observations(  # noqa: C901, PLR0912 - fail-closed provenance 
     if not isinstance(identity_points, list) or not identity_points:
         return _unavailable()
     try:
-        normalized_identity_points = tuple(
-            (float(point[0]), float(point[1])) for point in identity_points
-        )
-    except (IndexError, TypeError, ValueError):
+        normalized_identity_points_list = []
+        for point in identity_points:
+            x, y = point
+            normalized_identity_points_list.append((float(x), float(y)))
+        normalized_identity_points = tuple(normalized_identity_points_list)
+    except (TypeError, ValueError):
         return _unavailable()
     if not np.isfinite(normalized_identity_points).all():
         return _unavailable()

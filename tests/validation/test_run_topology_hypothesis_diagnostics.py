@@ -252,6 +252,33 @@ def test_route_choice_observations_reject_mismatched_planner_path_frames() -> No
     assert homotopy_observation.identity is None
 
 
+def test_route_choice_observations_reject_three_dimensional_identity_points() -> None:
+    selected_route = {
+        "route_path_grid": [[1, 1], [1, 2]],
+        "route_path_coordinate_frame": "occupancy_grid_rc",
+        "route_path_world": [[1.0, 1.0], [2.0, 1.0]],
+        "route_path_world_coordinate_frame": "global_xy",
+        "route_path_world_units": "m",
+        "route_homotopy_observation": {
+            "identity": "1,1",
+            "unavailable_reason": None,
+            "identity_coordinate_frame": "global_xy",
+            "identity_units": "m",
+            "identity_match_tolerance": 1.0,
+            "identity_points": [[1.0, 1.0, 7.0]],
+        },
+    }
+
+    side_report, homotopy_observation = _route_choice_observations(
+        selected_route,
+        reference_start=(0.0, 0.0),
+        reference_goal=(3.0, 0.0),
+    )
+
+    assert side_report.side == "unavailable"
+    assert homotopy_observation.identity is None
+
+
 def test_topology_signature_prefers_choke_cells_over_same_gap_wiggles() -> None:
     """Same-gap detours should share the same compact bottleneck signature."""
     blocked = np.zeros((16, 16), dtype=bool)

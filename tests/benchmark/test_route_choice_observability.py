@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from robot_sf.benchmark.route_choice_observability import (
+    HomotopyObservation,
     classify_route_side,
     diagnostic_record,
     homotopy_identity,
@@ -398,6 +399,28 @@ def test_temporal_consistency_keeps_full_cell_topologies_distinct() -> None:
     report = temporal_consistency([side, side], [first, second])
 
     assert report.topology_transition_count == 1
+    assert report.first_stable_step is None
+
+
+def test_temporal_consistency_complete_link_rejects_tolerance_bridge() -> None:
+    """A non-transitive tolerance bridge cannot be stable and transitional simultaneously."""
+    observations = [
+        HomotopyObservation(
+            identity=str(value),
+            unavailable_reason=None,
+            identity_coordinate_frame="global_xy",
+            identity_units="m",
+            identity_points=((value, 0.0),),
+            identity_match_tolerance=1.0,
+        )
+        for value in (0.6, 0.0, 1.2)
+    ]
+    side = classify_route_side(_left_route(), start=START, goal=GOAL)
+
+    report = temporal_consistency([side, side, side], observations)
+
+    assert report.topology_transition_count == 1
+    assert report.consistency_fraction == pytest.approx(2 / 3)
     assert report.first_stable_step is None
 
 

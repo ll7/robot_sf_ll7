@@ -213,6 +213,9 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
     assert snapshot["base_sha"] == "base_sha"
     assert snapshot["pr_state"] == "OPEN"
     assert snapshot["pr_merged_at"] is None
+    assert snapshot["data_source"] == "graphql"
+    assert snapshot["evidence_provenance"]["ordinary_facts"]["check_rollup"] == "graphql"
+    assert snapshot["evidence_provenance"]["ordinary_facts"]["base_sha"] == "rest"
     first_call = mock_gh.call_args_list[0].args[0]
     assert first_call[:3] == ["pr", "view", "42"]
     fields = first_call[first_call.index("--json") + 1]
@@ -306,6 +309,14 @@ def test_fetch_pr_snapshot_rest_fallback_when_graphql_quota_exhausted() -> None:
     assert snapshot["requested_reviewers"] == ["external-reviewer"]
     assert snapshot["requested_teams"] == ["Core Reviewers"]
     assert snapshot["comment_snapshot"]["latest"][0]["body_excerpt"] == "comment one"
+    assert snapshot["data_source"] == "rest_fallback_graphql_quota"
+    assert snapshot["evidence_provenance"]["data_source"] == "rest_fallback_graphql_quota"
+    assert snapshot["evidence_provenance"]["ordinary_facts"]["check_rollup"] == "rest"
+    assert snapshot["evidence_provenance"]["ordinary_facts"]["labels"] == "rest"
+    assert snapshot["evidence_provenance"]["review_threads"] == {
+        "source": "graphql",
+        "status": "separate_query",
+    }
     # The REST fallback must be exercised (pr view hit with quota failure first).
     first_call = mock_gh.call_args_list[0].args[0]
     assert first_call[:3] == ["pr", "view", "42"]

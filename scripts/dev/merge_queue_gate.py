@@ -112,6 +112,7 @@ COMPLETED_STATUS = "completed"
 GATE_WORKFLOW_NAME = "Merge Queue Gate"
 GATE_JOB_NAME = "merge-queue-gate"
 CHANGED_COVERAGE_CHECK_NAME = "changed-coverage-gate"
+SNAPSHOT_PROVENANCE_SCHEMA = "single_account_merge_evidence_provenance.v1"
 # Keep this list in lockstep with the top-level ``paths-ignore`` filters in
 # ``.github/workflows/ci.yml``.  The merge gate may need to explain why that
 # workflow did not create an exact-head changed-coverage check for a PR.
@@ -1304,6 +1305,8 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         timeout=30,
     )
     result = retry.result
+    snapshot_data_source = "graphql"
+    graphql_fallback_diagnostic = ""
     if result.returncode != 0:
         if retry.quota_exhausted:
             # GraphQL quota is spent but REST reads remain available; rebuild the
@@ -1313,6 +1316,8 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
             if rest_err or not isinstance(rest_payload, dict):
                 return {}, rest_err or "REST snapshot fallback returned no payload"
             payload = rest_payload
+            snapshot_data_source = "rest_fallback_graphql_quota"
+            graphql_fallback_diagnostic = retry.terminal_diagnostic
         else:
             diagnostic = retry.terminal_diagnostic if retry.exhausted else result.stderr.strip()
             return {}, diagnostic or f"gh pr view failed (exit {result.returncode})"
@@ -1411,6 +1416,28 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         # team, or bot is "external"; this is conservative parity with the
         # gh-pr-merger preflight.
         "reviewers_requested": bool(review_requests),
+        "data_source": snapshot_data_source,
+        "evidence_provenance": {
+            "schema": SNAPSHOT_PROVENANCE_SCHEMA,
+            "data_source": snapshot_data_source,
+            "ordinary_facts": {
+                "pull_request": "rest" if snapshot_data_source.startswith("rest_") else "graphql",
+                "labels": "rest" if snapshot_data_source.startswith("rest_") else "graphql",
+                "comments": "rest" if snapshot_data_source.startswith("rest_") else "graphql",
+                "reviews": "rest" if snapshot_data_source.startswith("rest_") else "graphql",
+                "requested_reviewers": (
+                    "rest" if snapshot_data_source.startswith("rest_") else "graphql"
+                ),
+                "check_rollup": "rest" if snapshot_data_source.startswith("rest_") else "graphql",
+                "base_sha": "rest",
+                "changed_coverage": "rest",
+            },
+            "review_threads": {
+                "source": "graphql",
+                "status": "separate_query",
+            },
+            "fallback_diagnostic": graphql_fallback_diagnostic or None,
+        },
     }
     return snapshot, None
 

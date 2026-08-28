@@ -16,6 +16,7 @@ from scripts.dev.single_account_merge_receipt import (
     EVIDENCE_STATES,
     HOLD_KEYS,
     apply_guarded_merge,
+    build_live_evidence,
     build_receipt,
     classify_implementation_review,
     detect_post_merge_incident,
@@ -80,7 +81,7 @@ def _receipt(*, holds: dict[str, dict[str, Any]] | None = None, **overrides: Any
 
 def _live_evidence(receipt: dict[str, Any]) -> dict[str, Any]:
     """Project a receipt back into the live-evidence shape used for rereads."""
-    return {
+    evidence = {
         "repository": receipt["repository"],
         "pr_number": receipt["pr_number"],
         "head_sha": receipt["head_sha"],
@@ -96,6 +97,54 @@ def _live_evidence(receipt: dict[str, Any]) -> dict[str, Any]:
         "requested_teams": copy.deepcopy(receipt["requested_teams"]),
         "holds": copy.deepcopy(receipt["holds"]),
         "gate_audit": copy.deepcopy(receipt["gate_audit"]),
+    }
+    if "evidence_provenance" in receipt:
+        evidence["evidence_provenance"] = copy.deepcopy(receipt["evidence_provenance"])
+    return evidence
+
+
+def _snapshot_with_provenance() -> dict[str, Any]:
+    """Build a live snapshot with the complete source-route contract."""
+    return {
+        "number": 42,
+        "pr_state": "OPEN",
+        "pr_merged_at": None,
+        "draft": False,
+        "head_sha": HEAD_SHA,
+        "base_sha": BASE_SHA,
+        "metadata_digest": METADATA_DIGEST,
+        "body": "final body",
+        "labels": ["merge-ready"],
+        "checks": {"overall": "success"},
+        "changed_coverage": {"status": "success", "head_sha": HEAD_SHA},
+        "required_checks": [
+            {
+                "name": "CI",
+                "head_sha": HEAD_SHA,
+                "status": "completed",
+                "conclusion": "success",
+            }
+        ],
+        "review_evidence": {},
+        "requested_reviewers": [],
+        "requested_teams": [],
+        "reviewers_requested": False,
+        "evidence_provenance": {
+            "schema": "single_account_merge_evidence_provenance.v1",
+            "data_source": "rest_fallback_graphql_quota",
+            "ordinary_facts": {
+                "pull_request": "rest",
+                "labels": "rest",
+                "comments": "rest",
+                "reviews": "rest",
+                "requested_reviewers": "rest",
+                "check_rollup": "rest",
+                "base_sha": "rest",
+                "changed_coverage": "rest",
+            },
+            "review_threads": {"source": "graphql", "status": "separate_query"},
+            "fallback_diagnostic": "GitHub GraphQL quota exhausted",
+        },
     }
 
 
@@ -204,6 +253,87 @@ def test_live_head_metadata_and_check_changes_block_without_reconstructing_recei
     assert (
         "live_gate_audit_changed" in verify_receipt(receipt, live_evidence=changed_gate)["reasons"]
     )
+
+
+def test_live_evidence_provenance_is_immutable_for_receipt_validation() -> None:
+    """A changed API route or source record must not be hidden during reread."""
+    provenance = _snapshot_with_provenance()["evidence_provenance"]
+    receipt = _receipt(evidence_provenance=provenance)
+    changed = _live_evidence(receipt)
+    changed["evidence_provenance"]["data_source"] = "graphql"
+
+    assert (
+        "live_evidence_provenance_changed"
+        in verify_receipt(receipt, live_evidence=changed)["reasons"]
+    )
+
+
+def test_quota_evidence_provenance_matches_receipt_schema() -> None:
+    """The new route evidence remains machine-validatable as part of v1."""
+    from pathlib import Path
+
+    import jsonschema
+
+    schema_path = Path(receipt_module.__file__).with_name(
+        "single_account_merge_receipt.v1.schema.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    jsonschema.Draft202012Validator(schema).validate(
+        _receipt(evidence_provenance=_snapshot_with_provenance()["evidence_provenance"])
+    )
+
+
+def test_build_live_evidence_reports_rest_facts_when_thread_graphql_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Quota recovery emits an auditable blocked receipt instead of an opaque error."""
+    snapshot = _snapshot_with_provenance()
+    monkeypatch.setattr(
+        "scripts.dev.merge_queue_gate.fetch_pr_snapshot",
+        lambda *args, **kwargs: (snapshot, None),
+    )
+    monkeypatch.setattr(
+        "scripts.dev.merge_queue_gate.fetch_main_sha",
+        lambda *args, **kwargs: CURRENT_BASE_SHA,
+    )
+    monkeypatch.setattr(
+        "scripts.dev.merge_queue_gate.fetch_threads_resolved",
+        lambda *args, **kwargs: (None, "GitHub GraphQL quota exhausted"),
+    )
+
+    evidence, error = build_live_evidence(42, repository="owner/repo")
+
+    assert error is None
+    assert evidence is not None
+    assert evidence["evidence_provenance"]["data_source"] == "rest_fallback_graphql_quota"
+    assert evidence["evidence_provenance"]["review_threads"] == {
+        "source": "graphql",
+        "status": "unavailable",
+        "diagnostic": "GitHub GraphQL quota exhausted",
+    }
+    assert evidence["thread_resolution"]["status"] == "unavailable"
+    assert evidence["gate_audit"]["thread_resolution"] == "not_evaluated"
+    assert "review_threads_not_evaluated" in evidence["gate_audit"]["reasons"]
+
+    receipt = build_receipt(**evidence)
+    assert receipt["status"] == "blocked"
+    assert "review_threads_unavailable" in receipt["reason_codes"]
+    assert receipt["evidence_provenance"]["ordinary_facts"]["check_rollup"] == "rest"
+
+
+def test_build_live_evidence_keeps_rest_snapshot_failure_explicit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed ordinary REST snapshot remains an error and cannot become partial evidence."""
+    monkeypatch.setattr(
+        "scripts.dev.merge_queue_gate.fetch_pr_snapshot",
+        lambda *args, **kwargs: ({}, "REST snapshot fallback failed"),
+    )
+
+    evidence, error = build_live_evidence(42, repository="owner/repo")
+
+    assert evidence is None
+    assert error == "REST snapshot fallback failed"
 
 
 def test_review_carrier_precedence_and_fail_closed_states() -> None:

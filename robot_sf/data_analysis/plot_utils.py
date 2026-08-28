@@ -43,6 +43,8 @@ def save_plot(filename, title=None, interactive=False) -> None:
         title (str, optional): Title for the plot
         interactive (bool, optional): Whether to display the plot interactively
     """
+    fig = plt.gcf()
+
     if title:
         plt.title(title)
 
@@ -62,5 +64,5 @@ def save_plot(filename, title=None, interactive=False) -> None:
     if interactive:
         plt.show()
 
-    # Close the plot to free memory
-    plt.close()
+    # Close the saved figure (not whatever is currently active) to free memory
+    plt.close(fig)

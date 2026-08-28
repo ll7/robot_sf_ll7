@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 
 import numpy as np
+import pytest
 
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
 from scripts.validation.run_topology_hypothesis_diagnostics import (
@@ -13,7 +14,9 @@ from scripts.validation.run_topology_hypothesis_diagnostics import (
     _extract_pedestrians,
     _find_alternative_paths,
     _first_float,
+    _homotopy_identity,
     _path_dynamic_clearance,
+    _route_choice_observations,
     _RouteHypothesisPath,
     _summarize_hypotheses,
     _terminal_outcome,
@@ -131,6 +134,221 @@ def test_find_alternative_paths_fails_closed_with_single_gap() -> None:
     )
 
     assert [route.hypothesis_id for route in paths] == ["primary_route"]
+
+
+def test_route_choice_observations_use_selected_path_and_grid_context() -> None:
+    """The operational diagnostic should convert a selected route to both metrics."""
+    blocked = np.zeros((10, 10), dtype=bool)
+    blocked[3:7, 4:6] = True
+    route = _RouteHypothesisPath(
+        hypothesis_id="bottom_corridor",
+        path=[(8, column) for column in range(10)],
+        clearance_map=GridRoutePlannerAdapter._compute_clearance_map(blocked),
+        topology_signature=frozenset(),
+    )
+    meta = {"origin": [0.0, 0.0], "resolution": [1.0], "use_ego_frame": [0.0]}
+    world_path = [tuple(_adapter()._grid_to_world(cell, meta)) for cell in route.path]
+    homotopy = _homotopy_identity(
+        route.path,
+        blocked,
+        identity_coordinates=world_path,
+        identity_coordinate_frame="global_xy",
+        identity_units="m",
+        identity_match_tolerance=1.0,
+    )
+    selected_route = {
+        "route_path_grid": route.path,
+        "route_path_coordinate_frame": "occupancy_grid_rc",
+        "route_path_world": world_path,
+        "route_path_world_coordinate_frame": "global_xy",
+        "route_path_world_units": "m",
+        "route_homotopy_observation": homotopy.as_dict(),
+    }
+
+    side_report, homotopy_observation = _route_choice_observations(
+        selected_route,
+        reference_start=(0.5, 4.5),
+        reference_goal=(9.5, 4.5),
+    )
+
+    assert side_report.side == "left"
+    assert side_report.coordinate_frame == "global_xy"
+    assert homotopy_observation.identity is not None
+    assert homotopy_observation.unavailable_reason is None
+    assert homotopy_observation.identity_coordinate_frame == "global_xy"
+    assert homotopy_observation.identity_units == "m"
+
+
+def test_route_choice_observations_do_not_rebind_by_ephemeral_hypothesis_id() -> None:
+    """The planner's selected path remains usable when diagnostic route IDs differ."""
+    blocked = np.zeros((10, 10), dtype=bool)
+    blocked[3:7, 4:6] = True
+    planner_selected_path = [(8, column) for column in range(10)]
+    meta = {"origin": [0.0, 0.0], "resolution": [1.0], "use_ego_frame": [0.0]}
+    world_path = [tuple(_adapter()._grid_to_world(cell, meta)) for cell in planner_selected_path]
+    selected_route = {
+        "route_path_grid": planner_selected_path,
+        "route_path_coordinate_frame": "occupancy_grid_rc",
+        "route_path_world": world_path,
+        "route_path_world_coordinate_frame": "global_xy",
+        "route_path_world_units": "m",
+        "route_homotopy_observation": _homotopy_identity(
+            planner_selected_path,
+            blocked,
+            identity_coordinates=world_path,
+            identity_coordinate_frame="global_xy",
+            identity_units="m",
+            identity_match_tolerance=1.0,
+        ).as_dict(),
+    }
+
+    side_report, homotopy_observation = _route_choice_observations(
+        selected_route,
+        reference_start=(0.5, 4.5),
+        reference_goal=(9.5, 4.5),
+    )
+
+    assert side_report.side == "left"
+    assert homotopy_observation.identity is not None
+
+
+def test_route_choice_observations_fail_closed_without_selected_path() -> None:
+    """An unselected or unavailable route must not be credited as an observation."""
+    side_report, homotopy_observation = _route_choice_observations(
+        None,
+        reference_start=(0.5, 0.5),
+        reference_goal=(3.5, 0.5),
+    )
+
+    assert side_report.side == "unavailable"
+    assert side_report.reason == "empty_path"
+    assert homotopy_observation.identity is None
+    assert homotopy_observation.unavailable_reason == "empty_path"
+
+
+def test_route_choice_observations_preserve_side_when_topology_has_no_choke_cells() -> None:
+    """Independent availability keeps a valid route side when topology is unavailable."""
+    selected_route = {
+        "route_path_grid": [[1, 1], [1, 2]],
+        "route_path_coordinate_frame": "occupancy_grid_rc",
+        "route_path_world": [[1.0, 1.0], [2.0, 1.0]],
+        "route_path_world_coordinate_frame": "global_xy",
+        "route_path_world_units": "m",
+        "route_homotopy_observation": {
+            "identity": None,
+            "unavailable_reason": "no_choke_cells",
+            "identity_coordinate_frame": "global_xy",
+            "identity_units": "m",
+            "identity_match_tolerance": 1.0,
+            "identity_points": [],
+        },
+    }
+
+    side_report, homotopy_observation = _route_choice_observations(
+        selected_route,
+        reference_start=(0.0, 0.0),
+        reference_goal=(3.0, 0.0),
+    )
+
+    assert side_report.side == "left"
+    assert side_report.reason is None
+    assert homotopy_observation.identity is None
+    assert homotopy_observation.unavailable_reason == "no_choke_cells"
+    assert homotopy_observation.identity_points == ()
+
+
+def test_route_choice_observations_reject_mismatched_planner_path_frames() -> None:
+    selected_route = {
+        "route_path_grid": [[1, 1], [1, 2]],
+        "route_path_coordinate_frame": "wrong_grid_frame",
+        "route_path_world": [[1.0, 1.0], [2.0, 1.0]],
+        "route_path_world_coordinate_frame": "global_xy",
+        "route_path_world_units": "m",
+        "route_homotopy_observation": {
+            "identity": "1,1",
+            "unavailable_reason": None,
+            "identity_coordinate_frame": "global_xy",
+            "identity_units": "m",
+            "identity_match_tolerance": 1.0,
+            "identity_points": [[1.0, 1.0]],
+        },
+    }
+
+    side_report, homotopy_observation = _route_choice_observations(
+        selected_route,
+        reference_start=(0.0, 0.0),
+        reference_goal=(3.0, 0.0),
+    )
+
+    assert side_report.side == "unavailable"
+    assert homotopy_observation.identity is None
+
+
+def test_route_choice_observations_reject_three_dimensional_identity_points() -> None:
+    selected_route = {
+        "route_path_grid": [[1, 1], [1, 2]],
+        "route_path_coordinate_frame": "occupancy_grid_rc",
+        "route_path_world": [[1.0, 1.0], [2.0, 1.0]],
+        "route_path_world_coordinate_frame": "global_xy",
+        "route_path_world_units": "m",
+        "route_homotopy_observation": {
+            "identity": "1,1",
+            "unavailable_reason": None,
+            "identity_coordinate_frame": "global_xy",
+            "identity_units": "m",
+            "identity_match_tolerance": 1.0,
+            "identity_points": [[1.0, 1.0, 7.0]],
+        },
+    }
+
+    side_report, homotopy_observation = _route_choice_observations(
+        selected_route,
+        reference_start=(0.0, 0.0),
+        reference_goal=(3.0, 0.0),
+    )
+
+    assert side_report.side == "left"
+    assert homotopy_observation.identity is None
+    assert homotopy_observation.unavailable_reason == "invalid_homotopy_payload"
+
+
+@pytest.mark.parametrize(
+    ("identity", "identity_points"),
+    [
+        ("100,-100", [[100.0, -100.0]]),
+        ("forged-right-corridor", [[1.0, 1.0]]),
+    ],
+)
+def test_route_choice_observations_bind_homotopy_to_selected_world_path(
+    identity: str,
+    identity_points: list[list[float]],
+) -> None:
+    """Topology points and their canonical identity must come from the selected path."""
+    selected_route = {
+        "route_path_grid": [[1, 1], [1, 2]],
+        "route_path_coordinate_frame": "occupancy_grid_rc",
+        "route_path_world": [[1.0, 1.0], [2.0, 1.0]],
+        "route_path_world_coordinate_frame": "global_xy",
+        "route_path_world_units": "m",
+        "route_homotopy_observation": {
+            "identity": identity,
+            "unavailable_reason": None,
+            "identity_coordinate_frame": "global_xy",
+            "identity_units": "m",
+            "identity_match_tolerance": 1.0,
+            "identity_points": identity_points,
+        },
+    }
+
+    side_report, homotopy_observation = _route_choice_observations(
+        selected_route,
+        reference_start=(0.0, 0.0),
+        reference_goal=(3.0, 0.0),
+    )
+
+    assert side_report.side == "left"
+    assert homotopy_observation.identity is None
+    assert homotopy_observation.unavailable_reason == "invalid_homotopy_payload"
 
 
 def test_topology_signature_prefers_choke_cells_over_same_gap_wiggles() -> None:

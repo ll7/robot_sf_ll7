@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.benchmark.route_choice_observability import homotopy_identity
 from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, build_grid_route_config
 from robot_sf.planner.hybrid_rule_local_planner import (
@@ -1048,6 +1049,23 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                 robot_pos=robot_pos,
                 heading=heading,
             )
+            geometry["route_path_grid"] = [list(cell) for cell in route_path.path]
+            geometry["route_path_coordinate_frame"] = "occupancy_grid_rc"
+            world_path = [
+                tuple(float(value) for value in self._route_hypothesis._grid_to_world(cell, meta))
+                for cell in route_path.path
+            ]
+            geometry["route_path_world"] = [list(point) for point in world_path]
+            geometry["route_path_world_coordinate_frame"] = "global_xy"
+            geometry["route_path_world_units"] = "m"
+            geometry["route_homotopy_observation"] = homotopy_identity(
+                route_path.path,
+                blocked,
+                identity_coordinates=world_path,
+                identity_coordinate_frame="global_xy",
+                identity_units="m",
+                identity_match_tolerance=resolution,
+            ).as_dict()
             clearance = _static_clearance_summary(
                 route_path.path,
                 route_path.clearance_map,

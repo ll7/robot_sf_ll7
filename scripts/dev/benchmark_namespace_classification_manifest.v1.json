@@ -241,6 +241,7 @@
     "risk_layer_ablation.py",
     "rl_trajectory_dataset.py",
     "robustness_delta.py",
+    "route_choice_observability.py",
     "run_config_provenance.py",
     "runner.py",
     "runtime_smoke_admission.py",

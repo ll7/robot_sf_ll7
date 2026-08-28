@@ -1,5 +1,11 @@
 # Context Retrieval Index
 
+Issue #7890 route-choice observability contract: frame-explicit route-side labels,
+canonical grid-corridor identities, denominator-separated temporal consistency, and a versioned
+analysis-only diagnostic receipt. The contract observes planner routes and does not establish
+pedestrian preference, response, comfort, or human predictability:
+[issue_7890_route_choice_observability.md](issue_7890_route_choice_observability.md).
+
 Issue #7848 RecurrentPPO learned adapter: stateful `sb3_contrib.RecurrentPPO` local planner
 under the #7846 `default_gym` observation contract (`drive_state` + `rays`), recurrent hidden/cell
 state lifecycle across control steps and reset boundaries, deterministic inference mode,

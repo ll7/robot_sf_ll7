@@ -14,6 +14,7 @@ from robot_sf.benchmark.route_choice_observability import (
     diagnostic_record,
     homotopy_identity,
     temporal_consistency,
+    topology_signature,
 )
 
 #: Symmetric corridor map: two feasible corridors around a static barrier
@@ -318,6 +319,23 @@ def test_homotopy_identity_rejects_malformed_path_points(malformed_point: object
 def test_homotopy_identity_rejects_paths_through_blocked_cells() -> None:
     observation = homotopy_identity([(4.0, 5.0), (4.0, 6.0)], SYMMETRIC_BLOCKED)
     assert observation.unavailable_reason == "path_intersects_blocked"
+
+
+@pytest.mark.parametrize("cell", [(-1, 0), (5, 0), (0, -1), (0, 5)])
+def test_topology_signature_rejects_out_of_bounds_path_cells(
+    cell: tuple[int, int],
+) -> None:
+    blocked = np.zeros((5, 5), dtype=bool)
+    clearance_map = np.ones((5, 5), dtype=float)
+    assert (
+        topology_signature(
+            [(0, 0), cell],
+            blocked,
+            clearance_map,
+            clearance_threshold_cells=1,
+        )
+        == frozenset()
+    )
 
 
 def test_temporal_consistency_separates_valid_and_unavailable() -> None:

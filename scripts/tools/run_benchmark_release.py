@@ -558,6 +558,121 @@ def _normalize_repository_input(path: Path, *, field_name: str) -> Path:
     return resolved
 
 
+def _checkpoint_arm_identities(
+    payload: dict[str, Any], *, label: str
+) -> list[tuple[str, str, str, str, bool, str]]:
+    """Return the path-independent checkpoint identity for every validated receipt arm."""
+    arms = payload.get("arms")
+    if not isinstance(arms, list) or not arms:
+        raise ValueError(f"{label} checkpoint receipt has no arms")
+
+    identities: list[tuple[str, str, str, str, bool, str]] = []
+    for index, arm in enumerate(arms):
+        if not isinstance(arm, dict):
+            raise ValueError(f"{label} checkpoint receipt arm {index} is not an object")
+        fields = tuple(arm.get(field) for field in ("planner_key", "algo", "kind", "value"))
+        if not all(isinstance(field, str) and field for field in fields):
+            raise ValueError(f"{label} checkpoint receipt arm {index} has incomplete identity")
+        implicit = arm.get("implicit")
+        if not isinstance(implicit, bool):
+            raise ValueError(f"{label} checkpoint receipt arm {index} has invalid implicit flag")
+        checkpoint_sha256 = arm.get("checkpoint_sha256")
+        if not isinstance(checkpoint_sha256, str):
+            raise ValueError(f"{label} checkpoint receipt arm {index} has no checkpoint hash")
+        checkpoint_sha256 = checkpoint_sha256.lower()
+        if len(checkpoint_sha256) != 64 or any(
+            character not in "0123456789abcdef" for character in checkpoint_sha256
+        ):
+            raise ValueError(
+                f"{label} checkpoint receipt arm {index} has an invalid checkpoint hash"
+            )
+        identities.append((*fields, implicit, checkpoint_sha256))
+
+    if len(set(identities)) != len(identities):
+        raise ValueError(f"{label} checkpoint receipt contains duplicate arm identities")
+    return sorted(identities)
+
+
+def _load_runtime_smoke_checkpoint_receipt(runtime_smoke_receipt: Path) -> dict[str, Any]:
+    """Load and verify the checkpoint receipt embedded in a runtime-smoke result."""
+    try:
+        result = _read_json(runtime_smoke_receipt)
+        descriptor = result.get("checkpoint_staging_receipt")
+        if not isinstance(descriptor, dict):
+            raise ValueError("runtime smoke checkpoint staging receipt descriptor is missing")
+        raw_path = descriptor.get("path")
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            raise ValueError("runtime smoke checkpoint staging receipt path is missing")
+        checkpoint_relative = Path(raw_path)
+        if checkpoint_relative.is_absolute():
+            raise ValueError("runtime smoke checkpoint staging receipt path is absolute")
+        checkpoint_path = _normalize_repository_input(
+            checkpoint_relative,
+            field_name="runtime smoke checkpoint staging receipt",
+        )
+        if not checkpoint_path.is_file():
+            raise ValueError("runtime smoke checkpoint staging receipt is not a file")
+        declared_sha256 = descriptor.get("sha256")
+        if not isinstance(declared_sha256, str) or declared_sha256.lower() != sha256_file(
+            checkpoint_path
+        ):
+            raise ValueError("runtime smoke checkpoint staging receipt hash is invalid")
+        return _read_json(checkpoint_path)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            "runtime smoke checkpoint receipt could not be loaded or verified"
+        ) from exc
+
+
+def _compare_rehearsal_checkpoint_identities(
+    checkpoint_receipt: dict[str, Any],
+    runtime_smoke_receipt: Path,
+    *,
+    release_receipt_sha256: str,
+    runtime_smoke_receipt_sha256: str,
+) -> tuple[dict[str, Any], bool]:
+    """Compare shared checkpoint identities across config-bound rehearsal receipts."""
+    try:
+        runtime_checkpoint_receipt = _load_runtime_smoke_checkpoint_receipt(runtime_smoke_receipt)
+        staged_identities = _checkpoint_arm_identities(checkpoint_receipt, label="staged")
+        runtime_identities = _checkpoint_arm_identities(
+            runtime_checkpoint_receipt,
+            label="runtime smoke",
+        )
+    except (OSError, TypeError, ValueError, KeyError):
+        return (
+            {
+                "schema_version": "benchmark-release-rehearsal-checkpoint-identity-admission.v1",
+                "status": "rejected",
+                "release_receipt_sha256": release_receipt_sha256,
+                "runtime_smoke_receipt_sha256": runtime_smoke_receipt_sha256,
+                "blockers": ["checkpoint arm identity could not be compared"],
+            },
+            False,
+        )
+
+    identities_match = staged_identities == runtime_identities
+    identity_admission = {
+        "schema_version": "benchmark-release-rehearsal-checkpoint-identity-admission.v1",
+        "status": "admitted" if identities_match else "rejected",
+        "release_receipt_sha256": release_receipt_sha256,
+        "runtime_smoke_receipt_sha256": runtime_smoke_receipt_sha256,
+        "arm_count": len(staged_identities),
+        "identity_fields": [
+            "planner_key",
+            "algo",
+            "kind",
+            "value",
+            "implicit",
+            "checkpoint_sha256",
+        ],
+        "blockers": []
+        if identities_match
+        else ["staged and runtime-smoke checkpoint arm identities do not match"],
+    }
+    return identity_admission, identities_match
+
+
 def _normalize_rehearsal_args(args: Any) -> None:
     """Normalize all read-only rehearsal inputs before any admission is attempted."""
     args.manifest = _normalize_repository_input(args.manifest, field_name="manifest")
@@ -793,23 +908,28 @@ def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912
         "schema_version": "benchmark-release-rehearsal-runtime-smoke-admission.v1",
         **smoke_admission,
     }
-    staged_checkpoint_sha = str(
+    release_receipt_sha256 = str(
         evidence["checkpoint_staging_admission"].get("sha256") or ""
     ).lower()
-    runtime_checkpoint_sha = str(smoke_admission.get("checkpoint_receipt_sha256") or "").lower()
-    if runtime_checkpoint_sha != staged_checkpoint_sha:
-        evidence["runtime_smoke_admission"].update(
-            {
-                "status": "rejected",
-                "blockers": [
-                    "runtime smoke receipt checkpoint staging receipt hash does not match "
-                    "staged checkpoint receipt"
-                ],
-            }
-        )
+    runtime_smoke_receipt_sha256 = str(
+        smoke_admission.get("checkpoint_receipt_sha256") or ""
+    ).lower()
+    identity_admission, identities_match = _compare_rehearsal_checkpoint_identities(
+        checkpoint_receipt,
+        args.runtime_smoke_receipt,
+        release_receipt_sha256=release_receipt_sha256,
+        runtime_smoke_receipt_sha256=runtime_smoke_receipt_sha256,
+    )
+    evidence["checkpoint_identity_admission"] = identity_admission
+    if not identities_match:
+        unable_to_compare = not identity_admission.get("arm_count")
         return _rehearsal_failure(
             status="checkpoint_identity_mismatch",
-            reason="runtime smoke receipt is not bound to the staged checkpoint receipt",
+            reason=(
+                "release and runtime-smoke checkpoint identities could not be compared"
+                if unable_to_compare
+                else "release and runtime-smoke checkpoint identities do not match"
+            ),
             evidence=evidence,
         )
 

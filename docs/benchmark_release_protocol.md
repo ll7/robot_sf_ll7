@@ -199,8 +199,11 @@ checkpoint, and runtime-smoke admissions. It returns success only when all
 admissions pass, while explicitly reporting `campaign_execution_status` as
 `not_started`; it creates no campaign output, episode, publication bundle, or
 scheduler submission. The runtime-smoke admission must carry the exact SHA-256
-of the supplied staged-checkpoint receipt. Allocation and resume options,
-including `--resume-receipt-max-age-hours`, are rejected in this mode.
+of its own embedded staged-checkpoint receipt. The release and runtime-smoke
+receipts are validated independently; their wrapper hashes may differ because
+their campaign-config bindings differ, but their checkpoint arm identities and
+model-byte SHA-256 values must match. Allocation and resume options, including
+`--resume-receipt-max-age-hours`, are rejected in this mode.
 
 `release/release_result.json` preserves the wrapped campaign semantics in the
 top-level `status`, `status_reason`, `benchmark_success`, `exit_code`,

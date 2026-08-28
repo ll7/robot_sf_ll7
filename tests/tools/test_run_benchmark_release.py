@@ -157,10 +157,40 @@ def _rehearsal_fixture(tmp_path: Path) -> tuple[SimpleNamespace, SimpleNamespace
         expected_kinematics_matrix=("differential_drive",),
     )
     checkpoint = tmp_path / "receipt.json"
-    checkpoint.write_text("{}\n", encoding="utf-8")
+    checkpoint_arm = {
+        "planner_key": "goal",
+        "algo": "goal",
+        "kind": "model_id",
+        "value": "goal-model",
+        "implicit": False,
+        "checkpoint_sha256": "d" * 64,
+    }
+    _write_json(
+        checkpoint,
+        {
+            "campaign_config_sha256": "f" * 64,
+            "arms": [checkpoint_arm],
+        },
+    )
+    runtime_checkpoint = tmp_path / "runtime-receipt.json"
+    _write_json(
+        runtime_checkpoint,
+        {
+            "campaign_config_sha256": "r" * 64,
+            "arms": [checkpoint_arm],
+        },
+    )
     smoke = tmp_path / "smoke" / "release_result.json"
     smoke.parent.mkdir()
-    smoke.write_text("{}\n", encoding="utf-8")
+    _write_json(
+        smoke,
+        {
+            "checkpoint_staging_receipt": {
+                "path": runtime_checkpoint.name,
+                "sha256": run_benchmark_release.sha256_file(runtime_checkpoint),
+            }
+        },
+    )
     return manifest, cfg, checkpoint, smoke
 
 
@@ -182,7 +212,7 @@ def _patch_valid_rehearsal_admissions(monkeypatch, tmp_path: Path) -> None:
         lambda *args, **kwargs: {
             "generated_at_utc": "2026-08-27T00:00:00Z",
             "submit_safe": True,
-            "arms": [{"planner_key": "goal"}],
+            "arms": run_benchmark_release._read_json(tmp_path / "receipt.json")["arms"],
         },
     )
     monkeypatch.setattr(
@@ -192,7 +222,7 @@ def _patch_valid_rehearsal_admissions(monkeypatch, tmp_path: Path) -> None:
             "status": "admitted",
             "result_sha256": "b" * 64,
             "checkpoint_receipt_sha256": run_benchmark_release.sha256_file(
-                tmp_path / "receipt.json"
+                tmp_path / "runtime-receipt.json"
             ),
             "source_commit": "a" * 40,
             "planner_arms": 1,
@@ -250,6 +280,11 @@ def test_release_rehearsal_admits_inputs_without_campaign_side_effects(
     assert payload["campaign_output_created"] is False
     assert payload["checkpoint_staging_admission"]["status"] == "admitted"
     assert payload["runtime_smoke_admission"]["status"] == "admitted"
+    assert payload["checkpoint_identity_admission"]["status"] == "admitted"
+    assert (
+        payload["checkpoint_identity_admission"]["release_receipt_sha256"]
+        != payload["checkpoint_identity_admission"]["runtime_smoke_receipt_sha256"]
+    )
     assert payload["planner_roster_admission"]["status"] == "valid"
     assert payload["release_inputs"]["manifest_path"] == "configs/release.yaml"
     assert called == {"campaign": False, "preflight": False}
@@ -258,18 +293,27 @@ def test_release_rehearsal_admits_inputs_without_campaign_side_effects(
 def test_release_rehearsal_rejects_checkpoint_identity_drift(
     monkeypatch, capsys, tmp_path: Path
 ) -> None:
-    """Runtime smoke must remain bound to the exact staged checkpoint receipt bytes."""
-    manifest, cfg, _checkpoint, _smoke = _rehearsal_fixture(tmp_path)
+    """Runtime smoke must retain the same checkpoint arm and model-byte identities."""
+    manifest, cfg, _checkpoint, smoke = _rehearsal_fixture(tmp_path)
     _patch_valid_rehearsal_admissions(monkeypatch, tmp_path)
     monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
     monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    runtime_checkpoint = tmp_path / "runtime-receipt.json"
+    runtime_payload = run_benchmark_release._read_json(runtime_checkpoint)
+    runtime_payload["arms"][0]["checkpoint_sha256"] = "e" * 64
+    _write_json(runtime_checkpoint, runtime_payload)
+    smoke_payload = run_benchmark_release._read_json(smoke)
+    smoke_payload["checkpoint_staging_receipt"]["sha256"] = run_benchmark_release.sha256_file(
+        runtime_checkpoint
+    )
+    _write_json(smoke, smoke_payload)
     monkeypatch.setattr(
         run_benchmark_release,
         "validate_runtime_smoke_result",
         lambda *args, **kwargs: {
             "status": "admitted",
             "result_sha256": "b" * 64,
-            "checkpoint_receipt_sha256": "c" * 64,
+            "checkpoint_receipt_sha256": run_benchmark_release.sha256_file(runtime_checkpoint),
         },
     )
 
@@ -290,11 +334,9 @@ def test_release_rehearsal_rejects_checkpoint_identity_drift(
     assert exit_code == 2
     assert payload["status"] == "checkpoint_identity_mismatch"
     assert payload["campaign_execution_status"] == "not_started"
-    assert payload["runtime_smoke_admission"]["status"] == "rejected"
-    assert (
-        "does not match staged checkpoint receipt"
-        in payload["runtime_smoke_admission"]["blockers"][0]
-    )
+    assert payload["runtime_smoke_admission"]["status"] == "admitted"
+    assert payload["checkpoint_identity_admission"]["status"] == "rejected"
+    assert "arm identities" in payload["checkpoint_identity_admission"]["blockers"][0]
 
 
 def test_release_rehearsal_rejects_resume_age_option(monkeypatch, capsys, tmp_path: Path) -> None:

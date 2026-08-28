@@ -7,6 +7,11 @@ For broad context lookup, start with [INDEX.md](INDEX.md). It is the retrieval-f
 current entry points, status rules, and curated context-pack scopes. This README remains the note
 maintenance workflow and full discoverability surface.
 
+The route-side and homotopy observability contract is documented in
+[issue_7890_route_choice_observability.md](issue_7890_route_choice_observability.md); it is an
+analysis-only diagnostic for planner-route observability, not evidence of human preference or
+predictability.
+
 The trace dossier cell-binding metadata contract is documented in
 [issue_7086_cell_binding_metadata.md](issue_7086_cell_binding_metadata.md); it remains
 metadata-only even though the retained-trace export and renderer provenance path is now

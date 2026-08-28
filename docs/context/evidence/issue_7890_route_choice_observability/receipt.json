@@ -1,0 +1,97 @@
+{
+  "claim_boundary": "planner-route observability only; not pedestrian preference, response, comfort, or general human predictability",
+  "evidence_tier": "analysis-only",
+  "fixture": {
+    "blocked_map_shape": [9, 15],
+    "blocked_slice": {
+      "cols": [6, 8],
+      "rows": [1, 7]
+    },
+    "name": "symmetric_two_corridor_with_unavailable_step",
+    "source": "deterministic synthetic fixture in tests/benchmark/test_route_choice_observability.py"
+  },
+  "homotopy_observations": [
+    {
+      "identity": "8,6;8,7;8,8",
+      "identity_coordinate_frame": "occupancy_grid_rc",
+      "identity_match_tolerance": null,
+      "identity_points": [[8.0, 6.0], [8.0, 7.0], [8.0, 8.0]],
+      "identity_units": "cells",
+      "unavailable_reason": null
+    },
+    {
+      "identity": "0,6;0,7;0,8",
+      "identity_coordinate_frame": "occupancy_grid_rc",
+      "identity_match_tolerance": null,
+      "identity_points": [[0.0, 6.0], [0.0, 7.0], [0.0, 8.0]],
+      "identity_units": "cells",
+      "unavailable_reason": null
+    },
+    {
+      "identity": null,
+      "identity_coordinate_frame": "occupancy_grid_rc",
+      "identity_match_tolerance": null,
+      "identity_points": [],
+      "identity_units": "cells",
+      "unavailable_reason": "empty_path"
+    }
+  ],
+  "result_classification": "diagnostic-only",
+  "route_side_observations": [
+    {
+      "coordinate_frame": "global_xy",
+      "goal": [8.0, 4.0],
+      "neutral_band_m": 0.2,
+      "progress_interval": [0.1, 0.9],
+      "reason": null,
+      "side": "left",
+      "start": [0.0, 4.0],
+      "tolerance_m": 0.05,
+      "units": "m"
+    },
+    {
+      "coordinate_frame": "global_xy",
+      "goal": [8.0, 4.0],
+      "neutral_band_m": 0.2,
+      "progress_interval": [0.1, 0.9],
+      "reason": null,
+      "side": "right",
+      "start": [0.0, 4.0],
+      "tolerance_m": 0.05,
+      "units": "m"
+    },
+    {
+      "coordinate_frame": "global_xy",
+      "goal": [8.0, 4.0],
+      "neutral_band_m": 0.2,
+      "progress_interval": [0.1, 0.9],
+      "reason": "empty_path",
+      "side": "unavailable",
+      "start": [0.0, 4.0],
+      "tolerance_m": 0.05,
+      "units": "m"
+    }
+  ],
+  "schema_version": "route_choice_observability.v1",
+  "status": "available",
+  "temporal_consistency": {
+    "aligned_count": 3,
+    "alignment_reason": null,
+    "alignment_valid": true,
+    "availability_denominator": 3,
+    "availability_fraction": 0.6666666666666666,
+    "consistency_fraction": 0.5,
+    "denominator": 2,
+    "dominant_side": null,
+    "dominant_topology": null,
+    "first_stable_step": null,
+    "side_denominator": 3,
+    "side_transition_count": 1,
+    "side_valid_count": 2,
+    "topology_denominator": 3,
+    "topology_transition_count": 1,
+    "topology_valid_count": 2,
+    "unavailable_count": 1,
+    "valid_count": 2
+  }
+}

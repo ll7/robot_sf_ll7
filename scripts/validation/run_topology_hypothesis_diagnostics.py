@@ -19,6 +19,17 @@ from robot_sf.benchmark.map_runner.map_runner import (
     _policy_command_to_env_action,
     _scenario_with_episode_seed_defaults,
 )
+from robot_sf.benchmark.route_choice_observability import (
+    HomotopyObservation,
+    RouteSideReport,
+    diagnostic_record,
+    serialize_homotopy_identity_points,
+)
+from robot_sf.benchmark.route_choice_observability import (
+    classify_route_side as _classify_route_side,
+)
+from robot_sf.benchmark.route_choice_observability import homotopy_identity as _homotopy_identity
+from robot_sf.benchmark.route_choice_observability import topology_signature as _topology_signature
 from robot_sf.benchmark.termination_reason import route_complete_success
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.planner.grid_route import GridRoutePlannerAdapter, GridRoutePlannerConfig
@@ -58,6 +69,18 @@ class _RouteHypothesisPath:
     clearance_map: np.ndarray | None
     topology_signature: frozenset[tuple[int, int]]
     blocked_cell: tuple[int, int] | None = None
+
+
+@dataclass(frozen=True)
+class _RouteHypothesisInputs:
+    """Raw route hypotheses and grid context for one diagnostic observation."""
+
+    routes: list[_RouteHypothesisPath]
+    blocked: np.ndarray
+    meta: dict[str, Any]
+    robot_pos: np.ndarray
+    heading: float
+    goal: np.ndarray
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -137,35 +160,6 @@ def _distinct_path(
     return True
 
 
-def _topology_signature(
-    path: list[tuple[int, int]],
-    blocked: np.ndarray,
-    clearance_map: np.ndarray,
-    *,
-    clearance_threshold_cells: int,
-) -> frozenset[tuple[int, int]]:
-    """Return low-clearance path cells used as a compact corridor signature."""
-    choke_cells: set[tuple[int, int]] = set()
-    rows, cols = blocked.shape
-    for row, col in path:
-        up_blocked = row <= 0 or bool(blocked[row - 1, col])
-        down_blocked = row >= rows - 1 or bool(blocked[row + 1, col])
-        left_blocked = col <= 0 or bool(blocked[row, col - 1])
-        right_blocked = col >= cols - 1 or bool(blocked[row, col + 1])
-        if (up_blocked and down_blocked) or (left_blocked and right_blocked):
-            choke_cells.add((row, col))
-    if choke_cells:
-        return frozenset(choke_cells)
-
-    threshold = max(int(clearance_threshold_cells), 1)
-    signature = {
-        cell
-        for cell in path
-        if np.isfinite(float(clearance_map[cell])) and float(clearance_map[cell]) <= threshold
-    }
-    return frozenset(signature)
-
-
 def _block_path_cell(
     blocked: np.ndarray,
     cell: tuple[int, int],
@@ -231,20 +225,20 @@ def _find_alternative_paths(
         )
         clearance = adapter._compute_clearance_map(perturbed)
         path = adapter._astar(perturbed, start, goal, clearance_map=clearance)
-        topology_signature = _topology_signature(
+        signature = _topology_signature(
             path,
             blocked,
             base_clearance,
             clearance_threshold_cells=max(block_radius_cells, 1),
         )
-        if len(path) < 2 or not _distinct_path(path, topology_signature, hypotheses):
+        if len(path) < 2 or not _distinct_path(path, signature, hypotheses):
             continue
         hypotheses.append(
             _RouteHypothesisPath(
                 hypothesis_id=f"masked_cell_{blocked_cell[0]}_{blocked_cell[1]}",
                 path=path,
                 clearance_map=clearance,
-                topology_signature=topology_signature,
+                topology_signature=signature,
                 blocked_cell=blocked_cell,
             )
         )
@@ -318,34 +312,34 @@ def _side_label(path: list[np.ndarray], primary: list[np.ndarray]) -> str:
     return "left" if cross > 0.0 else "right"
 
 
-def _route_hypotheses_for_observation(  # noqa: C901
+def _route_hypothesis_inputs_for_observation(
     adapter: GridRoutePlannerAdapter,
     obs: dict[str, Any],
     *,
     max_hypotheses: int,
     block_radius_cells: int,
     block_stride_cells: int,
-) -> list[dict[str, Any]]:
-    """Return JSON-ready topology hypotheses for the current observation."""
+) -> _RouteHypothesisInputs | None:
+    """Return raw topology hypotheses and grid context for one observation."""
     try:
         robot_pos, heading, goal, radius = adapter._extract_state(obs)
     except (AttributeError, IndexError, KeyError, TypeError, ValueError):
-        return []
+        return None
     payload = adapter._extract_grid_payload(obs)
     if payload is None:
-        return []
+        return None
     grid, meta = payload
     blocked = adapter._blocked_grid(grid, meta, radius)
     if blocked is None:
-        return []
+        return None
     start_rc = adapter._world_to_grid(robot_pos, meta, blocked.shape)
     goal_rc = adapter._world_to_grid(goal, meta, blocked.shape)
     if start_rc is None or goal_rc is None:
-        return []
+        return None
     start = adapter._nearest_free(blocked, start_rc, int(adapter.config.clearance_search_cells))
     stop = adapter._nearest_free(blocked, goal_rc, int(adapter.config.clearance_search_cells))
     if start is None or stop is None:
-        return []
+        return None
 
     route_paths = _find_alternative_paths(
         adapter,
@@ -357,14 +351,29 @@ def _route_hypotheses_for_observation(  # noqa: C901
         block_stride_cells=block_stride_cells,
     )
     if not route_paths:
-        return []
+        return None
+    return _RouteHypothesisInputs(
+        routes=route_paths,
+        blocked=blocked,
+        meta=meta,
+        robot_pos=np.asarray(robot_pos, dtype=float),
+        heading=float(heading),
+        goal=np.asarray(goal, dtype=float),
+    )
 
-    resolution = _resolution(meta)
+
+def _format_route_hypotheses(
+    adapter: GridRoutePlannerAdapter,
+    obs: dict[str, Any],
+    inputs: _RouteHypothesisInputs,
+) -> list[dict[str, Any]]:
+    """Return JSON-ready topology hypotheses from raw observation inputs."""
+    resolution = _resolution(inputs.meta)
     ped_positions, ped_radius = _extract_pedestrians(adapter, obs)
-    primary_world = [adapter._grid_to_world(cell, meta) for cell in route_paths[0].path]
+    primary_world = [adapter._grid_to_world(cell, inputs.meta) for cell in inputs.routes[0].path]
     hypotheses: list[dict[str, Any]] = []
-    for rank, route_path in enumerate(route_paths):
-        world_points = [adapter._grid_to_world(cell, meta) for cell in route_path.path]
+    for rank, route_path in enumerate(inputs.routes):
+        world_points = [adapter._grid_to_world(cell, inputs.meta) for cell in route_path.path]
         clearance_map = route_path.clearance_map
         static_values: list[float] = []
         if clearance_map is not None:
@@ -412,10 +421,165 @@ def _route_hypotheses_for_observation(  # noqa: C901
                 "route_tangent_heading": tangent_heading,
                 "route_heading_error": None
                 if tangent_heading is None
-                else float((tangent_heading - float(heading) + np.pi) % (2.0 * np.pi) - np.pi),
+                else float((tangent_heading - inputs.heading + np.pi) % (2.0 * np.pi) - np.pi),
             }
         )
     return hypotheses
+
+
+def _route_hypotheses_for_observation(
+    adapter: GridRoutePlannerAdapter,
+    obs: dict[str, Any],
+    *,
+    max_hypotheses: int,
+    block_radius_cells: int,
+    block_stride_cells: int,
+) -> list[dict[str, Any]]:
+    """Return JSON-ready topology hypotheses for the current observation."""
+    inputs = _route_hypothesis_inputs_for_observation(
+        adapter,
+        obs,
+        max_hypotheses=max_hypotheses,
+        block_radius_cells=block_radius_cells,
+        block_stride_cells=block_stride_cells,
+    )
+    if inputs is None:
+        return []
+    return _format_route_hypotheses(adapter, obs, inputs)
+
+
+def _route_choice_observations(  # noqa: C901, PLR0912 - fail-closed provenance validation
+    selected_route: dict[str, Any] | None,
+    *,
+    reference_start: tuple[float, float],
+    reference_goal: tuple[float, float],
+) -> tuple[RouteSideReport, HomotopyObservation]:
+    """Build one route-choice observation from the planner's exact selected-route payload."""
+
+    def _unavailable() -> tuple[RouteSideReport, HomotopyObservation]:
+        return (
+            _classify_route_side([], start=reference_start, goal=reference_goal),
+            _homotopy_identity([], np.zeros((0, 0), dtype=bool)),
+        )
+
+    if not isinstance(selected_route, dict):
+        return _unavailable()
+    grid_path = selected_route.get("route_path_grid")
+    world_path = selected_route.get("route_path_world")
+    if (
+        selected_route.get("route_path_coordinate_frame") != "occupancy_grid_rc"
+        or selected_route.get("route_path_world_coordinate_frame") != "global_xy"
+        or selected_route.get("route_path_world_units") != "m"
+        or not isinstance(grid_path, list)
+        or not isinstance(world_path, list)
+        or len(grid_path) < 2
+        or len(grid_path) != len(world_path)
+    ):
+        return _unavailable()
+    try:
+        for cell in grid_path:
+            row, col = cell
+            row_value = float(row)
+            col_value = float(col)
+            if not row_value.is_integer() or not col_value.is_integer():
+                return _unavailable()
+        normalized_world_path = []
+        for point in world_path:
+            x, y = point
+            normalized_point = (float(x), float(y))
+            if not np.isfinite(normalized_point).all():
+                return _unavailable()
+            normalized_world_path.append(normalized_point)
+    except (TypeError, ValueError):
+        return _unavailable()
+
+    side_report = _classify_route_side(
+        normalized_world_path,
+        start=reference_start,
+        goal=reference_goal,
+        coordinate_frame="global_xy",
+        units="m",
+    )
+
+    def _invalid_homotopy() -> tuple[RouteSideReport, HomotopyObservation]:
+        return side_report, HomotopyObservation(
+            identity=None,
+            unavailable_reason="invalid_homotopy_payload",
+            identity_coordinate_frame="global_xy",
+            identity_units="m",
+        )
+
+    homotopy_payload = selected_route.get("route_homotopy_observation")
+    if not isinstance(homotopy_payload, dict):
+        return _invalid_homotopy()
+    identity = homotopy_payload.get("identity")
+    unavailable_reason = homotopy_payload.get("unavailable_reason")
+    identity_frame = homotopy_payload.get("identity_coordinate_frame")
+    identity_units = homotopy_payload.get("identity_units")
+    identity_points = homotopy_payload.get("identity_points")
+    identity_match_tolerance = homotopy_payload.get("identity_match_tolerance")
+    if identity_frame != "global_xy" or identity_units != "m":
+        return _invalid_homotopy()
+    try:
+        match_tolerance_value = float(identity_match_tolerance)
+    except (TypeError, ValueError):
+        return _invalid_homotopy()
+    if not np.isfinite(match_tolerance_value) or match_tolerance_value <= 0.0:
+        return _invalid_homotopy()
+    if identity is None:
+        if (
+            not isinstance(unavailable_reason, str)
+            or not unavailable_reason.strip()
+            or identity_points != []
+        ):
+            return _invalid_homotopy()
+        return side_report, HomotopyObservation(
+            identity=None,
+            unavailable_reason=unavailable_reason,
+            identity_coordinate_frame=identity_frame,
+            identity_units=identity_units,
+            identity_points=(),
+            identity_match_tolerance=match_tolerance_value,
+        )
+    if (
+        not isinstance(identity, str)
+        or not identity.strip()
+        or unavailable_reason is not None
+        or not isinstance(identity_points, list)
+        or not identity_points
+    ):
+        return _invalid_homotopy()
+    try:
+        normalized_identity_points_list = []
+        for point in identity_points:
+            x, y = point
+            normalized_identity_points_list.append((float(x), float(y)))
+        normalized_identity_points = tuple(sorted(normalized_identity_points_list))
+    except (TypeError, ValueError):
+        return _invalid_homotopy()
+    if not np.isfinite(normalized_identity_points).all():
+        return _invalid_homotopy()
+    if len(set(normalized_identity_points)) != len(normalized_identity_points):
+        return _invalid_homotopy()
+    if identity != serialize_homotopy_identity_points(normalized_identity_points):
+        return _invalid_homotopy()
+    selected_points = np.asarray(normalized_world_path, dtype=float)
+    identity_point_array = np.asarray(normalized_identity_points, dtype=float)
+    point_distances = np.linalg.norm(
+        identity_point_array[:, None, :] - selected_points[None, :, :],
+        axis=2,
+    )
+    if np.any(np.min(point_distances, axis=1) > 1e-9):
+        return _invalid_homotopy()
+    homotopy_observation = HomotopyObservation(
+        identity=identity,
+        unavailable_reason=unavailable_reason,
+        identity_coordinate_frame=identity_frame,
+        identity_units=identity_units,
+        identity_points=normalized_identity_points,
+        identity_match_tolerance=match_tolerance_value,
+    )
+    return side_report, homotopy_observation
 
 
 def _selection_score_example(row: dict[str, Any]) -> dict[str, Any] | None:
@@ -853,6 +1017,11 @@ def _report_lines(payload: dict[str, Any], trace_path: Path) -> list[str]:
         f"- Horizon: `{payload['horizon']}`",
         f"- Trace JSON: `{trace_path}`",
         f"- Topology status counts: `{summary['topology_status_counts']}`",
+        "- Route-choice observability: "
+        f"`{payload['route_choice_observability']['schema_version']}` "
+        f"({payload['route_choice_observability']['status']})",
+        "- Route-choice temporal consistency: "
+        f"`{payload['route_choice_observability']['temporal_consistency']}`",
         f"- Selected local command sources: `{summary['selected_source_counts']}`",
         "- Route-selector selected hypotheses: "
         f"`{summary['route_selector_selected_hypothesis_counts']}`",
@@ -1038,6 +1207,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
 
     env = make_robot_env(config=env_config, seed=seed, debug=False)
     steps: list[dict[str, Any]] = []
+    side_reports: list[RouteSideReport] = []
+    homotopy_observations: list[HomotopyObservation] = []
     done_info: dict[str, Any] = {}
     try:
         obs, _ = env.reset(seed=seed)
@@ -1045,6 +1216,12 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
             planner_bind_env(env)
         if callable(planner_reset):
             planner_reset(seed=seed)
+        reference_start = tuple(
+            float(value) for value in np.asarray(env.simulator.robot_pos[0], dtype=float)[:2]
+        )
+        reference_goal = tuple(
+            float(value) for value in np.asarray(env.simulator.goal_pos[0], dtype=float)[:2]
+        )
 
         for step_idx in range(horizon):
             robot_pos = np.array(env.simulator.robot_pos[0], dtype=float, copy=True)
@@ -1053,12 +1230,17 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
             min_robot_ped_dist = _sim_min_robot_ped_distance(env)
             if min_robot_ped_dist is None:
                 min_robot_ped_dist = _obs_min_robot_ped_distance(obs)
-            topology_hypotheses = _route_hypotheses_for_observation(
+            route_inputs = _route_hypothesis_inputs_for_observation(
                 route_adapter,
                 obs,
                 max_hypotheses=int(args.max_hypotheses),
                 block_radius_cells=int(args.block_radius_cells),
                 block_stride_cells=int(args.block_stride_cells),
+            )
+            topology_hypotheses = (
+                _format_route_hypotheses(route_adapter, obs, route_inputs)
+                if route_inputs is not None
+                else []
             )
 
             policy_command = policy_fn(obs)
@@ -1078,6 +1260,14 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
                 if callable(last_decision):
                     planner_decision = last_decision()
             decision = planner_decision if isinstance(planner_decision, dict) else {}
+            route_corridor = decision.get("route_corridor")
+            side_report, homotopy_observation = _route_choice_observations(
+                route_corridor if isinstance(route_corridor, dict) else None,
+                reference_start=reference_start,
+                reference_goal=reference_goal,
+            )
+            side_reports.append(side_report)
+            homotopy_observations.append(homotopy_observation)
 
             obs, reward, terminated, truncated, info = env.step(env_action)
             meta = info.get("meta", {}) if isinstance(info, dict) else {}
@@ -1137,6 +1327,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
         env.close()
 
     summary = _summarize_hypotheses(steps, done_info)
+    route_choice_observability = diagnostic_record(side_reports, homotopy_observations)
     has_sufficient_hypotheses = any(row.get("topology_status") == "ok" for row in steps)
     diagnostic_status = "diagnostic_complete" if has_sufficient_hypotheses else "not_available"
     payload = {
@@ -1155,6 +1346,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
         "planner_summary": _json_ready(planner_summary),
         "done_info": _json_ready(done_info),
         "summary": _json_ready(summary),
+        "route_choice_observability": route_choice_observability,
         "steps": steps,
     }
 
@@ -1170,6 +1362,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
                 "scenario_id": payload["scenario_id"],
                 "seed": seed,
                 "diagnostic_status": diagnostic_status,
+                "route_choice_observability_status": route_choice_observability["status"],
                 "topology_status_counts": summary["topology_status_counts"],
                 "selected_source_counts": summary["selected_source_counts"],
             },

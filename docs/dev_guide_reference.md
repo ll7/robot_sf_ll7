@@ -514,14 +514,19 @@ repository uses the explicit `base_sensitive` marker-file selector from issue #5
 - **Changed-file provenance**: the gate tries `gh pr diff <pr-number> --name-only` first. If GitHub
   rejects the unified diff because it exceeds its line limit, it falls back to the paginated REST
   `pulls/<number>/files` endpoint with strict page and filename validation. A failed, malformed, empty,
-  or pagination-exhausted response remains `unknown`; no partial file list is used for admission.
+  pagination-exhausted, or 3,000-file-capped response remains `unknown`; no partial file list is used
+  for admission.
 - **Base-sensitive path**: a `base_sensitive` PR must pass the existing workflow-run/base freshness
   check and the focused `base_sensitive` subset against the current base before merge-ready admission.
 - **Ordinary path**: a trusted exact-head review may record
   `base-policy: ordinary-cas @ <head-sha>` for a complete non-intersecting inventory. The guarded
-  merger then runs `scripts/dev/check_pr_current_base_cas.py` immediately before merging and still
-  uses `--match-head-commit`; it does not waive exact-head CI, review, metadata, thread, or branch
-  protection requirements.
+  receipt owner then records every filename, status, and prior rename path, derives the complete
+  Python-test candidate set from those records, and classifies each candidate's marker content
+  at immutable base/head/current-main refs (including both paths of renamed candidates), verifies
+  the current-main commit before treating a missing path as absent, preserves the trusted full-40-hex
+  policy carrier, and records the result of `scripts/dev/check_pr_current_base_cas.py` immediately
+  before its expected-head merge. This proof qualifies only `stale_merge_base`; it does not waive
+  exact-head CI, review, metadata, thread, branch protection, or any second gate failure.
 - **Unknown path**: missing selector, current-main, head, review-thread, or CAS provenance fails closed.
 
 - **Script**: `scripts/dev/check_pr_merge_staleness.py <pr-number>`.
@@ -760,16 +765,22 @@ The canonical owner is
 head/base/current-main SHAs, final PR metadata digest, terminal exact-head required checks,
 independent implementation-review carrier and evidence digest, review-thread disposition,
 requested reviewers and teams, all separate hold dimensions, optional waiver actor/reason/time,
-and the expected-head compare-and-swap (CAS) request. The receipt digest covers the pre-merge
-observation and is preserved when GitHub returns the merge commit SHA.
+the expected-head compare-and-swap (CAS) request, and an `ordinary_cas` proof when the recorded PR
+base predates current `main`. That proof binds the complete normalized changed-file record inventory
+(filename, status, and prior rename path), derives the exact test candidate set, and binds immutable
+base/head/current-main content refs for changed Python test marker candidates (including both paths
+of renamed candidates), a verified current-main commit ref, the full trusted exact-head policy
+carrier, and immediate current-main/head CAS; a 3,000-file-capped inventory fails closed, and the
+proof can qualify only a lone `stale_merge_base` gate reason. The receipt digest covers the
+pre-merge observation and is preserved when GitHub returns the merge commit SHA.
 
 Use the three explicit modes as follows:
 
 - `--mode report-only` reads the canonical merge-gate snapshot and writes an inspectable receipt;
   it performs no remote mutation.
 - `--mode validate --receipt-file <path>` rereads live state and compares it with the immutable
-  receipt; a changed head, base, metadata, check, review, thread, requested reviewer, or hold
-  blocks.
+  receipt; a changed head, base, metadata, check, review, thread, requested reviewer, hold, or
+  ordinary-CAS proof blocks.
 - `--mode apply --receipt-file <path>` repeats validation and then lets the receipt owner issue
   exactly one expected-head squash merge, rereading the closed/merged PR and recording the
   returned SHA. `scripts/dev/stacked_prs.py merge-cascade --apply` is the stack coordinator and
@@ -778,9 +789,9 @@ Use the three explicit modes as follows:
 The only permitted waiver is the bounded absence of a distinct human implementation reviewer,
 and it requires an actor, reason, and timestamp. It cannot waive a required hosted check,
 scientific or evidence review, domain approval, legal/release or security gate, dependency hold,
-draft state, unresolved thread, requested reviewer, stale base, or metadata mismatch. If the
-post-merge readback is invalid, preserve the receipt and route an incident; do not reconstruct the
-pre-merge evidence or reuse the waiver. The repository policy fixture
+draft state, unresolved thread, requested reviewer, unqualified stale base, or metadata mismatch.
+If the post-merge readback is invalid, preserve the receipt and route an incident; do not
+reconstruct the pre-merge evidence or reuse the waiver. The repository policy fixture
 `scripts/dev/single_account_merge_authority_fixture.v1.json` enumerates the callers and prevents
 new direct merge endpoints from bypassing this contract.
 

@@ -52,6 +52,8 @@ work needs separate evidence before the issue can close.
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import json
 import os
 import re
@@ -60,6 +62,7 @@ import sys
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 # Make the sibling ``scripts.dev`` package importable when this file is run as a
 # standalone script (``python scripts/dev/merge_queue_gate.py``). Under pytest or
@@ -87,6 +90,7 @@ from scripts.dev.pr_metadata import (  # noqa: E402
     metadata_trailer,
 )
 from scripts.dev.snapshot_pr_queue import (  # noqa: E402
+    _extract_base_policies,
     _extract_gate_verdicts,
     _extract_metadata_verdicts,
 )
@@ -119,6 +123,8 @@ CI_PATHS_IGNORE_PATTERNS = ("**/*.md", "docs/**")
 CHANGED_COVERAGE_NOT_REQUIRED = "not_required"
 _CHANGED_FILES_PAGE_SIZE = 100
 _MAX_CHANGED_FILES_PAGES = 100
+_MAX_CHANGED_TEST_CONTENT_FILES = 200
+_MAX_GITHUB_PR_FILES = 3000
 
 # GitHub's native merge-queue ref is exposed as either the full
 # ``refs/heads/gh-readonly-queue/<base>/pr-<number>-<source-sha>`` ref or its
@@ -987,17 +993,16 @@ def _fetch_pr_base_sha(pr_number: str | int, *, repo: str) -> tuple[str | None, 
     return sha, None
 
 
-def _fetch_pr_changed_files(
+def _fetch_pr_changed_file_records(
     pr_number: str | int, *, repo: str
-) -> tuple[list[str] | None, str | None]:
-    """Fetch the complete changed-file set needed for a missing-proof ruling.
+) -> tuple[list[dict[str, Any]] | None, str | None]:
+    """Fetch complete paginated changed-file records for exact-ref classification.
 
     The REST files endpoint does not expose a total count in the response, so
     page until a short page (including an empty terminal page) proves that no
-    file was omitted.  A bounded page count and strict response validation keep
-    an API truncation or malformed response from becoming a docs-only bypass.
+    file was omitted.
     """
-    changed_files: list[str] = []
+    changed_records: list[dict[str, Any]] = []
     for page in range(1, _MAX_CHANGED_FILES_PAGES + 1):
         result = _gh(
             [
@@ -1011,22 +1016,212 @@ def _fetch_pr_changed_files(
         if err or not isinstance(payload, list):
             return None, err or "changed-file response is not a JSON array"
 
-        page_files: list[str] = []
+        page_records: list[dict[str, Any]] = []
         for item in payload:
             if not isinstance(item, dict):
                 return None, "changed-file response contains a malformed entry"
             filename = item.get("filename")
             if not isinstance(filename, str) or not filename.strip():
                 return None, "changed-file response contains an invalid filename"
-            page_files.append(filename)
+            page_records.append(dict(item))
 
-        changed_files.extend(page_files)
-        if len(page_files) < _CHANGED_FILES_PAGE_SIZE:
-            if not changed_files:
+        changed_records.extend(page_records)
+        if len(changed_records) >= _MAX_GITHUB_PR_FILES:
+            return (
+                None,
+                f"changed-file inventory reached GitHub's {_MAX_GITHUB_PR_FILES}-file cap",
+            )
+        if len(page_records) < _CHANGED_FILES_PAGE_SIZE:
+            if not changed_records:
                 return None, "changed-file response is empty"
-            return changed_files, None
+            return changed_records, None
 
     return None, "changed-file response exceeded the bounded pagination limit"
+
+
+def _fetch_pr_changed_files(
+    pr_number: str | int, *, repo: str
+) -> tuple[list[str] | None, str | None]:
+    """Fetch the complete changed-file names needed for a missing-proof ruling."""
+    records, error = _fetch_pr_changed_file_records(pr_number, repo=repo)
+    if error or records is None:
+        return None, error
+    return [str(record["filename"]) for record in records], None
+
+
+def _fetch_text_at_ref(
+    *, repo: str, path: str, ref: str, allow_absent: bool = False
+) -> tuple[str | None, str | None]:
+    """Read one UTF-8 repository file through an immutable full-SHA REST ref."""
+    encoded_path = quote(path, safe="/")
+    result = _gh(["api", f"repos/{repo}/contents/{encoded_path}?ref={ref}"])
+    if result.returncode != 0:
+        diagnostic = result.stderr.strip() or f"content query failed for {path} at {ref}"
+        if allow_absent and "HTTP 404" in diagnostic:
+            return None, None
+        return None, diagnostic
+    payload, error = _parse_json(result.stdout)
+    if error or not isinstance(payload, dict):
+        return None, error or f"content response is malformed for {path} at {ref}"
+    if payload.get("encoding") != "base64" or not isinstance(payload.get("content"), str):
+        return None, f"content response is not inline base64 for {path} at {ref}"
+    try:
+        raw = base64.b64decode("".join(payload["content"].split()), validate=True)
+        return raw.decode("utf-8"), None
+    except (binascii.Error, UnicodeDecodeError) as exc:
+        return None, f"content decode failed for {path} at {ref}: {exc}"
+
+
+def _verify_git_commit_ref(*, repo: str, ref: str) -> tuple[bool, str | None]:
+    """Verify that a full immutable commit ref resolves before optional path reads."""
+    result = _gh(["api", f"repos/{repo}/git/commits/{ref}"])
+    if result.returncode != 0:
+        return False, result.stderr.strip() or f"commit ref query failed for {ref}"
+    payload, error = _parse_json(result.stdout)
+    if error or not isinstance(payload, dict) or str(payload.get("sha") or "") != ref:
+        return False, error or f"commit ref response did not bind {ref}"
+    return True, None
+
+
+def fetch_pr_changed_file_marker_inventory(  # noqa: C901, PLR0912 - statuses have distinct refs.
+    pr_number: str | int,
+    *,
+    repo: str,
+    base_sha: str,
+    head_sha: str,
+    current_main_sha: str,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Classify changed test files using content bound to exact base/head SHAs."""
+    records, error = _fetch_pr_changed_file_records(pr_number, repo=repo)
+    if error or records is None:
+        return None, error or "changed-file inventory unavailable"
+    current_main_verified, current_main_error = _verify_git_commit_ref(
+        repo=repo, ref=current_main_sha
+    )
+    if not current_main_verified:
+        return None, current_main_error or "current-main commit ref unavailable"
+
+    normalized_records: list[dict[str, Any]] = []
+    for record in records:
+        filename = str(record["filename"])
+        status = str(record.get("status") or "").lower()
+        previous_filename = record.get("previous_filename")
+        if not status:
+            return None, f"changed file lacks status: {filename}"
+        if previous_filename is not None and (
+            not isinstance(previous_filename, str) or not previous_filename.strip()
+        ):
+            return None, f"changed file has invalid previous_filename: {filename}"
+        if status == "renamed" and previous_filename is None:
+            return None, f"renamed file lacks previous_filename: {filename}"
+        if status != "renamed" and previous_filename is not None:
+            return None, f"non-renamed file has previous_filename: {filename}"
+        normalized_records.append(
+            {
+                "filename": filename,
+                "previous_filename": previous_filename,
+                "status": status,
+            }
+        )
+    records = sorted(normalized_records, key=lambda record: str(record["filename"]))
+
+    candidates = [
+        record
+        for record in records
+        if (
+            Path(str(record["filename"])).name.startswith("test_")
+            and str(record["filename"]).endswith(".py")
+        )
+        or (
+            isinstance(record.get("previous_filename"), str)
+            and Path(str(record["previous_filename"])).name.startswith("test_")
+            and str(record["previous_filename"]).endswith(".py")
+        )
+    ]
+    if len(candidates) > _MAX_CHANGED_TEST_CONTENT_FILES:
+        return None, "changed test-file inventory exceeds exact-content bound"
+
+    sensitive: list[str] = []
+    provenance: list[dict[str, Any]] = []
+    for record in candidates:
+        filename = str(record["filename"])
+        status = str(record.get("status") or "").lower()
+        refs: list[tuple[str, str, str]] = []
+        if status in {"added", "copied"}:
+            refs.append(("head", filename, head_sha))
+        elif status == "removed":
+            refs.append(("base", filename, base_sha))
+        elif status in {"changed", "modified"}:
+            refs.extend((("base", filename, base_sha), ("head", filename, head_sha)))
+        elif status == "renamed":
+            previous = record.get("previous_filename")
+            if not isinstance(previous, str) or not previous.strip():
+                return None, f"renamed test file lacks previous_filename: {filename}"
+            refs.extend((("base", previous, base_sha), ("head", filename, head_sha)))
+        else:
+            return (
+                None,
+                f"changed test file has unsupported status {status or 'missing'}: {filename}",
+            )
+
+        proof: dict[str, Any] = {
+            "base": None,
+            "current_main": [],
+            "filename": filename,
+            "head": None,
+            "previous_filename": record.get("previous_filename"),
+            "status": status,
+        }
+        contains_marker = False
+        for side, path, ref in refs:
+            text, text_error = _fetch_text_at_ref(repo=repo, path=path, ref=ref)
+            if text_error or text is None:
+                return None, text_error or f"content unavailable for {path} at {ref}"
+            marker_present = "base_sensitive" in text
+            proof[side] = {
+                "contains_marker": marker_present,
+                "path": path,
+                "ref": ref,
+            }
+            contains_marker = contains_marker or marker_present
+        current_paths = {filename}
+        if status == "renamed":
+            current_paths.add(str(record["previous_filename"]))
+        for path in sorted(current_paths):
+            text, text_error = _fetch_text_at_ref(
+                repo=repo,
+                path=path,
+                ref=current_main_sha,
+                allow_absent=True,
+            )
+            if text_error:
+                return None, text_error
+            current_marker = text is not None and "base_sensitive" in text
+            proof["current_main"].append(
+                {
+                    "contains_marker": current_marker,
+                    "exists": text is not None,
+                    "path": path,
+                    "ref": current_main_sha,
+                }
+            )
+            contains_marker = contains_marker or current_marker
+        if contains_marker:
+            sensitive.append(filename)
+        provenance.append(proof)
+
+    return {
+        "base_sha": base_sha,
+        "candidate_files": [str(record["filename"]) for record in candidates],
+        "changed_file_records": records,
+        "changed_files": [str(record["filename"]) for record in records],
+        "changed_sensitive_files": sorted(sensitive),
+        "complete": True,
+        "content_provenance": provenance,
+        "current_main_sha": current_main_sha,
+        "current_main_ref_verified": True,
+        "head_sha": head_sha,
+    }, None
 
 
 def _attach_missing_coverage_scope(
@@ -1399,6 +1594,7 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         "changed_coverage": changed_coverage,
         # Canonical extraction rejects trailers from untrusted author associations.
         "gate_verdicts": _extract_gate_verdicts(payload),
+        "base_policy": _extract_base_policies(payload),
         "metadata_verdicts": _extract_metadata_verdicts(payload),
         "review_snapshot": _to_body_snapshot(payload.get("reviews")),
         "comment_snapshot": _to_body_snapshot(payload.get("comments")),

@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import copy
 import json
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from pathlib import Path
+from typing import Any
 
 import pytest
+from jsonschema import Draft202012Validator
 
 from scripts.dev import single_account_merge_receipt as receipt_module
 from scripts.dev.single_account_merge_receipt import (
@@ -37,6 +36,53 @@ OBSERVED_AT = "2026-08-21T00:00:00Z"
 
 def _clear_holds() -> dict[str, dict[str, Any]]:
     return {key: {"status": "clear", "reason_codes": [], "source": "fixture"} for key in HOLD_KEYS}
+
+
+def _ordinary_cas_proof() -> dict[str, Any]:
+    return {
+        "status": "accepted",
+        "reason_codes": [],
+        "selector": {
+            "base_sha": BASE_SHA,
+            "candidate_files": [],
+            "complete": True,
+            "content_provenance": [],
+            "current_main_sha": CURRENT_BASE_SHA,
+            "current_main_ref_verified": True,
+            "status": "ordinary",
+            "selector": "pytest-marker-files.v1",
+            "changed_file_records": [
+                {
+                    "filename": "scripts/dev/example.py",
+                    "previous_filename": None,
+                    "status": "modified",
+                }
+            ],
+            "changed_files": ["scripts/dev/example.py"],
+            "changed_sensitive_files": [],
+            "head_sha": HEAD_SHA,
+        },
+        "base_policy": {
+            "carrier": f"base-policy: ordinary-cas @ {HEAD_SHA}",
+            "status": "accepted",
+            "policy": "ordinary-cas",
+            "head_sha": HEAD_SHA,
+        },
+        "current_base_cas": {
+            "schema": "pr_current_base_cas.v1",
+            "status": "passed",
+            "passed": True,
+            "reasons": [],
+            "require_fresh_base": False,
+            "base_relation": "stale_allowed",
+            "base_ref": "main",
+            "base_sha": BASE_SHA,
+            "expected_head_sha": HEAD_SHA,
+            "observed_head_sha": HEAD_SHA,
+            "expected_main_sha": CURRENT_BASE_SHA,
+            "observed_main_sha": CURRENT_BASE_SHA,
+        },
+    }
 
 
 def _receipt(*, holds: dict[str, dict[str, Any]] | None = None, **overrides: Any) -> dict[str, Any]:
@@ -95,6 +141,7 @@ def _live_evidence(receipt: dict[str, Any]) -> dict[str, Any]:
         "requested_reviewers": copy.deepcopy(receipt["requested_reviewers"]),
         "requested_teams": copy.deepcopy(receipt["requested_teams"]),
         "holds": copy.deepcopy(receipt["holds"]),
+        "ordinary_cas": copy.deepcopy(receipt["ordinary_cas"]),
         "gate_audit": copy.deepcopy(receipt["gate_audit"]),
     }
 
@@ -109,6 +156,24 @@ def test_complete_receipt_is_deterministic_and_verifies() -> None:
     assert first["receipt_digest"] == receipt_digest(first)
     assert validate_receipt(first)["passed"] is True
     assert verify_receipt(first)["passed"] is True
+
+
+def test_ready_receipts_match_the_versioned_json_schema() -> None:
+    schema = json.loads(
+        Path("scripts/dev/single_account_merge_receipt.v1.schema.json").read_text(encoding="utf-8")
+    )
+
+    Draft202012Validator(schema).validate(_receipt())
+    Draft202012Validator(schema).validate(
+        _receipt(
+            gate_audit={
+                "schema": "merge_queue_gate.v1",
+                "passed": False,
+                "reasons": ["stale_merge_base"],
+            },
+            ordinary_cas=_ordinary_cas_proof(),
+        )
+    )
 
 
 def test_each_hold_dimension_blocks_independently() -> None:
@@ -149,6 +214,313 @@ def test_non_passing_gate_audit_blocks_ready_receipts() -> None:
     assert blocked["status"] == "blocked"
     assert "merge_queue_gate_not_passed" in blocked["reason_codes"]
     assert "merge_queue_gate_stale_merge_base" in blocked["reason_codes"]
+
+
+def test_exact_head_ordinary_cas_proof_qualifies_only_stale_base_gate_reason() -> None:
+    receipt = _receipt(
+        gate_audit={
+            "schema": "merge_queue_gate.v1",
+            "passed": False,
+            "reasons": ["stale_merge_base"],
+        },
+        ordinary_cas=_ordinary_cas_proof(),
+    )
+
+    assert receipt["status"] == "ready"
+    assert receipt["reason_codes"] == []
+    assert verify_receipt(receipt)["passed"] is True
+
+
+@pytest.mark.parametrize(
+    ("proof_path", "replacement", "expected_reason"),
+    [
+        (("selector", "status"), "base_sensitive", "ordinary_cas_selector_not_ordinary"),
+        (("base_policy", "status"), "missing", "ordinary_cas_policy_not_accepted"),
+        (
+            ("current_base_cas", "observed_head_sha"),
+            "f" * 40,
+            "ordinary_cas_observed_head_sha_mismatch",
+        ),
+        (
+            ("current_base_cas", "observed_main_sha"),
+            "f" * 40,
+            "ordinary_cas_observed_main_sha_mismatch",
+        ),
+    ],
+)
+def test_ordinary_cas_proof_fails_closed_on_unsafe_dimensions(
+    proof_path: tuple[str, str], replacement: str, expected_reason: str
+) -> None:
+    proof = _ordinary_cas_proof()
+    proof[proof_path[0]][proof_path[1]] = replacement
+
+    blocked = _receipt(
+        gate_audit={
+            "schema": "merge_queue_gate.v1",
+            "passed": False,
+            "reasons": ["stale_merge_base"],
+        },
+        ordinary_cas=proof,
+    )
+
+    assert blocked["status"] == "blocked"
+    assert expected_reason in blocked["reason_codes"]
+
+
+def test_ordinary_cas_proof_rejects_substituted_test_content_path() -> None:
+    proof = _ordinary_cas_proof()
+    proof["selector"]["changed_files"] = ["tests/test_remote_marker.py"]
+    proof["selector"]["candidate_files"] = ["tests/test_remote_marker.py"]
+    proof["selector"]["content_provenance"] = [
+        {
+            "base": None,
+            "current_main": [
+                {
+                    "contains_marker": False,
+                    "exists": False,
+                    "path": "tests/test_remote_marker.py",
+                    "ref": CURRENT_BASE_SHA,
+                }
+            ],
+            "filename": "tests/test_remote_marker.py",
+            "head": {
+                "contains_marker": False,
+                "path": "tests/test_substituted.py",
+                "ref": HEAD_SHA,
+            },
+            "previous_filename": None,
+            "status": "added",
+        }
+    ]
+
+    blocked = _receipt(
+        gate_audit={
+            "schema": "merge_queue_gate.v1",
+            "passed": False,
+            "reasons": ["stale_merge_base"],
+        },
+        ordinary_cas=proof,
+    )
+
+    assert blocked["status"] == "blocked"
+    assert "ordinary_cas_content_provenance_path_mismatch" in blocked["reason_codes"]
+
+
+@pytest.mark.parametrize(
+    ("record", "changed_file"),
+    [
+        (
+            {
+                "filename": "tests/test_remote_marker.py",
+                "previous_filename": None,
+                "status": "added",
+            },
+            "tests/test_remote_marker.py",
+        ),
+        (
+            {
+                "filename": "robot_sf/marker_helper.py",
+                "previous_filename": "tests/test_marker.py",
+                "status": "renamed",
+            },
+            "robot_sf/marker_helper.py",
+        ),
+    ],
+)
+def test_ordinary_cas_proof_rejects_omitted_test_candidate(
+    record: dict[str, Any], changed_file: str
+) -> None:
+    proof = _ordinary_cas_proof()
+    proof["selector"]["changed_files"] = [changed_file]
+    proof["selector"]["changed_file_records"] = [record]
+    proof["selector"]["candidate_files"] = []
+    proof["selector"]["content_provenance"] = []
+
+    blocked = _receipt(
+        gate_audit={
+            "schema": "merge_queue_gate.v1",
+            "passed": False,
+            "reasons": ["stale_merge_base"],
+        },
+        ordinary_cas=proof,
+    )
+
+    assert blocked["status"] == "blocked"
+    assert "ordinary_cas_content_provenance_scope_mismatch" in blocked["reason_codes"]
+
+
+def test_ordinary_cas_proof_rejects_record_provenance_status_mismatch() -> None:
+    proof = _ordinary_cas_proof()
+    filename = "tests/test_remote_marker.py"
+    proof["selector"]["changed_files"] = [filename]
+    proof["selector"]["changed_file_records"] = [
+        {"filename": filename, "previous_filename": None, "status": "added"}
+    ]
+    proof["selector"]["candidate_files"] = [filename]
+    proof["selector"]["content_provenance"] = [
+        {
+            "base": {"contains_marker": False, "path": filename, "ref": BASE_SHA},
+            "current_main": [
+                {
+                    "contains_marker": False,
+                    "exists": True,
+                    "path": filename,
+                    "ref": CURRENT_BASE_SHA,
+                }
+            ],
+            "filename": filename,
+            "head": {"contains_marker": False, "path": filename, "ref": HEAD_SHA},
+            "previous_filename": None,
+            "status": "modified",
+        }
+    ]
+
+    blocked = _receipt(
+        gate_audit={
+            "schema": "merge_queue_gate.v1",
+            "passed": False,
+            "reasons": ["stale_merge_base"],
+        },
+        ordinary_cas=proof,
+    )
+
+    assert blocked["status"] == "blocked"
+    assert "ordinary_cas_content_provenance_scope_mismatch" in blocked["reason_codes"]
+
+
+def test_ordinary_cas_never_qualifies_an_additional_gate_failure() -> None:
+    blocked = _receipt(
+        gate_audit={
+            "schema": "merge_queue_gate.v1",
+            "passed": False,
+            "reasons": ["stale_merge_base", "ci_not_green:failure"],
+        },
+        ordinary_cas=_ordinary_cas_proof(),
+    )
+
+    assert blocked["status"] == "blocked"
+    assert "merge_queue_gate_ci_not_green:failure" in blocked["reason_codes"]
+
+
+def test_fresh_base_gate_failure_does_not_require_ordinary_cas_proof() -> None:
+    blocked = _receipt(
+        gate_audit={
+            "schema": "merge_queue_gate.v1",
+            "passed": False,
+            "reasons": ["ci_not_green:failure"],
+        }
+    )
+
+    assert blocked["status"] == "blocked"
+    assert "merge_queue_gate_ci_not_green:failure" in blocked["reason_codes"]
+    assert not any(reason.startswith("ordinary_cas_") for reason in blocked["reason_codes"])
+
+
+@pytest.mark.parametrize(
+    ("policy_sha", "expected_status"),
+    [(HEAD_SHA, "accepted"), (HEAD_SHA[:7], "blocked")],
+)
+def test_live_evidence_requires_full_exact_selector_policy_and_current_main_cas(
+    monkeypatch: pytest.MonkeyPatch, policy_sha: str, expected_status: str
+) -> None:
+    from scripts.dev import check_pr_current_base_cas, merge_queue_gate
+
+    snapshot = {
+        "number": 42,
+        "head_sha": HEAD_SHA,
+        "base_sha": BASE_SHA,
+        "pr_state": "OPEN",
+        "pr_merged_at": None,
+        "metadata_digest": METADATA_DIGEST,
+        "review_evidence": {},
+        "required_checks": [],
+        "requested_reviewers": [],
+        "requested_teams": [],
+        "reviewers_requested": False,
+        "base_policy": [f"base-policy: ordinary-cas @ {policy_sha}"],
+        "labels": [],
+    }
+
+    class StaleOnlyGate:
+        @staticmethod
+        def to_dict() -> dict[str, Any]:
+            return {
+                "schema": "merge_queue_gate.v1",
+                "passed": False,
+                "reasons": ["stale_merge_base"],
+            }
+
+    monkeypatch.setattr(
+        merge_queue_gate, "fetch_pr_snapshot", lambda *args, **kwargs: (snapshot, None)
+    )
+    monkeypatch.setattr(merge_queue_gate, "fetch_main_sha", lambda **kwargs: CURRENT_BASE_SHA)
+    monkeypatch.setattr(
+        merge_queue_gate, "fetch_threads_resolved", lambda *args, **kwargs: (True, None)
+    )
+    monkeypatch.setattr(
+        merge_queue_gate, "evaluate_merge_gate", lambda *args, **kwargs: StaleOnlyGate()
+    )
+    monkeypatch.setattr(
+        merge_queue_gate,
+        "fetch_pr_changed_file_marker_inventory",
+        lambda *args, **kwargs: (
+            {
+                "base_sha": BASE_SHA,
+                "candidate_files": [],
+                "changed_file_records": [
+                    {
+                        "filename": "scripts/dev/example.py",
+                        "previous_filename": None,
+                        "status": "modified",
+                    }
+                ],
+                "changed_files": ["scripts/dev/example.py"],
+                "changed_sensitive_files": [],
+                "complete": True,
+                "content_provenance": [],
+                "current_main_sha": CURRENT_BASE_SHA,
+                "current_main_ref_verified": True,
+                "head_sha": HEAD_SHA,
+            },
+            None,
+        ),
+    )
+    monkeypatch.setattr(
+        check_pr_current_base_cas,
+        "check_current_base_cas",
+        lambda *args, **kwargs: {
+            "schema": "pr_current_base_cas.v1",
+            "status": "passed",
+            "passed": True,
+            "reasons": [],
+            "require_fresh_base": False,
+            "base_relation": "stale_allowed",
+            "base_ref": "main",
+            "base_sha": BASE_SHA,
+            "expected_head_sha": HEAD_SHA,
+            "observed_head_sha": HEAD_SHA,
+            "expected_main_sha": CURRENT_BASE_SHA,
+            "observed_main_sha": CURRENT_BASE_SHA,
+        },
+    )
+
+    evidence, error = receipt_module.build_live_evidence(42, repository="owner/repo")
+
+    assert error is None
+    assert evidence is not None
+    assert evidence["ordinary_cas"]["status"] == expected_status
+    assert evidence["ordinary_cas"]["selector"]["status"] == "ordinary"
+    assert evidence["ordinary_cas"]["selector"]["head_sha"] == HEAD_SHA
+    assert evidence["ordinary_cas"]["selector"]["base_sha"] == BASE_SHA
+    if expected_status == "accepted":
+        assert evidence["ordinary_cas"]["base_policy"] == {
+            "carrier": f"base-policy: ordinary-cas @ {HEAD_SHA}",
+            "status": "accepted",
+            "policy": "ordinary-cas",
+            "head_sha": HEAD_SHA,
+        }
+    else:
+        assert "exact_head_ordinary_cas_policy_missing" in evidence["ordinary_cas"]["reason_codes"]
 
 
 def test_explicit_non_passing_gate_audit_cannot_be_overridden_by_legacy_status() -> None:
@@ -203,6 +575,13 @@ def test_live_head_metadata_and_check_changes_block_without_reconstructing_recei
     }
     assert (
         "live_gate_audit_changed" in verify_receipt(receipt, live_evidence=changed_gate)["reasons"]
+    )
+
+    changed_ordinary_cas = _live_evidence(receipt)
+    changed_ordinary_cas["ordinary_cas"] = {"status": "blocked"}
+    assert (
+        "live_ordinary_cas_changed"
+        in verify_receipt(receipt, live_evidence=changed_ordinary_cas)["reasons"]
     )
 
 

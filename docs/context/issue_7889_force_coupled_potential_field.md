@@ -72,14 +72,16 @@ remain available for analytic smoke fixtures. It is a comparator core for future
 
 The receipt below is implementation-integrity evidence only. It does not measure collision,
 time-to-collision, comfort, social compliance, planner ranking, or fidelity to the source paper.
-It is retained as a historical receipt for the named source commit and is not exact-head evidence
-after the fail-closed occupancy/overlap corrections.
+It binds the delivered planner implementation and regressions to the named source commit. The PR
+head may differ only by this receipt and other non-runtime review metadata added after that smoke.
 
-- Code/source commit: `3c3cca655652050c97771f10b7176cb0a07ebad8`.
-- Comparison base: `31552ec8d3f2e963ba857b34b0efe65f49311fc9` (`origin/main`).
-- Config digest (SHA-256):
-  `ba14509401c6eb4b78c2f9af7575a0c8422b2eb374e3fc8d488c28d85c1340c3`.
-- Environment: Python 3.12.8, NumPy 2.4.6,
+- Planner implementation source commit: `af60587a09f1677c821466e63ba3dd426be6760e`.
+- Comparison base: `0739cdbd0aa06a75ad004406b9bb2400f26b1b18` (`origin/main`).
+- Parsed planner-config digest (`ForceCoupledPotentialFieldConfig.digest()`, SHA-256):
+  `33f276c592b9564f53f9879366aa921ed1a7fb22ef26de7104c523b309a9ccfc`.
+- Config-file byte digest (SHA-256):
+  `d117695f6c553dfcc8efe7259eff33198aac21953c842bc6e26221c2bef930b4`.
+- Environment: Python 3.13.14, NumPy 2.4.6,
   Linux 6.8.0-87-generic x86_64, glibc 2.39.
 - Exact fixed-smoke command:
 
@@ -95,7 +97,8 @@ after the fail-closed occupancy/overlap corrections.
 
 Both cases reported `linear_rate_limit` and `angular_rate_limit` as active on their first step,
 with no fallback, degradation, or zero-distance guard. Repeated seeded replay produced identical
-commands and diagnostics.
+commands and diagnostics. The exact fixed-smoke selector passed both cases at the implementation
+source commit (2 passed).
 
 ### Outcome-state boundary
 

@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-08-27
+updated_at: 2026-08-28
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,10 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/issue_7889_force_coupled_potential_field.md
+  status: current
+  freshness: maintained
+  area: planner
 - path: docs/context/issue_7890_route_choice_observability.md
   status: current
   freshness: maintained

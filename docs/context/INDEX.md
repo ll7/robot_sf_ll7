@@ -1,5 +1,11 @@
 # Context Retrieval Index
 
+Issue #7889 force-coupled potential-field comparator: an opt-in experimental local planner with
+strict observation and occupancy-grid validation, bounded command-rate behavior, deterministic
+analytic smoke, and explicit implementation-only evidence boundaries. It does not establish
+planner performance, safety, social compliance, or source-method reproduction:
+[issue_7889_force_coupled_potential_field.md](issue_7889_force_coupled_potential_field.md).
+
 Issue #7890 route-choice observability contract: frame-explicit route-side labels,
 canonical grid-corridor identities, denominator-separated temporal consistency, and a versioned
 analysis-only diagnostic receipt. The contract observes planner routes and does not establish

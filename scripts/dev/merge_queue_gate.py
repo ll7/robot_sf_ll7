@@ -124,14 +124,17 @@ CI_PATHS_IGNORE_PATTERNS = ("**/*.md", "docs/**")
 CHANGED_COVERAGE_NOT_REQUIRED = "not_required"
 _CHANGED_FILES_PAGE_SIZE = 100
 _MAX_CHANGED_FILES_PAGES = 100
-_MAX_CHANGED_TEST_CONTENT_FILES = 200
-_MAX_GITHUB_PR_FILES = 3000
 _REST_EVIDENCE_PAGE_SIZE = 100
 _MAX_REST_EVIDENCE_PAGES = 10
 _REST_CHECK_STATUSES = frozenset(
     {"queued", "in_progress", "completed", "requested", "waiting", "pending"}
 )
 _REST_COMMIT_STATUS_STATES = frozenset({"error", "failure", "pending", "success"})
+_CHANGED_FILE_STATUSES = frozenset(
+    {"added", "changed", "copied", "deleted", "modified", "renamed", "removed"}
+)
+_MAX_CHANGED_TEST_CONTENT_FILES = 200
+_MAX_GITHUB_PR_FILES = 3000
 
 # GitHub's native merge-queue ref is exposed as either the full
 # ``refs/heads/gh-readonly-queue/<base>/pr-<number>-<source-sha>`` ref or its
@@ -1102,12 +1105,6 @@ def fetch_pr_changed_file_marker_inventory(  # noqa: C901, PLR0912 - statuses ha
     records, error = _fetch_pr_changed_file_records(pr_number, repo=repo)
     if error or records is None:
         return None, error or "changed-file inventory unavailable"
-    current_main_verified, current_main_error = _verify_git_commit_ref(
-        repo=repo, ref=current_main_sha
-    )
-    if not current_main_verified:
-        return None, current_main_error or "current-main commit ref unavailable"
-
     normalized_records: list[dict[str, Any]] = []
     for record in records:
         filename = str(record["filename"])
@@ -1115,6 +1112,8 @@ def fetch_pr_changed_file_marker_inventory(  # noqa: C901, PLR0912 - statuses ha
         previous_filename = record.get("previous_filename")
         if not status:
             return None, f"changed file lacks status: {filename}"
+        if status not in _CHANGED_FILE_STATUSES:
+            return None, f"changed file has unsupported status {status}: {filename}"
         if previous_filename is not None and (
             not isinstance(previous_filename, str) or not previous_filename.strip()
         ):
@@ -1131,6 +1130,12 @@ def fetch_pr_changed_file_marker_inventory(  # noqa: C901, PLR0912 - statuses ha
             }
         )
     records = sorted(normalized_records, key=lambda record: str(record["filename"]))
+
+    current_main_verified, current_main_error = _verify_git_commit_ref(
+        repo=repo, ref=current_main_sha
+    )
+    if not current_main_verified:
+        return None, current_main_error or "current-main commit ref unavailable"
 
     candidates = [
         record
@@ -1156,7 +1161,7 @@ def fetch_pr_changed_file_marker_inventory(  # noqa: C901, PLR0912 - statuses ha
         refs: list[tuple[str, str, str]] = []
         if status in {"added", "copied"}:
             refs.append(("head", filename, head_sha))
-        elif status == "removed":
+        elif status in {"deleted", "removed"}:
             refs.append(("base", filename, base_sha))
         elif status in {"changed", "modified"}:
             refs.extend((("base", filename, base_sha), ("head", filename, head_sha)))

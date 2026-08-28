@@ -1152,6 +1152,24 @@ def test_invalid_current_main_ref_cannot_be_treated_as_path_absence() -> None:
     assert error == "gh: Not Found (HTTP 404)"
 
 
+def test_changed_file_marker_inventory_rejects_unknown_status() -> None:
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(
+            stdout=json.dumps([{"filename": "robot_sf/example.py", "status": "mystery"}])
+        )
+
+        inventory, error = merge_queue_gate_module.fetch_pr_changed_file_marker_inventory(
+            42,
+            repo="owner/repo",
+            base_sha="b" * 40,
+            head_sha=FULL_SHA,
+            current_main_sha="c" * 40,
+        )
+
+    assert inventory is None
+    assert error == "changed file has unsupported status mystery: robot_sf/example.py"
+
+
 @pytest.mark.parametrize("carrier", ["comments", "reviews"])
 def test_fetch_pr_snapshot_ignores_untrusted_gate_verdict_authors(carrier: str) -> None:
     """A contributor cannot self-approve a retained merge-ready label after pushing."""

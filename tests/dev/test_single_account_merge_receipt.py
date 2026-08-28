@@ -225,6 +225,18 @@ def test_ready_receipts_match_the_versioned_json_schema() -> None:
     )
 
 
+def test_legacy_receipt_without_ordinary_cas_matches_versioned_json_schema() -> None:
+    """The v1 schema must accept receipts written before ordinary-CAS evidence existed."""
+    schema = json.loads(
+        Path("scripts/dev/single_account_merge_receipt.v1.schema.json").read_text(encoding="utf-8")
+    )
+    legacy = _receipt()
+    legacy.pop("ordinary_cas")
+    legacy["receipt_digest"] = receipt_digest(legacy)
+
+    Draft202012Validator(schema).validate(legacy)
+
+
 def test_each_hold_dimension_blocks_independently() -> None:
     for key in HOLD_KEYS:
         holds = _clear_holds()
@@ -435,6 +447,30 @@ def test_ordinary_cas_proof_rejects_record_provenance_status_mismatch() -> None:
 
     assert blocked["status"] == "blocked"
     assert "ordinary_cas_content_provenance_scope_mismatch" in blocked["reason_codes"]
+
+
+def test_ordinary_cas_proof_rejects_unknown_non_test_file_status() -> None:
+    proof = _ordinary_cas_proof()
+    proof["selector"]["changed_file_records"] = [
+        {
+            "filename": "robot_sf/example.py",
+            "previous_filename": None,
+            "status": "mystery",
+        }
+    ]
+    proof["selector"]["changed_files"] = ["robot_sf/example.py"]
+
+    blocked = _receipt(
+        gate_audit={
+            "schema": "merge_queue_gate.v1",
+            "passed": False,
+            "reasons": ["stale_merge_base"],
+        },
+        ordinary_cas=proof,
+    )
+
+    assert blocked["status"] == "blocked"
+    assert "ordinary_cas_content_provenance_status_invalid" in blocked["reason_codes"]
 
 
 def test_ordinary_cas_never_qualifies_an_additional_gate_failure() -> None:
@@ -657,6 +693,30 @@ def test_legacy_receipt_remains_verifiable_when_live_evidence_gains_provenance()
 
     assert verification["passed"] is True
     assert "live_evidence_provenance_changed" not in verification["reasons"]
+
+
+def test_legacy_receipt_without_ordinary_cas_remains_verifiable() -> None:
+    """The ordinary-CAS extension must not invalidate pre-#7984 v1 receipts."""
+    receipt = _receipt()
+    receipt.pop("ordinary_cas")
+    receipt["receipt_digest"] = receipt_digest(receipt)
+    live = _live_evidence(_receipt())
+    live.pop("ordinary_cas")
+
+    assert validate_receipt(receipt)["passed"] is True
+    verification = verify_receipt(receipt, live_evidence=live)
+    assert verification["passed"] is True
+    assert "live_ordinary_cas_changed" not in verification["reasons"]
+
+
+def test_fresh_base_receipt_matches_not_required_ordinary_cas_evidence() -> None:
+    """Fresh-base receipts must agree with the live not-required projection."""
+    receipt = _receipt(base_sha=CURRENT_BASE_SHA)
+    live = _live_evidence(receipt)
+    live["ordinary_cas"] = {"status": "not_required", "reason_codes": []}
+
+    assert receipt["ordinary_cas"] == {"status": "not_required", "reason_codes": []}
+    assert verify_receipt(receipt, live_evidence=live)["passed"] is True
 
 
 def test_invalid_provenance_thread_status_blocks_receipt_validation() -> None:

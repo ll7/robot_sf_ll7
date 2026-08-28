@@ -833,6 +833,8 @@ def _ordinary_selector_provenance_reasons(  # noqa: C901, PLR0912, PLR0915 - fai
     selector: Mapping[str, Any], receipt: Mapping[str, Any]
 ) -> list[str]:
     """Validate exact-ref marker proofs for every changed Python test file."""
+    from scripts.dev.merge_queue_gate import _CHANGED_FILE_STATUSES
+
     changed_files = selector.get("changed_files")
     changed_file_records = selector.get("changed_file_records")
     candidate_files = selector.get("candidate_files")
@@ -871,6 +873,8 @@ def _ordinary_selector_provenance_reasons(  # noqa: C901, PLR0912, PLR0915 - fai
             reasons.append("ordinary_cas_content_provenance_scope_mismatch")
             continue
         normalized_status = status.lower()
+        if normalized_status not in _CHANGED_FILE_STATUSES:
+            reasons.append("ordinary_cas_content_provenance_status_invalid")
         if (normalized_status == "renamed") != (previous_filename is not None):
             reasons.append("ordinary_cas_content_provenance_scope_mismatch")
         normalized_records.append((filename, previous_filename, normalized_status))
@@ -918,6 +922,7 @@ def _ordinary_selector_provenance_reasons(  # noqa: C901, PLR0912, PLR0915 - fai
             "added": {"head"},
             "copied": {"head"},
             "removed": {"base"},
+            "deleted": {"base"},
             "changed": {"base", "head"},
             "modified": {"base", "head"},
             "renamed": {"base", "head"},
@@ -1109,6 +1114,11 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
     normalized_waiver = _normalize_waiver(waiver, observed_at=timestamp)
     normalized_provenance = _normalize_evidence_provenance(evidence_provenance)
     cas = _cas_request(repository, pr_number, head_sha, expected_head_cas)
+    normalized_ordinary_cas = (
+        copy.deepcopy(dict(ordinary_cas))
+        if ordinary_cas is not None
+        else {"status": "not_required", "reason_codes": []}
+    )
     receipt: dict[str, Any] = {
         "schema": RECEIPT_SCHEMA,
         "repository": repository,
@@ -1125,7 +1135,7 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
         "holds": normalized_holds,
         "waiver": normalized_waiver,
         "expected_head_cas": {"request": cas, "status": "not_applied"},
-        "ordinary_cas": copy.deepcopy(dict(ordinary_cas)) if ordinary_cas is not None else None,
+        "ordinary_cas": normalized_ordinary_cas,
         "gate_audit": copy.deepcopy(dict(gate_audit)) if gate_audit is not None else None,
         "pr_state": _string(pr_state).upper() or None,
         "pr_merged_at": pr_merged_at,
@@ -1314,7 +1324,6 @@ def validate_receipt(receipt: Any) -> dict[str, Any]:
         "holds",
         "waiver",
         "expected_head_cas",
-        "ordinary_cas",
         "observed_at",
         "merge_result",
         "receipt_digest",
@@ -1416,14 +1425,14 @@ def verify_receipt(  # noqa: C901, PLR0912 - revalidation compares every immutab
             receipt.get("gate_audit")
         ):
             reasons.append("live_gate_audit_changed")
-        if _canonical_json(live_evidence.get("ordinary_cas")) != _canonical_json(
-            receipt.get("ordinary_cas")
-        ):
-            reasons.append("live_ordinary_cas_changed")
         if "evidence_provenance" in receipt and _canonical_json(
             live_evidence.get("evidence_provenance")
         ) != _canonical_json(receipt.get("evidence_provenance")):
             reasons.append("live_evidence_provenance_changed")
+        if "ordinary_cas" in receipt and _canonical_json(
+            live_evidence.get("ordinary_cas")
+        ) != _canonical_json(receipt.get("ordinary_cas")):
+            reasons.append("live_ordinary_cas_changed")
         fresh_holds = derive_holds(live_evidence)
         if _canonical_json(fresh_holds) != _canonical_json(receipt.get("holds")):
             reasons.append("live_hold_disposition_changed")
@@ -1562,16 +1571,90 @@ def detect_post_merge_incident(
     }
 
 
-def build_live_evidence(  # noqa: C901 - provenance and ordinary-CAS paths fail closed separately.
+def _build_ordinary_cas_evidence(
+    snapshot: Mapping[str, Any],
+    *,
+    pr_number: int,
+    repository: str,
+    current_main_sha: str,
+) -> dict[str, Any]:
+    """Bind ordinary selector, policy carrier, and immediate current-main CAS evidence."""
+    from scripts.dev.base_sensitive_selector import SELECTOR_VERSION, classify_changed_files
+    from scripts.dev.check_pr_current_base_cas import check_current_base_cas
+    from scripts.dev.merge_queue_gate import fetch_pr_changed_file_marker_inventory
+
+    ordinary_cas: dict[str, Any] = {"status": "not_required", "reason_codes": []}
+    if _string(snapshot.get("base_sha")).lower() == current_main_sha.lower():
+        return ordinary_cas
+
+    head_sha = _string(snapshot.get("head_sha"))
+    base_sha = _string(snapshot.get("base_sha"))
+    marker_inventory, marker_inventory_error = fetch_pr_changed_file_marker_inventory(
+        pr_number,
+        repo=repository,
+        base_sha=base_sha,
+        head_sha=head_sha,
+        current_main_sha=current_main_sha,
+    )
+    selector = classify_changed_files(
+        marker_inventory.get("changed_files")
+        if isinstance(marker_inventory, Mapping) and not marker_inventory_error
+        else None,
+        sensitive_files=marker_inventory.get("changed_sensitive_files", [])
+        if isinstance(marker_inventory, Mapping)
+        else [],
+    )
+    selector = {
+        **selector,
+        **(dict(marker_inventory) if isinstance(marker_inventory, Mapping) else {}),
+        "selector": selector.get("selector") or SELECTOR_VERSION,
+        **({"inventory_error": marker_inventory_error} if marker_inventory_error else {}),
+    }
+    policy_carrier = next(
+        (
+            match.group(0)
+            for text in snapshot.get("base_policy", [])
+            if isinstance(text, str)
+            for match in _FULL_ORDINARY_BASE_POLICY_RE.finditer(text)
+            if match.group(1).lower() == head_sha.lower()
+        ),
+        None,
+    )
+    policy_accepted = policy_carrier is not None
+    current_base_cas = check_current_base_cas(
+        str(pr_number),
+        repo=repository,
+        expected_head_sha=head_sha,
+        expected_main_sha=current_main_sha,
+    )
+    reason_codes: list[str] = []
+    if selector.get("status") != "ordinary":
+        reason_codes.append(f"selector_{selector.get('status') or 'unknown'}")
+    if not policy_accepted:
+        reason_codes.append("exact_head_ordinary_cas_policy_missing")
+    if current_base_cas.get("passed") is not True:
+        reason_codes.append("current_base_cas_not_passed")
+    return {
+        "status": "accepted" if not reason_codes else "blocked",
+        "reason_codes": reason_codes,
+        "selector": selector,
+        "base_policy": {
+            "carrier": policy_carrier,
+            "status": "accepted" if policy_accepted else "missing",
+            "policy": "ordinary-cas",
+            "head_sha": head_sha,
+        },
+        "current_base_cas": current_base_cas,
+    }
+
+
+def build_live_evidence(
     pr_number: int, *, repository: str
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Re-read canonical merge-gate evidence for a report/validate/apply run."""
-    from scripts.dev.base_sensitive_selector import SELECTOR_VERSION, classify_changed_files
-    from scripts.dev.check_pr_current_base_cas import check_current_base_cas
     from scripts.dev.merge_queue_gate import (  # local import avoids a module cycle for pure helpers
         evaluate_merge_gate,
         fetch_main_sha,
-        fetch_pr_changed_file_marker_inventory,
         fetch_pr_snapshot,
         fetch_threads_resolved,
     )
@@ -1591,67 +1674,9 @@ def build_live_evidence(  # noqa: C901 - provenance and ordinary-CAS paths fail 
         if isinstance(snapshot.get("reviewers_requested"), bool)
         else None,
     )
-    ordinary_cas: dict[str, Any] = {"status": "not_required", "reason_codes": []}
-    if _string(snapshot.get("base_sha")).lower() != current_base_sha.lower():
-        head_sha = _string(snapshot.get("head_sha"))
-        base_sha = _string(snapshot.get("base_sha"))
-        marker_inventory, marker_inventory_error = fetch_pr_changed_file_marker_inventory(
-            pr_number,
-            repo=repository,
-            base_sha=base_sha,
-            head_sha=head_sha,
-            current_main_sha=current_base_sha,
-        )
-        selector = classify_changed_files(
-            marker_inventory.get("changed_files")
-            if isinstance(marker_inventory, Mapping) and not marker_inventory_error
-            else None,
-            sensitive_files=marker_inventory.get("changed_sensitive_files", [])
-            if isinstance(marker_inventory, Mapping)
-            else [],
-        )
-        selector = {
-            **selector,
-            **(dict(marker_inventory) if isinstance(marker_inventory, Mapping) else {}),
-            "selector": selector.get("selector") or SELECTOR_VERSION,
-            **({"inventory_error": marker_inventory_error} if marker_inventory_error else {}),
-        }
-        policy_carrier = next(
-            (
-                match.group(0)
-                for text in snapshot.get("base_policy", [])
-                if isinstance(text, str)
-                for match in _FULL_ORDINARY_BASE_POLICY_RE.finditer(text)
-                if match.group(1).lower() == head_sha.lower()
-            ),
-            None,
-        )
-        policy_accepted = policy_carrier is not None
-        current_base_cas = check_current_base_cas(
-            str(pr_number),
-            repo=repository,
-            expected_head_sha=head_sha,
-            expected_main_sha=current_base_sha,
-        )
-        reason_codes: list[str] = []
-        if selector.get("status") != "ordinary":
-            reason_codes.append(f"selector_{selector.get('status') or 'unknown'}")
-        if not policy_accepted:
-            reason_codes.append("exact_head_ordinary_cas_policy_missing")
-        if current_base_cas.get("passed") is not True:
-            reason_codes.append("current_base_cas_not_passed")
-        ordinary_cas = {
-            "status": "accepted" if not reason_codes else "blocked",
-            "reason_codes": reason_codes,
-            "selector": selector,
-            "base_policy": {
-                "carrier": policy_carrier,
-                "status": "accepted" if policy_accepted else "missing",
-                "policy": "ordinary-cas",
-                "head_sha": head_sha,
-            },
-            "current_base_cas": current_base_cas,
-        }
+    ordinary_cas = _build_ordinary_cas_evidence(
+        snapshot, pr_number=pr_number, repository=repository, current_main_sha=current_base_sha
+    )
     review_evidence = (
         snapshot.get("review_evidence")
         if isinstance(snapshot.get("review_evidence"), Mapping)
@@ -1720,8 +1745,8 @@ def build_live_evidence(  # noqa: C901 - provenance and ordinary-CAS paths fail 
         "requested_reviewers": snapshot.get("requested_reviewers"),
         "requested_teams": snapshot.get("requested_teams"),
         "holds": derive_holds(snapshot),
-        "ordinary_cas": ordinary_cas,
         "evidence_provenance": evidence_provenance,
+        "ordinary_cas": ordinary_cas,
         "gate_audit": gate.to_dict(),
     }, None
 

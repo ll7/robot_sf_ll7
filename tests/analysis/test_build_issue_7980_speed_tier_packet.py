@@ -16,6 +16,8 @@ from robot_sf.benchmark.result_interpretation_packet import (
     load_result_interpretation_packet,
 )
 from scripts.analysis.build_issue_7980_speed_tier_packet import (
+    _review_sidecar_path,
+    _review_sidecar_payload,
     _validate_synthesis,
     decode_source_binding,
 )
@@ -233,6 +235,29 @@ def test_source_references_match_tracked_bytes_and_nested_synthesis_digest() -> 
         assert hashlib.sha256(source_path.read_bytes()).hexdigest() == source["sha256"]
     assert recovery["local_artifact_sha256"]["synthesis.json"] == (
         "e6bb7a3553c623e07ef48260325cfe1e161dba71cc6c068dcb412df7062808c0"
+    )
+
+
+def test_generated_artifacts_have_exact_review_sidecars() -> None:
+    """Bind every marker-sensitive artifact to the shared review-sidecar contract."""
+
+    artifacts = (
+        PACKET_PATH,
+        EVIDENCE_DIR / "result_interpretation_caption.issue_7980.txt",
+        EVIDENCE_DIR / "SHA256SUMS.issue_7980",
+    )
+    for artifact in artifacts:
+        assert _load_json(_review_sidecar_path(artifact)) == _review_sidecar_payload(artifact)
+
+    assert (
+        (EVIDENCE_DIR / "result_interpretation_caption.issue_7980.txt")
+        .read_text(encoding="utf-8")
+        .startswith("<!-- AI-GENERATED (robot_sf#7980) - NEEDS-REVIEW -->\n")
+    )
+    assert (
+        (EVIDENCE_DIR / "SHA256SUMS.issue_7980")
+        .read_text(encoding="utf-8")
+        .startswith("# AI-GENERATED NEEDS-REVIEW\n")
     )
 
 

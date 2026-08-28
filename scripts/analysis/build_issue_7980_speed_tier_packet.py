@@ -34,6 +34,14 @@ from robot_sf.benchmark.result_interpretation_packet import (  # noqa: E402
     validate_packet,
     write_deterministic_json,
 )
+from robot_sf.evidence.writers import (  # noqa: E402
+    REVIEW_SIDECAR_SCHEMA_VERSION,
+    review_marker,
+    review_marker_comment,
+    review_marker_json,
+    write_review_sidecar,
+    write_text,
+)
 
 RECOVERY_DIR = Path("docs/context/evidence/issue_6102_robot_speed_tier_recovery")
 DEFAULT_RECOVERY_MANIFEST = RECOVERY_DIR / "recovery_manifest.json"
@@ -572,15 +580,33 @@ def build_packet(
     return packet
 
 
-def _write_checksum_manifest(paths: Sequence[Path], destination: Path) -> None:
-    """Write a conventional checksum manifest with paths relative to its directory."""
+def _checksum_manifest_text(paths: Sequence[Path], destination: Path) -> str:
+    """Return a marked checksum manifest with paths relative to its directory."""
 
     lines = []
     for path in sorted(paths, key=lambda item: item.name):
         if path.parent.resolve() != destination.parent.resolve():
             raise ValueError("issue #7980 checksum outputs must share one directory")
         lines.append(f"{_sha256(path)}  {path.name}")
-    destination.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return review_marker_comment() + "\n" + "\n".join(lines) + "\n"
+
+
+def _review_sidecar_payload(artifact: Path) -> dict[str, Any]:
+    """Return the exact shared-writer sidecar payload expected for one artifact."""
+
+    return {
+        "artifact_path": artifact.resolve().relative_to(_REPO_ROOT.resolve()).as_posix(),
+        "artifact_sha256": _sha256(artifact),
+        "preserved_exact_bytes": True,
+        "review_marker": review_marker_json(),
+        "schema_version": REVIEW_SIDECAR_SCHEMA_VERSION,
+    }
+
+
+def _review_sidecar_path(artifact: Path) -> Path:
+    """Return the canonical shared-writer review-sidecar path."""
+
+    return artifact.with_name(artifact.name + ".review.json")
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -628,28 +654,32 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"error: regenerated packet differs from {output}", file=sys.stderr)
             return 1
         loaded = load_result_interpretation_packet(output)
-        expected_caption = render_caption(loaded)
+        expected_caption = review_marker("robot_sf#7980") + "\n" + render_caption(loaded)
         if caption_output.read_text(encoding="utf-8") != expected_caption:
             print(f"error: regenerated caption differs from {caption_output}", file=sys.stderr)
             return 1
-        expected_checksums = (
-            "\n".join(
-                f"{_sha256(path)}  {path.name}"
-                for path in sorted((caption_output, output), key=lambda item: item.name)
-            )
-            + "\n"
-        )
+        expected_checksums = _checksum_manifest_text((caption_output, output), checksum_output)
         if checksum_output.read_text(encoding="utf-8") != expected_checksums:
             print(f"error: checksum manifest differs from {checksum_output}", file=sys.stderr)
             return 1
+        for artifact in (output, caption_output, checksum_output):
+            sidecar = _review_sidecar_path(artifact)
+            if _load_json(sidecar) != _review_sidecar_payload(artifact):
+                print(f"error: review sidecar differs from {sidecar}", file=sys.stderr)
+                return 1
         print(f"packet check passed: {compute_packet_digest(loaded)}")
         return 0
 
     output.parent.mkdir(parents=True, exist_ok=True)
     write_deterministic_json(packet, output)
     loaded = load_result_interpretation_packet(output)
-    caption_output.write_text(render_caption(loaded), encoding="utf-8")
-    _write_checksum_manifest((output, caption_output), checksum_output)
+    write_text(caption_output, render_caption(loaded), issue_ref="robot_sf#7980")
+    write_text(
+        checksum_output,
+        _checksum_manifest_text((output, caption_output), checksum_output),
+    )
+    for artifact in (output, caption_output, checksum_output):
+        write_review_sidecar(artifact, repo_root=_REPO_ROOT)
     print(f"written {output.relative_to(_REPO_ROOT)}")
     print(f"packet_digest: {compute_packet_digest(loaded)}")
     return 0

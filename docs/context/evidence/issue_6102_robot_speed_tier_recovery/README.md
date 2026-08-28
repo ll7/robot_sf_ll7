@@ -68,7 +68,9 @@ the six inactive prediction-planner contrasts remain `invalid`. The tracked pack
 therefore improves auditability without admitting a null effect, ranking, causal,
 safety, dissertation, release, or paper-facing claim. Its deterministic caption and
 checksums are `result_interpretation_caption.issue_7980.txt` and
-`SHA256SUMS.issue_7980`.
+`SHA256SUMS.issue_7980`. The packet, caption, and checksum manifest each have an
+exact-hash `*.review.json` sidecar from the shared evidence-writer convention; the
+caption and checksum manifest also carry inline `NEEDS-REVIEW` markers.
 
 ## Re-check commands
 

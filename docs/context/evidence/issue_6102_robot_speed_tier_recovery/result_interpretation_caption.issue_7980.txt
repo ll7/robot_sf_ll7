@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (robot_sf#7980) - NEEDS-REVIEW -->
 issue_7980_robot_speed_tier_contrast_binding_diagnostic.
 Question: What do the exact 24 source-bound speed-tier contrasts establish before any separate benchmark-admission decision?
 Evidence: smoke_diagnostic; admission=diagnostic_only

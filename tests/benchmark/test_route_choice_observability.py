@@ -402,6 +402,28 @@ def test_temporal_consistency_keeps_full_cell_topologies_distinct() -> None:
     assert report.first_stable_step is None
 
 
+def test_temporal_consistency_keeps_decimal_full_cell_boundary_distinct() -> None:
+    """A 0.2 m cell at a nonzero world origin remains outside the strict tolerance."""
+    observations = [
+        HomotopyObservation(
+            identity=str(value),
+            unavailable_reason=None,
+            identity_coordinate_frame="global_xy",
+            identity_units="m",
+            identity_points=((value, 2.4),),
+            identity_match_tolerance=0.2,
+        )
+        for value in (1.0, 1.2)
+    ]
+    side = classify_route_side(_left_route(), start=START, goal=GOAL)
+
+    report = temporal_consistency([side, side], observations)
+
+    assert report.topology_transition_count == 1
+    assert report.consistency_fraction == pytest.approx(1 / 2)
+    assert report.first_stable_step is None
+
+
 def test_temporal_consistency_complete_link_rejects_tolerance_bridge() -> None:
     """A non-transitive tolerance bridge cannot be stable and transitional simultaneously."""
     observations = [

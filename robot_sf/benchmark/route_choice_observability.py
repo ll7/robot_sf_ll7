@@ -684,8 +684,17 @@ def _homotopy_equivalent(left: HomotopyObservation, right: HomotopyObservation) 
         float(np.max(np.min(distances, axis=1))),
         float(np.max(np.min(distances, axis=0))),
     )
-    # Strict comparison keeps corridors separated by one complete grid cell distinct.
-    return symmetric_hausdorff < tolerance
+    # Strict comparison keeps corridors separated by one complete grid cell distinct. Exclude
+    # floating-point values numerically equal to the boundary before applying ``<``.
+    boundary_equal = bool(
+        np.isclose(
+            symmetric_hausdorff,
+            tolerance,
+            rtol=1e-9,
+            atol=max(1e-12, tolerance * 1e-9),
+        )
+    )
+    return symmetric_hausdorff < tolerance and not boundary_equal
 
 
 def temporal_consistency(

@@ -697,6 +697,16 @@ def test_legacy_receipt_without_ordinary_cas_remains_verifiable() -> None:
     assert "live_ordinary_cas_changed" not in verification["reasons"]
 
 
+def test_fresh_base_receipt_matches_not_required_ordinary_cas_evidence() -> None:
+    """Fresh-base receipts must agree with the live not-required projection."""
+    receipt = _receipt(base_sha=CURRENT_BASE_SHA)
+    live = _live_evidence(receipt)
+    live["ordinary_cas"] = {"status": "not_required", "reason_codes": []}
+
+    assert receipt["ordinary_cas"] == {"status": "not_required", "reason_codes": []}
+    assert verify_receipt(receipt, live_evidence=live)["passed"] is True
+
+
 def test_invalid_provenance_thread_status_blocks_receipt_validation() -> None:
     """Python validation must enforce the same thread-status enum as the JSON schema."""
     provenance = _snapshot_with_provenance()["evidence_provenance"]

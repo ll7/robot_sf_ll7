@@ -1114,6 +1114,11 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
     normalized_waiver = _normalize_waiver(waiver, observed_at=timestamp)
     normalized_provenance = _normalize_evidence_provenance(evidence_provenance)
     cas = _cas_request(repository, pr_number, head_sha, expected_head_cas)
+    normalized_ordinary_cas = (
+        copy.deepcopy(dict(ordinary_cas))
+        if ordinary_cas is not None
+        else {"status": "not_required", "reason_codes": []}
+    )
     receipt: dict[str, Any] = {
         "schema": RECEIPT_SCHEMA,
         "repository": repository,
@@ -1130,7 +1135,7 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
         "holds": normalized_holds,
         "waiver": normalized_waiver,
         "expected_head_cas": {"request": cas, "status": "not_applied"},
-        "ordinary_cas": copy.deepcopy(dict(ordinary_cas)) if ordinary_cas is not None else None,
+        "ordinary_cas": normalized_ordinary_cas,
         "gate_audit": copy.deepcopy(dict(gate_audit)) if gate_audit is not None else None,
         "pr_state": _string(pr_state).upper() or None,
         "pr_merged_at": pr_merged_at,

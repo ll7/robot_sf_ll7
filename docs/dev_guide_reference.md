@@ -774,6 +774,17 @@ carrier, and immediate current-main/head CAS; a 3,000-file-capped inventory fail
 proof can qualify only a lone `stale_merge_base` gate reason. The receipt digest covers the
 pre-merge observation and is preserved when GitHub returns the merge commit SHA.
 
+When the GraphQL-backed PR snapshot is rate-limited, `--mode report-only` and `--mode validate`
+reuse the bounded REST snapshot path for ordinary PR, label, comment, review, requested-reviewer,
+and hosted-check facts. Each live receipt records `evidence_provenance` with the route used for
+those facts, plus the REST sources for the exact base and changed-coverage checks. Review-thread
+resolution remains GraphQL-only: if that read is unavailable, the receipt records
+`thread_resolution.status: unavailable` and stays blocked. REST fallback is evidence recovery, not
+merge authority; it never authorizes a merge or bypasses the thread gate. The fallback route is
+only used for recognized GraphQL quota exhaustion, paginates and validates the ordinary REST
+collections (including legacy commit statuses), and still fails closed when any gate-critical
+field is unavailable, malformed, or incomplete.
+
 Use the three explicit modes as follows:
 
 - `--mode report-only` reads the canonical merge-gate snapshot and writes an inspectable receipt;

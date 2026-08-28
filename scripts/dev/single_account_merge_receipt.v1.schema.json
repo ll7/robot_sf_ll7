@@ -198,6 +198,54 @@
       ]
     },
     "gate_audit": {"type": ["object", "null"]},
+    "evidence_provenance": {
+      "type": "object",
+      "required": ["schema", "data_source", "ordinary_facts", "review_threads"],
+      "properties": {
+        "schema": {"const": "single_account_merge_evidence_provenance.v1"},
+        "data_source": {
+          "enum": [
+            "graphql",
+            "rest_fallback_graphql_quota"
+          ]
+        },
+        "ordinary_facts": {
+          "type": "object",
+          "required": [
+            "pull_request",
+            "labels",
+            "comments",
+            "reviews",
+            "requested_reviewers",
+            "check_rollup",
+            "base_sha",
+            "changed_coverage"
+          ],
+          "properties": {
+            "pull_request": {"enum": ["graphql", "rest"]},
+            "labels": {"enum": ["graphql", "rest"]},
+            "comments": {"enum": ["graphql", "rest"]},
+            "reviews": {"enum": ["graphql", "rest"]},
+            "requested_reviewers": {"enum": ["graphql", "rest"]},
+            "check_rollup": {"enum": ["graphql", "rest"]},
+            "base_sha": {"const": "rest"},
+            "changed_coverage": {"const": "rest"}
+          }
+        },
+        "review_threads": {
+          "type": "object",
+          "required": ["source", "status"],
+          "properties": {
+            "source": {"const": "graphql"},
+            "status": {
+              "enum": ["separate_query", "resolved", "unresolved", "unavailable"]
+            },
+            "diagnostic": {"type": "string"}
+          }
+        },
+        "fallback_diagnostic": {"type": ["string", "null"]}
+      }
+    },
     "observed_at": {"type": "string", "minLength": 1},
     "merge_result": {
       "type": "object",

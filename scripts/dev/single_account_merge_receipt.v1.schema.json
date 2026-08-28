@@ -124,8 +124,7 @@
         "data_source": {
           "enum": [
             "graphql",
-            "rest_fallback_graphql_quota",
-            "rest_fallback_graphql_transient"
+            "rest_fallback_graphql_quota"
           ]
         },
         "ordinary_facts": {

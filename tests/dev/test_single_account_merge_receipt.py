@@ -268,6 +268,41 @@ def test_live_evidence_provenance_is_immutable_for_receipt_validation() -> None:
     )
 
 
+def test_legacy_receipt_remains_verifiable_when_live_evidence_gains_provenance() -> None:
+    """The optional provenance field must not invalidate receipts written before this change."""
+    receipt = _receipt()
+    live = _live_evidence(receipt)
+    live["evidence_provenance"] = _snapshot_with_provenance()["evidence_provenance"]
+
+    verification = verify_receipt(receipt, live_evidence=live)
+
+    assert verification["passed"] is True
+    assert "live_evidence_provenance_changed" not in verification["reasons"]
+
+
+def test_invalid_provenance_thread_status_blocks_receipt_validation() -> None:
+    """Python validation must enforce the same thread-status enum as the JSON schema."""
+    provenance = _snapshot_with_provenance()["evidence_provenance"]
+    provenance["review_threads"]["status"] = "bogus"
+
+    receipt = _receipt(evidence_provenance=provenance)
+
+    assert receipt["status"] == "blocked"
+    assert "evidence_provenance_review_threads_status_invalid" in receipt["reason_codes"]
+    assert validate_receipt(receipt)["status"] == "invalid"
+
+
+def test_transient_provenance_route_is_rejected() -> None:
+    """A route not produced by the quota fallback cannot be presented as valid receipt evidence."""
+    provenance = _snapshot_with_provenance()["evidence_provenance"]
+    provenance["data_source"] = "rest_fallback_graphql_transient"
+
+    receipt = _receipt(evidence_provenance=provenance)
+
+    assert receipt["status"] == "blocked"
+    assert "evidence_provenance_source_invalid" in receipt["reason_codes"]
+
+
 def test_quota_evidence_provenance_matches_receipt_schema() -> None:
     """The new route evidence remains machine-validatable as part of v1."""
     from pathlib import Path

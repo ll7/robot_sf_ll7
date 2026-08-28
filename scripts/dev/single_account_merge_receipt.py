@@ -32,6 +32,8 @@ RECEIPT_SCHEMA = "single_account_merge_receipt.v1"
 VERIFY_SCHEMA = "single_account_merge_receipt_verification.v1"
 AUTHORITY_FIXTURE_SCHEMA = "single_account_merge_authority_fixture.v1"
 PROVENANCE_SCHEMA = "single_account_merge_evidence_provenance.v1"
+PROVENANCE_DATA_SOURCES = frozenset({"graphql", "rest_fallback_graphql_quota"})
+PROVENANCE_THREAD_STATUSES = frozenset({"separate_query", "resolved", "unresolved", "unavailable"})
 
 SUCCESS_CONCLUSIONS = frozenset({"success", "neutral", "skipped"})
 PENDING_STATUSES = frozenset(
@@ -562,34 +564,43 @@ def _evidence_provenance_reasons(value: Any) -> list[str]:
     reasons: list[str] = []
     if value.get("schema") != PROVENANCE_SCHEMA:
         reasons.append("evidence_provenance_schema_mismatch")
-    if value.get("data_source") not in {
-        "graphql",
-        "rest_fallback_graphql_quota",
-        "rest_fallback_graphql_transient",
-    }:
+    if value.get("data_source") not in PROVENANCE_DATA_SOURCES:
         reasons.append("evidence_provenance_source_invalid")
-    ordinary_facts = value.get("ordinary_facts")
-    if not isinstance(ordinary_facts, Mapping):
-        reasons.append("evidence_provenance_ordinary_facts_missing")
-    else:
-        for field in (
-            "pull_request",
-            "labels",
-            "comments",
-            "reviews",
-            "requested_reviewers",
-            "check_rollup",
-            "base_sha",
-            "changed_coverage",
-        ):
-            if ordinary_facts.get(field) not in {"graphql", "rest"}:
-                reasons.append(f"evidence_provenance_{field}_source_invalid")
-    thread_facts = value.get("review_threads")
-    if not isinstance(thread_facts, Mapping):
-        reasons.append("evidence_provenance_review_threads_missing")
-    elif thread_facts.get("source") != "graphql":
-        reasons.append("evidence_provenance_review_threads_source_invalid")
+    reasons.extend(_provenance_ordinary_fact_reasons(value.get("ordinary_facts")))
+    reasons.extend(_provenance_thread_reasons(value.get("review_threads")))
     return sorted(set(reasons))
+
+
+def _provenance_ordinary_fact_reasons(value: Any) -> list[str]:
+    """Validate the source route for every ordinary merge-gate fact."""
+    if not isinstance(value, Mapping):
+        return ["evidence_provenance_ordinary_facts_missing"]
+    reasons = []
+    for field in (
+        "pull_request",
+        "labels",
+        "comments",
+        "reviews",
+        "requested_reviewers",
+        "check_rollup",
+        "base_sha",
+        "changed_coverage",
+    ):
+        if value.get(field) not in {"graphql", "rest"}:
+            reasons.append(f"evidence_provenance_{field}_source_invalid")
+    return reasons
+
+
+def _provenance_thread_reasons(value: Any) -> list[str]:
+    """Validate the GraphQL-only review-thread provenance state."""
+    if not isinstance(value, Mapping):
+        return ["evidence_provenance_review_threads_missing"]
+    reasons = []
+    if value.get("source") != "graphql":
+        reasons.append("evidence_provenance_review_threads_source_invalid")
+    if value.get("status") not in PROVENANCE_THREAD_STATUSES:
+        reasons.append("evidence_provenance_review_threads_status_invalid")
+    return reasons
 
 
 def _normalize_requested(value: Any, *, label: str) -> dict[str, Any]:
@@ -1151,11 +1162,9 @@ def verify_receipt(  # noqa: C901, PLR0912 - revalidation compares every immutab
             receipt.get("gate_audit")
         ):
             reasons.append("live_gate_audit_changed")
-        if (
-            "evidence_provenance" in receipt or "evidence_provenance" in live_evidence
-        ) and _canonical_json(live_evidence.get("evidence_provenance")) != _canonical_json(
-            receipt.get("evidence_provenance")
-        ):
+        if "evidence_provenance" in receipt and _canonical_json(
+            live_evidence.get("evidence_provenance")
+        ) != _canonical_json(receipt.get("evidence_provenance")):
             reasons.append("live_evidence_provenance_changed")
         fresh_holds = derive_holds(live_evidence)
         if _canonical_json(fresh_holds) != _canonical_json(receipt.get("holds")):

@@ -770,8 +770,9 @@ those facts, plus the REST sources for the exact base and changed-coverage check
 resolution remains GraphQL-only: if that read is unavailable, the receipt records
 `thread_resolution.status: unavailable` and stays blocked. REST fallback is evidence recovery, not
 merge authority; it never authorizes a merge or bypasses the thread gate. The fallback route is
-only used for recognized GraphQL quota exhaustion and still fails closed when any ordinary
-gate-critical REST field is unavailable.
+only used for recognized GraphQL quota exhaustion, paginates and validates the ordinary REST
+collections (including legacy commit statuses), and still fails closed when any gate-critical
+field is unavailable, malformed, or incomplete.
 
 Use the three explicit modes as follows:
 

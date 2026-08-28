@@ -583,16 +583,17 @@ def _live_body_writer(issue: int, block: str) -> None:
     from scripts.dev import _gh_rest
 
     endpoint = f"repos/ll7/robot_sf_ll7/issues/{issue}"
-    current_result = _gh_rest.run_gh_api(endpoint, extra_args=["--jq", ".body"])
+    current_result = _gh_rest.run_gh_api(endpoint)
     if current_result.returncode != 0:
         detail = (
             current_result.stderr.strip() or current_result.stdout.strip() or "REST read failed"
         )
         raise RuntimeError(f"issue {issue} body read failed: {detail}")
     try:
-        current = json.loads(current_result.stdout)
+        current_payload = json.loads(current_result.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"issue {issue} body read was not valid JSON") from exc
+    current = current_payload.get("body") if isinstance(current_payload, dict) else None
     if not isinstance(current, str):
         raise RuntimeError(f"issue {issue} body read was not a string")
     if _MARKER_BLOCK_RE.search(current):
@@ -603,7 +604,7 @@ def _live_body_writer(issue: int, block: str) -> None:
     if write_result.returncode != 0:
         detail = write_result.stderr.strip() or write_result.stdout.strip() or "REST write failed"
         raise RuntimeError(f"issue {issue} body write failed: {detail}")
-    readback_result = _gh_rest.run_gh_api(endpoint, extra_args=["--jq", ".body"])
+    readback_result = _gh_rest.run_gh_api(endpoint)
     if readback_result.returncode != 0:
         detail = (
             readback_result.stderr.strip()
@@ -612,9 +613,10 @@ def _live_body_writer(issue: int, block: str) -> None:
         )
         raise RuntimeError(f"issue {issue} body readback failed: {detail}")
     try:
-        readback = json.loads(readback_result.stdout)
+        readback_payload = json.loads(readback_result.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"issue {issue} body readback was not valid JSON") from exc
+    readback = readback_payload.get("body") if isinstance(readback_payload, dict) else None
     if readback != body:
         raise RuntimeError(f"issue {issue} body readback mismatch")
 

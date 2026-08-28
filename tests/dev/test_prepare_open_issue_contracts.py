@@ -355,7 +355,7 @@ def test_live_body_writer_uses_rest_path_and_verifies_readback(
         return type(
             "Result",
             (),
-            {"returncode": 0, "stdout": json.dumps(current_body), "stderr": ""},
+            {"returncode": 0, "stdout": json.dumps({"body": current_body}), "stderr": ""},
         )()
 
     monkeypatch.setattr(_gh_rest, "run_gh_api", fake_run_gh_api)
@@ -368,9 +368,9 @@ def test_live_body_writer_uses_rest_path_and_verifies_readback(
         "repos/ll7/robot_sf_ll7/issues/1001",
         "repos/ll7/robot_sf_ll7/issues/1001",
     ]
-    assert calls[0]["extra_args"] == ["--jq", ".body"]
+    assert calls[0]["extra_args"] is None
     assert calls[1]["method"] == "PATCH"
-    assert calls[2]["extra_args"] == ["--jq", ".body"]
+    assert calls[2]["extra_args"] is None
     assert current_body.endswith(block)
 
 

@@ -419,6 +419,10 @@ _FAST_FILES = {
     # for the changed release identity module; keep them in fast shards for the
     # exact-head changed-coverage gate (issue #7938).
     "test_release_tag_identity.py",
+    # Route-side/homotopy observability tests are deterministic pure-metric
+    # contracts with numpy fixtures; keep them in fast pull-request shards for
+    # the exact-head changed-coverage gate (issue #7890).
+    "test_route_choice_observability.py",
     # The trace-dossier contract tests exercise lightweight, diagnostic-only
     # export/render paths required by the exact-head changed-coverage gate.
     "test_export_trace_dossier.py",

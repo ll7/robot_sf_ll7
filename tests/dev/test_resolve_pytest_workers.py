@@ -169,6 +169,21 @@ def test_resolve_worker_spec_uses_safe_default_when_cuda_probe_is_uncertain() ->
     assert "capability is uncertain" in reason
 
 
+def test_resolve_worker_spec_normalizes_unrecognized_cuda_status_to_safe_default() -> None:
+    """A future classifier status must not reopen parallel GPU contention."""
+    workers, reason = _resolve_worker_spec(
+        requested=None,
+        cpu_count=32,
+        system="Linux",
+        lane="optional",
+        cuda_runtime=("future_status", "classifier drift"),
+    )
+
+    assert workers == "1"
+    assert "unrecognized CUDA runtime status" in reason
+    assert "safe serial default" in reason
+
+
 def test_resolve_worker_spec_rejects_unknown_lane() -> None:
     """Worker policy must not silently treat a typo as a CPU-only lane."""
     with pytest.raises(ValueError, match="lane must be one of"):

@@ -41,7 +41,7 @@ from urllib.parse import quote
 from scripts.dev._gh_rest import gh_api_delete as _gh_api_delete
 from scripts.dev._gh_rest import gh_api_label_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_post as _gh_api_post
-from scripts.dev._gh_rest import subprocess  # noqa: F401
+from scripts.dev._gh_rest import subprocess
 from scripts.dev.pr_carrier_gate import check_merge_ready_carriers
 from scripts.dev.pr_write_guard import guard_pr_write, pr_write_lock
 
@@ -49,6 +49,14 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
+
+
+def _is_absent_label_delete(result: subprocess.CompletedProcess[str]) -> bool:
+    """Recognize only GitHub's idempotent missing-label DELETE response."""
+    if result.returncode == 0:
+        return False
+    detail = (result.stderr or result.stdout).strip().lower()
+    return "http 404" in detail and "label does not exist" in detail
 
 
 def _get_label_names(number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30) -> dict[str, Any]:
@@ -200,7 +208,8 @@ def remove_label(number: int, label: str, *, repo: str = DEFAULT_REPO) -> dict[s
 
     path = f"repos/{repo}/issues/{number}/labels/{quote(label, safe='')}"
     result = _gh_api_delete(path)
-    if result.returncode != 0:
+    idempotent = _is_absent_label_delete(result)
+    if result.returncode != 0 and not idempotent:
         detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
         return {"status": "error", "error": f"label remove failed: {detail}"}
 
@@ -214,13 +223,16 @@ def remove_label(number: int, label: str, *, repo: str = DEFAULT_REPO) -> dict[s
             "error": f"label '{label}' was still found in labels after remove; "
             "the delete may not have taken effect",
         }
-    return {
+    response = {
         "status": "ok",
         "number": number,
         "label": label,
         "action": "remove",
         "repo": repo,
     }
+    if idempotent:
+        response["idempotent"] = True
+    return response
 
 
 def _build_parser() -> argparse.ArgumentParser:

@@ -6,6 +6,7 @@ import json
 import sys
 
 import pytest
+from loguru import logger
 
 from robot_sf.benchmark.snqi import cli as snqi_cli
 
@@ -35,3 +36,23 @@ def test_weights_inventory_alias_reports_conflict_fail_closed(
         and set(conflict["sources"]) == {"code_default", "model_canonical_v1"}
         for conflict in payload["conflicts"]
     )
+
+
+def test_weights_inventory_json_is_stdout_only_with_retained_stdout_sink(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A retained Loguru stdout sink must not corrupt the machine-readable report."""
+    sink_id = logger.add(lambda message: print(message, end=""), level="ERROR")
+    try:
+        monkeypatch.setattr(sys, "argv", ["robot_sf_snqi", "inventory", "--json"])
+
+        assert snqi_cli.main() == 2
+
+        captured = capsys.readouterr()
+    finally:
+        logger.remove(sink_id)
+
+    payload = json.loads(captured.out)
+    assert payload["has_blocking_conflict"] is True
+    assert "SNQI weight-set provenance preflight failed" in captured.err

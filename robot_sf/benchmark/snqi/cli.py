@@ -23,8 +23,24 @@ from robot_sf.benchmark.snqi.compute import (
 from robot_sf.benchmark.snqi.types import SNQIWeights
 
 
-def _log_cli_failure(stage: str, message: str, **context: object) -> None:
-    """Log a structured SNQI CLI failure before returning a non-zero status."""
+def _log_cli_failure(
+    stage: str,
+    message: str,
+    *,
+    json_output: bool = False,
+    **context: object,
+) -> None:
+    """Report a structured SNQI CLI failure without corrupting JSON stdout."""
+    if json_output:
+        diagnostic = {
+            "event": "snqi_cli_failed",
+            "message": message,
+            "stage": stage,
+            **context,
+        }
+        print(json.dumps(diagnostic, default=str, sort_keys=True), file=sys.stderr)
+        return
+
     logger.bind(event="snqi_cli_failed", stage=stage, **context).error(message)
 
 
@@ -298,11 +314,22 @@ def cmd_inventory_weights(args: argparse.Namespace) -> int:
             _log_cli_failure(
                 "weights_inventory",
                 "SNQI weight-set provenance preflight failed (fail-closed).",
+                json_output=args.json,
                 blocking=[c.kind for c in report.conflicts if c.severity == "error"],
             )
             return EXIT_VALIDATION_ERROR
         return EXIT_SUCCESS
-    except Exception:  # noqa: BLE001 - CLI fail-closed boundary: log and exit nonzero (#6690)
+    except Exception as exc:  # noqa: BLE001 - CLI fail-closed boundary: log and exit nonzero (#6690)
+        if args.json:
+            _log_cli_failure(
+                "weights_inventory",
+                "SNQI CLI failed while building the weight-set inventory.",
+                json_output=True,
+                error=str(exc),
+                exception_type=type(exc).__name__,
+            )
+            return EXIT_RUNTIME_ERROR
+
         logger.bind(event="snqi_cli_failed", stage="weights_inventory").exception(
             "SNQI CLI failed while building the weight-set inventory."
         )

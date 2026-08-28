@@ -18,7 +18,14 @@ if TYPE_CHECKING:
 
 @pytest.fixture(autouse=True)
 def _close_all_figures() -> Iterator[None]:
-    """Close every Matplotlib figure after each plot utility test."""
+    """Isolate every plot utility test from figures left open by other tests.
+
+    ``plt.close`` (no arguments) closes only the current figure, so a figure
+    left open by a different test in the same xdist worker can survive until
+    a later strict ``plt.get_fignums() == []`` assertion. Closing all figures
+    before and after each test keeps the registry deterministic (issue #8007).
+    """
+    plt.close("all")
     yield
     plt.close("all")
 
@@ -123,13 +130,34 @@ def test_save_plot_existing_directory_no_op(tmp_path: Path) -> None:
     assert os.path.getsize(filepath) > 0
 
 
+def test_save_plot_closes_saved_figure_when_current_figure_drifts(
+    tmp_path: Path,
+) -> None:
+    """Close the saved figure even if another figure becomes current mid-save."""
+    fig = plt.figure()
+    plt.plot([0, 1], [0, 1])
+    filepath = str(tmp_path / "drift.png")
+
+    def _make_another_figure_current(*args: object, **kwargs: object) -> None:
+        plt.figure()
+
+    with patch(
+        "robot_sf.data_analysis.plot_utils.plt.savefig",
+        side_effect=_make_another_figure_current,
+    ) as savefig:
+        save_plot(filepath)
+    savefig.assert_called_once()
+    assert fig.number not in plt.get_fignums()
+
+
 def test_save_plot_default_interactive(tmp_path: Path) -> None:
     """Keep the default non-interactive mode from showing the plot."""
-    plt.figure()
+    fig = plt.figure()
+    fig_num = fig.number
     plt.plot([0, 1], [0, 1])
     filepath = str(tmp_path / "default_interactive.png")
     with patch("robot_sf.data_analysis.plot_utils.plt.show") as show:
         save_plot(filepath)
     show.assert_not_called()
     assert os.path.isfile(filepath)
-    assert plt.get_fignums() == []
+    assert fig_num not in plt.get_fignums()

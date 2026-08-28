@@ -57,6 +57,7 @@ EVIDENCE_PREFIX = "evidence:"
 DECISION_LABEL = "decision-required"
 TRIAGE_LABEL = "needs-triage"
 REVIEW_STATE_LABEL = "state:review"
+PARENT_LABELS = frozenset({"epic", "parent", "type:epic"})
 BLOCKED_LABELS = frozenset({"state:blocked", "state:blocked-external-input"})
 BLOCKED_TRIAGE_BLOCK_RE = re.compile(
     r"<!--\s*blocked-triage-v1\b[^>]*-->.*?```(?:yaml|yml)\s*\n.*?```",
@@ -1440,6 +1441,7 @@ def classify_issue(
     number = int(issue.get("number", 0))
     labels = set(_label_names(issue.get("labels")))
     body = str(issue.get("body") or "")
+    title = str(issue.get("title") or "")
     text = _text_for_issue(issue)
     state_labels = tuple(sorted(label for label in labels if label.startswith(STATE_PREFIX)))
     execution_state_labels = tuple(
@@ -1487,6 +1489,9 @@ def classify_issue(
     if len(type_labels) > 1:
         decision_evidence.append("multiple mutually-exclusive type labels present")
     readiness_evidence = _ready_evidence(body)
+    parent_issue = bool(labels & PARENT_LABELS) or bool(PARENT_TITLE_PATTERN.search(title))
+    if parent_issue:
+        findings.append("parent issue cannot be promoted to state:ready")
     gate_blocked = bool(blocker_evidence)
     decision_required = bool(decision_evidence)
     ready = (
@@ -1494,6 +1499,7 @@ def classify_issue(
         and not gate_blocked
         and not decision_required
         and not job_inventory_uncertain
+        and not parent_issue
     )
     closure = closure_evidence(
         issue,

@@ -139,7 +139,10 @@ Policy caveats:
   [packet](issue_6102_robot_speed_tier_recovery/result_interpretation_packet.v1.json)
   remains `smoke_diagnostic` / `diagnostic_only`: it closes custody and reconstruction gaps but
   is not benchmark, planner-ranking, causal, safety, dissertation, release, or paper-facing
-  admission evidence.
+  admission evidence. The issue #7980
+  [source-complete successor](issue_6102_robot_speed_tier_recovery/result_interpretation_packet.issue_7980.v1.json)
+  binds all 24 exact contrast rows to the immutable synthesis digest while retaining the same
+  non-admitted boundary and all six non-activated exclusions.
 
 - `issue_5602_scenario_evidence_crosswalk_release_0_0_3_2026-07-17/`: generated
   `scenario_evidence_crosswalk.v1` instance (issue #5602 tooling) over the full

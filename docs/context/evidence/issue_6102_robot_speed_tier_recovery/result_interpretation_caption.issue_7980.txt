@@ -1,0 +1,4 @@
+issue_7980_robot_speed_tier_contrast_binding_diagnostic.
+Question: What do the exact 24 source-bound speed-tier contrasts establish before any separate benchmark-admission decision?
+Evidence: smoke_diagnostic; admission=diagnostic_only
+Claim boundary: Planner ranking or planner superiority claim. General safety, realism, causal, or population claim. Claim that prediction_planner is insensitive to the speed cap. Dissertation, release, or paper-facing admission claim.

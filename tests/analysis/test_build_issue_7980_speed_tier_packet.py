@@ -1,0 +1,286 @@
+"""Contract tests for the issue #7980 source-complete speed-tier packet."""
+
+from __future__ import annotations
+
+import copy
+import hashlib
+import json
+from collections import Counter
+from pathlib import Path
+
+import pytest
+import yaml
+
+from robot_sf.benchmark.result_interpretation_packet import (
+    compute_packet_digest,
+    load_result_interpretation_packet,
+)
+from scripts.analysis.build_issue_7980_speed_tier_packet import (
+    _validate_synthesis,
+    decode_source_binding,
+)
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+EVIDENCE_DIR = REPO_ROOT / "docs/context/evidence/issue_6102_robot_speed_tier_recovery"
+PACKET_PATH = EVIDENCE_DIR / "result_interpretation_packet.issue_7980.v1.json"
+RECOVERY_MANIFEST_PATH = EVIDENCE_DIR / "recovery_manifest.json"
+PREREGISTRATION_PATH = (
+    REPO_ROOT / "configs/benchmarks/issue_5578_robot_speed_tier_preregistration.yaml"
+)
+EXPECTED_PACKET_DIGEST = "131943376ec40976b261bce8fbf8934b8d243a905ac01b2333ddb25d47d13a70"
+EXPECTED_ROW_DIGESTS = (
+    "c204a1741a2d4bf77a1e757eb9614d77b6f721794bd51182bc34d922c2c48858",
+    "35a90600f347363b74cf8c98fe8022a2b5b439cf3aea5e69f6a4c8e11707f85f",
+    "4caed594079a9d111ce475c642a9f5c759fbacf5f48268a1f5bf1ba01fe8e76d",
+    "7fcc6319de3394b8e1ba8bc46833a72d7ff1b2cda31c2b4b840b7fae26581755",
+    "ac772454829b9f6928bd131c76f546a3730bda2188081f8e8f58eb805d4ed425",
+    "35a15306eadb718fc6c55e1b7e15624d01e8bd1f2e63cfcde93ec75fec735e0f",
+    "9599efa384b734e4411b14a9be91c4ccc4eca14a9c006348607e9a7faa77900b",
+    "dbba6cde004d69943b4bb2ea4a743e1cb37086ffcc9a5d85e9d9606faeaacf91",
+    "0b565aba99e530f7f47b971811bd40e78863d894ca8e950579dfa0767e081e64",
+    "d96841359c6fc858d10ccdf4fd7c844fe715c8f4b994db138c26bc8fc0af2e7e",
+    "f6cb2401cc4dadc5897f67eb759373d5196061fc8f820a01a3b3fa838ff3b657",
+    "0ddfa9be2a83bdcaeba2fce548d4fb6c692f87915cbd8bd70a04ad72c1c07c48",
+    "f4a42c36899b803b1c5b421f6ae83b8bfc480fdace6bee31bc27933a39aa8662",
+    "36779665df005ac2e67f70e03337eb6b746d358457c18cfc2f0165b71a238fb4",
+    "378c8425d14c9d4d0521052205bb39ade3828200699b14f0710ae7bc2efc23b3",
+    "10ffa01b2e14debbc19806ec09318bd9a96bb455da238a51a5cba8d38c136e26",
+    "869836455d0912e8132b54cf80f5255f52cdd6e73c87539a4ca4cfc2666e9d58",
+    "da6fc95ea79f1c275d754d120ad76e00637d90e353e9f55f942dae1136490fcf",
+    "bd20370c154d6328a13b9b596cc5871322f3c5ff5ffa7a69dc93af9acc28a79c",
+    "4329f4aa7ecfce521dda97029f920a95926a6a5070a185f0fbca5c221a182522",
+    "451a17f611fad1fc7699cf8ebeaf5117b5b82571a7ff44b0ca0b3fba08704051",
+    "88777184ab19f655e4566fe65e205722063216eeced4e48c63241cbab76a0c1a",
+    "c16f79550eb1f908a68e430ed1aa16abed26e25734ff8c1e9e575192d53aa80a",
+    "d9cd5779fe605a91b3a043a7c620f59fbd0647ad46012c9372d80be77006bdac",
+)
+
+
+def _load_json(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _packet_bindings() -> tuple[dict, list[dict]]:
+    packet = _load_json(PACKET_PATH)
+    bindings = [decode_source_binding(metric["sensitivity"][0]) for metric in packet["metrics"]]
+    return packet, bindings
+
+
+def _synthetic_synthesis(rows: list[dict]) -> dict:
+    return {
+        "schema_version": "robot_sf.issue_5578_speed_tier_synthesis_adapter.v1",
+        "per_cell_count": 2160,
+        "native_cell_count": 2160,
+        "excluded_cell_count": 0,
+        "all_native": True,
+        "grid_complete": True,
+        "evidence_status": "native_grid_synthesis_complete_provenance_unverified",
+        "decision_table": rows,
+    }
+
+
+def _validation_inputs() -> tuple[dict, str, dict, dict]:
+    _, bindings = _packet_bindings()
+    rows = [copy.deepcopy(binding["canonical_decision_row"]) for binding in bindings]
+    recovery = _load_json(RECOVERY_MANIFEST_PATH)
+    preregistration = yaml.safe_load(PREREGISTRATION_PATH.read_text(encoding="utf-8"))
+    synthesis_sha = recovery["local_artifact_sha256"]["synthesis.json"]
+    return _synthetic_synthesis(rows), synthesis_sha, recovery, preregistration
+
+
+def test_tracked_packet_loads_under_generic_v1_contract() -> None:
+    """Protect the durable packet's public schema and semantic validation contract."""
+
+    packet = load_result_interpretation_packet(PACKET_PATH)
+
+    assert packet.packet_id == "issue_7980_robot_speed_tier_contrast_binding_diagnostic"
+    assert packet.evidence.tier == "smoke_diagnostic"
+    assert packet.evidence.admission_state == "diagnostic_only"
+    assert len(packet.metrics) == len(packet.decisions) == 24
+    assert compute_packet_digest(packet) == EXPECTED_PACKET_DIGEST
+
+
+def test_all_24_packet_rows_match_the_immutable_source_binding() -> None:
+    """Prove every contrast is represented once with exact custody and statistics."""
+
+    packet, bindings = _packet_bindings()
+    recovery = _load_json(RECOVERY_MANIFEST_PATH)
+    expected_source_sha = recovery["local_artifact_sha256"]["synthesis.json"]
+    metrics = {metric["metric_id"]: metric for metric in packet["metrics"]}
+    decisions = {decision["metric_id"]: decision for decision in packet["decisions"]}
+    rows = [binding["canonical_decision_row"] for binding in bindings]
+
+    assert len(rows) == len({row["test_id"] for row in rows}) == 24
+    assert Counter(row["classification"] for row in rows) == {
+        "no_material_shift": 10,
+        "inconclusive": 8,
+        "intervention_not_activated": 6,
+    }
+    assert (
+        tuple(
+            hashlib.sha256(
+                json.dumps(row, allow_nan=False, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+            for row in sorted(rows, key=lambda item: item["test_id"])
+        )
+        == EXPECTED_ROW_DIGESTS
+    )
+    for binding in bindings:
+        row = binding["canonical_decision_row"]
+        test_id = row["test_id"]
+        metric = metrics[test_id]
+        decision = decisions[test_id]
+        assert binding["source_artifact"] == {
+            "artifact": "ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0",
+            "artifact_location": (
+                "wandb-artifact://ll7/robot_sf/"
+                "campaign-issue5578-native-speed-tier-job-13828:v0/synthesis.json"
+            ),
+            "artifact_path": "synthesis.json",
+            "member": "synthesis.json",
+            "sha256": expected_source_sha,
+        }
+        assert binding["preregistration"] == {
+            "path": "configs/benchmarks/issue_5578_robot_speed_tier_preregistration.yaml",
+            "schema_version": "robot_sf.issue_5578_robot_speed_tier_preregistration.v1",
+        }
+        assert binding["paired_denominator"] == metric["denominator"] == 180
+        assert metric["support"] == metric["support_threshold"] == 180
+        assert metric["effect"] == row["pooled_delta_mean"] == decision["effect"]
+        assert decision["contrast_result"]["effect"] == row["pooled_delta_mean"]
+        assert decision["comparator"] == {
+            "reference": "cap_2_0_nominal",
+            "comparison": row["speed_tier_id"],
+            "direction": "comparison_minus_reference",
+        }
+        for field in (
+            "pooled_delta_se",
+            "harm_bound",
+            "noninferiority_bound",
+            "p_value_harm_raw",
+            "p_value_harm_holm",
+            "p_value_noninferiority_raw",
+            "p_value_noninferiority_holm",
+            "directional_family_alpha",
+            "familywise_alpha",
+            "intervention_activated",
+        ):
+            assert field in row
+
+
+def test_directional_bounds_and_thresholds_remain_exact() -> None:
+    """Prevent the two directional tests from being collapsed into one ambiguous interval."""
+
+    packet, bindings = _packet_bindings()
+    metrics = {metric["metric_id"]: metric for metric in packet["metrics"]}
+    expected_thresholds = {
+        "success_rate": -0.05,
+        "collision_rate": 0.02,
+        "near_miss_rate": 0.05,
+    }
+
+    for binding in bindings:
+        row = binding["canonical_decision_row"]
+        metric = metrics[row["test_id"]]
+        bounds = {
+            row["harm_bound_type"]: row["harm_bound"],
+            row["noninferiority_bound_type"]: row["noninferiority_bound"],
+        }
+        assert set(bounds) == {"lower", "upper"}
+        assert metric["uncertainty"]["ci_low"] == bounds["lower"]
+        assert metric["uncertainty"]["ci_high"] == bounds["upper"]
+        assert binding["harm_threshold"] == expected_thresholds[row["metric"]]
+        assert metric["null_value"] == binding["harm_threshold"]
+        assert metric["multiplicity"] == {
+            "declared": True,
+            "method": "holm_bonferroni_per_planner_directional_family",
+            "n_comparisons": 6,
+        }
+
+
+def test_nonactivated_prediction_rows_remain_invalid() -> None:
+    """Protect the key fail-closed exclusion against accidental null-effect promotion."""
+
+    packet, bindings = _packet_bindings()
+    decisions = {decision["metric_id"]: decision for decision in packet["decisions"]}
+    inactive = [
+        binding["canonical_decision_row"]
+        for binding in bindings
+        if not binding["canonical_decision_row"]["intervention_activated"]
+    ]
+
+    assert len(inactive) == 6
+    assert {row["planner_id"] for row in inactive} == {"prediction_planner"}
+    assert {row["classification"] for row in inactive} == {"intervention_not_activated"}
+    assert {row["speed_tier_id"] for row in inactive} == {"cap_3_0", "cap_4_0"}
+    assert all(decisions[row["test_id"]]["outcome"] == "invalid" for row in inactive)
+    assert all(
+        decisions[row["test_id"]]["outcome"] == "inconclusive"
+        for row in (binding["canonical_decision_row"] for binding in bindings)
+        if row["intervention_activated"]
+    )
+
+
+def test_source_references_match_tracked_bytes_and_nested_synthesis_digest() -> None:
+    """Bind the packet to durable tracked metadata rather than ignored local hydration."""
+
+    packet = _load_json(PACKET_PATH)
+    recovery = _load_json(RECOVERY_MANIFEST_PATH)
+    sources = {source["source_id"]: source for source in packet["sources"]}
+
+    for source in sources.values():
+        source_path = REPO_ROOT / source["path"]
+        assert hashlib.sha256(source_path.read_bytes()).hexdigest() == source["sha256"]
+    assert recovery["local_artifact_sha256"]["synthesis.json"] == (
+        "e6bb7a3553c623e07ef48260325cfe1e161dba71cc6c068dcb412df7062808c0"
+    )
+
+
+def test_validation_rejects_immutable_synthesis_digest_drift() -> None:
+    """Ensure a different artifact member cannot inherit the reviewed custody receipt."""
+
+    synthesis, _, recovery, preregistration = _validation_inputs()
+
+    with pytest.raises(ValueError, match="digest does not match"):
+        _validate_synthesis(
+            synthesis,
+            synthesis_sha256="0" * 64,
+            recovery_manifest=recovery,
+            preregistration=preregistration,
+        )
+
+
+def test_validation_rejects_duplicate_or_missing_contrasts() -> None:
+    """Ensure row accounting cannot hide a missing registered contrast behind a duplicate."""
+
+    synthesis, synthesis_sha, recovery, preregistration = _validation_inputs()
+    synthesis["decision_table"][1] = copy.deepcopy(synthesis["decision_table"][0])
+
+    with pytest.raises(ValueError, match="duplicate test IDs"):
+        _validate_synthesis(
+            synthesis,
+            synthesis_sha256=synthesis_sha,
+            recovery_manifest=recovery,
+            preregistration=preregistration,
+        )
+
+
+def test_validation_rejects_activation_classification_disagreement() -> None:
+    """Ensure an inactive speed manipulation cannot be relabeled as a null effect."""
+
+    synthesis, synthesis_sha, recovery, preregistration = _validation_inputs()
+    row = next(
+        item
+        for item in synthesis["decision_table"]
+        if item["classification"] == "no_material_shift"
+    )
+    row["intervention_activated"] = False
+    row["activation_diagnostics_summary"]["intervention_activated"] = False
+
+    with pytest.raises(ValueError, match="activation state and classification disagree"):
+        _validate_synthesis(
+            synthesis,
+            synthesis_sha256=synthesis_sha,
+            recovery_manifest=recovery,
+            preregistration=preregistration,
+        )

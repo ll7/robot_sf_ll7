@@ -499,6 +499,8 @@ def topology_signature(
     choke_cells: set[tuple[int, int]] = set()
     rows, cols = blocked.shape
     for row, col in path:
+        if row < 0 or row >= rows or col < 0 or col >= cols:
+            return frozenset()
         up_blocked = row <= 0 or bool(blocked[row - 1, col])
         down_blocked = row >= rows - 1 or bool(blocked[row + 1, col])
         left_blocked = col <= 0 or bool(blocked[row, col - 1])

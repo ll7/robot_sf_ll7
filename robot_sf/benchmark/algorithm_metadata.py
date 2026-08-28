@@ -106,6 +106,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "fast_pysf_planner": "diagnostic",
     "rvo": "classical",
     "dwa": "classical",
+    "force_coupled_potential_field": "classical",
     "teb": "classical",
     "nmpc_social": "classical",
     "topology_parallel_nmpc": "classical",
@@ -188,6 +189,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "fast_pysf_planner": "social_force_reference",
     "rvo": "placeholder_adapter",
     "dwa": "in_repo_classical_dynamic_window",
+    "force_coupled_potential_field": ("clean_room_force_coupled_potential_field_experimental"),
     "teb": "corridor_commitment_local_planner",
     "nmpc_social": "nonlinear_model_predictive_local_planner",
     "topology_parallel_nmpc": "topology_parallel_nmpc_local_planner",
@@ -255,6 +257,16 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
     "stream_gap": _DEFAULT_OBSERVATION_SPEC,
     "gap_prediction": _DEFAULT_OBSERVATION_SPEC,
     "dwa": _DEFAULT_OBSERVATION_SPEC,
+    "force_coupled_potential_field": {
+        "default_mode": "socnav_state",
+        "supported_modes": ("socnav_state",),
+        "inputs": ("robot_state", "goal", "obstacles_if_visible", "pedestrians_if_visible"),
+        "notes": (
+            "Experimental clean-room planner consumes Robot SF structured or flattened state. "
+            "Missing optional obstacle or pedestrian visibility is reported as degraded; "
+            "this smoke-only contract is not benchmark evidence."
+        ),
+    },
     "topology_parallel_nmpc": _DEFAULT_OBSERVATION_SPEC,
     "risk_dwa": _DEFAULT_OBSERVATION_SPEC,
     "risk_surface_dwa": {
@@ -913,6 +925,18 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "projection_policy": "native_dynamic_window_unicycle_vw",
         "projection_documented": True,
         "testing_only_adapter": True,
+    },
+    "force_coupled_potential_field": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": True,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "ForceCoupledPotentialFieldPlanner",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "native_bounded_unicycle_vw_with_runner_feasibility_projection",
+        "projection_documented": True,
+        "testing_only_adapter": True,
+        "prototype_only": True,
     },
     "teb": {
         "planner_command_space": "unicycle_vw",

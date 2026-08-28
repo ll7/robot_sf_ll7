@@ -456,6 +456,14 @@ if [[ "$lane_mode" == "core" ]]; then
         append_unique_pytest_arg "$core_test_path"
       fi
     done
+    # Broad core targets such as tests/dev can contain optional-import tests.
+    # Exclude only the paths declared by the shared allowlist so those files
+    # cannot be imported before the optional dependency preflight runs.
+    for optional_test_path in "${optional_test_paths[@]}"; do
+      if [[ -e "$optional_test_path" ]]; then
+        cmd+=("--ignore=$optional_test_path")
+      fi
+    done
     for changed_test_path in "${changed_top_level_core_test_paths[@]}"; do
       if [[ -e "$changed_test_path" ]]; then
         append_unique_pytest_arg "$changed_test_path"

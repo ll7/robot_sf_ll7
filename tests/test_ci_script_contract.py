@@ -658,6 +658,33 @@ def test_run_tests_parallel_invalid_dist_fails_before_worker_resolution() -> Non
     assert "resolve_pytest_workers.py" not in result.stderr
 
 
+def _run_parallel_lane(
+    *,
+    script_dir: Path,
+    repo: Path,
+    fake_bin: Path,
+    captured_args: Path,
+    lane: str,
+) -> subprocess.CompletedProcess[str]:
+    """Run a fixture lane with serial workers and capture its pytest command."""
+    return subprocess.run(
+        [str(script_dir / "run_tests_parallel.sh"), "--lane", lane, "--no-ordering"],
+        cwd=repo,
+        env={
+            **os.environ,
+            "BASE_REF": "HEAD~1",
+            "PYTEST_NUM_WORKERS": "1",
+            "PYTEST_FAST_FAIL": "0",
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            "UV_CAPTURED_ARGS": str(captured_args),
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+
 def test_run_tests_parallel_fails_before_worker_resolution_on_incomplete_profile(
     tmp_path: Path,
 ) -> None:
@@ -717,7 +744,9 @@ def test_run_tests_parallel_fails_before_worker_resolution_on_incomplete_profile
     assert not uv_called.exists()
 
 
-def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_path: Path) -> None:
+def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(  # noqa: PLR0915
+    tmp_path: Path,
+) -> None:
     """New top-level core tests must reach PR-readiness pytest collection (issue #5108)."""
     repo = tmp_path / "repo"
     script_dir = repo / "scripts" / "dev"
@@ -732,7 +761,10 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_
         target = script_dir / script_name
         target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
         target.chmod(0o755)
-    optional_allowlist.write_text("tests/test_optional_top_level.py\n", encoding="utf-8")
+    optional_allowlist.write_text(
+        "tests/test_optional_top_level.py\ntests/dev/test_audit_config_families.py\n",
+        encoding="utf-8",
+    )
     venv_python = repo / ".venv" / "bin" / "python"
     venv_python.parent.mkdir(parents=True)
     venv_python.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
@@ -771,6 +803,9 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_
     (repo / "tests" / "test_optional_top_level.py").write_text(
         "def test_optional(): pass\n", encoding="utf-8"
     )
+    audit_config_test = repo / "tests" / "dev" / "test_audit_config_families.py"
+    audit_config_test.parent.mkdir(parents=True, exist_ok=True)
+    audit_config_test.write_text("def test_audit_config_families(): pass\n", encoding="utf-8")
     ped_npc_test = repo / "tests" / "ped_npc" / "test_population.py"
     ped_npc_test.parent.mkdir(parents=True)
     ped_npc_test.write_text("def test_population(): pass\n", encoding="utf-8")
@@ -815,10 +850,28 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_
     assert " --dist " not in padded_pytest_args
     assert "in-process serial (pytest-xdist disabled)" in result.stderr
     assert "tests/test_new_top_level.py" in pytest_args
-    assert "tests/test_optional_top_level.py" not in pytest_args
+    core_pytest_tokens = pytest_args.split()
+    assert "tests/test_optional_top_level.py" not in core_pytest_tokens
+    assert "--ignore=tests/test_optional_top_level.py" in core_pytest_tokens
+    assert "tests/dev/test_audit_config_families.py" not in core_pytest_tokens
+    assert "--ignore=tests/dev/test_audit_config_families.py" in core_pytest_tokens
     assert "tests/ped_npc" in pytest_args
     assert "tests/new_nested/test_nested.py" in pytest_args
     assert "fast-pysf/tests" in pytest_args
+
+    optional_result = _run_parallel_lane(
+        script_dir=script_dir,
+        repo=repo,
+        fake_bin=fake_bin,
+        captured_args=captured_args,
+        lane="optional",
+    )
+
+    assert optional_result.returncode == 0, optional_result.stderr
+    optional_pytest_args = captured_args.read_text(encoding="utf-8")
+    assert "tests/test_optional_top_level.py" in optional_pytest_args
+    assert "tests/dev/test_audit_config_families.py" in optional_pytest_args
+    assert "--ignore=tests/dev/test_audit_config_families.py" not in optional_pytest_args
 
 
 def test_run_tests_parallel_keeps_ped_npc_in_core_lane() -> None:

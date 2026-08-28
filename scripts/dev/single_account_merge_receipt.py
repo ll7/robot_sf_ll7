@@ -82,6 +82,10 @@ _DO_NOT_MERGE_RE = re.compile(r"\[\s*do\s+not\s+merge\s*\]", re.IGNORECASE)
 _DIRECT_MERGE_RE = re.compile(
     r"pulls/(?:\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*|<[^>]+>|[A-Za-z0-9_.-]+)/merge"
 )
+_FULL_ORDINARY_BASE_POLICY_RE = re.compile(
+    r"base-policy\s*:\s*ordinary-cas\s*@\s*([0-9a-fA-F]{40})\b",
+    re.IGNORECASE,
+)
 
 GhApi = Callable[[str, str, dict[str, Any] | None], tuple[Any | None, str | None]]
 
@@ -825,6 +829,248 @@ def _normalize_review_source(value: Any, *, head_sha: str, metadata_digest: str)
     return {"status": "unavailable", "carrier": None, "reason_codes": ["review_source_unavailable"]}
 
 
+def _ordinary_selector_provenance_reasons(  # noqa: C901, PLR0912, PLR0915 - fail closed.
+    selector: Mapping[str, Any], receipt: Mapping[str, Any]
+) -> list[str]:
+    """Validate exact-ref marker proofs for every changed Python test file."""
+    changed_files = selector.get("changed_files")
+    changed_file_records = selector.get("changed_file_records")
+    candidate_files = selector.get("candidate_files")
+    provenance = selector.get("content_provenance")
+    if (
+        not isinstance(changed_files, list)
+        or not isinstance(changed_file_records, list)
+        or not isinstance(candidate_files, list)
+        or not isinstance(provenance, list)
+    ):
+        return ["ordinary_cas_content_provenance_unavailable"]
+
+    candidates = sorted(str(path) for path in candidate_files)
+    entries = [entry for entry in provenance if isinstance(entry, Mapping)]
+    reasons: list[str] = []
+    if any(not isinstance(path, str) or not path.strip() for path in changed_files):
+        reasons.append("ordinary_cas_content_provenance_scope_mismatch")
+    if any(not isinstance(path, str) or not path.strip() for path in candidate_files):
+        reasons.append("ordinary_cas_content_provenance_scope_mismatch")
+    records = [record for record in changed_file_records if isinstance(record, Mapping)]
+    normalized_records: list[tuple[str, str | None, str]] = []
+    for record in records:
+        filename = record.get("filename")
+        previous_filename = record.get("previous_filename")
+        status = record.get("status")
+        if (
+            not isinstance(filename, str)
+            or not filename.strip()
+            or not isinstance(status, str)
+            or not status.strip()
+            or (
+                previous_filename is not None
+                and (not isinstance(previous_filename, str) or not previous_filename.strip())
+            )
+        ):
+            reasons.append("ordinary_cas_content_provenance_scope_mismatch")
+            continue
+        normalized_status = status.lower()
+        if (normalized_status == "renamed") != (previous_filename is not None):
+            reasons.append("ordinary_cas_content_provenance_scope_mismatch")
+        normalized_records.append((filename, previous_filename, normalized_status))
+
+    record_filenames = [filename for filename, _, _ in normalized_records]
+    changed_file_names = [str(path) for path in changed_files]
+    if (
+        len(records) != len(changed_file_records)
+        or len(set(record_filenames)) != len(record_filenames)
+        or len(set(changed_file_names)) != len(changed_file_names)
+        or sorted(record_filenames) != sorted(changed_file_names)
+    ):
+        reasons.append("ordinary_cas_content_provenance_scope_mismatch")
+    expected_candidates = sorted(
+        filename
+        for filename, previous_filename, _ in normalized_records
+        if (Path(filename).name.startswith("test_") and filename.endswith(".py"))
+        or (
+            isinstance(previous_filename, str)
+            and Path(previous_filename).name.startswith("test_")
+            and previous_filename.endswith(".py")
+        )
+    )
+    if len(set(candidates)) != len(candidates) or candidates != expected_candidates:
+        reasons.append("ordinary_cas_content_provenance_scope_mismatch")
+    record_by_filename = {
+        filename: (previous_filename, status)
+        for filename, previous_filename, status in normalized_records
+    }
+    if (
+        len(entries) != len(provenance)
+        or sorted(_string(entry.get("filename")) for entry in entries) != candidates
+    ):
+        reasons.append("ordinary_cas_content_provenance_scope_mismatch")
+
+    marker_files: list[str] = []
+    for entry in entries:
+        filename = _string(entry.get("filename"))
+        status = _string(entry.get("status")).lower()
+        previous_filename = entry.get("previous_filename")
+        if record_by_filename.get(filename) != (previous_filename, status):
+            reasons.append("ordinary_cas_content_provenance_scope_mismatch")
+        filename_is_test = Path(filename).name.startswith("test_") and filename.endswith(".py")
+        required_sides = {
+            "added": {"head"},
+            "copied": {"head"},
+            "removed": {"base"},
+            "changed": {"base", "head"},
+            "modified": {"base", "head"},
+            "renamed": {"base", "head"},
+        }.get(status)
+        if required_sides is None:
+            reasons.append("ordinary_cas_content_provenance_status_invalid")
+            continue
+        if status == "renamed":
+            previous_is_test = (
+                isinstance(previous_filename, str)
+                and Path(previous_filename).name.startswith("test_")
+                and previous_filename.endswith(".py")
+            )
+            if not filename_is_test and not previous_is_test:
+                reasons.append("ordinary_cas_content_provenance_rename_scope_invalid")
+        elif not filename_is_test or previous_filename is not None:
+            reasons.append("ordinary_cas_content_provenance_scope_mismatch")
+        marker_present = False
+        for side, receipt_field in (("base", "base_sha"), ("head", "head_sha")):
+            proof = entry.get(side)
+            if side not in required_sides:
+                if proof is not None:
+                    reasons.append("ordinary_cas_content_provenance_unexpected_ref")
+                continue
+            if not isinstance(proof, Mapping):
+                reasons.append("ordinary_cas_content_provenance_ref_missing")
+                continue
+            if _string(proof.get("ref")).lower() != _string(receipt.get(receipt_field)).lower():
+                reasons.append("ordinary_cas_content_provenance_ref_mismatch")
+            path = _string(proof.get("path"))
+            expected_path = (
+                _string(previous_filename) if status == "renamed" and side == "base" else filename
+            )
+            if path != expected_path:
+                reasons.append("ordinary_cas_content_provenance_path_mismatch")
+            if type(proof.get("contains_marker")) is not bool:
+                reasons.append("ordinary_cas_content_provenance_marker_invalid")
+            marker_present = marker_present or proof.get("contains_marker") is True
+        current_proofs = entry.get("current_main")
+        if not isinstance(current_proofs, list) or not current_proofs:
+            reasons.append("ordinary_cas_content_provenance_current_main_missing")
+        else:
+            expected_current_paths = {filename}
+            if status == "renamed":
+                if not isinstance(previous_filename, str) or not previous_filename.strip():
+                    reasons.append("ordinary_cas_content_provenance_rename_scope_invalid")
+                else:
+                    expected_current_paths.add(previous_filename)
+            observed_current_paths = {
+                _string(current_proof.get("path"))
+                for current_proof in current_proofs
+                if isinstance(current_proof, Mapping)
+            }
+            if observed_current_paths != expected_current_paths:
+                reasons.append("ordinary_cas_content_provenance_path_mismatch")
+            for current_proof in current_proofs:
+                if not isinstance(current_proof, Mapping):
+                    reasons.append("ordinary_cas_content_provenance_current_main_invalid")
+                    continue
+                if (
+                    _string(current_proof.get("ref")).lower()
+                    != _string(receipt.get("current_base_sha")).lower()
+                ):
+                    reasons.append("ordinary_cas_content_provenance_current_main_mismatch")
+                if (
+                    type(current_proof.get("exists")) is not bool
+                    or type(current_proof.get("contains_marker")) is not bool
+                ):
+                    reasons.append("ordinary_cas_content_provenance_current_main_invalid")
+                if (
+                    current_proof.get("exists") is False
+                    and current_proof.get("contains_marker") is True
+                ):
+                    reasons.append("ordinary_cas_content_provenance_current_main_invalid")
+                marker_present = marker_present or current_proof.get("contains_marker") is True
+        if marker_present:
+            marker_files.append(filename)
+    if sorted(marker_files) != sorted(selector.get("changed_sensitive_files") or []):
+        reasons.append("ordinary_cas_content_provenance_marker_mismatch")
+    return sorted(set(reasons))
+
+
+def _ordinary_cas_reasons(  # noqa: C901, PLR0912 - dimensions fail closed independently.
+    receipt: Mapping[str, Any],
+) -> list[str]:
+    """Validate the exact-head ordinary-CAS proof that may qualify base staleness."""
+    proof = receipt.get("ordinary_cas")
+    if not isinstance(proof, Mapping):
+        return ["ordinary_cas_proof_unavailable"]
+
+    reasons: list[str] = []
+    if proof.get("status") != "accepted":
+        reasons.append("ordinary_cas_proof_not_accepted")
+
+    selector = proof.get("selector") if isinstance(proof.get("selector"), Mapping) else {}
+    if selector.get("status") != "ordinary":
+        reasons.append("ordinary_cas_selector_not_ordinary")
+    if selector.get("selector") != "pytest-marker-files.v1":
+        reasons.append("ordinary_cas_selector_unknown")
+    if selector.get("complete") is not True:
+        reasons.append("ordinary_cas_selector_incomplete")
+    if selector.get("current_main_ref_verified") is not True:
+        reasons.append("ordinary_cas_selector_current_main_unverified")
+    if _string(selector.get("head_sha")).lower() != _string(receipt.get("head_sha")).lower():
+        reasons.append("ordinary_cas_selector_head_mismatch")
+    if _string(selector.get("base_sha")).lower() != _string(receipt.get("base_sha")).lower():
+        reasons.append("ordinary_cas_selector_base_mismatch")
+    if (
+        _string(selector.get("current_main_sha")).lower()
+        != _string(receipt.get("current_base_sha")).lower()
+    ):
+        reasons.append("ordinary_cas_selector_current_main_mismatch")
+    changed_files = selector.get("changed_files")
+    if not isinstance(changed_files, list) or not changed_files:
+        reasons.append("ordinary_cas_changed_files_unavailable")
+    if selector.get("changed_sensitive_files") not in ([], ()):
+        reasons.append("ordinary_cas_sensitive_files_present")
+    reasons.extend(_ordinary_selector_provenance_reasons(selector, receipt))
+
+    policy = proof.get("base_policy") if isinstance(proof.get("base_policy"), Mapping) else {}
+    if policy.get("status") != "accepted" or policy.get("policy") != "ordinary-cas":
+        reasons.append("ordinary_cas_policy_not_accepted")
+    if _string(policy.get("head_sha")).lower() != _string(receipt.get("head_sha")).lower():
+        reasons.append("ordinary_cas_policy_head_mismatch")
+    carrier = _string(policy.get("carrier"))
+    carrier_match = _FULL_ORDINARY_BASE_POLICY_RE.search(carrier)
+    if (
+        carrier_match is None
+        or carrier_match.group(1).lower() != _string(receipt.get("head_sha")).lower()
+    ):
+        reasons.append("ordinary_cas_policy_carrier_mismatch")
+
+    cas = (
+        proof.get("current_base_cas") if isinstance(proof.get("current_base_cas"), Mapping) else {}
+    )
+    if cas.get("schema") != "pr_current_base_cas.v1" or cas.get("passed") is not True:
+        reasons.append("ordinary_cas_current_base_check_not_passed")
+    if cas.get("require_fresh_base") is not False:
+        reasons.append("ordinary_cas_fresh_base_mode_invalid")
+    if cas.get("base_ref") != "main":
+        reasons.append("ordinary_cas_base_ref_invalid")
+    for field, receipt_field in (
+        ("base_sha", "base_sha"),
+        ("expected_head_sha", "head_sha"),
+        ("observed_head_sha", "head_sha"),
+        ("expected_main_sha", "current_base_sha"),
+        ("observed_main_sha", "current_base_sha"),
+    ):
+        if _string(cas.get(field)).lower() != _string(receipt.get(receipt_field)).lower():
+            reasons.append(f"ordinary_cas_{field}_mismatch")
+    return sorted(set(reasons))
+
+
 def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit and auditable.
     *,
     repository: str,
@@ -841,6 +1087,7 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
     holds: Any,
     waiver: Any = None,
     expected_head_cas: Any = None,
+    ordinary_cas: Mapping[str, Any] | None = None,
     gate_audit: Mapping[str, Any] | None = None,
     evidence_provenance: Any = None,
     pr_state: str | None = None,
@@ -878,6 +1125,7 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
         "holds": normalized_holds,
         "waiver": normalized_waiver,
         "expected_head_cas": {"request": cas, "status": "not_applied"},
+        "ordinary_cas": copy.deepcopy(dict(ordinary_cas)) if ordinary_cas is not None else None,
         "gate_audit": copy.deepcopy(dict(gate_audit)) if gate_audit is not None else None,
         "pr_state": _string(pr_state).upper() or None,
         "pr_merged_at": pr_merged_at,
@@ -928,14 +1176,19 @@ def _premerge_reasons(  # noqa: C901, PLR0912, PLR0915 - every waiver/hold dimen
             else _string(gate_audit.get("status")).lower() == "success"
         )
         if not gate_passed:
-            reasons.append("merge_queue_gate_not_passed")
             raw_gate_reasons = gate_audit.get("reasons")
-            if isinstance(raw_gate_reasons, list):
-                reasons.extend(
-                    f"merge_queue_gate_{reason}"
-                    for reason in raw_gate_reasons
-                    if isinstance(reason, str) and reason
-                )
+            gate_reasons = (
+                [reason for reason in raw_gate_reasons if isinstance(reason, str) and reason]
+                if isinstance(raw_gate_reasons, list)
+                else []
+            )
+            ordinary_cas_reasons = (
+                _ordinary_cas_reasons(receipt) if "stale_merge_base" in gate_reasons else []
+            )
+            if gate_reasons != ["stale_merge_base"] or ordinary_cas_reasons:
+                reasons.append("merge_queue_gate_not_passed")
+                reasons.extend(f"merge_queue_gate_{reason}" for reason in gate_reasons)
+                reasons.extend(ordinary_cas_reasons)
 
     checks = (
         receipt.get("required_checks")
@@ -1061,6 +1314,7 @@ def validate_receipt(receipt: Any) -> dict[str, Any]:
         "holds",
         "waiver",
         "expected_head_cas",
+        "ordinary_cas",
         "observed_at",
         "merge_result",
         "receipt_digest",
@@ -1166,6 +1420,10 @@ def verify_receipt(  # noqa: C901, PLR0912 - revalidation compares every immutab
             live_evidence.get("evidence_provenance")
         ) != _canonical_json(receipt.get("evidence_provenance")):
             reasons.append("live_evidence_provenance_changed")
+        if _canonical_json(live_evidence.get("ordinary_cas")) != _canonical_json(
+            receipt.get("ordinary_cas")
+        ):
+            reasons.append("live_ordinary_cas_changed")
         fresh_holds = derive_holds(live_evidence)
         if _canonical_json(fresh_holds) != _canonical_json(receipt.get("holds")):
             reasons.append("live_hold_disposition_changed")
@@ -1308,9 +1566,12 @@ def build_live_evidence(
     pr_number: int, *, repository: str
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Re-read canonical merge-gate evidence for a report/validate/apply run."""
+    from scripts.dev.base_sensitive_selector import SELECTOR_VERSION, classify_changed_files
+    from scripts.dev.check_pr_current_base_cas import check_current_base_cas
     from scripts.dev.merge_queue_gate import (  # local import avoids a module cycle for pure helpers
         evaluate_merge_gate,
         fetch_main_sha,
+        fetch_pr_changed_file_marker_inventory,
         fetch_pr_snapshot,
         fetch_threads_resolved,
     )
@@ -1330,6 +1591,67 @@ def build_live_evidence(
         if isinstance(snapshot.get("reviewers_requested"), bool)
         else None,
     )
+    ordinary_cas: dict[str, Any] = {"status": "not_required", "reason_codes": []}
+    if _string(snapshot.get("base_sha")).lower() != current_base_sha.lower():
+        head_sha = _string(snapshot.get("head_sha"))
+        base_sha = _string(snapshot.get("base_sha"))
+        marker_inventory, marker_inventory_error = fetch_pr_changed_file_marker_inventory(
+            pr_number,
+            repo=repository,
+            base_sha=base_sha,
+            head_sha=head_sha,
+            current_main_sha=current_base_sha,
+        )
+        selector = classify_changed_files(
+            marker_inventory.get("changed_files")
+            if isinstance(marker_inventory, Mapping) and not marker_inventory_error
+            else None,
+            sensitive_files=marker_inventory.get("changed_sensitive_files", [])
+            if isinstance(marker_inventory, Mapping)
+            else [],
+        )
+        selector = {
+            **selector,
+            **(dict(marker_inventory) if isinstance(marker_inventory, Mapping) else {}),
+            "selector": selector.get("selector") or SELECTOR_VERSION,
+            **({"inventory_error": marker_inventory_error} if marker_inventory_error else {}),
+        }
+        policy_carrier = next(
+            (
+                match.group(0)
+                for text in snapshot.get("base_policy", [])
+                if isinstance(text, str)
+                for match in _FULL_ORDINARY_BASE_POLICY_RE.finditer(text)
+                if match.group(1).lower() == head_sha.lower()
+            ),
+            None,
+        )
+        policy_accepted = policy_carrier is not None
+        current_base_cas = check_current_base_cas(
+            str(pr_number),
+            repo=repository,
+            expected_head_sha=head_sha,
+            expected_main_sha=current_base_sha,
+        )
+        reason_codes: list[str] = []
+        if selector.get("status") != "ordinary":
+            reason_codes.append(f"selector_{selector.get('status') or 'unknown'}")
+        if not policy_accepted:
+            reason_codes.append("exact_head_ordinary_cas_policy_missing")
+        if current_base_cas.get("passed") is not True:
+            reason_codes.append("current_base_cas_not_passed")
+        ordinary_cas = {
+            "status": "accepted" if not reason_codes else "blocked",
+            "reason_codes": reason_codes,
+            "selector": selector,
+            "base_policy": {
+                "carrier": policy_carrier,
+                "status": "accepted" if policy_accepted else "missing",
+                "policy": "ordinary-cas",
+                "head_sha": head_sha,
+            },
+            "current_base_cas": current_base_cas,
+        }
     review_evidence = (
         snapshot.get("review_evidence")
         if isinstance(snapshot.get("review_evidence"), Mapping)
@@ -1399,6 +1721,7 @@ def build_live_evidence(
         "requested_teams": snapshot.get("requested_teams"),
         "holds": derive_holds(snapshot),
         "evidence_provenance": evidence_provenance,
+        "ordinary_cas": ordinary_cas,
         "gate_audit": gate.to_dict(),
     }, None
 

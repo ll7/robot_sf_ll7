@@ -54,7 +54,15 @@ scientific/evidence, legal/release, security, and merge holds. A single-account 
 only document the absence of a distinct human implementation reviewer; it cannot clear any
 other hold or replace hosted checks, domain approval, evidence, legal, release, security, or
 dependency authority. The receipt owner performs the final expected-head compare-and-swap
-merge and records GitHub's returned merge SHA. Report and validate modes are read-only.
+merge and records GitHub's returned merge SHA. When an ordinary PR's recorded base predates
+current `main`, the receipt additionally binds the complete changed-file record inventory
+(filename, status, and prior rename path), exact
+base/head/current-main content refs for every changed Python test marker candidate (including a
+renamed file's prior path), a trusted full-40-hex exact-head `base-policy: ordinary-cas` carrier,
+and immediate current-main/head CAS. GitHub's 3,000-file response cap cannot prove completeness and
+therefore fails closed.
+This qualifies only the gate's `stale_merge_base` reason; every additional gate reason remains
+blocking. Report and validate modes are read-only.
 
 The authority fixture at
 `scripts/dev/single_account_merge_authority_fixture.v1.json` enumerates the allowed callers
@@ -123,9 +131,13 @@ Before each merge operation, verify:
    Any stale, unknown, or failed result skips the PR; the author must update the branch and rerun
    CI. For `ordinary`, a trusted exact-head review must carry
    `base-policy: ordinary-cas @ <head-sha>` and the merger must not infer that status from a local
-   snapshot. Capture `HEAD_SHA` and the current `main` SHA immediately before the merge, then run
-   `uv run python scripts/dev/check_pr_current_base_cas.py --pr <number>
-   --expected-head-sha "$HEAD_SHA" --expected-main-sha "$EXPECTED_MAIN_SHA" --json`.
+   snapshot. The guarded receipt owner retains every normalized changed-file record, derives the
+   exact test candidate set from those records, and classifies marker content at immutable PR
+   base/head/current-main refs, includes both paths of renamed candidates, verifies the current-main
+   commit ref before treating a missing path as absent, preserves the full carrier, and runs the
+   equivalent immediate `check_pr_current_base_cas.py` proof against the expected head and current
+   `main`; inspect its `ordinary_cas` field before apply. A changed-file result at GitHub's
+   3,000-file cap is incomplete and fails closed.
    A non-passing CAS result, moved `main`, moved head, missing provenance, or non-`main` target
    skips the PR. The final merge still uses `--match-head-commit "$HEAD_SHA"`. See issue #6272.
 8. The PR has no unresolved actionable review threads or outstanding explicitly requested external

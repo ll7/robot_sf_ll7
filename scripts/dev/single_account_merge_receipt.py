@@ -833,6 +833,8 @@ def _ordinary_selector_provenance_reasons(  # noqa: C901, PLR0912, PLR0915 - fai
     selector: Mapping[str, Any], receipt: Mapping[str, Any]
 ) -> list[str]:
     """Validate exact-ref marker proofs for every changed Python test file."""
+    from scripts.dev.merge_queue_gate import _CHANGED_FILE_STATUSES
+
     changed_files = selector.get("changed_files")
     changed_file_records = selector.get("changed_file_records")
     candidate_files = selector.get("candidate_files")
@@ -871,6 +873,8 @@ def _ordinary_selector_provenance_reasons(  # noqa: C901, PLR0912, PLR0915 - fai
             reasons.append("ordinary_cas_content_provenance_scope_mismatch")
             continue
         normalized_status = status.lower()
+        if normalized_status not in _CHANGED_FILE_STATUSES:
+            reasons.append("ordinary_cas_content_provenance_status_invalid")
         if (normalized_status == "renamed") != (previous_filename is not None):
             reasons.append("ordinary_cas_content_provenance_scope_mismatch")
         normalized_records.append((filename, previous_filename, normalized_status))
@@ -918,6 +922,7 @@ def _ordinary_selector_provenance_reasons(  # noqa: C901, PLR0912, PLR0915 - fai
             "added": {"head"},
             "copied": {"head"},
             "removed": {"base"},
+            "deleted": {"base"},
             "changed": {"base", "head"},
             "modified": {"base", "head"},
             "renamed": {"base", "head"},
@@ -1314,7 +1319,6 @@ def validate_receipt(receipt: Any) -> dict[str, Any]:
         "holds",
         "waiver",
         "expected_head_cas",
-        "ordinary_cas",
         "observed_at",
         "merge_result",
         "receipt_digest",
@@ -1420,9 +1424,9 @@ def verify_receipt(  # noqa: C901, PLR0912 - revalidation compares every immutab
             live_evidence.get("evidence_provenance")
         ) != _canonical_json(receipt.get("evidence_provenance")):
             reasons.append("live_evidence_provenance_changed")
-        if _canonical_json(live_evidence.get("ordinary_cas")) != _canonical_json(
-            receipt.get("ordinary_cas")
-        ):
+        if "ordinary_cas" in receipt and _canonical_json(
+            live_evidence.get("ordinary_cas")
+        ) != _canonical_json(receipt.get("ordinary_cas")):
             reasons.append("live_ordinary_cas_changed")
         fresh_holds = derive_holds(live_evidence)
         if _canonical_json(fresh_holds) != _canonical_json(receipt.get("holds")):

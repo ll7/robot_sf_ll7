@@ -437,6 +437,30 @@ def test_ordinary_cas_proof_rejects_record_provenance_status_mismatch() -> None:
     assert "ordinary_cas_content_provenance_scope_mismatch" in blocked["reason_codes"]
 
 
+def test_ordinary_cas_proof_rejects_unknown_non_test_file_status() -> None:
+    proof = _ordinary_cas_proof()
+    proof["selector"]["changed_file_records"] = [
+        {
+            "filename": "robot_sf/example.py",
+            "previous_filename": None,
+            "status": "mystery",
+        }
+    ]
+    proof["selector"]["changed_files"] = ["robot_sf/example.py"]
+
+    blocked = _receipt(
+        gate_audit={
+            "schema": "merge_queue_gate.v1",
+            "passed": False,
+            "reasons": ["stale_merge_base"],
+        },
+        ordinary_cas=proof,
+    )
+
+    assert blocked["status"] == "blocked"
+    assert "ordinary_cas_content_provenance_status_invalid" in blocked["reason_codes"]
+
+
 def test_ordinary_cas_never_qualifies_an_additional_gate_failure() -> None:
     blocked = _receipt(
         gate_audit={
@@ -657,6 +681,20 @@ def test_legacy_receipt_remains_verifiable_when_live_evidence_gains_provenance()
 
     assert verification["passed"] is True
     assert "live_evidence_provenance_changed" not in verification["reasons"]
+
+
+def test_legacy_receipt_without_ordinary_cas_remains_verifiable() -> None:
+    """The ordinary-CAS extension must not invalidate pre-#7984 v1 receipts."""
+    receipt = _receipt()
+    receipt.pop("ordinary_cas")
+    receipt["receipt_digest"] = receipt_digest(receipt)
+    live = _live_evidence(_receipt())
+    live.pop("ordinary_cas")
+
+    assert validate_receipt(receipt)["passed"] is True
+    verification = verify_receipt(receipt, live_evidence=live)
+    assert verification["passed"] is True
+    assert "live_ordinary_cas_changed" not in verification["reasons"]
 
 
 def test_invalid_provenance_thread_status_blocks_receipt_validation() -> None:

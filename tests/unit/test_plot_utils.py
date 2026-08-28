@@ -125,11 +125,12 @@ def test_save_plot_existing_directory_no_op(tmp_path: Path) -> None:
 
 def test_save_plot_default_interactive(tmp_path: Path) -> None:
     """Keep the default non-interactive mode from showing the plot."""
-    plt.figure()
+    fig = plt.figure()
+    fig_num = fig.number
     plt.plot([0, 1], [0, 1])
     filepath = str(tmp_path / "default_interactive.png")
     with patch("robot_sf.data_analysis.plot_utils.plt.show") as show:
         save_plot(filepath)
     show.assert_not_called()
     assert os.path.isfile(filepath)
-    assert plt.get_fignums() == []
+    assert fig_num not in plt.get_fignums()

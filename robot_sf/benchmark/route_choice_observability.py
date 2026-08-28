@@ -23,6 +23,7 @@ blocked-cell topology, not from discovery order or ephemeral names.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import Any, cast
 
 import numpy as np
@@ -448,6 +449,14 @@ def _side_from_flags(left_seen: bool, right_seen: bool, neutral_seen: bool) -> s
     return "neutral"
 
 
+def _has_only_8_connected_steps(path: list[tuple[int, int]]) -> bool:
+    """Return whether consecutive grid cells are duplicates or 8-connected."""
+    return all(
+        max(abs(current[0] - previous[0]), abs(current[1] - previous[1])) <= 1
+        for previous, current in pairwise(path)
+    )
+
+
 def topology_signature(
     path: list[tuple[int, int]],
     blocked: np.ndarray,
@@ -464,7 +473,11 @@ def topology_signature(
     from silently acquiring different identity semantics.
     """
 
-    if blocked.ndim != 2 or clearance_map.shape != blocked.shape:
+    if (
+        blocked.ndim != 2
+        or clearance_map.shape != blocked.shape
+        or not _has_only_8_connected_steps(path)
+    ):
         return frozenset()
     choke_cells: set[tuple[int, int]] = set()
     rows, cols = blocked.shape
@@ -554,6 +567,9 @@ def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and thres
         if blocked_map[row, col]:
             return HomotopyObservation(identity=None, unavailable_reason="path_intersects_blocked")
         grid_path.append((row, col))
+
+    if not _has_only_8_connected_steps(grid_path):
+        return HomotopyObservation(identity=None, unavailable_reason="non_adjacent_grid_step")
 
     clearance_map = GridRoutePlannerAdapter._compute_clearance_map(blocked_map)
     signature = topology_signature(

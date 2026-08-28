@@ -48,12 +48,12 @@ def _mixed_route() -> list[tuple[float, float]]:
 
 def _left_route_grid() -> list[tuple[float, float]]:
     """Left corridor in grid ``(row, col)`` order (positive-y row 8)."""
-    return [(8.0, 0.0), (8.0, 2.0), (8.0, 4.0), (8.0, 6.0), (8.0, 8.0)]
+    return [(8.0, float(column)) for column in range(9)]
 
 
 def _right_route_grid() -> list[tuple[float, float]]:
     """Right corridor in grid ``(row, col)`` order (negative-y row 0)."""
-    return [(0.0, 0.0), (0.0, 2.0), (0.0, 4.0), (0.0, 6.0), (0.0, 8.0)]
+    return [(0.0, float(column)) for column in range(9)]
 
 
 def _resampled(path: list[tuple[float, float]], factor: int = 3) -> list[tuple[float, float]]:
@@ -286,6 +286,24 @@ def test_homotopy_identity_rejects_invalid_threshold() -> None:
 def test_homotopy_identity_rejects_non_integral_grid_cells() -> None:
     observation = homotopy_identity([(0.0, 0.0), (0.5, 1.0)], SYMMETRIC_BLOCKED)
     assert observation.unavailable_reason == "non_integral_grid_cell"
+
+
+def test_homotopy_identity_rejects_non_adjacent_grid_steps() -> None:
+    blocked = np.zeros((5, 5), dtype=bool)
+    blocked[1, 2] = True
+    observation = homotopy_identity([(1.0, 1.0), (1.0, 3.0)], blocked)
+    assert observation.identity is None
+    assert observation.unavailable_reason == "non_adjacent_grid_step"
+
+
+@pytest.mark.parametrize("step", [(0, 0), (1, 0), (0, 1), (1, 1), (-1, -1)])
+def test_homotopy_identity_accepts_duplicate_and_8_connected_steps(
+    step: tuple[int, int],
+) -> None:
+    blocked = np.zeros((5, 5), dtype=bool)
+    path = [(1.0, 1.0), (1.0 + step[0], 1.0 + step[1])]
+    observation = homotopy_identity(path, blocked)
+    assert observation.unavailable_reason in {None, "no_choke_cells"}
 
 
 @pytest.mark.parametrize("malformed_point", [None, (1.0,)])

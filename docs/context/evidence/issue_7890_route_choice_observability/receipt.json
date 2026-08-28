@@ -12,11 +12,11 @@
   },
   "homotopy_observations": [
     {
-      "identity": "8,6;8,8",
+      "identity": "8,6;8,7;8,8",
       "unavailable_reason": null
     },
     {
-      "identity": "0,6;0,8",
+      "identity": "0,6;0,7;0,8",
       "unavailable_reason": null
     },
     {

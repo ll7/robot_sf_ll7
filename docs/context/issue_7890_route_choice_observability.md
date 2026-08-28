@@ -52,8 +52,9 @@ cells of the path relative to the blocked map, with the same finite-clearance fa
 choke cell exists. The identity is a canonical, order-independent string of `row,col` pairs sorted
 and joined. It is stable across discovery order and does not depend on ephemeral route names such
 as `primary_route` or `masked_cell_*`. Malformed maps and invalid thresholds fail closed.
-Path coordinates must be integral grid cells, stay in bounds, and avoid blocked cells; continuous
-world coordinates must be converted by the map owner before this helper is called.
+Path coordinates must be integral grid cells, stay in bounds, avoid blocked cells, and use
+duplicate or 8-connected consecutive steps; non-adjacent jumps fail closed. Continuous world
+coordinates must be converted by the map owner before this helper is called.
 
 ## 4. Temporal consistency
 

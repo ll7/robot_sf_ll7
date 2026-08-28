@@ -14,7 +14,8 @@ Plain-language summary: an opt-in local planner that steers a unicycle robot by 
 attractive force toward a look-ahead target with repulsive forces from obstacles and pedestrians,
 saturating the total force, and issuing a speed/steering command that respects configured speed and
 rate limits as hard predicates. A zero-distance overlap triggers an explicit rate-limited stop
-request and degraded status. The registered map-runner
+request and degraded status; diagnostics distinguish a requested, pending, and fully applied stop.
+The registered map-runner
 path reads static obstacles from the canonical occupancy-grid obstacle channel; direct point inputs
 remain available for analytic smoke fixtures. It is a comparator core for future planner evaluation
 — nothing more.
@@ -36,8 +37,9 @@ remain available for analytic smoke fixtures. It is a comparator core for future
   for `numerical_epsilon < d <= influence_radius_m`.
 - A zero-distance obstacle or pedestrian is treated as an overlap: the planner requests `(0, 0)`,
   applies the configured command-rate limits, records sticky `status: degraded`, and explicitly
-  records the `emergency_stop` trigger; it does not invent a repulsion direction or exceed the hard
-  rate predicate.
+  records whether the stop is requested, pending, or applied. `emergency_stop` is true only once the
+  constrained command is actually zero; the planner does not invent a repulsion direction or exceed
+  the hard rate predicate.
 - Reaching the goal emits a rate-limited ordinary `(0, 0)` stop. A near-zero total force away from
   the goal is treated as a potential-field local minimum: the planner emits a rate-limited stop,
   records sticky `status: degraded`, and does not pass the undefined `atan2(0, 0)` direction into
@@ -45,14 +47,16 @@ remain available for analytic smoke fixtures. It is a comparator core for future
 - Total force saturated at `force_saturation` magnitude.
 - Desired heading: `atan2(fy, fx)`; command `linear = look_ahead_gain * goal_distance`,
   `angular = wrap_pi(desired_heading - robot_theta)`.
-- Units: metres, seconds, radians. Sign convention: left-hand positive angular rate.
+- Units: metres, seconds, radians. Sign convention: left-hand positive angular rate. Runtime
+  `sim.timestep` observation metadata owns the command-rate interval when present; the immutable
+  `control_dt` config is the explicit fallback for direct analytic use.
 - Static-obstacle input: direct world-frame points for analytic fixtures, otherwise occupied cell
   centres from the map runner's canonical occupancy-grid obstacle channel, thresholded and bounded
   to the nearest configured point count inside the influence radius. The explicit obstacle channel
   and its finite, shape-consistent metadata are required; combined occupancy is not treated as a
   static-obstacle substitute.
 - Numerical guards: `numerical_epsilon` for overlap, division, goal arrival, and total-force
-  cancellation; non-finite inputs raise.
+  cancellation; non-finite inputs or force arithmetic fail closed with invalid diagnostics.
 
 ## Deviations and unsupported elements
 

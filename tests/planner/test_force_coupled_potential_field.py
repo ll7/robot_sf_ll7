@@ -155,6 +155,10 @@ def test_zero_distance_guard_stops_and_reports_degraded() -> None:
     assert diagnostics["step_degraded"] is True
     assert diagnostics["ever_degraded"] is True
     assert diagnostics["emergency_stop"] is True
+    assert diagnostics["overlap_stop_requested"] is True
+    assert diagnostics["overlap_stop_pending"] is False
+    assert diagnostics["overlap_stop_applied"] is True
+    assert "zero_distance_stop_requested" in diagnostics["active_constraints"]
     assert "zero_distance_stop" in diagnostics["active_constraints"]
     assert "emergency_stop" in diagnostics["active_constraints"]
 
@@ -172,9 +176,63 @@ def test_zero_distance_overlap_stop_obeys_rate_limit_after_command_ramp() -> Non
     assert 0.0 < linear < previous_linear
     assert abs(linear - previous_linear) <= config.max_linear_rate * config.control_dt + 1e-9
     assert abs(angular - previous_angular) <= config.max_angular_rate * config.control_dt + 1e-9
-    assert diagnostics["emergency_stop"] is True
-    assert "zero_distance_stop" in diagnostics["active_constraints"]
+    assert diagnostics["emergency_stop"] is False
+    assert diagnostics["overlap_stop_requested"] is True
+    assert diagnostics["overlap_stop_pending"] is True
+    assert diagnostics["overlap_stop_applied"] is False
+    assert "zero_distance_stop_requested" in diagnostics["active_constraints"]
+    assert "zero_distance_stop_pending" in diagnostics["active_constraints"]
     assert "linear_rate_limit" in diagnostics["active_constraints"]
+
+
+def test_runtime_timestep_overrides_configured_rate_limit_timestep() -> None:
+    """Map-runner timestep metadata must own the per-step command-rate bound."""
+    config = ForceCoupledPotentialFieldConfig(
+        max_linear_rate=0.8,
+        control_dt=0.2,
+    )
+    planner = ForceCoupledPotentialFieldPlanner(config)
+    observation = _observation()
+    observation["sim"] = {"timestep": [0.1]}
+    for _ in range(20):
+        previous_linear, _ = planner.plan(observation)
+
+    overlap = _observation(obstacles=[(0.0, 0.0)])
+    overlap["sim"] = {"timestep": [0.1]}
+    linear, _ = planner.plan(overlap)
+    diagnostics = planner.diagnostics()
+
+    assert abs(linear - previous_linear) <= config.max_linear_rate * 0.1 + 1e-9
+    assert diagnostics["control_dt"] == pytest.approx(0.1)
+    assert diagnostics["control_dt_source"] == "observation.sim.timestep"
+
+
+def test_non_finite_force_overflow_records_fail_closed_diagnostics() -> None:
+    """Extreme accepted finite inputs must not escape without invalid diagnostics."""
+    planner = ForceCoupledPotentialFieldPlanner(
+        ForceCoupledPotentialFieldConfig(repulsive_weight=1e308)
+    )
+
+    with pytest.raises(ValueError, match="non-finite force or command computation"):
+        planner.plan(_observation(obstacles=[(1e-5, 0.0)]))
+
+    diagnostics = planner.diagnostics()
+    assert diagnostics["status"] == "invalid_input"
+    assert diagnostics["invalid_input"] is True
+    assert diagnostics["non_finite_input"] is True
+    assert diagnostics["fallback"] is False
+
+
+@pytest.mark.parametrize("timestep", [0.0, -0.1, float("nan"), [0.1, 0.2]])
+def test_invalid_runtime_timestep_fails_closed(timestep: object) -> None:
+    observation = _observation()
+    observation["sim"] = {"timestep": timestep}
+    planner = ForceCoupledPotentialFieldPlanner()
+
+    with pytest.raises(ValueError, match="control timestep"):
+        planner.plan(observation)
+
+    assert planner.diagnostics()["status"] == "invalid_input"
 
 
 def test_goal_reached_stops_without_inventing_a_heading() -> None:

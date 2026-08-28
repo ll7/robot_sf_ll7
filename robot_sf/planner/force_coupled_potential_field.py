@@ -199,41 +199,59 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
             robot, goal, obstacles, pedestrians, missing_inputs = self._observation_fields(
                 observation
             )
+            control_dt, control_dt_source = self._control_timestep(observation)
         except (IndexError, TypeError, ValueError) as exc:
             self._record_failure(status="invalid_input", reason=str(exc))
             raise ValueError(str(exc)) from exc
 
-        target = self._select_target(robot, goal)
-        attractive = self._attractive_force(robot, target)
-        obstacle_repulsive, obstacle_zero_distance = self._repulsive_force(robot, obstacles)
-        pedestrian_repulsive, pedestrian_zero_distance = self._repulsive_force(robot, pedestrians)
-        repulsive = obstacle_repulsive + pedestrian_repulsive
-        total_force = attractive + obstacle_repulsive + pedestrian_repulsive
-        saturated = self._saturate(total_force)
+        try:
+            with np.errstate(divide="raise", invalid="raise", over="raise"):
+                target = self._select_target(robot, goal)
+                attractive = self._attractive_force(robot, target)
+                obstacle_repulsive, obstacle_zero_distance = self._repulsive_force(robot, obstacles)
+                pedestrian_repulsive, pedestrian_zero_distance = self._repulsive_force(
+                    robot, pedestrians
+                )
+                repulsive = obstacle_repulsive + pedestrian_repulsive
+                total_force = attractive + obstacle_repulsive + pedestrian_repulsive
+                saturated = self._saturate(total_force)
+                if not all(
+                    np.all(np.isfinite(force))
+                    for force in (attractive, repulsive, total_force, saturated)
+                ):
+                    raise ValueError("non-finite force computation")
 
-        distance = float(np.hypot(goal[0] - robot[0], goal[1] - robot[1]))
-        force_norm = float(np.hypot(saturated[0], saturated[1]))
-        goal_reached = distance <= self.config.numerical_epsilon
-        force_cancellation_guard = force_norm <= self.config.numerical_epsilon and not goal_reached
-        if goal_reached or force_cancellation_guard:
-            # atan2(0, 0) would silently invent the world-frame +x direction.
-            # Stop at the goal, and fail closed at a potential-field local minimum.
-            raw_linear = 0.0
-            raw_angular = 0.0
-        else:
-            desired_heading = math.atan2(saturated[1], saturated[0])
-            heading_error = wrap_angle_pi(desired_heading - robot[2])
-            raw_linear = float(self.config.look_ahead_gain * distance)
-            raw_angular = float(heading_error)
+                distance = float(np.hypot(goal[0] - robot[0], goal[1] - robot[1]))
+                force_norm = float(np.hypot(saturated[0], saturated[1]))
+                goal_reached = distance <= self.config.numerical_epsilon
+                force_cancellation_guard = (
+                    force_norm <= self.config.numerical_epsilon and not goal_reached
+                )
+                if goal_reached or force_cancellation_guard:
+                    # atan2(0, 0) would silently invent the world-frame +x direction.
+                    # Stop at the goal, and fail closed at a potential-field local minimum.
+                    raw_linear = 0.0
+                    raw_angular = 0.0
+                else:
+                    desired_heading = math.atan2(saturated[1], saturated[0])
+                    heading_error = wrap_angle_pi(desired_heading - robot[2])
+                    raw_linear = float(self.config.look_ahead_gain * distance)
+                    raw_angular = float(heading_error)
 
-        zero_distance_stop = bool(obstacle_zero_distance or pedestrian_zero_distance)
-        if zero_distance_stop:
-            # Request a stop without violating the issue contract's hard
-            # command-rate predicates. Diagnostics retain the overlap trigger
-            # while the constrained command decelerates deterministically.
-            raw_linear = 0.0
-            raw_angular = 0.0
-        linear, angular = self._constrain_command(raw_linear, raw_angular)
+                zero_distance_stop = bool(obstacle_zero_distance or pedestrian_zero_distance)
+                if zero_distance_stop:
+                    # Request a stop without violating the issue contract's hard
+                    # command-rate predicates. Diagnostics retain the overlap trigger
+                    # while the constrained command decelerates deterministically.
+                    raw_linear = 0.0
+                    raw_angular = 0.0
+                linear, angular = self._constrain_command(
+                    raw_linear, raw_angular, control_dt=control_dt
+                )
+        except (FloatingPointError, OverflowError, ValueError) as exc:
+            reason = f"non-finite force or command computation: {exc}"
+            self._record_failure(status="invalid_input", reason=reason)
+            raise ValueError(reason) from exc
         self._last_diagnostics = self._build_diagnostics(
             state=(robot, goal, target),
             forces={
@@ -254,8 +272,8 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
                     "pedestrians": pedestrian_zero_distance,
                 },
             ),
-            goal_reached=goal_reached,
-            force_cancellation_guard=force_cancellation_guard,
+            stop_state=(goal_reached, force_cancellation_guard),
+            control_timestep=(control_dt, control_dt_source),
         )
         self._last_linear = linear
         self._last_angular = angular
@@ -306,6 +324,29 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         else:
             pedestrians = _as_2d_points(pedestrians_raw)
         return robot, goal, obstacles, pedestrians, missing_inputs
+
+    def _control_timestep(self, observation: dict[str, Any]) -> tuple[float, str]:
+        """Resolve one positive control timestep from runtime observation metadata.
+
+        Returns:
+            The effective timestep and its provenance label.
+        """
+        sim = observation.get("sim")
+        if isinstance(sim, dict) and "timestep" in sim:
+            raw_dt = sim["timestep"]
+            source = "observation.sim.timestep"
+        elif "sim_timestep" in observation:
+            raw_dt = observation["sim_timestep"]
+            source = "observation.sim_timestep"
+        elif "dt" in observation:
+            raw_dt = observation["dt"]
+            source = "observation.dt"
+        else:
+            return float(self.config.control_dt), "config.control_dt"
+        values = np.asarray(raw_dt, dtype=float).reshape(-1)
+        if values.size != 1 or not math.isfinite(float(values[0])) or float(values[0]) <= 0.0:
+            raise ValueError("control timestep must contain exactly one positive finite value")
+        return float(values[0]), source
 
     @staticmethod
     def _robot_and_goal(observation: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
@@ -595,6 +636,8 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
             magnitude = self.config.repulsive_weight * (
                 1.0 / distance - 1.0 / self.config.influence_radius_m
             )
+            if not math.isfinite(magnitude):
+                raise ValueError("non-finite repulsive force magnitude")
             total = total + magnitude * delta / distance
         return total, zero_distance_guards
 
@@ -609,7 +652,9 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
             return force
         return force * (self.config.force_saturation / norm)
 
-    def _constrain_command(self, raw_linear: float, raw_angular: float) -> tuple[float, float]:
+    def _constrain_command(
+        self, raw_linear: float, raw_angular: float, *, control_dt: float
+    ) -> tuple[float, float]:
         """Apply configured speed and command-rate limits as hard predicates.
 
         Returns:
@@ -628,22 +673,22 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         linear = float(
             np.clip(
                 linear,
-                self._last_linear - self.config.max_linear_rate * self.config.control_dt,
-                self._last_linear + self.config.max_linear_rate * self.config.control_dt,
+                self._last_linear - self.config.max_linear_rate * control_dt,
+                self._last_linear + self.config.max_linear_rate * control_dt,
             )
         )
         angular = float(
             np.clip(
                 angular,
-                self._last_angular - self.config.max_angular_rate * self.config.control_dt,
-                self._last_angular + self.config.max_angular_rate * self.config.control_dt,
+                self._last_angular - self.config.max_angular_rate * control_dt,
+                self._last_angular + self.config.max_angular_rate * control_dt,
             )
         )
         if not (math.isfinite(linear) and math.isfinite(angular)):
             raise ValueError("non-finite constrained command")
         return (linear, angular)
 
-    def _build_diagnostics(
+    def _build_diagnostics(  # noqa: C901
         self,
         *,
         state: tuple[np.ndarray, np.ndarray, np.ndarray],
@@ -652,8 +697,8 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         command: tuple[float, float],
         previous_command: tuple[float, float],
         visibility: tuple[list[str], dict[str, int]],
-        goal_reached: bool,
-        force_cancellation_guard: bool,
+        stop_state: tuple[bool, bool],
+        control_timestep: tuple[float, str],
     ) -> dict[str, Any]:
         """Build the versioned diagnostics payload for one planning step.
 
@@ -664,6 +709,8 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         missing_inputs, zero_distance_guards = visibility
         raw_linear, raw_angular = raw_command
         linear, angular = command
+        goal_reached, force_cancellation_guard = stop_state
+        control_dt, control_dt_source = control_timestep
         current_degradation_reasons: list[str] = []
         if missing_inputs:
             current_degradation_reasons.append(
@@ -672,7 +719,12 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         overlapping_sources = [
             source for source, count in zero_distance_guards.items() if count > 0
         ]
-        emergency_stop = bool(overlapping_sources)
+        overlap_stop_requested = bool(overlapping_sources)
+        overlap_stop_pending, overlap_stop_applied = self._overlap_stop_state(
+            requested=overlap_stop_requested,
+            command=(linear, angular),
+        )
+        emergency_stop = overlap_stop_applied
         if overlapping_sources:
             current_degradation_reasons.append(
                 "zero-distance overlap stop: " + ", ".join(overlapping_sources)
@@ -689,8 +741,13 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
             raw_linear,
             raw_angular,
             previous_command,
+            control_dt=control_dt,
         )
         if overlapping_sources:
+            active_constraints.append("zero_distance_stop_requested")
+        if overlap_stop_pending:
+            active_constraints.append("zero_distance_stop_pending")
+        if overlap_stop_applied:
             active_constraints.append("zero_distance_stop")
             active_constraints.append("emergency_stop")
         if goal_reached:
@@ -713,10 +770,15 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
             "raw_command": [float(raw_linear), float(raw_angular)],
             "constrained_command": [float(linear), float(angular)],
             "active_constraints": active_constraints,
+            "control_dt": control_dt,
+            "control_dt_source": control_dt_source,
             "zero_distance_guards": zero_distance_guards,
             "goal_reached": goal_reached,
             "force_cancellation_guard": force_cancellation_guard,
             "emergency_stop": emergency_stop,
+            "overlap_stop_requested": overlap_stop_requested,
+            "overlap_stop_pending": overlap_stop_pending,
+            "overlap_stop_applied": overlap_stop_applied,
             "missing_inputs": list(missing_inputs),
             "invalid_input": False,
             "non_finite_input": False,
@@ -737,6 +799,19 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
             ),
         }
 
+    def _overlap_stop_state(
+        self, *, requested: bool, command: tuple[float, float]
+    ) -> tuple[bool, bool]:
+        """Return the pending/applied state for one overlap stop request.
+
+        Returns:
+            The ``(pending, applied)`` booleans.
+        """
+        if not requested:
+            return False, False
+        applied = all(abs(value) <= self.config.numerical_epsilon for value in command)
+        return not applied, applied
+
     def _active_constraints(
         self,
         linear: float,
@@ -744,6 +819,8 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
         raw_linear: float,
         raw_angular: float,
         previous_command: tuple[float, float],
+        *,
+        control_dt: float,
     ) -> list[str]:
         """Report which hard constraints were active on the last step.
 
@@ -755,8 +832,8 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
             active.append("linear_speed_limit")
         if abs(angular) >= self.config.max_angular_speed - self.config.numerical_epsilon:
             active.append("angular_speed_limit")
-        linear_rate = abs(linear - previous_command[0]) / max(self.config.control_dt, 1e-9)
-        angular_rate = abs(angular - previous_command[1]) / max(self.config.control_dt, 1e-9)
+        linear_rate = abs(linear - previous_command[0]) / max(control_dt, 1e-9)
+        angular_rate = abs(angular - previous_command[1]) / max(control_dt, 1e-9)
         if linear_rate >= self.config.max_linear_rate - self.config.numerical_epsilon:
             active.append("linear_rate_limit")
         if angular_rate >= self.config.max_angular_rate - self.config.numerical_epsilon:
@@ -767,6 +844,7 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
 
     def _record_failure(self, *, status: str, reason: str) -> None:
         """Record a stable fail-closed diagnostic before raising to the caller."""
+        normalized_reason = reason.lower()
         self._last_diagnostics = {
             "diagnostics_schema": "force_coupled_potential_field.v1",
             "planner_type": self.planner_type,
@@ -775,7 +853,9 @@ class ForceCoupledPotentialFieldPlanner(OccupancyAwarePlannerMixin):
             "status_reason": reason,
             "missing_inputs": [],
             "invalid_input": status == "invalid_input",
-            "non_finite_input": "non-finite" in reason,
+            "non_finite_input": any(
+                marker in normalized_reason for marker in ("non-finite", "overflow", "floating")
+            ),
             "fallback": False,
             "degraded": status == "degraded",
             "step_degraded": status == "degraded",

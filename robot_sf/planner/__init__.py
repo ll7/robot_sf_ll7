@@ -20,6 +20,11 @@ _LAZY_EXPORTS = {
     "ClassicPlannerConfig": "robot_sf.planner.classic_global_planner",
     "DWAPlannerAdapter": "robot_sf.planner.dwa",
     "DWAPlannerConfig": "robot_sf.planner.dwa",
+    "ForceCoupledPotentialFieldConfig": "robot_sf.planner.force_coupled_potential_field",
+    "ForceCoupledPotentialFieldPlanner": "robot_sf.planner.force_coupled_potential_field",
+    "build_force_coupled_potential_field_config": (
+        "robot_sf.planner.force_coupled_potential_field"
+    ),
     "PredictiveGaussianHumanCost": "robot_sf.planner.predictive_human_cost",
     "PredictiveGaussianHumanCostConfig": "robot_sf.planner.predictive_human_cost",
     "build_predictive_gaussian_human_cost_config": "robot_sf.planner.predictive_human_cost",

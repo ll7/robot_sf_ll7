@@ -427,6 +427,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="force_coupled_potential_field",
+        tier="experimental",
+        aliases=("force_coupled_potential_field",),
+        note=(
+            "Clean-room force-coupled potential-field local-planner comparator; "
+            "implementation-integrity smoke only, not benchmark or reproduction evidence."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="topology_parallel_nmpc",
         tier="experimental",
         aliases=("topology_parallel_nmpc", "topology_nmpc"),

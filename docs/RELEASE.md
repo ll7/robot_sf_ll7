@@ -100,7 +100,7 @@ runtime-smoke receipt, then stops before campaign allocation:
 
 ```bash
 REHEARSAL_SOURCE_COMMIT="$(git rev-parse --verify HEAD)"
-git diff --quiet
+test -z "$(git status --porcelain=v1 --untracked-files=all)"
 uv run python scripts/tools/run_benchmark_release.py \
   --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
   --mode rehearsal \

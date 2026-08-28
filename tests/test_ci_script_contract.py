@@ -504,6 +504,16 @@ def test_run_tests_parallel_validates_dist_mode_before_resolving_workers() -> No
     assert script_text.find(dist_validation) < script_text.find(worker_resolution)
 
 
+def test_run_tests_parallel_passes_lane_and_cuda_policy_to_worker_resolver() -> None:
+    """Readiness worker resolution must receive the selected lane and CUDA status."""
+    script_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
+
+    assert 'cuda_runtime_override="${ROBOT_SF_CUDA_RUNTIME_STATUS:-}"' in script_text
+    assert 'cuda_runtime_args=(--cuda-runtime "$cuda_runtime_override")' in script_text
+    assert '--lane "$lane_mode"' in script_text
+    assert "source=ROBOT_SF_CUDA_RUNTIME_STATUS" in script_text
+
+
 def test_run_tests_parallel_invalid_dist_fails_before_worker_resolution() -> None:
     """Invalid dist mode should exit before validating or resolving worker count."""
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve a pytest-xdist worker count that is safe for the current host."""
+"""Resolve a pytest-xdist worker count that is safe for the current host and lane."""
 
 from __future__ import annotations
 
@@ -23,6 +23,9 @@ MACOS_MIN_WORKERS = 2
 # are unaffected. "auto" always bypasses these caps.
 LOW_CPU_WORKER_CAP = 16
 LOW_CPU_THRESHOLD = 8
+CUDA_SAFE_DEFAULT_WORKERS = 1
+CUDA_LANES = frozenset(("optional", "all"))
+CUDA_RUNTIME_STATUSES = frozenset(("usable", "unavailable", "unusable_nvml", "unknown"))
 
 
 def _cap_workers_for_host(
@@ -59,13 +62,83 @@ def _cap_workers_for_host(
     return requested, ""
 
 
+def _probe_cuda_runtime() -> tuple[str, str]:
+    """Return the shared CUDA classification for worker-policy decisions."""
+    try:
+        from robot_sf.telemetry.gpu import classify_cuda_runtime
+
+        classification = classify_cuda_runtime()
+    except Exception as exc:  # noqa: BLE001 - an uncertain probe must not leak into pytest
+        return "unknown", f"CUDA runtime probe failed: {exc}"
+    return classification.status, classification.reason
+
+
+def _resolve_cuda_runtime(
+    *,
+    lane: str,
+    cuda_runtime: tuple[str, str] | None,
+) -> tuple[str, str] | None:
+    """Resolve the CUDA status relevant to a test lane, if any."""
+    if lane not in CUDA_LANES:
+        return None
+    if cuda_runtime is not None:
+        return cuda_runtime
+    return _probe_cuda_runtime()
+
+
+def _resolve_default_worker_spec(
+    *,
+    lane: str,
+    logical_cpus: int,
+    system: str,
+    cuda_runtime: tuple[str, str] | None,
+) -> tuple[str, str]:
+    """Resolve a non-explicit worker request for the selected host and readiness lane."""
+    normalized_system = system.lower()
+    cuda_resolution = _resolve_cuda_runtime(lane=lane, cuda_runtime=cuda_runtime)
+    if cuda_resolution is not None:
+        cuda_status, cuda_reason = cuda_resolution
+        runtime_summary = f"CUDA runtime={cuda_status} ({cuda_reason})"
+        if cuda_status == "usable":
+            return (
+                str(CUDA_SAFE_DEFAULT_WORKERS),
+                "CUDA-safe default for GPU-spawning readiness lane "
+                f"(in-process serial); {runtime_summary}",
+            )
+        if cuda_status == "unknown":
+            return (
+                str(CUDA_SAFE_DEFAULT_WORKERS),
+                f"safe serial default because CUDA capability is uncertain; {runtime_summary}",
+            )
+        if normalized_system != "darwin":
+            return "auto", f"default xdist auto worker count on {system}; {runtime_summary}"
+
+    if normalized_system == "darwin":
+        workers = max(MACOS_MIN_WORKERS, min(MACOS_MAX_WORKERS, logical_cpus // 2))
+        reason = (
+            f"macOS-safe default derived from {logical_cpus} logical CPUs "
+            f"(cap={MACOS_MAX_WORKERS}, floor={MACOS_MIN_WORKERS})"
+        )
+        if cuda_resolution is not None:
+            reason = f"{reason}; {runtime_summary}"
+        return str(workers), reason
+
+    return "auto", f"default xdist auto worker count on {system}"
+
+
 def _resolve_worker_spec(
     *,
     requested: str | None,
     cpu_count: int | None,
     system: str,
+    lane: str = "core",
+    cuda_runtime: tuple[str, str] | None = None,
 ) -> tuple[str, str]:
     """Return the xdist worker spec and a short explanation."""
+    normalized_lane = lane.strip().lower()
+    if normalized_lane not in {"core", "optional", "all"}:
+        raise ValueError("lane must be one of: core, optional, all")
+
     requested_value = requested.strip() if requested else ""
     if requested_value:
         if requested_value == "auto":
@@ -87,17 +160,12 @@ def _resolve_worker_spec(
             return str(capped), f"explicit override ({cap_reason})"
         return str(capped), "explicit override via PYTEST_NUM_WORKERS"
 
-    logical_cpus = max(1, int(cpu_count or 1))
-    normalized_system = system.lower()
-    if normalized_system == "darwin":
-        workers = max(MACOS_MIN_WORKERS, min(MACOS_MAX_WORKERS, max(1, logical_cpus // 2)))
-        return (
-            str(workers),
-            f"macOS-safe default derived from {logical_cpus} logical CPUs "
-            f"(cap={MACOS_MAX_WORKERS}, floor={MACOS_MIN_WORKERS})",
-        )
-
-    return "auto", f"default xdist auto worker count on {system}"
+    return _resolve_default_worker_spec(
+        lane=normalized_lane,
+        logical_cpus=max(1, int(cpu_count or 1)),
+        system=system,
+        cuda_runtime=cuda_runtime,
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -116,6 +184,18 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print a human-readable explanation to stderr.",
     )
+    parser.add_argument(
+        "--lane",
+        choices=("core", "optional", "all"),
+        default="core",
+        help="Readiness lane whose worker policy is being resolved (default: core).",
+    )
+    parser.add_argument(
+        "--cuda-runtime",
+        choices=tuple(sorted(CUDA_RUNTIME_STATUSES | {"auto"})),
+        default="auto",
+        help="Use a supplied CUDA classification, or probe it when set to auto.",
+    )
     return parser
 
 
@@ -126,10 +206,18 @@ def main() -> int:
         args.requested if args.requested is not None else os.environ.get("PYTEST_NUM_WORKERS")
     )
     try:
+        cuda_runtime = None
+        if args.cuda_runtime != "auto":
+            cuda_runtime = (
+                args.cuda_runtime,
+                f"provided via --cuda-runtime={args.cuda_runtime}",
+            )
         workers, reason = _resolve_worker_spec(
             requested=requested,
             cpu_count=os.cpu_count(),
             system=platform.system(),
+            lane=args.lane,
+            cuda_runtime=cuda_runtime,
         )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)

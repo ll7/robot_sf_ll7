@@ -14,7 +14,9 @@ from scripts.dev.resolve_pytest_workers import (
 
 def test_resolve_worker_spec_defaults_to_auto_on_linux() -> None:
     """Non-macOS hosts should keep xdist auto by default."""
-    workers, reason = _resolve_worker_spec(requested=None, cpu_count=32, system="Linux")
+    workers, reason = _resolve_worker_spec(
+        requested=None, cpu_count=32, system="Linux", lane="core"
+    )
     assert workers == "auto"
     assert "default xdist auto worker count" in reason
 
@@ -91,6 +93,86 @@ def test_resolve_worker_spec_honors_auto_override() -> None:
     workers, reason = _resolve_worker_spec(requested="auto", cpu_count=2, system="Linux")
     assert workers == "auto"
     assert reason == "explicit override via PYTEST_NUM_WORKERS=auto"
+
+
+def test_resolve_worker_spec_serializes_optional_lane_on_usable_cuda() -> None:
+    """GPU-spawning readiness lanes use a safe serial default on usable CUDA."""
+    workers, reason = _resolve_worker_spec(
+        requested=None,
+        cpu_count=32,
+        system="Linux",
+        lane="optional",
+        cuda_runtime=("usable", "real CUDA device operation succeeded"),
+    )
+
+    assert workers == "1"
+    assert "CUDA-safe default" in reason
+    assert "in-process serial" in reason
+    assert "CUDA runtime=usable" in reason
+
+
+def test_resolve_worker_spec_serializes_all_lane_on_usable_macos_cuda() -> None:
+    """CUDA safety takes precedence over the legacy macOS worker default."""
+    workers, reason = _resolve_worker_spec(
+        requested=None,
+        cpu_count=32,
+        system="Darwin",
+        lane="all",
+        cuda_runtime=("usable", "real CUDA device operation succeeded"),
+    )
+
+    assert workers == "1"
+    assert str(MACOS_MAX_WORKERS) not in reason
+    assert "CUDA-safe default" in reason
+
+
+def test_resolve_worker_spec_keeps_cpu_parallelism_without_cuda() -> None:
+    """CPU-only optional readiness keeps the existing automatic xdist policy."""
+    workers, reason = _resolve_worker_spec(
+        requested=None,
+        cpu_count=32,
+        system="Linux",
+        lane="optional",
+        cuda_runtime=("unavailable", "torch.cuda.is_available() is False"),
+    )
+
+    assert workers == "auto"
+    assert "default xdist auto" in reason
+    assert "CUDA runtime=unavailable" in reason
+
+
+def test_resolve_worker_spec_honors_explicit_cuda_lane_override() -> None:
+    """An explicit worker request remains authoritative on a CUDA host."""
+    workers, reason = _resolve_worker_spec(
+        requested="4",
+        cpu_count=32,
+        system="Linux",
+        lane="optional",
+        cuda_runtime=("usable", "test probe"),
+    )
+
+    assert workers == "4"
+    assert reason == "explicit override via PYTEST_NUM_WORKERS"
+
+
+def test_resolve_worker_spec_uses_safe_default_when_cuda_probe_is_uncertain() -> None:
+    """An uncertain GPU probe fails safe instead of allowing hidden contention."""
+    workers, reason = _resolve_worker_spec(
+        requested=None,
+        cpu_count=32,
+        system="Linux",
+        lane="all",
+        cuda_runtime=("unknown", "probe failed"),
+    )
+
+    assert workers == "1"
+    assert "capability is uncertain" in reason
+
+
+def test_resolve_worker_spec_rejects_unknown_lane() -> None:
+    """Worker policy must not silently treat a typo as a CPU-only lane."""
+    with pytest.raises(ValueError, match="lane must be one of"):
+        _resolve_worker_spec(requested=None, cpu_count=32, system="Linux", lane="gpu")
 
 
 def test_cap_workers_for_host_no_change_when_within_limit() -> None:

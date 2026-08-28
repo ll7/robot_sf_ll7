@@ -152,8 +152,29 @@ preflight_check_cuda_runtime() {
   if [ "${PR_READY_SKIP_PREFLIGHT:-0}" = "1" ]; then
     return 0
   fi
-  if ! uv run python "$REPO_ROOT/scripts/dev/check_cuda_runtime.py" --receipt-dir "$REPO_ROOT/output/validation/pr_ready"; then
+  local probe_json
+  if ! probe_json="$(uv run python "$REPO_ROOT/scripts/dev/check_cuda_runtime.py" \
+    --receipt-dir "$REPO_ROOT/output/validation/pr_ready" --json)"; then
     printf 'CUDA runtime classification probe failed (setup evidence, not a code regression).\n' >&2
     exit 1
+  fi
+
+  local cuda_status
+  local cuda_reason
+  if ! cuda_status="$(printf '%s\n' "$probe_json" | python3 -c \
+    'import json, sys; print(json.load(sys.stdin)["status"])')"; then
+    printf 'CUDA runtime classification returned invalid JSON (setup evidence, not a code regression).\n' >&2
+    exit 1
+  fi
+  if ! cuda_reason="$(printf '%s\n' "$probe_json" | python3 -c \
+    'import json, sys; print(json.load(sys.stdin)["reason"])')"; then
+    printf 'CUDA runtime classification omitted its reason (setup evidence, not a code regression).\n' >&2
+    exit 1
+  fi
+  export ROBOT_SF_CUDA_RUNTIME_STATUS="$cuda_status"
+  printf 'CUDA runtime classification: %s\n' "$cuda_status" >&2
+  printf 'Reason: %s\n' "$cuda_reason" >&2
+  if [ "$cuda_status" != "usable" ]; then
+    printf 'Readiness note: CUDA-gated tests will skip with a gpu_unavailable receipt; this is an environment classification, not GPU evidence.\n' >&2
   fi
 }

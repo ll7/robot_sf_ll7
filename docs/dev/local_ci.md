@@ -71,6 +71,16 @@ BASE_REF=origin/main PR_READY_MODE=final scripts/dev/pr_ready_check.sh
 Use the core lane by default. Opt into `ROBOT_SF_TEST_LANE=optional` only when optional paths are
 part of the change. Do not treat fallback or degraded execution as benchmark success evidence.
 
+On a host where the shared NVIDIA CUDA (Compute Unified Device Architecture) probe reports a usable
+graphics processing unit (GPU), the optional and `all` lanes default to one in-process worker
+because some optional subprocess tests share GPU memory. This is a local readiness safety policy,
+not benchmark evidence. Central processing unit (CPU)-only hosts retain the automatic xdist default,
+and an explicit `PYTEST_NUM_WORKERS=<int>|auto` override remains visible and takes precedence over
+the CUDA serial policy (subject to the existing platform and low-CPU caps). The readiness output
+records the CUDA status, selected lane, worker count, and override or default reason. An uncertain
+CUDA probe uses the serial safe default; an unavailable or unusable runtime keeps the CPU parallel
+path and CUDA-gated tests use their explicit unavailable receipt.
+
 ## Local CI-equivalent path
 
 Use `scripts/dev/run_ci_local.sh` when the repository's complete local CI contract is required. Run

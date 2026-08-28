@@ -229,6 +229,48 @@ def test_route_side_rejects_invalid_numeric_contract(
     assert report.reason == reason
 
 
+def test_route_side_tolerance_expands_the_neutral_boundary() -> None:
+    """Numerical tolerance must affect the signed-distance decision it documents."""
+    near_axis = [(0.0, 0.0), (1.0, 0.01), (2.0, 0.0)]
+
+    exact = classify_route_side(
+        near_axis,
+        start=(0.0, 0.0),
+        goal=(2.0, 0.0),
+        tolerance_m=0.0,
+        neutral_band_m=0.0,
+        progress_interval=(0.0, 1.0),
+    )
+    tolerant = classify_route_side(
+        near_axis,
+        start=(0.0, 0.0),
+        goal=(2.0, 0.0),
+        tolerance_m=0.05,
+        neutral_band_m=0.0,
+        progress_interval=(0.0, 1.0),
+    )
+
+    assert exact.side == "left"
+    assert tolerant.side == "neutral"
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"start": (0.0, 0.0, 1.0), "goal": GOAL},
+        {"start": START, "goal": (8.0, 4.0, 1.0)},
+        {"start": START, "goal": GOAL, "coordinate_frame": ""},
+        {"start": START, "goal": GOAL, "units": ""},
+    ],
+)
+def test_route_side_rejects_ambiguous_reference_metadata(kwargs: dict[str, object]) -> None:
+    """Reference points, frame, and units remain explicit instead of being truncated."""
+    report = classify_route_side(_neutral_route(), **kwargs)  # type: ignore[arg-type]
+
+    assert report.side == "unavailable"
+    assert report.reason == "invalid_reference"
+
+
 def test_homotopy_identity_is_stable_across_discovery_order() -> None:
     left = homotopy_identity(_left_route_grid(), SYMMETRIC_BLOCKED)
     right = homotopy_identity(_right_route_grid(), SYMMETRIC_BLOCKED)

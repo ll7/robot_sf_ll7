@@ -256,8 +256,9 @@ def _finite_nonnegative(value: Any) -> float | None:
 def _finite_point(value: Any) -> tuple[float, float] | None:
     """Return a finite two-dimensional point, or ``None`` for malformed input."""
     try:
-        point = (float(value[0]), float(value[1]))
-    except (IndexError, TypeError, ValueError):
+        x, y = value
+        point = (float(x), float(y))
+    except (TypeError, ValueError):
         return None
     if not np.isfinite(point[0]) or not np.isfinite(point[1]):
         return None
@@ -354,7 +355,14 @@ def classify_route_side(  # noqa: C901 - fail-closed parameter and geometry gate
         invalid_reason = "invalid_neutral_band"
     elif normalized_interval is None:
         invalid_reason = "invalid_progress_interval"
-    elif normalized_start is None or normalized_goal is None:
+    elif (
+        normalized_start is None
+        or normalized_goal is None
+        or not isinstance(coordinate_frame, str)
+        or not coordinate_frame.strip()
+        or not isinstance(units, str)
+        or not units.strip()
+    ):
         invalid_reason = "invalid_reference"
     if invalid_reason is not None:
         return _unavailable_report(
@@ -419,8 +427,9 @@ def classify_route_side(  # noqa: C901 - fail-closed parameter and geometry gate
         )
 
     minimum_signed, maximum_signed = signed_range
-    left_seen = maximum_signed > neutral_band_m
-    right_seen = minimum_signed < -neutral_band_m
+    side_threshold_m = neutral_band_m + tolerance_m
+    left_seen = maximum_signed > side_threshold_m
+    right_seen = minimum_signed < -side_threshold_m
     return RouteSideReport(
         side=_side_from_flags(left_seen, right_seen, not left_seen and not right_seen),
         reason=None,

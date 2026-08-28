@@ -30,6 +30,10 @@ The record carries:
 A left/right label without this reference is invalid — the classifier fails closed with
 `degenerate_reference` when the start-goal axis has zero length.
 
+Strict left/right evidence begins beyond `neutral_band_m + tolerance_m`; the tolerance therefore
+widens the neutral boundary instead of serving only as recorded metadata. Reference points must be
+exactly two-dimensional, and coordinate-frame and units labels must be non-empty.
+
 ## 2. Route-side vocabulary
 
 `left` / `right` / `neutral` / `mixed` / `unavailable`. The left-hand side is the standard

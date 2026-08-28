@@ -1064,7 +1064,7 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                 identity_coordinates=world_path,
                 identity_coordinate_frame="global_xy",
                 identity_units="m",
-                identity_quantization=resolution,
+                identity_match_tolerance=resolution,
             ).as_dict()
             clearance = _static_clearance_summary(
                 route_path.path,

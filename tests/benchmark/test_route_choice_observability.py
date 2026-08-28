@@ -330,8 +330,8 @@ def test_homotopy_identity_survives_ego_grid_motion() -> None:
     assert topology_t0.identity_units == "m"
 
 
-def test_homotopy_identity_quantizes_fractional_ego_lattice_motion() -> None:
-    """Sub-cell movement maps the same choke geometry to one canonical global lattice."""
+def test_temporal_consistency_matches_fractional_ego_lattice_motion() -> None:
+    """Sub-cell movement remains one topology under bounded point-set matching."""
     adapter = GridRoutePlannerAdapter()
     blocked = np.zeros((11, 17), dtype=bool)
     blocked[1:9, 7:10] = True
@@ -340,9 +340,9 @@ def test_homotopy_identity_quantizes_fractional_ego_lattice_motion() -> None:
         "origin": [0.0, 0.0],
         "resolution": [1.0],
         "use_ego_frame": [1.0],
-        "robot_pose": [0.0, 0.0, 0.0],
+        "robot_pose": [0.4, 0.0, 0.0],
     }
-    meta_t1 = {**meta_t0, "robot_pose": [0.1, 0.0, 0.0]}
+    meta_t1 = {**meta_t0, "robot_pose": [0.5, 0.0, 0.0]}
     world_t0 = [tuple(adapter._grid_to_world(cell, meta_t0)) for cell in path]
     world_t1 = [tuple(adapter._grid_to_world(cell, meta_t1)) for cell in path]
 
@@ -352,7 +352,7 @@ def test_homotopy_identity_quantizes_fractional_ego_lattice_motion() -> None:
         identity_coordinates=world_t0,
         identity_coordinate_frame="global_xy",
         identity_units="m",
-        identity_quantization=1.0,
+        identity_match_tolerance=1.0,
     )
     topology_t1 = homotopy_identity(
         path,
@@ -360,22 +360,56 @@ def test_homotopy_identity_quantizes_fractional_ego_lattice_motion() -> None:
         identity_coordinates=world_t1,
         identity_coordinate_frame="global_xy",
         identity_units="m",
-        identity_quantization=1.0,
+        identity_match_tolerance=1.0,
     )
 
-    assert topology_t0.identity == topology_t1.identity
-    assert topology_t0.identity_quantization == 1.0
+    side = classify_route_side(world_t0, start=(0.0, 0.0), goal=(20.0, 0.0))
+    temporal = temporal_consistency([side, side], [topology_t0, topology_t1])
+    assert topology_t0.identity != topology_t1.identity
+    assert topology_t0.identity_match_tolerance == 1.0
+    assert temporal.topology_transition_count == 0
+    assert temporal.consistency_fraction == 1.0
+    assert temporal.first_stable_step == 0
 
 
-@pytest.mark.parametrize("quantization", [0.0, -1.0, float("nan")])
-def test_homotopy_identity_rejects_invalid_quantization(quantization: float) -> None:
+def test_temporal_consistency_keeps_full_cell_topologies_distinct() -> None:
+    """Strict tolerance does not merge choke-point sets one complete cell apart."""
+    path = _left_route_grid()
+    first_points = [(row, col) for row, col in path]
+    second_points = [(row + 1.0, col) for row, col in path]
+    first = homotopy_identity(
+        path,
+        SYMMETRIC_BLOCKED,
+        identity_coordinates=first_points,
+        identity_coordinate_frame="global_xy",
+        identity_units="m",
+        identity_match_tolerance=1.0,
+    )
+    second = homotopy_identity(
+        path,
+        SYMMETRIC_BLOCKED,
+        identity_coordinates=second_points,
+        identity_coordinate_frame="global_xy",
+        identity_units="m",
+        identity_match_tolerance=1.0,
+    )
+    side = classify_route_side(_left_route(), start=START, goal=GOAL)
+
+    report = temporal_consistency([side, side], [first, second])
+
+    assert report.topology_transition_count == 1
+    assert report.first_stable_step is None
+
+
+@pytest.mark.parametrize("tolerance", [0.0, -1.0, float("nan")])
+def test_homotopy_identity_rejects_invalid_match_tolerance(tolerance: float) -> None:
     observation = homotopy_identity(
         _left_route_grid(),
         SYMMETRIC_BLOCKED,
-        identity_quantization=quantization,
+        identity_match_tolerance=tolerance,
     )
     assert observation.identity is None
-    assert observation.unavailable_reason == "invalid_identity_quantization"
+    assert observation.unavailable_reason == "invalid_identity_match_tolerance"
 
 
 def test_homotopy_identity_rejects_misaligned_identity_coordinates() -> None:
@@ -567,10 +601,10 @@ def test_temporal_consistency_rejects_homotopy_frame_changes() -> None:
     assert report.valid_count == 0
 
 
-def test_temporal_consistency_rejects_homotopy_quantization_changes() -> None:
+def test_temporal_consistency_rejects_homotopy_match_tolerance_changes() -> None:
     side = classify_route_side(_left_route(), start=START, goal=GOAL)
-    first = homotopy_identity(_left_route_grid(), SYMMETRIC_BLOCKED, identity_quantization=1.0)
-    second = homotopy_identity(_left_route_grid(), SYMMETRIC_BLOCKED, identity_quantization=0.5)
+    first = homotopy_identity(_left_route_grid(), SYMMETRIC_BLOCKED, identity_match_tolerance=1.0)
+    second = homotopy_identity(_left_route_grid(), SYMMETRIC_BLOCKED, identity_match_tolerance=0.5)
 
     report = temporal_consistency([side, side], [first, second])
 

@@ -55,17 +55,18 @@ Reuses the canonical corridor-signature helper from the topology-hypothesis diag
 cells of the path relative to the blocked map, with the same finite-clearance fallback when no
 choke cell exists. The identity is a canonical, order-independent string of coordinate pairs sorted
 and joined. Pure grid callers default to `occupancy_grid_rc` coordinates in cells. The
-topology-guided planner computes the observation against its own selected path and blocked map,
-then maps aligned `global_xy` cell centres onto a canonical lattice whose bin width is the planner
-grid resolution. This suppresses false identity changes from fractional ego-grid lattice motion.
-Every observation records `identity_coordinate_frame`, `identity_units`, and
-`identity_quantization`; changing any of them invalidates a temporal comparison.
+topology-guided planner computes the observation against its own selected path and blocked map and
+emits the aligned `global_xy` choke-point set. Temporal reporting uses strict bounded symmetric
+Hausdorff matching with the planner grid resolution as tolerance, so moving cell representatives
+less than one cell apart remain one topology while corridors a full cell apart remain distinct.
+Every observation records `identity_coordinate_frame`, `identity_units`, `identity_points`, and
+`identity_match_tolerance`; changing any reference field invalidates a temporal comparison.
 
 Identity remains stable across discovery order and does not depend on ephemeral route names such as
 `primary_route` or `masked_cell_*`. The production diagnostic consumes the planner's exact
 `route_path_grid`, `route_path_world`, and `route_homotopy_observation` payload; it does not
 regenerate a blocked map or rejoin alternatives by those names. Malformed maps, invalid thresholds
-or quantization, misaligned coordinates, and ambiguous frame metadata fail closed. Grid paths must
+or match tolerances, misaligned coordinates, and ambiguous frame metadata fail closed. Grid paths must
 be integral, stay in bounds, avoid blocked cells, and use duplicate or 8-connected consecutive
 steps; non-adjacent jumps fail closed.
 
@@ -80,8 +81,8 @@ side-transition and topology-transition counts, dominant side/topology, consiste
 explicit side, topology, and aligned denominators, and the first stable-decision step when
 defined. Side/topology transitions do not bridge unavailable samples, and length-mismatched
 sequences are returned as alignment-invalid with zero admissible denominator. A change in the
-declared route reference, classification thresholds, homotopy coordinate frame, or homotopy units
-likewise fails alignment closed rather than comparing semantically incompatible labels. Outputs
+declared route reference, classification thresholds, homotopy coordinate frame, homotopy units, or
+match tolerance likewise fails alignment closed rather than comparing incompatible labels. Outputs
 are never merged into a single social-compliance score.
 
 `consistency_fraction` is the modal aligned `(side, topology)` pair count divided by the aligned

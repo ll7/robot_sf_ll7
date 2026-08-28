@@ -492,9 +492,10 @@ def test_topology_guided_policy_records_selected_hypothesis_diagnostics() -> Non
     assert route_corridor["route_homotopy_observation"]["identity"]
     assert route_corridor["route_homotopy_observation"]["identity_coordinate_frame"] == "global_xy"
     assert route_corridor["route_homotopy_observation"]["identity_units"] == "m"
-    assert route_corridor["route_homotopy_observation"]["identity_quantization"] == pytest.approx(
-        0.2
-    )
+    assert route_corridor["route_homotopy_observation"][
+        "identity_match_tolerance"
+    ] == pytest.approx(0.2)
+    assert route_corridor["route_homotopy_observation"]["identity_points"]
     assert route_corridor["topology_guided_config"]["schema_version"] == (
         "topology_guided_hybrid_rule.v1"
     )

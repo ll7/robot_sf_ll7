@@ -447,7 +447,7 @@ def _route_hypotheses_for_observation(
     return _format_route_hypotheses(adapter, obs, inputs)
 
 
-def _route_choice_observations(  # noqa: C901 - fail-closed planner provenance validation
+def _route_choice_observations(  # noqa: C901, PLR0912 - fail-closed provenance validation
     selected_route: dict[str, Any] | None,
     *,
     reference_start: tuple[float, float],
@@ -499,14 +499,25 @@ def _route_choice_observations(  # noqa: C901 - fail-closed planner provenance v
     unavailable_reason = homotopy_payload.get("unavailable_reason")
     identity_frame = homotopy_payload.get("identity_coordinate_frame")
     identity_units = homotopy_payload.get("identity_units")
-    identity_quantization = homotopy_payload.get("identity_quantization")
+    identity_points = homotopy_payload.get("identity_points")
+    identity_match_tolerance = homotopy_payload.get("identity_match_tolerance")
     if identity_frame != "global_xy" or identity_units != "m":
         return _unavailable()
     try:
-        quantization_value = float(identity_quantization)
+        match_tolerance_value = float(identity_match_tolerance)
     except (TypeError, ValueError):
         return _unavailable()
-    if not np.isfinite(quantization_value) or quantization_value <= 0.0:
+    if not np.isfinite(match_tolerance_value) or match_tolerance_value <= 0.0:
+        return _unavailable()
+    if not isinstance(identity_points, list) or not identity_points:
+        return _unavailable()
+    try:
+        normalized_identity_points = tuple(
+            (float(point[0]), float(point[1])) for point in identity_points
+        )
+    except (IndexError, TypeError, ValueError):
+        return _unavailable()
+    if not np.isfinite(normalized_identity_points).all():
         return _unavailable()
     if identity is not None and (not isinstance(identity, str) or not identity.strip()):
         return _unavailable()
@@ -527,7 +538,8 @@ def _route_choice_observations(  # noqa: C901 - fail-closed planner provenance v
         unavailable_reason=unavailable_reason,
         identity_coordinate_frame=identity_frame,
         identity_units=identity_units,
-        identity_quantization=quantization_value,
+        identity_points=normalized_identity_points,
+        identity_match_tolerance=match_tolerance_value,
     )
     return side_report, homotopy_observation
 

@@ -101,7 +101,8 @@ class HomotopyObservation:
     unavailable_reason: str | None
     identity_coordinate_frame: str = "occupancy_grid_rc"
     identity_units: str = "cells"
-    identity_quantization: float | None = None
+    identity_points: tuple[tuple[float, float], ...] = ()
+    identity_match_tolerance: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         """Return a JSON-ready dictionary."""
@@ -110,7 +111,8 @@ class HomotopyObservation:
             "unavailable_reason": self.unavailable_reason,
             "identity_coordinate_frame": self.identity_coordinate_frame,
             "identity_units": self.identity_units,
-            "identity_quantization": self.identity_quantization,
+            "identity_points": [list(point) for point in self.identity_points],
+            "identity_match_tolerance": self.identity_match_tolerance,
         }
 
 
@@ -522,7 +524,7 @@ def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and thres
     identity_coordinates: list[tuple[float, float]] | None = None,
     identity_coordinate_frame: str = "occupancy_grid_rc",
     identity_units: str = "cells",
-    identity_quantization: float | None = None,
+    identity_match_tolerance: float | None = None,
 ) -> HomotopyObservation:
     """Return a stable compact corridor identity for a grid-cell path.
 
@@ -549,17 +551,17 @@ def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and thres
             unavailable_reason=reason,
             identity_coordinate_frame=identity_coordinate_frame,
             identity_units=identity_units,
-            identity_quantization=quantization_value,
+            identity_match_tolerance=match_tolerance_value,
         )
 
-    quantization_value: float | None = None
-    if identity_quantization is not None:
+    match_tolerance_value: float | None = None
+    if identity_match_tolerance is not None:
         try:
-            quantization_value = float(identity_quantization)
+            match_tolerance_value = float(identity_match_tolerance)
         except (TypeError, ValueError):
-            return _unavailable("invalid_identity_quantization")
-        if not np.isfinite(quantization_value) or quantization_value <= 0.0:
-            return _unavailable("invalid_identity_quantization")
+            return _unavailable("invalid_identity_match_tolerance")
+        if not np.isfinite(match_tolerance_value) or match_tolerance_value <= 0.0:
+            return _unavailable("invalid_identity_match_tolerance")
 
     if not path:
         return _unavailable("empty_path")
@@ -627,15 +629,6 @@ def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and thres
             if normalized_point is None:
                 return _unavailable("invalid_identity_coordinates")
             canonical_coordinates.append(normalized_point)
-    if quantization_value is not None:
-        canonical_coordinates = [
-            (
-                float(np.floor(first / quantization_value) * quantization_value),
-                float(np.floor(second / quantization_value) * quantization_value),
-            )
-            for first, second in canonical_coordinates
-        ]
-
     clearance_map = GridRoutePlannerAdapter._compute_clearance_map(blocked_map)
     signature = topology_signature(
         grid_path,
@@ -666,8 +659,33 @@ def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and thres
         unavailable_reason=None,
         identity_coordinate_frame=identity_coordinate_frame,
         identity_units=identity_units,
-        identity_quantization=quantization_value,
+        identity_points=tuple(identity_points),
+        identity_match_tolerance=match_tolerance_value,
     )
+
+
+def _homotopy_equivalent(left: HomotopyObservation, right: HomotopyObservation) -> bool:
+    """Return whether two identities denote one topology under their declared tolerance."""
+    if left.identity is None or right.identity is None:
+        return False
+    if (
+        left.identity_coordinate_frame != right.identity_coordinate_frame
+        or left.identity_units != right.identity_units
+        or left.identity_match_tolerance != right.identity_match_tolerance
+    ):
+        return False
+    tolerance = left.identity_match_tolerance
+    if tolerance is None or not left.identity_points or not right.identity_points:
+        return left.identity == right.identity
+    left_points = np.asarray(left.identity_points, dtype=float)
+    right_points = np.asarray(right.identity_points, dtype=float)
+    distances = np.linalg.norm(left_points[:, None, :] - right_points[None, :, :], axis=2)
+    symmetric_hausdorff = max(
+        float(np.max(np.min(distances, axis=1))),
+        float(np.max(np.min(distances, axis=0))),
+    )
+    # Strict comparison keeps corridors separated by one complete grid cell distinct.
+    return symmetric_hausdorff < tolerance
 
 
 def temporal_consistency(
@@ -733,7 +751,7 @@ def temporal_consistency(
         (
             observation.identity_coordinate_frame,
             observation.identity_units,
-            observation.identity_quantization,
+            observation.identity_match_tolerance,
         )
         for observation in homotopy_observations
         if observation.identity is not None
@@ -748,13 +766,30 @@ def temporal_consistency(
     topology_valid_indices = [
         index for index, observation in enumerate(homotopy_observations) if observation.identity
     ]
+    topology_cluster_labels: dict[int, str] = {}
+    topology_cluster_representatives: list[int] = []
+    for index in topology_valid_indices:
+        representative = next(
+            (
+                candidate
+                for candidate in topology_cluster_representatives
+                if _homotopy_equivalent(
+                    homotopy_observations[index], homotopy_observations[candidate]
+                )
+            ),
+            None,
+        )
+        if representative is None:
+            representative = index
+            topology_cluster_representatives.append(index)
+        topology_cluster_labels[index] = str(homotopy_observations[representative].identity)
     valid_pair_indices = [
         index
         for index in range(aligned_count)
         if index in side_valid_indices and index in topology_valid_indices
     ]
     valid_sides = [side_reports[index].side for index in side_valid_indices]
-    valid_topologies = [homotopy_observations[index].identity for index in topology_valid_indices]
+    valid_topologies = [topology_cluster_labels[index] for index in topology_valid_indices]
     valid_count = len(valid_pair_indices)
     unavailable_count = aligned_count - valid_count
 
@@ -770,14 +805,13 @@ def temporal_consistency(
         for index in range(1, aligned_count)
         if index in topology_valid_indices
         and index - 1 in topology_valid_indices
-        and homotopy_observations[index].identity != homotopy_observations[index - 1].identity
+        and not _homotopy_equivalent(homotopy_observations[index], homotopy_observations[index - 1])
     )
 
     dominant_side = _dominant(valid_sides)
     dominant_topology = _dominant(valid_topologies)
     valid_pairs = [
-        (side_reports[index].side, str(homotopy_observations[index].identity))
-        for index in valid_pair_indices
+        (side_reports[index].side, topology_cluster_labels[index]) for index in valid_pair_indices
     ]
     pair_counts: dict[tuple[str, str], int] = {}
     for pair in valid_pairs:

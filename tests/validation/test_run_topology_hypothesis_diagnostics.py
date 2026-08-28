@@ -153,7 +153,7 @@ def test_route_choice_observations_use_selected_path_and_grid_context() -> None:
         identity_coordinates=world_path,
         identity_coordinate_frame="global_xy",
         identity_units="m",
-        identity_quantization=1.0,
+        identity_match_tolerance=1.0,
     )
     selected_route = {
         "route_path_grid": route.path,
@@ -197,7 +197,7 @@ def test_route_choice_observations_do_not_rebind_by_ephemeral_hypothesis_id() ->
             identity_coordinates=world_path,
             identity_coordinate_frame="global_xy",
             identity_units="m",
-            identity_quantization=1.0,
+            identity_match_tolerance=1.0,
         ).as_dict(),
     }
 
@@ -237,7 +237,8 @@ def test_route_choice_observations_reject_mismatched_planner_path_frames() -> No
             "unavailable_reason": None,
             "identity_coordinate_frame": "global_xy",
             "identity_units": "m",
-            "identity_quantization": 1.0,
+            "identity_match_tolerance": 1.0,
+            "identity_points": [[1.0, 1.0]],
         },
     }
 

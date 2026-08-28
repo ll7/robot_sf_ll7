@@ -14,21 +14,24 @@
     {
       "identity": "8,6;8,7;8,8",
       "identity_coordinate_frame": "occupancy_grid_rc",
-      "identity_quantization": null,
+      "identity_match_tolerance": null,
+      "identity_points": [[8.0, 6.0], [8.0, 7.0], [8.0, 8.0]],
       "identity_units": "cells",
       "unavailable_reason": null
     },
     {
       "identity": "0,6;0,7;0,8",
       "identity_coordinate_frame": "occupancy_grid_rc",
-      "identity_quantization": null,
+      "identity_match_tolerance": null,
+      "identity_points": [[0.0, 6.0], [0.0, 7.0], [0.0, 8.0]],
       "identity_units": "cells",
       "unavailable_reason": null
     },
     {
       "identity": null,
       "identity_coordinate_frame": "occupancy_grid_rc",
-      "identity_quantization": null,
+      "identity_match_tolerance": null,
+      "identity_points": [],
       "identity_units": "cells",
       "unavailable_reason": "empty_path"
     }

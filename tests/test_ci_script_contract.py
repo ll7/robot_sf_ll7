@@ -514,10 +514,12 @@ def test_run_tests_parallel_passes_lane_and_cuda_policy_to_worker_resolver() -> 
     assert "source=ROBOT_SF_CUDA_RUNTIME_STATUS" in script_text
 
 
-def test_cuda_preflight_dispatches_usable_status_to_serial_optional_lane(
+@pytest.mark.parametrize("cuda_status", ("usable", "future_status"))
+def test_cuda_preflight_dispatches_status_to_serial_optional_lane(
     tmp_path: Path,
+    cuda_status: str,
 ) -> None:
-    """Exercise preflight -> wrapper -> real resolver dispatch for usable CUDA."""
+    """Exercise preflight -> wrapper -> real resolver dispatch for CUDA statuses."""
     repo = tmp_path / "repo"
     script_dir = repo / "scripts" / "dev"
     fake_bin = repo / "fake-bin"
@@ -552,7 +554,7 @@ def test_cuda_preflight_dispatches_usable_status_to_serial_optional_lane(
                 'if [[ "$1" == "run" && "$2" == "python" ]]; then',
                 '  case "$3" in',
                 "    *check_cuda_runtime.py)",
-                '      printf \'%s\\n\' \'{"schema":"cuda_runtime_readiness.v1","status":"usable","reason":"fixture usable device"}\'',
+                f'      printf \'%s\\n\' \'{{"schema":"cuda_runtime_readiness.v1","status":"{cuda_status}","reason":"fixture {cuda_status}"}}\'',
                 "      exit 0",
                 "      ;;",
                 "    *resolve_pytest_workers.py)",
@@ -617,9 +619,11 @@ def test_cuda_preflight_dispatches_usable_status_to_serial_optional_lane(
     )
 
     assert result.returncode == 0, result.stderr
-    assert "CUDA runtime classification: usable" in result.stderr
-    assert "Resolved CUDA runtime status: usable" in result.stderr
+    assert f"CUDA runtime classification: {cuda_status}" in result.stderr
+    assert f"Resolved CUDA runtime status: {cuda_status}" in result.stderr
     assert "in-process serial (pytest-xdist disabled)" in result.stderr
+    if cuda_status == "future_status":
+        assert "unrecognized CUDA runtime status 'future_status'" in result.stderr
     pytest_args = captured_args.read_text(encoding="utf-8")
     assert " -n " not in f" {pytest_args} "
     assert " --dist " not in f" {pytest_args} "

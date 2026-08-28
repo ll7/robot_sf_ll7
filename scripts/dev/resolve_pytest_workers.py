@@ -197,9 +197,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--cuda-runtime",
-        choices=tuple(sorted(CUDA_RUNTIME_STATUSES | {"auto"})),
         default="auto",
-        help="Use a supplied CUDA classification, or probe it when set to auto.",
+        metavar="STATUS",
+        help=(
+            "Use a supplied CUDA classification, or probe it when set to auto. "
+            "Unrecognized statuses are treated as unknown."
+        ),
     )
     return parser
 

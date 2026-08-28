@@ -49,6 +49,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
+LABEL_PAGE_SIZE = 100
+LABEL_MAX_PAGES = 10
 
 
 def _is_absent_label_delete(result: subprocess.CompletedProcess[str]) -> bool:
@@ -60,32 +62,64 @@ def _is_absent_label_delete(result: subprocess.CompletedProcess[str]) -> bool:
 
 
 def _get_label_names(number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30) -> dict[str, Any]:
-    """Return the current label names for *number* as a list, or an error dict."""
-    path = f"repos/{repo}/issues/{number}/labels"
-    result = _gh_api_get(path, timeout=timeout)
-    if result.returncode != 0:
-        detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
-        return {"status": "error", "error": f"could not read labels: {detail}"}
-    try:
-        data = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        snippet = result.stdout.strip()[:200]
-        return {
-            "status": "error",
-            "error": f"label response was not valid JSON: {exc}; stdout snippet: {snippet!r}",
-        }
-    if not isinstance(data, list):
-        return {
-            "status": "error",
-            "error": f"expected a list from labels endpoint, got {type(data).__name__}",
-        }
-    names = []
-    for entry in data:
-        if isinstance(entry, dict):
+    """Return a complete, strictly validated label inventory or an error dict.
+
+    GitHub's labels endpoint is paginated.  A finite page ceiling keeps a
+    malformed or unexpectedly large response from creating an unbounded
+    reconciliation loop; landing on that ceiling with a full page is an
+    incomplete read and therefore fails closed.
+    """
+    names: list[str] = []
+    for page in range(1, LABEL_MAX_PAGES + 1):
+        path = f"repos/{repo}/issues/{number}/labels?per_page={LABEL_PAGE_SIZE}&page={page}"
+        result = _gh_api_get(path, timeout=timeout)
+        if result.returncode != 0:
+            detail = result.stderr.strip() or f"gh api exited with code {result.returncode}"
+            return {
+                "status": "error",
+                "error": f"could not read labels page {page}: {detail}",
+            }
+        try:
+            data = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            snippet = result.stdout.strip()[:200]
+            return {
+                "status": "error",
+                "error": (
+                    f"label response page {page} was not valid JSON: {exc}; "
+                    f"stdout snippet: {snippet!r}"
+                ),
+            }
+        if not isinstance(data, list):
+            return {
+                "status": "error",
+                "error": (
+                    f"expected a list from labels endpoint page {page}, got {type(data).__name__}"
+                ),
+            }
+        for index, entry in enumerate(data):
+            if not isinstance(entry, dict):
+                return {
+                    "status": "error",
+                    "error": f"label page {page} row {index} was not an object",
+                }
             name = entry.get("name")
-            if isinstance(name, str):
-                names.append(name)
-    return {"status": "ok", "labels": names}
+            if not isinstance(name, str) or not name.strip():
+                return {
+                    "status": "error",
+                    "error": f"label page {page} row {index} had no non-empty name",
+                }
+            names.append(name)
+        if len(data) < LABEL_PAGE_SIZE:
+            return {"status": "ok", "labels": names}
+
+    return {
+        "status": "error",
+        "error": (
+            f"label response reached bounded page ceiling ({LABEL_MAX_PAGES}) "
+            "without proving completeness"
+        ),
+    }
 
 
 def _guarded_merge_ready_write(

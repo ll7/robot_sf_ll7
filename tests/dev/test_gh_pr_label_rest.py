@@ -6,7 +6,14 @@ import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from scripts.dev.gh_pr_label_rest import add_label, main, remove_label
+from scripts.dev.gh_pr_label_rest import (
+    LABEL_MAX_PAGES,
+    LABEL_PAGE_SIZE,
+    _get_label_names,
+    add_label,
+    main,
+    remove_label,
+)
 
 
 def _proc(*, stdout: str = "", stderr: str = "", returncode: int = 0) -> MagicMock:
@@ -152,7 +159,7 @@ class TestAddLabel:
         assert mock_run.call_args_list[1].args[0] == [
             "gh",
             "api",
-            "repos/ll7/robot_sf_ll7/issues/5220/labels",
+            "repos/ll7/robot_sf_ll7/issues/5220/labels?per_page=100&page=1",
         ]
 
     def test_fails_closed_on_authentication_error(self) -> None:
@@ -236,7 +243,7 @@ class TestRemoveLabel:
         assert mock_run.call_args_list[1].args[0] == [
             "gh",
             "api",
-            "repos/ll7/robot_sf_ll7/issues/5220/labels",
+            "repos/ll7/robot_sf_ll7/issues/5220/labels?per_page=100&page=1",
         ]
 
     def test_fails_closed_on_authentication_error(self) -> None:
@@ -357,3 +364,72 @@ class TestCli:
             rc = main(["remove", "5220", "--label", "cheap-lane", "--repo", "ll7/robot_sf_ll7"])
 
         assert rc == 0
+
+
+class TestLabelReadback:
+    """Tests for complete, strict paginated label inventories."""
+
+    def test_finds_label_on_second_page(self) -> None:
+        """A full first page must not hide a target label on the next page."""
+        first_page = _mock_labels_payload(*(f"label-{index}" for index in range(LABEL_PAGE_SIZE)))
+        second_page = _mock_labels_payload("target")
+        with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
+            mock_run.side_effect = [_proc(stdout=first_page), _proc(stdout=second_page)]
+            result = _get_label_names(5220)
+
+        assert result == {
+            "status": "ok",
+            "labels": [*(f"label-{index}" for index in range(LABEL_PAGE_SIZE)), "target"],
+        }
+        assert mock_run.call_args_list[0].args[0][-1] == (
+            "repos/ll7/robot_sf_ll7/issues/5220/labels?per_page=100&page=1"
+        )
+        assert mock_run.call_args_list[1].args[0][-1] == (
+            "repos/ll7/robot_sf_ll7/issues/5220/labels?per_page=100&page=2"
+        )
+
+    def test_rejects_malformed_row_without_returning_partial_labels(self) -> None:
+        """A malformed row must not be silently dropped from an authoritative read."""
+        with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
+            mock_run.return_value = _proc(stdout=json.dumps([{"name": "valid"}, {"id": 123}]))
+            result = _get_label_names(5220)
+
+        assert result["status"] == "error"
+        assert "page 1 row 1" in result["error"]
+        assert "labels" not in result
+
+    def test_rejects_malformed_page(self) -> None:
+        """A non-array API page must fail closed."""
+        with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
+            mock_run.return_value = _proc(stdout=json.dumps({"name": "not-a-page"}))
+            result = _get_label_names(5220)
+
+        assert result["status"] == "error"
+        assert "expected a list" in result["error"]
+        assert "page 1" in result["error"]
+
+    def test_rejects_pagination_failure(self) -> None:
+        """A later page failure must not return the complete-looking first page."""
+        first_page = _mock_labels_payload(*(f"label-{index}" for index in range(LABEL_PAGE_SIZE)))
+        with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _proc(stdout=first_page),
+                _proc(returncode=1, stderr="HTTP 500: server error"),
+            ]
+            result = _get_label_names(5220)
+
+        assert result["status"] == "error"
+        assert "page 2" in result["error"]
+        assert "server error" in result["error"]
+        assert len(mock_run.call_args_list) == 2
+
+    def test_rejects_bounded_truncation(self) -> None:
+        """A full page at the finite ceiling proves that the inventory is incomplete."""
+        full_page = _mock_labels_payload(*(f"label-{index}" for index in range(LABEL_PAGE_SIZE)))
+        with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
+            mock_run.side_effect = [_proc(stdout=full_page) for _ in range(LABEL_MAX_PAGES)]
+            result = _get_label_names(5220)
+
+        assert result["status"] == "error"
+        assert f"({LABEL_MAX_PAGES})" in result["error"]
+        assert len(mock_run.call_args_list) == LABEL_MAX_PAGES

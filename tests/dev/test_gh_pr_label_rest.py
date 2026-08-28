@@ -6,7 +6,14 @@ import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
-from scripts.dev.gh_pr_label_rest import add_label, main, remove_label
+from scripts.dev.gh_pr_label_rest import (
+    LABEL_PAGE_CEILING,
+    LABEL_PAGE_SIZE,
+    _get_label_names,
+    add_label,
+    main,
+    remove_label,
+)
 
 
 def _proc(*, stdout: str = "", stderr: str = "", returncode: int = 0) -> MagicMock:
@@ -17,6 +24,79 @@ def _proc(*, stdout: str = "", stderr: str = "", returncode: int = 0) -> MagicMo
 def _mock_labels_payload(*names: str) -> str:
     """Build a JSON labels-array payload from label names."""
     return json.dumps([{"name": n} for n in names])
+
+
+def _page_path(page: int) -> str:
+    return f"repos/ll7/robot_sf_ll7/issues/5220/labels?per_page=100&page={page}"
+
+
+class TestLabelRead:
+    """Tests for complete and strict paginated label reads."""
+
+    def test_finds_label_on_second_page(self) -> None:
+        page_one = [{"name": f"label-{index}"} for index in range(LABEL_PAGE_SIZE)]
+        with patch("scripts.dev.gh_pr_label_rest._gh_api_get") as mock_get:
+            mock_get.side_effect = [
+                _proc(stdout=json.dumps(page_one)),
+                _proc(stdout=_mock_labels_payload("target")),
+            ]
+            result = _get_label_names(5220, repo="ll7/robot_sf_ll7")
+
+        assert result == {
+            "status": "ok",
+            "labels": [f"label-{i}" for i in range(100)] + ["target"],
+        }
+        assert [call.args[0] for call in mock_get.call_args_list] == [
+            _page_path(1),
+            _page_path(2),
+        ]
+
+    def test_rejects_malformed_page_and_row(self) -> None:
+        for payload in (
+            {"name": "not-a-page"},
+            [{"name": ""}],
+            [{"name": None}],
+            [{"name": 42}],
+            ["not-a-row"],
+        ):
+            with patch(
+                "scripts.dev.gh_pr_label_rest._gh_api_get",
+                return_value=_proc(stdout=json.dumps(payload)),
+            ):
+                result = _get_label_names(5220)
+
+            assert result["status"] == "error"
+            assert "page 1" in result["error"]
+            assert "labels" not in result
+
+    def test_fails_closed_when_page_fetch_fails(self) -> None:
+        page_one = [{"name": f"label-{index}"} for index in range(LABEL_PAGE_SIZE)]
+        with patch(
+            "scripts.dev.gh_pr_label_rest._gh_api_get",
+        ) as mock_get:
+            mock_get.side_effect = [
+                _proc(stdout=json.dumps(page_one)),
+                _proc(returncode=1, stderr="HTTP 503: unavailable"),
+            ]
+            result = _get_label_names(5220)
+
+        assert result == {
+            "status": "error",
+            "error": "could not read labels page 2: HTTP 503: unavailable",
+        }
+
+    def test_fails_closed_at_page_ceiling(self) -> None:
+        full_page = _mock_labels_payload(*[f"label-{index}" for index in range(LABEL_PAGE_SIZE)])
+        with patch(
+            "scripts.dev.gh_pr_label_rest._gh_api_get",
+            return_value=_proc(stdout=full_page),
+        ) as mock_get:
+            result = _get_label_names(5220)
+
+        assert result["status"] == "error"
+        assert str(LABEL_PAGE_CEILING) in result["error"]
+        assert "labels" not in result
+        assert mock_get.call_count == LABEL_PAGE_CEILING
 
 
 class TestAddLabel:
@@ -152,7 +232,7 @@ class TestAddLabel:
         assert mock_run.call_args_list[1].args[0] == [
             "gh",
             "api",
-            "repos/ll7/robot_sf_ll7/issues/5220/labels",
+            _page_path(1),
         ]
 
     def test_fails_closed_on_authentication_error(self) -> None:
@@ -236,7 +316,7 @@ class TestRemoveLabel:
         assert mock_run.call_args_list[1].args[0] == [
             "gh",
             "api",
-            "repos/ll7/robot_sf_ll7/issues/5220/labels",
+            _page_path(1),
         ]
 
     def test_fails_closed_on_authentication_error(self) -> None:

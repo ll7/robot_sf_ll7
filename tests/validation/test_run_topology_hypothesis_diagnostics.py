@@ -157,7 +157,7 @@ def test_route_choice_observations_use_selected_path_and_grid_context() -> None:
     side_report, homotopy_observation = _route_choice_observations(
         _adapter(),
         inputs,
-        selected_hypothesis_id="bottom_corridor",
+        selected_path=route.path,
         reference_start=(0.5, 4.5),
         reference_goal=(9.5, 4.5),
     )
@@ -166,6 +166,34 @@ def test_route_choice_observations_use_selected_path_and_grid_context() -> None:
     assert side_report.coordinate_frame == "global_xy"
     assert homotopy_observation.identity is not None
     assert homotopy_observation.unavailable_reason is None
+    assert homotopy_observation.identity_coordinate_frame == "global_xy"
+    assert homotopy_observation.identity_units == "m"
+
+
+def test_route_choice_observations_do_not_rebind_by_ephemeral_hypothesis_id() -> None:
+    """The planner's selected path remains usable when diagnostic route IDs differ."""
+    blocked = np.zeros((10, 10), dtype=bool)
+    blocked[3:7, 4:6] = True
+    planner_selected_path = [(8, column) for column in range(10)]
+    inputs = _RouteHypothesisInputs(
+        routes=[],
+        blocked=blocked,
+        meta={"origin": [0.0, 0.0], "resolution": [1.0], "use_ego_frame": [0.0]},
+        robot_pos=np.array([0.5, 4.5]),
+        heading=0.0,
+        goal=np.array([9.5, 4.5]),
+    )
+
+    side_report, homotopy_observation = _route_choice_observations(
+        _adapter(),
+        inputs,
+        selected_path=planner_selected_path,
+        reference_start=(0.5, 4.5),
+        reference_goal=(9.5, 4.5),
+    )
+
+    assert side_report.side == "left"
+    assert homotopy_observation.identity is not None
 
 
 def test_route_choice_observations_fail_closed_without_selected_path() -> None:
@@ -182,7 +210,7 @@ def test_route_choice_observations_fail_closed_without_selected_path() -> None:
     side_report, homotopy_observation = _route_choice_observations(
         _adapter(),
         inputs,
-        selected_hypothesis_id=None,
+        selected_path=None,
         reference_start=(0.5, 0.5),
         reference_goal=(3.5, 0.5),
     )

@@ -99,12 +99,16 @@ class HomotopyObservation:
 
     identity: str | None
     unavailable_reason: str | None
+    identity_coordinate_frame: str = "occupancy_grid_rc"
+    identity_units: str = "cells"
 
     def as_dict(self) -> dict[str, Any]:
         """Return a JSON-ready dictionary."""
         return {
             "identity": self.identity,
             "unavailable_reason": self.unavailable_reason,
+            "identity_coordinate_frame": self.identity_coordinate_frame,
+            "identity_units": self.identity_units,
         }
 
 
@@ -513,6 +517,9 @@ def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and thres
     blocked: np.ndarray,
     *,
     clearance_threshold_cells: int = 2,
+    identity_coordinates: list[tuple[float, float]] | None = None,
+    identity_coordinate_frame: str = "occupancy_grid_rc",
+    identity_units: str = "cells",
 ) -> HomotopyObservation:
     """Return a stable compact corridor identity for a grid-cell path.
 
@@ -522,43 +529,55 @@ def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and thres
     order and does not depend on ephemeral route names.
 
     ``path`` points use the grid convention ``(row, col)`` matching the
-    blocked map's index order (row 0 is the top edge).
+    blocked map's index order (row 0 is the top edge). When
+    ``identity_coordinates`` is supplied, it must align one-for-one with
+    ``path`` and provides the immutable coordinate frame used to serialize the
+    compact signature. Production ego-grid callers use global world points so
+    grid motion cannot create false topology transitions.
 
     Returns:
         A :class:`HomotopyObservation` with the identity string or an
         unavailable reason.
     """
 
+    def _unavailable(reason: str) -> HomotopyObservation:
+        return HomotopyObservation(
+            identity=None,
+            unavailable_reason=reason,
+            identity_coordinate_frame=identity_coordinate_frame,
+            identity_units=identity_units,
+        )
+
     if not path:
-        return HomotopyObservation(identity=None, unavailable_reason="empty_path")
+        return _unavailable("empty_path")
     if len(path) == 1:
-        return HomotopyObservation(identity=None, unavailable_reason="single_point")
+        return _unavailable("single_point")
     if (path_problem := _path_problem(path)) is not None:
-        return HomotopyObservation(identity=None, unavailable_reason=path_problem)
+        return _unavailable(path_problem)
     try:
         blocked_map = np.asarray(blocked)
     except (TypeError, ValueError):
-        return HomotopyObservation(identity=None, unavailable_reason="malformed_blocked_map")
+        return _unavailable("malformed_blocked_map")
     if blocked_map.ndim != 2:
-        return HomotopyObservation(identity=None, unavailable_reason="malformed_blocked_map")
+        return _unavailable("malformed_blocked_map")
     if blocked_map.size == 0:
-        return HomotopyObservation(identity=None, unavailable_reason="missing_blocked_map")
+        return _unavailable("missing_blocked_map")
     if np.issubdtype(blocked_map.dtype, np.number):
         if not np.isfinite(blocked_map).all() or not np.isin(blocked_map, [0, 1]).all():
-            return HomotopyObservation(identity=None, unavailable_reason="invalid_blocked_map")
+            return _unavailable("invalid_blocked_map")
     elif blocked_map.dtype != np.dtype(bool):
-        return HomotopyObservation(identity=None, unavailable_reason="invalid_blocked_map")
+        return _unavailable("invalid_blocked_map")
 
     try:
         threshold_value = float(clearance_threshold_cells)
     except (TypeError, ValueError):
-        return HomotopyObservation(identity=None, unavailable_reason="invalid_clearance_threshold")
+        return _unavailable("invalid_clearance_threshold")
     if (
         not np.isfinite(threshold_value)
         or threshold_value < 1.0
         or not threshold_value.is_integer()
     ):
-        return HomotopyObservation(identity=None, unavailable_reason="invalid_clearance_threshold")
+        return _unavailable("invalid_clearance_threshold")
 
     blocked_map = blocked_map.astype(bool, copy=False)
 
@@ -568,17 +587,33 @@ def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and thres
         row_value = float(point[0])
         col_value = float(point[1])
         if not row_value.is_integer() or not col_value.is_integer():
-            return HomotopyObservation(identity=None, unavailable_reason="non_integral_grid_cell")
+            return _unavailable("non_integral_grid_cell")
         row = int(row_value)
         col = int(col_value)
         if row < 0 or row >= rows or col < 0 or col >= cols:
-            return HomotopyObservation(identity=None, unavailable_reason="out_of_bounds")
+            return _unavailable("out_of_bounds")
         if blocked_map[row, col]:
-            return HomotopyObservation(identity=None, unavailable_reason="path_intersects_blocked")
+            return _unavailable("path_intersects_blocked")
         grid_path.append((row, col))
 
     if not _has_only_8_connected_steps(grid_path):
-        return HomotopyObservation(identity=None, unavailable_reason="non_adjacent_grid_step")
+        return _unavailable("non_adjacent_grid_step")
+
+    if not isinstance(identity_coordinate_frame, str) or not identity_coordinate_frame.strip():
+        return _unavailable("invalid_identity_coordinates")
+    if not isinstance(identity_units, str) or not identity_units.strip():
+        return _unavailable("invalid_identity_coordinates")
+    if identity_coordinates is None:
+        canonical_coordinates = [(float(row), float(col)) for row, col in grid_path]
+    else:
+        if len(identity_coordinates) != len(grid_path):
+            return _unavailable("invalid_identity_coordinates")
+        canonical_coordinates = []
+        for point in identity_coordinates:
+            normalized_point = _finite_point(point)
+            if normalized_point is None:
+                return _unavailable("invalid_identity_coordinates")
+            canonical_coordinates.append(normalized_point)
 
     clearance_map = GridRoutePlannerAdapter._compute_clearance_map(blocked_map)
     signature = topology_signature(
@@ -588,10 +623,29 @@ def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and thres
         clearance_threshold_cells=int(threshold_value),
     )
     if not signature:
-        return HomotopyObservation(identity=None, unavailable_reason="no_choke_cells")
-    # Canonical, order-independent identity: sorted choke cells joined by '|'.
-    identity = ";".join(f"{row},{col}" for row, col in sorted(signature))
-    return HomotopyObservation(identity=identity, unavailable_reason=None)
+        return _unavailable("no_choke_cells")
+
+    coordinate_by_cell: dict[tuple[int, int], tuple[float, float]] = {}
+    for cell, coordinate in zip(grid_path, canonical_coordinates, strict=True):
+        previous = coordinate_by_cell.setdefault(cell, coordinate)
+        if not np.allclose(previous, coordinate, rtol=0.0, atol=1e-9):
+            return _unavailable("invalid_identity_coordinates")
+
+    def _format_coordinate(value: float) -> str:
+        normalized = 0.0 if abs(value) <= 1e-12 else value
+        return format(normalized, ".12g")
+
+    identity_points = sorted(coordinate_by_cell[cell] for cell in signature)
+    identity = ";".join(
+        f"{_format_coordinate(first)},{_format_coordinate(second)}"
+        for first, second in identity_points
+    )
+    return HomotopyObservation(
+        identity=identity,
+        unavailable_reason=None,
+        identity_coordinate_frame=identity_coordinate_frame,
+        identity_units=identity_units,
+    )
 
 
 def temporal_consistency(
@@ -611,8 +665,8 @@ def temporal_consistency(
 
     side_denominator = len(side_reports)
     topology_denominator = len(homotopy_observations)
-    alignment_valid = side_denominator == topology_denominator
-    if not alignment_valid:
+
+    def _alignment_failure(reason: str) -> TemporalConsistencyReport:
         return TemporalConsistencyReport(
             valid_count=0,
             unavailable_count=max(side_denominator, topology_denominator),
@@ -630,9 +684,36 @@ def temporal_consistency(
             topology_denominator=topology_denominator,
             aligned_count=0,
             alignment_valid=False,
-            alignment_reason="length_mismatch",
+            alignment_reason=reason,
             first_stable_step=None,
         )
+
+    if side_denominator != topology_denominator:
+        return _alignment_failure("length_mismatch")
+
+    route_references = {
+        (
+            report.coordinate_frame,
+            report.units,
+            report.start,
+            report.goal,
+            report.tolerance_m,
+            report.neutral_band_m,
+            report.progress_interval,
+        )
+        for report in side_reports
+        if report.side != "unavailable"
+    }
+    if len(route_references) > 1:
+        return _alignment_failure("route_reference_mismatch")
+
+    identity_references = {
+        (observation.identity_coordinate_frame, observation.identity_units)
+        for observation in homotopy_observations
+        if observation.identity is not None
+    }
+    if len(identity_references) > 1:
+        return _alignment_failure("identity_reference_mismatch")
 
     aligned_count = side_denominator
     side_valid_indices = [

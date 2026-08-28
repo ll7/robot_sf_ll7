@@ -451,29 +451,31 @@ def _route_choice_observations(
     adapter: GridRoutePlannerAdapter,
     inputs: _RouteHypothesisInputs | None,
     *,
-    selected_hypothesis_id: str | None,
+    selected_path: list[tuple[int, int]] | None,
     reference_start: tuple[float, float],
     reference_goal: tuple[float, float],
 ) -> tuple[RouteSideReport, HomotopyObservation]:
     """Build one route-choice observation from the selected raw hypothesis."""
-    selected = next(
-        (
-            route
-            for route in (inputs.routes if inputs is not None else [])
-            if route.hypothesis_id == selected_hypothesis_id
-        ),
-        None,
-    )
-    if inputs is None or selected is None:
+    if inputs is None or not selected_path:
         return (
             _classify_route_side([], start=reference_start, goal=reference_goal),
             _homotopy_identity([], np.zeros((0, 0), dtype=bool)),
         )
 
-    world_path = [
-        tuple(float(value) for value in adapter._grid_to_world(cell, inputs.meta)[:2])
-        for cell in selected.path
-    ]
+    try:
+        grid_path = []
+        for cell in selected_path:
+            row, col = cell
+            grid_path.append((float(row), float(col)))
+        world_path = [
+            tuple(float(value) for value in adapter._grid_to_world(cell, inputs.meta)[:2])
+            for cell in grid_path
+        ]
+    except (IndexError, TypeError, ValueError):
+        return (
+            _classify_route_side([], start=reference_start, goal=reference_goal),
+            _homotopy_identity([], np.zeros((0, 0), dtype=bool)),
+        )
     side_report = _classify_route_side(
         world_path,
         start=reference_start,
@@ -481,7 +483,13 @@ def _route_choice_observations(
         coordinate_frame="global_xy",
         units="m",
     )
-    homotopy_observation = _homotopy_identity(selected.path, inputs.blocked)
+    homotopy_observation = _homotopy_identity(
+        grid_path,
+        inputs.blocked,
+        identity_coordinates=world_path,
+        identity_coordinate_frame="global_xy",
+        identity_units="m",
+    )
     return side_report, homotopy_observation
 
 
@@ -1163,19 +1171,14 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
                 if callable(last_decision):
                     planner_decision = last_decision()
             decision = planner_decision if isinstance(planner_decision, dict) else {}
-            selected_hypothesis = _selected_topology_hypothesis_row(
-                {"planner_route_corridor": decision.get("route_corridor")}
-            )
-            selected_hypothesis_id = (
-                str(selected_hypothesis.get("hypothesis_id"))
-                if isinstance(selected_hypothesis, dict)
-                and selected_hypothesis.get("hypothesis_id")
-                else None
+            route_corridor = decision.get("route_corridor")
+            selected_path = (
+                route_corridor.get("route_path_grid") if isinstance(route_corridor, dict) else None
             )
             side_report, homotopy_observation = _route_choice_observations(
                 route_adapter,
                 route_inputs,
-                selected_hypothesis_id=selected_hypothesis_id,
+                selected_path=selected_path,
                 reference_start=reference_start,
                 reference_goal=reference_goal,
             )

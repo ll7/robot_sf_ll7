@@ -53,12 +53,22 @@ therefore cannot change a label.
 
 Reuses the canonical corridor-signature helper from the topology-hypothesis diagnostics: choke
 cells of the path relative to the blocked map, with the same finite-clearance fallback when no
-choke cell exists. The identity is a canonical, order-independent string of `row,col` pairs sorted
-and joined. It is stable across discovery order and does not depend on ephemeral route names such
-as `primary_route` or `masked_cell_*`. Malformed maps and invalid thresholds fail closed.
-Path coordinates must be integral grid cells, stay in bounds, avoid blocked cells, and use
-duplicate or 8-connected consecutive steps; non-adjacent jumps fail closed. Continuous world
-coordinates must be converted by the map owner before this helper is called.
+choke cell exists. The identity is a canonical, order-independent string of coordinate pairs sorted
+and joined. Pure grid callers default to `occupancy_grid_rc` coordinates in cells. Production
+replanning supplies aligned `global_xy` cell-centre coordinates in metres, so the same world route
+keeps one identity when an ego-centred occupancy grid moves. Every observation records
+`identity_coordinate_frame` and `identity_units`.
+
+Identity remains stable across discovery order and does not depend on ephemeral route names such as
+`primary_route` or `masked_cell_*`. The production diagnostic binds the exact path selected by the
+planner through `route_path_grid`; it does not regenerate alternatives and rejoin them by those
+names. Malformed maps, invalid thresholds, misaligned immutable-frame coordinates, and ambiguous
+frame metadata fail closed. Grid paths must be integral, stay in bounds, avoid blocked cells, and
+use duplicate or 8-connected consecutive steps; non-adjacent jumps fail closed.
+
+Only a topology-guided planner decision that exposes this exact selected path can produce an
+operational homotopy observation. Base route-corridor diagnostics without selected-topology path
+provenance remain explicitly `unavailable`.
 
 ## 4. Temporal consistency
 
@@ -66,8 +76,10 @@ For a sequence of replanned paths, the report records valid/unavailable counts s
 side-transition and topology-transition counts, dominant side/topology, consistency fraction with
 explicit side, topology, and aligned denominators, and the first stable-decision step when
 defined. Side/topology transitions do not bridge unavailable samples, and length-mismatched
-sequences are returned as alignment-invalid with zero admissible denominator. Outputs are never
-merged into a single social-compliance score.
+sequences are returned as alignment-invalid with zero admissible denominator. A change in the
+declared route reference, classification thresholds, homotopy coordinate frame, or homotopy units
+likewise fails alignment closed rather than comparing semantically incompatible labels. Outputs
+are never merged into a single social-compliance score.
 
 `consistency_fraction` is the modal aligned `(side, topology)` pair count divided by the aligned
 valid-pair count. `availability_fraction` separately reports aligned valid pairs divided by all

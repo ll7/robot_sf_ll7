@@ -1048,6 +1048,8 @@ class TopologyGuidedHybridRulePlannerAdapter(HybridRuleLocalPlannerAdapter):
                 robot_pos=robot_pos,
                 heading=heading,
             )
+            geometry["route_path_grid"] = [list(cell) for cell in route_path.path]
+            geometry["route_path_coordinate_frame"] = "occupancy_grid_rc"
             clearance = _static_clearance_summary(
                 route_path.path,
                 route_path.clearance_map,

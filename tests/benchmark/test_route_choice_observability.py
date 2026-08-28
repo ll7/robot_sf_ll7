@@ -15,6 +15,7 @@ from robot_sf.benchmark.route_choice_observability import (
     homotopy_identity,
     temporal_consistency,
 )
+from robot_sf.planner.grid_route import GridRoutePlannerAdapter
 
 #: Symmetric corridor map: two feasible corridors around a static barrier
 #: (rows 1-7, cols 6-8 blocked).  Row 0 and row 8 are the open corridors.
@@ -283,6 +284,66 @@ def test_homotopy_identity_is_stable_across_discovery_order() -> None:
     )
 
 
+def test_homotopy_identity_survives_ego_grid_motion() -> None:
+    """The same world route must not switch topology when its ego-grid cells move."""
+    adapter = GridRoutePlannerAdapter()
+    blocked_t0 = np.zeros((11, 17), dtype=bool)
+    blocked_t0[1:9, 7:10] = True
+    path_t0 = [(9, col) for col in range(2, 15)]
+
+    blocked_t1 = np.zeros_like(blocked_t0)
+    blocked_t1[1:9, 6:9] = True
+    path_t1 = [(9, col) for col in range(1, 14)]
+    meta_t0 = {
+        "origin": [0.0, 0.0],
+        "resolution": [1.0],
+        "use_ego_frame": [1.0],
+        "robot_pose": [0.0, 0.0, 0.0],
+    }
+    meta_t1 = {
+        "origin": [0.0, 0.0],
+        "resolution": [1.0],
+        "use_ego_frame": [1.0],
+        "robot_pose": [1.0, 0.0, 0.0],
+    }
+    world_t0 = [tuple(adapter._grid_to_world(cell, meta_t0)) for cell in path_t0]
+    world_t1 = [tuple(adapter._grid_to_world(cell, meta_t1)) for cell in path_t1]
+    assert np.allclose(world_t0, world_t1)
+
+    topology_t0 = homotopy_identity(
+        path_t0,
+        blocked_t0,
+        identity_coordinates=world_t0,
+        identity_coordinate_frame="global_xy",
+        identity_units="m",
+    )
+    topology_t1 = homotopy_identity(
+        path_t1,
+        blocked_t1,
+        identity_coordinates=world_t1,
+        identity_coordinate_frame="global_xy",
+        identity_units="m",
+    )
+
+    assert topology_t0.identity == topology_t1.identity
+    assert topology_t0.identity_coordinate_frame == "global_xy"
+    assert topology_t0.identity_units == "m"
+
+
+def test_homotopy_identity_rejects_misaligned_identity_coordinates() -> None:
+    """An immutable-frame identity path must align one-for-one with grid cells."""
+    observation = homotopy_identity(
+        _left_route_grid(),
+        SYMMETRIC_BLOCKED,
+        identity_coordinates=[(0.0, 0.0)],
+        identity_coordinate_frame="global_xy",
+        identity_units="m",
+    )
+
+    assert observation.identity is None
+    assert observation.unavailable_reason == "invalid_identity_coordinates"
+
+
 def test_homotopy_identity_does_not_depend_on_ephemeral_names() -> None:
     left_a = homotopy_identity(_left_route_grid(), SYMMETRIC_BLOCKED)
     left_b = homotopy_identity(list(reversed(_left_route_grid())), SYMMETRIC_BLOCKED)
@@ -418,6 +479,44 @@ def test_temporal_consistency_rejects_unaligned_observations() -> None:
     assert report.denominator == 0
     assert report.valid_count == 0
     assert report.consistency_fraction == 0.0
+
+
+def test_temporal_consistency_rejects_route_reference_changes() -> None:
+    """Side labels from different declared references are not comparable over time."""
+    first = classify_route_side(_left_route(), start=START, goal=GOAL)
+    second = classify_route_side(
+        _left_route(),
+        start=START,
+        goal=GOAL,
+        coordinate_frame="shifted_global_xy",
+    )
+    topology = homotopy_identity(_left_route_grid(), SYMMETRIC_BLOCKED)
+
+    report = temporal_consistency([first, second], [topology, topology])
+
+    assert report.alignment_valid is False
+    assert report.alignment_reason == "route_reference_mismatch"
+    assert report.valid_count == 0
+
+
+def test_temporal_consistency_rejects_homotopy_frame_changes() -> None:
+    """Equal coordinate strings from different topology frames are not the same identity."""
+    side = classify_route_side(_left_route(), start=START, goal=GOAL)
+    grid_topology = homotopy_identity(_left_route_grid(), SYMMETRIC_BLOCKED)
+    world_topology = homotopy_identity(
+        _left_route_grid(),
+        SYMMETRIC_BLOCKED,
+        identity_coordinates=_left_route_grid(),
+        identity_coordinate_frame="global_xy",
+        identity_units="m",
+    )
+    assert grid_topology.identity == world_topology.identity
+
+    report = temporal_consistency([side, side], [grid_topology, world_topology])
+
+    assert report.alignment_valid is False
+    assert report.alignment_reason == "identity_reference_mismatch"
+    assert report.valid_count == 0
 
 
 def test_temporal_consistency_consistent_sequence() -> None:

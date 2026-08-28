@@ -53,8 +53,8 @@ remain available for analytic smoke fixtures. It is a comparator core for future
 - Static-obstacle input: direct world-frame points for analytic fixtures, otherwise occupied cell
   centres from the map runner's canonical occupancy-grid obstacle channel, thresholded and bounded
   to the nearest configured point count inside the influence radius. The explicit obstacle channel
-  and its finite, shape-consistent metadata are required; combined occupancy is not treated as a
-  static-obstacle substitute.
+  and its finite, shape-consistent metadata are required, and the robot pose must map inside the
+  supplied grid; combined occupancy is not treated as a static-obstacle substitute.
 - Numerical guards: `numerical_epsilon` for overlap, division, goal arrival, and total-force
   cancellation; non-finite inputs or force arithmetic fail closed with invalid diagnostics.
 

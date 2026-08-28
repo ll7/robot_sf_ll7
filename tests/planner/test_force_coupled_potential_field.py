@@ -540,8 +540,8 @@ def test_occupied_robot_grid_cell_triggers_overlap_stop() -> None:
     assert diagnostics["zero_distance_guards"]["obstacles"] == 1
 
 
-def test_out_of_bounds_robot_grid_does_not_invent_overlap_stop() -> None:
-    """Out-of-bounds safety reads must not masquerade as robot-cell overlap."""
+def test_out_of_bounds_robot_grid_fails_closed_without_inventing_overlap() -> None:
+    """An unusable supplied grid is invalid input, not overlap or nominal visibility."""
     planner = ForceCoupledPotentialFieldPlanner()
     observation = {
         "robot": {"position": [10.0, 10.0], "heading": [0.0]},
@@ -557,12 +557,13 @@ def test_out_of_bounds_robot_grid_does_not_invent_overlap_stop() -> None:
         "occupancy_grid_meta_robot_pose": [10.0, 10.0, 0.0],
     }
 
-    command = planner.plan(observation)
-    diagnostics = planner.diagnostics()
+    with pytest.raises(ValueError, match="robot pose lies outside supplied occupancy grid"):
+        planner.plan(observation)
 
-    assert command == pytest.approx((0.16, 0.0))
-    assert diagnostics["status"] == "ok"
-    assert diagnostics["zero_distance_guards"] == {"obstacles": 0, "pedestrians": 0}
+    diagnostics = planner.diagnostics()
+    assert diagnostics["status"] == "invalid_input"
+    assert diagnostics["invalid_input"] is True
+    assert diagnostics["fallback"] is False
 
 
 @pytest.mark.parametrize("invalid_value", [float("nan"), -0.1, 1.1])

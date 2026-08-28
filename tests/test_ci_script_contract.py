@@ -514,6 +514,122 @@ def test_run_tests_parallel_passes_lane_and_cuda_policy_to_worker_resolver() -> 
     assert "source=ROBOT_SF_CUDA_RUNTIME_STATUS" in script_text
 
 
+@pytest.mark.parametrize("cuda_status", ("usable", "future_status"))
+def test_cuda_preflight_dispatches_status_to_serial_optional_lane(
+    tmp_path: Path,
+    cuda_status: str,
+) -> None:
+    """Exercise preflight -> wrapper -> real resolver dispatch for CUDA statuses."""
+    repo = tmp_path / "repo"
+    script_dir = repo / "scripts" / "dev"
+    fake_bin = repo / "fake-bin"
+    optional_allowlist = repo / "tests" / "support" / "optional_test_allowlist.txt"
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir(parents=True)
+    optional_allowlist.parent.mkdir(parents=True)
+    optional_allowlist.write_text("tests/optional\n", encoding="utf-8")
+
+    for script_name in (
+        "common_setup.sh",
+        "run_tests_parallel.sh",
+        "resolve_pytest_workers.py",
+    ):
+        source = ROOT / "scripts" / "dev" / script_name
+        target = script_dir / script_name
+        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        target.chmod(0o755)
+
+    venv_python = repo / ".venv" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    venv_python.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    venv_python.chmod(0o755)
+
+    captured_args = repo / "captured-pytest-args.txt"
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                "set -euo pipefail",
+                'if [[ "$1" == "run" && "$2" == "python" ]]; then',
+                '  case "$3" in',
+                "    *check_cuda_runtime.py)",
+                f'      printf \'%s\\n\' \'{{"schema":"cuda_runtime_readiness.v1","status":"{cuda_status}","reason":"fixture {cuda_status}"}}\'',
+                "      exit 0",
+                "      ;;",
+                "    *resolve_pytest_workers.py)",
+                '      shift 2; exec python3 "$@"',
+                "      ;;",
+                '    *) echo "unexpected python helper: $*" >&2; exit 98 ;;',
+                "  esac",
+                "fi",
+                'if [[ "$1" == "run" && "$2" == "pytest" ]]; then',
+                '  printf "%s\\n" "$*" > "$UV_CAPTURED_ARGS"',
+                "  exit 0",
+                "fi",
+                'echo "unexpected uv invocation: $*" >&2',
+                "exit 99",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    configure_git_identity(repo, name="Agent", email="agent@example.invalid")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "base fixture"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    driver = repo / "run-optional-lane.sh"
+    driver.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "source scripts/dev/common_setup.sh\n"
+        "preflight_check_cuda_runtime\n"
+        "scripts/dev/run_tests_parallel.sh --lane optional tests/optional/test_cuda.py\n",
+        encoding="utf-8",
+    )
+    driver.chmod(0o755)
+
+    env = {**os.environ, "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}"}
+    for key in ("PR_READY_SKIP_PREFLIGHT", "ROBOT_SF_CUDA_RUNTIME_STATUS", "PYTEST_NUM_WORKERS"):
+        env.pop(key, None)
+    env.update(
+        {
+            "PYTHONPATH": str(ROOT),
+            "PYTEST_DEBUG_TEMPROOT": "fixture",
+            "UV_CAPTURED_ARGS": str(captured_args),
+        }
+    )
+    result = subprocess.run(
+        [str(driver)],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f"CUDA runtime classification: {cuda_status}" in result.stderr
+    assert f"Resolved CUDA runtime status: {cuda_status}" in result.stderr
+    assert "in-process serial (pytest-xdist disabled)" in result.stderr
+    if cuda_status == "future_status":
+        assert "unrecognized CUDA runtime status 'future_status'" in result.stderr
+    pytest_args = captured_args.read_text(encoding="utf-8")
+    assert " -n " not in f" {pytest_args} "
+    assert " --dist " not in f" {pytest_args} "
+    assert "tests/optional/test_cuda.py" in pytest_args
+
+
 def test_run_tests_parallel_invalid_dist_fails_before_worker_resolution() -> None:
     """Invalid dist mode should exit before validating or resolving worker count."""
 

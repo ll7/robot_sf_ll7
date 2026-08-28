@@ -81,9 +81,14 @@ def _resolve_cuda_runtime(
     """Resolve the CUDA status relevant to a test lane, if any."""
     if lane not in CUDA_LANES:
         return None
-    if cuda_runtime is not None:
-        return cuda_runtime
-    return _probe_cuda_runtime()
+    resolution = cuda_runtime if cuda_runtime is not None else _probe_cuda_runtime()
+    status, reason = resolution
+    if not isinstance(status, str) or status not in CUDA_RUNTIME_STATUSES:
+        return (
+            "unknown",
+            f"unrecognized CUDA runtime status {status!r}; {reason}",
+        )
+    return resolution
 
 
 def _resolve_default_worker_spec(
@@ -192,9 +197,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--cuda-runtime",
-        choices=tuple(sorted(CUDA_RUNTIME_STATUSES | {"auto"})),
         default="auto",
-        help="Use a supplied CUDA classification, or probe it when set to auto.",
+        metavar="STATUS",
+        help=(
+            "Use a supplied CUDA classification, or probe it when set to auto. "
+            "Unrecognized statuses are treated as unknown."
+        ),
     )
     return parser
 

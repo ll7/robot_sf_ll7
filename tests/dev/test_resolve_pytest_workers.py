@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 
 from scripts.dev.resolve_pytest_workers import (
@@ -10,6 +15,8 @@ from scripts.dev.resolve_pytest_workers import (
     _cap_workers_for_host,
     _resolve_worker_spec,
 )
+
+RESOLVER = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "resolve_pytest_workers.py"
 
 
 def test_resolve_worker_spec_defaults_to_auto_on_linux() -> None:
@@ -167,6 +174,47 @@ def test_resolve_worker_spec_uses_safe_default_when_cuda_probe_is_uncertain() ->
 
     assert workers == "1"
     assert "capability is uncertain" in reason
+
+
+def test_resolve_worker_spec_normalizes_unrecognized_cuda_status_to_safe_default() -> None:
+    """A future classifier status must not reopen parallel GPU contention."""
+    workers, reason = _resolve_worker_spec(
+        requested=None,
+        cpu_count=32,
+        system="Linux",
+        lane="optional",
+        cuda_runtime=("future_status", "classifier drift"),
+    )
+
+    assert workers == "1"
+    assert "unrecognized CUDA runtime status" in reason
+    assert "safe serial default" in reason
+
+
+def test_resolver_cli_normalizes_unrecognized_cuda_status() -> None:
+    """The production CLI must pass future classifier statuses to safe normalization."""
+    env = os.environ.copy()
+    env.pop("PYTEST_NUM_WORKERS", None)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(RESOLVER),
+            "--lane",
+            "optional",
+            "--cuda-runtime",
+            "future_status",
+            "--show-reason",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "1"
+    assert "unrecognized CUDA runtime status 'future_status'" in result.stderr
+    assert "safe serial default" in result.stderr
 
 
 def test_resolve_worker_spec_rejects_unknown_lane() -> None:

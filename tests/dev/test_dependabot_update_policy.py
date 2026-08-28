@@ -434,7 +434,7 @@ exclude = [".worktrees", "mutants"]
     monkeypatch.setattr(
         "scripts.dev.check_dependabot_update_policy._diff_vs_head",
         lambda _repo_root, _base_ref, _options=None, pathspec=None: (
-            "+[tool.ruff]\n+exclude = [\".worktrees\", \"mutants\"]\n"
+            '+[tool.ruff]\n+exclude = [".worktrees", "mutants"]\n'
         ),
     )
 
@@ -442,4 +442,3 @@ exclude = [".worktrees", "mutants"]
 
     assert report["status"] == "not_applicable"
     assert "without modifying dependency declarations" in report["message"]
-

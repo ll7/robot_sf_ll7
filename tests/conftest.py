@@ -532,6 +532,10 @@ _FAST_FILES = {
     # SNQI inventory CLI tests use deterministic monkeypatched data and are
     # required to cover the machine-readable diagnostic contract in PR shards.
     "test_snqi_weight_inventory_cli.py",
+    # Force-coupled potential-field planner tests are deterministic contract
+    # coverage for the changed planner producer; keep them in the exact-head
+    # fast lane for changed-coverage admission.
+    "test_force_coupled_potential_field.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

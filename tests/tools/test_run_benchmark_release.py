@@ -191,6 +191,9 @@ def _patch_valid_rehearsal_admissions(monkeypatch, tmp_path: Path) -> None:
         lambda *args, **kwargs: {
             "status": "admitted",
             "result_sha256": "b" * 64,
+            "checkpoint_receipt_sha256": run_benchmark_release.sha256_file(
+                tmp_path / "receipt.json"
+            ),
             "source_commit": "a" * 40,
             "planner_arms": 1,
             "episode_cells": 1,
@@ -250,6 +253,71 @@ def test_release_rehearsal_admits_inputs_without_campaign_side_effects(
     assert payload["planner_roster_admission"]["status"] == "valid"
     assert payload["release_inputs"]["manifest_path"] == "configs/release.yaml"
     assert called == {"campaign": False, "preflight": False}
+
+
+def test_release_rehearsal_rejects_checkpoint_identity_drift(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """Runtime smoke must remain bound to the exact staged checkpoint receipt bytes."""
+    manifest, cfg, _checkpoint, _smoke = _rehearsal_fixture(tmp_path)
+    _patch_valid_rehearsal_admissions(monkeypatch, tmp_path)
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_runtime_smoke_result",
+        lambda *args, **kwargs: {
+            "status": "admitted",
+            "result_sha256": "b" * 64,
+            "checkpoint_receipt_sha256": "c" * 64,
+        },
+    )
+
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "configs/release.yaml",
+            "--mode",
+            "rehearsal",
+            "--checkpoint-receipt",
+            "receipt.json",
+            "--runtime-smoke-receipt",
+            "smoke/release_result.json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "checkpoint_identity_mismatch"
+    assert payload["campaign_execution_status"] == "not_started"
+    assert payload["runtime_smoke_admission"]["status"] == "rejected"
+    assert (
+        "does not match staged checkpoint receipt"
+        in payload["runtime_smoke_admission"]["blockers"][0]
+    )
+
+
+def test_release_rehearsal_rejects_resume_age_option(monkeypatch, capsys, tmp_path: Path) -> None:
+    """Resume-only age tuning is not silently accepted by the no-campaign mode."""
+    manifest, _cfg, _checkpoint, _smoke = _rehearsal_fixture(tmp_path)
+    monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: tmp_path)
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "configs/release.yaml",
+            "--mode",
+            "rehearsal",
+            "--resume-receipt-max-age-hours",
+            "12",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "unsupported_combination"
+    assert "resume-receipt-max-age-hours" in payload["status_reason"]
 
 
 def test_release_rehearsal_rejects_stale_planner_roster_before_receipt_admission(

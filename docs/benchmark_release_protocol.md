@@ -198,7 +198,9 @@ source/config/manifest identities, and reports startup, planner-roster,
 checkpoint, and runtime-smoke admissions. It returns success only when all
 admissions pass, while explicitly reporting `campaign_execution_status` as
 `not_started`; it creates no campaign output, episode, publication bundle, or
-scheduler submission. Allocation and resume options are rejected in this mode.
+scheduler submission. The runtime-smoke admission must carry the exact SHA-256
+of the supplied staged-checkpoint receipt. Allocation and resume options,
+including `--resume-receipt-max-age-hours`, are rejected in this mode.
 
 `release/release_result.json` preserves the wrapped campaign semantics in the
 top-level `status`, `status_reason`, `benchmark_success`, `exit_code`,

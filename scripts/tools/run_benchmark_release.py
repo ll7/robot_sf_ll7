@@ -793,6 +793,25 @@ def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912
         "schema_version": "benchmark-release-rehearsal-runtime-smoke-admission.v1",
         **smoke_admission,
     }
+    staged_checkpoint_sha = str(
+        evidence["checkpoint_staging_admission"].get("sha256") or ""
+    ).lower()
+    runtime_checkpoint_sha = str(smoke_admission.get("checkpoint_receipt_sha256") or "").lower()
+    if runtime_checkpoint_sha != staged_checkpoint_sha:
+        evidence["runtime_smoke_admission"].update(
+            {
+                "status": "rejected",
+                "blockers": [
+                    "runtime smoke receipt checkpoint staging receipt hash does not match "
+                    "staged checkpoint receipt"
+                ],
+            }
+        )
+        return _rehearsal_failure(
+            status="checkpoint_identity_mismatch",
+            reason="runtime smoke receipt is not bound to the staged checkpoint receipt",
+            evidence=evidence,
+        )
 
     try:
         resolved_manifest = build_resolved_release_manifest(
@@ -843,6 +862,15 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     logger.add(sys.stderr, level="INFO")
 
     if args.mode == "rehearsal":
+        if any(
+            argument == "--resume-receipt-max-age-hours"
+            or argument.startswith("--resume-receipt-max-age-hours=")
+            for argument in raw_argv
+        ):
+            return _rehearsal_failure(
+                status="unsupported_combination",
+                reason="rehearsal mode does not accept --resume-receipt-max-age-hours",
+            )
         try:
             _normalize_rehearsal_args(args)
         except (OSError, TypeError, ValueError) as exc:

@@ -109,7 +109,9 @@ uv run python scripts/tools/run_benchmark_release.py \
 Successful rehearsal output is admission/preflight evidence only. It reports
 `campaign_execution_status: not_started` and must not be treated as benchmark
 evidence or publication authorization; no campaign output, episode, bundle, or
-scheduler submission is created.
+scheduler submission is created. The runtime-smoke receipt's staged-checkpoint
+hash must match the supplied checkpoint receipt byte-for-byte; resume-only
+options, including `--resume-receipt-max-age-hours`, are rejected.
 
 ## Release Execution
 

@@ -14,6 +14,8 @@ from loguru import logger
 from robot_sf import baselines
 from robot_sf.benchmark import runner
 
+_SLOW_PLANNER_STEP_SECS = 2.0
+
 
 class _SlowPlanner:
     """Planner stub whose step call exceeds the benchmark timeout budget."""
@@ -22,7 +24,7 @@ class _SlowPlanner:
         self.seed = seed
 
     def step(self, _obs: Any) -> dict[str, float]:
-        time.sleep(0.75)
+        time.sleep(_SLOW_PLANNER_STEP_SECS)
         return {"vx": 1.0, "vy": 0.0}
 
     def get_metadata(self) -> dict[str, Any]:
@@ -163,7 +165,9 @@ def test_planner_step_timeout_fails_fast_and_reports_metadata(
     )
     elapsed = time.monotonic() - start
 
-    assert elapsed < 0.5
+    # Use a relative bound with ample scheduler headroom while still proving that
+    # the parent returns before the deliberately slow worker could complete.
+    assert elapsed < _SLOW_PLANNER_STEP_SECS / 2
     assert velocity == pytest.approx(np.array([0.0, 0.0]))
     assert metadata["status"] == "policy_step_timeout_fallback"
     timeout_metadata = metadata["policy_step_timeout"]

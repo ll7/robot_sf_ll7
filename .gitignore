@@ -64,8 +64,14 @@ test_pygame/
 # Local machine context for agents (template in docs/templates)
 /local.machine*.md
 
+# Agent workspace clutter and local snapshots
 .gemini/
+.commandcode/
+.qwen/
+.claude/
+.cursor/
 gha-creds-*.json
+snap_*.json
 
 # Understand-Anything shared graph artifacts.
 # Commit knowledge-graph.json, fingerprints.json, meta.json, config.json, and .understandignore.

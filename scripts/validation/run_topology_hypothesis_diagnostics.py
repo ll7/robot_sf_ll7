@@ -492,42 +492,6 @@ def _route_choice_observations(  # noqa: C901, PLR0912 - fail-closed provenance 
     except (TypeError, ValueError):
         return _unavailable()
 
-    homotopy_payload = selected_route.get("route_homotopy_observation")
-    if not isinstance(homotopy_payload, dict):
-        return _unavailable()
-    identity = homotopy_payload.get("identity")
-    unavailable_reason = homotopy_payload.get("unavailable_reason")
-    identity_frame = homotopy_payload.get("identity_coordinate_frame")
-    identity_units = homotopy_payload.get("identity_units")
-    identity_points = homotopy_payload.get("identity_points")
-    identity_match_tolerance = homotopy_payload.get("identity_match_tolerance")
-    if identity_frame != "global_xy" or identity_units != "m":
-        return _unavailable()
-    try:
-        match_tolerance_value = float(identity_match_tolerance)
-    except (TypeError, ValueError):
-        return _unavailable()
-    if not np.isfinite(match_tolerance_value) or match_tolerance_value <= 0.0:
-        return _unavailable()
-    if not isinstance(identity_points, list) or not identity_points:
-        return _unavailable()
-    try:
-        normalized_identity_points_list = []
-        for point in identity_points:
-            x, y = point
-            normalized_identity_points_list.append((float(x), float(y)))
-        normalized_identity_points = tuple(normalized_identity_points_list)
-    except (TypeError, ValueError):
-        return _unavailable()
-    if not np.isfinite(normalized_identity_points).all():
-        return _unavailable()
-    if identity is not None and (not isinstance(identity, str) or not identity.strip()):
-        return _unavailable()
-    if identity is None and not isinstance(unavailable_reason, str):
-        return _unavailable()
-    if identity is not None and unavailable_reason is not None:
-        return _unavailable()
-
     side_report = _classify_route_side(
         normalized_world_path,
         start=reference_start,
@@ -535,6 +499,65 @@ def _route_choice_observations(  # noqa: C901, PLR0912 - fail-closed provenance 
         coordinate_frame="global_xy",
         units="m",
     )
+
+    def _invalid_homotopy() -> tuple[RouteSideReport, HomotopyObservation]:
+        return side_report, HomotopyObservation(
+            identity=None,
+            unavailable_reason="invalid_homotopy_payload",
+            identity_coordinate_frame="global_xy",
+            identity_units="m",
+        )
+
+    homotopy_payload = selected_route.get("route_homotopy_observation")
+    if not isinstance(homotopy_payload, dict):
+        return _invalid_homotopy()
+    identity = homotopy_payload.get("identity")
+    unavailable_reason = homotopy_payload.get("unavailable_reason")
+    identity_frame = homotopy_payload.get("identity_coordinate_frame")
+    identity_units = homotopy_payload.get("identity_units")
+    identity_points = homotopy_payload.get("identity_points")
+    identity_match_tolerance = homotopy_payload.get("identity_match_tolerance")
+    if identity_frame != "global_xy" or identity_units != "m":
+        return _invalid_homotopy()
+    try:
+        match_tolerance_value = float(identity_match_tolerance)
+    except (TypeError, ValueError):
+        return _invalid_homotopy()
+    if not np.isfinite(match_tolerance_value) or match_tolerance_value <= 0.0:
+        return _invalid_homotopy()
+    if identity is None:
+        if (
+            not isinstance(unavailable_reason, str)
+            or not unavailable_reason.strip()
+            or identity_points != []
+        ):
+            return _invalid_homotopy()
+        return side_report, HomotopyObservation(
+            identity=None,
+            unavailable_reason=unavailable_reason,
+            identity_coordinate_frame=identity_frame,
+            identity_units=identity_units,
+            identity_points=(),
+            identity_match_tolerance=match_tolerance_value,
+        )
+    if (
+        not isinstance(identity, str)
+        or not identity.strip()
+        or unavailable_reason is not None
+        or not isinstance(identity_points, list)
+        or not identity_points
+    ):
+        return _invalid_homotopy()
+    try:
+        normalized_identity_points_list = []
+        for point in identity_points:
+            x, y = point
+            normalized_identity_points_list.append((float(x), float(y)))
+        normalized_identity_points = tuple(normalized_identity_points_list)
+    except (TypeError, ValueError):
+        return _invalid_homotopy()
+    if not np.isfinite(normalized_identity_points).all():
+        return _invalid_homotopy()
     homotopy_observation = HomotopyObservation(
         identity=identity,
         unavailable_reason=unavailable_reason,

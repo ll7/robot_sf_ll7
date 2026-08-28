@@ -225,6 +225,37 @@ def test_route_choice_observations_fail_closed_without_selected_path() -> None:
     assert homotopy_observation.unavailable_reason == "empty_path"
 
 
+def test_route_choice_observations_preserve_side_when_topology_has_no_choke_cells() -> None:
+    """Independent availability keeps a valid route side when topology is unavailable."""
+    selected_route = {
+        "route_path_grid": [[1, 1], [1, 2]],
+        "route_path_coordinate_frame": "occupancy_grid_rc",
+        "route_path_world": [[1.0, 1.0], [2.0, 1.0]],
+        "route_path_world_coordinate_frame": "global_xy",
+        "route_path_world_units": "m",
+        "route_homotopy_observation": {
+            "identity": None,
+            "unavailable_reason": "no_choke_cells",
+            "identity_coordinate_frame": "global_xy",
+            "identity_units": "m",
+            "identity_match_tolerance": 1.0,
+            "identity_points": [],
+        },
+    }
+
+    side_report, homotopy_observation = _route_choice_observations(
+        selected_route,
+        reference_start=(0.0, 0.0),
+        reference_goal=(3.0, 0.0),
+    )
+
+    assert side_report.side == "left"
+    assert side_report.reason is None
+    assert homotopy_observation.identity is None
+    assert homotopy_observation.unavailable_reason == "no_choke_cells"
+    assert homotopy_observation.identity_points == ()
+
+
 def test_route_choice_observations_reject_mismatched_planner_path_frames() -> None:
     selected_route = {
         "route_path_grid": [[1, 1], [1, 2]],
@@ -275,8 +306,9 @@ def test_route_choice_observations_reject_three_dimensional_identity_points() ->
         reference_goal=(3.0, 0.0),
     )
 
-    assert side_report.side == "unavailable"
+    assert side_report.side == "left"
     assert homotopy_observation.identity is None
+    assert homotopy_observation.unavailable_reason == "invalid_homotopy_payload"
 
 
 def test_topology_signature_prefers_choke_cells_over_same_gap_wiggles() -> None:

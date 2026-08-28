@@ -374,6 +374,37 @@ def test_temporal_consistency_matches_fractional_ego_lattice_motion() -> None:
     assert temporal.first_stable_step == 0
 
 
+def test_temporal_consistency_does_not_count_same_corridor_progress_as_transition() -> None:
+    """Dropping already-traversed choke cells must preserve the route identity."""
+    full_path = _left_route_grid()
+    remaining_path = full_path[7:]
+    full = homotopy_identity(
+        full_path,
+        SYMMETRIC_BLOCKED,
+        identity_coordinates=full_path,
+        identity_coordinate_frame="global_xy",
+        identity_units="m",
+        identity_match_tolerance=1.0,
+    )
+    remaining = homotopy_identity(
+        remaining_path,
+        SYMMETRIC_BLOCKED,
+        identity_coordinates=remaining_path,
+        identity_coordinate_frame="global_xy",
+        identity_units="m",
+        identity_match_tolerance=1.0,
+    )
+    side = classify_route_side(_left_route(), start=START, goal=GOAL)
+
+    report = temporal_consistency([side, side], [full, remaining])
+
+    assert full.identity_points == ((8.0, 6.0), (8.0, 7.0), (8.0, 8.0))
+    assert remaining.identity_points == ((8.0, 7.0), (8.0, 8.0))
+    assert report.topology_transition_count == 0
+    assert report.consistency_fraction == 1.0
+    assert report.first_stable_step == 0
+
+
 def test_temporal_consistency_keeps_full_cell_topologies_distinct() -> None:
     """Strict tolerance does not merge choke-point sets one complete cell apart."""
     path = _left_route_grid()

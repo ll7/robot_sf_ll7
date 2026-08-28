@@ -666,37 +666,48 @@ def homotopy_identity(  # noqa: C901, PLR0912 - fail-closed map, path, and thres
     )
 
 
-def _homotopy_equivalent(left: HomotopyObservation, right: HomotopyObservation) -> bool:
-    """Return whether two identities denote one topology under their declared tolerance."""
-    if left.identity is None or right.identity is None:
+def _homotopy_equivalent(
+    current: HomotopyObservation,
+    previous: HomotopyObservation,
+) -> bool:
+    """Return whether ``current`` continues ``previous`` under forward route progress.
+
+    Replanning removes already-traversed choke points from the remaining route.  Therefore the
+    current point set may be a strict subset of the previous set without denoting a topology
+    switch.  Matching is deliberately chronological: every current point must remain within the
+    declared tolerance of the previous route, while old points may disappear as the robot advances.
+    """
+    if current.identity is None or previous.identity is None:
         return False
     if (
-        left.identity_coordinate_frame != right.identity_coordinate_frame
-        or left.identity_units != right.identity_units
-        or left.identity_match_tolerance != right.identity_match_tolerance
+        current.identity_coordinate_frame != previous.identity_coordinate_frame
+        or current.identity_units != previous.identity_units
+        or current.identity_match_tolerance != previous.identity_match_tolerance
     ):
         return False
-    tolerance = left.identity_match_tolerance
-    if tolerance is None or not left.identity_points or not right.identity_points:
-        return left.identity == right.identity
-    left_points = np.asarray(left.identity_points, dtype=float)
-    right_points = np.asarray(right.identity_points, dtype=float)
-    distances = np.linalg.norm(left_points[:, None, :] - right_points[None, :, :], axis=2)
-    symmetric_hausdorff = max(
-        float(np.max(np.min(distances, axis=1))),
-        float(np.max(np.min(distances, axis=0))),
+    tolerance = current.identity_match_tolerance
+    if tolerance is None or not current.identity_points or not previous.identity_points:
+        return current.identity == previous.identity
+    if len(current.identity_points) > len(previous.identity_points):
+        return False
+    current_points = np.asarray(current.identity_points, dtype=float)
+    previous_points = np.asarray(previous.identity_points, dtype=float)
+    distances = np.linalg.norm(
+        current_points[:, None, :] - previous_points[None, :, :],
+        axis=2,
     )
+    directed_hausdorff = float(np.max(np.min(distances, axis=1)))
     # Strict comparison keeps corridors separated by one complete grid cell distinct. Exclude
     # floating-point values numerically equal to the boundary before applying ``<``.
     boundary_equal = bool(
         np.isclose(
-            symmetric_hausdorff,
+            directed_hausdorff,
             tolerance,
             rtol=1e-9,
             atol=max(1e-12, tolerance * 1e-9),
         )
     )
-    return symmetric_hausdorff < tolerance and not boundary_equal
+    return directed_hausdorff < tolerance and not boundary_equal
 
 
 def temporal_consistency(

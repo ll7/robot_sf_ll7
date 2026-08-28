@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 from scripts.dev import issue_claim, issue_implementability
@@ -54,7 +56,9 @@ def compact_admission(payload: dict[str, Any]) -> dict[str, Any]:
         "write_attempted": payload.get("write_attempted") is True,
         "source_ref": payload.get("source_ref", DEFAULT_SOURCE_REF),
         "classification": preflight.get("classification"),
+        "admission_reason": preflight.get("admission_reason"),
         "reasons": list(preflight.get("reasons", [])),
+        "execution_contract": preflight.get("execution_contract"),
         "ready": preflight.get("ready") is True,
         "write_allowed": preflight.get("write_allowed") is True,
         "claim": claim,
@@ -119,12 +123,17 @@ def admit_issue(
     remote: str,
     source_ref: str,
     check_only: bool,
+    route_preflight: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Evaluate one live issue and create its atomic claim only after a pass."""
+    preflight_kwargs: dict[str, Any] = {}
+    if route_preflight is not None:
+        preflight_kwargs["route_preflight"] = route_preflight
     preflight = issue_implementability.live_issue_report(
         issue_number,
         repo=repo,
         remote=remote,
+        **preflight_kwargs,
     )
     payload: dict[str, Any] = {
         "schema": SCHEMA,
@@ -156,6 +165,7 @@ def admit_issue(
         issue_number,
         repo=repo,
         remote=remote,
+        **preflight_kwargs,
     )
     initial_fingerprint = _preflight_fingerprint(preflight)
     revalidated_fingerprint = _preflight_fingerprint(revalidated)
@@ -208,7 +218,22 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Evaluate admission without attempting an issue-claim write.",
     )
+    parser.add_argument(
+        "--route-preflight-json",
+        type=Path,
+        help="Optional fresh route-plan JSON for an explicitly multi-repository issue.",
+    )
     return parser
+
+
+def _load_route_preflight(path: Path | None) -> Mapping[str, Any] | None:
+    """Load one route-plan object without exposing provider or credential data."""
+    if path is None:
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, Mapping):
+        raise ValueError("route preflight JSON must be an object")
+    return payload
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -231,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
                 remote=args.remote,
                 source_ref=args.source_ref,
                 check_only=args.check_only,
+                route_preflight=_load_route_preflight(args.route_preflight_json),
             )
         except (OSError, RuntimeError, TypeError, ValueError) as exc:
             payload = {

@@ -38,7 +38,8 @@ changes.
   instead of redefining classes here.
 - `context_budget` defaults to compact helpers before broad reads:
   `uv run python -m scripts.dev.autopilot_state_snapshot --include-worktrees`,
-  `uv run python -m scripts.dev.snapshot_issue_batch --claimable --json`,
+  `uv run python -m scripts.dev.snapshot_issue_batch --claimable --json` (candidate queue;
+  use only its live-admitted `claimable_issues`),
   `uv run python -m scripts.dev.snapshot_pr_queue --active --json`, and
   `uv run python scripts/dev/run_compact_validation.py -- <command>`.
 - `resume_checkpoint` should be the first thing refreshed after compaction or

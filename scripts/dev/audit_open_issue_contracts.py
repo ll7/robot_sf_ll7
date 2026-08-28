@@ -43,6 +43,9 @@ NEXT_ACTIONS: dict[str, str] = {
     "needs_dependency": "resolve_typed_dependency",
     "needs_compute": "route_to_compute_authority",
     "blocked": "resolve_named_blocker",
+    "wrong_owner_repo": "move_or_split_cross_repository_issue",
+    "state_conflict": "reconcile_state_labels",
+    "stale_running": "reconcile_stale_running_state",
     "assigned": "do_not_duplicate_active_work",
     "already_claimed": "do_not_duplicate_active_work",
     "working": "do_not_duplicate_active_work",
@@ -60,6 +63,9 @@ AUTHORITIES: dict[str, str] = {
     "needs_dependency": "dependency_owner",
     "needs_compute": "compute_authority",
     "blocked": "blocker_owner",
+    "wrong_owner_repo": "repository_owner",
+    "state_conflict": "lifecycle_owner",
+    "stale_running": "lifecycle_owner",
     "assigned": "current_owner",
     "already_claimed": "current_owner",
     "working": "current_owner",
@@ -215,7 +221,12 @@ def _fixture_lookup(mapping: Mapping[str, Any], number: int, *, field: str) -> A
     return mapping[key]
 
 
-def _fixture_evaluator(fixture: Mapping[str, Any]) -> Callable[[int], dict[str, Any]]:
+def _fixture_evaluator(
+    fixture: Mapping[str, Any],
+    *,
+    repository: str = DEFAULT_REPO,
+    route_preflight: Mapping[str, Any] | None = None,
+) -> Callable[[int], dict[str, Any]]:
     """Build an exact issue evaluator backed only by fixture data."""
 
     def evaluate(number: int) -> dict[str, Any]:
@@ -234,12 +245,16 @@ def _fixture_evaluator(fixture: Mapping[str, Any]) -> Callable[[int], dict[str, 
             exact,
             claim,
             dependency_evaluation=dependency,
+            repository=repository,
+            route_preflight=route_preflight,
         )
 
     return evaluate
 
 
-def _live_evaluator(*, repo: str, remote: str) -> Callable[[int], dict[str, Any]]:
+def _live_evaluator(
+    *, repo: str, remote: str, route_preflight: Mapping[str, Any] | None = None
+) -> Callable[[int], dict[str, Any]]:
     """Build a live evaluator that reuses the canonical exact-read and dependency path."""
 
     def evaluate(number: int) -> dict[str, Any]:
@@ -248,6 +263,7 @@ def _live_evaluator(*, repo: str, remote: str) -> Callable[[int], dict[str, Any]
             repo=repo,
             remote=remote,
             repo_root=Path.cwd(),
+            route_preflight=route_preflight,
         )
 
     return evaluate
@@ -273,9 +289,11 @@ def _error_item(listed: Mapping[str, Any], message: str) -> dict[str, Any]:
         "claim": None,
         "observed_classification": "error",
         "classification": "error",
+        "admission_reason": "error",
         "reasons": [message],
         "body_sha256": None,
         "contract_fields": {},
+        "execution_contract": None,
         "missing_fields": [],
         "dependency_gate": None,
         "listing_drift": [],
@@ -317,9 +335,13 @@ def _item_from_report(listed: Mapping[str, Any], report: Mapping[str, Any]) -> d
         "claim": claim,
         "observed_classification": observed,
         "classification": effective,
+        "admission_reason": (
+            "listing_drift" if drift else str(report.get("admission_reason") or observed)
+        ),
         "reasons": normalized_reasons,
         "body_sha256": contract.get("body_sha256"),
         "contract_fields": fields,
+        "execution_contract": report.get("execution_contract"),
         "missing_fields": list(missing) if isinstance(missing, list) else [],
         "dependency_gate": report.get("dependency_gate"),
         "listing_drift": drift,
@@ -383,15 +405,17 @@ def _claim_state(claim: object) -> str:
 
 
 def _summary(items: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    """Build aggregate classification, claim, and contract-field counts."""
+    """Build aggregate classification, claim, contract, and admission-reason counts."""
     classifications: Counter[str] = Counter()
     next_actions: Counter[str] = Counter()
     claim_states: Counter[str] = Counter()
     missing_fields: Counter[str] = Counter()
     labels: Counter[str] = Counter()
+    admission_reasons: Counter[str] = Counter()
     executable: list[int] = []
     for item in items:
         classifications[str(item.get("classification", "error"))] += 1
+        admission_reasons[str(item.get("admission_reason", "unknown"))] += 1
         next_actions[str(item.get("next_action", NEXT_ACTIONS["error"]))] += 1
         claim_states[_claim_state(item.get("claim"))] += 1
         for field in item.get("missing_fields", []):
@@ -407,6 +431,14 @@ def _summary(items: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         "claim_states": dict(sorted(claim_states.items())),
         "missing_fields": dict(sorted(missing_fields.items())),
         "labels": dict(sorted(labels.items())),
+        "admission_reason_histogram": dict(sorted(admission_reasons.items())),
+        "not_admitted": dict(
+            sorted(
+                (reason, count)
+                for reason, count in admission_reasons.items()
+                if reason != "claimable"
+            )
+        ),
         "executable_leaf_numbers": sorted(executable),
     }
 
@@ -514,6 +546,18 @@ def _render_markdown(report: Mapping[str, Any], *, item_limit: int, json_report:
     lines.extend(
         [
             "",
+            "## Admission reason counts",
+            "",
+            "| Admission reason | Count |",
+            "| --- | ---: |",
+        ]
+    )
+    for reason, count in sorted(summary.get("admission_reason_histogram", {}).items()):
+        lines.append(f"| `{_markdown_cell(reason)}` | {count} |")
+
+    lines.extend(
+        [
+            "",
             "## Bounded preparation queue",
             "",
             "| Issue | Classification | Next action | Missing fields |",
@@ -547,6 +591,16 @@ def _write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _load_route_preflight(path: Path | None) -> Mapping[str, Any] | None:
+    """Load one route-plan object for explicit multi-repository issue contracts."""
+    if path is None:
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, Mapping):
+        raise ValueError("route preflight JSON must be an object")
+    return payload
+
+
 def _build_parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -558,6 +612,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--format", choices=("json", "markdown"), default="json")
     parser.add_argument("--output", type=Path, help="Write selected output format to this path.")
     parser.add_argument("--json-report", type=Path, help="Also write the full JSON report here.")
+    parser.add_argument(
+        "--route-preflight-json",
+        type=Path,
+        help="Optional fresh route-plan JSON for explicitly multi-repository issue contracts.",
+    )
     parser.add_argument("--item-limit", type=int, default=DEFAULT_ITEM_LIMIT)
     parser.add_argument(
         "--check",
@@ -590,7 +649,12 @@ def main(argv: list[str] | None = None) -> int:
                 page_size=args.page_size,
                 max_pages=args.max_pages,
             )
-            evaluator = _fixture_evaluator(fixture)
+            route_preflight = _load_route_preflight(args.route_preflight_json)
+            evaluator = _fixture_evaluator(
+                fixture,
+                repository=args.repo,
+                route_preflight=route_preflight,
+            )
             source = "fixture"
         else:
             pages, complete, page_errors = _fetch_live_pages(
@@ -599,7 +663,12 @@ def main(argv: list[str] | None = None) -> int:
                 max_pages=args.max_pages,
             )
             input_sha256 = None
-            evaluator = _live_evaluator(repo=args.repo, remote=args.remote)
+            route_preflight = _load_route_preflight(args.route_preflight_json)
+            evaluator = _live_evaluator(
+                repo=args.repo,
+                remote=args.remote,
+                route_preflight=route_preflight,
+            )
             source = "github_rest"
 
         report = _build_report(

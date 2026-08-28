@@ -204,7 +204,7 @@ def test_render_cli(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
 # --- Verify ------------------------------------------------------------------
 
 
-def _body_with_marker(body: str, number: int) -> str:
+def _body_with_marker(body: str, number: int, *, separator: str = "\n\n") -> str:
     item = {
         "number": number,
         "classification": "ready",
@@ -215,7 +215,7 @@ def _body_with_marker(body: str, number: int) -> str:
         "body_sha256": prep._sha256_text(body),
     }
     block = prep._render_marker_block(item, audit_digest="d1", batch_id="b1")
-    return body + "\n\n" + block
+    return body + separator + block
 
 
 def test_verify_ok_on_single_marker() -> None:
@@ -249,6 +249,17 @@ def test_verify_fails_on_content_drift() -> None:
     findings = prep._verify_batch(plan, {"1001": body})
     assert not findings[0]["ok"]
     assert "content drift" in findings[0]["reason"]
+
+
+def test_verify_accepts_body_without_trailing_newline() -> None:
+    """Exact body preservation also works when the source has no final newline."""
+    original = "# Title\n\nbody text"
+    body = _body_with_marker(original, 1001, separator="")
+    fixture = _audit_fixture()
+    fixture["items"][0]["body_sha256"] = prep._sha256_text(original)
+    plan = prep.build_plan(fixture, batch_id="b1")
+    findings = prep._verify_batch(plan, {"1001": body})
+    assert all(f["ok"] for f in findings)
 
 
 # --- Apply -------------------------------------------------------------------
@@ -327,6 +338,52 @@ def test_apply_writer_receives_block() -> None:
     for issue, block in log:
         assert block.count(prep.MARKER_START) == 1
         assert prep.MARKER_END in block
+
+
+@pytest.mark.parametrize("current_body", ["# Issue\n\nbody\n", "# Issue\n\nbody"])
+def test_live_body_writer_uses_rest_path_and_verifies_readback(
+    monkeypatch: pytest.MonkeyPatch,
+    current_body: str,
+) -> None:
+    """The live writer uses the shared REST signature and checks the returned body."""
+    from scripts.dev import _gh_rest
+
+    calls: list[dict[str, object]] = []
+
+    def fake_run_gh_api(
+        path: str,
+        payload: object | None = None,
+        *,
+        method: str | None = None,
+        extra_args: list[str] | None = None,
+        **_: object,
+    ) -> object:
+        nonlocal current_body
+        calls.append({"path": path, "payload": payload, "method": method, "extra_args": extra_args})
+        if method == "PATCH":
+            assert isinstance(payload, dict)
+            current_body = str(payload["body"])
+            return type("Result", (), {"returncode": 0, "stdout": "{}", "stderr": ""})()
+        return type(
+            "Result",
+            (),
+            {"returncode": 0, "stdout": json.dumps({"body": current_body}), "stderr": ""},
+        )()
+
+    monkeypatch.setattr(_gh_rest, "run_gh_api", fake_run_gh_api)
+    block = f"{prep.MARKER_START}\npacket\n{prep.MARKER_END}"
+
+    prep._live_body_writer(1001, block)
+
+    assert [call["path"] for call in calls] == [
+        "repos/ll7/robot_sf_ll7/issues/1001",
+        "repos/ll7/robot_sf_ll7/issues/1001",
+        "repos/ll7/robot_sf_ll7/issues/1001",
+    ]
+    assert calls[0]["extra_args"] is None
+    assert calls[1]["method"] == "PATCH"
+    assert calls[2]["extra_args"] is None
+    assert current_body.endswith(block)
 
 
 def test_apply_ceiling_too_high_fails_closed(tmp_path: Path) -> None:

@@ -46,7 +46,8 @@ The snapshot exposes suppressed redispatch counts, re-evaluation counts, blocker
 reasons. All outputs are route evidence; callers still perform fresh issue, branch, dependency, and
 validation checks before dispatch or publication.
 
-The canonical issue-batch snapshot can consume the same external artifact before claim routing:
+The canonical candidate-queue snapshot can consume the same external artifact before claim routing;
+only its live-admitted `claimable_issues` are claimable:
 
 ```bash
 uv run python -m scripts.dev.snapshot_issue_batch --claimable \

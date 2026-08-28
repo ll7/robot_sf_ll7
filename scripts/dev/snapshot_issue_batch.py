@@ -9,6 +9,7 @@ import pathlib
 import re
 import subprocess
 import sys
+from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
 
@@ -516,6 +517,32 @@ def _claim_payload(claim: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _admission_reason(admission: dict[str, Any]) -> str:
+    """Return the stable admission reason exposed by the canonical gate."""
+    reason = admission.get("admission_reason")
+    if isinstance(reason, str) and reason.strip():
+        return reason
+    classification = admission.get("classification")
+    return {
+        "parent": "parent_not_leaf",
+        "blocked": "blocked",
+        "review": "covering_pr_open",
+        "needs_ready_label": "needs_ready_label",
+        "needs_spec": "needs_spec",
+        "needs_dependency": "dependency_missing",
+        "wrong_owner_repo": "wrong_owner_repo",
+        "state_conflict": "state_label_conflict",
+        "stale_running": "stale_running_state",
+        "error": "error",
+        "ready": "claimable",
+    }.get(str(classification), str(classification or "unknown"))
+
+
+def _is_external_admission(admission: dict[str, Any]) -> bool:
+    """Return whether an admission row is blocked by an external input."""
+    return _admission_reason(admission) == "external_input_missing"
+
+
 def _transition_plan(issue: dict[str, Any]) -> dict[str, Any]:
     """Attach a read-only blocker transition projection to one issue row."""
     try:
@@ -551,6 +578,7 @@ def _admission_error(*, claim: dict[str, Any], error: str) -> dict[str, Any]:
         "write_attempted": False,
         "source_ref": goal_issue_admission.DEFAULT_SOURCE_REF,
         "classification": "error",
+        "admission_reason": "error",
         "reasons": [error],
         "ready": False,
         "write_allowed": False,
@@ -583,6 +611,24 @@ def _issue_admission(
     labels = _labels(issue)
     state = _issue_state(issue)
     assignees = _assignees(issue)
+    if state != "OPEN":
+        classification = "closed" if state else "state_unknown"
+        reason = (
+            f"issue state is {state}; skip autonomous claim"
+            if state
+            else "issue state missing or unknown; skip autonomous claim"
+        )
+        return goal_issue_admission.compact_preflight(
+            {
+                "schema": "issue_implementability.v1",
+                "classification": classification,
+                "admission_reason": classification,
+                "reasons": [reason],
+                "ready": False,
+                "write_allowed": False,
+                "claim": claim,
+            }
+        )
     has_obvious_blocker = (
         _is_blocked_external_issue(labels)
         or COMPUTE_ROUTING_LABEL in labels
@@ -619,6 +665,21 @@ def _issue_admission(
     except (TypeError, ValueError) as exc:
         return _admission_error(claim=claim, error=str(exc))
     return goal_issue_admission.compact_preflight(preflight)
+
+
+def _snapshot_admission_fields(
+    admission: dict[str, Any],
+    *,
+    fallback_classification: str,
+    fallback_reason: str,
+) -> tuple[str, str]:
+    """Project canonical admission fields onto the compact snapshot row."""
+    classification = admission.get("classification")
+    reasons = admission.get("reasons")
+    reason = reasons[0] if isinstance(reasons, list) and reasons else None
+    if isinstance(classification, str) and classification and isinstance(reason, str) and reason:
+        return classification, reason
+    return fallback_classification, fallback_reason
 
 
 def _claim_status_payload(
@@ -873,11 +934,23 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
     assignees = sorted(issue.get("assignees") or [])
     state = _issue_state(issue)
     claim = status_issue(number, remote=remote)
-    classification, reason = _issue_classification(
+    fallback_classification, fallback_reason = _issue_classification(
         assignees=assignees,
         claim=claim,
         labels=labels,
         state=state,
+    )
+    admission = _issue_admission(
+        issue,
+        number=int(issue.get("number", number)),
+        claim=claim,
+        repo=repo,
+        remote=remote,
+    )
+    classification, reason = _snapshot_admission_fields(
+        admission,
+        fallback_classification=fallback_classification,
+        fallback_reason=fallback_reason,
     )
     excerpt, truncated = _body_excerpt(issue.get("body"), limit=body_limit)
     return {
@@ -891,13 +964,7 @@ def fetch_issue(number: int, *, repo: str, body_limit: int, remote: str) -> dict
         "body_excerpt": excerpt,
         "body_truncated": truncated,
         "claim": _claim_payload(claim),
-        "admission": _issue_admission(
-            issue,
-            number=int(issue.get("number", number)),
-            claim=claim,
-            repo=repo,
-            remote=remote,
-        ),
+        "admission": admission,
         "transition": _transition_plan(issue),
         "classification": classification,
         "reason": reason,
@@ -938,11 +1005,23 @@ def _snapshot_from_issue_list(
             sha=None,
             error="claim status unavailable",
         )
-    classification, reason = _issue_classification(
+    fallback_classification, fallback_reason = _issue_classification(
         assignees=assignees,
         claim=claim,
         labels=labels,
         state=state,
+    )
+    admission = _issue_admission(
+        issue,
+        number=number,
+        claim=claim,
+        repo=repo,
+        remote=remote,
+    )
+    classification, reason = _snapshot_admission_fields(
+        admission,
+        fallback_classification=fallback_classification,
+        fallback_reason=fallback_reason,
     )
     return {
         "number": number,
@@ -958,13 +1037,7 @@ def _snapshot_from_issue_list(
         "classification": classification,
         "reason": reason,
         "linked_prs": [],
-        "admission": _issue_admission(
-            issue,
-            number=number,
-            claim=claim,
-            repo=repo,
-            remote=remote,
-        ),
+        "admission": admission,
         "transition": _transition_plan(issue),
     }
 
@@ -980,7 +1053,7 @@ def snapshot_claimable_issues(
     resume_page: int = 1,
     blocker_decision_paths: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Return a compact claimable/open issue snapshot.
+    """Return a compact candidate/open issue snapshot with live claimable rows separated.
 
     GraphQL discovery is used only when the quota preflight leaves the configured safety margin.
     Otherwise the bounded REST page is used, and a ``resume_cursor`` is returned when another page
@@ -994,12 +1067,17 @@ def snapshot_claimable_issues(
             "schema": "issue_batch_snapshot.v1",
             "repo": repo,
             "body_excerpt_chars": body_limit,
-            "mode": "claimable",
+            "mode": "candidate_queue",
+            "legacy_mode": "claimable",
             "status": "error",
             "data_source": "none",
             "blocker_decision_paths": blocker_decision_paths or [],
             "errors": blocker_errors,
             "issues": [{"status": "error", "error": error} for error in blocker_errors],
+            "candidate_count": 0,
+            "claimable_issues": [],
+            "claimable_count": 0,
+            "admission_reason_histogram": {},
         }
     listing = _list_open_issues(
         repo=repo,
@@ -1011,13 +1089,20 @@ def snapshot_claimable_issues(
         "schema": "issue_batch_snapshot.v1",
         "repo": repo,
         "body_excerpt_chars": body_limit,
-        "mode": "claimable",
+        "mode": "candidate_queue",
+        "legacy_mode": "claimable",
         "status": listing["status"],
         "data_source": listing["data_source"],
         "rate_limit": listing["rate_limit"],
         "quota": listing["quota"],
         "resume_cursor": listing["resume_cursor"],
         "blocker_decision_paths": blocker_decision_paths or [],
+        "candidate_count": 0,
+        "claimable_issues": [],
+        "claimable_count": 0,
+        "admission_reason_histogram": {},
+        "excluded_counts": {"blocked_external": 0},
+        "transition_counts": {},
     }
     if listing["status"] != "ok":
         return {
@@ -1042,10 +1127,19 @@ def snapshot_claimable_issues(
         for issue in listed
     ]
     snapshots = [_apply_blocker_decision(issue, blocker_decisions) for issue in snapshots]
+    for issue in snapshots:
+        admission = issue.get("admission")
+        if isinstance(admission, dict) and "blocker_decision" not in issue:
+            issue["classification"] = admission.get("classification") or "error"
+            reasons = admission.get("reasons")
+            if isinstance(reasons, list) and reasons:
+                issue["reason"] = str(reasons[0])
     issues = [
         issue
         for issue in snapshots
-        if include_blocked_external or issue.get("classification") != "blocked_external"
+        if include_blocked_external
+        or not isinstance(issue.get("admission"), dict)
+        or not _is_external_admission(issue["admission"])
     ]
     truncated = is_likely_truncated(len(listed), limit=limit) or bool(listing["resume_cursor"])
     if listing["resume_cursor"]:
@@ -1062,12 +1156,41 @@ def snapshot_claimable_issues(
         truncation_note = ""
     return {
         **base,
+        "mode": "candidate_queue",
+        "legacy_mode": "claimable",
         "truncated": truncated,
         "truncation_note": truncation_note,
         "include_blocked_external": include_blocked_external,
+        "candidate_count": len(issues),
+        "claimable_issues": [
+            issue
+            for issue in issues
+            if isinstance(issue.get("admission"), dict)
+            and issue["admission"].get("ok") is True
+            and issue["admission"].get("outcome") == "ready_check_only"
+        ],
+        "claimable_count": sum(
+            1
+            for issue in issues
+            if isinstance(issue.get("admission"), dict)
+            and issue["admission"].get("ok") is True
+            and issue["admission"].get("outcome") == "ready_check_only"
+        ),
+        "admission_reason_histogram": dict(
+            sorted(
+                Counter(
+                    _admission_reason(issue["admission"])
+                    for issue in snapshots
+                    if isinstance(issue.get("admission"), dict)
+                ).items()
+            )
+        ),
         "excluded_counts": {
             "blocked_external": sum(
-                1 for issue in snapshots if issue.get("classification") == "blocked_external"
+                1
+                for issue in snapshots
+                if isinstance(issue.get("admission"), dict)
+                and _is_external_admission(issue["admission"])
             ),
         },
         "transition_counts": _transition_counts(snapshots),

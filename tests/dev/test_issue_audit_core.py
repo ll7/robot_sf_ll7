@@ -97,6 +97,25 @@ def test_active_work_never_promotes_acceptance_text_to_ready() -> None:
     assert {mutation["value"] for mutation in classification.mutations} == {"state:running"}
 
 
+def test_parent_issue_is_never_promoted_to_ready() -> None:
+    """Parent coordination issues remain non-leaves despite complete-looking prose."""
+    classification = classify_issue(
+        _issue(
+            122,
+            labels=["parent"],
+            body="## Acceptance Criteria\n- [ ] complete the bounded child work",
+        ),
+        available_labels={"state:ready"},
+    )
+
+    assert classification.classification == "unclassified"
+    assert not any(
+        mutation["operation"] == "add_label" and mutation["value"] == "state:ready"
+        for mutation in classification.mutations
+    )
+    assert any("parent issue cannot be promoted" in finding for finding in classification.findings)
+
+
 def test_stale_running_state_is_preserved_and_not_promoted_to_ready() -> None:
     """A stale running label remains uncertain instead of being guessed complete."""
     classification = classify_issue(

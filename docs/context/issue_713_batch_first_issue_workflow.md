@@ -114,7 +114,7 @@ before spending GraphQL budget. The default guard retains 100 GraphQL requests a
 after the estimated bounded operation. These margins can be changed explicitly for a controlled
 batch, but they must not be bypassed by retry loops.
 
-For claimable issue discovery, a healthy preflight uses the existing bounded `gh issue list` path.
+For candidate-queue discovery, a healthy preflight uses the existing bounded `gh issue list` path.
 When GraphQL is near or below the margin, discovery uses one REST issue page instead, filters pull
 requests out of the REST response, and returns a `resume_cursor` when another page is available:
 
@@ -127,11 +127,12 @@ uv run python -m scripts.dev.snapshot_issue_batch \
   --claimable --limit 20 --resume-page 2 --json
 ```
 
-The snapshot includes `status`, `data_source`, `rate_limit`, `quota`, and `resume_cursor`. A
-`status: quota_blocked` result has no issue rows and must not be treated as an empty or claimable
-queue. It is a resumable handoff: inspect `quota.resume_after`, wait for the relevant reset, and
-rerun the bounded command. If the REST fallback is healthy, the result remains `status: ok` while
-reporting `data_source: rest`.
+The snapshot includes `status`, `data_source`, `rate_limit`, `quota`, and `resume_cursor`. It also
+reports an admission-reason histogram and separates candidate rows from `claimable_issues`; a row
+is claimable only after a successful live check-only admission. A `status: quota_blocked` result
+has no issue rows and must not be treated as an empty or claimable queue. It is a resumable
+handoff: inspect `quota.resume_after`, wait for the relevant reset, and rerun the bounded command.
+If the REST fallback is healthy, the result remains `status: ok` while reporting `data_source: rest`.
 
 Issues carrying explicit `state:review` or `needs-triage` remain visible for audit, but the
 snapshot must classify them as non-claimable until the corresponding human gate is cleared. A

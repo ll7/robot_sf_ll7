@@ -22,6 +22,9 @@ SCHEMA_VERSION = "compact_validation_summary.v2"
 DEFAULT_EXCERPT_LINES = 40
 DEFAULT_EXCERPT_WIDTH = 240
 TIMEOUT_EXIT_CODE = 124
+INTERRUPTED_EXIT_CODE = 130
+PROCESS_GROUP_CLEANUP_GRACE_SECONDS = 5.0
+PROCESS_GROUP_POLL_INTERVAL_SECONDS = 0.01
 
 FAILURE_PATTERNS = re.compile(
     r"(FAILED|ERROR|FAILURES|Traceback|AssertionError|Exception|short test summary|"
@@ -46,29 +49,74 @@ def _quote_command(command: list[str]) -> str:
     return " ".join(shlex.quote(part) for part in command)
 
 
+def _process_group_exists(process_group_id: int) -> bool:
+    """Return whether a process remains in *process_group_id*."""
+    try:
+        os.killpg(process_group_id, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def _wait_for_process_group_exit(
+    process: subprocess.Popen[bytes],
+    process_group_id: int,
+    timeout_seconds: float,
+) -> bool:
+    """Wait until the group is gone, reaping the direct child when possible."""
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        process.poll()
+        if not _process_group_exists(process_group_id):
+            process.wait()
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(PROCESS_GROUP_POLL_INTERVAL_SECONDS, remaining))
+
+
 def _terminate_process_group(process: subprocess.Popen[bytes]) -> str:
-    """Terminate a timed-out process and descendants started in its process group."""
+    """Terminate a timed-out process and all descendants in its process group."""
     cleanup_status = "process_group_terminated_and_waited"
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
+        process.wait()
         return cleanup_status
     except OSError:
         process.terminate()
-        cleanup_status = "direct_process_terminated_and_waited"
-    try:
-        process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        cleanup_status = cleanup_status.replace("terminated", "killed")
+        cleanup_status = "direct_process_termination_unverified"
         try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        except OSError:
+            process.wait(timeout=PROCESS_GROUP_CLEANUP_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
             process.kill()
-            cleanup_status = "direct_process_killed_and_waited"
-        process.wait()
-    return cleanup_status
+            process.wait()
+            cleanup_status = "direct_process_kill_cleanup_unverified"
+        return cleanup_status
+
+    if _wait_for_process_group_exit(
+        process,
+        process.pid,
+        PROCESS_GROUP_CLEANUP_GRACE_SECONDS,
+    ):
+        return cleanup_status
+
+    cleanup_status = cleanup_status.replace("terminated", "killed")
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    except OSError:
+        process.kill()
+        cleanup_status = "direct_process_kill_cleanup_unverified"
+    if _wait_for_process_group_exit(
+        process,
+        process.pid,
+        PROCESS_GROUP_CLEANUP_GRACE_SECONDS,
+    ):
+        return cleanup_status
+    return "process_group_cleanup_unverified"
 
 
 def _failure_lines(text: str, *, limit: int, width: int) -> tuple[list[str], bool]:
@@ -119,6 +167,7 @@ def run_compact_validation(
 
     started = time.monotonic()
     timed_out = False
+    interrupted = False
     timeout_message = ""
     cleanup_status = "not_needed"
     try:
@@ -137,6 +186,12 @@ def run_compact_validation(
                 returncode = TIMEOUT_EXIT_CODE
                 cleanup_status = _terminate_process_group(process)
                 timeout_message = f"Command timed out after {exc.timeout:g} seconds."
+                log_file.write(f"\n{timeout_message}\n".encode("utf-8", errors="replace"))
+            except KeyboardInterrupt:
+                interrupted = True
+                returncode = INTERRUPTED_EXIT_CODE
+                cleanup_status = _terminate_process_group(process)
+                timeout_message = "Command interrupted by user."
                 log_file.write(f"\n{timeout_message}\n".encode("utf-8", errors="replace"))
     except subprocess.TimeoutExpired as exc:
         timed_out = True
@@ -159,6 +214,7 @@ def run_compact_validation(
         "exit_code": returncode,
         "elapsed_seconds": round(elapsed, 3),
         "timed_out": timed_out,
+        "interrupted": interrupted,
         "timeout_seconds": timeout_seconds,
         "timeout_message": timeout_message,
         "cleanup_status": cleanup_status,

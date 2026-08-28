@@ -329,6 +329,51 @@ def test_apply_writer_receives_block() -> None:
         assert prep.MARKER_END in block
 
 
+def test_live_body_writer_uses_rest_path_and_verifies_readback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The live writer uses the shared REST signature and checks the returned body."""
+    from scripts.dev import _gh_rest
+
+    current_body = "# Issue\n\nbody\n"
+    calls: list[dict[str, object]] = []
+
+    def fake_run_gh_api(
+        path: str,
+        payload: object | None = None,
+        *,
+        method: str | None = None,
+        extra_args: list[str] | None = None,
+        **_: object,
+    ) -> object:
+        nonlocal current_body
+        calls.append({"path": path, "payload": payload, "method": method, "extra_args": extra_args})
+        if method == "PATCH":
+            assert isinstance(payload, dict)
+            current_body = str(payload["body"])
+            return type("Result", (), {"returncode": 0, "stdout": "{}", "stderr": ""})()
+        return type(
+            "Result",
+            (),
+            {"returncode": 0, "stdout": json.dumps(current_body), "stderr": ""},
+        )()
+
+    monkeypatch.setattr(_gh_rest, "run_gh_api", fake_run_gh_api)
+    block = f"{prep.MARKER_START}\npacket\n{prep.MARKER_END}"
+
+    prep._live_body_writer(1001, block)
+
+    assert [call["path"] for call in calls] == [
+        "repos/ll7/robot_sf_ll7/issues/1001",
+        "repos/ll7/robot_sf_ll7/issues/1001",
+        "repos/ll7/robot_sf_ll7/issues/1001",
+    ]
+    assert calls[0]["extra_args"] == ["--jq", ".body"]
+    assert calls[1]["method"] == "PATCH"
+    assert calls[2]["extra_args"] == ["--jq", ".body"]
+    assert current_body.endswith(block)
+
+
 def test_apply_ceiling_too_high_fails_closed(tmp_path: Path) -> None:
     """A ceiling above the hard max must fail closed."""
     audit_path = _audit_path(tmp_path)

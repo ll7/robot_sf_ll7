@@ -582,23 +582,41 @@ def _live_body_writer(issue: int, block: str) -> None:
     """Write one issue body through the canonical REST helper (CAS re-read)."""
     from scripts.dev import _gh_rest
 
-    current = json.loads(
-        _gh_rest.run_gh_api(["api", f"repos/ll7/robot_sf_ll7/issues/{issue}", "--jq", ".body"])
-    )
+    endpoint = f"repos/ll7/robot_sf_ll7/issues/{issue}"
+    current_result = _gh_rest.run_gh_api(endpoint, extra_args=["--jq", ".body"])
+    if current_result.returncode != 0:
+        detail = (
+            current_result.stderr.strip() or current_result.stdout.strip() or "REST read failed"
+        )
+        raise RuntimeError(f"issue {issue} body read failed: {detail}")
+    try:
+        current = json.loads(current_result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"issue {issue} body read was not valid JSON") from exc
+    if not isinstance(current, str):
+        raise RuntimeError(f"issue {issue} body read was not a string")
     if _MARKER_BLOCK_RE.search(current):
         body = _MARKER_BLOCK_RE.sub(block.rstrip("\n"), current)
     else:
         body = current.rstrip("\n") + "\n\n" + block.rstrip("\n")
-    _gh_rest.run_gh_api(
-        [
-            "api",
-            "-X",
-            "PATCH",
-            f"repos/ll7/robot_sf_ll7/issues/{issue}",
-            "-f",
-            f"body={body}",
-        ]
-    )
+    write_result = _gh_rest.run_gh_api(endpoint, {"body": body}, method="PATCH")
+    if write_result.returncode != 0:
+        detail = write_result.stderr.strip() or write_result.stdout.strip() or "REST write failed"
+        raise RuntimeError(f"issue {issue} body write failed: {detail}")
+    readback_result = _gh_rest.run_gh_api(endpoint, extra_args=["--jq", ".body"])
+    if readback_result.returncode != 0:
+        detail = (
+            readback_result.stderr.strip()
+            or readback_result.stdout.strip()
+            or "REST readback failed"
+        )
+        raise RuntimeError(f"issue {issue} body readback failed: {detail}")
+    try:
+        readback = json.loads(readback_result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"issue {issue} body readback was not valid JSON") from exc
+    if readback != body:
+        raise RuntimeError(f"issue {issue} body readback mismatch")
 
 
 def _apply_mode(

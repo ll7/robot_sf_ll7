@@ -330,6 +330,8 @@ def test_fetch_pr_snapshot_rest_fallback_when_graphql_quota_exhausted() -> None:
         "source": "graphql",
         "status": "separate_query",
     }
+    assert mock_gh.call_args_list[2].args[0][-1].endswith("/issues/42/comments?per_page=100&page=1")
+    assert mock_gh.call_args_list[3].args[0][-1].endswith("/pulls/42/reviews?per_page=100&page=1")
     # The REST fallback must be exercised (pr view hit with quota failure first).
     first_call = mock_gh.call_args_list[0].args[0]
     assert first_call[:3] == ["pr", "view", "42"]

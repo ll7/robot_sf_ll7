@@ -1096,7 +1096,7 @@ def _rest_comments(
     comments, err = _rest_json_list(
         owner=owner,
         name=name,
-        path=f"issues/{pr_number}/comments?per_page=100",
+        path=f"issues/{pr_number}/comments",
         fail_message="REST comment response is not a JSON list",
     )
     if err:
@@ -1135,7 +1135,7 @@ def _rest_reviews(
     reviews, err = _rest_json_list(
         owner=owner,
         name=name,
-        path=f"pulls/{pr_number}/reviews?per_page=100",
+        path=f"pulls/{pr_number}/reviews",
         fail_message="REST review response is not a JSON list",
     )
     if err:

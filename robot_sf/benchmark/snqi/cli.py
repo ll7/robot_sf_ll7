@@ -319,8 +319,9 @@ def cmd_inventory_weights(args: argparse.Namespace) -> int:
             )
             return EXIT_VALIDATION_ERROR
         return EXIT_SUCCESS
-    except Exception as exc:  # noqa: BLE001 - CLI fail-closed boundary: log and exit nonzero (#6690)
+    except Exception:  # noqa: BLE001 - CLI fail-closed boundary: log and exit nonzero (#6690)
         if args.json:
+            exc = sys.exc_info()[1]
             _log_cli_failure(
                 "weights_inventory",
                 "SNQI CLI failed while building the weight-set inventory.",

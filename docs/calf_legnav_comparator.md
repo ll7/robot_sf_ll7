@@ -61,12 +61,18 @@ The report keeps local and proxy semantics explicit:
 For each executed action, the distance metrics use the conservative minimum of
 the available pre-step and post-step ground-truth distances. This keeps the
 shared state between adjacent rows from being counted twice while preserving
-within-step clearance violations. Outcome flags must be JSON booleans; malformed
-flags are reported as unavailable rather than coerced into results. Trace rows
-must also have contiguous step identities, a complete fixed horizon or explicit
-terminal `done_info`, recognized execution-mode provenance, non-negative integer
-observed-actor counts, and finite non-negative distance values. Violations block
-the condition or materialize a schema-valid blocked handoff.
+within-step clearance violations. Every executed row must expose at least one
+finite non-negative distance field; a partial distance trace leaves both distance
+metrics unavailable instead of silently changing their denominator. Outcome
+flags must be JSON booleans; malformed flags are reported as unavailable rather
+than coerced into results. When terminal `done_info.success` is present, a true
+row-level `is_success` flag must not contradict a false terminal outcome; such a
+contradiction leaves success and dependent timeout metrics unavailable. Trace
+rows must also have contiguous step identities, a complete fixed horizon or
+explicit terminal `done_info`, recognized execution-mode provenance,
+non-negative integer observed-actor counts, and finite non-negative distance
+values. Violations block the condition or materialize a schema-valid blocked
+handoff.
 
 One paired episode has no uncertainty estimate. Missing observations, runner errors,
 fallback/degraded execution, or an unrecognized observation contract produce `blocked`

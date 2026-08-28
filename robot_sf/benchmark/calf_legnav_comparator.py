@@ -124,7 +124,7 @@ def _metric(
     return row
 
 
-def _distance_values(rows: Sequence[Mapping[str, Any]]) -> tuple[list[float], bool]:
+def _distance_values(rows: Sequence[Mapping[str, Any]]) -> tuple[list[float], bool, bool]:
     """Extract one conservative ground-truth distance per executed action.
 
     The diagnostics producer records the distance before and after each action.
@@ -134,10 +134,13 @@ def _distance_values(rows: Sequence[Mapping[str, Any]]) -> tuple[list[float], bo
     interval; if only one field is present, that field is used.
 
     Returns:
-        One finite distance per row that contains at least one distance.
+        A tuple of one finite distance per row that contains at least one distance,
+        whether any provided value was malformed, and whether any row lacked both
+        distance fields.
     """
     values: list[float] = []
     malformed = False
+    incomplete = False
     for row in rows:
         row_values: list[float] = []
         for key in ("min_robot_ped_distance", "post_step_min_robot_ped_distance"):
@@ -150,7 +153,9 @@ def _distance_values(rows: Sequence[Mapping[str, Any]]) -> tuple[list[float], bo
                 row_values.append(value)
         if row_values:
             values.append(min(row_values))
-    return values, malformed
+        else:
+            incomplete = True
+    return values, malformed, incomplete
 
 
 def _boolean_values(rows: Sequence[Mapping[str, Any]], field: str) -> tuple[list[bool], bool]:
@@ -441,14 +446,23 @@ def _condition_metrics(
             reason=None if value is not None else (reason or "required trace field unavailable"),
         )
 
+    boolean_reason = "outcome flags must be booleans when present"
     success_values, malformed_row_success = _boolean_values(rows, "is_success")
     done_info = _mapping(trace.get("done_info"))
     done_success, malformed_done_success = _optional_boolean(done_info, "success")
     success_present = done_success is not None or bool(success_values)
+    contradictory_success = done_success is False and any(success_values)
     success = (
         None
-        if malformed_row_success or malformed_done_success or not success_present
-        else float(bool(done_success) or any(success_values))
+        if (
+            malformed_row_success
+            or malformed_done_success
+            or contradictory_success
+            or not success_present
+        )
+        else float(done_success)
+        if done_success is not None
+        else float(any(success_values))
     )
     collision_values: list[bool] = []
     malformed_collision = False
@@ -484,14 +498,23 @@ def _condition_metrics(
             or (horizon_reached and not bool(success) and not bool(terminated))
         )
     )
-    distances, malformed_distances = _distance_values(rows)
+    distances, malformed_distances, incomplete_distances = _distance_values(rows)
     actions, malformed_actions = _action_values(rows)
-    boolean_reason = "outcome flags must be booleans when present"
+    success_reason = (
+        boolean_reason
+        if malformed_row_success or malformed_done_success
+        else "trace.done_info.success contradicts trace.is_success"
+        if contradictory_success
+        else None
+    )
     distance_reason = (
         "distance fields must be finite non-negative numbers when present"
         if malformed_distances
+        else "each executed action must expose at least one ground-truth distance field"
+        if incomplete_distances
         else "ground-truth simulator distance is not present"
     )
+    complete_distances = bool(distances) and not malformed_distances and not incomplete_distances
     action_reason = (
         "action fields must contain at least two finite numeric channels"
         if malformed_actions
@@ -503,7 +526,7 @@ def _condition_metrics(
             units="fraction",
             source="trace.done_info.success|trace.is_success",
             mapping="exact_local",
-            reason=boolean_reason if success is None else None,
+            reason=success_reason if success is None else None,
         ),
         "collision_rate": row(
             value=collision,
@@ -513,7 +536,7 @@ def _condition_metrics(
             reason=boolean_reason if collision is None else None,
         ),
         "minimum_human_distance_m": row(
-            value=min(distances) if distances and not malformed_distances else None,
+            value=min(distances) if complete_distances else None,
             units="m",
             source="trace.ground_truth_simulator_distance",
             mapping="qualified_proxy",
@@ -522,7 +545,7 @@ def _condition_metrics(
         "personal_space_compliance_rate": row(
             value=(
                 float(np.mean(np.asarray(distances) >= personal_space_radius_m))
-                if distances and not malformed_distances
+                if complete_distances
                 else None
             ),
             units="fraction",

@@ -238,6 +238,40 @@ def test_malformed_metric_fields_do_not_produce_partial_values() -> None:
         )
 
 
+def test_incomplete_distance_trace_does_not_report_partial_metrics() -> None:
+    """Distance metrics must not silently drop an action with no distance field."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [1.0, 1.0, 2.0])
+    for trace in (perfect, sensor):
+        trace["steps"][1].pop("min_robot_ped_distance")
+        trace["steps"][1].pop("post_step_min_robot_ped_distance")
+
+    report = build_calf_legnav_comparator_report(perfect, sensor, config=_config())
+    metrics = report["conditions"]["perfect_perception"]["metrics"]
+
+    for name in ("minimum_human_distance_m", "personal_space_compliance_rate"):
+        assert metrics[name]["status"] == "unavailable"
+        assert metrics[name]["value"] is None
+        assert metrics[name]["reason"] == (
+            "each executed action must expose at least one ground-truth distance field"
+        )
+
+
+def test_contradictory_success_fields_are_unavailable() -> None:
+    """A terminal false outcome must not be overridden by a row success flag."""
+    perfect = _trace("ideal_state", [2.0, 2.0, 2.0])
+    sensor = _trace("perception_limited", [1.0, 1.0, 2.0])
+    perfect["done_info"]["success"] = False
+    perfect["steps"][1]["is_success"] = True
+
+    report = build_calf_legnav_comparator_report(perfect, sensor, config=_config())
+    success = report["conditions"]["perfect_perception"]["metrics"]["success_rate"]
+
+    assert success["status"] == "unavailable"
+    assert success["value"] is None
+    assert success["reason"] == ("trace.done_info.success contradicts trace.is_success")
+
+
 def test_runner_materializes_blocked_report_for_malformed_trace(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

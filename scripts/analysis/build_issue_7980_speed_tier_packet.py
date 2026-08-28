@@ -105,10 +105,31 @@ def _validate_row_crosswalk(crosswalk: object, rows: Sequence[Mapping[str, Any]]
         raise ValueError("source receipt row crosswalk does not match independently ingested rows")
 
 
+def _load_receipt_source_crosswalk(receipt: Mapping[str, Any], synthesis_path: Path) -> object:
+    """Load and hash the independently supplied source crosswalk."""
+
+    source_path_value = receipt.get("source_path")
+    if not isinstance(source_path_value, str) or not source_path_value.strip():
+        raise ValueError("source receipt must identify the supplied source path")
+    source_path = _repo_path(Path(source_path_value))
+    if source_path == synthesis_path.resolve():
+        raise ValueError("source receipt source path must not reuse the supplied synthesis path")
+    if receipt.get("source_sha256") != _sha256(source_path):
+        raise ValueError("source receipt source path digest does not match supplied source bytes")
+    source_crosswalk = _load_json(source_path)
+    crosswalk = source_crosswalk.get("row_crosswalk")
+    if "row_crosswalk" in receipt and crosswalk != receipt["row_crosswalk"]:
+        raise ValueError(
+            "source receipt does not match the independently supplied source crosswalk"
+        )
+    return crosswalk
+
+
 def _validate_source_receipt(
     receipt: Mapping[str, Any],
     *,
     synthesis_sha256: str,
+    synthesis_path: Path,
     rows: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
     """Validate independent source custody before emitting source-complete wording."""
@@ -129,9 +150,10 @@ def _validate_source_receipt(
         raise ValueError("source receipt must declare independence from the packet")
     if not isinstance(receipt.get("source_artifact"), Mapping):
         raise ValueError("source receipt must identify the independently ingested source artifact")
+    crosswalk = _load_receipt_source_crosswalk(receipt, synthesis_path)
     if receipt.get("synthesis_sha256") != synthesis_sha256:
         raise ValueError("source receipt synthesis digest does not match supplied synthesis")
-    _validate_row_crosswalk(receipt.get("row_crosswalk"), rows)
+    _validate_row_crosswalk(crosswalk, rows)
     return dict(receipt)
 
 
@@ -536,7 +558,10 @@ def build_packet(
     )
     if source_receipt is not None:
         source_receipt = _validate_source_receipt(
-            source_receipt, synthesis_sha256=synthesis_sha256, rows=rows
+            source_receipt,
+            synthesis_sha256=synthesis_sha256,
+            synthesis_path=synthesis_path,
+            rows=rows,
         )
     source_complete = (
         source_receipt is not None
@@ -637,7 +662,7 @@ def build_packet(
                 "uv run python scripts/analysis/build_issue_7980_speed_tier_packet.py "
                 "--synthesis <verified-wandb-v0-synthesis.json>"
             ),
-            "status": "draft" if source_complete else "pending_source_proof",
+            "status": "draft",
         },
         "findings": [
             "All 24 registered planner-by-tier-by-metric contrasts are present exactly once.",

@@ -1,0 +1,13 @@
+{
+  "schema_version": "issue_7980_source_ingestion_receipt.v1",
+  "source_ingestion_status": "fixture_verified",
+  "independent_of_packet": true,
+  "fixture_purpose": "deterministic contract test only; not benchmark evidence",
+  "synthesis_sha256": "e6bb7a3553c623e07ef48260325cfe1e161dba71cc6c068dcb412df7062808c0",
+  "source_path": "docs/context/evidence/issue_6102_robot_speed_tier_recovery/source_row_crosswalk.issue_7980.fixture.json",
+  "source_sha256": "9888a78a10e7ee21ac7ee9f553dc1ae17ac105f9ae237ba3ca1da82fa993852c",
+  "source_artifact": {
+    "kind": "deterministic_fixture_crosswalk",
+    "path": "docs/context/evidence/issue_6102_robot_speed_tier_recovery/source_row_crosswalk.issue_7980.fixture.json"
+  }
+}

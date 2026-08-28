@@ -30,7 +30,7 @@ RECOVERY_MANIFEST_PATH = EVIDENCE_DIR / "recovery_manifest.json"
 PREREGISTRATION_PATH = (
     REPO_ROOT / "configs/benchmarks/issue_5578_robot_speed_tier_preregistration.yaml"
 )
-EXPECTED_PACKET_DIGEST = "131943376ec40976b261bce8fbf8934b8d243a905ac01b2333ddb25d47d13a70"
+EXPECTED_PACKET_DIGEST = "91cac80d2c4a060c03ebdcae8be8608832dba2a7989f1da06612cd1bb01b2f1d"
 EXPECTED_ROW_DIGESTS = (
     "c204a1741a2d4bf77a1e757eb9614d77b6f721794bd51182bc34d922c2c48858",
     "35a90600f347363b74cf8c98fe8022a2b5b439cf3aea5e69f6a4c8e11707f85f",
@@ -101,6 +101,7 @@ def test_tracked_packet_loads_under_generic_v1_contract() -> None:
     assert packet.evidence.admission_state == "diagnostic_only"
     assert len(packet.metrics) == len(packet.decisions) == 24
     assert compute_packet_digest(packet) == EXPECTED_PACKET_DIGEST
+    assert "source-complete" not in PACKET_PATH.read_text(encoding="utf-8")
 
 
 def test_all_24_packet_rows_match_the_immutable_source_binding() -> None:
@@ -134,14 +135,9 @@ def test_all_24_packet_rows_match_the_immutable_source_binding() -> None:
         metric = metrics[test_id]
         decision = decisions[test_id]
         assert binding["source_artifact"] == {
-            "artifact": "ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0",
-            "artifact_location": (
-                "wandb-artifact://ll7/robot_sf/"
-                "campaign-issue5578-native-speed-tier-job-13828:v0/synthesis.json"
-            ),
-            "artifact_path": "synthesis.json",
-            "member": "synthesis.json",
+            "reason": "independent source-ingestion receipt is unavailable",
             "sha256": expected_source_sha,
+            "status": "pending",
         }
         assert binding["preregistration"] == {
             "path": "configs/benchmarks/issue_5578_robot_speed_tier_preregistration.yaml",
@@ -247,6 +243,8 @@ def test_generated_artifacts_have_exact_review_sidecars() -> None:
         EVIDENCE_DIR / "result_interpretation_caption.issue_7980.txt",
         EVIDENCE_DIR / "SHA256SUMS.issue_7980",
         EVIDENCE_DIR / "packet_digest_review.issue_7980.json",
+        EVIDENCE_DIR / "source_row_crosswalk.issue_7980.fixture.json",
+        EVIDENCE_DIR / "source_ingestion_receipt.issue_7980.fixture.json",
     )
     for artifact in artifacts:
         assert _load_json(_review_sidecar_path(artifact)) == _review_sidecar_payload(artifact)
@@ -327,10 +325,12 @@ def test_independent_source_crosswalk_validates_rows_without_packet_reuse() -> N
     """Require a separately supplied crosswalk before calling rows source-complete."""
 
     synthesis, synthesis_sha, _, _ = _validation_inputs()
-    receipt = _load_json(EVIDENCE_DIR / "source_row_crosswalk.issue_7980.fixture.json")
+    receipt = _load_json(EVIDENCE_DIR / "source_ingestion_receipt.issue_7980.fixture.json")
     rows = sorted(synthesis["decision_table"], key=lambda item: item["test_id"])
 
-    validated = _validate_source_receipt(receipt, synthesis_sha256=synthesis_sha, rows=rows)
+    validated = _validate_source_receipt(
+        receipt, synthesis_sha256=synthesis_sha, synthesis_path=PACKET_PATH, rows=rows
+    )
 
     assert validated["source_ingestion_status"] == "fixture_verified"
     assert validated["independent_of_packet"] is True
@@ -340,13 +340,14 @@ def test_source_receipt_fails_closed_when_authenticated_hydration_is_unavailable
     """Do not let a manifest digest or packet-derived rows imply immutable source custody."""
 
     synthesis, synthesis_sha, _, _ = _validation_inputs()
-    receipt = _load_json(EVIDENCE_DIR / "source_row_crosswalk.issue_7980.fixture.json")
+    receipt = _load_json(EVIDENCE_DIR / "source_ingestion_receipt.issue_7980.fixture.json")
     receipt["source_ingestion_status"] = "recorded_but_not_hydrated"
 
     with pytest.raises(ValueError, match="authenticated immutable source hydration is unavailable"):
         _validate_source_receipt(
             receipt,
             synthesis_sha256=synthesis_sha,
+            synthesis_path=PACKET_PATH,
             rows=sorted(synthesis["decision_table"], key=lambda item: item["test_id"]),
         )
 
@@ -355,12 +356,46 @@ def test_source_crosswalk_tampering_is_rejected() -> None:
     """A changed source row cannot inherit the independent receipt's digest."""
 
     synthesis, synthesis_sha, _, _ = _validation_inputs()
-    receipt = _load_json(EVIDENCE_DIR / "source_row_crosswalk.issue_7980.fixture.json")
+    receipt = _load_json(EVIDENCE_DIR / "source_ingestion_receipt.issue_7980.fixture.json")
     synthesis["decision_table"][0]["pooled_delta_mean"] += 0.001
 
     with pytest.raises(ValueError, match="row crosswalk does not match"):
         _validate_source_receipt(
             receipt,
             synthesis_sha256=synthesis_sha,
+            synthesis_path=PACKET_PATH,
+            rows=sorted(synthesis["decision_table"], key=lambda item: item["test_id"]),
+        )
+
+
+def test_packet_reuse_as_source_path_is_rejected() -> None:
+    """A receipt cannot turn the successor packet into independent source evidence."""
+
+    synthesis, synthesis_sha, _, _ = _validation_inputs()
+    receipt = _load_json(EVIDENCE_DIR / "source_ingestion_receipt.issue_7980.fixture.json")
+    receipt["source_path"] = str(PACKET_PATH.relative_to(REPO_ROOT))
+    receipt["source_sha256"] = hashlib.sha256(PACKET_PATH.read_bytes()).hexdigest()
+
+    with pytest.raises(ValueError, match="must not reuse the supplied synthesis path"):
+        _validate_source_receipt(
+            receipt,
+            synthesis_sha256=synthesis_sha,
+            synthesis_path=PACKET_PATH,
+            rows=sorted(synthesis["decision_table"], key=lambda item: item["test_id"]),
+        )
+
+
+def test_supplied_source_path_digest_is_checked() -> None:
+    """A receipt cannot claim custody for source bytes whose digest changed."""
+
+    synthesis, synthesis_sha, _, _ = _validation_inputs()
+    receipt = _load_json(EVIDENCE_DIR / "source_ingestion_receipt.issue_7980.fixture.json")
+    receipt["source_sha256"] = "0" * 64
+
+    with pytest.raises(ValueError, match="source path digest does not match"):
+        _validate_source_receipt(
+            receipt,
+            synthesis_sha256=synthesis_sha,
+            synthesis_path=PACKET_PATH,
             rows=sorted(synthesis["decision_table"], key=lambda item: item["test_id"]),
         )

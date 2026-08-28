@@ -186,9 +186,12 @@ with both the enforced-staged checkpoint receipt and the exact-source runtime
 smoke receipt:
 
 ```bash
+REHEARSAL_SOURCE_COMMIT="$(git rev-parse --verify HEAD)"
+git diff --quiet
 uv run python scripts/tools/run_benchmark_release.py \
   --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
   --mode rehearsal \
+  --source-commit "$REHEARSAL_SOURCE_COMMIT" \
   --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
   --runtime-smoke-receipt output/benchmarks/camera_ready/<smoke_id>/release/release_result.json
 ```
@@ -204,6 +207,11 @@ receipts are validated independently; their wrapper hashes may differ because
 their campaign-config bindings differ, but their checkpoint arm identities and
 model-byte SHA-256 values must match. Allocation and resume options, including
 `--resume-receipt-max-age-hours`, are rejected in this mode.
+The canonical benchmark-data manifest is a historical compatibility manifest
+without `source_sha`, so `--source-commit` is required and must be an exact
+40-character SHA equal to the clean checked-out `HEAD`. A manifest-declared
+`source_sha`, when present, remains authoritative; an explicit argument that
+disagrees with it is rejected.
 
 `release/release_result.json` preserves the wrapped campaign semantics in the
 top-level `status`, `status_reason`, `benchmark_success`, `exit_code`,

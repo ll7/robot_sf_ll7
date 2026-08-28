@@ -2258,6 +2258,15 @@ def parse_release_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Maximum accepted runtime-smoke result age (default: 24 hours).",
     )
     parser.add_argument(
+        "--source-commit",
+        type=str,
+        default=None,
+        help=(
+            "Exact checked-out source SHA for rehearsal when the manifest does not declare "
+            "source_sha; it must match a manifest source_sha when one is declared."
+        ),
+    )
+    parser.add_argument(
         "--resume-receipt",
         type=Path,
         default=None,

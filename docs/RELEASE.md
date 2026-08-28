@@ -99,12 +99,23 @@ rehearsal. It requires the same staged checkpoint receipt and exact-source
 runtime-smoke receipt, then stops before campaign allocation:
 
 ```bash
+REHEARSAL_SOURCE_COMMIT="$(git rev-parse --verify HEAD)"
+git diff --quiet
 uv run python scripts/tools/run_benchmark_release.py \
   --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml \
   --mode rehearsal \
+  --source-commit "$REHEARSAL_SOURCE_COMMIT" \
   --checkpoint-receipt output/release/checkpoints/staging_receipt.json \
   --runtime-smoke-receipt output/benchmarks/camera_ready/<smoke_id>/release/release_result.json
 ```
+
+The command pins and records the exact clean checkout being rehearsed; if a
+reviewed SHA was selected separately, set `REHEARSAL_SOURCE_COMMIT` to that
+exact 40-character value instead. Never substitute a planning/base SHA.
+The canonical benchmark-data manifest is retained as a historical compatibility
+manifest without `source_sha`, so this explicit pin is required. If a future
+manifest declares `source_sha`, that manifest value is authoritative and any
+explicit argument must match it.
 
 Successful rehearsal output is admission/preflight evidence only. It reports
 `campaign_execution_status: not_started` and must not be treated as benchmark

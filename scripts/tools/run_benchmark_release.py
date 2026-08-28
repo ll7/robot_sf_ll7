@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -624,6 +625,61 @@ def _load_runtime_smoke_checkpoint_receipt(runtime_smoke_receipt: Path) -> dict[
         ) from exc
 
 
+def _normalize_rehearsal_source_commit(value: Any) -> str:
+    """Normalize an explicit rehearsal source pin and reject abbreviated hashes."""
+    source_commit = str(value).strip().lower()
+    if re.fullmatch(r"[0-9a-f]{40}", source_commit) is None:
+        raise ValueError("rehearsal source commit must be an exact 40-character Git SHA")
+    return source_commit
+
+
+def _resolve_rehearsal_source_identity(
+    manifest: Any, explicit_source_commit: str | None
+) -> tuple[str, dict[str, Any]]:
+    """Resolve the source pin for rehearsal without accepting an unpinned checkout.
+
+    A manifest-declared source SHA is authoritative.  The historical compatibility
+    manifest has no such field, so rehearsal requires an explicit CLI source pin.
+    In either case the caller must compare the resolved pin with the checked-out
+    source commit before admitting any other release input.
+
+    Returns:
+        Expected source SHA and public source-identity evidence.
+    """
+    declared_value = getattr(manifest, "source_sha", None)
+    declared_source_commit = (
+        _normalize_rehearsal_source_commit(declared_value) if declared_value is not None else None
+    )
+    explicit = (
+        _normalize_rehearsal_source_commit(explicit_source_commit)
+        if explicit_source_commit is not None
+        else None
+    )
+    if declared_source_commit is not None:
+        if explicit is not None and explicit != declared_source_commit:
+            raise ValueError("explicit rehearsal source commit does not match manifest source_sha")
+        return declared_source_commit, {
+            "schema_version": "benchmark-release-rehearsal-source-identity.v1",
+            "status": "pinned",
+            "source": "manifest",
+            "manifest_source_sha": declared_source_commit,
+            "explicit_source_commit": explicit,
+            "blockers": [],
+        }
+    if explicit is None:
+        raise ValueError(
+            "rehearsal requires --source-commit when the manifest does not declare source_sha"
+        )
+    return explicit, {
+        "schema_version": "benchmark-release-rehearsal-source-identity.v1",
+        "status": "pinned",
+        "source": "explicit_argument",
+        "manifest_source_sha": None,
+        "explicit_source_commit": explicit,
+        "blockers": [],
+    }
+
+
 def _compare_rehearsal_checkpoint_identities(
     checkpoint_receipt: dict[str, Any],
     runtime_smoke_receipt: Path,
@@ -731,7 +787,7 @@ def _rehearsal_failure(
     return 2
 
 
-def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912
+def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912, PLR0915
     """Run all release admissions and stop before campaign execution or output creation."""
     unsupported = {
         "output_root": args.output_root,
@@ -763,6 +819,29 @@ def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912
         )
 
     try:
+        expected_source_commit, source_identity = _resolve_rehearsal_source_identity(
+            manifest,
+            getattr(args, "source_commit", None),
+        )
+    except ValueError as exc:
+        return _rehearsal_failure(
+            status="source_identity_rejected",
+            reason=str(exc),
+            evidence={
+                "source_identity": {
+                    "schema_version": "benchmark-release-rehearsal-source-identity.v1",
+                    "status": "rejected",
+                    "source": "manifest"
+                    if getattr(manifest, "source_sha", None) is not None
+                    else "explicit_argument",
+                    "manifest_source_sha": getattr(manifest, "source_sha", None),
+                    "explicit_source_commit": getattr(args, "source_commit", None),
+                    "blockers": [str(exc)],
+                }
+            },
+        )
+
+    try:
         cfg = load_campaign_config(manifest.canonical_campaign_config_path)
         source_commit = _current_source_commit()
         worktree_clean = _current_worktree_clean()
@@ -776,16 +855,27 @@ def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912
         "schema_version": "benchmark-release-rehearsal-startup-admission.v1",
         "status": "valid",
         "source_commit": source_commit,
+        "source_identity": {
+            **source_identity,
+            "expected_source_commit": expected_source_commit,
+            "checked_out_source_commit": source_commit,
+        },
         "worktree_clean": worktree_clean,
         "blockers": [],
     }
     if not worktree_clean:
         startup_admission["status"] = "invalid"
         startup_admission["blockers"] = ["release source worktree is not clean"]
-    if source_commit != getattr(manifest, "source_sha", None):
+    if source_commit != expected_source_commit:
         startup_admission["status"] = "invalid"
+        source_identity = {
+            **startup_admission["source_identity"],
+            "status": "rejected",
+            "blockers": ["checked-out source SHA does not match the rehearsal source pin"],
+        }
+        startup_admission["source_identity"] = source_identity
         startup_admission["blockers"] = [
-            "checked-out source SHA does not match manifest source_sha"
+            "checked-out source SHA does not match the rehearsal source pin"
         ]
     if startup_admission["status"] != "valid":
         return _rehearsal_failure(
@@ -980,6 +1070,21 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
 
     logger.remove()
     logger.add(sys.stderr, level="INFO")
+
+    if args.mode != "rehearsal" and args.source_commit is not None:
+        print(
+            json.dumps(
+                {
+                    "mode": args.mode,
+                    "status": "unsupported_combination",
+                    "status_reason": "--source-commit is only accepted in rehearsal mode",
+                    "benchmark_success": False,
+                    "release_exit_code": 2,
+                },
+                indent=2,
+            )
+        )
+        return 2
 
     if args.mode == "rehearsal":
         unsupported_options = (

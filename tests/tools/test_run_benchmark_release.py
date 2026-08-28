@@ -11,6 +11,7 @@ import pytest
 
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec, SeedPolicy
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
+from robot_sf.benchmark.release_protocol import load_release_manifest
 from scripts.tools import rebuild_campaign_reports_from_rows, run_benchmark_release
 
 
@@ -237,11 +238,104 @@ def _patch_valid_rehearsal_admissions(monkeypatch, tmp_path: Path) -> None:
     )
 
 
+def test_canonical_rehearsal_manifest_requires_explicit_source_identity(capsys) -> None:
+    """The historical canonical manifest cannot silently admit an unpinned checkout."""
+    manifest = load_release_manifest(
+        Path("configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml")
+    )
+
+    assert manifest.source_sha is None
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml",
+            "--mode",
+            "rehearsal",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "source_identity_rejected"
+    assert "--source-commit" in payload["status_reason"]
+    assert payload["campaign_execution_status"] == "not_started"
+
+
+def test_rehearsal_rejects_mismatched_explicit_source_identity(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """An explicit source pin must match the clean checked-out source exactly."""
+    manifest, _cfg, _checkpoint, _smoke = _rehearsal_fixture(tmp_path)
+    manifest.source_sha = None
+    _patch_valid_rehearsal_admissions(monkeypatch, tmp_path)
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "configs/release.yaml",
+            "--mode",
+            "rehearsal",
+            "--source-commit",
+            "b" * 40,
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "startup_admission_failed"
+    assert "does not match the rehearsal source pin" in payload["status_reason"]
+    assert payload["startup_admission"]["source_identity"]["status"] == "rejected"
+    assert payload["campaign_execution_status"] == "not_started"
+
+
+def test_rehearsal_explicit_source_identity_accepts_historical_manifest_pin() -> None:
+    """Historical manifests can be rehearsed only with an explicit exact source pin."""
+    manifest = load_release_manifest(
+        Path("configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml")
+    )
+
+    expected, evidence = run_benchmark_release._resolve_rehearsal_source_identity(
+        manifest, "a" * 40
+    )
+
+    assert expected == "a" * 40
+    assert evidence["source"] == "explicit_argument"
+    assert evidence["manifest_source_sha"] is None
+
+
+def test_rehearsal_rejects_explicit_source_identity_drift_from_manifest(tmp_path: Path) -> None:
+    """An explicit pin cannot override a manifest-declared source identity."""
+    _manifest, _cfg, _checkpoint, _smoke = _rehearsal_fixture(tmp_path)
+    manifest = SimpleNamespace(source_sha="a" * 40)
+
+    with pytest.raises(ValueError, match="does not match manifest source_sha"):
+        run_benchmark_release._resolve_rehearsal_source_identity(manifest, "b" * 40)
+
+
+def test_source_commit_option_is_rehearsal_only(capsys, tmp_path: Path) -> None:
+    """Run and preflight modes must not silently ignore a rehearsal-only source pin."""
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            str(tmp_path / "release.yaml"),
+            "--source-commit",
+            "a" * 40,
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "unsupported_combination"
+    assert "only accepted in rehearsal mode" in payload["status_reason"]
+
+
 def test_release_rehearsal_admits_inputs_without_campaign_side_effects(
     monkeypatch, capsys, tmp_path: Path
 ) -> None:
     """A successful rehearsal reports every gate and never starts campaign execution."""
     manifest, cfg, _checkpoint, _smoke = _rehearsal_fixture(tmp_path)
+    manifest.source_sha = None
     unrelated_cwd = tmp_path / "unrelated-cwd"
     unrelated_cwd.mkdir()
     monkeypatch.chdir(unrelated_cwd)
@@ -266,6 +360,8 @@ def test_release_rehearsal_admits_inputs_without_campaign_side_effects(
             "configs/release.yaml",
             "--mode",
             "rehearsal",
+            "--source-commit",
+            "a" * 40,
             "--checkpoint-receipt",
             "receipt.json",
             "--runtime-smoke-receipt",
@@ -287,6 +383,8 @@ def test_release_rehearsal_admits_inputs_without_campaign_side_effects(
     )
     assert payload["planner_roster_admission"]["status"] == "valid"
     assert payload["release_inputs"]["manifest_path"] == "configs/release.yaml"
+    assert payload["startup_admission"]["source_identity"]["source"] == "explicit_argument"
+    assert payload["startup_admission"]["source_identity"]["checked_out_source_commit"] == "a" * 40
     assert called == {"campaign": False, "preflight": False}
 
 

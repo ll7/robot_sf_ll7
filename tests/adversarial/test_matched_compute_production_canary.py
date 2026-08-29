@@ -23,7 +23,9 @@ from scripts.validation.run_matched_compute_production_canary import (
     CANDIDATE_RECORD_SCHEMA,
     CandidateRecord,
     _aggregate_reconcile,
+    _arm_evidence_status,
     _budget_reconcile,
+    _canonical_episode_observation,
     _check_receipt,
     _cross_arm_episode_reuse_problems,
     _digest_file,
@@ -68,6 +70,7 @@ def _record(
     commit: str = "c" * 40,
     episode_identity: str = TEST_ARTIFACT_ID,
     episode_digest: str = TEST_ARTIFACT_DIGEST,
+    objective_value: float | str | None = 1.25,
 ) -> CandidateRecord:
     try:
         candidate_number = int(candidate_identity.rsplit("-", 1)[-1])
@@ -103,6 +106,7 @@ def _record(
         simulator_steps_source="observed_episode_record",
         episode_identity=episode_identity,
         episode_digest=episode_digest,
+        objective_value=objective_value,
     )
 
 
@@ -215,6 +219,8 @@ def _fake_native_open_loop_runner(
     *,
     scenario_seed: int = 123,
     config_overrides: dict[str, object] | None = None,
+    objective_value: object = 1.25,
+    include_objective: bool = True,
 ) -> Callable[[SearchConfig], SimpleNamespace]:
     """Return a native-manifest-shaped search fake with selectable source seed."""
 
@@ -227,20 +233,20 @@ def _fake_native_open_loop_runner(
         manifest_path = tmp_path / "manifest.json"
         manifest_config = config.to_json()
         manifest_config.update(config_overrides or {})
+        candidate_entry = {
+            "candidate": {"scenario_seed": scenario_seed},
+            "certification_status": {"status": "valid"},
+            "bundle_path": str(episode_path.parent),
+            "episode_record_path": str(episode_path),
+        }
+        if include_objective:
+            candidate_entry["objective_value"] = objective_value
         manifest_path.write_text(
             json.dumps(
                 {
                     "schema_version": "adversarial-search-manifest.v1",
                     "config": manifest_config,
-                    "candidates": [
-                        {
-                            "candidate": {"scenario_seed": scenario_seed},
-                            "certification_status": {"status": "valid"},
-                            "bundle_path": str(episode_path.parent),
-                            "episode_record_path": str(episode_path),
-                            "objective_value": 1.25,
-                        }
-                    ],
+                    "candidates": [candidate_entry],
                 }
             ),
             encoding="utf-8",
@@ -487,6 +493,99 @@ def test_receipt_round_trip_and_deterministic_check(tmp_path: Path) -> None:
     )
     # Re-checking is deterministic.
     assert receipt_path.read_bytes() == receipt_path.read_bytes()
+
+
+@pytest.mark.parametrize(
+    ("objective_value", "expected_problem"),
+    [
+        (None, "objective_value is required for accepted candidate"),
+        ("not-a-number", "objective_value is not numeric"),
+        (float("nan"), "objective_value is not finite"),
+        (float("inf"), "objective_value is not finite"),
+    ],
+    ids=("missing", "non-numeric", "nan", "infinity"),
+)
+def test_receipt_check_rejects_accepted_candidate_without_finite_objective_full_180(
+    objective_value: float | str | None,
+    expected_problem: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """All 180 records stay production-shaped while one accepted objective is invalid."""
+    records = _canonical_records(tmp_path / "artifacts", arm="open_loop", identity_prefix="open")
+    reactive_records = _canonical_records(
+        tmp_path / "artifacts", arm="reactive", identity_prefix="reactive"
+    )
+    records[0] = replace(records[0], objective_value=objective_value)
+    assert _arm_evidence_status(records) == "not_production_observed"
+    receipt_path = tmp_path / "receipt.json"
+    _write_receipt(
+        packet_digest="a" * 64,
+        commit="c" * 40,
+        open_loop_records=records,
+        reactive_records=reactive_records,
+        problems=[],
+        output=receipt_path,
+        input_digests={"fixture.yaml": "f" * 64},
+        runtime_traces={
+            "open_loop": _runtime_trace(),
+            "reactive": _runtime_trace(arm="reactive"),
+        },
+    )
+
+    assert _check_receipt(receipt_path) == 1
+    assert expected_problem in capsys.readouterr().out
+
+
+def test_receipt_check_binds_digest_to_single_episode_byte_buffer_full_180(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A canonical replacement cannot be hashed as A and parsed as different bytes B."""
+    records = _canonical_records(tmp_path / "artifacts", arm="open_loop", identity_prefix="open")
+    reactive_records = _canonical_records(
+        tmp_path / "artifacts", arm="reactive", identity_prefix="reactive"
+    )
+    receipt_path = tmp_path / "receipt.json"
+    _write_receipt(
+        packet_digest="a" * 64,
+        commit="c" * 40,
+        open_loop_records=records,
+        reactive_records=reactive_records,
+        problems=[],
+        output=receipt_path,
+        input_digests={"fixture.yaml": "f" * 64},
+        runtime_traces={
+            "open_loop": _runtime_trace(),
+            "reactive": _runtime_trace(arm="reactive"),
+        },
+    )
+
+    target = Path(records[0].episode_identity)
+    canonical_bytes_a = target.read_bytes()
+    replacement = json.loads(canonical_bytes_a)
+    replacement["episode_id"] = f"{replacement['episode_id']}-replacement"
+    canonical_bytes_b = (json.dumps(replacement) + "\n").encode()
+    assert hashlib.sha256(canonical_bytes_a).digest() != hashlib.sha256(canonical_bytes_b).digest()
+    target.write_bytes(canonical_bytes_b)
+
+    original_digest_file = _digest_file
+
+    def _swap_between_digest_and_parse(path: Path) -> str:
+        if path.resolve() == target.resolve():
+            target.write_bytes(canonical_bytes_a)
+            digest = original_digest_file(path)
+            target.write_bytes(canonical_bytes_b)
+            return digest
+        return original_digest_file(path)
+
+    _canonical_episode_observation.cache_clear()
+    monkeypatch.setattr(
+        "scripts.validation.run_matched_compute_production_canary._digest_file",
+        _swap_between_digest_and_parse,
+    )
+
+    assert _check_receipt(receipt_path) == 1
+    assert target.read_bytes() == canonical_bytes_b
 
 
 def test_receipt_check_rejects_arbitrary_regular_file_as_episode_provenance(
@@ -805,6 +904,41 @@ def test_open_loop_rejects_manifest_scenario_seed_drift_before_record_emission(
     )
 
     with pytest.raises(ValueError, match="scenario_seed.*frozen packet"):
+        _run_open_loop(
+            load_packet(PACKET),
+            tmp_path / "output",
+            "c" * 40,
+            "a" * 64,
+        )
+
+
+@pytest.mark.parametrize(
+    ("include_objective", "objective_value", "expected_problem"),
+    [
+        (False, None, "objective_value is required for accepted candidate"),
+        (True, "not-a-number", "objective_value is not numeric"),
+        (True, float("nan"), "objective_value is not finite"),
+        (True, float("inf"), "objective_value is not finite"),
+    ],
+    ids=("missing", "non-numeric", "nan", "infinity"),
+)
+def test_open_loop_rejects_accepted_manifest_without_finite_objective(
+    include_objective: bool,
+    objective_value: object,
+    expected_problem: str,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        "scripts.validation.run_matched_compute_production_canary.run_adversarial_search",
+        _fake_native_open_loop_runner(
+            tmp_path,
+            include_objective=include_objective,
+            objective_value=objective_value,
+        ),
+    )
+
+    with pytest.raises(ValueError, match=expected_problem):
         _run_open_loop(
             load_packet(PACKET),
             tmp_path / "output",

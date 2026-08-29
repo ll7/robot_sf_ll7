@@ -661,7 +661,7 @@ def _run_open_loop(
                 episode_digest=_digest_file(Path(entry["episode_record_path"]))
                 if entry.get("episode_record_path") and Path(entry["episode_record_path"]).exists()
                 else "",
-                objective_value=_manifest_objective(entry),
+                objective_value=_manifest_objective(entry, status=status),
                 degraded_reason=(
                     str(entry.get("error") or "episode record unavailable") if steps is None else ""
                 ),
@@ -752,25 +752,32 @@ def _manifest_steps(entry: dict[str, Any]) -> int | None:
     return None
 
 
-def _manifest_objective(entry: dict[str, Any]) -> float | None:
-    """Return the finite objective value when valid."""
+def _objective_value_problem(value: Any, *, status: str, prefix: str) -> str | None:
+    """Return why an objective is inadmissible for one candidate status."""
+    if value is None:
+        return (
+            f"{prefix}.objective_value is required for accepted candidate"
+            if status == "accepted"
+            else None
+        )
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return f"{prefix}.objective_value is not numeric"
+    if not math.isfinite(float(value)):
+        return f"{prefix}.objective_value is not finite"
+    return None
+
+
+def _manifest_objective(entry: dict[str, Any], *, status: str) -> float | None:
+    """Return a finite manifest objective, rejecting invalid accepted evidence."""
     value = entry.get("objective_value")
-    if value is None:
-        record_path = entry.get("episode_record_path")
-        if record_path and Path(record_path).exists():
-            try:
-                record = json.loads(Path(record_path).read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
-                record = {}
-            if isinstance(record, dict):
-                value = record.get("min_robot_distance")
-    if value is None:
-        return None
-    try:
-        as_float = float(value)
-    except (TypeError, ValueError):
-        return None
-    return as_float if math.isfinite(as_float) else None
+    problem = _objective_value_problem(
+        value,
+        status=status,
+        prefix="native open-loop manifest candidate",
+    )
+    if problem is not None:
+        raise ValueError(problem)
+    return float(value) if value is not None else None
 
 
 def _run_reactive(
@@ -885,16 +892,16 @@ def _observed_episode_steps(payload: dict[str, Any]) -> int:
 
 @lru_cache(maxsize=1024)
 def _canonical_episode_observation(
-    artifact_identity: str, observed_digest: str
+    observed_digest: str, artifact_bytes: bytes
 ) -> tuple[dict[str, Any], int]:
-    """Parse and validate one immutable-by-digest canonical episode artifact."""
-    artifact = Path(artifact_identity)
+    """Parse the exact immutable byte buffer whose digest was observed."""
+    if hashlib.sha256(artifact_bytes).hexdigest() != observed_digest:
+        raise ValueError("episode artifact buffer does not match its observed digest")
     try:
-        nonempty_lines = [
-            line for line in artifact.read_text(encoding="utf-8").splitlines() if line.strip()
-        ]
-    except (OSError, UnicodeDecodeError) as exc:
-        raise ValueError(f"episode artifact cannot be read: {exc}") from exc
+        artifact_text = artifact_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"episode artifact is not UTF-8: {exc}") from exc
+    nonempty_lines = [line for line in artifact_text.splitlines() if line.strip()]
     if len(nonempty_lines) != 1:
         raise ValueError("episode artifact must contain exactly one JSONL record")
     try:
@@ -920,9 +927,8 @@ def _canonical_episode_observation(
     contradictions = payload.get("integrity", {}).get("contradictions", [])
     if contradictions:
         raise ValueError("episode artifact declares integrity contradictions")
-    # ``observed_digest`` is deliberately part of the cache key. A changed file
-    # cannot reuse a previously validated observation under a new digest.
-    del observed_digest
+    # The cache key contains the verified digest and immutable bytes, never a
+    # mutable path that would need to be reopened for parsing.
     return payload, _observed_episode_steps(payload)
 
 
@@ -968,15 +974,14 @@ def _episode_observation_problems(
 ) -> list[str]:
     """Return digest, schema, and byte-derived identity problems for one artifact."""
     try:
-        observed_digest = _digest_file(artifact)
+        artifact_bytes = artifact.read_bytes()
     except OSError as exc:
         return [f"{prefix}.episode_identity cannot be read: {exc}"]
+    observed_digest = hashlib.sha256(artifact_bytes).hexdigest()
     if observed_digest != record.episode_digest:
         return [f"{prefix}.episode_digest does not match referenced episode artifact"]
     try:
-        payload, observed_steps = _canonical_episode_observation(
-            artifact.as_posix(), observed_digest
-        )
+        payload, observed_steps = _canonical_episode_observation(observed_digest, artifact_bytes)
     except ValueError as exc:
         return [f"{prefix}.episode_identity is not authoritative: {exc}"]
     return _episode_payload_binding_problems(record, prefix, payload, observed_steps)
@@ -1140,14 +1145,13 @@ def _record_scalar_problems(
 ) -> list[str]:
     """Return malformed numeric or observed-episode fields for one record."""
     problems: list[str] = []
-    if record.objective_value is not None:
-        try:
-            objective_value = float(record.objective_value)
-        except (TypeError, ValueError):
-            problems.append(f"{prefix}.objective_value is not numeric")
-        else:
-            if not math.isfinite(objective_value):
-                problems.append(f"{prefix}.objective_value is not finite")
+    objective_problem = _objective_value_problem(
+        record.objective_value,
+        status=record.status,
+        prefix=prefix,
+    )
+    if objective_problem is not None:
+        problems.append(objective_problem)
     problems.extend(
         _record_step_problems(
             record,
@@ -1310,7 +1314,7 @@ def _arm_evidence_status(
         or record.fallback_flags
         or record.degraded_reason
         or bool(
-            _record_step_problems(
+            _record_scalar_problems(
                 record,
                 "record",
                 repository_root,

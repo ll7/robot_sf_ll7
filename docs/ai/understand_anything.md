@@ -66,11 +66,15 @@ uv run python scripts/dev/check_understand_graph_freshness.py
 
 The command always prints one JSON report. Exit code `0` and the paired values
 `AUTHORITATIVE` / `ACTIONABLE` mean that `meta.json`, `knowledge-graph.json`, and
-`fingerprints.json` agree on a resolvable source commit and that the inspected clean repository has
-the same tracked non-graph content. The comparison ignores `.understand-anything/` itself because
-the graph artifacts must be committed after their recorded source commit. Exit code `1` marks the
-graph `NON-AUTHORITATIVE` / `NON-ACTIONABLE` with stable reason codes when artifacts are stale,
-missing, malformed, inconsistent, or locally modified, or when the source worktree is dirty.
+`fingerprints.json` are tracked regular files, agree on a locally resolvable source commit, and the
+inspected clean repository has the same source content. The comparison excludes only those three
+self-referential generated artifacts because they must be committed after their recorded source
+commit. Graph controls such as `config.json` and `.understandignore`, plus any unexpected tracked
+files under `.understand-anything/`, remain source-bound. Exit code `1` marks the graph
+`NON-AUTHORITATIVE` / `NON-ACTIONABLE` with stable reason codes when artifacts are stale, missing,
+malformed, inconsistent, untracked, symlinked, or locally modified, or when the source worktree is
+dirty. Git inspection disables lazy promisor fetches and optional locks, so a missing source object
+is denied locally without retrieving or writing repository objects.
 
 Treat a denied graph as orientation history only: inspect current source directly or refresh the
 graph with `/understand`, commit the intended graph artifacts, and rerun the gate. The gate does not

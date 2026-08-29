@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -12,6 +13,15 @@ from typing import Any
 
 SCHEMA_VERSION = "robot_sf.understand_graph_freshness.v1"
 GRAPH_DIR = Path(".understand-anything")
+EXPECTED_GRAPH_ARTIFACTS = {
+    "meta": GRAPH_DIR / "meta.json",
+    "knowledge_graph": GRAPH_DIR / "knowledge-graph.json",
+    "fingerprints": GRAPH_DIR / "fingerprints.json",
+}
+GENERATED_GRAPH_ARTIFACTS = tuple(EXPECTED_GRAPH_ARTIFACTS.values())
+GENERATED_GRAPH_EXCLUSIONS = tuple(
+    f":(exclude){path.as_posix()}" for path in GENERATED_GRAPH_ARTIFACTS
+)
 
 
 class _GraphCheckError(Exception):
@@ -29,12 +39,21 @@ class _GraphCheckError(Exception):
 
 
 def _git(repo_root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env.update(
+        {
+            "GIT_NO_LAZY_FETCH": "1",
+            "GIT_OPTIONAL_LOCKS": "0",
+            "GIT_TERMINAL_PROMPT": "0",
+        }
+    )
     return subprocess.run(
         ["git", *args],
         cwd=repo_root,
         check=check,
         capture_output=True,
         text=True,
+        env=env,
     )
 
 
@@ -90,18 +109,39 @@ def _require_clean_paths(
         raise _GraphCheckError(reason_code, recorded_commit=recorded_commit)
 
 
-def _load_artifacts(graph_root: Path) -> dict[str, dict[str, Any]]:
-    required_paths = {
-        "meta": graph_root / "meta.json",
-        "knowledge_graph": graph_root / "knowledge-graph.json",
-        "fingerprints": graph_root / "fingerprints.json",
-    }
-    for artifact_name, path in required_paths.items():
+def _load_artifacts(repo_root: Path) -> dict[str, dict[str, Any]]:
+    for artifact_name, relative_path in EXPECTED_GRAPH_ARTIFACTS.items():
+        path = repo_root / relative_path
+        if path.is_symlink():
+            raise _GraphCheckError(f"{artifact_name}_not_regular")
         if not path.is_file():
             raise _GraphCheckError(f"{artifact_name}_missing")
+        index_entry = _git(
+            repo_root,
+            "ls-files",
+            "--stage",
+            "--",
+            relative_path.as_posix(),
+            check=False,
+        )
+        if index_entry.returncode != 0:
+            raise _GraphCheckError("git_index_check_failed")
+        entries = index_entry.stdout.splitlines()
+        if len(entries) != 1:
+            raise _GraphCheckError(f"{artifact_name}_not_tracked")
+        entry_metadata, _, listed_path = entries[0].partition("\t")
+        metadata_fields = entry_metadata.split()
+        if (
+            listed_path != relative_path.as_posix()
+            or len(metadata_fields) != 3
+            or metadata_fields[0] not in {"100644", "100755"}
+            or metadata_fields[2] != "0"
+        ):
+            raise _GraphCheckError(f"{artifact_name}_not_regular")
 
     artifacts: dict[str, dict[str, Any]] = {}
-    for artifact_name, path in required_paths.items():
+    for artifact_name, relative_path in EXPECTED_GRAPH_ARTIFACTS.items():
+        path = repo_root / relative_path
         try:
             artifacts[artifact_name] = _read_json_object(path)
         except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
@@ -178,10 +218,14 @@ def _source_tree_matches(repo_root: Path, *, recorded_commit: str, inspected_com
         inspected_commit,
         "--",
         ".",
-        ":(exclude).understand-anything",
+        *GENERATED_GRAPH_EXCLUSIONS,
         check=False,
     )
-    return comparison.returncode == 0
+    if comparison.returncode == 0:
+        return True
+    if comparison.returncode == 1:
+        return False
+    raise _GraphCheckError("git_comparison_failed", recorded_commit=recorded_commit)
 
 
 def _authoritative_result(repo_root: Path) -> dict[str, Any]:
@@ -193,12 +237,12 @@ def _authoritative_result(repo_root: Path) -> dict[str, Any]:
             pathspecs=(str(GRAPH_DIR),),
             reason_code="graph_artifacts_dirty",
         )
-        artifacts = _load_artifacts(repo_root / GRAPH_DIR)
+        artifacts = _load_artifacts(repo_root)
         recorded_commit = _recorded_commit(artifacts, inspected_commit)
         _require_consistent_artifact_commits(artifacts, recorded_commit)
         _require_clean_paths(
             repo_root,
-            pathspecs=(".", ":(exclude).understand-anything"),
+            pathspecs=(".", *GENERATED_GRAPH_EXCLUSIONS),
             reason_code="working_tree_dirty",
             recorded_commit=recorded_commit,
         )

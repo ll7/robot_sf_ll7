@@ -266,6 +266,66 @@ def test_uncommitted_graph_change_is_non_authoritative(tmp_path: Path) -> None:
     assert payload["graph"]["source_tree_equivalent"] is None
 
 
+@pytest.mark.parametrize("index_flag", ["assume-unchanged", "skip-worktree"])
+def test_hidden_index_flag_cannot_conceal_modified_graph_artifact(
+    tmp_path: Path, index_flag: str
+) -> None:
+    """Index hints must not let altered graph bytes bypass the graph-dirty gate."""
+    repo, source_commit = _graph_repo(tmp_path)
+    graph_path = repo / ".understand-anything" / "meta.json"
+    _git(repo, "update-index", f"--{index_flag}", ".understand-anything/meta.json")
+    _write_json(graph_path, {"gitCommitHash": source_commit, "tampered": True})
+    assert (
+        _git(
+            repo,
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--",
+            ".understand-anything/meta.json",
+        )
+        == ""
+    )
+
+    result = _run_check(repo)
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["authoritativeness"] == "NON-AUTHORITATIVE"
+    assert payload["actionability"] == "NON-ACTIONABLE"
+    assert payload["reason_codes"] == ["graph_artifacts_dirty"]
+    assert payload["graph"]["recorded_commit"] is None
+
+
+@pytest.mark.parametrize("index_flag", ["assume-unchanged", "skip-worktree"])
+def test_hidden_index_flag_cannot_conceal_modified_source(tmp_path: Path, index_flag: str) -> None:
+    """Index hints must not let working source bytes bypass the source-dirty gate."""
+    repo, source_commit = _graph_repo(tmp_path)
+    _git(repo, "update-index", f"--{index_flag}", "source.py")
+    (repo / "source.py").write_text("VALUE = 999\n", encoding="utf-8")
+    assert (
+        _git(
+            repo,
+            "status",
+            "--porcelain",
+            "--untracked-files=all",
+            "--",
+            "source.py",
+        )
+        == ""
+    )
+
+    result = _run_check(repo)
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["authoritativeness"] == "NON-AUTHORITATIVE"
+    assert payload["actionability"] == "NON-ACTIONABLE"
+    assert payload["reason_codes"] == ["working_tree_dirty"]
+    assert payload["graph"]["recorded_commit"] == source_commit
+    assert payload["graph"]["source_tree_equivalent"] is None
+
+
 def test_missing_knowledge_graph_is_non_authoritative(tmp_path: Path) -> None:
     """A missing graph must produce a machine-readable denial instead of a traceback."""
     repo, _ = _graph_repo(tmp_path)

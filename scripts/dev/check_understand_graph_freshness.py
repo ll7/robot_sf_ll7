@@ -97,6 +97,26 @@ def _require_clean_paths(
     reason_code: str,
     recorded_commit: str | None = None,
 ) -> None:
+    index_entries = _git(
+        repo_root,
+        "ls-files",
+        "-v",
+        "-z",
+        "--",
+        *pathspecs,
+    )
+    for entry in index_entries.stdout.split("\0"):
+        if not entry:
+            continue
+        tag, separator, _ = entry.partition(" ")
+        if separator != " " or len(tag) != 1:
+            raise _GraphCheckError(reason_code, recorded_commit=recorded_commit)
+        # `git ls-files -v` lowercases the tag for assume-unchanged entries;
+        # `S` identifies skip-worktree (`s` when both flags are present).
+        # Porcelain status deliberately trusts these hints, so their presence
+        # makes working-tree cleanliness unprovable and must deny graph use.
+        if tag.islower() or tag == "S":
+            raise _GraphCheckError(reason_code, recorded_commit=recorded_commit)
     status = _git(
         repo_root,
         "status",

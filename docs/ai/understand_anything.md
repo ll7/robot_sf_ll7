@@ -70,7 +70,9 @@ The command always prints one JSON report. Exit code `0` and the paired values
 inspected clean repository has the same source content. The comparison excludes only those three
 self-referential generated artifacts because they must be committed after their recorded source
 commit. Graph controls such as `config.json` and `.understandignore`, plus any unexpected tracked
-files under `.understand-anything/`, remain source-bound. Exit code `1` marks the graph
+files under `.understand-anything/`, remain source-bound. Paths marked with Git's
+`assume-unchanged` or `skip-worktree` index hints are denied because those hints can conceal local
+byte changes from ordinary status checks. Exit code `1` marks the graph
 `NON-AUTHORITATIVE` / `NON-ACTIONABLE` with stable reason codes when artifacts are stale, missing,
 malformed, inconsistent, untracked, symlinked, or locally modified, or when the source worktree is
 dirty. Git inspection disables lazy promisor fetches and optional locks, so a missing source object

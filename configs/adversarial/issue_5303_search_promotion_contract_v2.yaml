@@ -156,7 +156,9 @@ input_provenance:
       # public API, and error behavior are byte-identical (proven by the committed
       # pre-refactor snapshot parity tests); no target, split, budget, estimator,
       # gate, or decision field changed.
-      sha256: e322ee1327eed4446657461cbbb9758c479aaa8d774b2190dc3c98518dbbf5fc
+      # Refreshed for issue #7889: additive experimental force-coupled planner
+      # registry metadata; the powered-search contract fields are unchanged.
+      sha256: af9687bf51cfb4a51db549e60517096108baebde5df5ded4217650ecc7b02451
     - id: powered_search_space
       path: configs/adversarial/issue_5303_search_promotion_space_v2.yaml
       sha256: 1f65d0913d0871ee4e658a560a870f8e8a9f74589397c6c613440a90f2757099

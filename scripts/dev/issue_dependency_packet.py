@@ -809,6 +809,7 @@ def apply_dependency_gate(
     if not gate["ok"]:
         result["ready"] = False
         result["write_allowed"] = False
+        result["admission_reason"] = "dependency_missing"
         if result.get("classification") not in {"error", "closed", "already_claimed"}:
             result["classification"] = "needs_dependency"
         reasons = result.setdefault("reasons", [])

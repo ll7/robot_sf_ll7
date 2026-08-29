@@ -398,7 +398,7 @@ resolving lint or test failures locally before requesting review.
 - For delegated-worker routing, prefer a compact preflight ledger before implementation or review
   dispatch: `gh auth status`, `uv run python -m scripts.dev.snapshot_pr_queue --prs <number> --expected-head-sha <sha> --json`,
   and `scripts/dev/check_pr_ci_status.py --expected-head-sha <sha>`.
-- Default claimable issue snapshots should keep blocked external-data issues out of agent routing;
+- Default candidate-queue snapshots should keep blocked external-data issues out of agent routing;
   use `uv run python -m scripts.dev.snapshot_issue_batch --blocked-external-report` for the parked human-action
   report, or `--include-blocked-external` only when explicitly auditing that queue.
 - Use `uv run python -m scripts.dev.snapshot_issue_batch --active-portfolio` when reviewing the broader open

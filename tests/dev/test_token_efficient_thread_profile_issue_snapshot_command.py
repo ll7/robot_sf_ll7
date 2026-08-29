@@ -104,11 +104,11 @@ def test_documented_issue_snapshot_succeeds_against_cli(capsys) -> None:  # type
     assert rc == 0, f"Expected documented command to succeed, got exit code {rc}"
     payload = json.loads(capsys.readouterr().out)
     assert payload["schema"] == "issue_batch_snapshot.v1", "CLI emitted an unexpected schema"
-    assert payload["mode"] == "claimable", "CLI did not run the documented claimable mode"
+    assert payload["mode"] == "candidate_queue", "CLI did not run the documented candidate mode"
     issues_by_number = {issue["number"]: issue for issue in payload["issues"]}
     assert list(issues_by_number) == [6031], "CLI did not emit the mocked claimable issue"
-    assert issues_by_number[6031]["classification"] == "claimable", (
-        "Mocked unclaimed issue was not classified as claimable"
+    assert issues_by_number[6031]["classification"] == "state_conflict", (
+        "Missing lifecycle state was not classified as a non-claimable candidate"
     )
     mock_gh.assert_called_once()
     mock_claims.assert_called_once_with([6031], remote="origin")

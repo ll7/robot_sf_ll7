@@ -1,10 +1,22 @@
 # Context Retrieval Index
 
+Issue #7889 force-coupled potential-field comparator: an opt-in experimental local planner with
+strict observation and occupancy-grid validation, bounded command-rate behavior, deterministic
+analytic smoke, and explicit implementation-only evidence boundaries. It does not establish
+planner performance, safety, social compliance, or source-method reproduction:
+[issue_7889_force_coupled_potential_field.md](issue_7889_force_coupled_potential_field.md).
+
 Issue #7890 route-choice observability contract: frame-explicit route-side labels,
 canonical grid-corridor identities, denominator-separated temporal consistency, and a versioned
 analysis-only diagnostic receipt. The contract observes planner routes and does not establish
 pedestrian preference, response, comfort, or human predictability:
 [issue_7890_route_choice_observability.md](issue_7890_route_choice_observability.md).
+
+Issue #7888 incident-to-scenario provenance contract (`incident_scenario_provenance.v1`):
+separate source facts, extracted hypotheses, simulator assumptions, parameter mappings, generated
+configuration, execution identity, and observed outcomes without legal fault attribution
+(`normative_fault: not_assessed`):
+[issue_7888_incident_scenario_provenance.md](issue_7888_incident_scenario_provenance.md).
 
 Issue #7848 RecurrentPPO learned adapter: stateful `sb3_contrib.RecurrentPPO` local planner
 under the #7846 `default_gym` observation contract (`drive_state` + `rays`), recurrent hidden/cell

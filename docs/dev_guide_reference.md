@@ -1449,7 +1449,9 @@ uv run python scripts/dev/pr_babysitter_snapshot.py 2679 --expected-head-sha "$S
 uv run python scripts/dev/watch_pr_ci_status.py 2679 --expected-head-sha "$SHA" --json --once
 ```
 
-Default `--claimable` issue snapshots omit issues classified as blocked on external data, assets,
+The `--claimable` compatibility command emits a `candidate_queue`: label-filtered rows are
+candidate evidence, while only rows in its `claimable_issues` list passed the live admission check.
+It omits issues classified as blocked on external data, assets,
 licenses, or human staging input. Use `--include-blocked-external` only when deliberately auditing
 that parked queue, or `--blocked-external-report` to generate a compact human-action report with
 monthly review dates. Use `--active-portfolio` for a compact non-mutating open-issue portfolio
@@ -1459,10 +1461,11 @@ Issues carrying `routing:needs-compute` remain visible for audit but classify as
 are excluded from implementation dispatch until compute or private execution authorization is
 established. Issues carrying `needs-triage` likewise remain visible for audit but are excluded
 from autonomous implementation dispatch until human routing review clears the label.
-Any explicit `blocked:*` label is likewise retained for audit but classifies as `blocked_label`,
-including the exact blocker label in its reason, and is excluded from autonomous implementation
-dispatch. Explicit `state:review` rows are also retained for audit but classify as `blocked_label`
-and remain outside autonomous implementation dispatch until the review gate is cleared.
+Any explicit `blocked:*` label is likewise retained for audit but classifies as `blocked`, including
+the exact blocker label in the row's non-claimable evidence; the row remains excluded from
+autonomous implementation dispatch. Explicit `state:review` rows are retained for audit and classify as `review`; they remain
+outside autonomous implementation dispatch until the review gate is cleared. The queue also emits
+an `admission_reason_histogram` so `not_admitted` counts remain actionable.
 Before any autonomous claim write, route the candidate through
 `scripts/dev/goal_issue_admission.py`, which performs the live source-ref, issue, dependency,
 and claim preflight before calling the atomic claim writer. Snapshot consumers should use the

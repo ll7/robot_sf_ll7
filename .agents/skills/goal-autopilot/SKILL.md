@@ -156,8 +156,9 @@ practical native Codex token usage. Use goal-autopilot as the loop controller
 and compose it with save-codex-tokens for routing, budget checks, compact
 evidence, and delegation economics.
 
-Continue implement -> review -> merge -> discover until no eligible work
-remains, a hard blocker appears, or the Codex budget guard fires.
+Continue prioritize -> reconcile -> prepare -> admit/claim -> implement ->
+review -> merge -> discover until no eligible work remains, a hard blocker
+appears, or the Codex budget guard fires.
 ```
 
 ## Trigger Boundary
@@ -206,6 +207,8 @@ Record at start:
 - Write permissions: branch/commit/PR/project/merge writes allowed by default.
 - Stop condition: all eligible issues processed, no merge-ready PRs remain, discovery
   saturated, or user stop.
+- Queue truth: a label-filtered row is a candidate, not claimable work; only a successful live
+  `goal_issue_admission.py --check-only` result is claimable.
 - Exclusions: blocked/decision-required issues, draft PRs, benchmark-heavy PRs that
   need manual review.
 - Coordination: implementation selection must use the canonical `goal_issue_admission.py`
@@ -218,17 +221,96 @@ Do not ask for extra confirmation after this preflight.
 
 Each cycle iteration follows a fixed phase order:
 
-1. `prioritize` — auto-fill **empty** Project #5 priorities so the queue the `implement` phase reads
+1. `prioritize` — auto-fill **empty** Project #5 priorities so the queue the `admit/claim` phase reads
    reflects research leverage. Delegate to `gh-issue-priority-assessor` in **auto mode**
    (`--only-empty`): score only issues whose `Priority Score` is currently empty (newly created or
    never-assessed) and **never recompute or overwrite an existing priority**. This stays cheap
    (skips the already-scored majority) and applies the verify-before-scoring gate so already-merged
    issues are routed to closure, not scored. A failure here is non-fatal: log it and proceed with the
    existing ordering.
-2. `implement` — delegate to `goal-issue-implementation` for one issue.
-3. `review` — delegate to `goal-pr-review` for all merge-eligible PRs.
-4. `merge` — delegate to `gh-pr-merger` for all `merge-ready` PRs.
-5. `discover` — delegate to `goal-issue-discovery` for bounded discovery.
+2. `reconcile` — refresh project permission and worker-route status, then reconcile satisfied
+   blockers and stale lifecycle labels. Missing `read:project` is a non-fatal priority limitation;
+   it does not authorize treating the candidate queue as claimable. Route status is also non-fatal
+   for local work, but a prior failed route probe expires and must not remain authoritative.
+3. `prepare` — run the report-only open-issue audit and deterministic preparation planner. Review
+   `ready`, `needs_ready_label`, `needs_spec`, parent, decision, compute, external-input, active,
+   review, covered, and wrong-owner groups separately. Use bounded dry-run/apply operations only;
+   never relabel a whole backlog to reach a target ready-pool size.
+4. `admit/claim` — re-run the live `goal_issue_admission.py --check-only` gate for each selected
+   leaf and acquire its atomic claim only after the check passes. A preparation packet or
+   `state:ready` label is not a claim.
+5. `implement` — delegate to `goal-issue-implementation` for one admitted issue.
+6. `review` — delegate to `goal-pr-review` for all merge-eligible PRs, prioritizing exact-head
+   domain-review backlog before new evidence-bearing implementation work.
+7. `merge` — delegate to `gh-pr-merger` for all `merge-ready` PRs.
+8. `discover` — delegate to `goal-issue-discovery` for one bounded, unsaturated discovery lane.
+
+### Reconciliation and empty-queue policy
+
+When the candidate queue has no claimable leaf, run the following bounded recovery sequence before
+declaring zero work:
+
+```text
+refresh_project_permission_status()
+refresh_worker_routes()
+reconcile_satisfied_blockers()
+prepare_open_issue_contracts(limit=10)
+rerun_live_admission()
+if claimable_count == 0:
+    complete_review_ready_prs()
+if claimable_count == 0:
+    run_next_unsaturated_discovery_lane(max_new_issues=2)
+    prepare_and_admit_new_candidates()
+if claimable_count == 0:
+    stop as genuine_zero_work
+```
+
+The audit and queue snapshots must expose an admission-reason histogram. Use stable reasons such as
+`wrong_owner_repo`, `external_input_missing`, `covering_pr_open`, `parent_not_leaf`, `needs_spec`,
+`dependency_missing`, `stale_route_state`, and `claimable`; do not report only a total such as
+`12/12 not admitted`. A successful live check is the only basis for the word “claimable.”
+
+For each reconciliation cycle, retain one repository-local execution contract:
+
+```yaml
+execution:
+  owning_repo: ll7/robot_sf_ll7
+  mutation_repos:
+    - ll7/robot_sf_ll7
+  route_required: local
+  external_inputs: []
+```
+
+An explicit owner outside the current repository is `wrong_owner_repo` unless a fresh
+multi-repository route preflight passes. A parent is never `state:ready`; `state:running` requires
+an active atomic claim or covering PR; `state:blocked-external-input` names a real external input;
+and a no-safe-slice result remains valid rather than being reopened to fill the queue.
+
+### Discovery lane cursor
+
+Persist one cursor per autopilot goal and advance it after each bounded pass. Use this order:
+
+```yaml
+discovery_lanes:
+  - workflow_and_api_friction
+  - failing_skipped_disabled_tests
+  - current_main_todo_fixme
+  - stale_parent_and_merged_pr_residuals
+  - documentation_and_ci_contract_drift
+  - measured_test_or_runtime_regressions
+  - context_note_indexing
+policy:
+  maximum_new_issues_per_lane: 2
+  minimum_evidence_grade: observed
+  require_single_repo_leaf: true
+  require_live_admission_before_ready: true
+  rescan_only_after_relevant_head_change: true
+```
+
+Do not rescan a saturated lane until the relevant repository head or contract state changes. Prefer
+observed local support defects with one mutation owner, narrow paths, no external input or compute,
+deterministic focused proof, and an estimated duration below four hours. Proposal-only research
+ideas remain discovery candidates, not an automatic ready-pool repair.
 
 Before each phase, run a delegation checkpoint:
 
@@ -237,7 +319,8 @@ Before each phase, run a delegation checkpoint:
   discovery scout.
 - Before broad issue or PR queue review, prefer compact parent-thread snapshots:
   `uv run python -m scripts.dev.snapshot_issue_batch --claimable --limit <n> --json` for a
-  no-arg next-issue queue, `uv run python -m scripts.dev.snapshot_issue_batch <first> <last> --json`
+  no-arg candidate queue (use only its live-admitted `claimable_issues`),
+  `uv run python -m scripts.dev.snapshot_issue_batch <first> <last> --json`
   for explicit issue batches, `uv run python -m scripts.dev.snapshot_pr_queue --active --limit <n>
   --json` for the active PR queue, and `uv run python -m scripts.dev.snapshot_pr_queue --prs <pr>
   [<pr> ...] --json` for explicit PR headline state. Apply
@@ -344,6 +427,7 @@ uv run python -m scripts.dev.compact_ci_snapshot <pr> [<pr> ...] \
 
 # Compact no-arg next-issue queue and explicit issue batch snapshots
 uv run python -m scripts.dev.snapshot_issue_batch --claimable --limit <n> --json
+# The command is a candidate queue; only its live-admitted `claimable_issues` are claimable.
 uv run python -m scripts.dev.snapshot_issue_batch <first> <last> \
   --json --capsule-dir <artifact-dir>
 
@@ -571,6 +655,13 @@ provider budget alternatives. This skill must not duplicate a model inventory or
 sidecar route table. Route selection is route evidence only; the controller still reviews artifacts,
 the diff, and validation locally before accepting work.
 
+Record route evidence with a bounded freshness window (30 minutes by default), the route
+configuration digest, the target repository head, and the probe timestamp. Re-probe when a new
+autopilot cycle or user request starts, the route configuration digest changes, or the previous
+probe expires. A prior `Luna/Qwen down` observation is stale after that window and cannot reject a
+new route without a fresh probe. If `CODEX_ROUTING_REPO` is unset, record `route-unavailable` and
+continue conservative local work; do not infer a provider or model from an old ledger entry.
+
 ## Delegation Failure Recovery
 
 Each delegate skill may fail. Handle failures per phase:
@@ -623,6 +714,9 @@ If the phase used `worker_sparse_artifacts`, require the self-review companion t
 ## Cycle Policy
 
 - Process exactly one implementation issue per cycle iteration by default.
+- Keep at most two evidence-bearing PRs pending independent domain review. When the limit is
+  reached, stop new evidence implementations, prioritize exact-head review/merge work, and permit
+  only local support changes that do not add another domain-review obligation.
 - After implementation, review all open non-draft PRs that are not blocked.
 - Merge all PRs carrying the `merge-ready` label.
 - Run one bounded discovery pass after merge.
@@ -633,6 +727,8 @@ If the phase used `worker_sparse_artifacts`, require the self-review companion t
 Stop the autopilot when any:
 - all eligible issues have been implemented and merged,
 - no new discovery candidates remain,
+- the audited candidate queue, review queue, external-input owners, and unsaturated discovery lanes
+  provide no defensible single-repository leaf (`genuine_zero_work`),
 - auth/credentials/env blocker that affects all phases,
 - user requests stop.
 

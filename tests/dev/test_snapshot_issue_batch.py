@@ -108,9 +108,13 @@ def test_snapshot_claimable_issues_excludes_dispatch_stop_labels_from_dispatch(
             )
 
     row = payload["issues"][0]
-    assert row["classification"] == "blocked_label"
+    assert row["classification"] == (
+        "review" if dispatch_stop_label == "state:review" else "state_conflict"
+    )
     assert row["reason"] == (
-        f"explicit dispatch-stop label {dispatch_stop_label}; skip autonomous claim"
+        "the issue is already in review"
+        if dispatch_stop_label == "state:review"
+        else "exactly one state:* label is required; found none"
     )
 
 
@@ -256,13 +260,20 @@ def test_snapshot_claimable_issues_includes_classification_without_body() -> Non
                 limit=2,
             )
 
-    assert payload["mode"] == "claimable"
-    assert payload["issues"][0]["classification"] == "claimable"
-    assert payload["issues"][0]["admission"]["classification"] == "needs_ready_label"
+    assert payload["mode"] == "candidate_queue"
+    assert payload["legacy_mode"] == "claimable"
+    assert payload["issues"][0]["classification"] == "state_conflict"
+    assert payload["claimable_count"] == 0
+    assert payload["claimable_issues"] == []
+    assert payload["admission_reason_histogram"] == {
+        "blocked": 1,
+        "state_label_conflict": 1,
+    }
+    assert payload["issues"][0]["admission"]["classification"] == "state_conflict"
     assert payload["issues"][0]["admission"]["claim_outcome"] == "unclaimed"
     assert payload["issues"][0]["body_excerpt"] == ""
     assert payload["issues"][0]["body_truncated"] is False
-    assert payload["issues"][1]["classification"] == "blocked_label"
+    assert payload["issues"][1]["classification"] == "blocked"
     assert "reason" in payload["issues"][1]
     claim.assert_called_once_with([2667, 2668], remote="origin")
 
@@ -311,6 +322,7 @@ def test_snapshot_claimable_issues_uses_live_admission_for_ready_candidates() ->
     assert admission["classification"] == "needs_dependency"
     assert admission["outcome"] == "not_admitted"
     assert admission["claim_outcome"] == "unclaimed"
+    assert payload["claimable_count"] == 0
     admit.assert_called_once_with(
         2669,
         repo="ll7/robot_sf_ll7",
@@ -462,9 +474,7 @@ def test_snapshot_claimable_issues_fences_compute_routed_issue() -> None:
 
     issue = payload["issues"][0]
     assert issue["classification"] == "needs_compute"
-    assert issue["reason"] == (
-        "compute or private execution authorization required; skip implementation dispatch"
-    )
+    assert issue["reason"] == "the issue is routed to compute or campaign execution"
 
 
 def test_snapshot_issues_fail_closed_for_closed_issue_state() -> None:
@@ -539,6 +549,8 @@ def test_snapshot_issues_reads_rest_when_graphql_quota_exhausted() -> None:
     assert issue["number"] == 6819
     assert issue["state"] == "OPEN"
     assert issue["labels"] == ["enhancement", "workflow"]
+    assert issue["classification"] == "state_conflict"
+    assert issue["reason"] == "exactly one state:* label is required; found none"
     assert issue["body_excerpt"] == rest_issue["body"]
     assert issue["body_truncated"] is False
     # Explicit reads must go through the REST reader, not the GraphQL CLI.
@@ -642,7 +654,7 @@ def test_snapshot_claimable_issues_fail_closed_for_closed_and_unknown_state() ->
             )
 
     classifications = [issue["classification"] for issue in payload["issues"]]
-    assert classifications == ["closed", "state_unknown", "state_unknown", "claimable"]
+    assert classifications == ["closed", "state_unknown", "state_unknown", "state_conflict"]
     assert [issue["state"] for issue in payload["issues"]] == ["CLOSED", "", "", "OPEN"]
     assert payload["issues"][0]["reason"] == "issue state is CLOSED; skip autonomous claim"
     assert payload["issues"][1]["reason"] == "issue state missing or unknown; skip autonomous claim"
@@ -687,7 +699,10 @@ def test_snapshot_claimable_issues_uses_one_batch_claim_lookup() -> None:
 
     per_issue_claim.assert_not_called()
     batch_claim.assert_called_once_with([2667, 2668], remote="origin")
-    assert [issue["classification"] for issue in payload["issues"]] == ["claimable", "claimed"]
+    assert [issue["classification"] for issue in payload["issues"]] == [
+        "state_conflict",
+        "already_claimed",
+    ]
     assert payload["issues"][1]["claim"] == {
         "ok": True,
         "claimed": True,
@@ -942,7 +957,7 @@ def test_snapshot_claimable_issues_can_include_blocked_external() -> None:
             )
 
     assert payload["include_blocked_external"] is True
-    assert payload["issues"][0]["classification"] == "blocked_external"
+    assert payload["issues"][0]["classification"] == "blocked"
     assert payload["excluded_counts"] == {"blocked_external": 1}
 
 

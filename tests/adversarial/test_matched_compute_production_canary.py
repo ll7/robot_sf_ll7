@@ -10,12 +10,14 @@ import hashlib
 import json
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from robot_sf.adversarial.config import SearchConfig
 from robot_sf.adversarial.matched_compute import MatchedComputeRuntimeTrace
 from scripts.validation.run_matched_compute_production_canary import (
     CANDIDATE_RECORD_SCHEMA,
@@ -23,6 +25,7 @@ from scripts.validation.run_matched_compute_production_canary import (
     _aggregate_reconcile,
     _budget_reconcile,
     _check_receipt,
+    _cross_arm_episode_reuse_problems,
     _digest_file,
     _digest_text,
     _discover_frozen_input_files,
@@ -31,6 +34,7 @@ from scripts.validation.run_matched_compute_production_canary import (
     _record_integrity_problems,
     _run_open_loop,
     _runtime_trace_is_production_observed,
+    _validate_execution_destinations,
     _verify_frozen_inputs,
     _write_receipt,
     load_packet,
@@ -62,6 +66,8 @@ def _record(
     candidate_identity: str = "cand-0",
     packet_digest: str = "a" * 64,
     commit: str = "c" * 40,
+    episode_identity: str = TEST_ARTIFACT_ID,
+    episode_digest: str = TEST_ARTIFACT_DIGEST,
 ) -> CandidateRecord:
     try:
         candidate_number = int(candidate_identity.rsplit("-", 1)[-1])
@@ -95,15 +101,60 @@ def _record(
         status=status,
         simulator_steps=50,
         simulator_steps_source="observed_episode_record",
-        episode_identity=TEST_ARTIFACT_ID,
-        episode_digest=TEST_ARTIFACT_DIGEST,
+        episode_identity=episode_identity,
+        episode_digest=episode_digest,
     )
+
+
+def _canonical_records(
+    artifact_root: Path,
+    *,
+    arm: str,
+    identity_prefix: str,
+    packet_digest: str = "a" * 64,
+    commit: str = "c" * 40,
+    count: int = 90,
+) -> list[CandidateRecord]:
+    """Write genuine, unique canonical episode records for positive receipt tests."""
+    records: list[CandidateRecord] = []
+    for index in range(count):
+        candidate_identity = f"{identity_prefix}-{index}"
+        episode_path = artifact_root / arm / candidate_identity / "episode_records.jsonl"
+        episode_path.parent.mkdir(parents=True)
+        episode_payload = {
+            "version": "v1",
+            "episode_id": f"{arm}-episode-{index}",
+            "scenario_id": "crossing_ttc_template",
+            "seed": 123,
+            "steps": 50,
+            "metrics": {"collisions": 0},
+            "termination_reason": "max_steps",
+            "outcome": {
+                "route_complete": False,
+                "collision_event": False,
+                "timeout_event": True,
+            },
+            "integrity": {"contradictions": []},
+        }
+        episode_path.write_text(json.dumps(episode_payload) + "\n", encoding="utf-8")
+        records.append(
+            _record(
+                arm=arm,
+                candidate_identity=candidate_identity,
+                packet_digest=packet_digest,
+                commit=commit,
+                episode_identity=episode_path.as_posix(),
+                episode_digest=_digest_file(episode_path),
+            )
+        )
+    return records
 
 
 class _Trace:
     accepted = 90
     rejected = 0
     invalid = 0
+    simulator_physics_steps = 90 * 50
 
 
 def _runtime_trace(
@@ -121,7 +172,7 @@ def _runtime_trace(
         scenario_seed=123,
         search_seed=42,
         execution_mode="native",
-        simulator_physics_steps=50,
+        simulator_physics_steps=candidate_evaluations * 50,
         macro_actions=10,
         candidate_evaluations=candidate_evaluations,
         accepted=accepted,
@@ -157,6 +208,54 @@ def _real_receipt_inputs() -> tuple[str, str, dict[str, str]]:
         check=True,
     ).stdout.strip()
     return commit, input_digests[packet_relative], input_digests
+
+
+def _fake_native_open_loop_runner(
+    tmp_path: Path,
+    *,
+    scenario_seed: int = 123,
+    config_overrides: dict[str, object] | None = None,
+) -> Callable[[SearchConfig], SimpleNamespace]:
+    """Return a native-manifest-shaped search fake with selectable source seed."""
+
+    def _run(config: SearchConfig) -> SimpleNamespace:
+        episode_path = tmp_path / "candidate_0000" / "episode_records.jsonl"
+        episode_path.parent.mkdir(exist_ok=True)
+        episode_path.write_text(
+            json.dumps({"steps": 50, "min_robot_distance": 1.25}), encoding="utf-8"
+        )
+        manifest_path = tmp_path / "manifest.json"
+        manifest_config = config.to_json()
+        manifest_config.update(config_overrides or {})
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "adversarial-search-manifest.v1",
+                    "config": manifest_config,
+                    "candidates": [
+                        {
+                            "candidate": {"scenario_seed": scenario_seed},
+                            "certification_status": {"status": "valid"},
+                            "bundle_path": str(episode_path.parent),
+                            "episode_record_path": str(episode_path),
+                            "objective_value": 1.25,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return SimpleNamespace(
+            manifest_path=manifest_path,
+            best_candidate=None,
+            best_bundle_path=None,
+            num_candidates=1,
+            num_valid_candidates=1,
+            num_invalid_candidates=0,
+            num_failed_evaluations=0,
+        )
+
+    return _run
 
 
 def test_packet_loads_and_validates() -> None:
@@ -303,6 +402,16 @@ def test_aggregate_reconcile_rejects_candidate_step_drift() -> None:
     assert any("record[0] simulator_steps 90" in problem for problem in problems)
 
 
+def test_aggregate_reconcile_requires_sum_of_all_episode_steps() -> None:
+    records = [_record(candidate_identity=f"cand-{i}") for i in range(90)]
+    correct_trace = replace(_runtime_trace(), simulator_physics_steps=90 * 50)
+
+    assert _aggregate_reconcile(records, correct_trace, expected_simulator_steps=50) == []
+    undersized_trace = replace(_runtime_trace(), simulator_physics_steps=50)
+    problems = _aggregate_reconcile(records, undersized_trace, expected_simulator_steps=50)
+    assert any("4500" in problem and "simulator_physics_steps" in problem for problem in problems)
+
+
 def test_candidate_record_schema_is_versioned() -> None:
     record = _record()
     assert record.schema == CANDIDATE_RECORD_SCHEMA
@@ -354,8 +463,10 @@ def test_manifest_status_rejects_nested_failure_attribution_status(
 
 
 def test_receipt_round_trip_and_deterministic_check(tmp_path: Path) -> None:
-    records = [_record(candidate_identity=f"cand-{i}") for i in range(90)]
-    reactive_records = [_record(arm="reactive", candidate_identity=f"cand-{i}") for i in range(90)]
+    records = _canonical_records(tmp_path / "artifacts", arm="open_loop", identity_prefix="open")
+    reactive_records = _canonical_records(
+        tmp_path / "artifacts", arm="reactive", identity_prefix="reactive"
+    )
     receipt_path = tmp_path / "receipt.json"
     _write_receipt(
         packet_digest="a" * 64,
@@ -376,6 +487,119 @@ def test_receipt_round_trip_and_deterministic_check(tmp_path: Path) -> None:
     )
     # Re-checking is deterministic.
     assert receipt_path.read_bytes() == receipt_path.read_bytes()
+
+
+def test_receipt_check_rejects_arbitrary_regular_file_as_episode_provenance(
+    tmp_path: Path,
+) -> None:
+    """A matching digest does not turn an arbitrary source file into episode evidence."""
+    records = [_record(candidate_identity=f"open-{i}") for i in range(90)]
+    reactive_records = [
+        _record(arm="reactive", candidate_identity=f"reactive-{i}") for i in range(90)
+    ]
+    receipt_path = tmp_path / "receipt.json"
+    _write_receipt(
+        packet_digest="a" * 64,
+        commit="c" * 40,
+        open_loop_records=records,
+        reactive_records=reactive_records,
+        problems=[],
+        output=receipt_path,
+        input_digests={"fixture.yaml": "f" * 64},
+        runtime_traces={
+            "open_loop": _runtime_trace(),
+            "reactive": _runtime_trace(arm="reactive"),
+        },
+    )
+
+    assert _check_receipt(receipt_path) == 1
+
+
+def test_episode_provenance_reconciles_steps_from_canonical_bytes(tmp_path: Path) -> None:
+    record = _canonical_records(
+        tmp_path / "artifacts", arm="open_loop", identity_prefix="open", count=1
+    )[0]
+
+    problems = _record_integrity_problems(
+        [replace(record, simulator_steps=49)],
+        arm_name="open_loop",
+        packet_digest="a" * 64,
+        commit="c" * 40,
+    )
+
+    assert any("simulator_steps does not match canonical episode artifact" in p for p in problems)
+
+
+def test_episode_provenance_rejects_declared_integrity_contradictions(tmp_path: Path) -> None:
+    record = _canonical_records(
+        tmp_path / "artifacts", arm="open_loop", identity_prefix="open", count=1
+    )[0]
+    episode_path = Path(record.episode_identity)
+    payload = json.loads(episode_path.read_text(encoding="utf-8"))
+    payload["integrity"]["contradictions"] = ["fixture contradiction"]
+    episode_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    problems = _record_integrity_problems(
+        [replace(record, episode_digest=_digest_file(episode_path))],
+        arm_name="open_loop",
+        packet_digest="a" * 64,
+        commit="c" * 40,
+    )
+
+    assert any("declares integrity contradictions" in problem for problem in problems)
+
+
+def test_episode_provenance_rejects_reuse_across_candidates(tmp_path: Path) -> None:
+    records = _canonical_records(
+        tmp_path / "artifacts", arm="open_loop", identity_prefix="open", count=2
+    )
+    records[1] = replace(
+        records[1],
+        episode_identity=records[0].episode_identity,
+        episode_digest=records[0].episode_digest,
+    )
+
+    problems = _record_integrity_problems(
+        records,
+        arm_name="open_loop",
+        packet_digest="a" * 64,
+        commit="c" * 40,
+    )
+
+    assert any("reuse an episode artifact across candidates" in problem for problem in problems)
+    assert any("reuse episode artifact bytes across candidates" in problem for problem in problems)
+
+
+def test_episode_provenance_rejects_reuse_between_arms(tmp_path: Path) -> None:
+    open_loop = _canonical_records(
+        tmp_path / "artifacts", arm="open_loop", identity_prefix="shared", count=1
+    )[0]
+    reactive = replace(
+        _record(arm="reactive", candidate_identity="shared-0"),
+        episode_identity=open_loop.episode_identity,
+        episode_digest=open_loop.episode_digest,
+    )
+
+    problems = _cross_arm_episode_reuse_problems([open_loop], [reactive], None)
+
+    assert "receipt arms reuse an episode artifact across candidates" in problems
+    assert "receipt arms reuse episode artifact bytes across candidates" in problems
+
+
+def test_episode_provenance_must_stay_inside_receipt_artifact_bundle(tmp_path: Path) -> None:
+    record = _canonical_records(
+        tmp_path / "outside", arm="open_loop", identity_prefix="open", count=1
+    )[0]
+
+    problems = _record_integrity_problems(
+        [record],
+        arm_name="open_loop",
+        packet_digest="a" * 64,
+        commit="c" * 40,
+        episode_artifact_root=tmp_path / "receipt_bundle",
+    )
+
+    assert any("outside the receipt's artifact bundle" in problem for problem in problems)
 
 
 @pytest.mark.parametrize("arm_name", ["open_loop", "reactive"])
@@ -554,37 +778,9 @@ def test_receipt_check_rejects_missing_step_provenance(tmp_path: Path) -> None:
 def test_open_loop_uses_native_manifest_identity_and_packet_digest(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    episode_path = tmp_path / "candidate_0000" / "episode_records.jsonl"
-    episode_path.parent.mkdir()
-    episode_path.write_text(json.dumps({"steps": 50, "min_robot_distance": 1.25}), encoding="utf-8")
-    manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(
-        json.dumps(
-            {
-                "candidates": [
-                    {
-                        "candidate": {"scenario_seed": 123},
-                        "certification_status": {"status": "valid"},
-                        "bundle_path": str(episode_path.parent),
-                        "episode_record_path": str(episode_path),
-                        "objective_value": 1.25,
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
     monkeypatch.setattr(
         "scripts.validation.run_matched_compute_production_canary.run_adversarial_search",
-        lambda _config: SimpleNamespace(
-            manifest_path=manifest_path,
-            best_candidate=None,
-            best_bundle_path=None,
-            num_candidates=1,
-            num_valid_candidates=1,
-            num_invalid_candidates=0,
-            num_failed_evaluations=0,
-        ),
+        _fake_native_open_loop_runner(tmp_path),
     )
     records, trace = _run_open_loop(
         load_packet(PACKET),
@@ -600,21 +796,65 @@ def test_open_loop_uses_native_manifest_identity_and_packet_digest(
     assert records[0].simulator_steps_source == "observed_episode_record"
 
 
+def test_open_loop_rejects_manifest_scenario_seed_drift_before_record_emission(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        "scripts.validation.run_matched_compute_production_canary.run_adversarial_search",
+        _fake_native_open_loop_runner(tmp_path, scenario_seed=999),
+    )
+
+    with pytest.raises(ValueError, match="scenario_seed.*frozen packet"):
+        _run_open_loop(
+            load_packet(PACKET),
+            tmp_path / "output",
+            "c" * 40,
+            "a" * 64,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("policy", "forged_policy"),
+        ("objective", "forged_objective"),
+        ("seed", 999),
+        ("scenario_template", "configs/scenarios/templates/forged.yaml"),
+    ],
+)
+def test_open_loop_rejects_native_manifest_config_drift(
+    field: str, value: object, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        "scripts.validation.run_matched_compute_production_canary.run_adversarial_search",
+        _fake_native_open_loop_runner(tmp_path, config_overrides={field: value}),
+    )
+
+    with pytest.raises(ValueError, match="manifest config.*frozen packet"):
+        _run_open_loop(
+            load_packet(PACKET),
+            tmp_path / "output",
+            "c" * 40,
+            "a" * 64,
+        )
+
+
 def test_cli_check_mode(tmp_path: Path) -> None:
     commit, packet_digest, input_digests = _real_receipt_inputs()
-    records = [
-        _record(candidate_identity=f"cand-{i}", packet_digest=packet_digest, commit=commit)
-        for i in range(90)
-    ]
-    reactive_records = [
-        _record(
-            arm="reactive",
-            candidate_identity=f"cand-{i}",
-            packet_digest=packet_digest,
-            commit=commit,
-        )
-        for i in range(90)
-    ]
+    records = _canonical_records(
+        tmp_path / "artifacts",
+        arm="open_loop",
+        identity_prefix="open",
+        packet_digest=packet_digest,
+        commit=commit,
+    )
+    reactive_records = _canonical_records(
+        tmp_path / "artifacts",
+        arm="reactive",
+        identity_prefix="reactive",
+        packet_digest=packet_digest,
+        commit=commit,
+    )
     receipt_path = tmp_path / "receipt.json"
     _write_receipt(
         packet_digest=packet_digest,
@@ -877,6 +1117,10 @@ def test_main_reconciles_runtime_trace_before_receipt(
         "scripts.validation.run_matched_compute_production_canary._run_reactive",
         lambda *_args, **_kwargs: (reactive_records, reactive_trace),
     )
+    monkeypatch.setattr(
+        "scripts.validation.run_matched_compute_production_canary._validate_execution_destinations",
+        lambda output, receipt, _root: (output, receipt),
+    )
     receipt_path = tmp_path / "receipt.json"
     result = main(
         [
@@ -910,6 +1154,10 @@ def test_cli_blocks_before_partial_arm_execution(
         "scripts.validation.run_matched_compute_production_canary._run_open_loop",
         unexpected_open_loop,
     )
+    monkeypatch.setattr(
+        "scripts.validation.run_matched_compute_production_canary._validate_execution_destinations",
+        lambda output, receipt, _root: (output, receipt),
+    )
     receipt_path = tmp_path / "receipt.json"
     result = main(
         [
@@ -929,6 +1177,155 @@ def test_cli_blocks_before_partial_arm_execution(
     assert receipt["arms"]["reactive"]["records"] == []
     assert receipt["evidence_status"] == "blocked"
     assert any("blocked before arm execution" in problem for problem in receipt["problems"])
+
+
+def test_main_rejects_out_of_scope_destinations_before_arm_execution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.chdir(REPOSITORY_ROOT)
+    monkeypatch.setattr(
+        "scripts.validation.run_matched_compute_production_canary._reactive_production_preflight_problem",
+        lambda _packet: None,
+    )
+
+    def unexpected_arm(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("an arm must not run before destination admission")
+
+    monkeypatch.setattr(
+        "scripts.validation.run_matched_compute_production_canary._run_open_loop",
+        unexpected_arm,
+    )
+    receipt_path = tmp_path / "receipt.json"
+
+    with pytest.raises(ValueError, match="issue-scoped"):
+        main(
+            [
+                "--packet",
+                str(PACKET),
+                "--output-dir",
+                str(tmp_path / "matched_compute_canary-prefix-confusable"),
+                "--receipt",
+                str(receipt_path),
+                "--commit",
+                "c" * 40,
+            ]
+        )
+
+    assert not receipt_path.exists()
+
+
+def _destination_repository(tmp_path: Path) -> Path:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+    (repository / ".gitignore").write_text("output/\n", encoding="utf-8")
+    return repository
+
+
+def test_execution_destination_gate_accepts_only_exact_ignored_scope(tmp_path: Path) -> None:
+    repository = _destination_repository(tmp_path)
+    output = repository / "output" / "matched_compute_canary" / "run"
+    receipt = output / "receipt.json"
+
+    assert _validate_execution_destinations(output, receipt, repository) == (output, receipt)
+
+
+@pytest.mark.parametrize(
+    "unsafe_output",
+    [
+        Path("output/matched_compute_canary-prefix-confusable"),
+        Path("output/matched_compute_canary/../../elsewhere"),
+        Path("elsewhere/matched_compute_canary"),
+    ],
+)
+def test_execution_destination_gate_rejects_scope_escapes(
+    unsafe_output: Path, tmp_path: Path
+) -> None:
+    repository = _destination_repository(tmp_path)
+    receipt = repository / "output" / "matched_compute_canary" / "receipt.json"
+
+    with pytest.raises(ValueError, match="issue-scoped"):
+        _validate_execution_destinations(unsafe_output, receipt, repository)
+
+
+@pytest.mark.parametrize("tracked_kind", ["output", "receipt"])
+def test_execution_destination_gate_rejects_tracked_paths(
+    tracked_kind: str, tmp_path: Path
+) -> None:
+    repository = _destination_repository(tmp_path)
+    allowed = repository / "output" / "matched_compute_canary"
+    output = allowed / "run"
+    receipt = allowed / "receipt.json"
+    tracked_path = output / "tracked.json" if tracked_kind == "output" else receipt
+    tracked_path.parent.mkdir(parents=True, exist_ok=True)
+    tracked_path.write_text("tracked\n", encoding="utf-8")
+    subprocess.run(["git", "add", "-f", str(tracked_path)], cwd=repository, check=True)
+
+    with pytest.raises(ValueError, match="tracked path"):
+        _validate_execution_destinations(output, receipt, repository)
+
+
+@pytest.mark.parametrize("symlink_kind", ["output", "receipt"])
+def test_execution_destination_gate_rejects_symlinks(symlink_kind: str, tmp_path: Path) -> None:
+    repository = _destination_repository(tmp_path)
+    allowed = repository / "output" / "matched_compute_canary"
+    allowed.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    output = allowed / "run"
+    receipt = allowed / "receipt.json"
+    if symlink_kind == "output":
+        output.symlink_to(outside, target_is_directory=True)
+    else:
+        outside_receipt = outside / "receipt.json"
+        outside_receipt.write_text("{}", encoding="utf-8")
+        receipt.symlink_to(outside_receipt)
+
+    with pytest.raises(ValueError, match="symlink"):
+        _validate_execution_destinations(output, receipt, repository)
+
+
+def test_execution_destination_gate_rejects_nested_output_symlink(tmp_path: Path) -> None:
+    repository = _destination_repository(tmp_path)
+    output = repository / "output" / "matched_compute_canary" / "run"
+    output.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (output / "candidate_0000").symlink_to(outside, target_is_directory=True)
+    receipt = repository / "output" / "matched_compute_canary" / "receipt.json"
+
+    with pytest.raises(ValueError, match="symlink member"):
+        _validate_execution_destinations(output, receipt, repository)
+
+
+def test_execution_destination_gate_rejects_hard_link_to_tracked_file(tmp_path: Path) -> None:
+    repository = _destination_repository(tmp_path)
+    subprocess.run(["git", "add", ".gitignore"], cwd=repository, check=True)
+    allowed = repository / "output" / "matched_compute_canary"
+    allowed.mkdir(parents=True)
+    receipt = allowed / "receipt.json"
+    receipt.hardlink_to(repository / ".gitignore")
+
+    with pytest.raises(ValueError, match="hard-linked"):
+        _validate_execution_destinations(allowed / "run", receipt, repository)
+
+
+@pytest.mark.parametrize("invalid_kind", ["output_file", "receipt_directory"])
+def test_execution_destination_gate_requires_destination_file_types(
+    invalid_kind: str, tmp_path: Path
+) -> None:
+    repository = _destination_repository(tmp_path)
+    allowed = repository / "output" / "matched_compute_canary"
+    allowed.mkdir(parents=True)
+    output = allowed / "run"
+    receipt = allowed / "receipt.json"
+    if invalid_kind == "output_file":
+        output.write_text("not a directory\n", encoding="utf-8")
+    else:
+        receipt.mkdir()
+
+    with pytest.raises(ValueError, match="directory|regular file"):
+        _validate_execution_destinations(output, receipt, repository)
 
 
 def test_empty_blocked_reactive_arm_skips_macro_index_reconciliation() -> None:

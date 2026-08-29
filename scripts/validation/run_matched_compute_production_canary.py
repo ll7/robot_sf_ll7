@@ -18,10 +18,15 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import subprocess
 from dataclasses import asdict, dataclass, fields
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -34,6 +39,8 @@ from robot_sf.adversarial.matched_compute import (
     open_loop_runtime_trace_from_result,
 )
 from robot_sf.adversarial.search import run_adversarial_search
+from robot_sf.benchmark.schema_validator import load_schema
+from robot_sf.benchmark.termination_reason import outcome_contradictions
 from robot_sf.evidence.writers import write_json
 from robot_sf.ped_npc.residual_adversary import BoundedResidualAdversary
 from robot_sf.ped_npc.residual_search import FiniteGridSearchPolicy
@@ -49,6 +56,8 @@ DEFAULT_PACKET_PATH = Path("configs/adversarial/issue_6921_matched_compute_packe
 DEFAULT_INPUT_DIGESTS_PATH = Path(
     "docs/context/evidence/issue_7893_matched_compute_production_canary/input_digests.json"
 )
+ISSUE_OUTPUT_SCOPE = Path("output/matched_compute_canary")
+EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 _CERTIFICATION_STATUS_KEYS = frozenset({"availability", "execution", "mode", "readiness", "status"})
 _RUNTIME_TRACE_FIELDS = tuple(field.name for field in fields(MatchedComputeRuntimeTrace))
 _SHA256_HEX_DIGITS = frozenset("0123456789abcdef")
@@ -76,6 +85,162 @@ def _is_sha256_hex(value: Any) -> bool:
 def _repository_root() -> Path:
     """Return the repository root containing this checked-in entry point."""
     return Path(__file__).resolve().parents[2]
+
+
+def _lexical_repository_path(path: Path, repository_root: Path) -> Path:
+    """Return an absolute normalized path without following symlinks."""
+    candidate = path if path.is_absolute() else repository_root / path
+    return Path(os.path.abspath(candidate))
+
+
+def _symlink_component(path: Path, repository_root: Path) -> Path | None:
+    """Return the first symlink component from the repository to ``path``."""
+    try:
+        relative = path.relative_to(repository_root)
+    except ValueError:
+        return None
+    current = repository_root
+    for part in relative.parts:
+        current /= part
+        if current.is_symlink():
+            return current
+    return None
+
+
+def _absolute_symlink_component(path: Path) -> Path | None:
+    """Return the first symlink component in an absolute lexical path."""
+    absolute = Path(os.path.abspath(path))
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current /= part
+        if current.is_symlink():
+            return current
+    return None
+
+
+def _output_directory_member_problem(member: Path) -> str | None:
+    """Return a safety problem for one pre-existing output directory member."""
+    if member.is_symlink():
+        return f"output directory contains symlink member: {member}"
+    if not member.is_dir():
+        return f"output directory contains non-directory member: {member}"
+    return None
+
+
+def _output_file_member_problem(member: Path) -> str | None:
+    """Return a safety problem for one pre-existing output file member."""
+    if member.is_symlink():
+        return f"output directory contains symlink member: {member}"
+    if not member.is_file():
+        return f"output directory contains non-regular member: {member}"
+    if member.stat().st_nlink != 1:
+        return f"output directory contains hard-linked file: {member}"
+    return None
+
+
+def _existing_output_tree_problem(output_dir: Path) -> str | None:
+    """Reject unsafe pre-existing members that an arm could overwrite."""
+    if not output_dir.exists():
+        return None
+    try:
+        for current_root, directory_names, file_names in os.walk(output_dir, followlinks=False):
+            current = Path(current_root)
+            for name in directory_names:
+                if problem := _output_directory_member_problem(current / name):
+                    return problem
+            for name in file_names:
+                if problem := _output_file_member_problem(current / name):
+                    return problem
+    except OSError as exc:
+        return f"cannot inspect existing output directory: {exc}"
+    return None
+
+
+def _git_destination_check(
+    repository_root: Path, relative_path: Path, *, command: str
+) -> subprocess.CompletedProcess[str]:
+    """Run one read-only Git destination query or fail closed."""
+    args = (
+        ["git", "ls-files", "-z", "--", relative_path.as_posix()]
+        if command == "tracked"
+        else ["git", "check-ignore", "-q", "--no-index", "--", relative_path.as_posix()]
+    )
+    try:
+        return subprocess.run(
+            args,
+            cwd=repository_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise ValueError(f"cannot verify {command} destination state: {exc}") from exc
+
+
+def _validate_destination_scope(
+    label: str, destination: Path, repository_root: Path, allowed_scope: Path
+) -> None:
+    """Require one lexical and resolved destination to stay in the issue scope."""
+    try:
+        destination.relative_to(allowed_scope)
+    except ValueError as exc:
+        raise ValueError(
+            f"{label} is outside the issue-scoped {ISSUE_OUTPUT_SCOPE.as_posix()} tree"
+        ) from exc
+    symlink = _symlink_component(destination, repository_root)
+    if symlink is not None:
+        raise ValueError(f"{label} contains symlink component: {symlink}")
+    try:
+        destination.resolve(strict=False).relative_to(allowed_scope.resolve(strict=False))
+    except ValueError as exc:
+        raise ValueError(f"{label} resolves outside the issue-scoped output tree") from exc
+
+
+def _validate_destination_git_state(label: str, destination: Path, repository_root: Path) -> None:
+    """Require one destination to be untracked and ignored."""
+    relative = destination.relative_to(repository_root)
+    tracked = _git_destination_check(repository_root, relative, command="tracked")
+    if tracked.returncode != 0:
+        raise ValueError(f"cannot verify tracked state for {label}")
+    if tracked.stdout:
+        raise ValueError(f"{label} contains or names a tracked path")
+    ignored = _git_destination_check(repository_root, relative, command="ignored")
+    if ignored.returncode not in {0, 1}:
+        raise ValueError(f"cannot verify ignored state for {label}")
+    if ignored.returncode != 0:
+        raise ValueError(f"{label} is not ignored by repository policy")
+
+
+def _validate_execution_destinations(
+    output_dir: Path, receipt_path: Path, repository_root: Path
+) -> tuple[Path, Path]:
+    """Admit only ignored, untracked destinations in the issue-scoped output tree."""
+    root = repository_root.resolve()
+    allowed_scope = _lexical_repository_path(ISSUE_OUTPUT_SCOPE, root)
+    destinations = {
+        "output directory": _lexical_repository_path(output_dir, root),
+        "receipt": _lexical_repository_path(receipt_path, root),
+    }
+    for label, destination in destinations.items():
+        _validate_destination_scope(label, destination, root, allowed_scope)
+        _validate_destination_git_state(label, destination, root)
+
+    resolved_output = destinations["output directory"]
+    resolved_receipt = destinations["receipt"]
+    if resolved_output.exists() and not resolved_output.is_dir():
+        raise ValueError("output directory must be a directory when it exists")
+    if resolved_receipt.exists() and not resolved_receipt.is_file():
+        raise ValueError("receipt must be a regular file when it exists")
+    if resolved_receipt.exists() and resolved_receipt.stat().st_nlink != 1:
+        raise ValueError("receipt must not be a hard-linked file")
+    output_tree_problem = _existing_output_tree_problem(resolved_output)
+    if output_tree_problem is not None:
+        raise ValueError(output_tree_problem)
+    if resolved_receipt == resolved_output or resolved_output.is_relative_to(resolved_receipt):
+        raise ValueError("receipt must not be the output directory or its ancestor")
+    if not resolved_output.is_relative_to(resolved_receipt.parent):
+        raise ValueError("receipt parent must contain the execution output artifact bundle")
+    return resolved_output, resolved_receipt
 
 
 def _resolve_repository_file(path: Path, repository_root: Path, *, label: str) -> tuple[str, Path]:
@@ -261,6 +426,19 @@ class CandidateRecord:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class _ReceiptArmValidation:
+    """Shared packet and filesystem context for one receipt arm validation."""
+
+    packet_digest: str
+    commit: str
+    blocked_before_execution: bool
+    frozen_budget: int
+    expected: dict[str, Any] | None
+    repository_root: Path
+    episode_artifact_root: Path
+
+
 def load_packet(path: Path) -> dict[str, Any]:
     """Load and validate the frozen matched-compute packet."""
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -336,12 +514,19 @@ def _aggregate_reconcile(
         )
     if invalid != trace.invalid:
         problems.append(f"invalid {invalid} != trace.invalid {trace.invalid}")
-    if expected_simulator_steps is not None:
-        if trace.simulator_physics_steps != expected_simulator_steps:
+    well_typed_steps = [
+        record.simulator_steps
+        for record in records
+        if isinstance(record.simulator_steps, int) and not isinstance(record.simulator_steps, bool)
+    ]
+    if len(well_typed_steps) == len(records):
+        aggregate_steps = sum(well_typed_steps)
+        if trace.simulator_physics_steps != aggregate_steps:
             problems.append(
                 f"trace simulator_physics_steps {trace.simulator_physics_steps} != "
-                f"frozen simulator steps {expected_simulator_steps}"
+                f"candidate record simulator steps {aggregate_steps}"
             )
+    if expected_simulator_steps is not None:
         for index, record in enumerate(records):
             if record.simulator_steps != expected_simulator_steps:
                 problems.append(
@@ -359,6 +544,46 @@ def _manifest_candidate_identity(entry: dict[str, Any], index: int) -> str:
         if bundle_name:
             return bundle_name
     return f"candidate_{index:04d}"
+
+
+def _validated_open_loop_manifest(
+    manifest: Any,
+    config: SearchConfig,
+    *,
+    frozen_scenario_seed: int,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Validate native manifest lineage before emitting candidate evidence."""
+    if not isinstance(manifest, dict):
+        raise ValueError("native open-loop manifest must be a mapping")
+    if manifest.get("schema_version") != "adversarial-search-manifest.v1":
+        raise ValueError("native open-loop manifest schema_version mismatch")
+    manifest_config = manifest.get("config")
+    if not isinstance(manifest_config, dict) or manifest_config != config.to_json():
+        raise ValueError("native open-loop manifest config does not match the frozen packet run")
+    raw_candidates = manifest.get("candidates")
+    if not isinstance(raw_candidates, list):
+        raise ValueError("native open-loop manifest candidates must be a list")
+    candidates: list[dict[str, Any]] = []
+    for index, raw_entry in enumerate(raw_candidates):
+        if not isinstance(raw_entry, dict):
+            raise ValueError(f"native open-loop manifest candidates[{index}] must be a mapping")
+        candidate = raw_entry.get("candidate")
+        if not isinstance(candidate, dict):
+            raise ValueError(
+                f"native open-loop manifest candidates[{index}].candidate must be a mapping"
+            )
+        scenario_seed = candidate.get("scenario_seed")
+        if (
+            isinstance(scenario_seed, bool)
+            or not isinstance(scenario_seed, int)
+            or scenario_seed != frozen_scenario_seed
+        ):
+            raise ValueError(
+                f"native open-loop manifest candidates[{index}].scenario_seed "
+                "does not match the frozen packet"
+            )
+        candidates.append(raw_entry)
+    return manifest_config, candidates
 
 
 def _run_open_loop(
@@ -397,31 +622,37 @@ def _run_open_loop(
         dt=float(binding["dt_s"]),
     )
     result = run_adversarial_search(config)
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    manifest_config, manifest_candidates = _validated_open_loop_manifest(
+        manifest,
+        config,
+        frozen_scenario_seed=int(scenario["template_seed"]),
+    )
     trace = open_loop_runtime_trace_from_result(
         config,
         result,
         macro_actions=int(packet["budget"]["macro_actions_per_episode"]),
     )
 
-    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     records: list[CandidateRecord] = []
-    for index, entry in enumerate(manifest.get("candidates", [])):
+    for index, entry in enumerate(manifest_candidates):
         status = _manifest_status(entry)
         steps = _manifest_steps(entry)
+        candidate = entry["candidate"]
         records.append(
             CandidateRecord(
                 packet_digest=packet_digest,
                 arm="open_loop",
                 candidate_identity=_manifest_candidate_identity(entry, index),
                 scenario_template=scenario["template_id"],
-                scenario_seed=int(scenario["template_seed"]),
-                search_seed=seed,
+                scenario_seed=int(candidate["scenario_seed"]),
+                search_seed=int(manifest_config["seed"]),
                 native_seam=(
                     "robot_sf.adversarial.search.run_adversarial_search"
                     "(default production evaluator)"
                 ),
-                policy_identity=binding["policy"],
-                objective_identity=binding["objective"],
+                policy_identity=str(manifest_config["policy"]),
+                objective_identity=str(manifest_config["objective"]),
                 repository_commit=commit,
                 status=status,
                 simulator_steps=steps,
@@ -614,7 +845,7 @@ def _reactive_production_preflight_problem(packet: dict[str, Any]) -> str | None
 
 
 def _resolve_episode_artifact(identity: Any, repository_root: Path | None = None) -> Path | None:
-    """Resolve an episode identity to an existing regular artifact file."""
+    """Resolve an episode identity to an existing regular, non-symlink artifact."""
     if not isinstance(identity, str) or not identity or identity != identity.strip():
         return None
     try:
@@ -622,33 +853,216 @@ def _resolve_episode_artifact(identity: Any, repository_root: Path | None = None
         root = (repository_root or _repository_root()).resolve()
         if not path.is_absolute():
             path = root / path
+        if _absolute_symlink_component(path) is not None:
+            return None
         resolved = path.resolve()
         return resolved if resolved.is_file() else None
     except (OSError, RuntimeError, ValueError):
         return None
 
 
-def _episode_provenance_problems(
-    record: CandidateRecord, prefix: str, repository_root: Path | None = None
+@lru_cache(maxsize=1)
+def _episode_schema() -> dict[str, Any]:
+    """Load the repository's canonical episode schema once."""
+    return load_schema(_repository_root() / EPISODE_SCHEMA_PATH)
+
+
+@lru_cache(maxsize=1)
+def _episode_validator() -> Draft202012Validator:
+    """Compile the canonical episode schema once for bounded receipt validation."""
+    return Draft202012Validator(_episode_schema())
+
+
+def _observed_episode_steps(payload: dict[str, Any]) -> int:
+    """Derive simulator steps from the canonical episode-record representation."""
+    raw_steps = payload.get("steps")
+    if isinstance(raw_steps, list):
+        return len(raw_steps)
+    if isinstance(raw_steps, bool) or not isinstance(raw_steps, int) or raw_steps < 0:
+        raise ValueError("episode record steps must be a non-negative integer or list")
+    return raw_steps
+
+
+@lru_cache(maxsize=1024)
+def _canonical_episode_observation(
+    artifact_identity: str, observed_digest: str
+) -> tuple[dict[str, Any], int]:
+    """Parse and validate one immutable-by-digest canonical episode artifact."""
+    artifact = Path(artifact_identity)
+    try:
+        nonempty_lines = [
+            line for line in artifact.read_text(encoding="utf-8").splitlines() if line.strip()
+        ]
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ValueError(f"episode artifact cannot be read: {exc}") from exc
+    if len(nonempty_lines) != 1:
+        raise ValueError("episode artifact must contain exactly one JSONL record")
+    try:
+        payload = json.loads(nonempty_lines[0])
+    except json.JSONDecodeError as exc:
+        raise ValueError("episode artifact record is malformed JSON") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("episode artifact record must be a JSON object")
+    try:
+        _episode_validator().validate(payload)
+    except JsonSchemaValidationError as exc:
+        raise ValueError(f"episode artifact violates the canonical schema: {exc.message}") from exc
+    semantic_contradictions = outcome_contradictions(
+        termination_reason=str(payload.get("termination_reason", "")),
+        outcome=payload.get("outcome", {}),
+        metrics=payload.get("metrics"),
+    )
+    if semantic_contradictions:
+        raise ValueError(
+            "episode artifact violates canonical outcome semantics: "
+            + "; ".join(semantic_contradictions)
+        )
+    contradictions = payload.get("integrity", {}).get("contradictions", [])
+    if contradictions:
+        raise ValueError("episode artifact declares integrity contradictions")
+    # ``observed_digest`` is deliberately part of the cache key. A changed file
+    # cannot reuse a previously validated observation under a new digest.
+    del observed_digest
+    return payload, _observed_episode_steps(payload)
+
+
+def _episode_artifact_binding_problems(
+    record: CandidateRecord,
+    prefix: str,
+    artifact: Path,
+    episode_artifact_root: Path | None = None,
 ) -> list[str]:
-    """Return problems with the artifact reference and digest for observed steps."""
+    """Return path-contract problems for one resolved episode artifact."""
     problems: list[str] = []
-    if not _is_sha256_hex(record.episode_digest):
+    if episode_artifact_root is not None:
+        try:
+            artifact.relative_to(episode_artifact_root.resolve())
+        except ValueError:
+            problems.append(f"{prefix}.episode_identity is outside the receipt's artifact bundle")
+    if artifact.name != "episode_records.jsonl":
+        problems.append(f"{prefix}.episode_identity is not a canonical episode_records.jsonl")
+    if artifact.parent.name != record.candidate_identity:
+        problems.append(f"{prefix}.episode_identity is not bound to its candidate identity")
+    return problems
+
+
+def _episode_payload_binding_problems(
+    record: CandidateRecord,
+    prefix: str,
+    payload: dict[str, Any],
+    observed_steps: int,
+) -> list[str]:
+    """Return candidate identity mismatches derived from canonical record bytes."""
+    problems: list[str] = []
+    if observed_steps != record.simulator_steps:
+        problems.append(f"{prefix}.simulator_steps does not match canonical episode artifact")
+    if payload.get("seed") != record.scenario_seed:
+        problems.append(f"{prefix}.scenario_seed does not match canonical episode artifact")
+    if payload.get("scenario_id") != record.scenario_template:
+        problems.append(f"{prefix}.scenario_template does not match canonical episode artifact")
+    return problems
+
+
+def _episode_observation_problems(
+    record: CandidateRecord, prefix: str, artifact: Path
+) -> list[str]:
+    """Return digest, schema, and byte-derived identity problems for one artifact."""
+    try:
+        observed_digest = _digest_file(artifact)
+    except OSError as exc:
+        return [f"{prefix}.episode_identity cannot be read: {exc}"]
+    if observed_digest != record.episode_digest:
+        return [f"{prefix}.episode_digest does not match referenced episode artifact"]
+    try:
+        payload, observed_steps = _canonical_episode_observation(
+            artifact.as_posix(), observed_digest
+        )
+    except ValueError as exc:
+        return [f"{prefix}.episode_identity is not authoritative: {exc}"]
+    return _episode_payload_binding_problems(record, prefix, payload, observed_steps)
+
+
+def _episode_provenance_problems(
+    record: CandidateRecord,
+    prefix: str,
+    repository_root: Path | None = None,
+    episode_artifact_root: Path | None = None,
+) -> list[str]:
+    """Return problems with one candidate-bound canonical episode artifact."""
+    problems: list[str] = []
+    digest_is_valid = _is_sha256_hex(record.episode_digest)
+    if not digest_is_valid:
         problems.append(f"{prefix}.episode_digest is not a lowercase SHA-256 digest")
     artifact = _resolve_episode_artifact(record.episode_identity, repository_root)
     if artifact is None:
-        problems.append(f"{prefix}.episode_identity does not reference a regular artifact file")
+        problems.append(
+            f"{prefix}.episode_identity does not reference a regular non-symlink artifact file"
+        )
         return problems
-    if _is_sha256_hex(record.episode_digest):
-        try:
-            observed_digest = _digest_file(artifact)
-        except OSError as exc:
-            problems.append(f"{prefix}.episode_identity cannot be read: {exc}")
-        else:
-            if observed_digest != record.episode_digest:
-                problems.append(
-                    f"{prefix}.episode_digest does not match referenced episode artifact"
-                )
+    problems.extend(
+        _episode_artifact_binding_problems(record, prefix, artifact, episode_artifact_root)
+    )
+    if digest_is_valid:
+        problems.extend(_episode_observation_problems(record, prefix, artifact))
+    return problems
+
+
+def _episode_collection_problems(
+    records: list[CandidateRecord], arm_name: str, repository_root: Path | None
+) -> list[str]:
+    """Reject artifact or byte reuse across candidate observations in one arm."""
+    observed = [
+        record for record in records if record.simulator_steps_source in OBSERVED_STEP_SOURCES
+    ]
+    artifact_identities = [
+        resolved.as_posix()
+        for record in observed
+        if (resolved := _resolve_episode_artifact(record.episode_identity, repository_root))
+        is not None
+    ]
+    digests = [
+        record.episode_digest for record in observed if _is_sha256_hex(record.episode_digest)
+    ]
+    problems: list[str] = []
+    if len(artifact_identities) != len(set(artifact_identities)):
+        problems.append(f"{arm_name} records reuse an episode artifact across candidates")
+    if len(digests) != len(set(digests)):
+        problems.append(f"{arm_name} records reuse episode artifact bytes across candidates")
+    return problems
+
+
+def _cross_arm_episode_reuse_problems(
+    open_loop_records: list[CandidateRecord],
+    reactive_records: list[CandidateRecord],
+    repository_root: Path | None,
+) -> list[str]:
+    """Reject source paths or bytes reused between the two comparison arms."""
+
+    def _artifact_identities(records: list[CandidateRecord]) -> set[str]:
+        return {
+            resolved.as_posix()
+            for record in records
+            if (resolved := _resolve_episode_artifact(record.episode_identity, repository_root))
+            is not None
+        }
+
+    open_paths = _artifact_identities(open_loop_records)
+    reactive_paths = _artifact_identities(reactive_records)
+    open_digests = {
+        record.episode_digest
+        for record in open_loop_records
+        if _is_sha256_hex(record.episode_digest)
+    }
+    reactive_digests = {
+        record.episode_digest
+        for record in reactive_records
+        if _is_sha256_hex(record.episode_digest)
+    }
+    problems: list[str] = []
+    if open_paths & reactive_paths:
+        problems.append("receipt arms reuse an episode artifact across candidates")
+    if open_digests & reactive_digests:
+        problems.append("receipt arms reuse episode artifact bytes across candidates")
     return problems
 
 
@@ -657,6 +1071,7 @@ def _record_step_problems(
     prefix: str,
     repository_root: Path | None = None,
     expected_simulator_steps: int | None = None,
+    episode_artifact_root: Path | None = None,
 ) -> list[str]:
     """Return malformed simulator-step provenance for one record."""
     problems: list[str] = []
@@ -670,12 +1085,17 @@ def _record_step_problems(
             if mismatch:
                 problems.append(mismatch)
 
-    problems.extend(_record_step_source_problems(record, prefix, repository_root))
+    problems.extend(
+        _record_step_source_problems(record, prefix, repository_root, episode_artifact_root)
+    )
     return problems
 
 
 def _record_step_source_problems(
-    record: CandidateRecord, prefix: str, repository_root: Path | None
+    record: CandidateRecord,
+    prefix: str,
+    repository_root: Path | None,
+    episode_artifact_root: Path | None,
 ) -> list[str]:
     """Return provenance problems for the declared simulator-step source."""
     source = str(record.simulator_steps_source or "").strip()
@@ -690,7 +1110,9 @@ def _record_step_source_problems(
         if not str(record.episode_digest or "").strip():
             problems.append(f"{prefix} claims observed steps without an episode digest")
         else:
-            problems.extend(_episode_provenance_problems(record, prefix, repository_root))
+            problems.extend(
+                _episode_provenance_problems(record, prefix, repository_root, episode_artifact_root)
+            )
         return problems
     if not str(record.degraded_reason or "").strip():
         return [f"{prefix} has unavailable simulator steps without an explicit reason"]
@@ -714,6 +1136,7 @@ def _record_scalar_problems(
     prefix: str,
     repository_root: Path | None = None,
     expected_simulator_steps: int | None = None,
+    episode_artifact_root: Path | None = None,
 ) -> list[str]:
     """Return malformed numeric or observed-episode fields for one record."""
     problems: list[str] = []
@@ -726,7 +1149,13 @@ def _record_scalar_problems(
             if not math.isfinite(objective_value):
                 problems.append(f"{prefix}.objective_value is not finite")
     problems.extend(
-        _record_step_problems(record, prefix, repository_root, expected_simulator_steps)
+        _record_step_problems(
+            record,
+            prefix,
+            repository_root,
+            expected_simulator_steps,
+            episode_artifact_root,
+        )
     )
     return problems
 
@@ -825,6 +1254,8 @@ def _record_integrity_problems(
     commit: str,
     expected: dict[str, Any] | None = None,
     expected_simulator_steps: int | None = None,
+    repository_root: Path | None = None,
+    episode_artifact_root: Path | None = None,
 ) -> list[str]:
     """Return identity and provenance mismatches in one arm's candidate records."""
     problems: list[str] = []
@@ -842,9 +1273,14 @@ def _record_integrity_problems(
             problems.extend(_record_packet_identity_problems(record, prefix, expected))
         problems.extend(
             _record_scalar_problems(
-                record, prefix, expected_simulator_steps=expected_simulator_steps
+                record,
+                prefix,
+                repository_root,
+                expected_simulator_steps=expected_simulator_steps,
+                episode_artifact_root=episode_artifact_root,
             )
         )
+    problems.extend(_episode_collection_problems(records, arm_name, repository_root))
     if records and expected is not None and arm_name == "reactive":
         expected_macro_indices = [
             index
@@ -860,7 +1296,12 @@ def _record_integrity_problems(
     return problems
 
 
-def _arm_evidence_status(records: list[CandidateRecord]) -> str:
+def _arm_evidence_status(
+    records: list[CandidateRecord],
+    *,
+    repository_root: Path | None = None,
+    episode_artifact_root: Path | None = None,
+) -> str:
     """Return ``production_observed`` only when every record is native and observed."""
     if not records:
         return "not_production_observed"
@@ -868,9 +1309,18 @@ def _arm_evidence_status(records: list[CandidateRecord]) -> str:
         record.status in {"fallback", "unavailable"}
         or record.fallback_flags
         or record.degraded_reason
-        or bool(_record_step_problems(record, "record"))
+        or bool(
+            _record_step_problems(
+                record,
+                "record",
+                repository_root,
+                episode_artifact_root=episode_artifact_root,
+            )
+        )
         for record in records
     ):
+        return "not_production_observed"
+    if _episode_collection_problems(records, records[0].arm, repository_root):
         return "not_production_observed"
     return "production_observed"
 
@@ -938,16 +1388,25 @@ def _write_receipt(
 ) -> None:
     """Write the versioned canary receipt."""
     receipt_problems = list(problems)
+    episode_artifact_root = output.resolve().parent
+    arm_statuses = {
+        "open_loop": _arm_evidence_status(
+            open_loop_records, episode_artifact_root=episode_artifact_root
+        ),
+        "reactive": _arm_evidence_status(
+            reactive_records, episode_artifact_root=episode_artifact_root
+        ),
+    }
     serialized_runtime_traces = {
         arm_name: trace.to_dict()
         for arm_name, trace in (runtime_traces or {}).items()
         if trace is not None
     }
     runtime_trace_map = runtime_traces or {}
-    if all(
-        _arm_evidence_status(records) == "production_observed"
-        for records in (open_loop_records, reactive_records)
-    ):
+    receipt_problems.extend(
+        _cross_arm_episode_reuse_problems(open_loop_records, reactive_records, repository_root=None)
+    )
+    if all(status == "production_observed" for status in arm_statuses.values()):
         receipt_problems.extend(_runtime_trace_admission_problems(runtime_trace_map))
     receipt = {
         "schema": RECEIPT_SCHEMA,
@@ -958,19 +1417,19 @@ def _write_receipt(
         "arms": {
             "open_loop": {
                 "records": [record.as_dict() for record in open_loop_records],
-                "evidence_status": _arm_evidence_status(open_loop_records),
+                "evidence_status": arm_statuses["open_loop"],
             },
             "reactive": {
                 "records": [record.as_dict() for record in reactive_records],
-                "evidence_status": _arm_evidence_status(reactive_records),
+                "evidence_status": arm_statuses["reactive"],
             },
         },
         "problems": receipt_problems,
         "evidence_status": (
             "production_observed"
             if not receipt_problems
-            and _arm_evidence_status(open_loop_records) == "production_observed"
-            and _arm_evidence_status(reactive_records) == "production_observed"
+            and arm_statuses["open_loop"] == "production_observed"
+            and arm_statuses["reactive"] == "production_observed"
             and not _runtime_trace_admission_problems(runtime_trace_map)
             else "blocked"
         ),
@@ -1116,29 +1575,31 @@ def _receipt_arm_problems(
     arm: dict[str, Any],
     records: list[CandidateRecord],
     *,
-    packet_digest: str,
-    commit: str,
-    blocked_before_execution: bool,
-    frozen_budget: int = 90,
-    expected: dict[str, Any] | None = None,
+    validation: _ReceiptArmValidation,
 ) -> list[str]:
     """Validate one receipt arm's accounting and evidence status."""
     problems: list[str] = []
-    if blocked_before_execution and records:
+    if validation.blocked_before_execution and records:
         problems.append("blocked-before-execution receipt must not contain arm records")
-    if not (blocked_before_execution and not records):
-        problems.extend(_budget_reconcile(records, frozen_budget))
+    if not (validation.blocked_before_execution and not records):
+        problems.extend(_budget_reconcile(records, validation.frozen_budget))
     problems.extend(
         _record_integrity_problems(
             records,
             arm_name=arm_name,
-            packet_digest=packet_digest,
-            commit=commit,
-            expected=expected,
-            expected_simulator_steps=(expected or {}).get("simulator_steps"),
+            packet_digest=validation.packet_digest,
+            commit=validation.commit,
+            expected=validation.expected,
+            expected_simulator_steps=(validation.expected or {}).get("simulator_steps"),
+            repository_root=validation.repository_root,
+            episode_artifact_root=validation.episode_artifact_root,
         )
     )
-    expected_arm_status = _arm_evidence_status(records)
+    expected_arm_status = _arm_evidence_status(
+        records,
+        repository_root=validation.repository_root,
+        episode_artifact_root=validation.episode_artifact_root,
+    )
     if arm.get("evidence_status") != expected_arm_status:
         problems.append(
             f"{arm_name} evidence_status {arm.get('evidence_status')!r} "
@@ -1155,13 +1616,20 @@ def _receipt_status_problems(
     parsed_arms: dict[str, tuple[dict[str, Any], list[CandidateRecord]]],
     problems: list[str],
     parsed_traces: dict[str, MatchedComputeRuntimeTrace] | None = None,
+    repository_root: Path | None = None,
+    episode_artifact_root: Path | None = None,
 ) -> list[str]:
     """Validate aggregate receipt evidence status against both arms."""
     traces = parsed_traces or {}
     expected_receipt_status = (
         "production_observed"
         if all(
-            _arm_evidence_status(parsed_arms[name][1]) == "production_observed"
+            _arm_evidence_status(
+                parsed_arms[name][1],
+                repository_root=repository_root,
+                episode_artifact_root=episode_artifact_root,
+            )
+            == "production_observed"
             for name in ("open_loop", "reactive")
         )
         and all(
@@ -1285,6 +1753,8 @@ def _check_receipt(path: Path, *, packet_path: Path | None = None) -> int:
         problems.extend(_receipt_repository_commit_problems(commit, packet_path))
     problems.extend(_receipt_input_digest_problems(receipt, packet_digest, packet_path))
     parsed_arms = _parse_receipt_arms(receipt, problems)
+    repository_root = _repository_root()
+    episode_artifact_root = path.resolve().parent
     blocked_before_execution = any(
         "blocked before arm execution" in problem for problem in problems
     )
@@ -1294,13 +1764,24 @@ def _check_receipt(path: Path, *, packet_path: Path | None = None) -> int:
                 arm_name,
                 arm,
                 records,
-                packet_digest=packet_digest,
-                commit=commit,
-                blocked_before_execution=blocked_before_execution,
-                frozen_budget=(frozen_arm_budgets or {}).get(arm_name, 90),
-                expected=(frozen_arm_expectations or {}).get(arm_name),
+                validation=_ReceiptArmValidation(
+                    packet_digest=packet_digest,
+                    commit=commit,
+                    blocked_before_execution=blocked_before_execution,
+                    frozen_budget=(frozen_arm_budgets or {}).get(arm_name, 90),
+                    expected=(frozen_arm_expectations or {}).get(arm_name),
+                    repository_root=repository_root,
+                    episode_artifact_root=episode_artifact_root,
+                ),
             )
         )
+    problems.extend(
+        _cross_arm_episode_reuse_problems(
+            parsed_arms["open_loop"][1],
+            parsed_arms["reactive"][1],
+            repository_root,
+        )
+    )
     parsed_traces = _parse_runtime_traces(
         receipt,
         parsed_arms,
@@ -1309,7 +1790,16 @@ def _check_receipt(path: Path, *, packet_path: Path | None = None) -> int:
         expected_identities=frozen_arm_expectations,
         expected_simulator_steps=frozen_simulator_steps,
     )
-    problems.extend(_receipt_status_problems(receipt, parsed_arms, problems, parsed_traces))
+    problems.extend(
+        _receipt_status_problems(
+            receipt,
+            parsed_arms,
+            problems,
+            parsed_traces,
+            repository_root=repository_root,
+            episode_artifact_root=episode_artifact_root,
+        )
+    )
     if problems:
         print(json.dumps(receipt, indent=2, sort_keys=True))
         for problem in problems:
@@ -1338,15 +1828,21 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("--check requires --receipt")
         return _check_receipt(args.receipt, packet_path=args.packet)
 
-    import subprocess
-
+    repository_root = _repository_root()
+    requested_receipt_path = args.receipt or args.output_dir / "receipt.json"
+    output_dir, receipt_path = _validate_execution_destinations(
+        args.output_dir, requested_receipt_path, repository_root
+    )
     commit = (
         args.commit
         or subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+            ["git", "rev-parse", "HEAD"],
+            cwd=repository_root,
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.strip()
     )
-    repository_root = _repository_root()
     _, packet_path = _resolve_repository_file(args.packet, repository_root, label="packet")
     packet = load_packet(packet_path)
     input_digests = _verify_frozen_inputs(packet_path, repository_root=repository_root)
@@ -1366,14 +1862,12 @@ def main(argv: list[str] | None = None) -> int:
     else:
         open_loop_records, open_loop_trace = _run_open_loop(
             packet,
-            args.output_dir,
+            output_dir,
             commit,
             packet_digest,
             repository_root=repository_root,
         )
-        reactive_records, reactive_trace = _run_reactive(
-            packet, args.output_dir, commit, packet_digest
-        )
+        reactive_records, reactive_trace = _run_reactive(packet, output_dir, commit, packet_digest)
         problems.extend(_budget_reconcile(open_loop_records, 90))
         problems.extend(_budget_reconcile(reactive_records, 90))
         if open_loop_trace is None:
@@ -1403,12 +1897,12 @@ def main(argv: list[str] | None = None) -> int:
     }
     runtime_trace_map = {"open_loop": open_loop_trace, "reactive": reactive_trace}
     if all(
-        _arm_evidence_status(records) == "production_observed"
+        _arm_evidence_status(records, episode_artifact_root=receipt_path.resolve().parent)
+        == "production_observed"
         for records in (open_loop_records, reactive_records)
     ):
         problems.extend(_runtime_trace_admission_problems(runtime_trace_map, runtime_expectations))
 
-    receipt_path = args.receipt or args.output_dir / "receipt.json"
     _write_receipt(
         packet_digest=packet_digest,
         commit=commit,

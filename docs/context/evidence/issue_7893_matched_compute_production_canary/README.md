@@ -17,10 +17,22 @@ explicitly not fabricated.
   rejects unsafe or ambiguous paths, and verifies every byte before either arm can start.
 - Positive receipts also emit one `matched_compute_trace.v1` runtime trace per arm. The runner
   reconciles each trace's accepted/rejected/invalid partition against the candidate records,
-  binds candidate identity fields to the frozen packet arm, and requires each trace budget to
-  equal the packet's 90-candidate per-episode budget. `--check` also requires non-empty
+  binds candidate identity fields to the frozen packet arm, requires each candidate to have the
+  packet's 50 simulator steps, and requires the aggregate trace to equal the sum across candidates
+  (4,500 steps for a complete 90-candidate arm). The native open-loop manifest must retain the
+  exact run config and each candidate's frozen scenario seed before records are emitted. `--check`
+  also requires non-empty
   frozen-input digests plus a source commit present in the current checkout and reachable from
   its `HEAD`.
+- Observed-step provenance is admitted only from a regular, non-symlink
+  `episode_records.jsonl` bound to the candidate directory. The checker validates the repository's
+  canonical episode schema and outcome semantics, derives the step count from the record bytes,
+  checks the digest/seed/scenario identity, and rejects artifact or byte reuse across candidates.
+- Execution destinations are resolved before either arm starts or a receipt is written. Both must
+  be ignored, untracked, non-symlink paths inside the exact worktree-local
+  `output/matched_compute_canary/` scope; escapes and prefix-confusable sibling paths fail closed.
+  This gate does not apply to read-only `--check` mode, so the tracked blocked receipt remains a
+  valid validation input.
 - Command: `python scripts/validation/run_matched_compute_production_canary.py --packet
   configs/adversarial/issue_6921_matched_compute_packet.yaml --output-dir
   output/matched_compute_canary`
@@ -48,9 +60,9 @@ explicitly not fabricated.
   release, dissertation, or publication claim is made.
 - Raw per-candidate output lives under `output/matched_compute_canary/` (ignored, worktree-local).
 - `--check` mode validates a receipt deterministically (packet-bound budget and runtime-trace
-  reconciliation, frozen arm identity fields, duplicate and cross-arm identity checks,
-  packet/config digest and reachable source-commit identity, and no fallback/unavailable in
-  production-observed arms).
+  reconciliation, canonical candidate-bound episode provenance, frozen arm and native-manifest
+  identity fields, duplicate and cross-arm identity checks, packet/config digest and reachable
+  source-commit identity, and no fallback/unavailable in production-observed arms).
 
 ## Next smallest step
 

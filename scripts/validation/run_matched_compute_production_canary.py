@@ -35,6 +35,7 @@ import yaml
 
 from robot_sf.adversarial.config import SearchConfig
 from robot_sf.adversarial.matched_compute import (
+    MATCHED_COMPUTE_RUNTIME_SCHEMA,
     MatchedComputeRuntimeTrace,
     open_loop_runtime_trace_from_result,
 )
@@ -60,6 +61,7 @@ ISSUE_OUTPUT_SCOPE = Path("output/matched_compute_canary")
 EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 _CERTIFICATION_STATUS_KEYS = frozenset({"availability", "execution", "mode", "readiness", "status"})
 _RUNTIME_TRACE_FIELDS = tuple(field.name for field in fields(MatchedComputeRuntimeTrace))
+_RUNTIME_TRACE_REQUIRED_FIELDS = frozenset(MATCHED_COMPUTE_RUNTIME_SCHEMA["required"])
 _SHA256_HEX_DIGITS = frozenset("0123456789abcdef")
 
 
@@ -424,6 +426,9 @@ class CandidateRecord:
     def as_dict(self) -> dict[str, Any]:
         """Return a JSON-ready dictionary."""
         return asdict(self)
+
+
+_CANDIDATE_RECORD_REQUIRED_FIELDS = frozenset(field.name for field in fields(CandidateRecord))
 
 
 @dataclass(frozen=True)
@@ -1462,6 +1467,13 @@ def _parse_receipt_arms(
             if not isinstance(row, dict):
                 problems.append(f"{arm_name} records[{index}] is not a mapping")
                 continue
+            missing_fields = sorted(_CANDIDATE_RECORD_REQUIRED_FIELDS.difference(row))
+            if missing_fields:
+                problems.append(
+                    f"{arm_name} records[{index}] is missing required field(s): "
+                    f"{', '.join(missing_fields)}"
+                )
+                continue
             try:
                 records.append(CandidateRecord(**row))
             except (TypeError, ValueError) as exc:
@@ -1479,13 +1491,26 @@ def _parse_runtime_trace(
     if not isinstance(raw_trace, dict):
         problems.append(f"receipt {arm_name} runtime trace is malformed")
         return None
-    trace_payload = {
-        field_name: raw_trace[field_name]
-        for field_name in _RUNTIME_TRACE_FIELDS
-        if field_name in raw_trace
-    }
-    if "simulator_physics_steps" not in trace_payload and "simulator_steps" in raw_trace:
-        trace_payload["simulator_physics_steps"] = raw_trace["simulator_steps"]
+    missing_fields = sorted(_RUNTIME_TRACE_REQUIRED_FIELDS.difference(raw_trace))
+    if missing_fields:
+        problems.append(
+            f"receipt {arm_name} runtime trace is missing required field(s): "
+            f"{', '.join(missing_fields)}"
+        )
+        return None
+    if raw_trace["runtime_status"] != raw_trace["status"]:
+        problems.append(f"receipt {arm_name} runtime trace runtime_status does not match status")
+        return None
+    if (
+        type(raw_trace["simulator_steps"]) is not type(raw_trace["simulator_physics_steps"])
+        or raw_trace["simulator_steps"] != raw_trace["simulator_physics_steps"]
+    ):
+        problems.append(
+            f"receipt {arm_name} runtime trace simulator_steps does not match "
+            "simulator_physics_steps"
+        )
+        return None
+    trace_payload = {field_name: raw_trace[field_name] for field_name in _RUNTIME_TRACE_FIELDS}
     try:
         return MatchedComputeRuntimeTrace(**trace_payload)
     except (TypeError, ValueError) as exc:

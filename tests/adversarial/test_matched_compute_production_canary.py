@@ -588,6 +588,86 @@ def test_receipt_check_binds_digest_to_single_episode_byte_buffer_full_180(
     assert target.read_bytes() == canonical_bytes_b
 
 
+def test_receipt_check_requires_candidate_wire_schema_full_180(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A missing serialized field cannot be synthesized from dataclass defaults."""
+    records = _canonical_records(tmp_path / "artifacts", arm="open_loop", identity_prefix="open")
+    reactive_records = _canonical_records(
+        tmp_path / "artifacts", arm="reactive", identity_prefix="reactive"
+    )
+    receipt_path = tmp_path / "receipt.json"
+    _write_receipt(
+        packet_digest="a" * 64,
+        commit="c" * 40,
+        open_loop_records=records,
+        reactive_records=reactive_records,
+        problems=[],
+        output=receipt_path,
+        input_digests={"fixture.yaml": "f" * 64},
+        runtime_traces={
+            "open_loop": _runtime_trace(),
+            "reactive": _runtime_trace(arm="reactive"),
+        },
+    )
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    del receipt["arms"]["open_loop"]["records"][0]["schema"]
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    assert _check_receipt(receipt_path) == 1
+    assert "open_loop records[0] is missing required field(s): schema" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_problem"),
+    [
+        ("missing-schema", "runtime trace is missing required field(s): schema_version"),
+        ("runtime-status-conflict", "runtime_status does not match status"),
+        (
+            "simulator-steps-conflict",
+            "simulator_steps does not match simulator_physics_steps",
+        ),
+    ],
+)
+def test_receipt_check_requires_consistent_runtime_trace_wire_contract_full_180(
+    mutation: str,
+    expected_problem: str,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Required trace fields and duplicated wire aliases must agree exactly."""
+    records = _canonical_records(tmp_path / "artifacts", arm="open_loop", identity_prefix="open")
+    reactive_records = _canonical_records(
+        tmp_path / "artifacts", arm="reactive", identity_prefix="reactive"
+    )
+    receipt_path = tmp_path / "receipt.json"
+    _write_receipt(
+        packet_digest="a" * 64,
+        commit="c" * 40,
+        open_loop_records=records,
+        reactive_records=reactive_records,
+        problems=[],
+        output=receipt_path,
+        input_digests={"fixture.yaml": "f" * 64},
+        runtime_traces={
+            "open_loop": _runtime_trace(),
+            "reactive": _runtime_trace(arm="reactive"),
+        },
+    )
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    trace = receipt["runtime_traces"]["open_loop"]
+    if mutation == "missing-schema":
+        del trace["schema_version"]
+    elif mutation == "runtime-status-conflict":
+        trace["runtime_status"] = "unavailable"
+    else:
+        trace["simulator_steps"] = 50
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    assert _check_receipt(receipt_path) == 1
+    assert expected_problem in capsys.readouterr().out
+
+
 def test_receipt_check_rejects_arbitrary_regular_file_as_episode_provenance(
     tmp_path: Path,
 ) -> None:

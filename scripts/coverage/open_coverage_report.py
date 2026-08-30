@@ -5,7 +5,7 @@ Purpose: Opens the coverage HTML report in the default browser,
 working reliably on macOS, Linux, and Windows.
 
 Usage:
-    python scripts/coverage/open_coverage_report.py [--path htmlcov/index.html]
+    python scripts/coverage/open_coverage_report.py [--path output/coverage/htmlcov/index.html]
 """
 
 import argparse
@@ -17,8 +17,7 @@ from robot_sf.common.artifact_paths import get_artifact_category_path
 
 
 def open_coverage_report(report_path: Path) -> int:
-    """
-    Open coverage report in default browser.
+    """Open coverage report in default browser.
 
     Args:
         report_path: Path to HTML coverage report
@@ -28,7 +27,10 @@ def open_coverage_report(report_path: Path) -> int:
     """
     if not report_path.exists():
         print(f"❌ Coverage report not found: {report_path}", file=sys.stderr)
-        print("\nRun 'uv run pytest tests' first to generate coverage data", file=sys.stderr)
+        print(
+            "\nRun 'ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh --lane all' first to generate coverage data",
+            file=sys.stderr,
+        )
         return 1
 
     # Convert to absolute path for reliable browser opening

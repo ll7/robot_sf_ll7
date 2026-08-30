@@ -1031,3 +1031,59 @@ def test_lightweight_workflows_skip_system_packages_and_full_sync() -> None:
                 assert with_block.get("sync-args") == "--frozen", (
                     f"{filename} job {job_name} must set sync-args: '--frozen'"
                 )
+
+
+def test_packaging_extras_metadata_and_readme_trigger_contract() -> None:
+    """Issue #8040: packaging-extras workflow must trigger on README.md and strictly validate metadata."""
+    wf_path = WORKFLOWS_DIR / "packaging-extras.yml"
+    assert wf_path.is_file(), "packaging-extras.yml workflow missing"
+    wf_data = yaml.safe_load(wf_path.read_text(encoding="utf-8"))
+
+    # Assert README.md is in pull_request paths
+    on_section = wf_data.get("on") or wf_data.get(True, {})
+    pr_paths = on_section.get("pull_request", {}).get("paths", [])
+    assert "README.md" in pr_paths, (
+        "README.md must be included in packaging-extras pull_request paths"
+    )
+
+    job = wf_data.get("jobs", {}).get("clean-wheel-extra", {})
+    steps = job.get("steps", [])
+
+    build_idx = -1
+    twine_idx = -1
+    probe_idx = -1
+    upload_idx = -1
+    twine_step: dict[str, Any] = {}
+
+    for i, step in enumerate(steps):
+        name = step.get("name", "")
+        run_cmd = step.get("run", "")
+        uses = step.get("uses", "")
+        if "Build Robot SF wheel" in name:
+            build_idx = i
+        if "Validate distribution metadata" in name or "twine check" in run_cmd:
+            twine_idx = i
+            twine_step = step
+        if "Install and probe" in name or "wheel_install_smoke.sh" in run_cmd:
+            probe_idx = i
+        if "upload-artifact" in uses or "Upload" in name:
+            if upload_idx == -1:
+                upload_idx = i
+
+    assert build_idx != -1, "Build step missing"
+    assert twine_idx != -1, "Twine metadata validation step missing"
+    assert probe_idx != -1, "Wheel install smoke probe step missing"
+    assert upload_idx != -1, "Artifact upload step missing"
+
+    # Sequence assertion: build < twine < probe < upload
+    assert build_idx < twine_idx < probe_idx < upload_idx, (
+        f"Step ordering must be build ({build_idx}) < twine ({twine_idx}) < probe ({probe_idx}) < upload ({upload_idx})"
+    )
+
+    # Check exact twine command properties
+    run_cmd = twine_step.get("run", "")
+    assert "twine==7.0.0" in run_cmd, "Twine version must be pinned to twine==7.0.0"
+    assert "--strict" in run_cmd, "Twine check must use --strict"
+    assert "dist/*.whl" in run_cmd, "Twine check must validate wheels (dist/*.whl)"
+    assert "dist/*.tar.gz" in run_cmd, "Twine check must validate sdists (dist/*.tar.gz)"
+    assert "--no-project" in run_cmd, "Twine invocation must be ephemeral (--no-project)"

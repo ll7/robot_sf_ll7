@@ -3993,14 +3993,23 @@ def _episode_outcome(loop_result: _EpisodeStepLoopResult) -> tuple[dict[str, boo
         Tuple of outcome payload and status label.
     """
     route_complete = loop_result.reached_goal_step is not None
-    timeout_event = loop_result.timeout_seen or loop_result.termination_reason in {
-        "truncated",
-        "max_steps",
-    }
+    collision_seen = loop_result.collision_seen
+    timeout_event = (
+        not route_complete
+        and not collision_seen
+        and (
+            loop_result.timeout_seen
+            or loop_result.termination_reason
+            in {
+                "truncated",
+                "max_steps",
+            }
+        )
+    )
     return (
         build_outcome_payload(
             route_complete=route_complete,
-            collision=loop_result.collision_seen,
+            collision=collision_seen,
             timeout=timeout_event,
         ),
         status_from_termination_reason(loop_result.termination_reason),

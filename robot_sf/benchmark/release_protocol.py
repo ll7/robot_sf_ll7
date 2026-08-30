@@ -1631,12 +1631,79 @@ def _validate_release_planners(
     problems: list[str],
 ) -> None:
     """Validate planner keys and planner-group expectations."""
-    cfg_keys = tuple(planner.key for planner in cfg.planners if planner.enabled)
-    if cfg_keys != manifest.planner_keys:
-        problems.append("planners.keys does not match enabled planners in campaign config")
-    cfg_groups = {planner.key: planner.planner_group for planner in cfg.planners if planner.enabled}
-    if cfg_groups != manifest.planner_groups:
-        problems.append("planners.groups does not match campaign config")
+    problems.extend(validate_release_planner_roster(manifest, cfg)["blockers"])
+
+
+def validate_release_planner_roster(
+    manifest: BenchmarkReleaseManifest,
+    cfg: CampaignConfig,
+) -> dict[str, Any]:
+    """Admit the complete enabled planner roster without creating campaign output.
+
+    This is the pure planner-side admission shared by manifest validation and the
+    no-campaign release rehearsal.  It deliberately checks the enabled planner
+    keys, groups, algorithm names, and kinematics matrix before any campaign
+    runner can allocate an output directory or episode worker.
+
+    Returns:
+        Structured, path-free planner roster admission evidence.
+    """
+    expected_keys = tuple(str(key).strip() for key in manifest.planner_keys)
+    expected_groups = {
+        str(key).strip(): str(group).strip() for key, group in manifest.planner_groups.items()
+    }
+    enabled_planners = tuple(
+        planner for planner in getattr(cfg, "planners", ()) if getattr(planner, "enabled", True)
+    )
+    observed_keys = tuple(str(getattr(planner, "key", "")).strip() for planner in enabled_planners)
+    observed_groups = {
+        str(getattr(planner, "key", "")).strip(): str(getattr(planner, "planner_group", "")).strip()
+        for planner in enabled_planners
+    }
+    observed_algorithms = {
+        str(getattr(planner, "key", "")).strip(): str(getattr(planner, "algo", "")).strip()
+        for planner in enabled_planners
+    }
+    blockers: list[str] = []
+    if len(expected_keys) != len(set(expected_keys)):
+        blockers.append("planners.keys contains duplicate planner arms")
+    if len(observed_keys) != len(set(observed_keys)):
+        blockers.append("enabled campaign config contains duplicate planner arms")
+    if observed_keys != expected_keys:
+        blockers.append("planners.keys does not match enabled planners in campaign config")
+    if observed_groups != expected_groups:
+        blockers.append("planners.groups does not match campaign config")
+    if any(not key or not algorithm for key, algorithm in observed_algorithms.items()):
+        blockers.append("enabled planner roster contains an empty key or algorithm")
+
+    expected_kinematics = tuple(str(value).strip() for value in manifest.expected_kinematics_matrix)
+    observed_kinematics = tuple(
+        str(value).strip() for value in getattr(cfg, "kinematics_matrix", ())
+    )
+    if observed_kinematics != expected_kinematics:
+        blockers.append("kinematics matrix does not match release manifest")
+
+    arms = [
+        {
+            "key": key,
+            "algo": observed_algorithms.get(key),
+            "planner_group": observed_groups.get(key),
+            "enabled": True,
+        }
+        for key in observed_keys
+    ]
+    return {
+        "schema_version": "benchmark-release-planner-roster-admission.v1",
+        "status": "valid" if not blockers else "invalid",
+        "expected_planner_keys": list(expected_keys),
+        "observed_planner_keys": list(observed_keys),
+        "expected_planner_groups": expected_groups,
+        "observed_planner_groups": observed_groups,
+        "expected_kinematics": list(expected_kinematics),
+        "observed_kinematics": list(observed_kinematics),
+        "arms": arms,
+        "blockers": blockers,
+    }
 
 
 def _validate_v02_contract(  # noqa: C901, PLR0912
@@ -2144,9 +2211,11 @@ def parse_release_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--mode",
-        choices=("run", "preflight"),
+        choices=("run", "preflight", "rehearsal"),
         default="run",
-        help="Preflight-only validation or full release execution.",
+        help=(
+            "Preflight-only validation, no-campaign release rehearsal, or full release execution."
+        ),
     )
     parser.add_argument(
         "--campaign-id",
@@ -2187,6 +2256,15 @@ def parse_release_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=24.0,
         help="Maximum accepted runtime-smoke result age (default: 24 hours).",
+    )
+    parser.add_argument(
+        "--source-commit",
+        type=str,
+        default=None,
+        help=(
+            "Exact checked-out source SHA for rehearsal when the manifest does not declare "
+            "source_sha; it must match a manifest source_sha when one is declared."
+        ),
     )
     parser.add_argument(
         "--resume-receipt",
@@ -2230,5 +2308,6 @@ __all__ = [
     "load_release_manifest",
     "parse_release_args",
     "validate_release_manifest",
+    "validate_release_planner_roster",
     "validate_stress_smoke_runtime_identity",
 ]

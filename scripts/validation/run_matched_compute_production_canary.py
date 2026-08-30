@@ -84,6 +84,48 @@ def _is_sha256_hex(value: Any) -> bool:
     )
 
 
+def _is_finite_json_integer(value: Any) -> bool:
+    """Return whether ``value`` is an exact finite JSON integer, excluding Boolean."""
+    if type(value) is not int:
+        return False
+    try:
+        return math.isfinite(float(value))
+    except OverflowError:
+        return False
+
+
+def _is_finite_json_number(value: Any) -> bool:
+    """Return whether ``value`` is an exact finite JSON number, excluding Boolean."""
+    if type(value) not in {int, float}:
+        return False
+    try:
+        return math.isfinite(float(value))
+    except OverflowError:
+        return False
+
+
+def _wire_string_type_problems(
+    payload: dict[str, Any], field_names: tuple[str, ...], prefix: str, separator: str
+) -> list[str]:
+    """Return exact JSON-string violations for a group of wire fields."""
+    return [
+        f"{prefix}{separator}{field_name} must be a string"
+        for field_name in field_names
+        if type(payload[field_name]) is not str
+    ]
+
+
+def _wire_integer_type_problems(
+    payload: dict[str, Any], field_names: tuple[str, ...], prefix: str, separator: str
+) -> list[str]:
+    """Return exact finite JSON-integer violations for a group of wire fields."""
+    return [
+        f"{prefix}{separator}{field_name} must be a finite integer"
+        for field_name in field_names
+        if not _is_finite_json_integer(payload[field_name])
+    ]
+
+
 def _repository_root() -> Path:
     """Return the repository root containing this checked-in entry point."""
     return Path(__file__).resolve().parents[2]
@@ -431,6 +473,112 @@ class CandidateRecord:
 _CANDIDATE_RECORD_REQUIRED_FIELDS = frozenset(field.name for field in fields(CandidateRecord))
 
 
+def _candidate_wire_type_problems(row: dict[str, Any], arm_name: str, prefix: str) -> list[str]:
+    """Return exact JSON wire-type violations before candidate construction."""
+    problems = _wire_string_type_problems(
+        row,
+        (
+            "schema",
+            "packet_digest",
+            "arm",
+            "candidate_identity",
+            "scenario_template",
+            "native_seam",
+            "policy_identity",
+            "objective_identity",
+            "repository_commit",
+            "status",
+            "simulator_steps_source",
+            "episode_identity",
+            "episode_digest",
+            "degraded_reason",
+        ),
+        prefix,
+        ".",
+    )
+    problems.extend(
+        _wire_integer_type_problems(
+            row,
+            ("scenario_seed", "search_seed"),
+            prefix,
+            ".",
+        )
+    )
+    macro_action_index = row["macro_action_index"]
+    if arm_name == "open_loop":
+        if macro_action_index is not None:
+            problems.append(f"{prefix}.macro_action_index must be null for open_loop")
+    elif not _is_finite_json_integer(macro_action_index):
+        problems.append(f"{prefix}.macro_action_index must be a finite integer for reactive")
+    simulator_steps = row["simulator_steps"]
+    if simulator_steps is not None and not _is_finite_json_integer(simulator_steps):
+        problems.append(f"{prefix}.simulator_steps must be null or a finite integer")
+    objective_problem = _objective_value_problem(
+        row["objective_value"],
+        status=row["status"] if type(row["status"]) is str else "",
+        prefix=prefix,
+    )
+    if objective_problem is not None:
+        problems.append(objective_problem)
+    fallback_flags = row["fallback_flags"]
+    if not isinstance(fallback_flags, list) or not all(
+        type(flag) is str for flag in fallback_flags
+    ):
+        problems.append(f"{prefix}.fallback_flags must be an array of strings")
+    return problems
+
+
+def _runtime_trace_wire_type_problems(raw_trace: dict[str, Any], arm_name: str) -> list[str]:
+    """Return exact JSON wire-type violations before runtime-trace construction."""
+    prefix = f"receipt {arm_name} runtime trace"
+    problems = _wire_string_type_problems(
+        raw_trace,
+        (
+            "schema_version",
+            "arm",
+            "execution_mode",
+            "status",
+            "evidence_status",
+            "adapter",
+            "runtime_status",
+            "native_path",
+            "simulator_steps_source",
+        ),
+        prefix,
+        " ",
+    )
+    problems.extend(
+        _wire_integer_type_problems(
+            raw_trace,
+            (
+                "scenario_seed",
+                "search_seed",
+                "macro_actions",
+                "candidate_evaluations",
+                "accepted",
+                "rejected",
+                "invalid",
+                "candidate_budget",
+            ),
+            prefix,
+            " ",
+        )
+    )
+    for field_name in ("simulator_physics_steps", "simulator_steps"):
+        value = raw_trace[field_name]
+        if value is not None and not _is_finite_json_integer(value):
+            problems.append(f"{prefix} {field_name} must be null or a finite integer")
+    for field_name in ("fallback", "degraded"):
+        if type(raw_trace[field_name]) is not bool:
+            problems.append(f"{prefix} {field_name} must be a boolean")
+    if not isinstance(raw_trace["metadata"], dict):
+        problems.append(f"{prefix} metadata must be an object")
+    reason = raw_trace["unavailability_reason"]
+    if reason is not None and type(reason) is not str:
+        problems.append(f"{prefix} unavailability_reason must be null or a string")
+    return problems
+
+
 @dataclass(frozen=True)
 class _ReceiptArmValidation:
     """Shared packet and filesystem context for one receipt arm validation."""
@@ -765,9 +913,9 @@ def _objective_value_problem(value: Any, *, status: str, prefix: str) -> str | N
             if status == "accepted"
             else None
         )
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if type(value) not in {int, float}:
         return f"{prefix}.objective_value is not numeric"
-    if not math.isfinite(float(value)):
+    if not _is_finite_json_number(value):
         return f"{prefix}.objective_value is not finite"
     return None
 
@@ -1474,8 +1622,15 @@ def _parse_receipt_arms(
                     f"{', '.join(missing_fields)}"
                 )
                 continue
+            prefix = f"{arm_name} records[{index}]"
+            wire_type_problems = _candidate_wire_type_problems(row, arm_name, prefix)
+            if wire_type_problems:
+                problems.extend(wire_type_problems)
+                continue
+            candidate_payload = dict(row)
+            candidate_payload["fallback_flags"] = tuple(row["fallback_flags"])
             try:
-                records.append(CandidateRecord(**row))
+                records.append(CandidateRecord(**candidate_payload))
             except (TypeError, ValueError) as exc:
                 problems.append(f"{arm_name} records[{index}] is malformed: {exc}")
         parsed_arms[arm_name] = (arm, records)
@@ -1497,6 +1652,10 @@ def _parse_runtime_trace(
             f"receipt {arm_name} runtime trace is missing required field(s): "
             f"{', '.join(missing_fields)}"
         )
+        return None
+    wire_type_problems = _runtime_trace_wire_type_problems(raw_trace, arm_name)
+    if wire_type_problems:
+        problems.extend(wire_type_problems)
         return None
     if raw_trace["runtime_status"] != raw_trace["status"]:
         problems.append(f"receipt {arm_name} runtime trace runtime_status does not match status")

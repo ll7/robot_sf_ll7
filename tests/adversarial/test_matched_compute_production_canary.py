@@ -668,6 +668,79 @@ def test_receipt_check_requires_consistent_runtime_trace_wire_contract_full_180(
     assert expected_problem in capsys.readouterr().out
 
 
+def test_packet_bound_receipt_rejects_combined_serialized_type_confusion_full_180(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Wire values cannot exploit Python equality, membership, or truthiness semantics."""
+    commit, packet_digest, input_digests = _real_receipt_inputs()
+    records = _canonical_records(
+        tmp_path / "artifacts",
+        arm="open_loop",
+        identity_prefix="open",
+        packet_digest=packet_digest,
+        commit=commit,
+    )
+    reactive_records = _canonical_records(
+        tmp_path / "artifacts",
+        arm="reactive",
+        identity_prefix="reactive",
+        packet_digest=packet_digest,
+        commit=commit,
+    )
+    receipt_path = tmp_path / "receipt.json"
+    _write_receipt(
+        packet_digest=packet_digest,
+        commit=commit,
+        open_loop_records=records,
+        reactive_records=reactive_records,
+        problems=[],
+        output=receipt_path,
+        input_digests=input_digests,
+        runtime_traces={
+            "open_loop": _runtime_trace(),
+            "reactive": _runtime_trace(arm="reactive"),
+        },
+    )
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["arms"]["open_loop"]["records"][0].update(
+        {
+            "macro_action_index": "not-an-index",
+            "scenario_seed": 123.0,
+            "search_seed": 42.0,
+            "native_seam": ["robot_sf.adversarial.search.run_adversarial_search"],
+            "fallback_flags": False,
+            "degraded_reason": False,
+        }
+    )
+    receipt["arms"]["reactive"]["records"][0]["macro_action_index"] = False
+    receipt["runtime_traces"]["open_loop"].update(
+        {
+            "fallback": 0,
+            "degraded": 0,
+            "metadata": False,
+            "unavailability_reason": False,
+        }
+    )
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    assert _check_receipt(receipt_path, packet_path=PACKET) == 1
+    output = capsys.readouterr().out
+    for expected_problem in (
+        "macro_action_index must be null for open_loop",
+        "scenario_seed must be a finite integer",
+        "search_seed must be a finite integer",
+        "native_seam must be a string",
+        "fallback_flags must be an array of strings",
+        "degraded_reason must be a string",
+        "macro_action_index must be a finite integer for reactive",
+        "runtime trace fallback must be a boolean",
+        "runtime trace degraded must be a boolean",
+        "runtime trace metadata must be an object",
+        "runtime trace unavailability_reason must be null or a string",
+    ):
+        assert expected_problem in output
+
+
 def test_receipt_check_rejects_arbitrary_regular_file_as_episode_provenance(
     tmp_path: Path,
 ) -> None:

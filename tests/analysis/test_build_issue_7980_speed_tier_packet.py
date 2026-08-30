@@ -1,5 +1,9 @@
 """Contract tests for the issue #7980 source-bound diagnostic speed-tier packet."""
 
+# evidence-writer-exempt: authenticated-receipt tests write only throwaway pytest tmp_path
+# fixtures, including exact gzip bytes and deliberately malformed inputs; no repository evidence
+# is emitted by this test module.
+
 from __future__ import annotations
 
 import copy

@@ -396,3 +396,178 @@ def test_receipt_rejects_mapped_registry_pin_mismatch(tmp_path: Path, monkeypatc
             repo_root=tmp_path,
             now=datetime(2026, 8, 21, 13, tzinfo=UTC),
         )
+
+
+def test_receipt_resolves_default_registry_from_repo_root_regardless_of_cwd(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The default model registry resolves against repo_root even when CWD is unrelated."""
+    repo_fake = tmp_path / "repo"
+    repo_fake.mkdir()
+    unrelated_cwd = tmp_path / "unrelated_cwd"
+    unrelated_cwd.mkdir()
+
+    cfg, config, registry, receipt, payload = _fixture(repo_fake)
+    # Move registry to standard default location: <repo>/model/registry.yaml
+    default_registry_dir = repo_fake / "model"
+    default_registry_dir.mkdir(parents=True, exist_ok=True)
+    default_registry = default_registry_dir / "registry.yaml"
+    default_registry.write_text(registry.read_text(encoding="utf-8"), encoding="utf-8")
+    payload["checkpoint_registry_sha256"] = sha256_file(default_registry)
+    _write_receipt(receipt, payload)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda _cfg: _cfg.references,
+    )
+    monkeypatch.chdir(unrelated_cwd)
+
+    result = validate_checkpoint_staging_receipt(
+        cfg,
+        receipt,
+        campaign_config_path=config,
+        repo_root=repo_fake,
+        now=datetime(2026, 8, 21, 13, tzinfo=UTC),
+    )
+    assert result["submit_safe"] is True
+
+
+def test_receipt_resolves_relative_registry_path_from_repo_root(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """An explicit relative registry path resolves against repo_root when CWD is unrelated."""
+    repo_fake = tmp_path / "repo"
+    repo_fake.mkdir()
+    unrelated_cwd = tmp_path / "unrelated_cwd"
+    unrelated_cwd.mkdir()
+
+    cfg, config, registry, receipt, payload = _fixture(repo_fake)
+    custom_reg_dir = repo_fake / "custom_models"
+    custom_reg_dir.mkdir(parents=True, exist_ok=True)
+    custom_registry = custom_reg_dir / "reg.yaml"
+    custom_registry.write_text(registry.read_text(encoding="utf-8"), encoding="utf-8")
+    payload["checkpoint_registry_sha256"] = sha256_file(custom_registry)
+    _write_receipt(receipt, payload)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda _cfg: _cfg.references,
+    )
+    monkeypatch.chdir(unrelated_cwd)
+
+    result = validate_checkpoint_staging_receipt(
+        cfg,
+        receipt,
+        campaign_config_path=config,
+        registry_path=Path("custom_models/reg.yaml"),
+        repo_root=repo_fake,
+        now=datetime(2026, 8, 21, 13, tzinfo=UTC),
+    )
+    assert result["submit_safe"] is True
+
+
+def test_receipt_direct_model_path_relative_resolves_from_repo_root(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A relative direct model path resolves against repo_root when CWD is unrelated."""
+    repo_fake = tmp_path / "repo"
+    repo_fake.mkdir()
+    unrelated_cwd = tmp_path / "unrelated_cwd"
+    unrelated_cwd.mkdir()
+
+    cfg, config, registry, receipt, payload = _fixture(repo_fake)
+    model_rel_path = "models/my_model.zip"
+    model_abs_path = repo_fake / model_rel_path
+    model_abs_path.parent.mkdir(parents=True, exist_ok=True)
+    model_abs_path.write_bytes(b"direct-checkpoint-content")
+
+    cfg.references = [
+        SimpleNamespace(
+            planner_key="ppo",
+            algo="ppo",
+            kind="model_path",
+            value=model_rel_path,
+            implicit=False,
+        )
+    ]
+    payload["arms"][0].update(
+        planner_key="ppo",
+        algo="ppo",
+        kind="model_path",
+        value=model_rel_path,
+        resolved_path=str(model_abs_path),
+        checkpoint_sha256=sha256_file(model_abs_path),
+    )
+    _write_receipt(receipt, payload)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda _cfg: _cfg.references,
+    )
+    monkeypatch.chdir(unrelated_cwd)
+
+    result = validate_checkpoint_staging_receipt(
+        cfg,
+        receipt,
+        campaign_config_path=config,
+        registry_path=registry,
+        repo_root=repo_fake,
+        now=datetime(2026, 8, 21, 13, tzinfo=UTC),
+    )
+    assert result["submit_safe"] is True
+
+
+def test_receipt_direct_model_path_relative_resolves_from_cwd_when_repo_root_is_none(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A relative direct model path falls back to CWD when repo_root is None in arm validation."""
+    from robot_sf.benchmark.checkpoint_staging_receipt import _validate_direct_checkpoint_path
+
+    model_rel = "local_model.zip"
+    model_abs = (tmp_path / model_rel).resolve()
+    model_abs.write_bytes(b"content")
+
+    ref = SimpleNamespace(kind="model_path", value=model_rel)
+    monkeypatch.chdir(tmp_path)
+    # Should succeed without error
+    _validate_direct_checkpoint_path(
+        ref,
+        planner_key="goal",
+        resolved=model_abs,
+        receipt_path=str(model_abs),
+        repo_root=None,
+    )
+
+
+def test_receipt_resolves_default_registry_when_repo_root_is_none(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Default registry resolves via get_repository_root when repo_root parameter is None."""
+    repo_fake = tmp_path / "repo"
+    repo_fake.mkdir()
+
+    cfg, config, registry, receipt, payload = _fixture(repo_fake)
+    model_dir = repo_fake / "model"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    default_registry = model_dir / "registry.yaml"
+    default_registry.write_text(registry.read_text(encoding="utf-8"), encoding="utf-8")
+    payload["checkpoint_registry_sha256"] = sha256_file(default_registry)
+    _write_receipt(receipt, payload)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.get_repository_root",
+        lambda: repo_fake,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda _cfg: _cfg.references,
+    )
+
+    result = validate_checkpoint_staging_receipt(
+        cfg,
+        receipt,
+        campaign_config_path=config,
+        repo_root=None,
+        now=datetime(2026, 8, 21, 13, tzinfo=UTC),
+    )
+    assert result["submit_safe"] is True

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
+import platform
 import subprocess
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -15,6 +18,83 @@ WORKFLOW = ROOT / ".github" / "workflows" / "actionlint.yml"
 
 EXPECTED_VERSION = "1.7.12"
 EXPECTED_MANIFEST_SHA256 = "433028cf0ba3c42163ea1a668dedce30fcdbe84fe912b1a5e288c006eab8a4f5"
+EXPECTED_BINARY_SHA256 = {
+    "linux_amd64": "c872d6db8c6bf83a8eaa704fc93999f027d55dffbc63b8a6abdccb47df5f4cd4",
+    "linux_arm64": "ac0323433c2853ec3fb978c611430c5b3dc5d43c58d1a1ec031b00ab572beb60",
+    "darwin_amd64": "d1f7cee75ae2873609bd9567b4600bebc5315a5e733e73202987a44fafdd53b2",
+    "darwin_arm64": "8db11704dc296f096216db4db65d86cd7f0ebfdf4c38453a1da276b137b88388",
+}
+
+
+def _write_invalid_workflow(path: Path) -> Path:
+    path.write_text(
+        "name: Bad\non: [invalid_event]\njobs:\n"
+        "  broken:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo 1\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _write_fake_actionlint(
+    path: Path,
+    *,
+    version: str,
+    invocation_marker: Path | None = None,
+) -> Path:
+    marker_command = ""
+    if invocation_marker is not None:
+        marker_command = f"printf '%s\\n' invoked > {str(invocation_marker)!r}\\n"
+    path.write_text(
+        "#!/usr/bin/env bash\n"
+        f"{marker_command}"
+        'if [[ "${1:-}" == "-version" ]]; then\n'
+        f"  printf '%s\\n' {version!r}\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+    return path
+
+
+def _run_wrapper(
+    workflow: Path,
+    *,
+    tmp_path: Path,
+    actionlint_bin: Path | None = None,
+    path_prefix: Path | None = None,
+    script: Path = SCRIPT,
+) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["ROBOT_SF_ACTIONLINT_CACHE"] = str(tmp_path / "cache")
+    env["ACTIONLINT_BIN"] = str(actionlint_bin) if actionlint_bin is not None else ""
+    if path_prefix is not None:
+        env["PATH"] = f"{path_prefix}:{env['PATH']}"
+    return subprocess.run(
+        ["bash", str(script), str(workflow)],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+
+def _script_trusting_test_binary(path: Path, binary: Path) -> Path:
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    arch = "amd64" if machine in {"x86_64", "amd64"} else "arm64"
+    platform_key = f"{system}_{arch}"
+    old_digest = EXPECTED_BINARY_SHA256[platform_key]
+    test_digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+    text = SCRIPT.read_text(encoding="utf-8")
+    trusted_text = text.replace(
+        f'EXPECTED_BINARY_SHA256_{platform_key.upper()}="{old_digest}"',
+        f'EXPECTED_BINARY_SHA256_{platform_key.upper()}="{test_digest}"',
+    )
+    assert trusted_text != text
+    path.write_text(trusted_text, encoding="utf-8")
+    return path
 
 
 def test_actionlint_script_constants_and_pins() -> None:
@@ -24,6 +104,8 @@ def test_actionlint_script_constants_and_pins() -> None:
 
     assert f'ACTIONLINT_VERSION="{EXPECTED_VERSION}"' in text
     assert f'EXPECTED_CHECKSUMS_SHA256="{EXPECTED_MANIFEST_SHA256}"' in text
+    for platform_key, digest in EXPECTED_BINARY_SHA256.items():
+        assert f'EXPECTED_BINARY_SHA256_{platform_key.upper()}="{digest}"' in text
     assert "set -euo pipefail" in text
     assert "detect_platform" in text
     assert "compute_sha256" in text
@@ -131,8 +213,9 @@ def test_actionlint_workflow_contract() -> None:
 
     # Steps
     steps = job.get("steps", [])
-    step_runs = [s.get("run", "") for s in steps]
-    assert any("bash scripts/dev/check_github_actions_workflows.sh" in cmd for cmd in step_runs)
+    step_runs = [s.get("run", "").strip() for s in steps if s.get("run")]
+    assert step_runs == ["bash scripts/dev/check_github_actions_workflows.sh"]
+    assert all("|| true" not in command for command in step_runs)
 
 
 def test_actionlint_runs_cleanly_on_all_repository_workflows() -> None:
@@ -149,11 +232,7 @@ def test_actionlint_runs_cleanly_on_all_repository_workflows() -> None:
 
 def test_actionlint_fails_on_invalid_workflow_fixture(tmp_path: Path) -> None:
     """Verify actionlint wrapper detects syntax and schema violations in invalid workflow."""
-    bad_workflow = tmp_path / "bad_workflow.yml"
-    bad_workflow.write_text(
-        "name: Bad\non: [invalid_event]\njobs:\n  broken:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo 1\n",
-        encoding="utf-8",
-    )
+    bad_workflow = _write_invalid_workflow(tmp_path / "bad_workflow.yml")
     res = subprocess.run(
         ["bash", str(SCRIPT), str(bad_workflow)],
         cwd=ROOT,
@@ -164,11 +243,80 @@ def test_actionlint_fails_on_invalid_workflow_fixture(tmp_path: Path) -> None:
     assert res.returncode != 0, (
         f"actionlint should fail on invalid workflow, but succeeded:\n{res.stdout}"
     )
-    assert (
-        "unknown Webhook event" in res.stdout
-        or "unknown Webhook event" in res.stderr
-        or res.returncode != 0
+    assert "unknown Webhook event" in f"{res.stdout}\n{res.stderr}"
+
+
+def test_actionlint_rejects_untrusted_explicit_override(tmp_path: Path) -> None:
+    """An executable override must not bypass actionlint with unrelated bytes."""
+    bad_workflow = _write_invalid_workflow(tmp_path / "bad_override.yml")
+    res = _run_wrapper(
+        bad_workflow,
+        tmp_path=tmp_path,
+        actionlint_bin=Path("/bin/true"),
     )
+
+    assert res.returncode != 0
+    diagnostics = f"{res.stdout}\n{res.stderr}"
+    assert "binary digest mismatch" in diagnostics
+    assert "unknown Webhook event" not in diagnostics
+
+
+def test_actionlint_rejects_poisoned_cached_binary(tmp_path: Path) -> None:
+    """A cached executable is revalidated from its bytes before every use."""
+    cached_bin = tmp_path / "cache" / EXPECTED_VERSION / "actionlint"
+    cached_bin.parent.mkdir(parents=True)
+    cached_bin.symlink_to("/bin/true")
+    bad_workflow = _write_invalid_workflow(tmp_path / "bad_cache.yml")
+
+    res = _run_wrapper(bad_workflow, tmp_path=tmp_path)
+
+    assert res.returncode != 0
+    diagnostics = f"{res.stdout}\n{res.stderr}"
+    assert "binary digest mismatch" in diagnostics
+    assert "unknown Webhook event" not in diagnostics
+
+
+def test_actionlint_rejects_path_binary_with_untrusted_bytes(tmp_path: Path) -> None:
+    """A PATH candidate claiming the pinned version must also match trusted release bytes."""
+    fake_bin_dir = tmp_path / "bin"
+    fake_bin_dir.mkdir()
+    invocation_marker = tmp_path / "invoked"
+    _write_fake_actionlint(
+        fake_bin_dir / "actionlint",
+        version=EXPECTED_VERSION,
+        invocation_marker=invocation_marker,
+    )
+    bad_workflow = _write_invalid_workflow(tmp_path / "bad_path.yml")
+
+    res = _run_wrapper(bad_workflow, tmp_path=tmp_path, path_prefix=fake_bin_dir)
+
+    assert res.returncode != 0
+    assert "binary digest mismatch" in f"{res.stdout}\n{res.stderr}"
+    assert not invocation_marker.exists(), "untrusted candidate must not be executed"
+
+
+@pytest.mark.parametrize("reported_version", ["1.7.11", "1.7.120"])
+def test_actionlint_rejects_wrong_or_fuzzy_version(tmp_path: Path, reported_version: str) -> None:
+    """Candidate version output must equal the pinned release, not contain it."""
+    fake_actionlint = _write_fake_actionlint(
+        tmp_path / f"actionlint-{reported_version}",
+        version=reported_version,
+    )
+    trusted_test_script = _script_trusting_test_binary(
+        tmp_path / f"wrapper-{reported_version}.sh",
+        fake_actionlint,
+    )
+    bad_workflow = _write_invalid_workflow(tmp_path / f"bad-{reported_version}.yml")
+
+    res = _run_wrapper(
+        bad_workflow,
+        tmp_path=tmp_path,
+        actionlint_bin=fake_actionlint,
+        script=trusted_test_script,
+    )
+
+    assert res.returncode != 0
+    assert "version mismatch" in f"{res.stdout}\n{res.stderr}"
 
 
 def test_actionlint_fails_on_manifest_digest_mismatch(tmp_path: Path) -> None:

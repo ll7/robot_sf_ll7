@@ -667,6 +667,45 @@ def test_wheel_install_smoke_tests_optional_extras_independently() -> None:
     assert '"extras": json.loads(extras_status_json)' in smoke_text
 
 
+def test_wheel_console_scripts_have_an_installed_package_boundary() -> None:
+    """Every declared entry point must have an explicit wheel package boundary."""
+    project = _pyproject()
+    scripts = project["project"]["scripts"]
+    force_include = project["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+    sdist_include = project["tool"]["hatch"]["build"]["targets"]["sdist"]["include"]
+    smoke_text = WHEEL_INSTALL_SMOKE.read_text(encoding="utf-8")
+
+    # Hatchling discovers ``robot_sf`` itself, but the other entry-point roots
+    # are outside that package and therefore need an explicit force-include
+    # boundary. Keep this assertion coupled to the advertised roster so a new
+    # console script cannot silently regress to source-checkout-only behavior.
+    # Keep the top-level ``scripts`` package a namespace in the wheel: a regular
+    # package there can shadow the source checkout in developer environments.
+    assert "scripts/__init__.py" not in force_include
+    for target in scripts.values():
+        module = target.split(":", 1)[0]
+        root = module.split(".", 1)[0]
+        if root == "robot_sf":
+            continue
+        module_path = module.replace(".", "/")
+        assert (
+            root in force_include
+            or f"{module_path}.py" in force_include
+            or f"{module_path}/__init__.py" in force_include
+        ), f"entry point {module!r} has no wheel package boundary"
+        assert any(
+            path in sdist_include
+            for path in (f"/{root}", f"/{module_path}.py", f"/{module_path}/__init__.py")
+        ), f"entry point {module!r} has no source-distribution package boundary"
+
+    assert "importlib.metadata" in smoke_text
+    assert "subprocess.run" in smoke_text
+    assert 'export SDL_VIDEODRIVER="dummy"' in smoke_text
+    assert 'export MPLBACKEND="Agg"' in smoke_text
+    assert 'export PYGAME_HIDE_SUPPORT_PROMPT="1"' in smoke_text
+    assert '"console_script_probes": console_probes["entries"]' in smoke_text
+
+
 def test_wheel_metadata_vendors_compatible_fast_pysf_package() -> None:
     """Clean wheel installs must not resolve the incompatible PyPI pysocialforce package."""
     project = _pyproject()

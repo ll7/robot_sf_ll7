@@ -479,7 +479,7 @@ def _extract_obstacle_points(
             for row, col in indices:
                 ego_x = (col - occ.shape[1] / 2.0) * res
                 ego_y = (row - occ.shape[0] / 2.0) * res
-                wx, wy = ego_to_world((ego_x, ego_y), (rx, ry, rth))
+                wx, wy = ego_to_world(ego_x, ego_y, ((rx, ry), rth))
                 obs_list.append((wx, wy))
 
     return np.array(obs_list, dtype=float).reshape(-1, 2)

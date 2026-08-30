@@ -346,3 +346,73 @@ def test_fixed_smoke_scenarios() -> None:
 
     assert cmd_ped_1 == cmd_ped_2
     assert cmd_ped_1[0] > 0.0
+
+
+def test_policy_builders_registration() -> None:
+    """Policy builder registry correctly constructs anisotropic Gaussian cost adapter."""
+    from robot_sf.benchmark.policy_builders import build_registered_adapter_policy_spec
+
+    # Rejects when allow_testing_algorithms is missing or false
+    with pytest.raises(ValueError, match="allow_testing_algorithms"):
+        build_registered_adapter_policy_spec(
+            "anisotropic_gaussian_cost", {"allow_testing_algorithms": False}
+        )
+
+    # Accepts when allow_testing_algorithms is true
+    spec = build_registered_adapter_policy_spec(
+        "anisotropic_gaussian_cost", {"allow_testing_algorithms": True, "amplitude": 1.5}
+    )
+    assert spec is not None
+    assert spec.algo_key == "anisotropic_gaussian_cost"
+    assert spec.adapter_name == "AnisotropicGaussianCostPlanner"
+    assert isinstance(spec.adapter, AnisotropicGaussianCostPlanner)
+    assert spec.adapter.config.amplitude == 1.5
+
+
+def test_planner_occupancy_grid_and_alternate_observations() -> None:
+    """Planner parses occupancy grid obstacles and alternate observation keys."""
+    planner = AnisotropicGaussianCostPlanner()
+
+    # 1. Alternate robot_position, robot_heading, goal, pedestrian_positions
+    obs_alt = {
+        "robot_position": (0.0, 0.0),
+        "robot_heading": 0.0,
+        "goal": (10.0, 0.0),
+        "pedestrian_positions": [(4.0, 0.0)],
+        "pedestrian_velocities": [(0.0, 0.0)],
+    }
+    cmd_alt = planner.plan(obs_alt)
+    assert cmd_alt[0] > 0.0
+    assert planner.diagnostics()["status"] == "ok"
+    assert planner.diagnostics()["pedestrian_count"] == 1
+
+    # 2. Occupancy grid obstacle extraction
+    grid = np.zeros((20, 20), dtype=float)
+    grid[10, 15] = 1.0  # Occupied cell in front
+    obs_grid = {
+        "robot_state": (0.0, 0.0, 0.0),
+        "goal_position": (10.0, 0.0),
+        "occupancy_grid": grid,
+        "occupancy_grid_resolution": 0.2,
+    }
+    cmd_grid = planner.plan(obs_grid)
+    assert cmd_grid[0] > 0.0
+    assert planner.diagnostics()["status"] == "ok"
+
+
+def test_planner_heading_slowdown() -> None:
+    """Heading error > 90 degrees slows down forward speed proportionally."""
+    planner = AnisotropicGaussianCostPlanner(
+        config=AnisotropicGaussianCostConfig(
+            max_linear_speed=1.0,
+            max_linear_rate=2.0,
+        )
+    )
+    # Robot facing North (pi/2), Goal East (0.0) -> heading error = -pi/2
+    obs = {
+        "robot_state": (0.0, 0.0, math.pi),
+        "goal_position": (10.0, 0.0),  # Goal behind robot
+    }
+    v, _ = planner.plan(obs)
+    # With goal behind robot (180 deg error), forward speed should be 0
+    assert v == pytest.approx(0.0)

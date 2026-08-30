@@ -543,6 +543,8 @@ def build_report(
         "unscoped_tracked_path_count": 0,
         "issues": [],
         "known_blockers": [],
+        "known_blocker_paths": [],
+        "path_statuses": {},
     }
     issues: list[dict[str, Any]] = report["issues"]
     payload, load_issues = _load_inventory(inventory_path)
@@ -581,6 +583,11 @@ def build_report(
     row_paths, classified_count = _classify_paths(paths, scopes, rows, scope_paths, issues)
     report["classified_path_count"] = classified_count
     _finalise_rows(rows, row_paths, report["known_blockers"], issues)
+    blocking_row_ids = {row["id"] for row in rows if row.get("status") in KNOWN_BLOCKING_STATUSES}
+    report["known_blocker_paths"] = sorted(
+        path for row_id in blocking_row_ids for path in row_paths[row_id]
+    )
+    report["path_statuses"] = {path: row["status"] for row in rows for path in row_paths[row["id"]]}
 
     report["known_blockers"].sort(key=lambda item: item["row"])
     report["issues"] = sorted(
@@ -594,6 +601,7 @@ def build_report(
     report["counts"] = {
         "issues": len(report["issues"]),
         "known_blocker_rows": len(report["known_blockers"]),
+        "known_blocker_paths": len(report["known_blocker_paths"]),
         "unclassified_paths": sum(
             1 for issue in report["issues"] if issue["code"] == "unclassified_path"
         ),

@@ -427,6 +427,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="anisotropic_gaussian_cost",
+        tier="experimental",
+        aliases=("anisotropic_gaussian_cost",),
+        note=(
+            "Clean-room anisotropic Gaussian human-cost local-planner comparator; "
+            "implementation-integrity smoke only, not benchmark or reproduction evidence."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="force_coupled_potential_field",
         tier="experimental",
         aliases=("force_coupled_potential_field",),

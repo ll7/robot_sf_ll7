@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from robot_sf.planner.anisotropic_gaussian_cost import (
+    AnisotropicGaussianCostPlanner,
+    build_anisotropic_gaussian_cost_config,
+)
 from robot_sf.planner.chance_constrained_mpc import build_chance_constrained_mpc_adapter
 from robot_sf.planner.dwa import DWAPlannerAdapter, build_dwa_config
 from robot_sf.planner.force_coupled_potential_field import (
@@ -72,6 +76,36 @@ def _build_dwa_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpec:
         adapter=DWAPlannerAdapter(config=build_dwa_config(algo_config)),
         adapter_name="DWAPlannerAdapter",
         limitations="classical_dwa_experimental_testing_only",
+    )
+
+
+def _build_anisotropic_gaussian_cost_policy_spec(
+    algo_config: dict[str, Any],
+) -> AdapterPolicySpec:
+    """Build the opt-in anisotropic Gaussian human-cost smoke adapter spec.
+
+    Returns:
+        The experimental adapter construction payload.
+    """
+    raw_opt_in = algo_config.get("allow_testing_algorithms", False)
+    opt_in = (
+        raw_opt_in
+        if isinstance(raw_opt_in, bool)
+        else str(raw_opt_in).strip().lower() in {"true", "1", "yes"}
+    )
+    if not opt_in:
+        raise ValueError(
+            "anisotropic_gaussian_cost is experimental/testing-only and requires "
+            "allow_testing_algorithms: true"
+        )
+    return AdapterPolicySpec(
+        algo_key="anisotropic_gaussian_cost",
+        algo_config=algo_config,
+        adapter=AnisotropicGaussianCostPlanner(
+            config=build_anisotropic_gaussian_cost_config(algo_config)
+        ),
+        adapter_name="AnisotropicGaussianCostPlanner",
+        limitations="clean_room_experimental_smoke_only_not_benchmark_evidence",
     )
 
 
@@ -238,6 +272,7 @@ _ADAPTER_POLICY_BUILDERS: dict[str, Callable[[dict[str, Any]], AdapterPolicySpec
     "prediction_mpc": _build_prediction_mpc_policy_spec,
     "prediction_mpc_cbf": _build_prediction_mpc_policy_spec,
     "dwa": _build_dwa_policy_spec,
+    "anisotropic_gaussian_cost": _build_anisotropic_gaussian_cost_policy_spec,
     "force_coupled_potential_field": _build_force_coupled_potential_field_policy_spec,
     "risk_dwa": _build_risk_dwa_policy_spec,
     "sipp_lattice": _build_sipp_lattice_policy_spec,

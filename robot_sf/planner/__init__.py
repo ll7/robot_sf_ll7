@@ -20,6 +20,11 @@ _LAZY_EXPORTS = {
     "ClassicPlannerConfig": "robot_sf.planner.classic_global_planner",
     "DWAPlannerAdapter": "robot_sf.planner.dwa",
     "DWAPlannerConfig": "robot_sf.planner.dwa",
+    "AnisotropicGaussianCostConfig": "robot_sf.planner.anisotropic_gaussian_cost",
+    "AnisotropicGaussianCostPlanner": "robot_sf.planner.anisotropic_gaussian_cost",
+    "build_anisotropic_gaussian_cost_config": ("robot_sf.planner.anisotropic_gaussian_cost"),
+    "evaluate_anisotropic_gaussian_cost": ("robot_sf.planner.anisotropic_gaussian_cost"),
+    "evaluate_anisotropic_repulsive_force": ("robot_sf.planner.anisotropic_gaussian_cost"),
     "ForceCoupledPotentialFieldConfig": "robot_sf.planner.force_coupled_potential_field",
     "ForceCoupledPotentialFieldPlanner": "robot_sf.planner.force_coupled_potential_field",
     "build_force_coupled_potential_field_config": (

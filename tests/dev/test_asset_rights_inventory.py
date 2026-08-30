@@ -69,6 +69,8 @@ def test_live_inventory_classifies_tracked_paths_without_unknown_gaps() -> None:
         for issue in report["issues"]
     )
     assert report["known_blockers"]
+    assert report["counts"]["known_blocker_paths"] == len(report["known_blocker_paths"])
+    assert "examples/datasets/2024-12-06_15-39-44.json" in report["known_blocker_paths"]
     assert inventory.exit_code(report) == 2
     assert inventory.exit_code(report, allow_known_blockers=True) == 0
 

@@ -5,18 +5,23 @@ from __future__ import annotations
 import io
 import tarfile
 import zipfile
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
 from scripts.tools.check_distribution_licenses import (
     DistributionLicenseError,
+    check_archive_member_contract,
     check_distribution,
+    check_source_tree_member_contract,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-    from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 PAYLOADS = {
@@ -253,3 +258,120 @@ def test_license_gate_rejects_model_artifacts_in_source_distribution(tmp_path: P
         match="forbidden source-distribution model artifact members",
     ):
         check_distribution(tmp_path)
+
+
+def test_strict_archive_contract_accepts_clean_fixture(tmp_path: Path) -> None:
+    """Strict member validation accepts a fixture with no release asset members."""
+    _write_robot_sf_archives(tmp_path)
+
+    result = check_distribution(tmp_path, strict_asset_rights=True, repo_root=REPO_ROOT)
+
+    assert len(result.wheels) == 1
+    assert len(result.sdists) == 1
+
+
+def test_strict_archive_contract_rejects_known_blocked_asset(tmp_path: Path) -> None:
+    """A known blocked inventory path cannot enter either software archive."""
+    payloads = dict(PAYLOADS)
+    payloads["examples/datasets/2024-12-06_15-39-44.json"] = "blocked example data"
+    _write_robot_sf_archives(tmp_path, payloads)
+
+    with pytest.raises(
+        DistributionLicenseError,
+        match="asset member has non-release inventory status 'blocked'",
+    ):
+        check_distribution(tmp_path, strict_asset_rights=True, repo_root=REPO_ROOT)
+
+
+def test_strict_archive_contract_rejects_unclassified_asset(tmp_path: Path) -> None:
+    """A newly added asset-like archive member needs an inventory row first."""
+    payloads = dict(PAYLOADS)
+    payloads["examples/new-recording.json"] = "unclassified example data"
+    _write_robot_sf_archives(tmp_path, payloads)
+
+    with pytest.raises(
+        DistributionLicenseError,
+        match="asset member is not covered by the tracked rights inventory",
+    ):
+        check_distribution(tmp_path, strict_asset_rights=True, repo_root=REPO_ROOT)
+
+
+def test_strict_archive_contract_rejects_model_member_in_wheel(tmp_path: Path) -> None:
+    """Model bytes are forbidden even when a wheel carries them outside the sdist root."""
+    payloads = dict(PAYLOADS)
+    payloads["model/checkpoint.zip"] = "checkpoint bytes"
+    _write_robot_sf_archives(tmp_path, payloads)
+
+    with pytest.raises(
+        DistributionLicenseError,
+        match="model artifact member is forbidden in a software distribution",
+    ):
+        check_distribution(tmp_path, strict_asset_rights=True, repo_root=REPO_ROOT)
+
+
+def test_strict_archive_contract_rejects_unsafe_member_path(tmp_path: Path) -> None:
+    """Archive traversal names fail before they can be mapped to a repository path."""
+    archive_path = tmp_path / "robot_sf-0.0.0.tar.gz"
+    with tarfile.open(archive_path, "w:gz") as archive:
+        info = tarfile.TarInfo("robot_sf-0.0.0/../escape.txt")
+        data = b"escape"
+        info.size = len(data)
+        archive.addfile(info, fileobj=io.BytesIO(data))
+
+    errors = check_archive_member_contract(archive, repo_root=REPO_ROOT)
+
+    assert errors == ("unsafe archive member path: 'robot_sf-0.0.0/../escape.txt'",)
+
+
+def test_strict_archive_contract_rejects_windows_absolute_path(tmp_path: Path) -> None:
+    """Windows drive-qualified names cannot bypass POSIX traversal checks."""
+    archive_path = tmp_path / "robot_sf-0.0.0.tar.gz"
+    with tarfile.open(archive_path, "w:gz") as archive:
+        info = tarfile.TarInfo("C:/escape.txt")
+        data = b"escape"
+        info.size = len(data)
+        archive.addfile(info, fileobj=io.BytesIO(data))
+
+    errors = check_archive_member_contract(archive, repo_root=REPO_ROOT)
+
+    assert errors == ("unsafe archive member path: 'C:/escape.txt'",)
+
+
+def test_strict_archive_contract_rejects_duplicate_members(tmp_path: Path) -> None:
+    """Duplicate ZIP names cannot be silently collapsed during archive inspection."""
+    archive_path = tmp_path / "robot_sf-0.0.0-py3-none-any.whl"
+    member_name = "robot_sf-0.0.0.dist-info/licenses/LICENSE"
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr(member_name, "first")
+        archive.writestr(member_name, "second")
+
+    errors = check_archive_member_contract(archive, repo_root=REPO_ROOT)
+
+    assert errors == (
+        "robot_sf-0.0.0-py3-none-any.whl: duplicate archive member names: "
+        "robot_sf-0.0.0.dist-info/licenses/LICENSE",
+    )
+
+
+def test_strict_archive_contract_rejects_tar_symlink(tmp_path: Path) -> None:
+    """Symlinks are not regular release payload members and must be rejected."""
+    archive_path = tmp_path / "robot_sf-0.0.0.tar.gz"
+    with tarfile.open(archive_path, "w:gz") as archive:
+        info = tarfile.TarInfo("robot_sf-0.0.0/LICENSE")
+        info.type = tarfile.SYMTYPE
+        info.linkname = "../../outside"
+        archive.addfile(info)
+
+    errors = check_archive_member_contract(archive, repo_root=REPO_ROOT)
+
+    assert errors == (
+        "robot_sf-0.0.0.tar.gz: non-regular archive members are forbidden: robot_sf-0.0.0/LICENSE",
+    )
+
+
+def test_strict_source_tree_contract_rejects_current_blockers() -> None:
+    """The proposed current Git tree is not publishable while known blockers remain tracked."""
+    errors = check_source_tree_member_contract(REPO_ROOT, source_ref="HEAD")
+
+    assert any("examples/datasets/2024-12-06_15-39-44.json" in error for error in errors)
+    assert any("model/registry.yaml" in error for error in errors)

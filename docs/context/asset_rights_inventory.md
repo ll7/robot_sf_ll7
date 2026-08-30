@@ -16,6 +16,23 @@ intentional: unresolved source, attribution, license, checksum, or modification 
 remain fail-closed. Pull-request CI uses `--allow-known-blockers` so it can reject new
 unclassified/overlapping/malformed rows while reporting the existing legal blockers truthfully.
 
+Before a software release, validate the built payload and the exact proposed Git source tree as
+well:
+
+```bash
+uv run python scripts/tools/check_distribution_licenses.py dist \
+  --strict-asset-rights --repo-root . --source-tree-ref HEAD
+```
+
+This release mode checks the actual wheel and source-distribution members, rejects unsafe or
+duplicate archive paths, maps asset-like members back to this inventory, and rejects any member
+whose status is not `cleared` or `project-authored`. Model artifact paths are forbidden from the
+software payload. When `--source-tree-ref` is supplied, the same unresolved asset rows and all
+top-level `model/` paths fail closed in the proposed Git tree, which protects against GitHub's
+automatic tag source archive exposing files that the Python distributions exclude. The ordinary
+CI command remains a classification check and intentionally does not claim that the current tree
+is publishable.
+
 Every tracked path in a declared scope must match exactly one row. A new release-relevant asset
 therefore requires a row before it can be added. Each row records source, source revision or
 access date, rights status, attribution, checksum policy, modification status, and evidence (or an

@@ -1,20 +1,28 @@
 #!/usr/bin/env python3
-"""Fail-closed license-payload gate for Robot SF distribution archives.
+"""Fail-closed license-payload and release-member gate for Robot SF archives.
 
 The gate checks every Robot SF wheel and source distribution found in a distribution directory.
 At least one of each archive type is required. Each archive must carry the root GPL text, the
 fast-pysf MIT text, the python-rvo2 Apache text, the SocNavBench MIT text, and the third-party
 notice manifest. Source distributions must not carry the top-level ``model/`` artifact tree.
-CI can additionally require the vendored ``pyrvo2`` companion wheel.
+CI can additionally require the vendored ``pyrvo2`` companion wheel. Release validation can opt
+into the strict member contract, which cross-checks archive payload paths against the tracked
+asset-rights inventory and a proposed Git tree. This optional mode is deliberately separate from
+the ordinary CI classification check: the current repository still contains known rights rows
+that must be explicitly resolved or externalized before a software release.
 
 Examples:
     python scripts/tools/check_distribution_licenses.py dist
     python scripts/tools/check_distribution_licenses.py dist --require-pyrvo2
+    python scripts/tools/check_distribution_licenses.py dist --strict-asset-rights \
+        --repo-root . --source-tree-ref HEAD
 """
 
 from __future__ import annotations
 
 import argparse
+import stat
+import subprocess
 import sys
 import tarfile
 import zipfile
@@ -23,6 +31,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
+
+from scripts.tools import check_asset_rights_inventory as asset_inventory
 
 
 class DistributionLicenseError(ValueError):
@@ -155,6 +165,28 @@ PYRVO2_REQUIREMENTS = (
 SDIST_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz", ".zip")
 SOCNAV_EXCLUDED_MEMBERS = {"LICENSE", "LICENSING.yaml", "UPSTREAM.md"}
 FORBIDDEN_SDIST_ROOTS = frozenset({"model"})
+RELEASE_ALLOWED_ASSET_STATUSES = frozenset({"cleared", "project-authored"})
+
+
+def _normalise_archive_member_name(name: str) -> str:
+    """Return a safe POSIX archive member name or raise a contract error."""
+    normalised = name.replace("\\", "/")
+    path = PurePosixPath(normalised)
+    if not normalised or normalised.startswith("/") or "\x00" in normalised or ".." in path.parts:
+        raise DistributionLicenseError(f"unsafe archive member path: {name!r}")
+    if path.parts and len(path.parts[0]) == 2 and path.parts[0][1] == ":":
+        raise DistributionLicenseError(f"unsafe archive member path: {name!r}")
+    return path.as_posix()
+
+
+def _validate_unique_archive_names(names: list[str], archive: Path) -> None:
+    """Reject duplicate or unsafe names before archive contents are normalised to a mapping."""
+    normalised = [_normalise_archive_member_name(name) for name in names]
+    if len(normalised) != len(set(normalised)):
+        duplicates = sorted(name for name in set(normalised) if normalised.count(name) > 1)
+        raise DistributionLicenseError(
+            f"{archive.name}: duplicate archive member names: {', '.join(duplicates)}"
+        )
 
 
 def _archive_members(archive: Path) -> dict[str, str]:
@@ -162,13 +194,41 @@ def _archive_members(archive: Path) -> dict[str, str]:
     try:
         if archive.suffix in {".whl", ".zip"}:
             with zipfile.ZipFile(archive) as source:
+                infos = source.infolist()
+                if any(stat.S_IFMT(info.external_attr >> 16) == stat.S_IFLNK for info in infos):
+                    links = sorted(
+                        info.filename
+                        for info in infos
+                        if stat.S_IFMT(info.external_attr >> 16) == stat.S_IFLNK
+                    )
+                    raise DistributionLicenseError(
+                        f"{archive.name}: symbolic-link archive members are forbidden: "
+                        f"{', '.join(links)}"
+                    )
+                names = [info.filename for info in infos]
+                _validate_unique_archive_names(names, archive)
                 return {
-                    name: source.read(name).decode("utf-8", errors="replace")
-                    for name in source.namelist()
+                    _normalise_archive_member_name(name): source.read(name).decode(
+                        "utf-8", errors="replace"
+                    )
+                    for name in names
                     if not name.endswith("/")
                 }
         if archive.name.endswith(SDIST_SUFFIXES):
             with tarfile.open(archive, mode="r:*") as source:
+                tar_members = source.getmembers()
+                non_regular = sorted(
+                    member.name
+                    for member in tar_members
+                    if not member.isfile() and not member.isdir()
+                )
+                if non_regular:
+                    raise DistributionLicenseError(
+                        f"{archive.name}: non-regular archive members are forbidden: "
+                        f"{', '.join(non_regular)}"
+                    )
+                names = [member.name for member in tar_members]
+                _validate_unique_archive_names(names, archive)
                 members: dict[str, str] = {}
                 for member in source.getmembers():
                     if not member.isfile():
@@ -176,7 +236,9 @@ def _archive_members(archive: Path) -> dict[str, str]:
                     handle = source.extractfile(member)
                     if handle is None:
                         continue
-                    members[member.name] = handle.read().decode("utf-8", errors="replace")
+                    members[_normalise_archive_member_name(member.name)] = handle.read().decode(
+                        "utf-8", errors="replace"
+                    )
                 return members
     except (OSError, UnicodeError, tarfile.TarError, zipfile.BadZipFile) as exc:
         raise DistributionLicenseError(f"cannot read archive {archive.name}: {exc}") from exc
@@ -378,6 +440,172 @@ def _forbidden_sdist_members(archive: Path, members: dict[str, str]) -> tuple[st
     return tuple(forbidden)
 
 
+def _archive_source_path(archive: Path, member_name: str) -> str | None:
+    """Map one archive member to its repository path, ignoring generated metadata."""
+    parts = PurePosixPath(member_name).parts
+    if archive.suffix == ".whl":
+        if any(part.endswith((".dist-info", ".data")) for part in parts):
+            return None
+        return PurePosixPath(*parts).as_posix() if parts else None
+    if archive.name.endswith(SDIST_SUFFIXES) and len(parts) > 1:
+        return PurePosixPath(*parts[1:]).as_posix()
+    return None
+
+
+def _asset_inventory_report(repo_root: Path, inventory_path: Path) -> dict[str, Any]:
+    """Load the tracked-path inventory used by strict archive checks."""
+    return asset_inventory.build_report(repo_root.resolve(), inventory_path.resolve())
+
+
+def check_archive_member_contract(
+    archive: Path,
+    *,
+    repo_root: Path,
+    inventory_path: Path = asset_inventory.DEFAULT_INVENTORY,
+) -> tuple[str, ...]:
+    """Return strict rights/member violations for one built distribution archive.
+
+    Archive metadata is ignored, while package/source payload paths are mapped back to the
+    repository. Asset-like members must be covered by the tracked inventory and use a release-safe
+    status. Model artifacts are never accepted in a software distribution by this gate. The
+    function is read-only and does not decide whether an unresolved row should be relicensed.
+    """
+    try:
+        members = _archive_members(archive)
+    except DistributionLicenseError as exc:
+        return (str(exc),)
+
+    report = _asset_inventory_report(repo_root, inventory_path)
+    errors = [
+        f"{archive.name}: asset inventory is structurally invalid: {issue['message']}"
+        for issue in report.get("issues", [])
+    ]
+    path_statuses = report.get("path_statuses", {})
+    if not isinstance(path_statuses, dict):
+        return tuple(errors + [f"{archive.name}: asset inventory did not provide path statuses"])
+
+    for member_name in sorted(members):
+        source_path = _archive_source_path(archive, member_name)
+        if source_path is None:
+            continue
+        source_parts = PurePosixPath(source_path).parts
+        if source_parts and source_parts[0] == "model":
+            errors.append(
+                f"{archive.name}: model artifact member is forbidden in a software distribution: "
+                f"{member_name}"
+            )
+            continue
+        if not asset_inventory._looks_like_asset(source_path):
+            continue
+        status = path_statuses.get(source_path)
+        if status is None:
+            errors.append(
+                f"{archive.name}: asset member is not covered by the tracked rights inventory: "
+                f"{member_name} (source path {source_path})"
+            )
+        elif status not in RELEASE_ALLOWED_ASSET_STATUSES:
+            errors.append(
+                f"{archive.name}: asset member has non-release inventory status {status!r}: "
+                f"{member_name} (source path {source_path})"
+            )
+    return tuple(sorted(set(errors)))
+
+
+def _git_tree_paths(repo_root: Path, source_ref: str) -> tuple[str, ...]:
+    """Return the exact regular-file paths contained in one Git tree."""
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_root),
+                "ls-tree",
+                "-r",
+                "--name-only",
+                "-z",
+                source_ref,
+            ],
+            check=True,
+            capture_output=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise DistributionLicenseError(
+            f"could not enumerate source tree {source_ref!r}: {exc}"
+        ) from exc
+    try:
+        paths = result.stdout.decode("utf-8").split("\0")
+    except UnicodeDecodeError as exc:
+        raise DistributionLicenseError(
+            f"source tree {source_ref!r} contains non-UTF-8 paths"
+        ) from exc
+    try:
+        return tuple(sorted(asset_inventory._normalise_path(path) for path in paths if path))
+    except ValueError as exc:
+        raise DistributionLicenseError(
+            f"source tree {source_ref!r} contains an unsafe path: {exc}"
+        ) from exc
+
+
+def check_source_tree_member_contract(
+    repo_root: Path,
+    *,
+    source_ref: str = "HEAD",
+    inventory_path: Path = asset_inventory.DEFAULT_INVENTORY,
+) -> tuple[str, ...]:
+    """Return strict rights/member violations for a proposed Git source tree."""
+    try:
+        paths = _git_tree_paths(repo_root.resolve(), source_ref)
+    except DistributionLicenseError as exc:
+        return (str(exc),)
+
+    report = asset_inventory.build_report(
+        repo_root.resolve(), inventory_path.resolve(), tracked_paths=list(paths)
+    )
+    errors = [
+        f"source tree {source_ref!r}: asset inventory is structurally invalid: {issue['message']}"
+        for issue in report.get("issues", [])
+    ]
+    errors.extend(
+        f"source tree {source_ref!r}: unresolved asset-rights path remains tracked: {path}"
+        for path in report.get("known_blocker_paths", [])
+    )
+    errors.extend(
+        f"source tree {source_ref!r}: model artifact path is forbidden: {path}"
+        for path in paths
+        if PurePosixPath(path).parts and PurePosixPath(path).parts[0] == "model"
+    )
+    return tuple(sorted(set(errors)))
+
+
+def _strict_member_contract_errors(
+    wheels: tuple[Path, ...],
+    sdists: tuple[Path, ...],
+    *,
+    repo_root: Path,
+    inventory_path: Path,
+    source_tree_ref: str | None,
+) -> list[str]:
+    """Collect strict archive/source-tree contract errors for a distribution."""
+    errors: list[str] = []
+    for archive in (*wheels, *sdists):
+        errors.extend(
+            check_archive_member_contract(
+                archive,
+                repo_root=repo_root,
+                inventory_path=inventory_path,
+            )
+        )
+    if source_tree_ref is not None:
+        errors.extend(
+            check_source_tree_member_contract(
+                repo_root,
+                source_ref=source_tree_ref,
+                inventory_path=inventory_path,
+            )
+        )
+    return errors
+
+
 def _check_archive(
     archive: Path, requirements: tuple[ArchiveRequirement, ...] = REQUIREMENTS
 ) -> list[str]:
@@ -416,7 +644,15 @@ def _check_archive(
     return errors
 
 
-def check_distribution(dist_dir: Path, *, require_pyrvo2: bool = False) -> DistributionCheckResult:
+def check_distribution(
+    dist_dir: Path,
+    *,
+    require_pyrvo2: bool = False,
+    strict_asset_rights: bool = False,
+    repo_root: Path | None = None,
+    inventory_path: Path = asset_inventory.DEFAULT_INVENTORY,
+    source_tree_ref: str | None = None,
+) -> DistributionCheckResult:
     """Validate Robot SF archives in ``dist_dir`` or raise a clear error."""
     if not dist_dir.is_dir():
         raise DistributionLicenseError(f"distribution directory does not exist: {dist_dir}")
@@ -444,8 +680,19 @@ def check_distribution(dist_dir: Path, *, require_pyrvo2: bool = False) -> Distr
     for archive in pyrvo2_wheels:
         errors.extend(_check_archive(archive, PYRVO2_REQUIREMENTS))
 
+    if strict_asset_rights:
+        errors.extend(
+            _strict_member_contract_errors(
+                wheels,
+                sdists,
+                repo_root=(repo_root or Path.cwd()).resolve(),
+                inventory_path=inventory_path,
+                source_tree_ref=source_tree_ref,
+            )
+        )
+
     if errors:
-        details = "\n".join(f"  - {error}" for error in errors)
+        details = "\n".join(f"  - {error}" for error in dict.fromkeys(errors))
         raise DistributionLicenseError(f"distribution license gate failed:\n{details}")
 
     return DistributionCheckResult(wheels=wheels, sdists=sdists, pyrvo2_wheels=pyrvo2_wheels)
@@ -462,6 +709,31 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Require at least one pyrvo2 companion wheel in the distribution directory.",
     )
+    parser.add_argument(
+        "--strict-asset-rights",
+        action="store_true",
+        help=(
+            "Cross-check actual archive payload members against the tracked rights inventory and "
+            "reject unresolved asset/model members."
+        ),
+    )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=None,
+        help="Repository root for --strict-asset-rights (defaults to the current directory).",
+    )
+    parser.add_argument(
+        "--inventory",
+        type=Path,
+        default=asset_inventory.DEFAULT_INVENTORY,
+        help="Tracked asset-rights inventory for --strict-asset-rights.",
+    )
+    parser.add_argument(
+        "--source-tree-ref",
+        default=None,
+        help="Also inspect this Git tree/ref for blocked assets and model artifacts.",
+    )
     return parser.parse_args(argv)
 
 
@@ -469,7 +741,14 @@ def main(argv: list[str] | None = None) -> int:
     """Run the gate and return a CI-friendly status code."""
     args = _parse_args(argv)
     try:
-        result = check_distribution(args.dist_dir, require_pyrvo2=args.require_pyrvo2)
+        result = check_distribution(
+            args.dist_dir,
+            require_pyrvo2=args.require_pyrvo2,
+            strict_asset_rights=args.strict_asset_rights,
+            repo_root=args.repo_root,
+            inventory_path=args.inventory,
+            source_tree_ref=args.source_tree_ref,
+        )
     except DistributionLicenseError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 1

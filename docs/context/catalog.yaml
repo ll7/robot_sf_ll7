@@ -28,6 +28,14 @@ entries:
   status: current
   freshness: maintained
   area: benchmark_evidence
+- path: docs/context/issue_7883_biased_route_generator.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
+- path: docs/context/issue_8015_force_coupled_comparator.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_7890_route_choice_observability/receipt.json
   status: evidence
   freshness: evidence

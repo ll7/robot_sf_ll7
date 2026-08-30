@@ -12,6 +12,15 @@ analysis-only diagnostic receipt. The contract observes planner routes and does 
 pedestrian preference, response, comfort, or human predictability:
 [issue_7890_route_choice_observability.md](issue_7890_route_choice_observability.md).
 
+Issue #7883 deterministic route-condition generator (`biased_route_generator`): neutral/left/right
+variants on canonical multi-homotopy grids, verified through the #7890 side and homotopy contract with
+no pedestrian-preference or social-compliance claim:
+[issue_7883_biased_route_generator.md](issue_7883_biased_route_generator.md).
+
+Issue #8015 force-coupled comparator context note: method-card summary for the merged
+force-coupled local-planning comparator evaluation (parent #7882):
+[issue_8015_force_coupled_comparator.md](issue_8015_force_coupled_comparator.md).
+
 Issue #7888 incident-to-scenario provenance contract (`incident_scenario_provenance.v1`):
 separate source facts, extracted hypotheses, simulator assumptions, parameter mappings, generated
 configuration, execution identity, and observed outcomes without legal fault attribution

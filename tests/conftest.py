@@ -377,7 +377,9 @@ _FAST_FILES = {
     "map_test.py",
     "navigation_test.py",
     "ped_grouping_test.py",
+    "test_compare_coverage_cli.py",
     "test_open_coverage_report.py",
+    "test_pytest_config_contract.py",
     # Algorithm metadata facade tests are deterministic contract coverage for
     # the changed benchmark producer; keep them in the exact-head fast lane.
     "test_algorithm_metadata.py",
@@ -441,9 +443,6 @@ _FAST_FILES = {
     # Force-coupled potential-field comparator tests are deterministic
     # benchmark-diagnostic contracts; keep them in PR fast shards (issue #8015).
     "test_force_coupled_comparator.py",
-    # Pytest configuration and strict marker fail-closed contract tests;
-    # keep them in PR fast shards (issue #8039).
-    "test_pytest_config_contract.py",
     # The trace-dossier contract tests exercise lightweight, diagnostic-only
     # export/render paths required by the exact-head changed-coverage gate.
     "test_export_trace_dossier.py",

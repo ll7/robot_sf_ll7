@@ -154,6 +154,48 @@ def _metric_outcome_contradictions(
     return contradictions
 
 
+def _outcome_flag_contradictions(
+    *,
+    route_complete: bool,
+    collision: bool,
+    timeout: bool,
+) -> list[str]:
+    """Return contradictions between outcome boolean flags."""
+    contradictions: list[str] = []
+    if collision and route_complete:
+        contradictions.append("outcome has both collision_event=true and route_complete=true")
+    if route_complete and timeout:
+        contradictions.append("outcome has both route_complete=true and timeout_event=true")
+    if collision and timeout:
+        contradictions.append("outcome has both collision_event=true and timeout_event=true")
+    return contradictions
+
+
+def _termination_reason_contradictions(
+    *,
+    termination_reason: str,
+    route_complete: bool,
+    collision: bool,
+    timeout: bool,
+) -> list[str]:
+    """Return contradictions between termination_reason and outcome flags."""
+    contradictions: list[str] = []
+    term = str(termination_reason).strip()
+    if term == "collision" and route_complete:
+        contradictions.append("termination_reason=collision but outcome.route_complete=true")
+    if term == "collision" and timeout:
+        contradictions.append("termination_reason=collision but outcome.timeout_event=true")
+    if term == "success" and collision:
+        contradictions.append("termination_reason=success but outcome.collision_event=true")
+    if term == "success" and timeout:
+        contradictions.append("termination_reason=success but outcome.timeout_event=true")
+    if term in {"max_steps", "truncated"} and route_complete:
+        contradictions.append(f"termination_reason={term} but outcome.route_complete=true")
+    if term in {"max_steps", "truncated"} and collision:
+        contradictions.append(f"termination_reason={term} but outcome.collision_event=true")
+    return contradictions
+
+
 def outcome_contradictions(
     *,
     termination_reason: str,
@@ -161,19 +203,23 @@ def outcome_contradictions(
     metrics: Mapping[str, Any] | None = None,
 ) -> list[str]:
     """Return semantic contradictions for one episode payload."""
-    contradictions: list[str] = []
     route_complete = bool(outcome.get("route_complete"))
     collision = bool(outcome.get("collision_event"))
+    timeout = bool(outcome.get("timeout_event"))
 
-    if collision and route_complete:
-        contradictions.append("outcome has both collision_event=true and route_complete=true")
-
-    term = str(termination_reason).strip()
-    if term == "collision" and route_complete:
-        contradictions.append("termination_reason=collision but outcome.route_complete=true")
-    if term == "success" and collision:
-        contradictions.append("termination_reason=success but outcome.collision_event=true")
-
+    contradictions = _outcome_flag_contradictions(
+        route_complete=route_complete,
+        collision=collision,
+        timeout=timeout,
+    )
+    contradictions.extend(
+        _termination_reason_contradictions(
+            termination_reason=termination_reason,
+            route_complete=route_complete,
+            collision=collision,
+            timeout=timeout,
+        )
+    )
     if metrics is not None:
         contradictions.extend(
             _metric_outcome_contradictions(

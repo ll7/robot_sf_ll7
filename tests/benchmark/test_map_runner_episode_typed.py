@@ -429,3 +429,55 @@ def test_episode_boundary_annotations_resolve_at_runtime() -> None:
         ]
         == list[PlannerDecisionTraceEntry]
     )
+
+
+def test_episode_outcome_exclusivity_on_goal_at_horizon() -> None:
+    """Issue #8012: Goal reached on timeout/horizon step must not set timeout_event."""
+    from types import SimpleNamespace
+
+    from robot_sf.benchmark.map_runner.map_runner_episode import _episode_outcome
+
+    # Goal reached on final step, timeout was also flagged in sim
+    loop_result = SimpleNamespace(
+        reached_goal_step=600,
+        collision_seen=False,
+        timeout_seen=True,
+        termination_reason="success",
+    )
+    outcome, status = _episode_outcome(loop_result)  # type: ignore[arg-type]
+    assert outcome == {
+        "route_complete": True,
+        "collision_event": False,
+        "timeout_event": False,
+    }
+    assert status == "success"
+
+    # Collision seen on timeout step
+    loop_result_collision = SimpleNamespace(
+        reached_goal_step=None,
+        collision_seen=True,
+        timeout_seen=True,
+        termination_reason="collision",
+    )
+    outcome_c, status_c = _episode_outcome(loop_result_collision)  # type: ignore[arg-type]
+    assert outcome_c == {
+        "route_complete": False,
+        "collision_event": True,
+        "timeout_event": False,
+    }
+    assert status_c == "collision"
+
+    # Pure timeout (neither goal reached nor collision)
+    loop_result_timeout = SimpleNamespace(
+        reached_goal_step=None,
+        collision_seen=False,
+        timeout_seen=True,
+        termination_reason="max_steps",
+    )
+    outcome_t, status_t = _episode_outcome(loop_result_timeout)  # type: ignore[arg-type]
+    assert outcome_t == {
+        "route_complete": False,
+        "collision_event": False,
+        "timeout_event": True,
+    }
+    assert status_t == "failure"

@@ -191,3 +191,60 @@ def test_outcome_contradictions_uses_success_rate_alias_and_generic_messages() -
 
     assert "collision outcome but success metrics > 0" in contradictions
     assert "outcome.collision_event=true but collision metrics <= 0" in contradictions
+
+
+def test_outcome_contradictions_detects_route_complete_and_timeout_event() -> None:
+    """Outcome cannot have both route_complete and timeout_event set to true."""
+    contradictions = outcome_contradictions(
+        termination_reason="success",
+        outcome={
+            "route_complete": True,
+            "collision_event": False,
+            "timeout_event": True,
+        },
+        metrics={"success": 1.0, "collisions": 0.0},
+    )
+    assert "outcome has both route_complete=true and timeout_event=true" in contradictions
+    assert "termination_reason=success but outcome.timeout_event=true" in contradictions
+
+
+def test_outcome_contradictions_detects_collision_and_timeout_event() -> None:
+    """Outcome cannot have both collision_event and timeout_event set to true."""
+    contradictions = outcome_contradictions(
+        termination_reason="collision",
+        outcome={
+            "route_complete": False,
+            "collision_event": True,
+            "timeout_event": True,
+        },
+        metrics={"success": 0.0, "collisions": 1.0},
+    )
+    assert "outcome has both collision_event=true and timeout_event=true" in contradictions
+    assert "termination_reason=collision but outcome.timeout_event=true" in contradictions
+
+
+def test_outcome_contradictions_detects_max_steps_with_route_complete_or_collision() -> None:
+    """Max steps / truncated termination reasons cannot claim route completion or collision."""
+    route_contradictions = outcome_contradictions(
+        termination_reason="max_steps",
+        outcome={
+            "route_complete": True,
+            "collision_event": False,
+            "timeout_event": False,
+        },
+        metrics={"success": 1.0, "collisions": 0.0},
+    )
+    assert "termination_reason=max_steps but outcome.route_complete=true" in route_contradictions
+
+    collision_contradictions = outcome_contradictions(
+        termination_reason="truncated",
+        outcome={
+            "route_complete": False,
+            "collision_event": True,
+            "timeout_event": False,
+        },
+        metrics={"success": 0.0, "collisions": 1.0},
+    )
+    assert (
+        "termination_reason=truncated but outcome.collision_event=true" in collision_contradictions
+    )

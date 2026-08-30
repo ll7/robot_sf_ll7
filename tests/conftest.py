@@ -402,6 +402,10 @@ _FAST_FILES = {
     # The preparation-only adversarial search harness uses deterministic data
     # fixtures only; keep its contract coverage in pull-request fast shards.
     "test_search_harness.py",
+    # Matched-compute runtime and canary tests use injected seams and deterministic
+    # receipt fixtures; keep their accounting coverage in pull-request fast shards.
+    "test_matched_compute_runtime.py",
+    "test_matched_compute_production_canary.py",
     # Occupancy-grid rasterization helpers are pure unit contracts with
     # numpy fixtures; keep their coverage in fast pull-request shards for the
     # exact-head changed-coverage gate (see #7282).
@@ -474,6 +478,8 @@ _FAST_FILES = {
     # the planner modules without requiring an external benchmark dependency.
     "test_socnav.py",
     "test_socnav_prediction_module.py",
+    # Termination reason tests are deterministic unit contracts for canonical outcome flags.
+    "test_termination_reason.py",
     # Classic planner adapter tests are deterministic planner-contract tests for
     # the changed classic_planner_adapter.py producer; keep in fast shards for
     # the exact-head changed-coverage gate.

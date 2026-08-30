@@ -177,6 +177,8 @@ def _validate_trace_accounting(trace: MatchedComputeRuntimeTrace) -> None:
     _require_nonnegative_int(trace.search_seed, "search_seed")
     _require_nonnegative_int(trace.candidate_budget, "candidate_budget")
     _require_nonnegative_int(trace.candidate_evaluations, "candidate_evaluations")
+    if trace.candidate_evaluations > trace.candidate_budget:
+        raise ValueError("candidate_evaluations must not exceed candidate_budget")
     if trace.simulator_physics_steps is not None:
         _require_nonnegative_int(trace.simulator_physics_steps, "simulator_physics_steps")
     _require_nonnegative_int(trace.macro_actions, "macro_actions")
@@ -364,13 +366,33 @@ def probe_open_loop_runtime(
 
     active_runner = runner or adversarial_search.run_adversarial_search
     result = active_runner(config, evaluator=_production_candidate_bridge)
+    return open_loop_runtime_trace_from_result(
+        config,
+        result,
+        macro_actions=macro_actions,
+        preflight_only=runner is not None or production_evaluator_factory is not None,
+    )
+
+
+def open_loop_runtime_trace_from_result(
+    config: SearchConfig,
+    result: SearchRunResult,
+    *,
+    macro_actions: int,
+    preflight_only: bool = False,
+) -> MatchedComputeRuntimeTrace:
+    """Build an open-loop runtime trace from one completed search result.
+
+    Keeping result accounting in this helper lets production canary receipts and
+    diagnostic probes use the same ``matched_compute_trace.v1`` semantics without
+    running the search twice or deriving aggregate counts from companion records.
+    """
     candidate_budget = _require_nonnegative_int(config.budget, "config.budget")
     candidate_evaluations = _require_nonnegative_int(result.num_candidates, "result.num_candidates")
     if candidate_evaluations > candidate_budget:
         raise ValueError("open-loop candidate evaluations exceed declared budget")
 
     simulator_steps, status, reason = _simulator_steps_from_manifest(result)
-    preflight_only = runner is not None or production_evaluator_factory is not None
     if status == "unavailable":
         evidence_status = "unavailable"
         simulator_steps_source = "unavailable"
@@ -582,6 +604,7 @@ __all__ = [
     "MATCHED_COMPUTE_RUNTIME_SCHEMA_VERSION",
     "MatchedComputeRuntimeTrace",
     "ReactiveRuntimeSnapshot",
+    "open_loop_runtime_trace_from_result",
     "probe_open_loop_runtime",
     "probe_reactive_runtime",
 ]

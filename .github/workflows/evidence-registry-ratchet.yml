@@ -62,6 +62,10 @@ jobs:
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
+        with:
+          install-system-packages: "false"
+          migrate-artifacts: "false"
+          sync-args: "--frozen"
 
       # `set -o pipefail` keeps the `| tee` log capture from masking the ratchet's
       # non-zero exit code: without it this step reported success while the log showed

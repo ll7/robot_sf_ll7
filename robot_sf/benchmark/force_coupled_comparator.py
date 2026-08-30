@@ -407,7 +407,7 @@ def execute_rollout(  # noqa: C901, PLR0915
             linear_cmd, angular_cmd = planner.plan(obs)
             t1 = time.perf_counter()
             latencies_ms.append((t1 - t0) * 1000.0)
-        except Exception as exc:  # noqa: BLE001
+        except (ArithmeticError, IndexError, KeyError, TypeError, ValueError) as exc:
             status = "error"
             degraded = True
             degradation_reasons.append(f"plan_exception: {exc}")

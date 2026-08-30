@@ -960,3 +960,35 @@ def test_reproducibility_check_job_contract() -> None:
     strategy_text = QA_TEST_STRATEGY.read_text(encoding="utf-8")
     assert "no\nGitHub branch-protection required-status-check configuration" in strategy_text
     assert "future branch-protection\nchange must explicitly decide" in strategy_text
+
+
+def test_lightweight_workflows_skip_system_packages_and_full_sync() -> None:
+    """Issue #7648: policy and metadata workflows must use lightweight setup-ci-python."""
+    lightweight_workflows = [
+        "pr-contract-check.yml",
+        "pr-body-contracts.yml",
+        "scripts-catalog.yml",
+        "evidence-registry-ratchet.yml",
+        "ty-advisory-ratchet.yml",
+    ]
+    for filename in lightweight_workflows:
+        wf_path = WORKFLOWS_DIR / filename
+        assert wf_path.is_file(), f"Workflow {filename} missing"
+        wf_data = yaml.safe_load(wf_path.read_text(encoding="utf-8"))
+        for job_name, job_def in wf_data.get("jobs", {}).items():
+            setup_steps = [
+                step
+                for step in job_def.get("steps", [])
+                if step.get("uses") == "./.github/actions/setup-ci-python"
+            ]
+            for step in setup_steps:
+                with_block = step.get("with", {})
+                assert with_block.get("install-system-packages") == "false", (
+                    f"{filename} job {job_name} must set install-system-packages: 'false'"
+                )
+                assert with_block.get("migrate-artifacts") == "false", (
+                    f"{filename} job {job_name} must set migrate-artifacts: 'false'"
+                )
+                assert with_block.get("sync-args") == "--frozen", (
+                    f"{filename} job {job_name} must set sync-args: '--frozen'"
+                )

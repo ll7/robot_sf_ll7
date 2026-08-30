@@ -36,6 +36,10 @@ jobs:
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
+        with:
+          install-system-packages: "false"
+          migrate-artifacts: "false"
+          sync-args: "--frozen"
 
       - name: Collect changed files
         env:

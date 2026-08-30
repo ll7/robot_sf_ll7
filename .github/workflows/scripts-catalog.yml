@@ -33,6 +33,10 @@ jobs:
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
+        with:
+          install-system-packages: "false"
+          migrate-artifacts: "false"
+          sync-args: "--frozen"
 
       - name: Validate scripts catalog
         run: uv run python scripts/dev/check_scripts_catalog.py

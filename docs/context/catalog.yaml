@@ -24,6 +24,10 @@ entries:
   status: current
   freshness: maintained
   area: planner
+- path: docs/context/issue_7883_biased_route_generator.md
+  status: current
+  freshness: maintained
+  area: planner
 - path: docs/context/issue_7890_route_choice_observability.md
   status: current
   freshness: maintained

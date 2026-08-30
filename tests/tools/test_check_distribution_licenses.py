@@ -286,7 +286,7 @@ def test_strict_archive_contract_rejects_known_blocked_asset(tmp_path: Path) -> 
 def test_strict_archive_contract_rejects_unclassified_asset(tmp_path: Path) -> None:
     """A newly added asset-like archive member needs an inventory row first."""
     payloads = dict(PAYLOADS)
-    payloads["examples/new-recording.json"] = "unclassified example data"
+    payloads["examples/datasets/new-recording.json"] = "unclassified example data"
     _write_robot_sf_archives(tmp_path, payloads)
 
     with pytest.raises(
@@ -318,7 +318,7 @@ def test_strict_archive_contract_rejects_unsafe_member_path(tmp_path: Path) -> N
         info.size = len(data)
         archive.addfile(info, fileobj=io.BytesIO(data))
 
-    errors = check_archive_member_contract(archive, repo_root=REPO_ROOT)
+    errors = check_archive_member_contract(archive_path, repo_root=REPO_ROOT)
 
     assert errors == ("unsafe archive member path: 'robot_sf-0.0.0/../escape.txt'",)
 
@@ -332,7 +332,7 @@ def test_strict_archive_contract_rejects_windows_absolute_path(tmp_path: Path) -
         info.size = len(data)
         archive.addfile(info, fileobj=io.BytesIO(data))
 
-    errors = check_archive_member_contract(archive, repo_root=REPO_ROOT)
+    errors = check_archive_member_contract(archive_path, repo_root=REPO_ROOT)
 
     assert errors == ("unsafe archive member path: 'C:/escape.txt'",)
 
@@ -345,7 +345,7 @@ def test_strict_archive_contract_rejects_duplicate_members(tmp_path: Path) -> No
         archive.writestr(member_name, "first")
         archive.writestr(member_name, "second")
 
-    errors = check_archive_member_contract(archive, repo_root=REPO_ROOT)
+    errors = check_archive_member_contract(archive_path, repo_root=REPO_ROOT)
 
     assert errors == (
         "robot_sf-0.0.0-py3-none-any.whl: duplicate archive member names: "
@@ -362,7 +362,7 @@ def test_strict_archive_contract_rejects_tar_symlink(tmp_path: Path) -> None:
         info.linkname = "../../outside"
         archive.addfile(info)
 
-    errors = check_archive_member_contract(archive, repo_root=REPO_ROOT)
+    errors = check_archive_member_contract(archive_path, repo_root=REPO_ROOT)
 
     assert errors == (
         "robot_sf-0.0.0.tar.gz: non-regular archive members are forbidden: robot_sf-0.0.0/LICENSE",

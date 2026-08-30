@@ -431,6 +431,9 @@ _FAST_FILES = {
     # contracts with numpy fixtures; keep them in fast pull-request shards for
     # the exact-head changed-coverage gate (issue #7890).
     "test_route_choice_observability.py",
+    # Biased route generator tests are deterministic navigation contracts with
+    # geometric fixtures; keep them in PR fast shards (issue #8033).
+    "test_biased_route_generator.py",
     # Force-coupled potential-field comparator tests are deterministic
     # benchmark-diagnostic contracts; keep them in PR fast shards (issue #8015).
     "test_force_coupled_comparator.py",

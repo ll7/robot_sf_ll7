@@ -22,15 +22,18 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from itertools import pairwise
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import Any, Literal, cast
 
 import numpy as np
 
-if TYPE_CHECKING:
-    from robot_sf.benchmark.route_choice_observability import (
-        HomotopyObservation,
-        RouteSideReport,
-    )
+from robot_sf.benchmark.route_choice_observability import (
+    DEFAULT_NEUTRAL_BAND_M,
+    DEFAULT_SIDE_TOLERANCE_M,
+    HomotopyObservation,
+    RouteSideReport,
+    classify_route_side,
+    diagnostic_record,
+)
 
 RouteBiasMode = Literal["neutral", "left", "right"]
 HomotopyEnvironmentType = Literal["corridor", "doorway", "crossing", "free_space"]
@@ -40,12 +43,8 @@ ROUTE_BIAS_MODES: frozenset[RouteBiasMode] = frozenset({"neutral", "left", "righ
 HOMOTOPY_ENV_TYPES: frozenset[HomotopyEnvironmentType] = frozenset(
     {"corridor", "doorway", "crossing", "free_space"}
 )
-PROFILE_SHAPES: frozenset[ProfileShape] = frozenset(
-    {"smooth_sine", "hann", "cubic", "trapezoid"}
-)
+PROFILE_SHAPES: frozenset[ProfileShape] = frozenset({"smooth_sine", "hann", "cubic", "trapezoid"})
 
-DEFAULT_SIDE_TOLERANCE_M: float = 0.05
-DEFAULT_NEUTRAL_BAND_M: float = 0.2
 _EPS: float = 1e-9
 
 
@@ -66,7 +65,9 @@ class BiasedRouteConfig:
     def __post_init__(self) -> None:
         """Validate configuration parameters fail-closed."""
         if self.bias_mode not in ROUTE_BIAS_MODES:
-            msg = f"Invalid bias_mode: {self.bias_mode!r}, must be one of {sorted(ROUTE_BIAS_MODES)}"
+            msg = (
+                f"Invalid bias_mode: {self.bias_mode!r}, must be one of {sorted(ROUTE_BIAS_MODES)}"
+            )
             raise ValueError(msg)
         if not math.isfinite(self.lateral_bias_m) or self.lateral_bias_m < 0.0:
             msg = f"lateral_bias_m must be non-negative and finite, got {self.lateral_bias_m}"
@@ -222,8 +223,6 @@ def generate_biased_route(
     Returns:
         A :class:`BiasedRouteResult` containing the sampled path and classification report.
     """
-    from robot_sf.benchmark.route_choice_observability import classify_route_side
-
     valid_start = _validate_point(start, "start")
     valid_goal = _validate_point(goal, "goal")
 
@@ -237,7 +236,9 @@ def generate_biased_route(
     distance = math.hypot(dx, dy)
 
     if distance < cfg.tolerance_m or distance < _EPS:
-        msg = f"Start and goal are degenerate (distance {distance:.4f} < tolerance {cfg.tolerance_m})"
+        msg = (
+            f"Start and goal are degenerate (distance {distance:.4f} < tolerance {cfg.tolerance_m})"
+        )
         raise ValueError(msg)
 
     # Unit forward vector u and normal vector n (standard CCW 90 deg rotation: (-u_y, u_x))
@@ -279,9 +280,7 @@ def generate_biased_route(
         path.append((px, py))
         lateral_offsets.append(lat_offset)
 
-    total_length = sum(
-        math.hypot(p2[0] - p1[0], p2[1] - p1[1]) for p1, p2 in pairwise(path)
-    )
+    total_length = sum(math.hypot(p2[0] - p1[0], p2[1] - p1[1]) for p1, p2 in pairwise(path))
 
     max_lateral_offset = max(abs(off) for off in lateral_offsets)
     mean_lateral_offset = float(np.mean(np.abs(lateral_offsets)))
@@ -571,12 +570,6 @@ def evaluate_route_observability_sequence(
         A dictionary containing the full diagnostic record emitted by
         :func:`robot_sf.benchmark.route_choice_observability.diagnostic_record`.
     """
-    from robot_sf.benchmark.route_choice_observability import (
-        HomotopyObservation,
-        classify_route_side,
-        diagnostic_record,
-    )
-
     if not routes:
         return diagnostic_record([], [])
 

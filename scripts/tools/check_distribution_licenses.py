@@ -31,6 +31,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
+from packaging.utils import InvalidWheelFilename, parse_wheel_filename
 
 # ``uv run --no-project`` executes this file with ``scripts/tools`` as
 # ``sys.path[0]``.  Add the repository root for the direct-script path while
@@ -176,12 +177,20 @@ RELEASE_ALLOWED_ASSET_STATUSES = frozenset({"cleared", "project-authored"})
 
 def _normalise_archive_member_name(name: str) -> str:
     """Return a safe POSIX archive member name or raise a contract error."""
+    if not isinstance(name, str):
+        raise DistributionLicenseError(f"unsafe archive member path: {name!r}")
     normalised = name.replace("\\", "/")
+    raw_parts = normalised.split("/")
+    if not normalised or normalised.startswith("/") or "\x00" in normalised:
+        raise DistributionLicenseError(f"unsafe archive member path: {name!r}")
+    for index, part in enumerate(raw_parts):
+        if not part and index != len(raw_parts) - 1:
+            raise DistributionLicenseError(f"unsafe archive member path: {name!r}")
+        if part in {".", ".."} or ":" in part or part.endswith((".", " ")):
+            raise DistributionLicenseError(f"unsafe archive member path: {name!r}")
+        if any(ord(character) < 0x20 or ord(character) == 0x7F for character in part):
+            raise DistributionLicenseError(f"unsafe archive member path: {name!r}")
     path = PurePosixPath(normalised)
-    if not normalised or normalised.startswith("/") or "\x00" in normalised or ".." in path.parts:
-        raise DistributionLicenseError(f"unsafe archive member path: {name!r}")
-    if path.parts and len(path.parts[0]) == 2 and path.parts[0][1] == ":":
-        raise DistributionLicenseError(f"unsafe archive member path: {name!r}")
     return path.as_posix()
 
 
@@ -262,7 +271,9 @@ def _matching_members(archive: Path, members: dict[str, str], suffix: str) -> di
                 licenses_index = parts.index("licenses")
             except ValueError:
                 continue
-            if licenses_index == 0 or parts[licenses_index - 1].find(".dist-info") == -1:
+            if licenses_index == 0 or parts[licenses_index - 1] not in _wheel_metadata_roots(
+                archive
+            ):
                 continue
             payload_parts = parts[licenses_index + 1 :]
         else:
@@ -446,28 +457,91 @@ def _forbidden_sdist_members(archive: Path, members: dict[str, str]) -> tuple[st
     return tuple(forbidden)
 
 
-def _archive_source_path(archive: Path, member_name: str) -> str | None:
-    """Map one archive member to its repository path, ignoring generated metadata."""
+def _wheel_metadata_roots(archive: Path) -> frozenset[str]:
+    """Return the exact generated metadata/data roots named by a wheel filename."""
+    try:
+        distribution, version, _build, _tags = parse_wheel_filename(archive.name)
+    except InvalidWheelFilename:
+        return frozenset()
+    base = f"{str(distribution).replace('-', '_')}-{version}"
+    return frozenset({f"{base}.dist-info", f"{base}.data"})
+
+
+def _archive_source_path(
+    archive: Path,
+    member_name: str,
+    *,
+    source_root: str | None = None,
+) -> str | None:
+    """Map one archive member to its repository path, ignoring only exact metadata roots."""
     parts = PurePosixPath(member_name).parts
     if archive.suffix == ".whl":
-        if any(part.endswith((".dist-info", ".data")) for part in parts):
+        if parts and parts[0].endswith(".dist-info") and parts[0] in _wheel_metadata_roots(archive):
             return None
-        return PurePosixPath(*parts).as_posix() if parts else None
+        mapped = PurePosixPath(*parts).as_posix() if parts else None
+        if source_root is not None and mapped is not None:
+            return PurePosixPath(source_root, mapped).as_posix()
+        return mapped
     if archive.name.endswith(SDIST_SUFFIXES) and len(parts) > 1:
         return PurePosixPath(*parts[1:]).as_posix()
     return None
 
 
-def _asset_inventory_report(repo_root: Path, inventory_path: Path) -> dict[str, Any]:
+def _asset_inventory_report(repo_root: Path, inventory_path: Path | None) -> dict[str, Any]:
     """Load the tracked-path inventory used by strict archive checks."""
-    return asset_inventory.build_report(repo_root.resolve(), inventory_path.resolve())
+    return asset_inventory.build_report(repo_root.resolve(), inventory_path)
+
+
+def _archive_member_contract_error(
+    archive: Path,
+    member_name: str,
+    path_statuses: dict[str, Any],
+    source_root: str | None,
+) -> str | None:
+    """Return one strict violation for a non-metadata archive member, if any."""
+    member_parts = PurePosixPath(member_name).parts
+    if "model" in member_parts:
+        return (
+            f"{archive.name}: model artifact member is forbidden in a software distribution: "
+            f"{member_name}"
+        )
+    mapped_source_root = source_root
+    if mapped_source_root is None and archive.name.startswith("pyrvo2-"):
+        mapped_source_root = "third_party/python-rvo2"
+    source_path = _archive_source_path(
+        archive,
+        member_name,
+        source_root=mapped_source_root,
+    )
+    if source_path is None:
+        return None
+    if "model" in PurePosixPath(source_path).parts:
+        return (
+            f"{archive.name}: model artifact member is forbidden in a software distribution: "
+            f"{member_name}"
+        )
+    if not asset_inventory._looks_like_asset(source_path):
+        return None
+    status = path_statuses.get(source_path)
+    if status is None:
+        return (
+            f"{archive.name}: asset member is not covered by the tracked rights inventory: "
+            f"{member_name} (source path {source_path})"
+        )
+    if status not in RELEASE_ALLOWED_ASSET_STATUSES:
+        return (
+            f"{archive.name}: asset member has non-release inventory status {status!r}: "
+            f"{member_name} (source path {source_path})"
+        )
+    return None
 
 
 def check_archive_member_contract(
     archive: Path,
     *,
     repo_root: Path,
-    inventory_path: Path = asset_inventory.DEFAULT_INVENTORY,
+    inventory_path: Path | None = None,
+    source_root: str | None = None,
 ) -> tuple[str, ...]:
     """Return strict rights/member violations for one built distribution archive.
 
@@ -491,34 +565,19 @@ def check_archive_member_contract(
         return tuple(errors + [f"{archive.name}: asset inventory did not provide path statuses"])
 
     for member_name in sorted(members):
-        source_path = _archive_source_path(archive, member_name)
-        if source_path is None:
-            continue
-        source_parts = PurePosixPath(source_path).parts
-        if source_parts and source_parts[0] == "model":
-            errors.append(
-                f"{archive.name}: model artifact member is forbidden in a software distribution: "
-                f"{member_name}"
-            )
-            continue
-        if not asset_inventory._looks_like_asset(source_path):
-            continue
-        status = path_statuses.get(source_path)
-        if status is None:
-            errors.append(
-                f"{archive.name}: asset member is not covered by the tracked rights inventory: "
-                f"{member_name} (source path {source_path})"
-            )
-        elif status not in RELEASE_ALLOWED_ASSET_STATUSES:
-            errors.append(
-                f"{archive.name}: asset member has non-release inventory status {status!r}: "
-                f"{member_name} (source path {source_path})"
-            )
+        violation = _archive_member_contract_error(
+            archive,
+            member_name,
+            path_statuses,
+            source_root,
+        )
+        if violation is not None:
+            errors.append(violation)
     return tuple(sorted(set(errors)))
 
 
-def _git_tree_paths(repo_root: Path, source_ref: str) -> tuple[str, ...]:
-    """Return the exact regular-file paths contained in one Git tree."""
+def _git_tree_entries(repo_root: Path, source_ref: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Return regular Git paths and errors for non-regular tree members."""
     try:
         result = subprocess.run(
             [
@@ -527,7 +586,6 @@ def _git_tree_paths(repo_root: Path, source_ref: str) -> tuple[str, ...]:
                 str(repo_root),
                 "ls-tree",
                 "-r",
-                "--name-only",
                 "-z",
                 source_ref,
             ],
@@ -538,39 +596,67 @@ def _git_tree_paths(repo_root: Path, source_ref: str) -> tuple[str, ...]:
         raise DistributionLicenseError(
             f"could not enumerate source tree {source_ref!r}: {exc}"
         ) from exc
+    paths: list[str] = []
+    non_regular: list[str] = []
+    for entry in result.stdout.split(b"\0"):
+        if not entry:
+            continue
+        try:
+            header, raw_path = entry.split(b"\t", 1)
+            mode, object_type, _object_id = header.split(b" ", 2)
+            path = raw_path.decode("utf-8")
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise DistributionLicenseError(
+                f"source tree {source_ref!r} contains a malformed Git tree entry"
+            ) from exc
+        if mode not in {b"100644", b"100755"} or object_type != b"blob":
+            mode_text = mode.decode("ascii", errors="replace")
+            type_text = object_type.decode("ascii", errors="replace")
+            non_regular.append(
+                f"source tree {source_ref!r} contains non-regular Git member {path!r} "
+                f"(mode {mode_text}, type {type_text})"
+            )
+            continue
+        paths.append(path)
     try:
-        paths = result.stdout.decode("utf-8").split("\0")
-    except UnicodeDecodeError as exc:
-        raise DistributionLicenseError(
-            f"source tree {source_ref!r} contains non-UTF-8 paths"
-        ) from exc
-    try:
-        return tuple(sorted(asset_inventory._normalise_path(path) for path in paths if path))
+        normalised_paths = tuple(
+            sorted(asset_inventory._normalise_path(path) for path in paths if path)
+        )
     except ValueError as exc:
         raise DistributionLicenseError(
             f"source tree {source_ref!r} contains an unsafe path: {exc}"
         ) from exc
+    return normalised_paths, tuple(sorted(non_regular))
+
+
+def _git_tree_paths(repo_root: Path, source_ref: str) -> tuple[str, ...]:
+    """Return the exact regular-file paths contained in one Git tree."""
+    paths, non_regular = _git_tree_entries(repo_root, source_ref)
+    if non_regular:
+        raise DistributionLicenseError("; ".join(non_regular))
+    return paths
 
 
 def check_source_tree_member_contract(
     repo_root: Path,
     *,
     source_ref: str = "HEAD",
-    inventory_path: Path = asset_inventory.DEFAULT_INVENTORY,
+    inventory_path: Path | None = None,
 ) -> tuple[str, ...]:
     """Return strict rights/member violations for a proposed Git source tree."""
     try:
-        paths = _git_tree_paths(repo_root.resolve(), source_ref)
+        paths, non_regular = _git_tree_entries(repo_root.resolve(), source_ref)
     except DistributionLicenseError as exc:
         return (str(exc),)
 
     report = asset_inventory.build_report(
-        repo_root.resolve(), inventory_path.resolve(), tracked_paths=list(paths)
+        repo_root.resolve(), inventory_path, tracked_paths=list(paths)
     )
-    errors = [
+    errors = list(non_regular)
+    errors.extend(
         f"source tree {source_ref!r}: asset inventory is structurally invalid: {issue['message']}"
         for issue in report.get("issues", [])
-    ]
+    )
     errors.extend(
         f"source tree {source_ref!r}: unresolved asset-rights path remains tracked: {path}"
         for path in report.get("known_blocker_paths", [])
@@ -578,7 +664,7 @@ def check_source_tree_member_contract(
     errors.extend(
         f"source tree {source_ref!r}: model artifact path is forbidden: {path}"
         for path in paths
-        if PurePosixPath(path).parts and PurePosixPath(path).parts[0] == "model"
+        if "model" in PurePosixPath(path).parts
     )
     return tuple(sorted(set(errors)))
 
@@ -587,8 +673,9 @@ def _strict_member_contract_errors(
     wheels: tuple[Path, ...],
     sdists: tuple[Path, ...],
     *,
+    pyrvo2_wheels: tuple[Path, ...] = (),
     repo_root: Path,
-    inventory_path: Path,
+    inventory_path: Path | None,
     source_tree_ref: str | None,
 ) -> list[str]:
     """Collect strict archive/source-tree contract errors for a distribution."""
@@ -599,6 +686,15 @@ def _strict_member_contract_errors(
                 archive,
                 repo_root=repo_root,
                 inventory_path=inventory_path,
+            )
+        )
+    for archive in pyrvo2_wheels:
+        errors.extend(
+            check_archive_member_contract(
+                archive,
+                repo_root=repo_root,
+                inventory_path=inventory_path,
+                source_root="third_party/python-rvo2",
             )
         )
     if source_tree_ref is not None:
@@ -656,7 +752,7 @@ def check_distribution(
     require_pyrvo2: bool = False,
     strict_asset_rights: bool = False,
     repo_root: Path | None = None,
-    inventory_path: Path = asset_inventory.DEFAULT_INVENTORY,
+    inventory_path: Path | None = None,
     source_tree_ref: str | None = None,
 ) -> DistributionCheckResult:
     """Validate Robot SF archives in ``dist_dir`` or raise a clear error."""
@@ -693,6 +789,7 @@ def check_distribution(
                 sdists,
                 repo_root=(repo_root or Path.cwd()).resolve(),
                 inventory_path=inventory_path,
+                pyrvo2_wheels=pyrvo2_wheels,
                 source_tree_ref=source_tree_ref,
             )
         )
@@ -732,8 +829,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--inventory",
         type=Path,
-        default=asset_inventory.DEFAULT_INVENTORY,
-        help="Tracked asset-rights inventory for --strict-asset-rights.",
+        default=None,
+        help=(
+            "Tracked asset-rights inventory for --strict-asset-rights "
+            "(defaults to <repo-root>/scripts/validation/asset_rights_inventory.v1.yaml)."
+        ),
     )
     parser.add_argument(
         "--source-tree-ref",

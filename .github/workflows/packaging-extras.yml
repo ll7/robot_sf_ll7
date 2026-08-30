@@ -72,19 +72,19 @@ jobs:
         if: matrix.extra == 'all'
         run: python -m pip wheel --no-deps --wheel-dir dist third_party/python-rvo2
 
-      # The license gate parses the vendored SocNavBench LICENSING.yaml manifest, so it needs
-      # PyYAML. Run it in an ephemeral uv environment so the runner interpreter that the
-      # wheel-install smoke step probes afterwards stays clean.
+      # The license gate parses the vendored SocNavBench LICENSING.yaml manifest and wheel
+      # filenames, so it needs PyYAML and packaging. Run it in an ephemeral uv environment so
+      # the runner interpreter that the wheel-install smoke step probes afterwards stays clean.
       - name: Check distribution licenses
         if: matrix.extra != 'all'
         run: >-
-          uv run --no-project --with pyyaml
+          uv run --no-project --with pyyaml,packaging
           python scripts/tools/check_distribution_licenses.py dist
 
       - name: Check distribution licenses and pyrvo2 companion
         if: matrix.extra == 'all'
         run: >-
-          uv run --no-project --with pyyaml
+          uv run --no-project --with pyyaml,packaging
           python scripts/tools/check_distribution_licenses.py dist --require-pyrvo2
 
       - name: Install and probe isolated extra

@@ -91,6 +91,20 @@ def test_valid_fixture_passes_structural_check(tmp_path: Path) -> None:
     assert inventory.exit_code(report) == 0
 
 
+def test_default_inventory_follows_selected_repository_root(tmp_path: Path) -> None:
+    """An alternate checkout uses its own default inventory instead of the checker checkout."""
+    inventory_path = _write_fixture_inventory(tmp_path, [_row("asset", "assets/*.svg")])
+    canonical_path = tmp_path / "scripts" / "validation" / "asset_rights_inventory.v1.yaml"
+    canonical_path.parent.mkdir(parents=True)
+    inventory_path.rename(canonical_path)
+
+    report = inventory.build_report(tmp_path, tracked_paths=["assets/example.svg"])
+
+    assert report["inventory_path"] == str(canonical_path.resolve())
+    assert report["status"] == "passed"
+    assert report["path_statuses"] == {"assets/example.svg": "project-authored"}
+
+
 def test_unclassified_path_is_a_hard_error(tmp_path: Path) -> None:
     """A new path outside the row glob cannot silently enter the release surface."""
     path = _write_fixture_inventory(tmp_path, [_row("svg", "assets/*.svg")])

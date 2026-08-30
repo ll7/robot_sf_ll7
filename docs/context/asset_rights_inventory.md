@@ -31,7 +31,9 @@ software payload. When `--source-tree-ref` is supplied, the same unresolved asse
 top-level `model/` paths fail closed in the proposed Git tree, which protects against GitHub's
 automatic tag source archive exposing files that the Python distributions exclude. The ordinary
 CI command remains a classification check and intentionally does not claim that the current tree
-is publishable.
+is publishable. If `--require-pyrvo2` is supplied, strict mode also inspects the companion wheel's
+non-metadata members under `third_party/python-rvo2`; model payloads are rejected regardless of
+which wheel directory contains them.
 
 Every tracked path in a declared scope must match exactly one row. A new release-relevant asset
 therefore requires a row before it can be added. Each row records source, source revision or

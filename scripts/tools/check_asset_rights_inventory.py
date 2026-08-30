@@ -400,6 +400,11 @@ def _looks_like_asset(path: str) -> bool:
     )
 
 
+def _default_inventory_path(repo_root: Path) -> Path:
+    """Return the inventory path associated with a selected repository root."""
+    return repo_root / "scripts" / "validation" / "asset_rights_inventory.v1.yaml"
+
+
 def _collect_scope_paths(
     paths: list[str],
     scopes: list[dict[str, Any]],
@@ -524,13 +529,13 @@ def _finalise_rows(
 
 def build_report(
     repo_root: Path = REPO_ROOT,
-    inventory_path: Path = DEFAULT_INVENTORY,
+    inventory_path: Path | None = None,
     *,
     tracked_paths: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build the deterministic, read-only asset-rights inventory report."""
     repo_root = repo_root.resolve()
-    inventory_path = inventory_path.resolve()
+    inventory_path = (inventory_path or _default_inventory_path(repo_root)).resolve()
     report: dict[str, Any] = {
         "schema": REPORT_SCHEMA,
         "status": "blocked",
@@ -625,7 +630,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT)
-    parser.add_argument("--inventory", type=Path, default=DEFAULT_INVENTORY)
+    parser.add_argument(
+        "--inventory",
+        type=Path,
+        default=None,
+        help="Inventory path (defaults to <repo-root>/scripts/validation/asset_rights_inventory.v1.yaml).",
+    )
     parser.add_argument(
         "--allow-known-blockers",
         action="store_true",

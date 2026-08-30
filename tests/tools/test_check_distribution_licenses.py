@@ -76,12 +76,19 @@ def _archive_members(prefix: str, payloads: Mapping[str, str]) -> dict[str, str]
     return {f"{prefix}/{name}": content for name, content in payloads.items()}
 
 
-def _write_wheel(path: Path, payloads: Mapping[str, str]) -> None:
+def _write_wheel(
+    path: Path,
+    payloads: Mapping[str, str],
+    *,
+    package_payloads: Mapping[str, str] | None = None,
+) -> None:
     """Write a minimal wheel-like ZIP fixture."""
     with zipfile.ZipFile(path, "w") as archive:
         for name, content in _archive_members(
             "robot_sf-0.0.0.dist-info/licenses", payloads
         ).items():
+            archive.writestr(name, content)
+        for name, content in (package_payloads or {}).items():
             archive.writestr(name, content)
 
 
@@ -95,13 +102,27 @@ def _write_sdist(path: Path, payloads: Mapping[str, str]) -> None:
             archive.addfile(info, fileobj=io.BytesIO(data))
 
 
-def _write_robot_sf_archives(dist_dir: Path, payloads: Mapping[str, str] = PAYLOADS) -> None:
+def _write_robot_sf_archives(
+    dist_dir: Path,
+    payloads: Mapping[str, str] = PAYLOADS,
+    *,
+    package_payloads: Mapping[str, str] | None = None,
+) -> None:
     """Create the minimum Robot SF wheel and sdist fixture."""
-    _write_wheel(dist_dir / "robot_sf-0.0.0-py3-none-any.whl", payloads)
+    _write_wheel(
+        dist_dir / "robot_sf-0.0.0-py3-none-any.whl",
+        payloads,
+        package_payloads=package_payloads,
+    )
     _write_sdist(dist_dir / "robot_sf-0.0.0.tar.gz", payloads)
 
 
-def _write_pyrvo2_wheel(path: Path, *, content: str) -> None:
+def _write_pyrvo2_wheel(
+    path: Path,
+    *,
+    content: str,
+    package_payloads: Mapping[str, str] | None = None,
+) -> None:
     """Write a minimal companion wheel carrying legal and provenance payloads."""
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("pyrvo2-0.0.0.dist-info/licenses/LICENSE", content)
@@ -113,6 +134,8 @@ def _write_pyrvo2_wheel(path: Path, *, content: str) -> None:
             "pyrvo2-0.0.0.dist-info/licenses/LOCAL_CHANGES.patch",
             PAYLOADS["third_party/python-rvo2/LOCAL_CHANGES.patch"],
         )
+        for name, value in (package_payloads or {}).items():
+            archive.writestr(name, value)
 
 
 def test_valid_wheel_and_sdist_pass(tmp_path: Path) -> None:
@@ -286,6 +309,60 @@ def test_strict_archive_contract_accepts_clean_fixture(tmp_path: Path) -> None:
     assert len(result.sdists) == 1
 
 
+def test_strict_archive_contract_uses_repo_root_default_inventory(tmp_path: Path) -> None:
+    """An alternate checkout's inventory is selected when no inventory path is supplied."""
+    repo_root = tmp_path / "repo"
+    (repo_root / "assets").mkdir(parents=True)
+    (repo_root / "assets/example.svg").write_text("<svg />\n", encoding="utf-8")
+    canonical_path = repo_root / "scripts" / "validation" / "asset_rights_inventory.v1.yaml"
+    canonical_path.parent.mkdir(parents=True)
+    (repo_root / "evidence.txt").write_text("fixture evidence\n", encoding="utf-8")
+    canonical_path.write_text(
+        """schema_version: robot_sf.asset_rights_inventory.v1
+claim_boundary: synthetic test inventory only
+tracked_scopes:
+  - id: assets
+    globs: [assets/**]
+    release_relevant: true
+rows:
+  - id: asset
+    scope: assets
+    globs: [assets/*.svg]
+    status: project-authored
+    source: fixture
+    source_revision_or_access_date: fixture
+    license_or_rights: fixture
+    attribution: fixture
+    checksum_policy: fixture
+    modification_status: fixture
+    evidence: [evidence.txt]
+""",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "init", "--quiet", str(repo_root)], check=True)
+    subprocess.run(["git", "-C", str(repo_root), "config", "user.name", "fixture"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo_root), "config", "user.email", "fixture@example.invalid"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(repo_root), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(repo_root), "commit", "--quiet", "-m", "fixture"], check=True)
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+    _write_wheel(
+        dist_dir / "robot_sf-0.0.0-py3-none-any.whl",
+        PAYLOADS,
+        package_payloads={"assets/example.svg": "<svg />\n"},
+    )
+
+    errors = check_archive_member_contract(
+        dist_dir / "robot_sf-0.0.0-py3-none-any.whl",
+        repo_root=repo_root,
+    )
+
+    assert errors == ()
+
+
 def test_strict_archive_contract_rejects_known_blocked_asset(tmp_path: Path) -> None:
     """A known blocked inventory path cannot enter either software archive."""
     payloads = dict(PAYLOADS)
@@ -314,15 +391,70 @@ def test_strict_archive_contract_rejects_unclassified_asset(tmp_path: Path) -> N
 
 def test_strict_archive_contract_rejects_model_member_in_wheel(tmp_path: Path) -> None:
     """Model bytes are forbidden even when a wheel carries them outside the sdist root."""
-    payloads = dict(PAYLOADS)
-    payloads["model/checkpoint.zip"] = "checkpoint bytes"
-    _write_robot_sf_archives(tmp_path, payloads)
+    _write_robot_sf_archives(
+        tmp_path,
+        package_payloads={"model/checkpoint.zip": "checkpoint bytes"},
+    )
 
     with pytest.raises(
         DistributionLicenseError,
         match="model artifact member is forbidden in a software distribution",
     ):
         check_distribution(tmp_path, strict_asset_rights=True, repo_root=REPO_ROOT)
+
+
+def test_strict_archive_contract_rejects_nested_reserved_model_members(tmp_path: Path) -> None:
+    """Noncanonical nested reserved directories cannot hide model payloads in a wheel."""
+    _write_robot_sf_archives(
+        tmp_path,
+        package_payloads={
+            "evil.data/model/hidden-checkpoint.zip": "checkpoint bytes",
+            "evil.dist-info/model/other-checkpoint.zip": "checkpoint bytes",
+        },
+    )
+
+    with pytest.raises(
+        DistributionLicenseError,
+        match="model artifact member is forbidden in a software distribution",
+    ):
+        check_distribution(tmp_path, strict_asset_rights=True, repo_root=REPO_ROOT)
+
+
+def test_strict_archive_contract_checks_pyrvo2_companion_members(tmp_path: Path) -> None:
+    """A required companion wheel cannot carry a model payload outside its metadata root."""
+    _write_robot_sf_archives(tmp_path)
+    _write_pyrvo2_wheel(
+        tmp_path / "pyrvo2-0.0.0-cp312-cp312-linux_x86_64.whl",
+        content=PAYLOADS["third_party/python-rvo2/LICENSE"],
+        package_payloads={"pyrvo2-0.0.0/model/hidden-checkpoint.zip": "checkpoint bytes"},
+    )
+
+    with pytest.raises(
+        DistributionLicenseError,
+        match="pyrvo2-0.0.0-cp312-cp312-linux_x86_64.whl: model artifact member",
+    ):
+        check_distribution(
+            tmp_path,
+            require_pyrvo2=True,
+            strict_asset_rights=True,
+            repo_root=REPO_ROOT,
+        )
+
+
+def test_strict_archive_contract_binds_pyrvo2_members_to_vendored_root(
+    tmp_path: Path,
+) -> None:
+    """Companion payloads are mapped to their vendored source root for inventory checks."""
+    wheel = tmp_path / "pyrvo2-0.0.0-cp312-cp312-linux_x86_64.whl"
+    _write_pyrvo2_wheel(
+        wheel,
+        content=PAYLOADS["third_party/python-rvo2/LICENSE"],
+        package_payloads={"maps/hidden.svg": "<svg />\n"},
+    )
+
+    errors = check_archive_member_contract(wheel, repo_root=REPO_ROOT)
+
+    assert any("source path third_party/python-rvo2/maps/hidden.svg" in error for error in errors)
 
 
 def test_strict_archive_contract_rejects_unsafe_member_path(tmp_path: Path) -> None:
@@ -351,6 +483,30 @@ def test_strict_archive_contract_rejects_windows_absolute_path(tmp_path: Path) -
     errors = check_archive_member_contract(archive_path, repo_root=REPO_ROOT)
 
     assert errors == ("unsafe archive member path: 'C:/escape.txt'",)
+
+
+@pytest.mark.parametrize(
+    "member_name",
+    [
+        "C:relative.txt",
+        "robot_sf-0.0.0/root/.. /escape.txt",
+        "robot_sf-0.0.0/root/escape. /file.txt",
+    ],
+)
+def test_strict_archive_contract_rejects_cross_platform_unsafe_names(
+    tmp_path: Path, member_name: str
+) -> None:
+    """Drive-relative and Windows-normalized names cannot enter a release archive."""
+    archive_path = tmp_path / "robot_sf-0.0.0.tar.gz"
+    with tarfile.open(archive_path, "w:gz") as archive:
+        info = tarfile.TarInfo(member_name)
+        data = b"unsafe"
+        info.size = len(data)
+        archive.addfile(info, fileobj=io.BytesIO(data))
+
+    errors = check_archive_member_contract(archive_path, repo_root=REPO_ROOT)
+
+    assert errors == (f"unsafe archive member path: {member_name!r}",)
 
 
 def test_strict_archive_contract_rejects_duplicate_members(tmp_path: Path) -> None:
@@ -382,6 +538,29 @@ def test_strict_archive_contract_rejects_tar_symlink(tmp_path: Path) -> None:
 
     assert errors == (
         "robot_sf-0.0.0.tar.gz: non-regular archive members are forbidden: robot_sf-0.0.0/LICENSE",
+    )
+
+
+def test_strict_source_tree_contract_rejects_tracked_symlink(tmp_path: Path) -> None:
+    """The Git source-tree route rejects symlink modes instead of discarding file types."""
+    repo_root = tmp_path / "repo"
+    (repo_root / "assets").mkdir(parents=True)
+    (repo_root / "outside.txt").write_text("outside\n", encoding="utf-8")
+    (repo_root / "assets/escape.svg").symlink_to(repo_root / "outside.txt")
+    subprocess.run(["git", "init", "--quiet", str(repo_root)], check=True)
+    subprocess.run(["git", "-C", str(repo_root), "config", "user.name", "fixture"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo_root), "config", "user.email", "fixture@example.invalid"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(repo_root), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(repo_root), "commit", "--quiet", "-m", "fixture"], check=True)
+
+    errors = check_source_tree_member_contract(repo_root, source_ref="HEAD")
+
+    assert errors[0] == (
+        "source tree 'HEAD' contains non-regular Git member 'assets/escape.svg' "
+        "(mode 120000, type blob)"
     )
 
 

@@ -3,6 +3,7 @@ name: Packaging Extras Matrix
 on:
   pull_request:
     paths:
+      - "README.md"
       - "pyproject.toml"
       - "uv.lock"
       - "LICENSE"
@@ -67,6 +68,9 @@ jobs:
 
       - name: Build Robot SF wheel and sdist
         run: uv build
+
+      - name: Validate distribution metadata and README rendering
+        run: uv run --no-project --with 'twine==7.0.0' twine check --strict dist/*.whl dist/*.tar.gz
 
       - name: Build vendored ORCA companion wheel
         if: matrix.extra == 'all'

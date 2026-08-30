@@ -18,6 +18,7 @@ from robot_sf.benchmark.campaign.campaign_checkpoint_preflight import (
     iter_campaign_arm_checkpoint_references,
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.errors import RobotSfError
 from robot_sf.models.registry import DEFAULT_REGISTRY_PATH, get_registry_entry
 
@@ -318,11 +319,13 @@ def _validate_direct_checkpoint_path(
     planner_key: str,
     resolved: Path,
     receipt_path: str | None = None,
+    repo_root: Path | None = None,
 ) -> None:
     """Require a direct model-path receipt to resolve the path bound by the campaign config."""
     configured_path = Path(reference.value)
     if not configured_path.is_absolute():
-        configured_path = (Path.cwd() / configured_path).resolve()
+        base = repo_root if repo_root is not None else Path.cwd()
+        configured_path = (base / configured_path).resolve()
     identity_path = Path(receipt_path).resolve() if receipt_path is not None else resolved
     if identity_path != configured_path:
         raise CheckpointStagingReceiptError(
@@ -336,6 +339,7 @@ def _validate_receipt_arms(
     *,
     registry_path: Path,
     checkpoint_path_map: Mapping[str, Path] | None = None,
+    repo_root: Path | None = None,
 ) -> None:
     """Validate arm coverage, statuses, materialized files, and checksums."""
     arms = payload.get("arms")
@@ -377,6 +381,7 @@ def _validate_receipt_arms(
                 planner_key=planner_key,
                 resolved=resolved,
                 receipt_path=receipt_path if isinstance(receipt_path, str) else None,
+                repo_root=repo_root,
             )
 
 
@@ -410,6 +415,7 @@ def validate_checkpoint_staging_receipt(
         ) from exc
     if not isinstance(payload, dict):
         raise CheckpointStagingReceiptError("checkpoint staging receipt must be a JSON object")
+    root = (Path(repo_root) if repo_root is not None else get_repository_root()).resolve()
     resolved_path_map = _resolve_checkpoint_path_map(
         checkpoint_path_map,
         receipt_arms=payload.get("arms", []) if isinstance(payload.get("arms"), list) else [],
@@ -422,7 +428,11 @@ def validate_checkpoint_staging_receipt(
         max_age_hours=max_age_hours,
         now=now,
     )
-    resolved_registry_path = Path(registry_path or DEFAULT_REGISTRY_PATH).resolve()
+    if registry_path is not None:
+        raw_reg = Path(registry_path)
+        resolved_registry_path = (raw_reg if raw_reg.is_absolute() else root / raw_reg).resolve()
+    else:
+        resolved_registry_path = (root / DEFAULT_REGISTRY_PATH).resolve()
     if any(
         reference.kind == "model_id" for reference in iter_campaign_arm_checkpoint_references(cfg)
     ):
@@ -432,6 +442,7 @@ def validate_checkpoint_staging_receipt(
         payload,
         registry_path=resolved_registry_path,
         checkpoint_path_map=resolved_path_map,
+        repo_root=root,
     )
     return payload
 

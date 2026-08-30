@@ -377,6 +377,7 @@ _FAST_FILES = {
     "map_test.py",
     "navigation_test.py",
     "ped_grouping_test.py",
+    "test_compare_coverage_cli.py",
     "test_open_coverage_report.py",
     # Algorithm metadata facade tests are deterministic contract coverage for
     # the changed benchmark producer; keep them in the exact-head fast lane.

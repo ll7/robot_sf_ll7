@@ -1,0 +1,43 @@
+{
+  "arms": {
+    "open_loop": {
+      "evidence_status": "not_production_observed",
+      "records": []
+    },
+    "reactive": {
+      "evidence_status": "not_production_observed",
+      "records": []
+    }
+  },
+  "evidence_status": "blocked",
+  "input_digests": {
+    "configs/adversarial/crossing_ttc_space.yaml": "e90353f9653173cc351117bfc874c1e7d5933d32f1f892f1b264d8148c767f34",
+    "configs/adversarial/issue_4360_dispatchable_repro_seeds.yaml": "576be3f8ed1f96e7da089c605728ffd2b64ba339128ec1a09ed507dc5f3bb178",
+    "configs/adversarial/issue_4360_residual_adversary.yaml": "35e788d48dae338a58458f5f6f81ab42623a800e74fce3e00a90f6504ac460da",
+    "configs/adversarial/issue_6911_residual_search.yaml": "c9d6a911ebcb9426775071f63a4f741728ac3997c22908500dcdd04c93cfe4df",
+    "configs/adversarial/issue_6921_crossing_ttc_space.yaml": "6c6525b3d9e6d60d31803114635cd113ca1cb20794c369934266bdab6257157e",
+    "configs/adversarial/issue_6921_matched_compute_packet.yaml": "4527f00dc700409bf9d9f9c0c2a1d0958903693368afd789793415726057b2f3",
+    "configs/adversarial_routes/default.yaml": "d2e88b5f6daf265bd76e21b2c3bb538656baf5f8d22e82de319f4058759fdc69",
+    "configs/scenarios/archetypes/classic_bottleneck.yaml": "74882625aaa863ef6e9d4e9a57f7709e00c57d483344f91025ce79c8b91017ac",
+    "configs/scenarios/archetypes/classic_cross_trap.yaml": "2a49503a93741009dc2a1462b7641c77ec1128420cacd8861cf64b0e44a6d060",
+    "configs/scenarios/archetypes/classic_doorway.yaml": "2b68b827ba83bbe56e7ddfe3e34cb642ee67202097c970cb7eadc466cc7ff7b0",
+    "configs/scenarios/archetypes/classic_group_crossing.yaml": "370cd23bad5e4e5644c60ebb7bf9b4c3554bc3bbc15f380f7517a13cdcd154f8",
+    "configs/scenarios/archetypes/classic_head_on_corridor.yaml": "e70c3b18e085f09b1d08f80ae747e8a9967e247a9161ab88a9d145cd14fefca8",
+    "configs/scenarios/archetypes/classic_merging.yaml": "eb1c80372a6c0d96fdfe36d5523980bb5461475abbca8db0d7f8a04b0cfd9023",
+    "configs/scenarios/archetypes/classic_overtaking.yaml": "fdd789f19e833039cee0bd4f5fceeb2f273dedb9925c58f41b26246cdfee9f74",
+    "configs/scenarios/archetypes/classic_realworld_bottleneck.yaml": "b6210d3a11fd2270ae1e8729b1d4e5b9045cc5e036249f822f4b34ea445fee34",
+    "configs/scenarios/archetypes/classic_station_platform.yaml": "7f093fdb6406f4043e07b4a8d4113defd4cb17ec4bc793bf3583f12960b77228",
+    "configs/scenarios/archetypes/classic_t_intersection.yaml": "97d7f9a95c57ac58814df6271d518aec84d4233fb027c1ca397250b06b0fecde",
+    "configs/scenarios/archetypes/classic_urban_crossing.yaml": "ea65d720fd8765bb725fedba0f50ccc9bbd1e609aa24a80c8ad9711666550161",
+    "configs/scenarios/classic_interactions.yaml": "5fd4d57c29e4a895e6a85889567c91f24ca7f16f02fafa2373bdf4cb9171bdc5",
+    "configs/scenarios/templates/crossing_ttc.yaml": "4718aa6ee78d8013f251e20f1c78173ac4052a79e63ec80e19dd2347866b4d8f"
+  },
+  "packet_digest": "4527f00dc700409bf9d9f9c0c2a1d0958903693368afd789793415726057b2f3",
+  "problems": [
+    "reactive production canary blocked before arm execution: no native environment-episode driver exposes per-residual candidate evaluations and observed simulator-step provenance; FiniteGridSearchPolicy/BoundedResidualAdversary resolution alone is insufficient"
+  ],
+  "repository_commit": "4b57a26525c74550624c3523d5420c93b29aae78",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "runtime_traces": {},
+  "schema": "matched_compute_production_canary.v1"
+}

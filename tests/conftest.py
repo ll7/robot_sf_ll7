@@ -402,6 +402,10 @@ _FAST_FILES = {
     # The preparation-only adversarial search harness uses deterministic data
     # fixtures only; keep its contract coverage in pull-request fast shards.
     "test_search_harness.py",
+    # Matched-compute runtime and canary tests use injected seams and deterministic
+    # receipt fixtures; keep their accounting coverage in pull-request fast shards.
+    "test_matched_compute_runtime.py",
+    "test_matched_compute_production_canary.py",
     # Occupancy-grid rasterization helpers are pure unit contracts with
     # numpy fixtures; keep their coverage in fast pull-request shards for the
     # exact-head changed-coverage gate (see #7282).

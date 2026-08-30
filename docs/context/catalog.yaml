@@ -124,6 +124,26 @@ entries:
   status: evidence
   freshness: evidence
   area: workflow_evidence
+- path: docs/context/evidence/issue_7893_matched_compute_production_canary/README.md
+  status: evidence
+  freshness: evidence
+  area: adversarial_search
+- path: docs/context/evidence/issue_7893_matched_compute_production_canary/README.md.review.json
+  status: evidence
+  freshness: evidence
+  area: adversarial_search
+- path: docs/context/evidence/issue_7893_matched_compute_production_canary/input_digests.json
+  status: evidence
+  freshness: evidence
+  area: adversarial_search
+- path: docs/context/evidence/issue_7893_matched_compute_production_canary/receipt.json
+  status: evidence
+  freshness: evidence
+  area: adversarial_search
+- path: docs/context/evidence/issue_7893_matched_compute_production_canary/receipt.json.review.json
+  status: evidence
+  freshness: evidence
+  area: adversarial_search
 - path: docs/context/evidence/issue_7896_terminal_label_inventory/README.md
   status: evidence
   freshness: evidence
@@ -7399,3 +7419,7 @@ entries:
   status: historical
   freshness: dated
   area: context_archive
+- path: docs/context/evidence/issue_7893_matched_compute_production_canary
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

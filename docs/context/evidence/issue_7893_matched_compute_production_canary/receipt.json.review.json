@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_7893_matched_compute_production_canary/receipt.json",
+  "artifact_sha256": "495ad89614f33dbe10334ee7e46f8a1f860c7dace4aee2392bdf27f4d50e88cc",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

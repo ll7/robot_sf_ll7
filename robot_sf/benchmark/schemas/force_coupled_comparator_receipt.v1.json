@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "force_coupled_comparator_receipt.v1.json",
+  "title": "Force-Coupled Potential-Field Comparator Receipt (v1)",
+  "description": "Deterministic diagnostic comparison receipt for the force-coupled potential-field local planner against reference local planners on canonical analytic scenarios.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_digest",
+    "status",
+    "claim_boundary",
+    "config_digest",
+    "config_sha256",
+    "scenarios",
+    "results",
+    "summary_table",
+    "environment"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "force_coupled_comparator_receipt.v1"
+    },
+    "receipt_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "completed", "diagnostic_only", "failed"]
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "config_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "config_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scenario_id", "seed", "robot_start", "goal", "obstacles", "pedestrians"],
+        "properties": {
+          "scenario_id": {"type": "string", "minLength": 1},
+          "seed": {"type": "integer"},
+          "robot_start": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "goal": {
+            "type": "array",
+            "items": {"type": "number"},
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "obstacles": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {"type": "number"},
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "pedestrians": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {"type": "number"},
+              "minItems": 2,
+              "maxItems": 2
+            }
+          }
+        }
+      }
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "planner_id",
+          "scenario_id",
+          "seed",
+          "steps",
+          "completed",
+          "collision",
+          "near_miss",
+          "min_clearance_obstacle_m",
+          "min_clearance_pedestrian_m",
+          "path_length_m",
+          "mean_linear_speed_mps",
+          "max_linear_speed_mps",
+          "mean_angular_rate_radps",
+          "max_angular_rate_radps",
+          "jerk_metric",
+          "mean_latency_ms",
+          "status",
+          "degraded",
+          "degradation_reasons"
+        ],
+        "properties": {
+          "planner_id": {"type": "string", "minLength": 1},
+          "scenario_id": {"type": "string", "minLength": 1},
+          "seed": {"type": "integer"},
+          "steps": {"type": "integer", "minimum": 0},
+          "completed": {"type": "boolean"},
+          "collision": {"type": "boolean"},
+          "near_miss": {"type": "boolean"},
+          "min_clearance_obstacle_m": {"type": ["number", "null"]},
+          "min_clearance_pedestrian_m": {"type": ["number", "null"]},
+          "path_length_m": {"type": "number", "minimum": 0.0},
+          "mean_linear_speed_mps": {"type": "number"},
+          "max_linear_speed_mps": {"type": "number"},
+          "mean_angular_rate_radps": {"type": "number"},
+          "max_angular_rate_radps": {"type": "number"},
+          "jerk_metric": {"type": "number", "minimum": 0.0},
+          "mean_latency_ms": {"type": "number", "minimum": 0.0},
+          "status": {"type": "string"},
+          "degraded": {"type": "boolean"},
+          "degradation_reasons": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "summary_table": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "planner_id",
+          "runs",
+          "success_rate",
+          "collision_rate",
+          "near_miss_rate",
+          "mean_path_length_m",
+          "mean_jerk_metric",
+          "mean_latency_ms",
+          "status_counts"
+        ],
+        "properties": {
+          "planner_id": {"type": "string", "minLength": 1},
+          "runs": {"type": "integer", "minimum": 1},
+          "success_rate": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+          "collision_rate": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+          "near_miss_rate": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+          "mean_path_length_m": {"type": "number", "minimum": 0.0},
+          "mean_jerk_metric": {"type": "number", "minimum": 0.0},
+          "mean_latency_ms": {"type": "number", "minimum": 0.0},
+          "status_counts": {
+            "type": "object",
+            "additionalProperties": {"type": "integer"}
+          }
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["python_version", "numpy_version", "platform"],
+      "properties": {
+        "python_version": {"type": "string"},
+        "numpy_version": {"type": "string"},
+        "platform": {"type": "string"}
+      }
+    }
+  }
+}

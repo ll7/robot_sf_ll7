@@ -431,6 +431,9 @@ _FAST_FILES = {
     # contracts with numpy fixtures; keep them in fast pull-request shards for
     # the exact-head changed-coverage gate (issue #7890).
     "test_route_choice_observability.py",
+    # Force-coupled potential-field comparator tests are deterministic
+    # benchmark-diagnostic contracts; keep them in PR fast shards (issue #8015).
+    "test_force_coupled_comparator.py",
     # The trace-dossier contract tests exercise lightweight, diagnostic-only
     # export/render paths required by the exact-head changed-coverage gate.
     "test_export_trace_dossier.py",

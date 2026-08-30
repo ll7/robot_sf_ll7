@@ -32,6 +32,12 @@ from typing import Any
 
 import yaml
 
+# ``uv run --no-project`` executes this file with ``scripts/tools`` as
+# ``sys.path[0]``.  Add the repository root for the direct-script path while
+# keeping normal package imports unchanged.
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from scripts.tools import check_asset_rights_inventory as asset_inventory
 
 

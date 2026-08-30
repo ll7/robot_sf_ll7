@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import io
+import subprocess
+import sys
 import tarfile
 import zipfile
 from pathlib import Path
@@ -121,6 +123,20 @@ def test_valid_wheel_and_sdist_pass(tmp_path: Path) -> None:
 
     assert len(result.wheels) == 1
     assert len(result.sdists) == 1
+
+
+def test_direct_script_invocation_is_importable() -> None:
+    """The CI's no-project direct-script invocation must import repository helpers."""
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts/tools/check_distribution_licenses.py"), "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "--strict-asset-rights" in result.stdout
+    assert "ModuleNotFoundError" not in result.stderr
 
 
 def test_socnavbench_file_partition_is_checked_semantically(tmp_path: Path) -> None:

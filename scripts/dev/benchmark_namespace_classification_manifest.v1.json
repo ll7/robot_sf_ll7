@@ -87,6 +87,7 @@
     "figures",
     "finite_checks.py",
     "flint_chart.py",
+    "force_coupled_comparator.py",
     "forecast",
     "freeze_manifest.py",
     "frozen_trace_reconciliation.py",

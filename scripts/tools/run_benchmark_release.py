@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import yaml
 from loguru import logger
 
 from robot_sf.adversarial.public_projection import find_offending_paths
@@ -807,7 +808,7 @@ def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912, PLR0915
 
     try:
         manifest = load_release_manifest(args.manifest)
-    except (OSError, TypeError, ValueError, KeyError) as exc:
+    except (OSError, TypeError, ValueError, KeyError, yaml.YAMLError) as exc:
         return _rehearsal_failure(
             status="manifest_rejected",
             reason="release manifest could not be admitted: " + str(exc),
@@ -845,7 +846,14 @@ def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912, PLR0915
         cfg = load_campaign_config(manifest.canonical_campaign_config_path)
         source_commit = _current_source_commit()
         worktree_clean = _current_worktree_clean()
-    except (OSError, TypeError, ValueError, KeyError, ReleaseResumeAdmissionError) as exc:
+    except (
+        OSError,
+        TypeError,
+        ValueError,
+        KeyError,
+        ReleaseResumeAdmissionError,
+        yaml.YAMLError,
+    ) as exc:
         return _rehearsal_failure(
             status="startup_admission_failed",
             reason="release rehearsal startup admission failed: " + str(exc),
@@ -912,7 +920,7 @@ def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912, PLR0915
                 ),
             },
         }
-    except (OSError, TypeError, ValueError, KeyError) as exc:
+    except (OSError, TypeError, ValueError, KeyError, yaml.YAMLError) as exc:
         return _rehearsal_failure(
             status="manifest_rejected",
             reason="release manifest admission failed: " + str(exc),
@@ -1029,7 +1037,7 @@ def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912, PLR0915
             campaign_config=cfg,
             source_commit=source_commit,
         )
-    except (OSError, TypeError, ValueError, KeyError) as exc:
+    except (OSError, TypeError, ValueError, KeyError, yaml.YAMLError) as exc:
         return _rehearsal_failure(
             status="release_identity_rejected",
             reason="release identity binding failed: " + str(exc),
@@ -1310,6 +1318,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
             args.checkpoint_receipt,
             campaign_config_path=manifest.canonical_campaign_config_path,
             max_age_hours=args.checkpoint_receipt_max_age_hours,
+            repo_root=get_repository_root(),
         )
     except CheckpointStagingReceiptError as exc:
         result.update(

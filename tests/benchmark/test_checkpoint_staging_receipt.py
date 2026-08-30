@@ -396,3 +396,71 @@ def test_receipt_rejects_mapped_registry_pin_mismatch(tmp_path: Path, monkeypatc
             repo_root=tmp_path,
             now=datetime(2026, 8, 21, 13, tzinfo=UTC),
         )
+
+
+def test_receipt_resolves_default_registry_from_repo_root_regardless_of_cwd(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The default model registry resolves against repo_root even when CWD is unrelated."""
+    repo_fake = tmp_path / "repo"
+    repo_fake.mkdir()
+    unrelated_cwd = tmp_path / "unrelated_cwd"
+    unrelated_cwd.mkdir()
+
+    cfg, config, registry, receipt, payload = _fixture(repo_fake)
+    # Move registry to standard default location: <repo>/model/registry.yaml
+    default_registry_dir = repo_fake / "model"
+    default_registry_dir.mkdir(parents=True, exist_ok=True)
+    default_registry = default_registry_dir / "registry.yaml"
+    default_registry.write_text(registry.read_text(encoding="utf-8"), encoding="utf-8")
+    payload["checkpoint_registry_sha256"] = sha256_file(default_registry)
+    _write_receipt(receipt, payload)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda _cfg: _cfg.references,
+    )
+    monkeypatch.chdir(unrelated_cwd)
+
+    result = validate_checkpoint_staging_receipt(
+        cfg,
+        receipt,
+        campaign_config_path=config,
+        repo_root=repo_fake,
+        now=datetime(2026, 8, 21, 13, tzinfo=UTC),
+    )
+    assert result["submit_safe"] is True
+
+
+def test_receipt_resolves_relative_registry_path_from_repo_root(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """An explicit relative registry path resolves against repo_root when CWD is unrelated."""
+    repo_fake = tmp_path / "repo"
+    repo_fake.mkdir()
+    unrelated_cwd = tmp_path / "unrelated_cwd"
+    unrelated_cwd.mkdir()
+
+    cfg, config, registry, receipt, payload = _fixture(repo_fake)
+    custom_reg_dir = repo_fake / "custom_models"
+    custom_reg_dir.mkdir(parents=True, exist_ok=True)
+    custom_registry = custom_reg_dir / "reg.yaml"
+    custom_registry.write_text(registry.read_text(encoding="utf-8"), encoding="utf-8")
+    payload["checkpoint_registry_sha256"] = sha256_file(custom_registry)
+    _write_receipt(receipt, payload)
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda _cfg: _cfg.references,
+    )
+    monkeypatch.chdir(unrelated_cwd)
+
+    result = validate_checkpoint_staging_receipt(
+        cfg,
+        receipt,
+        campaign_config_path=config,
+        registry_path=Path("custom_models/reg.yaml"),
+        repo_root=repo_fake,
+        now=datetime(2026, 8, 21, 13, tzinfo=UTC),
+    )
+    assert result["submit_safe"] is True

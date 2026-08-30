@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec, SeedPolicy
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
@@ -548,6 +550,210 @@ def test_release_rehearsal_serializes_manifest_admission_failure(
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 2
     assert payload["status"] == "manifest_rejected"
+    assert payload["campaign_execution_status"] == "not_started"
+
+
+def test_release_rehearsal_serializes_malformed_manifest_yaml(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """Malformed YAML manifest returns structured JSON without unhandled traceback."""
+    _rehearsal_fixture(tmp_path)
+    monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: tmp_path)
+    bad_manifest = tmp_path / "configs" / "bad_manifest.yaml"
+    bad_manifest.write_text("bad: [yaml: invalid\n", encoding="utf-8")
+
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "configs/bad_manifest.yaml",
+            "--mode",
+            "rehearsal",
+            "--source-commit",
+            "a" * 40,
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "manifest_rejected"
+    assert "release manifest could not be admitted" in payload["status_reason"]
+    assert payload["campaign_execution_status"] == "not_started"
+    assert payload["benchmark_success"] is False
+    assert payload["release_exit_code"] == 2
+
+
+def test_release_rehearsal_serializes_malformed_campaign_config_yaml(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """Malformed campaign config YAML returns structured startup admission failure."""
+    manifest, _cfg, _checkpoint, _smoke = _rehearsal_fixture(tmp_path)
+    monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: tmp_path)
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "_current_source_commit", lambda: "a" * 40)
+    monkeypatch.setattr(run_benchmark_release, "_current_worktree_clean", lambda: True)
+    bad_config = tmp_path / "configs" / "bad_config.yaml"
+    bad_config.write_text("bad: [config: invalid\n", encoding="utf-8")
+    manifest.canonical_campaign_config_path = bad_config
+
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "configs/release.yaml",
+            "--mode",
+            "rehearsal",
+            "--source-commit",
+            "a" * 40,
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "startup_admission_failed"
+    assert "release rehearsal startup admission failed" in payload["status_reason"]
+    assert payload["campaign_execution_status"] == "not_started"
+    assert payload["benchmark_success"] is False
+    assert payload["release_exit_code"] == 2
+
+
+def test_release_rehearsal_admits_inputs_from_unrelated_cwd_with_real_receipt_validation(
+    monkeypatch, capsys, tmp_path: Path
+) -> None:
+    """Rehearsal succeeds with real receipt validation when invoked from an unrelated CWD."""
+    manifest, cfg, _checkpoint, smoke = _rehearsal_fixture(tmp_path)
+    model_file = tmp_path / "model.zip"
+    model_file.write_bytes(b"checkpoint-bytes")
+
+    default_registry_dir = tmp_path / "model"
+    default_registry_dir.mkdir(parents=True, exist_ok=True)
+    default_registry = default_registry_dir / "registry.yaml"
+    default_registry.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "models": [
+                    {
+                        "model_id": "goal-model",
+                        "github_release": {"sha256": run_benchmark_release.sha256_file(model_file)},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    receipt_payload = {
+        "schema_version": "campaign-checkpoint-staging-receipt.v1",
+        "status": "ok",
+        "mode": "enforced_staged",
+        "stage": True,
+        "submit_safe": True,
+        "generated_at_utc": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "campaign_config_sha256": run_benchmark_release.sha256_file(
+            manifest.canonical_campaign_config_path
+        ),
+        "checkpoint_registry_sha256": run_benchmark_release.sha256_file(default_registry),
+        "arms": [
+            {
+                "planner_key": "goal",
+                "algo": "goal",
+                "kind": "model_id",
+                "value": "goal-model",
+                "implicit": False,
+                "status": "staged",
+                "resolved_path": str(model_file),
+                "checkpoint_sha256": run_benchmark_release.sha256_file(model_file),
+                "hash_source": "computed_file",
+            }
+        ],
+    }
+    _write_json(tmp_path / "receipt.json", receipt_payload)
+    runtime_checkpoint = tmp_path / "runtime-receipt.json"
+    _write_json(
+        runtime_checkpoint,
+        {
+            "campaign_config_sha256": run_benchmark_release.sha256_file(
+                manifest.canonical_campaign_config_path
+            ),
+            "arms": receipt_payload["arms"],
+        },
+    )
+    _write_json(
+        smoke,
+        {
+            "checkpoint_staging_receipt": {
+                "path": runtime_checkpoint.name,
+                "sha256": run_benchmark_release.sha256_file(runtime_checkpoint),
+            }
+        },
+    )
+
+    monkeypatch.setattr(run_benchmark_release, "get_repository_root", lambda: tmp_path)
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: cfg)
+    monkeypatch.setattr(run_benchmark_release, "_current_source_commit", lambda: "a" * 40)
+    monkeypatch.setattr(run_benchmark_release, "_current_worktree_clean", lambda: True)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda *args, **kwargs: {"status": "valid", "problem_count": 0, "problems": []},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_runtime_smoke_result",
+        lambda *args, **kwargs: {
+            "status": "admitted",
+            "result_sha256": "b" * 64,
+            "checkpoint_receipt_sha256": run_benchmark_release.sha256_file(
+                tmp_path / "receipt.json"
+            ),
+            "source_commit": "a" * 40,
+            "planner_arms": 1,
+            "episode_cells": 1,
+            "fallback_or_degraded_rows": 0,
+        },
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_resolved_release_manifest",
+        lambda *args, **kwargs: {"release_id": "rehearsal"},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.checkpoint_staging_receipt.iter_campaign_arm_checkpoint_references",
+        lambda _cfg: [
+            SimpleNamespace(
+                planner_key="goal",
+                algo="goal",
+                kind="model_id",
+                value="goal-model",
+                implicit=False,
+            )
+        ],
+    )
+
+    unrelated_cwd = tmp_path / "unrelated_working_directory"
+    unrelated_cwd.mkdir()
+    monkeypatch.chdir(unrelated_cwd)
+
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "configs/release.yaml",
+            "--mode",
+            "rehearsal",
+            "--source-commit",
+            "a" * 40,
+            "--checkpoint-receipt",
+            "receipt.json",
+            "--runtime-smoke-receipt",
+            "smoke/release_result.json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["status"] == "release_rehearsal_passed"
+    assert payload["checkpoint_staging_admission"]["status"] == "admitted"
     assert payload["campaign_execution_status"] == "not_started"
 
 

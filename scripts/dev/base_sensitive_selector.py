@@ -3,14 +3,14 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
+import subprocess
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-SELECTOR_VERSION = "pytest-marker-files.v1"
+SELECTOR_VERSION = "pytest-marker-files.v2"
 BASE_SENSITIVE = "base_sensitive"
 ORDINARY = "ordinary"
 UNKNOWN = "unknown"
@@ -24,26 +24,51 @@ def _normalize_repo_path(path: str) -> str:
     return normalized
 
 
+def _tracked_test_files(repo_root: Path) -> list[str]:
+    """Return tracked ``test_*.py`` repository paths via the Git index.
+
+    Tracked-file enumeration is repository-bound: ignored nested worktrees,
+    output caches, and other untracked copies (for example ``.emdash/``,
+    ``.worktrees/``, and ``output/``) can never enter the selection. The call
+    fails closed on Git errors instead of silently widening the selection.
+    """
+    completed = subprocess.run(
+        ["git", "-C", str(repo_root), "ls-files", "--", "*.py"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            "base-sensitive selection requires the Git tracked-file index; "
+            f"git ls-files failed with exit code {completed.returncode}: "
+            f"{completed.stderr.strip()}"
+        )
+    return [
+        tracked
+        for tracked in completed.stdout.splitlines()
+        if PurePosixPath(tracked).name.startswith("test_") and tracked.endswith(".py")
+    ]
+
+
 def find_base_sensitive_test_files(repo_root: Path) -> list[str]:
     """Return repository-relative test files declaring the ``base_sensitive`` marker.
 
     The marker is the deliberately small, explicit contract from issue #5559.  Keeping the
     selector in one module lets the gate and queue policy use identical file classification.
+    Selection is repository-bound: only Git-tracked ``test_*.py`` files are inspected, so
+    ignored nested worktree and cache copies never contaminate the result (issue #8025).
     """
     matches: list[str] = []
-    ignored_dirs = {".git", ".venv", "venv", "build", "dist", "__pycache__", "third_party"}
-    for root, dirs, files in os.walk(repo_root):
-        dirs[:] = [directory for directory in dirs if directory not in ignored_dirs]
-        for filename in files:
-            if not (filename.startswith("test_") and filename.endswith(".py")):
-                continue
-            path = Path(root) / filename
-            try:
-                text = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
-                continue
-            if BASE_SENSITIVE in text:
-                matches.append(path.relative_to(repo_root).as_posix())
+    for tracked in _tracked_test_files(repo_root):
+        path = repo_root / tracked
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if BASE_SENSITIVE in text:
+            matches.append(tracked)
     return sorted(matches)
 
 

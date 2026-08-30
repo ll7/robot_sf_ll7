@@ -105,9 +105,12 @@ uv build
 scripts/validation/wheel_install_smoke.sh
 ```
 
-The smoke installs the built wheel into a temporary venv, then verifies a minimal import
-with a small bootstrap dependency set (`loguru`, `numba`, `matplotlib`). This is a
-`clean install + import` guardrail, not a full runtime benchmark install.
+The smoke installs the built wheel into a temporary venv, verifies a minimal environment
+step, and invokes every advertised console script's `--help` command from outside the
+source checkout. It is a `clean install + entry-point` guardrail, not a full runtime
+benchmark install. The CARLA bridge commands are import-safe without CARLA; commands
+that need a live CARLA server fail closed with an availability result until the optional
+`carla` dependency and pinned Docker runtime are supplied.
 
 Core simulation imports and basic environment creation are lightweight by default. Optional feature stacks can be installed via extras:
 

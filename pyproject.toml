@@ -170,11 +170,24 @@ version-file = "robot_sf/_version.py"
 [tool.hatch.build.targets.wheel.force-include]
 "benchmarks" = "benchmarks"
 "fast-pysf/pysocialforce" = "pysocialforce"
+# These modules back the declared console scripts and the import-safe top-level
+# CLI.  Hatchling's package discovery is intentionally rooted at ``robot_sf``;
+# keep the small cross-package surfaces explicit so a wheel never advertises
+# entry points that only work from the source checkout.
+"robot_sf_carla_bridge" = "robot_sf_carla_bridge"
+"scripts/carla_bridge/diagnose_replay_semantics.py" = "scripts/carla_bridge/diagnose_replay_semantics.py"
+"scripts/tools/__init__.py" = "scripts/tools/__init__.py"
+"scripts/tools/manage_external_data.py" = "scripts/tools/manage_external_data.py"
+"scripts/tools/migrate_artifacts.py" = "scripts/tools/migrate_artifacts.py"
 
 [tool.hatch.build.targets.sdist]
 include = [
     "/robot_sf",
     "/robot_sf_carla_bridge",
+    "/scripts/carla_bridge/diagnose_replay_semantics.py",
+    "/scripts/tools/__init__.py",
+    "/scripts/tools/manage_external_data.py",
+    "/scripts/tools/migrate_artifacts.py",
     "/fast-pysf/pysocialforce",
     "/examples",
     "/benchmarks",

@@ -106,6 +106,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "fast_pysf_planner": "diagnostic",
     "rvo": "classical",
     "dwa": "classical",
+    "anisotropic_gaussian_cost": "classical",
     "force_coupled_potential_field": "classical",
     "teb": "classical",
     "nmpc_social": "classical",
@@ -189,6 +190,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "fast_pysf_planner": "social_force_reference",
     "rvo": "placeholder_adapter",
     "dwa": "in_repo_classical_dynamic_window",
+    "anisotropic_gaussian_cost": ("clean_room_anisotropic_gaussian_cost_experimental"),
     "force_coupled_potential_field": ("clean_room_force_coupled_potential_field_experimental"),
     "teb": "corridor_commitment_local_planner",
     "nmpc_social": "nonlinear_model_predictive_local_planner",
@@ -257,6 +259,16 @@ _OBSERVATION_SPEC_BY_CANONICAL: dict[str, dict[str, Any]] = {
     "stream_gap": _DEFAULT_OBSERVATION_SPEC,
     "gap_prediction": _DEFAULT_OBSERVATION_SPEC,
     "dwa": _DEFAULT_OBSERVATION_SPEC,
+    "anisotropic_gaussian_cost": {
+        "default_mode": "socnav_state",
+        "supported_modes": ("socnav_state",),
+        "inputs": ("robot_state", "goal", "obstacles_if_visible", "pedestrians_if_visible"),
+        "notes": (
+            "Experimental anisotropic Gaussian human-cost planner. "
+            "Missing optional obstacle or pedestrian visibility is reported as degraded; "
+            "this smoke-only contract is not benchmark evidence."
+        ),
+    },
     "force_coupled_potential_field": {
         "default_mode": "socnav_state",
         "supported_modes": ("socnav_state",),
@@ -925,6 +937,18 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "projection_policy": "native_dynamic_window_unicycle_vw",
         "projection_documented": True,
         "testing_only_adapter": True,
+    },
+    "anisotropic_gaussian_cost": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": True,
+        "supports_adapter_commands": True,
+        "default_execution_mode": "adapter",
+        "default_adapter_name": "AnisotropicGaussianCostPlanner",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "native_bounded_unicycle_vw_with_runner_feasibility_projection",
+        "projection_documented": True,
+        "testing_only_adapter": True,
+        "prototype_only": True,
     },
     "force_coupled_potential_field": {
         "planner_command_space": "unicycle_vw",

@@ -1,0 +1,35 @@
+# Opt-in anisotropic Gaussian human-cost local planner (issue #7603, parent #7319).
+# Experimental/testing-only: runnable for controlled deterministic smoke, not
+# paper-facing benchmark evidence. Does not change any default planner or
+# release roster.
+allow_testing_algorithms: true
+planner_variant: anisotropic_gaussian_cost
+amplitude: 1.0
+sigma_long_base_m: 0.8
+sigma_lat_base_m: 0.5
+velocity_scale_long: 0.5
+velocity_scale_lat: 0.0
+asymmetry_front_ratio: 1.5
+min_velocity_threshold_mps: 0.05
+stationary_sigma_m: 0.6
+mahalanobis_cutoff: 3.0
+cutoff_distance_m: 4.0
+aggregation_mode: max
+attractive_weight: 1.0
+repulsive_weight: 2.0
+static_obstacle_weight: 1.5
+static_obstacle_radius_m: 2.0
+force_saturation: 5.0
+look_ahead_min_m: 0.5
+look_ahead_max_m: 2.0
+look_ahead_gain: 0.8
+max_linear_speed: 1.0
+max_angular_speed: 1.2
+max_linear_rate: 0.8
+max_angular_rate: 1.5
+control_dt: 0.2
+numerical_epsilon: 1.0e-6
+obstacle_grid_threshold: 0.5
+obstacle_grid_max_points: 256
+obstacle_input_mode: observation_contract
+pedestrian_input_mode: observation_contract

@@ -1,10 +1,12 @@
-"""Contract tests for the issue #7980 source-complete speed-tier packet."""
+"""Contract tests for the issue #7980 source-bound diagnostic speed-tier packet."""
 
 from __future__ import annotations
 
 import copy
+import gzip
 import hashlib
 import json
+import subprocess
 from collections import Counter
 from pathlib import Path
 
@@ -16,6 +18,7 @@ from robot_sf.benchmark.result_interpretation_packet import (
     load_result_interpretation_packet,
 )
 from scripts.analysis.build_issue_7980_speed_tier_packet import (
+    _canonical_manifest_digest,
     _review_sidecar_path,
     _review_sidecar_payload,
     _validate_source_receipt,
@@ -91,6 +94,105 @@ def _validation_inputs() -> tuple[dict, str, dict, dict]:
     return _synthetic_synthesis(rows), synthesis_sha, recovery, preregistration
 
 
+def _authenticated_receipt_inputs(
+    tmp_path: Path,
+) -> tuple[dict, Path, str, list[dict], dict]:
+    """Build one byte-backed authenticated receipt without external credentials."""
+
+    rows = [
+        {"test_id": "planner__cap_3_0__success_rate", "effect": 0.01},
+        {"test_id": "planner__cap_4_0__success_rate", "effect": -0.02},
+    ]
+    synthesis_path = tmp_path / "synthesis.json"
+    source_bytes = json.dumps(
+        {"decision_table": rows}, allow_nan=False, sort_keys=True, separators=(",", ":")
+    ).encode()
+    synthesis_path.write_bytes(source_bytes)
+    synthesis_sha256 = hashlib.sha256(source_bytes).hexdigest()
+
+    member_path = tmp_path / "synthesis.json.gz"
+    member_path.write_bytes(gzip.compress(source_bytes, compresslevel=6, mtime=0))
+    member_sha256 = hashlib.sha256(member_path.read_bytes()).hexdigest()
+    manifest = {
+        "schema": "campaign-preservation-manifest.v1",
+        "campaign_id": "fixture-authenticated-receipt",
+        "generated_at": "2026-08-30T00:00:00Z",
+        "source_root": str(tmp_path),
+        "source_host": "fixture",
+        "compression": "gzip-6",
+        "stage_root": str(tmp_path),
+        "files": [
+            {
+                "path": "synthesis.json",
+                "bytes": len(source_bytes),
+                "sha256": synthesis_sha256,
+                "stored_path": "synthesis.json.gz",
+                "stored_bytes": member_path.stat().st_size,
+                "stored_sha256": member_sha256,
+                "stored_md5_b64": "fixture-not-used-by-this-contract",
+            }
+        ],
+        "totals": {
+            "files": 1,
+            "source_bytes": len(source_bytes),
+            "stored_bytes": member_path.stat().st_size,
+            "compression_ratio": round(len(source_bytes) / member_path.stat().st_size, 4),
+        },
+    }
+    manifest["manifest_digest"] = _canonical_manifest_digest(manifest)
+    manifest_path = tmp_path / "campaign_preservation_manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    crosswalk = {
+        "row_crosswalk": [
+            {
+                "test_id": row["test_id"],
+                "canonical_row_sha256": hashlib.sha256(
+                    json.dumps(row, allow_nan=False, sort_keys=True, separators=(",", ":")).encode()
+                ).hexdigest(),
+            }
+            for row in rows
+        ]
+    }
+    crosswalk_path = tmp_path / "source_row_crosswalk.json"
+    crosswalk_path.write_text(json.dumps(crosswalk), encoding="utf-8")
+
+    qualified_name = "ll7/robot_sf/test-speed-tier-artifact:v0"
+    identity = {
+        "qualified_name": qualified_name,
+        "version": "v0",
+        "member": "synthesis.json.gz",
+        "member_sha256": member_sha256,
+        "source_member": "synthesis.json",
+        "source_sha256": synthesis_sha256,
+        "manifest_digest": manifest["manifest_digest"],
+    }
+    receipt = {
+        "schema_version": "issue_7980_source_ingestion_receipt.v1",
+        "source_ingestion_status": "authenticated_immutable_source_hydrated",
+        "independent_of_packet": True,
+        "synthesis_sha256": synthesis_sha256,
+        "source_path": str(crosswalk_path),
+        "source_sha256": hashlib.sha256(crosswalk_path.read_bytes()).hexdigest(),
+        "source_artifact": identity,
+        "immutable_hydration_receipt": {
+            **identity,
+            "status": "verified",
+            "hydrated_member_path": str(member_path),
+            "manifest_member": "campaign_preservation_manifest.json",
+            "preservation_manifest_path": str(manifest_path),
+        },
+    }
+    recovery = {
+        "durable_artifact": {
+            "artifact_name": qualified_name,
+            "version": "v0",
+            "manifest_sha256": manifest["manifest_digest"].removeprefix("sha256:"),
+        }
+    }
+    return receipt, synthesis_path, synthesis_sha256, rows, recovery
+
+
 def test_tracked_packet_loads_under_generic_v1_contract() -> None:
     """Protect the durable packet's public schema and semantic validation contract."""
 
@@ -102,6 +204,34 @@ def test_tracked_packet_loads_under_generic_v1_contract() -> None:
     assert len(packet.metrics) == len(packet.decisions) == 24
     assert compute_packet_digest(packet) == EXPECTED_PACKET_DIGEST
     assert "source-complete" not in PACKET_PATH.read_text(encoding="utf-8")
+
+
+def test_tracked_packet_producer_commit_contains_the_exact_builder() -> None:
+    """Keep producer identity resolvable without self-referencing the output commit."""
+
+    packet = _load_json(PACKET_PATH)
+    producer = packet["producer"]
+    commit = producer["commit"]
+    committed_blob = subprocess.run(
+        ["git", "rev-parse", f"{commit}:scripts/analysis/build_issue_7980_speed_tier_packet.py"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    current_blob = subprocess.run(
+        ["git", "hash-object", "scripts/analysis/build_issue_7980_speed_tier_packet.py"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    assert len(commit) == 40
+    assert committed_blob == current_blob
+    assert f"git worktree add --detach <fresh-worktree> {commit}" in producer["command"]
+    assert "scripts/analysis/build_issue_7980_speed_tier_packet.py" in producer["command"]
+    assert f"--producer-commit {commit}" in producer["command"]
 
 
 def test_all_24_packet_rows_match_the_immutable_source_binding() -> None:
@@ -322,14 +452,18 @@ def test_validation_rejects_activation_classification_disagreement() -> None:
 
 
 def test_independent_source_crosswalk_validates_rows_without_packet_reuse() -> None:
-    """Require a separately supplied crosswalk before calling rows source-complete."""
+    """Require a separately supplied fixture crosswalk without upgrading evidence status."""
 
     synthesis, synthesis_sha, _, _ = _validation_inputs()
     receipt = _load_json(EVIDENCE_DIR / "source_ingestion_receipt.issue_7980.fixture.json")
     rows = sorted(synthesis["decision_table"], key=lambda item: item["test_id"])
 
     validated = _validate_source_receipt(
-        receipt, synthesis_sha256=synthesis_sha, synthesis_path=PACKET_PATH, rows=rows
+        receipt,
+        synthesis_sha256=synthesis_sha,
+        synthesis_path=PACKET_PATH,
+        rows=rows,
+        recovery_manifest=_load_json(RECOVERY_MANIFEST_PATH),
     )
 
     assert validated["source_ingestion_status"] == "fixture_verified"
@@ -349,6 +483,7 @@ def test_source_receipt_fails_closed_when_authenticated_hydration_is_unavailable
             synthesis_sha256=synthesis_sha,
             synthesis_path=PACKET_PATH,
             rows=sorted(synthesis["decision_table"], key=lambda item: item["test_id"]),
+            recovery_manifest=_load_json(RECOVERY_MANIFEST_PATH),
         )
 
 
@@ -365,6 +500,7 @@ def test_source_crosswalk_tampering_is_rejected() -> None:
             synthesis_sha256=synthesis_sha,
             synthesis_path=PACKET_PATH,
             rows=sorted(synthesis["decision_table"], key=lambda item: item["test_id"]),
+            recovery_manifest=_load_json(RECOVERY_MANIFEST_PATH),
         )
 
 
@@ -382,6 +518,7 @@ def test_packet_reuse_as_source_path_is_rejected() -> None:
             synthesis_sha256=synthesis_sha,
             synthesis_path=PACKET_PATH,
             rows=sorted(synthesis["decision_table"], key=lambda item: item["test_id"]),
+            recovery_manifest=_load_json(RECOVERY_MANIFEST_PATH),
         )
 
 
@@ -398,4 +535,95 @@ def test_supplied_source_path_digest_is_checked() -> None:
             synthesis_sha256=synthesis_sha,
             synthesis_path=PACKET_PATH,
             rows=sorted(synthesis["decision_table"], key=lambda item: item["test_id"]),
+            recovery_manifest=_load_json(RECOVERY_MANIFEST_PATH),
+        )
+
+
+def test_authenticated_receipt_cross_checks_artifact_member_manifest_and_rows(
+    tmp_path: Path,
+) -> None:
+    """Accept one receipt only when every immutable identity and byte boundary agrees."""
+
+    receipt, synthesis_path, synthesis_sha256, rows, recovery = _authenticated_receipt_inputs(
+        tmp_path
+    )
+
+    validated = _validate_source_receipt(
+        receipt,
+        synthesis_sha256=synthesis_sha256,
+        synthesis_path=synthesis_path,
+        rows=rows,
+        recovery_manifest=recovery,
+    )
+
+    assert validated["source_ingestion_status"] == "authenticated_immutable_source_hydrated"
+    assert validated["source_artifact"]["member"] == "synthesis.json.gz"
+
+
+@pytest.mark.parametrize("field", ["source_artifact", "immutable_hydration_receipt"])
+def test_authenticated_receipt_rejects_empty_identity_mappings(tmp_path: Path, field: str) -> None:
+    """Empty self-declarations cannot stand in for authenticated immutable custody."""
+
+    receipt, synthesis_path, synthesis_sha256, rows, recovery = _authenticated_receipt_inputs(
+        tmp_path
+    )
+    receipt[field] = {}
+
+    with pytest.raises(ValueError, match="must be a non-empty mapping"):
+        _validate_source_receipt(
+            receipt,
+            synthesis_sha256=synthesis_sha256,
+            synthesis_path=synthesis_path,
+            rows=rows,
+            recovery_manifest=recovery,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("qualified_name", "ll7/robot_sf/wrong:v0", "qualified_name"),
+        ("member", "synthesis.json", "member"),
+        ("source_sha256", "0" * 64, "source_sha256"),
+        ("manifest_digest", "sha256:" + "0" * 64, "manifest_digest"),
+    ],
+)
+def test_authenticated_receipt_rejects_artifact_identity_or_digest_drift(
+    tmp_path: Path, field: str, value: str, message: str
+) -> None:
+    """Wrong artifact, member, source, or manifest identities fail before admission wording."""
+
+    receipt, synthesis_path, synthesis_sha256, rows, recovery = _authenticated_receipt_inputs(
+        tmp_path
+    )
+    receipt["source_artifact"][field] = value
+
+    with pytest.raises(ValueError, match=message):
+        _validate_source_receipt(
+            receipt,
+            synthesis_sha256=synthesis_sha256,
+            synthesis_path=synthesis_path,
+            rows=rows,
+            recovery_manifest=recovery,
+        )
+
+
+def test_authenticated_receipt_rejects_compressed_member_digest_drift(
+    tmp_path: Path,
+) -> None:
+    """A changed compressed member cannot inherit a valid artifact/source receipt."""
+
+    receipt, synthesis_path, synthesis_sha256, rows, recovery = _authenticated_receipt_inputs(
+        tmp_path
+    )
+    member_path = Path(receipt["immutable_hydration_receipt"]["hydrated_member_path"])
+    member_path.write_bytes(member_path.read_bytes() + b"drift")
+
+    with pytest.raises(ValueError, match="member digest drifted"):
+        _validate_source_receipt(
+            receipt,
+            synthesis_sha256=synthesis_sha256,
+            synthesis_path=synthesis_path,
+            rows=rows,
+            recovery_manifest=recovery,
         )

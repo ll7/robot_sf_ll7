@@ -24,7 +24,7 @@ admit a benchmark, planner-ranking, causal, dissertation, or paper claim.
 | Independent source copy | W&B artifact `ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0` |
 | Artifact verification | 76/76 stored objects and 76/76 decompressed sources match manifest digests and sizes |
 | Canonical synthesis parity | Stored and current outputs match after normalizing only `source_path` |
-| Source-complete contrasts | 24/24 rows bound to the immutable synthesis member by issue #7980 |
+| Source-bound diagnostic contrasts | 24/24 rows projected against the recorded source digest; authenticated `synthesis.json.gz` member receipt pending |
 | Admission | **not admitted**; a separate domain-aware admission decision is required |
 
 The descriptive synthesis reports the same planner ordering at all three speed
@@ -51,14 +51,15 @@ caption, exact-digest review report, and source/output checksums are recorded in
 `SHA256SUMS`. No figure is emitted because this diagnostic packet has no controlled
 visual assertion.
 
-## Source-complete successor packet
+## Source-bound diagnostic successor packet
 
 The tracked issue #7980 packet is diagnostic/pending: it does not claim that an
 authenticated immutable source was hydrated on this machine. The small
 `source_row_crosswalk.issue_7980.fixture.json` file is only a deterministic
-contract-test fixture. A source-complete regeneration must receive an
-independent source-ingestion receipt and matching row crosswalk; the builder
-fails closed when authenticated immutable hydration is unavailable.
+contract-test fixture. Authenticated-source regeneration must receive an exact
+artifact/version/member receipt, the pinned preservation manifest, compressed-
+member and decompressed-source digests, and a matching row crosswalk. The builder
+cross-checks those inputs and fails closed when immutable hydration is unavailable.
 
 Issue #7980 adds
 `result_interpretation_packet.issue_7980.v1.json` without replacing or silently
@@ -94,13 +95,15 @@ uv run python scripts/analysis/build_result_interpretation_packet.py --input doc
 ```
 
 The first command reproduces the compact synthesis. The later commands regenerate
-and validate the tracked source-complete projection. None grants benchmark or
-paper-facing eligibility.
+and validate the tracked source-bound diagnostic projection. The tracked packet
+does not carry an authenticated immutable-member receipt. None of these commands
+grants benchmark or paper-facing eligibility.
 
 ## Next decision
 
 Do not rerun the 2,160-cell campaign: the native grid and durable raw lineage are
-complete. The source-complete successor resolves the missing-statistic and source-
-binding gap, but it does not make the admission decision. Any later admission must
-explicitly address the six non-activated prediction-planner contrasts and must not
-promote the descriptive planner ordering into a ranking claim.
+complete. The source-bound diagnostic successor preserves all missing statistics,
+but authenticated immutable-member custody and the separate admission decision
+remain pending. Any later admission must explicitly address the six non-activated
+prediction-planner contrasts and must not promote the descriptive planner ordering
+into a ranking claim.

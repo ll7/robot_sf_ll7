@@ -3,17 +3,19 @@
 
 This projects the 24 canonical issue #5578 synthesis decisions into the existing
 ``result_interpretation_packet.v1`` contract. It does not rerun the campaign or
-admit a benchmark claim. A source-complete packet additionally requires an
-independent source-ingestion receipt and row crosswalk; without that receipt the
-output is explicitly diagnostic/pending.
+admit a benchmark claim. Authenticated-source wording additionally requires an
+exact immutable-member receipt, preservation manifest, and row crosswalk;
+without that proof the output is explicitly diagnostic/pending.
 """
 
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import math
+import re
 import subprocess
 import sys
 from collections import Counter
@@ -63,6 +65,13 @@ EXPECTED_SYNTHESIS_SCHEMA = "robot_sf.issue_5578_speed_tier_synthesis_adapter.v1
 EXPECTED_EVIDENCE_STATUS = "native_grid_synthesis_complete_provenance_unverified"
 SOURCE_RECEIPT_SCHEMA = "issue_7980_source_ingestion_receipt.v1"
 SOURCE_PROOF_STATUSES = frozenset({"fixture_verified", "authenticated_immutable_source_hydrated"})
+SOURCE_ARTIFACT_MEMBER = "synthesis.json.gz"
+SOURCE_ARTIFACT_SOURCE_MEMBER = "synthesis.json"
+SOURCE_ARTIFACT_MANIFEST_MEMBER = "campaign_preservation_manifest.json"
+SOURCE_ARTIFACT_MANIFEST_SCHEMA = "campaign-preservation-manifest.v1"
+PRODUCER_SCRIPT_PATH = "scripts/analysis/build_issue_7980_speed_tier_packet.py"
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -80,6 +89,46 @@ def _row_digest(row: Mapping[str, Any]) -> str:
     return hashlib.sha256(
         json.dumps(row, allow_nan=False, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
+
+
+def _require_nonempty_mapping(value: object, field: str) -> Mapping[str, Any]:
+    """Return one non-empty mapping or reject a self-declared empty receipt block."""
+
+    if not isinstance(value, Mapping) or not value:
+        raise ValueError(f"source receipt {field} must be a non-empty mapping")
+    return value
+
+
+def _require_nonempty_string(value: object, field: str) -> str:
+    """Return one non-empty string from a receipt identity field."""
+
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"source receipt {field} must be a non-empty string")
+    return value
+
+
+def _require_sha256(value: object, field: str) -> str:
+    """Return one lowercase SHA-256 digest from a receipt identity field."""
+
+    if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
+        raise ValueError(f"source receipt {field} must be a lowercase SHA-256 digest")
+    return value
+
+
+def _input_path(value: object, field: str) -> Path:
+    """Resolve one explicit receipt input path without requiring it to be tracked."""
+
+    raw = _require_nonempty_string(value, field)
+    path = Path(raw)
+    return (path if path.is_absolute() else (_REPO_ROOT / path)).resolve()
+
+
+def _canonical_manifest_digest(manifest: Mapping[str, Any]) -> str:
+    """Recompute the preservation tool's canonical manifest identity."""
+
+    payload = {key: value for key, value in manifest.items() if key != "manifest_digest"}
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def _validate_row_crosswalk(crosswalk: object, rows: Sequence[Mapping[str, Any]]) -> None:
@@ -109,9 +158,7 @@ def _load_receipt_source_crosswalk(receipt: Mapping[str, Any], synthesis_path: P
     """Load and hash the independently supplied source crosswalk."""
 
     source_path_value = receipt.get("source_path")
-    if not isinstance(source_path_value, str) or not source_path_value.strip():
-        raise ValueError("source receipt must identify the supplied source path")
-    source_path = _repo_path(Path(source_path_value))
+    source_path = _input_path(source_path_value, "source_path")
     if source_path == synthesis_path.resolve():
         raise ValueError("source receipt source path must not reuse the supplied synthesis path")
     if receipt.get("source_sha256") != _sha256(source_path):
@@ -125,14 +172,214 @@ def _load_receipt_source_crosswalk(receipt: Mapping[str, Any], synthesis_path: P
     return crosswalk
 
 
+def _expected_authenticated_artifact(
+    recovery_manifest: Mapping[str, Any], synthesis_sha256: str
+) -> dict[str, str]:
+    """Resolve the pinned W&B artifact identity from reviewed recovery metadata."""
+
+    durable = _require_nonempty_mapping(
+        recovery_manifest.get("durable_artifact"), "recovery durable_artifact"
+    )
+    qualified_name = _require_nonempty_string(
+        durable.get("artifact_name"), "recovery durable_artifact.artifact_name"
+    )
+    version = _require_nonempty_string(durable.get("version"), "recovery durable_artifact.version")
+    if not qualified_name.endswith(f":{version}"):
+        raise ValueError("reviewed recovery artifact name and version disagree")
+    manifest_sha256 = _require_sha256(
+        durable.get("manifest_sha256"), "recovery durable_artifact.manifest_sha256"
+    )
+    return {
+        "qualified_name": qualified_name,
+        "version": version,
+        "member": SOURCE_ARTIFACT_MEMBER,
+        "source_member": SOURCE_ARTIFACT_SOURCE_MEMBER,
+        "source_sha256": synthesis_sha256,
+        "manifest_digest": f"sha256:{manifest_sha256}",
+    }
+
+
+def _validated_authenticated_identity(
+    receipt: Mapping[str, Any],
+    *,
+    recovery_manifest: Mapping[str, Any],
+    synthesis_sha256: str,
+) -> tuple[Mapping[str, Any], Mapping[str, Any], dict[str, str], str]:
+    """Cross-check receipt identity blocks against reviewed artifact metadata."""
+
+    source_artifact = _require_nonempty_mapping(receipt.get("source_artifact"), "source_artifact")
+    hydration = _require_nonempty_mapping(
+        receipt.get("immutable_hydration_receipt"), "immutable_hydration_receipt"
+    )
+    expected = _expected_authenticated_artifact(recovery_manifest, synthesis_sha256)
+    for field, expected_value in expected.items():
+        if source_artifact.get(field) != expected_value:
+            raise ValueError(
+                f"source receipt source_artifact {field} does not match reviewed artifact identity"
+            )
+        if hydration.get(field) != expected_value:
+            raise ValueError(
+                f"source receipt immutable_hydration_receipt {field} does not match "
+                "reviewed artifact identity"
+            )
+    if hydration.get("status") != "verified":
+        raise ValueError("authenticated source receipt hydration status must be verified")
+
+    member_sha256 = _require_sha256(
+        source_artifact.get("member_sha256"), "source_artifact.member_sha256"
+    )
+    if hydration.get("member_sha256") != member_sha256:
+        raise ValueError("source receipt artifact and hydration member digests disagree")
+    return source_artifact, hydration, expected, member_sha256
+
+
+def _validated_authenticated_member(
+    hydration: Mapping[str, Any],
+    *,
+    member_sha256: str,
+    synthesis_sha256: str,
+    synthesis_path: Path,
+) -> tuple[bytes, Path]:
+    """Cross-check compressed member bytes against the supplied source bytes."""
+
+    member_path = _input_path(hydration.get("hydrated_member_path"), "hydrated_member_path")
+    if _sha256(member_path) != member_sha256:
+        raise ValueError("authenticated source member digest drifted")
+
+    source_bytes = synthesis_path.read_bytes()
+    if hashlib.sha256(source_bytes).hexdigest() != synthesis_sha256:
+        raise ValueError("authenticated source bytes do not match the supplied synthesis digest")
+    try:
+        decompressed = gzip.decompress(member_path.read_bytes())
+    except (OSError, EOFError) as exc:
+        raise ValueError("authenticated source member is not a valid gzip payload") from exc
+    if decompressed != source_bytes:
+        raise ValueError("authenticated source member does not decompress to supplied source bytes")
+    return source_bytes, member_path
+
+
+def _validate_authenticated_manifest(
+    hydration: Mapping[str, Any],
+    *,
+    expected_manifest_digest: str,
+    member_path: Path,
+    member_sha256: str,
+    source_bytes: bytes,
+    synthesis_sha256: str,
+) -> None:
+    """Cross-check the pinned preservation manifest and its synthesis member row."""
+
+    manifest_path = _input_path(
+        hydration.get("preservation_manifest_path"), "preservation_manifest_path"
+    )
+    manifest = _load_json(manifest_path)
+    if manifest.get("schema") != SOURCE_ARTIFACT_MANIFEST_SCHEMA:
+        raise ValueError("authenticated preservation manifest schema is unsupported")
+    manifest_digest = _canonical_manifest_digest(manifest)
+    if manifest.get("manifest_digest") != manifest_digest:
+        raise ValueError("authenticated preservation manifest digest is internally inconsistent")
+    if manifest_digest != expected_manifest_digest:
+        raise ValueError(
+            "authenticated preservation manifest digest does not match reviewed custody"
+        )
+    if hydration.get("manifest_member") != SOURCE_ARTIFACT_MANIFEST_MEMBER:
+        raise ValueError(
+            "authenticated source receipt names the wrong preservation manifest member"
+        )
+
+    manifest_rows = manifest.get("files")
+    if not isinstance(manifest_rows, list):
+        raise ValueError("authenticated preservation manifest files must be a list")
+    source_entries = [
+        entry
+        for entry in manifest_rows
+        if isinstance(entry, Mapping) and entry.get("path") == SOURCE_ARTIFACT_SOURCE_MEMBER
+    ]
+    if len(source_entries) != 1:
+        raise ValueError(
+            "authenticated preservation manifest must contain one synthesis source row"
+        )
+    source_entry = source_entries[0]
+    expected_entry = {
+        "path": SOURCE_ARTIFACT_SOURCE_MEMBER,
+        "stored_path": SOURCE_ARTIFACT_MEMBER,
+        "sha256": synthesis_sha256,
+        "stored_sha256": member_sha256,
+        "bytes": len(source_bytes),
+        "stored_bytes": member_path.stat().st_size,
+    }
+    for field, expected_value in expected_entry.items():
+        if source_entry.get(field) != expected_value:
+            raise ValueError(
+                f"authenticated preservation manifest source row {field} does not match receipt"
+            )
+
+
+def _validate_authenticated_source_rows(
+    synthesis_path: Path, rows: Sequence[Mapping[str, Any]]
+) -> None:
+    """Cross-check direct synthesis rows against the independent digest crosswalk."""
+
+    source_payload = _load_json(synthesis_path)
+    source_rows = source_payload.get("decision_table")
+    if not isinstance(source_rows, list) or not all(
+        isinstance(row, Mapping) for row in source_rows
+    ):
+        raise ValueError("authenticated synthesis decision_table must contain source row objects")
+    source_crosswalk = [
+        {
+            "test_id": row.get("test_id"),
+            "canonical_row_sha256": _row_digest(row),
+        }
+        for row in source_rows
+    ]
+    try:
+        _validate_row_crosswalk(source_crosswalk, rows)
+    except ValueError as exc:
+        raise ValueError("authenticated synthesis source rows do not match validated rows") from exc
+
+
+def _validate_authenticated_hydration(
+    receipt: Mapping[str, Any],
+    *,
+    recovery_manifest: Mapping[str, Any],
+    synthesis_sha256: str,
+    synthesis_path: Path,
+    rows: Sequence[Mapping[str, Any]],
+) -> None:
+    """Bind authenticated artifact identity, member bytes, manifest, and source rows."""
+
+    _, hydration, expected, member_sha256 = _validated_authenticated_identity(
+        receipt,
+        recovery_manifest=recovery_manifest,
+        synthesis_sha256=synthesis_sha256,
+    )
+    source_bytes, member_path = _validated_authenticated_member(
+        hydration,
+        member_sha256=member_sha256,
+        synthesis_sha256=synthesis_sha256,
+        synthesis_path=synthesis_path,
+    )
+    _validate_authenticated_manifest(
+        hydration,
+        expected_manifest_digest=expected["manifest_digest"],
+        member_path=member_path,
+        member_sha256=member_sha256,
+        source_bytes=source_bytes,
+        synthesis_sha256=synthesis_sha256,
+    )
+    _validate_authenticated_source_rows(synthesis_path, rows)
+
+
 def _validate_source_receipt(
     receipt: Mapping[str, Any],
     *,
     synthesis_sha256: str,
     synthesis_path: Path,
     rows: Sequence[Mapping[str, Any]],
+    recovery_manifest: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Validate independent source custody before emitting source-complete wording."""
+    """Validate fixture or authenticated source custody without trusting declarations alone."""
 
     if receipt.get("schema_version") != SOURCE_RECEIPT_SCHEMA:
         raise ValueError("source receipt schema_version is unsupported")
@@ -140,20 +387,32 @@ def _validate_source_receipt(
     if status not in SOURCE_PROOF_STATUSES:
         raise ValueError(
             "authenticated immutable source hydration is unavailable; "
-            "source-complete packet generation is refused"
+            "authenticated-source packet generation is refused"
         )
-    if status == "authenticated_immutable_source_hydrated" and not isinstance(
-        receipt.get("immutable_hydration_receipt"), Mapping
-    ):
-        raise ValueError("authenticated source receipt is missing its immutable hydration receipt")
     if receipt.get("independent_of_packet") is not True:
         raise ValueError("source receipt must declare independence from the packet")
-    if not isinstance(receipt.get("source_artifact"), Mapping):
-        raise ValueError("source receipt must identify the independently ingested source artifact")
     crosswalk = _load_receipt_source_crosswalk(receipt, synthesis_path)
     if receipt.get("synthesis_sha256") != synthesis_sha256:
         raise ValueError("source receipt synthesis digest does not match supplied synthesis")
     _validate_row_crosswalk(crosswalk, rows)
+    source_artifact = _require_nonempty_mapping(receipt.get("source_artifact"), "source_artifact")
+    if status == "fixture_verified":
+        if source_artifact.get("kind") != "deterministic_fixture_crosswalk":
+            raise ValueError(
+                "fixture source receipt must identify a deterministic fixture crosswalk"
+            )
+        if source_artifact.get("path") != receipt.get("source_path"):
+            raise ValueError("fixture source receipt artifact path must match its crosswalk path")
+        if receipt.get("immutable_hydration_receipt") is not None:
+            raise ValueError("fixture source receipt must not declare immutable hydration")
+        return dict(receipt)
+    _validate_authenticated_hydration(
+        receipt,
+        recovery_manifest=recovery_manifest,
+        synthesis_sha256=synthesis_sha256,
+        synthesis_path=synthesis_path,
+        rows=rows,
+    )
     return dict(receipt)
 
 
@@ -192,10 +451,34 @@ def _git(*args: str) -> str:
     return completed.stdout.strip()
 
 
-def _producer_base_commit() -> str:
-    """Return the current branch's stable merge base with ``origin/main``."""
+def _validate_producer_commit(commit: str) -> str:
+    """Require a full commit whose builder blob exactly matches the executing builder."""
 
-    return _git("merge-base", "HEAD", "origin/main")
+    if _COMMIT_RE.fullmatch(commit) is None:
+        raise ValueError("producer commit must be one full 40-character commit SHA")
+    resolved = _git("rev-parse", "--verify", f"{commit}^{{commit}}")
+    if resolved != commit:
+        raise ValueError("producer commit did not resolve to the exact requested commit")
+    try:
+        committed_blob = _git("rev-parse", f"{commit}:{PRODUCER_SCRIPT_PATH}")
+    except subprocess.CalledProcessError as exc:
+        raise ValueError(f"producer commit does not contain {PRODUCER_SCRIPT_PATH}") from exc
+    current_blob = _git("hash-object", str(_REPO_ROOT / PRODUCER_SCRIPT_PATH))
+    if committed_blob != current_blob:
+        raise ValueError("producer commit does not contain the executing builder implementation")
+    return resolved
+
+
+def _producer_command(commit: str) -> str:
+    """Return a checkout-pinned, non-self-referential reproduction command."""
+
+    return (
+        f"git worktree add --detach <fresh-worktree> {commit} && "
+        "cd <fresh-worktree> && "
+        "scripts/dev/run_worktree_shared_venv.sh -- python "
+        f"{PRODUCER_SCRIPT_PATH} --synthesis <verified-synthesis.json> "
+        f"--producer-commit {commit}"
+    )
 
 
 def _read_preregistration(path: Path) -> dict[str, Any]:
@@ -562,8 +845,9 @@ def build_packet(
             synthesis_sha256=synthesis_sha256,
             synthesis_path=synthesis_path,
             rows=rows,
+            recovery_manifest=recovery_manifest,
         )
-    source_complete = (
+    authenticated_source_bound = (
         source_receipt is not None
         and source_receipt.get("source_ingestion_status")
         == "authenticated_immutable_source_hydrated"
@@ -610,10 +894,11 @@ def build_packet(
             "tier": "smoke_diagnostic",
             "admission_state": "diagnostic_only",
             "rationale": (
-                "All registered statistics are source-complete and custody-bound, but this "
-                "packet intentionally preserves the existing non-admitted claim boundary."
-                if source_complete
-                else "Independent source-ingestion custody is pending; this packet is diagnostic only."
+                "All registered statistics are bound to an authenticated immutable-member "
+                "receipt, but this packet preserves the non-admitted diagnostic boundary."
+                if authenticated_source_bound
+                else "Authenticated immutable-member custody is pending; this source-bound "
+                "successor remains diagnostic only."
             ),
         },
         "sources": [dict(recovery_source)],
@@ -640,9 +925,9 @@ def build_packet(
                 "The immutable synthesis contains exactly 24 registered contrast rows.",
                 (
                     (
-                        "The source-complete classification accounting is "
-                        if source_complete
-                        else "The diagnostic/pending classification accounting is "
+                        "The authenticated-source classification accounting is "
+                        if authenticated_source_bound
+                        else "The source-bound diagnostic classification accounting is "
                     )
                     + f"{counts['no_material_shift']} no_material_shift, "
                     f"{counts['inconclusive']} inconclusive, and "
@@ -658,10 +943,7 @@ def build_packet(
         "producer": {
             "actor_id": "codex_issue_7980_packet_builder",
             "commit": producer_commit,
-            "command": (
-                "uv run python scripts/analysis/build_issue_7980_speed_tier_packet.py "
-                "--synthesis <verified-wandb-v0-synthesis.json>"
-            ),
+            "command": _producer_command(producer_commit),
             "status": "draft",
         },
         "findings": [
@@ -678,7 +960,7 @@ def build_packet(
         ],
         "fail_closed_changes": [
             "Missing, duplicate, non-native, digest-mismatched, or activation-inconsistent source rows stop packet generation.",
-            "Source-complete wording is emitted only with an independently validated source receipt; otherwise status remains diagnostic/pending.",
+            "Authenticated-source wording requires an exact artifact/version/member receipt, preservation-manifest digest, compressed-member digest, source digest, and row crosswalk; otherwise status remains diagnostic/pending.",
             "All activated source classifications remain non-admitted inconclusive decisions.",
             "All non-activated source classifications remain invalid decisions.",
             "Fallback and degraded execution remain forbidden and absent.",
@@ -756,7 +1038,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     producer_commit = args.producer_commit
     if producer_commit is None and args.check and output.is_file():
         producer_commit = _load_json(output)["producer"]["commit"]
-    producer_commit = producer_commit or _producer_base_commit()
+    if producer_commit is None:
+        raise ValueError(
+            "--producer-commit is required when writing; commit the exact builder first so "
+            "the generated packet does not self-reference its own output commit"
+        )
+    producer_commit = _validate_producer_commit(producer_commit)
     packet = build_packet(
         synthesis_path=args.synthesis,
         recovery_manifest_path=args.recovery_manifest,

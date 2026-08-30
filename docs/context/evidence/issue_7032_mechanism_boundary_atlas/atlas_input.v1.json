@@ -401,7 +401,7 @@
           "kind": "path",
           "label": "held-out step-three run plan",
           "path": "docs/context/evidence/issue_3275_same_planner_held_out/step3_run_plan.json",
-          "sha256": "d4fb43f5986c4ad1c142251a9bd1380a0d3173954737885aa3f2740ba22841e7"
+          "sha256": "8df2f62d2f318bfe5460157c9f38389ac3d319d004611f75d049ad27b680518e"
         },
         {
           "kind": "path",
@@ -471,13 +471,13 @@
         {
           "path": "docs/context/evidence/issue_3275_same_planner_held_out/SHA256SUMS",
           "role": "same-planner held-out preflight checksum sidecar",
-          "sha256": "5103636d19891520ce3d50620914acfa78f892316fc488c809fb38d7b90f1b89",
+          "sha256": "cbf101cd379edacb20b18985fe8595339360945def0e2c3605390d3ecc64190c",
           "status": "available"
         },
         {
           "path": "docs/context/evidence/issue_3275_same_planner_held_out/step3_decision_packet.json",
           "role": "step-3 decision packet with missing independent outcomes",
-          "sha256": "a703162b4214d29ac202063aa7309d65353b6d37883412ab226d88a88537f0d0",
+          "sha256": "c3123ac18b61212326f82828b159522bd20140cc0400fa766ae16ff507791651",
           "status": "available"
         },
         {

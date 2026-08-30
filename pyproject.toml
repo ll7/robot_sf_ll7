@@ -659,6 +659,8 @@ show_contexts = false
 addopts = [
     "--import-mode=importlib",
     "--durations=10",
+    "--strict-markers",
+    "--strict-config",
 ]
 testpaths = ["tests", "fast-pysf/tests"]
 filterwarnings = [

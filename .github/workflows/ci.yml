@@ -556,6 +556,7 @@ jobs:
       - name: Fail-closed guard when checkout fails
         if: steps.checkout_attempt_1.outcome == 'failure' && steps.checkout_attempt_2.outcome == 'failure' && steps.checkout_attempt_3.outcome == 'failure'
         run: |
+          # shellcheck disable=SC2016
           {
             echo "## Checkout failed: examples-smoke did not run"
             echo ""

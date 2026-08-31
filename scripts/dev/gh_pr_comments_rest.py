@@ -48,10 +48,12 @@ from scripts.dev._gh_rest import as_str as _as_str
 from scripts.dev._gh_rest import gh_api_comments_get as _gh_api
 from scripts.dev._gh_rest import parse_json as _parse_json
 from scripts.dev._gh_rest import subprocess  # noqa: F401
+from scripts.dev.github_transport_policy import get_transport_contract
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_MAX_COMMENT_PAGES = 10
 COMMENTS_PAGE_SIZE = 100
+TRANSPORT_CONTRACT = get_transport_contract("gh_pr_comments_rest.py")
 
 # Normalized comment shape, kept stable for machine consumers. Mirrors the
 # comment fields exposed by scripts/dev/gh_issue_rest.py so PR and issue threads

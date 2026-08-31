@@ -17,9 +17,14 @@ from robot_sf.nav.motion_planning_adapter import (
     visualize_grid,
 )
 from robot_sf.nav.predictive_types import (
+    MultimodalPrediction,
+    PedestrianForecast,
     ProbabilisticPrediction,
     ProbabilisticPredictor,
     TrajectoryDistribution,
+    TrajectoryMode,
+    as_multimodal_prediction,
+    build_normalized_modes,
 )
 from robot_sf.nav.proxemic_costmap import (
     ProxemicCostmapConfig,
@@ -44,12 +49,17 @@ __all__ = [
     "ENVELOPE_SCHEMA_VERSION",
     "ConformalInflationPolicy",
     "MotionPlanningGridConfig",
+    "MultimodalPrediction",
+    "PedestrianForecast",
     "PedestrianUncertaintyEnvelope",
     "ProbabilisticPrediction",
     "ProbabilisticPredictor",
     "ProxemicCostmapConfig",
     "SpatialInflationPolicy",
     "TrajectoryDistribution",
+    "TrajectoryMode",
+    "as_multimodal_prediction",
+    "build_normalized_modes",
     "build_proxemic_costmap_config",
     "config_hash",
     "count_obstacle_cells",

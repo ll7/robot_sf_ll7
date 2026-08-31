@@ -699,8 +699,10 @@ def test_rights_artifact_and_sanctioned_workflow_require_exact_run_and_digest(
         "123456",
         "--source-sha",
         source_sha,
+        check=False,
     )
-    assert accepted.returncode == 0, accepted.stderr
+    assert accepted.returncode == 1
+    assert "not sanctioned" in accepted.stderr
     run_payload = json.loads(run_metadata.read_text(encoding="utf-8"))
     run_payload["event"] = "workflow_dispatch"
     run_metadata.write_text(json.dumps(run_payload), encoding="utf-8")
@@ -728,7 +730,7 @@ def test_rights_artifact_and_sanctioned_workflow_require_exact_run_and_digest(
     )
     assert rejected.returncode == 1
     assert "not sanctioned" in rejected.stderr
-    run_payload["event"] = "workflow_call"
+    run_payload["event"] = "workflow_dispatch"
     run_metadata.write_text(json.dumps(run_payload), encoding="utf-8")
     run_payload.pop("repository")
     run_metadata.write_text(json.dumps(run_payload), encoding="utf-8")

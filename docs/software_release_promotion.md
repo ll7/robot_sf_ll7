@@ -42,14 +42,14 @@ GitHub artifact produced by the sanctioned #8149 workflow:
 `rights_admission_artifact_name`, and `rights_admission_artifact_digest`.
 The producer run must be a successful completed
 `.github/workflows/software-candidate.yml` run at the same source SHA, using
-the sanctioned `workflow_call` or `workflow_dispatch` event. Every consumer
+the sanctioned direct `workflow_dispatch` event. Every consumer
 downloads that artifact by ID, checks its API ID/name/digest/run/head SHA,
 repository, workflow identity, event, and run attempt, and verifies the
 workflow run conclusion before reading the receipt. The current `main` copy
 is reusable-only and has no in-repository caller; #8149 must provide the
-reviewed sanitized producer (either event is accepted only after the exact
-producer contract is present) before this promotion can be dispatched with
-real inputs.
+reviewed sanitized direct-dispatch producer before this promotion can be
+dispatched with real inputs. A reusable `workflow_call` producer is not
+accepted without a separately bound, reviewed caller identity.
 
 The artifact must contain only `rights-admission.json` conforming to
 `robot_sf.software_rights_admission.v1`. Its closed receipt binds the exact

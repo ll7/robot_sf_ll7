@@ -52,7 +52,11 @@ RIGHTS_POLICY_PATH = "scripts/validation/software_release_rights_policy.v1.json"
 SANITIZED_CANDIDATE_SCHEMA = "robot_sf.software_sanitized_candidate.v1"
 RIGHTS_GATE_ID = "strict-distribution-rights"
 RIGHTS_WORKFLOW_PATH = ".github/workflows/software-candidate.yml"
-RIGHTS_WORKFLOW_EVENTS = frozenset({"workflow_call", "workflow_dispatch"})
+# The current producer contract is a direct, reviewed manual dispatch.  A
+# reusable caller would need its own explicit identity binding before it could
+# be admitted; accepting ``workflow_call`` based only on the workflow path
+# would not identify that caller.
+RIGHTS_WORKFLOW_EVENTS = frozenset({"workflow_dispatch"})
 RIGHTS_GATE_COMMAND = (
     "python scripts/tools/check_distribution_licenses.py $DIST_DIR "
     "--strict-asset-rights --repo-root $BUILD_SOURCE --source-tree-ref $SOURCE_SHA"

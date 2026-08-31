@@ -310,9 +310,7 @@ def test_non_worktree_failure_stays_fail_closed(tmp_path: Path) -> None:
         "GraphQL: Repository quota metadata is unavailable.",
     ),
 )
-def test_non_quota_graphql_failure_stays_fail_closed(
-    tmp_path: Path, diagnostic: str
-) -> None:
+def test_non_quota_graphql_failure_stays_fail_closed(tmp_path: Path, diagnostic: str) -> None:
     """Generic GraphQL and incidental quota text are not fallback eligible."""
     result = _run_wrapper(
         tmp_path,

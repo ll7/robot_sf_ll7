@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import shutil
 import subprocess
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -692,3 +694,51 @@ def test_doctor_and_acceptance_resolve_the_same_identity_bound_campaign(
     assert axis_blockers == []
     assert len(scenario_ids) == 48
     assert seeds == tuple(range(111, 141))
+
+
+def test_acceptance_resolves_axes_and_planners_from_resolved_manifest(
+    tmp_path: Path,
+) -> None:
+    """Exercise the acceptance fallback that loads the verified campaign in-process."""
+    # These imports are normally initialized while pytest is collecting modules.  Reloading
+    # here keeps the release-facing import contract itself inside the measured test path.
+    importlib.reload(release_acceptance)
+    repo, template, source_commit = _release_template_repository(tmp_path)
+    output = repo / "output" / "acceptance" / "release_identity.resolved.json"
+    write_resolved_release_identity(
+        output_path=output,
+        **_identity_inputs(repo, template, source_commit),
+    )
+    manifest = load_release_manifest(output, repository_root=repo)
+
+    scenario_ids, seeds, axis_blockers = release_acceptance._resolve_expected_matrix_axes(
+        manifest,
+        None,
+        repo,
+    )
+    planner_candidates, planner_blockers = release_acceptance._full_release_planner_candidates(
+        manifest,
+        None,
+        repo,
+    )
+
+    assert axis_blockers == []
+    assert planner_blockers == []
+    assert len(scenario_ids) == 48
+    assert seeds == tuple(range(111, 141))
+    assert len(release_acceptance._full_release_planner_items(planner_candidates)) == 14
+
+    legacy_manifest = replace(manifest, resolved_identity_path=None)
+    legacy_scenario_ids, legacy_seeds, legacy_axis_blockers = (
+        release_acceptance._resolve_expected_matrix_axes(legacy_manifest, None, repo)
+    )
+    legacy_planners, legacy_planner_blockers = release_acceptance._full_release_planner_candidates(
+        legacy_manifest,
+        None,
+        repo,
+    )
+    assert legacy_axis_blockers == []
+    assert legacy_planner_blockers == []
+    assert legacy_scenario_ids == scenario_ids
+    assert legacy_seeds == seeds
+    assert len(release_acceptance._full_release_planner_items(legacy_planners)) == 14

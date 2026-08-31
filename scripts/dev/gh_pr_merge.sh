@@ -71,6 +71,12 @@ if ! [[ "$expected_head_sha" =~ ^[0-9a-fA-F]{40}$ ]]; then
   exit 2
 fi
 
+if ! python3 "$SCRIPT_DIR/github_transport_policy.py" check \
+  --helper "$SCRIPT_DIR/gh_pr_merge.sh" --root "$SCRIPT_DIR/../.." --json >/dev/null; then
+  printf 'ERROR: gh_pr_merge.sh is not admitted by the GitHub transport policy.\n' >&2
+  exit 2
+fi
+
 # First try the native gh path (handles branch deletion, queue interplay, etc.).
 _gh_pr_merge_err="$(mktemp "${TMPDIR:-/tmp}/gh-pr-merge.XXXXXX")"
 trap 'rm -f "$_gh_pr_merge_err"' EXIT
@@ -80,8 +86,9 @@ fi
 merge_error="$(cat "$_gh_pr_merge_err")"
 rm -f "$_gh_pr_merge_err"
 
-# Only the worktree-conflict signature triggers the REST fallback.
-if [[ "$merge_error" != *"already used by worktree"* ]]; then
+# Only a policy-approved worktree-conflict signature triggers the REST fallback.
+if ! python3 "$SCRIPT_DIR/github_transport_policy.py" classify \
+  --helper "$SCRIPT_DIR/gh_pr_merge.sh" --error "$merge_error" >/dev/null 2>&1; then
   printf 'ERROR: gh pr merge failed:\n%s\n' "$merge_error" >&2
   exit 1
 fi

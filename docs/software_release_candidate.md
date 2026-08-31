@@ -2,33 +2,20 @@
 
 `.github/workflows/software-candidate.yml` is the credential-free producer for a Robot SF
 software-package candidate. Its canonical invocation is a direct `workflow_dispatch` at the
-reviewed source head; it also remains callable by a pinned reusable caller. One job builds one
-wheel and one source distribution once, validates those exact files, creates deterministic
-provenance, and uploads the checked bundle once.
+reviewed source head. One job builds one wheel and one source distribution once, validates those
+exact files, creates deterministic provenance, and uploads the checked bundle once.
 
 This slice does **not** authorize or perform a package-index upload, GitHub Release, Zenodo
 deposit, DOI reservation, tag, environment approval, or trusted-publisher/OIDC exchange. It does
 not admit benchmark, model, dataset, or scientific evidence. Parent publication issue #8023
 remains blocked until its independent metadata, rights, policy, and author gates are satisfied.
 
-## Calling the producer
+## Dispatching the producer
 
-An authorized caller pins the reusable workflow to an exact reviewed commit:
-
-```yaml
-jobs:
-  software-candidate:
-    permissions:
-      contents: read
-    uses: ll7/robot_sf_ll7/.github/workflows/software-candidate.yml@<exact-commit-sha>
-```
-
-The call requests no secrets. Its outputs are the candidate identity (`artifact-id`,
-`artifact-digest`, `artifact-name`, `source-sha`, `candidate-source-sha`, and `candidate-tree-sha`)
-plus the separately uploaded rights-receipt identity (`rights-artifact-id`,
-`rights-artifact-digest`, and `rights-artifact-name`). A later consumer must bind every returned
-identity before downloading or promoting either artifact; a matching name alone is not identity
-evidence. Direct dispatch uses the deterministic name
+Dispatch the workflow at the reviewed source head. It requests no secrets and emits two separate
+artifacts. A later consumer must bind the candidate and rights-receipt artifact IDs, names, and
+digests to the successful run metadata before downloading or promoting either artifact; a matching
+name alone is not identity evidence. Direct dispatch uses the deterministic name
 `robot-sf-software-rights-admission-<source-sha>-<run-id>-<attempt>` for the receipt artifact.
 
 ## Candidate contents

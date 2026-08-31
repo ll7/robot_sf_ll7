@@ -2,35 +2,6 @@ name: Build Immutable Software Candidate
 
 on:
   workflow_dispatch:
-  workflow_call:
-    outputs:
-      artifact-id:
-        description: Exact GitHub artifact identity for the checked candidate bundle
-        value: ${{ jobs.build-candidate.outputs.artifact-id }}
-      artifact-digest:
-        description: GitHub SHA-256 digest for the uploaded candidate artifact
-        value: ${{ jobs.build-candidate.outputs.artifact-digest }}
-      artifact-name:
-        description: Deterministic name of the checked candidate artifact
-        value: ${{ jobs.build-candidate.outputs.artifact-name }}
-      source-sha:
-        description: Exact source commit bound by the candidate manifest
-        value: ${{ jobs.build-candidate.outputs.source-sha }}
-      candidate-source-sha:
-        description: Exact rights-scoped source candidate commit used for the build
-        value: ${{ jobs.build-candidate.outputs.candidate-source-sha }}
-      candidate-tree-sha:
-        description: Exact rights-scoped source candidate tree used for the build
-        value: ${{ jobs.build-candidate.outputs.candidate-tree-sha }}
-      rights-artifact-id:
-        description: Exact GitHub artifact identity for the separate rights receipt
-        value: ${{ jobs.build-candidate.outputs.rights-artifact-id }}
-      rights-artifact-digest:
-        description: GitHub SHA-256 digest for the separate rights receipt artifact
-        value: ${{ jobs.build-candidate.outputs.rights-artifact-digest }}
-      rights-artifact-name:
-        description: Deterministic name of the separate rights receipt artifact
-        value: ${{ jobs.build-candidate.outputs.rights-artifact-name }}
 
 permissions:
   contents: read
@@ -47,16 +18,6 @@ jobs:
     name: Build and verify once
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    outputs:
-      artifact-id: ${{ steps.upload.outputs.artifact-id }}
-      artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
-      artifact-name: ${{ steps.identity.outputs.artifact-name }}
-      source-sha: ${{ steps.identity.outputs.source-sha }}
-      candidate-source-sha: ${{ steps.materialize.outputs.candidate-source-sha }}
-      candidate-tree-sha: ${{ steps.materialize.outputs.candidate-tree-sha }}
-      rights-artifact-id: ${{ steps.upload-rights.outputs.artifact-id }}
-      rights-artifact-digest: ${{ steps.upload-rights.outputs.artifact-digest }}
-      rights-artifact-name: ${{ steps.identity.outputs.rights-artifact-name }}
     env:
       ARTIFACT_NAME: >-
         robot-sf-software-candidate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}

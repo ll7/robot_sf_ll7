@@ -38,10 +38,10 @@ def _steps(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return jobs["build-candidate"]["steps"]
 
 
-def test_workflow_is_dispatchable_reusable_single_job_and_least_privilege() -> None:
+def test_workflow_is_directly_dispatchable_single_job_and_least_privilege() -> None:
     text, workflow = _workflow()
 
-    assert set(_trigger(workflow)) == {"workflow_call", "workflow_dispatch"}
+    assert set(_trigger(workflow)) == {"workflow_dispatch"}
     assert workflow["permissions"] == {"contents": "read"}
     assert len(workflow["jobs"]) == 1
     job = workflow["jobs"]["build-candidate"]
@@ -254,24 +254,8 @@ def test_workflow_uploads_checked_bundle_once_and_exposes_artifact_identity() ->
     assert rights_upload["with"]["compression-level"] == 0
     assert rights_upload["with"]["overwrite"] is False
 
-    outputs = workflow["jobs"]["build-candidate"]["outputs"]
-    assert "steps.upload.outputs.artifact-id" in outputs["artifact-id"]
-    assert "steps.upload.outputs.artifact-digest" in outputs["artifact-digest"]
-    call_outputs = _trigger(workflow)["workflow_call"]["outputs"]
-    assert set(call_outputs) == {
-        "artifact-id",
-        "artifact-digest",
-        "artifact-name",
-        "source-sha",
-        "candidate-source-sha",
-        "candidate-tree-sha",
-        "rights-artifact-id",
-        "rights-artifact-digest",
-        "rights-artifact-name",
-    }
-    outputs = workflow["jobs"]["build-candidate"]["outputs"]
-    assert "steps.upload-rights.outputs.artifact-id" in outputs["rights-artifact-id"]
-    assert "steps.upload-rights.outputs.artifact-digest" in outputs["rights-artifact-digest"]
+    assert "workflow_call" not in _trigger(workflow)
+    assert "outputs" not in workflow["jobs"]["build-candidate"]
 
 
 def test_workflow_pins_actions_and_contains_no_publication_or_promotion_surface() -> None:

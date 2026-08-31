@@ -58,6 +58,17 @@ def _identity() -> dict[str, object]:
         "sbom_sha256": "3" * 64,
         "source_sha": "b" * 40,
         "workflow_run_id": "123456",
+        "workflow_run_attempt": 1,
+        "materialization": {
+            "candidate_commit_sha": "c" * 40,
+            "candidate_tree_sha": "d" * 40,
+            "policy_path": "scripts/validation/software_candidate_policy.v1.json",
+            "policy_sha256": "e" * 64,
+            "source_inventory_path": "scripts/validation/asset_rights_inventory.v1.yaml",
+            "source_inventory_sha256": "f" * 64,
+            "candidate_inventory_path": "scripts/validation/software_candidate_asset_rights.v1.json",
+            "candidate_metadata_path": "SOFTWARE_CANDIDATE.json",
+        },
     }
 
 
@@ -70,7 +81,11 @@ def _report(identity: dict[str, object]) -> dict[str, object]:
             "source_sha": identity["source_sha"],
             "status": "bound",
             "sbom": {"sha256": identity["sbom_sha256"]},
-            "workflow": {"run_id": identity["workflow_run_id"]},
+            "workflow": {
+                "run_id": identity["workflow_run_id"],
+                "run_attempt": identity["workflow_run_attempt"],
+            },
+            "materialization": identity["materialization"],
         },
         "policy": {
             "path": SUPPORTED_DEPENDENCY_POLICY_PATH,
@@ -114,6 +129,8 @@ def test_supported_dependency_report_binds_exact_candidate_and_input_digests(
         identity=identity,
         source_sha=identity["source_sha"],
         tree_sha256="e" * 64,
+        workflow_run_attempt=identity["workflow_run_attempt"],
+        materialization=identity["materialization"],
     )
 
     assert binding["candidate_manifest_sha256"] == identity["manifest_sha256"]
@@ -154,6 +171,8 @@ def test_supported_dependency_report_rejects_unbound_or_unresolved_variants(
             identity=identity,
             source_sha=identity["source_sha"],
             tree_sha256="e" * 64,
+            workflow_run_attempt=identity["workflow_run_attempt"],
+            materialization=identity["materialization"],
         )
 
 
@@ -168,6 +187,44 @@ def test_supported_dependency_report_rejects_wrong_filename(tmp_path: Path) -> N
             identity=identity,
             source_sha=identity["source_sha"],
             tree_sha256="e" * 64,
+            workflow_run_attempt=identity["workflow_run_attempt"],
+            materialization=identity["materialization"],
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [("workflow", "workflow identity"), ("materialization", "materialization identity")],
+)
+def test_supported_dependency_report_rejects_candidate_provenance_drift(
+    tmp_path: Path,
+    mutation: str,
+    message: str,
+) -> None:
+    """The transported report must retain the candidate attempt and materialization envelope."""
+    identity = _identity()
+    payload = _report(identity)
+    binding = payload["candidate_binding"]
+    assert isinstance(binding, dict)
+    if mutation == "workflow":
+        workflow = binding["workflow"]
+        assert isinstance(workflow, dict)
+        workflow["run_attempt"] = 2
+    else:
+        materialization = binding["materialization"]
+        assert isinstance(materialization, dict)
+        binding["materialization"] = {**materialization, "candidate_commit_sha": "a" * 40}
+    report_path = tmp_path / SUPPORTED_DEPENDENCY_REPORT_NAME
+    report_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    with pytest.raises(CandidateError, match=message):
+        _validate_supported_dependency_report(
+            report_path,
+            identity=identity,
+            source_sha=identity["source_sha"],
+            tree_sha256="e" * 64,
+            workflow_run_attempt=identity["workflow_run_attempt"],
+            materialization=identity["materialization"],
         )
 
 
@@ -185,4 +242,6 @@ def test_v006_candidate_rejects_core_only_dependency_report(tmp_path: Path) -> N
             identity=identity,
             source_sha=identity["source_sha"],
             tree_sha256="e" * 64,
+            workflow_run_attempt=identity["workflow_run_attempt"],
+            materialization=identity["materialization"],
         )

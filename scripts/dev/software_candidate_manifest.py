@@ -2951,12 +2951,14 @@ def _report_input_digest(report: dict[str, Any], path: str, *, label: str) -> st
     return digest
 
 
-def _validate_supported_dependency_report(  # noqa: C901, PLR0912 - closed dependency gate
+def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - closed dependency gate
     report_path: Path,
     *,
     identity: dict[str, Any],
     source_sha: str,
     tree_sha256: str,
+    workflow_run_attempt: int,
+    materialization: dict[str, Any] | None,
 ) -> dict[str, Any]:
     """Require a passed, candidate-bound supported-dependency inventory report."""
     if report_path.is_symlink() or not report_path.is_file():
@@ -3044,8 +3046,15 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912 - closed depen
     if binding.get("package") != identity["package"]:
         raise CandidateError("supported dependency report package identity differs from candidate")
     workflow = binding.get("workflow")
-    if not isinstance(workflow, dict) or workflow.get("run_id") != identity["workflow_run_id"]:
+    if workflow != {
+        "run_id": identity["workflow_run_id"],
+        "run_attempt": workflow_run_attempt,
+    }:
         raise CandidateError("supported dependency report workflow identity differs from candidate")
+    if binding.get("materialization") != materialization:
+        raise CandidateError(
+            "supported dependency report materialization identity differs from candidate"
+        )
     report_members = binding.get("members")
     if not isinstance(report_members, list):
         raise CandidateError("supported dependency report has no candidate member binding")
@@ -3302,6 +3311,8 @@ def _admit_rights(args: argparse.Namespace) -> None:  # noqa: C901, PLR0915 - cl
         identity=identity,
         source_sha=args.source_sha,
         tree_sha256=sanitized["tree_sha256"],
+        workflow_run_attempt=manifest["workflow"]["run_attempt"],
+        materialization=manifest.get("materialization"),
     )
     sanitized_path = Path(os.path.abspath(args.sanitized_manifest))
     _require_external(sanitized_path, repo_root=repo_root, label="sanitized candidate manifest")

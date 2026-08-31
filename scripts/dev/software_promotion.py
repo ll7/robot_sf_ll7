@@ -833,6 +833,8 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912 - closed repor
         binding.get(key) != value for key, value in expected_binding.items()
     ):
         raise PromotionError("supported dependency report candidate binding differs from candidate")
+    if binding.get("profile_ids") != ["all"]:
+        raise PromotionError("supported dependency report candidate profile binding is not all")
     if binding.get("manifest_sha256") != identity["manifest_sha256"]:
         raise PromotionError("supported dependency report manifest binding differs from candidate")
     members = binding.get("members")

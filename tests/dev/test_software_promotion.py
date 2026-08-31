@@ -157,6 +157,7 @@ def _candidate(tmp_path: Path) -> tuple[Path, str, Path]:
                     "sbom": {"sha256": manifest["members"][2]["sha256"]},
                     "source_sha": source_sha,
                     "status": "bound",
+                    "profile_ids": ["all"],
                     "workflow": {"run_attempt": 1, "run_id": "123456"},
                 },
                 "failures": [],

@@ -54,7 +54,10 @@ accepted without a separately bound, reviewed caller identity.
 The artifact must contain exactly `rights-admission.json` and
 `dependency-license-inventory.json`. The receipt conforms to
 `robot_sf.software_rights_admission.v1` and binds the exact
-candidate artifact and manifest, declares
+candidate artifact and manifest, including the optional rights-scoped
+materialization identity when present. The verifier requires that identity
+to use the producer's closed eight-field contract and requires the transported
+dependency report to repeat the same values. It declares
 `robot_sf.software_sanitized_candidate.v1`, names
 `scripts/validation/software_release_rights_policy.v1.json` and its SHA-256,
 and records a zero-finding passed

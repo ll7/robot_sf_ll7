@@ -17,7 +17,7 @@ import re
 import shutil
 import sys
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 SCHEMA_VERSION = "robot_sf.software_promotion.receipt.v1"
@@ -49,6 +49,27 @@ RIGHTS_ARTIFACT_NAME_PATTERN = re.compile(
     r"robot-sf-software-rights-admission-[0-9a-f]{40}-[1-9][0-9]*-[1-9][0-9]*\Z"
 )
 CANDIDATE_MEMBER_KINDS = ("wheel", "sdist", "sbom", "provenance")
+CANDIDATE_MATERIALIZATION_FIELDS = frozenset(
+    {
+        "candidate_commit_sha",
+        "candidate_tree_sha",
+        "policy_path",
+        "policy_sha256",
+        "source_inventory_path",
+        "source_inventory_sha256",
+        "candidate_inventory_path",
+        "candidate_metadata_path",
+    }
+)
+CANDIDATE_MATERIALIZATION_PATH_FIELDS = frozenset(
+    {
+        "policy_path",
+        "source_inventory_path",
+        "candidate_inventory_path",
+        "candidate_metadata_path",
+    }
+)
+CANDIDATE_MATERIALIZATION_SHA_FIELDS = frozenset({"policy_sha256", "source_inventory_sha256"})
 PUBLISHED_MEMBER_KINDS = ("wheel", "sdist")
 MANIFEST_NAME = "candidate-manifest.json"
 PROVENANCE_NAME = "candidate-provenance.json"
@@ -292,16 +313,66 @@ def _validate_validation_roster(validation: Any) -> None:  # noqa: C901 - versio
             raise PromotionError(f"candidate validation command drifted for {identifier}")
 
 
+def _validate_candidate_materialization(value: Any) -> dict[str, Any]:
+    """Validate the optional rights-scoped source identity envelope."""
+
+    if not isinstance(value, dict) or set(value) != CANDIDATE_MATERIALIZATION_FIELDS:
+        raise PromotionError("candidate materialization identity is missing or unclassified")
+    for field in ("candidate_commit_sha", "candidate_tree_sha"):
+        identity = value.get(field)
+        if not isinstance(identity, str) or not SHA_PATTERN.fullmatch(identity):
+            raise PromotionError(f"candidate materialization {field} is invalid")
+    for field in CANDIDATE_MATERIALIZATION_SHA_FIELDS:
+        digest = value.get(field)
+        if not isinstance(digest, str) or not SHA256_PATTERN.fullmatch(digest):
+            raise PromotionError(f"candidate materialization {field} is invalid")
+
+    paths: list[str] = []
+    for field in CANDIDATE_MATERIALIZATION_PATH_FIELDS:
+        path = value.get(field)
+        if (
+            not isinstance(path, str)
+            or not path
+            or path.startswith("/")
+            or "\\" in path
+            or "\x00" in path
+            or PurePosixPath(path).as_posix() != path
+        ):
+            raise PromotionError(f"candidate materialization {field} is invalid")
+        parts = PurePosixPath(path).parts
+        if (
+            not parts
+            or parts[0] == ".git"
+            or any(part in {"", ".", ".."} for part in parts)
+            or any(ord(character) < 0x20 or ord(character) == 0x7F for character in path)
+        ):
+            raise PromotionError(f"candidate materialization {field} is invalid")
+        paths.append(path)
+    if len(paths) != len(set(paths)):
+        raise PromotionError("candidate materialization paths must be distinct")
+    return value
+
+
+def _validate_optional_candidate_materialization(
+    manifest: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Validate and return a manifest's optional materialization envelope."""
+
+    if "materialization" not in manifest:
+        return None
+    return _validate_candidate_materialization(manifest["materialization"])
+
+
 def _validate_manifest_header(
     manifest: Any,
     *,
     expected_source_sha: str,
     expected_workflow_run_id: str,
     expected_version: str,
-) -> tuple[str, str, dict[str, str]]:
+) -> tuple[str, str, dict[str, str], dict[str, Any] | None]:
     if not isinstance(manifest, dict):
         raise PromotionError("candidate manifest must be a JSON object")
-    expected_keys = {
+    required_keys = {
         "schema_version",
         "repository",
         "source_sha",
@@ -310,7 +381,7 @@ def _validate_manifest_header(
         "validation",
         "members",
     }
-    if set(manifest) != expected_keys:
+    if set(manifest) not in (required_keys, required_keys | {"materialization"}):
         raise PromotionError("candidate manifest has missing or unclassified fields")
     if manifest["schema_version"] != "robot_sf.software_candidate.v1":
         raise PromotionError("candidate manifest schema version is unsupported")
@@ -342,7 +413,7 @@ def _validate_manifest_header(
     if package != {"name": "robot_sf", "version": version}:
         raise PromotionError("candidate package identity does not match the dispatch identity")
     _validate_validation_roster(manifest["validation"])
-    return source_sha, run_id, package
+    return source_sha, run_id, package, _validate_optional_candidate_materialization(manifest)
 
 
 def _validate_candidate_members(
@@ -376,6 +447,7 @@ def _validate_candidate_provenance(
     source_sha: str,
     package: dict[str, str],
     members: list[dict[str, Any]],
+    materialization: dict[str, Any] | None,
 ) -> None:
     provenance = _load_json(bundle_dir / member["filename"], label="candidate provenance")
     if not isinstance(provenance, dict):
@@ -393,6 +465,21 @@ def _validate_candidate_provenance(
         raise PromotionError("candidate provenance does not identify the exact build source")
     if provenance.get("subjects") != members[:2]:
         raise PromotionError("candidate provenance subjects do not match candidate members")
+    _validate_provenance_materialization(provenance, materialization)
+
+
+def _validate_provenance_materialization(
+    provenance: dict[str, Any], materialization: dict[str, Any] | None
+) -> None:
+    """Require provenance to mirror the manifest's optional materialization envelope."""
+
+    if materialization is None:
+        if "materialization" in provenance:
+            raise PromotionError(
+                "candidate provenance materialization is not bound by the manifest"
+            )
+    elif provenance.get("materialization") != materialization:
+        raise PromotionError("candidate provenance materialization differs from the manifest")
 
 
 def _distribution_extras(path: Path) -> frozenset[str]:
@@ -438,13 +525,12 @@ def _load_candidate(
     manifest_path = bundle_dir / MANIFEST_NAME
     _require_real_file(manifest_path, label="candidate manifest")
     manifest = _load_json(manifest_path, label="candidate manifest")
-    source_sha, run_id, package = _validate_manifest_header(
+    source_sha, run_id, package, materialization = _validate_manifest_header(
         manifest,
         expected_source_sha=expected_source_sha,
         expected_workflow_run_id=expected_workflow_run_id,
         expected_version=expected_version,
     )
-
     validated_members = _validate_candidate_members(bundle_dir, entries, manifest["members"])
     provenance_member = validated_members[-1]
     _validate_candidate_provenance(
@@ -453,6 +539,7 @@ def _load_candidate(
         source_sha=source_sha,
         package=package,
         members=validated_members,
+        materialization=materialization,
     )
 
     identity = {
@@ -464,6 +551,7 @@ def _load_candidate(
         "manifest_sha256": _sha256(manifest_path),
         "provenance_sha256": provenance_member["sha256"],
         "sbom_sha256": validated_members[2]["sha256"],
+        "materialization": materialization,
         "distribution_extras": _distribution_extras(bundle_dir / validated_members[0]["filename"]),
     }
     return manifest, identity
@@ -758,7 +846,7 @@ def _dependency_input_digest(report: dict[str, Any], path: str, *, label: str) -
     return digest
 
 
-def _validate_supported_dependency_report(  # noqa: C901, PLR0912 - closed report contract
+def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - closed report contract
     path: Path,
     *,
     identity: dict[str, Any],
@@ -848,6 +936,7 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912 - closed repor
     sbom = binding.get("sbom")
     if not isinstance(sbom, dict) or sbom.get("sha256") != identity["sbom_sha256"]:
         raise PromotionError("supported dependency report SBOM binding differs from candidate")
+    _validate_dependency_materialization_binding(binding, identity)
 
     policy_sha256 = _dependency_input_digest(
         report, SUPPORTED_DEPENDENCY_POLICY_PATH, label="policy"
@@ -864,6 +953,23 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912 - closed repor
         raise PromotionError("supported dependency report bytes differ from receipt")
     if expected_gate["candidate_tree_sha256"] != tree_sha256:
         raise PromotionError("supported dependency report tree binding differs from receipt")
+
+
+def _validate_dependency_materialization_binding(
+    binding: dict[str, Any], identity: dict[str, Any]
+) -> None:
+    """Require a dependency report to mirror the candidate materialization envelope."""
+
+    materialization = identity["materialization"]
+    if materialization is None:
+        if binding.get("materialization") is not None:
+            raise PromotionError(
+                "supported dependency report materialization binding is not bound by candidate"
+            )
+    elif binding.get("materialization") != materialization:
+        raise PromotionError(
+            "supported dependency report materialization binding differs from candidate"
+        )
 
 
 def _validate_rights_admission(  # noqa: C901, PLR0912, PLR0915 - closed rights receipt gate

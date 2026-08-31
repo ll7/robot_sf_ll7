@@ -114,7 +114,7 @@ def _raw_sbom(path: Path) -> Path:
     return path
 
 
-def _candidate(tmp_path: Path) -> tuple[Path, str, Path]:
+def _candidate(tmp_path: Path, *, include_materialization: bool = False) -> tuple[Path, str, Path]:
     source, source_sha = _source_repo(tmp_path / "source")
     dist = _distributions(tmp_path / "dist")
     raw_sbom = _raw_sbom(tmp_path / "raw-sbom.json")
@@ -143,23 +143,52 @@ def _candidate(tmp_path: Path) -> tuple[Path, str, Path]:
     subprocess.run([sys.executable, str(CANDIDATE_HELPER), *args], check=True)
     manifest_path = bundle / "candidate-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if include_materialization:
+        materialization = {
+            "candidate_commit_sha": "1" * 40,
+            "candidate_tree_sha": "2" * 40,
+            "policy_path": "scripts/validation/software_candidate_policy.v1.json",
+            "policy_sha256": "3" * 64,
+            "source_inventory_path": "scripts/validation/asset_rights_inventory.v1.yaml",
+            "source_inventory_sha256": "4" * 64,
+            "candidate_inventory_path": "scripts/validation/software_candidate_asset_rights.v1.json",
+            "candidate_metadata_path": "SOFTWARE_CANDIDATE.json",
+        }
+        provenance_path = bundle / manifest["members"][3]["filename"]
+        provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+        provenance["materialization"] = materialization
+        provenance_path.write_text(
+            json.dumps(provenance, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        manifest["members"][3] = {
+            **manifest["members"][3],
+            "sha256": hashlib.sha256(provenance_path.read_bytes()).hexdigest(),
+            "size": provenance_path.stat().st_size,
+        }
+        manifest["materialization"] = materialization
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+    candidate_binding = {
+        "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+        "members": manifest["members"],
+        "package": manifest["package"],
+        "repository": "ll7/robot_sf_ll7",
+        "sbom": {"sha256": manifest["members"][2]["sha256"]},
+        "source_sha": source_sha,
+        "status": "bound",
+        "profile_ids": ["all"],
+        "workflow": {"run_attempt": 1, "run_id": "123456"},
+    }
+    if "materialization" in manifest:
+        candidate_binding["materialization"] = manifest["materialization"]
     rights_dir = bundle.parent / "rights-admission-artifact"
     rights_dir.mkdir()
     dependency_report = rights_dir / "dependency-license-inventory.json"
     dependency_report.write_text(
         json.dumps(
             {
-                "candidate_binding": {
-                    "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
-                    "members": manifest["members"],
-                    "package": manifest["package"],
-                    "repository": "ll7/robot_sf_ll7",
-                    "sbom": {"sha256": manifest["members"][2]["sha256"]},
-                    "source_sha": source_sha,
-                    "status": "bound",
-                    "profile_ids": ["all"],
-                    "workflow": {"run_attempt": 1, "run_id": "123456"},
-                },
+                "candidate_binding": candidate_binding,
                 "failures": [],
                 "policy": {
                     "path": "scripts/validation/dependency_license_policy.v1.json",
@@ -469,6 +498,24 @@ def test_candidate_validation_roster_allows_strict_rights_upgrade(tmp_path: Path
     )
     accepted = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle))
     assert accepted.returncode == 0, accepted.stderr
+
+
+def test_candidate_verification_accepts_materialization_envelope(tmp_path: Path) -> None:
+    _source, source_sha, bundle = _candidate(tmp_path, include_materialization=True)
+    accepted = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle))
+    assert accepted.returncode == 0, accepted.stderr
+
+
+def test_candidate_verification_rejects_unsafe_materialization_path(tmp_path: Path) -> None:
+    _source, source_sha, bundle = _candidate(tmp_path, include_materialization=True)
+    manifest_path = bundle / "candidate-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["materialization"]["candidate_metadata_path"] = "../SOFTWARE_CANDIDATE.json"
+    manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+
+    rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
+    assert rejected.returncode == 1
+    assert "candidate materialization candidate_metadata_path" in rejected.stderr
 
 
 def test_receipt_round_trip_is_exact_and_channel_replay_fails(tmp_path: Path) -> None:

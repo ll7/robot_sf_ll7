@@ -1,0 +1,175 @@
+name: Build Immutable Software Candidate
+
+on:
+  workflow_call:
+    outputs:
+      artifact-id:
+        description: Exact GitHub artifact identity for the checked candidate bundle
+        value: ${{ jobs.build-candidate.outputs.artifact-id }}
+      artifact-digest:
+        description: GitHub SHA-256 digest for the uploaded candidate artifact
+        value: ${{ jobs.build-candidate.outputs.artifact-digest }}
+      artifact-name:
+        description: Deterministic name of the checked candidate artifact
+        value: ${{ jobs.build-candidate.outputs.artifact-name }}
+      source-sha:
+        description: Exact source commit bound by the candidate manifest
+        value: ${{ jobs.build-candidate.outputs.source-sha }}
+
+permissions:
+  contents: read
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONUNBUFFERED: "1"
+  SDL_VIDEODRIVER: dummy
+  MPLBACKEND: Agg
+  PYGAME_HIDE_SUPPORT_PROMPT: "1"
+
+jobs:
+  build-candidate:
+    name: Build and verify once
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
+      artifact-name: ${{ steps.identity.outputs.artifact-name }}
+      source-sha: ${{ steps.identity.outputs.source-sha }}
+    env:
+      ARTIFACT_NAME: >-
+        robot-sf-software-candidate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout exact source without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned uv with bounded retry
+        env:
+          UV_VERSION: "0.11.21"
+          UV_INSTALL_MAX_ATTEMPTS: "3"
+          UV_INSTALL_BACKOFF_BASE: "5"
+          UV_INSTALL_BACKOFF_CAP: "30"
+        run: bash scripts/dev/ci_install_uv_retry.sh "${UV_VERSION}"
+
+      - name: Bind artifact identity
+        id: identity
+        run: |
+          candidate_root="${RUNNER_TEMP}/robot-sf-software-candidate"
+          {
+            printf 'CANDIDATE_ROOT=%s\n' "${candidate_root}"
+            printf 'BUILD_SOURCE=%s/source\n' "${candidate_root}"
+            printf 'DIST_DIR=%s/dist\n' "${candidate_root}"
+            printf 'RAW_SBOM=%s/raw-sbom.cdx.json\n' "${candidate_root}"
+            printf 'BUNDLE_DIR=%s/bundle\n' "${candidate_root}"
+          } >> "${GITHUB_ENV}"
+          printf 'artifact-name=%s\n' "${ARTIFACT_NAME}" >> "${GITHUB_OUTPUT}"
+          printf 'source-sha=%s\n' "${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Require hermetic exact source identity before build
+        run: >-
+          python scripts/dev/software_candidate_manifest.py check-source
+          --repo-root "${GITHUB_WORKSPACE}"
+          --source-sha "${GITHUB_SHA}"
+
+      - name: Prepare isolated candidate directories
+        run: mkdir -p "${DIST_DIR}" "${BUNDLE_DIR}"
+
+      - name: Stage exact commit in disposable build root
+        run: >-
+          python scripts/dev/software_candidate_manifest.py stage-build-source
+          --repo-root "${GITHUB_WORKSPACE}"
+          --build-root "${BUILD_SOURCE}"
+          --source-sha "${GITHUB_SHA}"
+
+      - name: Prove disposable build source is the exact commit
+        run: >-
+          python scripts/dev/software_candidate_manifest.py check-source
+          --repo-root "${BUILD_SOURCE}"
+          --source-sha "${GITHUB_SHA}"
+
+      - name: Build exactly one wheel and one sdist once
+        run: |
+          cd "${BUILD_SOURCE}"
+          uv build --out-dir "${DIST_DIR}"
+
+      - name: Reject any source workspace mutation by the build
+        run: >-
+          python scripts/dev/software_candidate_manifest.py check-source
+          --repo-root "${GITHUB_WORKSPACE}"
+          --source-sha "${GITHUB_SHA}"
+
+      - name: Validate version alignment
+        run: >-
+          uv run --no-project --with 'pyyaml==6.0.3'
+          python scripts/dev/check_version_alignment.py
+
+      - name: Validate package metadata and README rendering
+        run: >-
+          uv run --no-project --with 'twine==7.0.0'
+          twine check --strict "${DIST_DIR}"/*.whl "${DIST_DIR}"/*.tar.gz
+
+      - name: Validate archive members and licenses
+        run: >-
+          uv run --no-project --with 'pyyaml==6.0.3' --with 'packaging==26.0'
+          python scripts/tools/check_distribution_licenses.py "${DIST_DIR}"
+
+      - name: Validate clean install and every entry point
+        env:
+          ROBOT_SF_WHEEL_INSTALL_SMOKE_EXTRAS: ""
+          ROBOT_SF_WHEEL_INSTALL_SMOKE_REPORT: >-
+            ${{ runner.temp }}/robot-sf-software-candidate/wheel-install-smoke.json
+        run: |
+          wheels=("${DIST_DIR}"/robot_sf-*.whl)
+          if [[ "${#wheels[@]}" -ne 1 || ! -f "${wheels[0]}" ]]; then
+            echo "Expected exactly one Robot SF wheel for clean-install validation." >&2
+            exit 1
+          fi
+          bash "${BUILD_SOURCE}/scripts/validation/wheel_install_smoke.sh" "${wheels[0]}"
+
+      - name: Export dependency SBOM without rebuilding
+        run: >-
+          uv export --preview-features sbom-export --frozen --no-dev --no-emit-project
+          --format cyclonedx1.5 --output-file "${RAW_SBOM}" >/dev/null
+
+      - name: Assemble deterministic candidate manifest and provenance
+        run: >-
+          python scripts/dev/software_candidate_manifest.py assemble
+          --repo-root "${GITHUB_WORKSPACE}"
+          --dist-dir "${DIST_DIR}"
+          --raw-sbom "${RAW_SBOM}"
+          --bundle-dir "${BUNDLE_DIR}"
+          --source-sha "${GITHUB_SHA}"
+          --repository "${GITHUB_REPOSITORY}"
+          --workflow-run-id "${GITHUB_RUN_ID}"
+          --workflow-run-attempt "${GITHUB_RUN_ATTEMPT}"
+          --validated version-alignment
+          --validated metadata
+          --validated archive-license
+          --validated wheel-install
+
+      - name: Revalidate admitted bytes offline
+        run: >-
+          python scripts/dev/software_candidate_manifest.py verify
+          --bundle-dir "${BUNDLE_DIR}"
+          --expected-source-sha "${GITHUB_SHA}"
+          --expected-workflow-run-id "${GITHUB_RUN_ID}"
+
+      - name: Upload checked candidate bundle once
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/robot-sf-software-candidate/bundle/
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+          retention-days: 30

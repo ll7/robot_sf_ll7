@@ -1,0 +1,147 @@
+{
+  "$id": "https://robot-sf.dev/schema/software-candidate-manifest.v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "members": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "filename": {
+            "minLength": 1,
+            "pattern": "^[^/\\\\]+$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "wheel",
+              "sdist",
+              "sbom",
+              "provenance"
+            ]
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "size": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "filename",
+          "kind",
+          "sha256",
+          "size"
+        ],
+        "type": "object"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "type": "array"
+    },
+    "package": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "const": "robot_sf"
+        },
+        "version": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9.+!_-]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "type": "object"
+    },
+    "repository": {
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "robot_sf.software_candidate.v1"
+    },
+    "source_sha": {
+      "pattern": "^[0-9a-f]{40}$",
+      "type": "string"
+    },
+    "validation": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "command": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "id": {
+                "enum": [
+                  "version-alignment",
+                  "metadata",
+                  "archive-license",
+                  "wheel-install"
+                ]
+              },
+              "status": {
+                "const": "passed"
+              }
+            },
+            "required": [
+              "command",
+              "id",
+              "status"
+            ],
+            "type": "object"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        },
+        "status": {
+          "const": "passed"
+        }
+      },
+      "required": [
+        "checks",
+        "status"
+      ],
+      "type": "object"
+    },
+    "workflow": {
+      "additionalProperties": false,
+      "properties": {
+        "run_attempt": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "run_id": {
+          "pattern": "^[1-9][0-9]*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "run_attempt"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "repository",
+    "source_sha",
+    "workflow",
+    "package",
+    "validation",
+    "members"
+  ],
+  "title": "Robot SF immutable software candidate manifest v1",
+  "type": "object"
+}

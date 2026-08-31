@@ -165,6 +165,30 @@ def _candidate(tmp_path: Path) -> tuple[Path, str, Path]:
                     "source_sha": source_sha,
                     "status": "passed",
                 },
+                "supported_dependency_gate": {
+                    "candidate_manifest_sha256": hashlib.sha256(
+                        manifest_path.read_bytes()
+                    ).hexdigest(),
+                    "candidate_tree_sha256": "c" * 64,
+                    "command": (
+                        "python scripts/tools/check_dependency_license_inventory.py "
+                        "--repo-root $BUILD_SOURCE --output $DEPENDENCY_REPORT "
+                        "--candidate-bundle $CANDIDATE_BUNDLE --fail-on-unresolved"
+                    ),
+                    "id": "strict-supported-dependency-surface",
+                    "policy_path": "scripts/validation/dependency_license_policy.v1.json",
+                    "policy_sha256": "d" * 64,
+                    "profile_manifest_path": (
+                        "scripts/validation/dependency_license_profiles.v1.json"
+                    ),
+                    "profile_manifest_sha256": "e" * 64,
+                    "report_filename": "dependency-license-inventory.json",
+                    "report_sha256": "f" * 64,
+                    "schema_version": "robot-sf.dependency-license-inventory.v1",
+                    "source_sha": source_sha,
+                    "status": "passed",
+                    "unresolved_count": 0,
+                },
             }
         )
         + "\n",
@@ -252,6 +276,42 @@ def test_candidate_verification_rejects_missing_or_unresolved_rights_admission(
 
     receipt = bundle.parent / "rights-admission-artifact" / "rights-admission.json"
     payload = json.loads(receipt.read_text(encoding="utf-8"))
+    payload.pop("supported_dependency_gate")
+    receipt.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
+    assert rejected.returncode == 1
+    assert "missing or unclassified" in rejected.stderr
+
+    payload["supported_dependency_gate"] = {
+        "candidate_manifest_sha256": hashlib.sha256(
+            (bundle / "candidate-manifest.json").read_bytes()
+        ).hexdigest(),
+        "candidate_tree_sha256": "c" * 64,
+        "command": (
+            "python scripts/tools/check_dependency_license_inventory.py "
+            "--repo-root $BUILD_SOURCE --output $DEPENDENCY_REPORT "
+            "--candidate-bundle $CANDIDATE_BUNDLE --fail-on-unresolved"
+        ),
+        "id": "strict-supported-dependency-surface",
+        "policy_path": "scripts/validation/dependency_license_policy.v1.json",
+        "policy_sha256": "d" * 64,
+        "profile_manifest_path": "scripts/validation/dependency_license_profiles.v1.json",
+        "profile_manifest_sha256": "e" * 64,
+        "report_filename": "dependency-license-inventory.json",
+        "report_sha256": "f" * 64,
+        "schema_version": "robot-sf.dependency-license-inventory.v1",
+        "source_sha": source_sha,
+        "status": "passed",
+        "unresolved_count": 0,
+    }
+    receipt.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    payload["supported_dependency_gate"]["unresolved_count"] = 1
+    receipt.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
+    assert rejected.returncode == 1
+    assert "unresolved rows" in rejected.stderr
+    payload["supported_dependency_gate"]["unresolved_count"] = 0
+    receipt.write_text(json.dumps(payload) + "\n", encoding="utf-8")
     payload["strict_gate"]["findings"] = 1
     receipt.write_text(json.dumps(payload) + "\n", encoding="utf-8")
     rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
@@ -289,7 +349,9 @@ def test_candidate_validation_roster_allows_strict_rights_upgrade(tmp_path: Path
             encoding="utf-8"
         )
     )
-    rights["candidate"]["manifest_sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    rights["candidate"]["manifest_sha256"] = manifest_sha256
+    rights["supported_dependency_gate"]["candidate_manifest_sha256"] = manifest_sha256
     (bundle.parent / "rights-admission-artifact" / "rights-admission.json").write_text(
         json.dumps(rights, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
@@ -640,6 +702,34 @@ def test_rights_artifact_and_sanctioned_workflow_require_exact_run_and_digest(
     )
     assert accepted.returncode == 0, accepted.stderr
     run_payload = json.loads(run_metadata.read_text(encoding="utf-8"))
+    run_payload["event"] = "workflow_dispatch"
+    run_metadata.write_text(json.dumps(run_payload), encoding="utf-8")
+    accepted = _run_helper(
+        "check-rights-run",
+        "--metadata",
+        str(run_metadata),
+        "--run-id",
+        "123456",
+        "--source-sha",
+        source_sha,
+    )
+    assert accepted.returncode == 0, accepted.stderr
+    run_payload["event"] = "push"
+    run_metadata.write_text(json.dumps(run_payload), encoding="utf-8")
+    rejected = _run_helper(
+        "check-rights-run",
+        "--metadata",
+        str(run_metadata),
+        "--run-id",
+        "123456",
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+    assert rejected.returncode == 1
+    assert "not sanctioned" in rejected.stderr
+    run_payload["event"] = "workflow_call"
+    run_metadata.write_text(json.dumps(run_payload), encoding="utf-8")
     run_payload.pop("repository")
     run_metadata.write_text(json.dumps(run_payload), encoding="utf-8")
     rejected = _run_helper(

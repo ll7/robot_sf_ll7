@@ -52,9 +52,20 @@ RIGHTS_POLICY_PATH = "scripts/validation/software_release_rights_policy.v1.json"
 SANITIZED_CANDIDATE_SCHEMA = "robot_sf.software_sanitized_candidate.v1"
 RIGHTS_GATE_ID = "strict-distribution-rights"
 RIGHTS_WORKFLOW_PATH = ".github/workflows/software-candidate.yml"
+RIGHTS_WORKFLOW_EVENTS = frozenset({"workflow_call", "workflow_dispatch"})
 RIGHTS_GATE_COMMAND = (
     "python scripts/tools/check_distribution_licenses.py $DIST_DIR "
     "--strict-asset-rights --repo-root $BUILD_SOURCE --source-tree-ref $SOURCE_SHA"
+)
+SUPPORTED_DEPENDENCY_SCHEMA_VERSION = "robot-sf.dependency-license-inventory.v1"
+SUPPORTED_DEPENDENCY_GATE_ID = "strict-supported-dependency-surface"
+SUPPORTED_DEPENDENCY_REPORT_NAME = "dependency-license-inventory.json"
+SUPPORTED_DEPENDENCY_POLICY_PATH = "scripts/validation/dependency_license_policy.v1.json"
+SUPPORTED_DEPENDENCY_PROFILE_PATH = "scripts/validation/dependency_license_profiles.v1.json"
+SUPPORTED_DEPENDENCY_GATE_COMMAND = (
+    "python scripts/tools/check_dependency_license_inventory.py "
+    "--repo-root $BUILD_SOURCE --output $DEPENDENCY_REPORT "
+    "--candidate-bundle $CANDIDATE_BUNDLE --fail-on-unresolved"
 )
 VALIDATION_ROSTER = (
     ("version-alignment", "python scripts/dev/check_version_alignment.py"),
@@ -581,7 +592,7 @@ def _receipt_identity(
     }
 
 
-def _validate_rights_admission(  # noqa: C901, PLR0912 - closed rights receipt gate
+def _validate_rights_admission(  # noqa: C901, PLR0912, PLR0915 - closed rights receipt gate
     path: Path,
     *,
     identity: dict[str, Any],
@@ -606,7 +617,14 @@ def _validate_rights_admission(  # noqa: C901, PLR0912 - closed rights receipt g
     receipt = _load_json(path, label="rights admission receipt")
     if not isinstance(receipt, dict):
         raise PromotionError("rights admission receipt must be a JSON object")
-    if set(receipt) != {"candidate", "sanitized", "strict_gate", "status", "schema_version"}:
+    if set(receipt) != {
+        "candidate",
+        "sanitized",
+        "strict_gate",
+        "status",
+        "schema_version",
+        "supported_dependency_gate",
+    }:
         raise PromotionError("rights admission receipt has missing or unclassified fields")
     if receipt.get("schema_version") != RIGHTS_ADMISSION_SCHEMA_VERSION:
         raise PromotionError("rights admission receipt schema version is unsupported")
@@ -670,6 +688,66 @@ def _validate_rights_admission(  # noqa: C901, PLR0912 - closed rights receipt g
     if isinstance(findings, bool) or not isinstance(findings, int) or findings != 0:
         raise PromotionError("rights admission strict gate reports unresolved findings")
 
+    dependency_gate = receipt.get("supported_dependency_gate")
+    if not isinstance(dependency_gate, dict) or set(dependency_gate) != {
+        "candidate_manifest_sha256",
+        "candidate_tree_sha256",
+        "command",
+        "id",
+        "policy_path",
+        "policy_sha256",
+        "profile_manifest_path",
+        "profile_manifest_sha256",
+        "report_filename",
+        "report_sha256",
+        "schema_version",
+        "source_sha",
+        "status",
+        "unresolved_count",
+    }:
+        raise PromotionError(
+            "rights admission supported-dependency gate is missing or unclassified"
+        )
+    if dependency_gate.get("schema_version") != SUPPORTED_DEPENDENCY_SCHEMA_VERSION:
+        raise PromotionError("supported-dependency report schema version is unsupported")
+    if dependency_gate.get("id") != SUPPORTED_DEPENDENCY_GATE_ID:
+        raise PromotionError("rights admission supported-dependency gate identity is unsupported")
+    if dependency_gate.get("status") != "passed":
+        raise PromotionError("rights admission supported-dependency gate did not pass")
+    if dependency_gate.get("source_sha") != identity["source_sha"]:
+        raise PromotionError(
+            "rights admission supported-dependency source SHA differs from candidate"
+        )
+    if dependency_gate.get("candidate_manifest_sha256") != expected_candidate["manifest_sha256"]:
+        raise PromotionError(
+            "rights admission supported-dependency report is bound to a different manifest"
+        )
+    if dependency_gate.get("candidate_tree_sha256") != tree_sha256:
+        raise PromotionError(
+            "rights admission supported-dependency report is bound to a different source tree"
+        )
+    if dependency_gate.get("policy_path") != SUPPORTED_DEPENDENCY_POLICY_PATH:
+        raise PromotionError("rights admission supported-dependency policy path is unsupported")
+    if dependency_gate.get("profile_manifest_path") != SUPPORTED_DEPENDENCY_PROFILE_PATH:
+        raise PromotionError("rights admission supported-dependency profile path is unsupported")
+    for field in ("policy_sha256", "profile_manifest_sha256", "report_sha256"):
+        value = dependency_gate.get(field)
+        if not isinstance(value, str) or not SHA256_PATTERN.fullmatch(value):
+            raise PromotionError(f"rights admission supported-dependency {field} is invalid")
+    if dependency_gate.get("report_filename") != SUPPORTED_DEPENDENCY_REPORT_NAME:
+        raise PromotionError("rights admission supported-dependency report filename is unsupported")
+    if dependency_gate.get("command") != SUPPORTED_DEPENDENCY_GATE_COMMAND:
+        raise PromotionError(
+            "rights admission supported-dependency command is not the canonical strict check"
+        )
+    unresolved_count = dependency_gate.get("unresolved_count")
+    if (
+        isinstance(unresolved_count, bool)
+        or not isinstance(unresolved_count, int)
+        or unresolved_count != 0
+    ):
+        raise PromotionError("rights admission supported-dependency gate reports unresolved rows")
+
 
 def _load_and_bind_candidate(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
     _source_sha(args.source_sha)
@@ -723,8 +801,10 @@ def _check_rights_workflow_run(args: argparse.Namespace) -> None:
         raise PromotionError("rights workflow-run ID drifted from the dispatch identity")
     if metadata.get("path") != RIGHTS_WORKFLOW_PATH:
         raise PromotionError("rights admission was not produced by the sanctioned workflow")
-    if metadata.get("event") != "workflow_call":
-        raise PromotionError("rights admission workflow event is not workflow_call")
+    event = metadata.get("event")
+    if event not in RIGHTS_WORKFLOW_EVENTS:
+        allowed = ", ".join(sorted(RIGHTS_WORKFLOW_EVENTS))
+        raise PromotionError(f"rights admission workflow event is not sanctioned ({allowed})")
     if metadata.get("head_sha") != _source_sha(args.source_sha):
         raise PromotionError("rights workflow-run source SHA drifted from the dispatch identity")
     if metadata.get("status") != "completed" or metadata.get("conclusion") != "success":

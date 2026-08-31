@@ -142,6 +142,9 @@ def test_workflow_requires_the_external_sanitized_candidate_producer() -> None:
     assert text.count("actions/runs/${{ inputs.rights_admission_run_id }}") == 4
     assert "rights-admission.json" in text
     assert "#8149" in text
+    docs = (REPO_ROOT / "docs" / "software_release_promotion.md").read_text(encoding="utf-8")
+    assert "supported-surface dependency" in docs
+    assert "--fail-on-unresolved" in docs
 
 
 def test_workflow_has_no_rebuild_or_long_lived_package_credentials() -> None:

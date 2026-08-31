@@ -41,12 +41,15 @@ GitHub artifact produced by the sanctioned #8149 workflow:
 `rights_admission_run_id`, `rights_admission_artifact_id`,
 `rights_admission_artifact_name`, and `rights_admission_artifact_digest`.
 The producer run must be a successful completed
-`.github/workflows/software-candidate.yml` run at the same source SHA. Every
-consumer downloads that artifact by ID, checks its API ID/name/digest/run/head
-SHA, and verifies the workflow run conclusion before reading the receipt.
-That workflow is currently reusable-only and has no in-repository caller;
-#8149 must extend it with the sanitized materialization/receipt producer and a
-reviewed caller before this promotion can be dispatched with real inputs.
+`.github/workflows/software-candidate.yml` run at the same source SHA, using
+the sanctioned `workflow_call` or `workflow_dispatch` event. Every consumer
+downloads that artifact by ID, checks its API ID/name/digest/run/head SHA,
+repository, workflow identity, event, and run attempt, and verifies the
+workflow run conclusion before reading the receipt. The current `main` copy
+is reusable-only and has no in-repository caller; #8149 must provide the
+reviewed sanitized producer (either event is accepted only after the exact
+producer contract is present) before this promotion can be dispatched with
+real inputs.
 
 The artifact must contain only `rights-admission.json` conforming to
 `robot_sf.software_rights_admission.v1`. Its closed receipt binds the exact
@@ -55,10 +58,18 @@ candidate artifact and manifest, declares
 `scripts/validation/software_release_rights_policy.v1.json` and its SHA-256,
 and records a zero-finding passed
 `check_distribution_licenses.py --strict-asset-rights --source-tree-ref ...`
-gate. The publisher validates those bindings in every package-producing job;
-it never accepts a locally authored or caller-provided rights assertion. Until
-#8149 emits this artifact, the promotion workflow is intentionally
-technically ineligible and cannot upload the current candidate.
+gate. It must also bind the separate #8021 supported-surface dependency
+report: schema `robot-sf.dependency-license-inventory.v1`, the exact
+candidate manifest and sanitized source-tree digests, the canonical
+dependency policy/profile paths and their SHA-256 values, the report SHA-256,
+and `unresolved_count: 0` from the exact
+`check_dependency_license_inventory.py --fail-on-unresolved` command. A
+rights-only receipt without this zero-unresolved dependency admission is not
+a software release admission and is rejected. The publisher validates all
+bindings in every package-producing job; it never accepts a locally authored
+or caller-provided rights assertion. Until #8149 and #8021 emit this complete
+receipt, the promotion workflow is intentionally technically ineligible and
+cannot upload the current candidate.
 
 ## First promotion
 

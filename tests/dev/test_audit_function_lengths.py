@@ -12,6 +12,7 @@ import pytest
 from scripts.dev.audit_function_lengths import (
     DEFAULT_THRESHOLD,
     SCHEMA,
+    _allowlist_load,
     _is_excluded,
     _markdown_summary,
     run_audit,
@@ -249,3 +250,151 @@ def test_is_excluded_matches_exclusions_and_vendored() -> None:
     assert _is_excluded("robot_sf/__init__.py", {"robot_sf/__init__.py": "why"}) == "why"
     assert _is_excluded("x/third_party/y.py", {}) is not None
     assert _is_excluded("robot_sf/mod.py", {}) is None
+
+
+def test_distinct_module_qualified_identities(tmp_path: Path) -> None:
+    """Same-named functions across modules have distinct module-qualified identities."""
+    _write_fixture(
+        tmp_path,
+        "a.py",
+        "def main() -> None:\n" + "".join(f"    v = {i}\n" for i in range(120)),
+    )
+    _write_fixture(
+        tmp_path,
+        "b.py",
+        "def main() -> None:\n" + "".join(f"    v = {i}\n" for i in range(150)),
+    )
+    report = run_audit(tmp_path, threshold=100)
+    assert report["findings_count"] == 2
+    findings_by_module = {f["module"]: f for f in report["findings"]}
+    assert "a" in findings_by_module
+    assert "b" in findings_by_module
+    assert findings_by_module["a"]["qualified_name"] == "main"
+    assert findings_by_module["b"]["qualified_name"] == "main"
+
+
+def test_allowing_one_module_does_not_allow_other(tmp_path: Path) -> None:
+    """Allowing a function in one module does not satisfy the same function in another."""
+    _write_fixture(
+        tmp_path,
+        "a.py",
+        "def main() -> None:\n" + "".join(f"    v = {i}\n" for i in range(120)),
+    )
+    _write_fixture(
+        tmp_path,
+        "b.py",
+        "def main() -> None:\n" + "".join(f"    v = {i}\n" for i in range(150)),
+    )
+    report = run_audit(tmp_path, threshold=100)
+    allowlist = {"a::main": 130}
+    exit_code, problems = run_check(report, allowlist)
+    assert exit_code == 1
+    assert any("function over threshold without allowlist entry: b::main" in p for p in problems)
+    assert not any("a::main" in p for p in problems)
+
+
+def test_ambiguous_legacy_key_fails_closed(tmp_path: Path) -> None:
+    """An unqualified legacy key matching multiple findings fails closed."""
+    _write_fixture(
+        tmp_path,
+        "a.py",
+        "def main() -> None:\n" + "".join(f"    v = {i}\n" for i in range(120)),
+    )
+    _write_fixture(
+        tmp_path,
+        "b.py",
+        "def main() -> None:\n" + "".join(f"    v = {i}\n" for i in range(150)),
+    )
+    report = run_audit(tmp_path, threshold=100)
+    allowlist = {"main": 200}
+    exit_code, problems = run_check(report, allowlist)
+    assert exit_code == 1
+    assert any(
+        "ambiguous legacy allowlist key 'main' matches multiple findings" in p for p in problems
+    )
+    assert any("a::main" in p and "b::main" in p for p in problems)
+    assert any("without allowlist entry: a::main" in p for p in problems)
+    assert any("without allowlist entry: b::main" in p for p in problems)
+
+
+def test_unambiguous_legacy_key_works(tmp_path: Path) -> None:
+    """An unqualified legacy key matching exactly one finding is accepted."""
+    _write_fixture(
+        tmp_path,
+        "a.py",
+        "def unique_fn() -> None:\n" + "".join(f"    v = {i}\n" for i in range(120)),
+    )
+    _write_fixture(
+        tmp_path,
+        "b.py",
+        "def other_fn() -> None:\n" + "".join(f"    v = {i}\n" for i in range(150)),
+    )
+    report = run_audit(tmp_path, threshold=100)
+    allowlist = {"unique_fn": 125, "b::other_fn": 155}
+    exit_code, problems = run_check(report, allowlist)
+    assert exit_code == 0
+    assert problems == []
+
+
+def test_method_and_nested_function_module_boundaries(tmp_path: Path) -> None:
+    """Methods and nested functions retain their module boundaries in identities."""
+    content_a = (
+        """
+class Handler:
+    def handle(self) -> None:
+"""
+        + "".join(f"        x = {i}\n" for i in range(120))
+        + """
+def outer() -> None:
+    def inner() -> None:
+"""
+        + "".join(f"        y = {i}\n" for i in range(130))
+    )
+
+    content_b = """
+class Handler:
+    def handle(self) -> None:
+""" + "".join(f"        z = {i}\n" for i in range(140))
+
+    _write_fixture(tmp_path, "pkg/a.py", content_a)
+    _write_fixture(tmp_path, "pkg/b.py", content_b)
+    report = run_audit(tmp_path, threshold=100)
+    assert report["findings_count"] == 4
+
+    allowlist = {
+        "pkg/a::Handler.handle": 125,
+        "pkg/a::outer": 135,
+        "pkg/a::outer.inner": 135,
+    }
+    exit_code, problems = run_check(report, allowlist)
+    assert exit_code == 1
+    assert any("without allowlist entry: pkg/b::Handler.handle" in p for p in problems)
+    assert not any("pkg/a::Handler.handle" in p for p in problems)
+    assert not any("pkg/a::outer.inner" in p for p in problems)
+    assert not any("pkg/a::outer" in p for p in problems)
+
+
+def test_allowlist_value_validation(tmp_path: Path) -> None:
+    """Allowlist values must be non-boolean non-negative integers."""
+    path_bool = _write_fixture(tmp_path, "bool.json", '{"a::main": true}')
+    path_neg = _write_fixture(tmp_path, "neg.json", '{"a::main": -1}')
+    path_str = _write_fixture(tmp_path, "str.json", '{"a::main": "200"}')
+    path_bad_json = _write_fixture(tmp_path, "bad.json", "not valid json")
+    path_list = _write_fixture(tmp_path, "list.json", '["a::main"]')
+
+    with pytest.raises(ValueError, match="non-negative integer"):
+        _allowlist_load(path_bool)
+    with pytest.raises(ValueError, match="non-negative integer"):
+        _allowlist_load(path_neg)
+    with pytest.raises(ValueError, match="non-negative integer"):
+        _allowlist_load(path_str)
+    with pytest.raises(ValueError, match="invalid JSON"):
+        _allowlist_load(path_bad_json)
+    with pytest.raises(ValueError, match="JSON object"):
+        _allowlist_load(path_list)
+
+    # run_check validation when dict passed directly
+    report = {"findings": []}
+    exit_code, problems = run_check(report, {"a::main": -5})  # type: ignore[dict-item]
+    assert exit_code == 1
+    assert any("must be a non-negative integer" in p for p in problems)

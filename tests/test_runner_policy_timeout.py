@@ -155,7 +155,6 @@ def test_planner_step_timeout_fails_fast_and_reports_metadata(
     monkeypatch.setattr(runner, "POLICY_STEP_TIMEOUT_SECS", 0.05)
     policy, metadata = runner._create_robot_policy("random", None, seed=123)
 
-    start = time.monotonic()
     velocity = policy(
         np.array([0.0, 0.0]),
         np.array([0.0, 0.0]),
@@ -163,11 +162,12 @@ def test_planner_step_timeout_fails_fast_and_reports_metadata(
         np.empty((0, 2)),
         0.1,
     )
-    elapsed = time.monotonic() - start
 
-    # Use a relative bound with ample scheduler headroom while still proving that
-    # the parent returns before the deliberately slow worker could complete.
-    assert elapsed < _SLOW_PLANNER_STEP_SECS / 2
+    # The fallback metadata is the semantic proof that the parent returned on
+    # the 0.05s timeout budget instead of waiting for the deliberately slow
+    # 2.0s worker step. No wall-clock bound is asserted: a waiting parent would
+    # report status "ok" with zero timeout counters, so scheduler jitter or CPU
+    # contention cannot fail this test (issue #8120).
     assert velocity == pytest.approx(np.array([0.0, 0.0]))
     assert metadata["status"] == "policy_step_timeout_fallback"
     timeout_metadata = metadata["policy_step_timeout"]

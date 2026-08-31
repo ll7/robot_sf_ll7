@@ -90,9 +90,63 @@ import json
 import numpy as np
 
 import robot_sf
+from robot_sf.gym_env.crowd_sim_env import CrowdSimulationConfig
 from robot_sf.gym_env.environment_factory import make_crowd_sim_env
+from robot_sf.nav.global_route import GlobalRoute
+from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
+from robot_sf.sim.sim_config import SimulationSettings
 
-env = make_crowd_sim_env(seed=123)
+
+def _programmatic_core_config() -> CrowdSimulationConfig:
+    """Build a map-free core smoke config for rights-scoped installations."""
+    width = height = 10.0
+    spawn_zone = ((1.0, 1.0), (2.0, 1.0), (2.0, 2.0))
+    goal_zone = ((8.0, 8.0), (9.0, 8.0), (9.0, 9.0))
+    route = GlobalRoute(
+        spawn_id=0,
+        goal_id=0,
+        waypoints=[(1.5, 1.5), (8.5, 8.5)],
+        spawn_zone=spawn_zone,
+        goal_zone=goal_zone,
+    )
+    map_def = MapDefinition(
+        width=width,
+        height=height,
+        obstacles=[],
+        robot_spawn_zones=[spawn_zone],
+        ped_spawn_zones=[spawn_zone],
+        robot_goal_zones=[goal_zone],
+        bounds=[
+            (0.0, width, 0.0, 0.0),
+            (0.0, width, height, height),
+            (0.0, 0.0, 0.0, height),
+            (width, width, 0.0, height),
+        ],
+        robot_routes=[route],
+        ped_goal_zones=[goal_zone],
+        ped_crowded_zones=[],
+        ped_routes=[route],
+    )
+    return CrowdSimulationConfig(
+        sim_config=SimulationSettings(
+            sim_time_in_secs=0.2,
+            time_per_step_in_secs=0.1,
+            difficulty=0,
+            ped_density_by_difficulty=[0.0],
+            max_total_pedestrians=0,
+        ),
+        map_pool=MapDefinitionPool(map_defs={"wheel-smoke": map_def}),
+        map_id="wheel-smoke",
+    )
+
+try:
+    env = make_crowd_sim_env(seed=123)
+    smoke_mode = "default-map-pool"
+except ValueError as exc:
+    if "Map pool is empty" not in str(exc):
+        raise
+    env = make_crowd_sim_env(config=_programmatic_core_config(), seed=123)
+    smoke_mode = "programmatic-core-map"
 try:
     obs, info = env.reset(seed=123)
     next_obs, reward, terminated, truncated, next_info = env.step()
@@ -104,6 +158,7 @@ print(
         {
             "module_file": robot_sf.__file__,
             "env_factory": "make_crowd_sim_env",
+            "smoke_mode": smoke_mode,
             "reset_positions_shape": list(np.asarray(obs["positions"]).shape),
             "step_positions_shape": list(np.asarray(next_obs["positions"]).shape),
             "reward": float(reward),

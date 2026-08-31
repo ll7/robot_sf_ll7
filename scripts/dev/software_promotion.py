@@ -109,6 +109,9 @@ SUPPORTED_RELEASE_EXTRAS = frozenset(
         "criticality",
     }
 )
+# ``all`` is the supported aggregator published by the sanitized candidate;
+# standalone ``rllib`` remains intentionally outside the release surface.
+SUPPORTED_RELEASE_DISTRIBUTION_EXTRAS = SUPPORTED_RELEASE_EXTRAS | {"all"}
 # Preserve the checked-in profile manifest order while excluding the unsupported
 # ``rllib``, ``fast-pysf``, and ``socnavbench`` profiles.
 SUPPORTED_RELEASE_PROFILE_ROSTER = (
@@ -316,7 +319,7 @@ def _validate_validation_roster(validation: Any) -> None:  # noqa: C901 - versio
     for identifier, command in expected_commands.items():
         matching = next(item for item in checks if item["id"] == identifier)
         if identifier == "archive-license":
-            # #8149 may replace the broad candidate gate with its strict
+            # The sanitized candidate workflow may replace the broad candidate gate with its strict
             # rights-clean command.  The separate rights admission receipt
             # below remains mandatory, so accepting that additive upgrade
             # does not permit the current unresolved tree to publish.
@@ -521,9 +524,9 @@ def _distribution_extras(path: Path) -> frozenset[str]:
         for line in metadata.splitlines()
         if line.startswith("Provides-Extra:") and line.partition(":")[2].strip()
     )
-    if extras != SUPPORTED_RELEASE_EXTRAS:
-        missing = sorted(SUPPORTED_RELEASE_EXTRAS - extras)
-        unsupported = sorted(extras - SUPPORTED_RELEASE_EXTRAS)
+    if extras != SUPPORTED_RELEASE_DISTRIBUTION_EXTRAS:
+        missing = sorted(SUPPORTED_RELEASE_DISTRIBUTION_EXTRAS - extras)
+        unsupported = sorted(extras - SUPPORTED_RELEASE_DISTRIBUTION_EXTRAS)
         raise PromotionError(
             "candidate wheel Provides-Extra values differ from the closed supported surface: "
             f"missing={missing}, unsupported={unsupported}"
@@ -928,7 +931,7 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - clo
             "supported dependency report embedded profile roster differs from the closed "
             "supported surface"
         )
-    if identity["distribution_extras"] != SUPPORTED_RELEASE_EXTRAS:
+    if identity["distribution_extras"] != SUPPORTED_RELEASE_DISTRIBUTION_EXTRAS:
         raise PromotionError("candidate archive does not advertise the supported profile surface")
     policy = report.get("policy")
     if not isinstance(policy, dict) or policy.get("path") != SUPPORTED_DEPENDENCY_POLICY_PATH:
@@ -1007,7 +1010,7 @@ def _validate_rights_admission(  # noqa: C901, PLR0912, PLR0915 - closed rights 
     *,
     identity: dict[str, Any],
 ) -> None:
-    """Require #8149's independent rights-clean admission before publication.
+    """Require the independent rights-clean admission before publication.
 
     The current build candidate is intentionally not rights-clean.  A separate
     receipt produced by the sanitized-candidate workflow must therefore bind
@@ -1540,7 +1543,7 @@ def _parser() -> argparse.ArgumentParser:  # noqa: PLR0915 - one versioned CLI s
             "--rights-receipt",
             type=Path,
             required=True,
-            help="Independent #8149 rights-clean admission receipt",
+            help="Independent rights-clean admission receipt",
         )
         command.add_argument("--source-sha", required=True)
         command.add_argument("--candidate-run-id", required=True)

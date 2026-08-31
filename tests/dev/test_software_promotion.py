@@ -12,6 +12,8 @@ import tarfile
 import zipfile
 from pathlib import Path
 
+from scripts.dev.software_promotion import PromotionError, _distribution_extras
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CANDIDATE_HELPER = REPO_ROOT / "scripts" / "dev" / "software_candidate_manifest.py"
 PROMOTION_HELPER = REPO_ROOT / "scripts" / "dev" / "software_promotion.py"
@@ -35,6 +37,7 @@ SUPPORTED_EXTRAS = (
     "socnav",
     "criticality",
 )
+SUPPORTED_DISTRIBUTION_EXTRAS = SUPPORTED_EXTRAS + ("all",)
 
 
 def _run_helper(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -67,7 +70,7 @@ def _source_repo(path: Path) -> tuple[Path, str]:
 
 
 def _distributions(
-    path: Path, version: str = "0.0.6", extras: tuple[str, ...] = SUPPORTED_EXTRAS
+    path: Path, version: str = "0.0.6", extras: tuple[str, ...] = SUPPORTED_DISTRIBUTION_EXTRAS
 ) -> Path:
     path.mkdir()
     extra_metadata = "".join(f"Provides-Extra: {extra}\n" for extra in extras)
@@ -120,7 +123,7 @@ def _candidate(
     tmp_path: Path,
     *,
     include_materialization: bool = False,
-    extras: tuple[str, ...] = SUPPORTED_EXTRAS,
+    extras: tuple[str, ...] = SUPPORTED_DISTRIBUTION_EXTRAS,
 ) -> tuple[Path, str, Path]:
     source, source_sha = _source_repo(tmp_path / "source")
     dist = _distributions(tmp_path / "dist", extras=extras)
@@ -481,13 +484,37 @@ def test_candidate_verification_rejects_rebound_unsupported_distribution_extras(
         case_dir.mkdir()
         _source, source_sha, bundle = _candidate(
             case_dir,
-            extras=SUPPORTED_EXTRAS + (unsupported,),
+            extras=SUPPORTED_DISTRIBUTION_EXTRAS + (unsupported,),
         )
         rejected = _run_helper(
             "verify-candidate", *_candidate_args(source_sha, bundle), check=False
         )
         assert rejected.returncode == 1
         assert "closed supported surface" in rejected.stderr
+
+
+def test_actual_built_wheel_is_checked_against_closed_distribution_surface(
+    tmp_path: Path,
+) -> None:
+    """Exercise the validator with the repository's real wheel metadata."""
+
+    output_dir = tmp_path / "wheel"
+    subprocess.run(
+        ["uv", "build", "--wheel", "--out-dir", str(output_dir), "--quiet"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    wheel = next(output_dir.glob("*.whl"))
+    try:
+        extras = _distribution_extras(wheel)
+    except PromotionError as exc:
+        # The unsanitized development tree currently advertises rllib.  It
+        # must be rejected until the producer removes it from the release.
+        assert "unsupported=['rllib']" in str(exc)
+    else:
+        assert extras == frozenset(SUPPORTED_DISTRIBUTION_EXTRAS)
 
 
 def test_candidate_verification_rejects_rebound_manifest_attempt_drift(tmp_path: Path) -> None:

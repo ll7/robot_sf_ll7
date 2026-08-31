@@ -77,6 +77,11 @@ or caller-provided rights assertion. Until the producer and #8021 emit this comp
 receipt, the promotion workflow is intentionally technically ineligible and
 cannot upload the current candidate.
 
+The sanitized release wheel must advertise exactly the twelve supported extras
+plus the supported `all` aggregator. The standalone `rllib` extra (as well as
+`orca` or any unknown extra) is outside this release surface and is rejected by
+the publisher even when every surrounding receipt hash has been refreshed.
+
 ## First promotion
 
 1. Run the rights-clean candidate workflow and retain its exact

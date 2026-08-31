@@ -71,7 +71,7 @@ jobs:
           printf 'artifact-name=%s\n' "${ARTIFACT_NAME}" >> "${GITHUB_OUTPUT}"
           printf 'source-sha=%s\n' "${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
 
-      - name: Require clean exact source before build
+      - name: Require hermetic exact source identity before build
         run: >-
           python scripts/dev/software_candidate_manifest.py check-source
           --repo-root "${GITHUB_WORKSPACE}"
@@ -83,7 +83,7 @@ jobs:
       - name: Build exactly one wheel and one sdist once
         run: uv build --out-dir "${DIST_DIR}"
 
-      - name: Reject source mutation by the build
+      - name: Reject any source workspace mutation by the build
         run: >-
           python scripts/dev/software_candidate_manifest.py check-source
           --repo-root "${GITHUB_WORKSPACE}"

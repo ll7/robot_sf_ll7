@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -310,6 +311,219 @@ def test_assemble_rejects_dirty_source_and_fuzzy_or_drifted_identity(tmp_path: P
     assert "source SHA drift" in drift.stderr
 
 
+def test_check_source_rejects_ignored_workspace_mutation(tmp_path: Path) -> None:
+    source, _source_sha = _source_repo(tmp_path / "source")
+    (source / ".gitignore").write_text("*.ignored\n", encoding="utf-8")
+    subprocess.run(["git", "-C", source, "add", ".gitignore"], check=True)
+    subprocess.run(["git", "-C", source, "commit", "-qm", "ignore fixture"], check=True)
+    source_sha = subprocess.run(
+        ["git", "-C", source, "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    (source / "payload.ignored").write_text("ignored mutation\n", encoding="utf-8")
+
+    result = _run(
+        "check-source",
+        "--repo-root",
+        str(source),
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "dirty or ambiguous" in result.stderr
+
+
+def test_check_source_rejects_mode_drift_hidden_by_repository_config(tmp_path: Path) -> None:
+    source, source_sha = _source_repo(tmp_path / "source")
+    subprocess.run(["git", "-C", source, "config", "core.filemode", "false"], check=True)
+    (source / "source.txt").chmod(0o755)
+
+    result = _run(
+        "check-source",
+        "--repo-root",
+        str(source),
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "dirty or ambiguous" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (("content", "content or symlink-target drift"), ("removal", "missing tracked entry")),
+)
+def test_check_source_rejects_tracked_content_and_removal(
+    tmp_path: Path,
+    mutation: str,
+    message: str,
+) -> None:
+    source, source_sha = _source_repo(tmp_path / "source")
+    if mutation == "content":
+        (source / "source.txt").write_text("changed source\n", encoding="utf-8")
+    else:
+        (source / "source.txt").unlink()
+
+    result = _run(
+        "check-source",
+        "--repo-root",
+        str(source),
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert message in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (("target-drift", "content or symlink-target drift"), ("escape", "unsafe symlink target")),
+)
+def test_check_source_rejects_symlink_target_drift_and_escape(
+    tmp_path: Path,
+    mutation: str,
+    message: str,
+) -> None:
+    source, _source_sha = _source_repo(tmp_path / "source")
+    (source / "target-a.txt").write_text("a\n", encoding="utf-8")
+    (source / "target-b.txt").write_text("b\n", encoding="utf-8")
+    link = source / "linked.txt"
+    link.symlink_to("target-a.txt" if mutation == "target-drift" else "../outside.txt")
+    subprocess.run(["git", "-C", source, "add", "."], check=True)
+    subprocess.run(["git", "-C", source, "commit", "-qm", "symlink fixture"], check=True)
+    source_sha = subprocess.run(
+        ["git", "-C", source, "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    if mutation == "target-drift":
+        link.unlink()
+        link.symlink_to("target-b.txt")
+
+    result = _run(
+        "check-source",
+        "--repo-root",
+        str(source),
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert message in result.stderr
+
+
+def test_check_source_does_not_execute_git_from_path(tmp_path: Path) -> None:
+    source, source_sha = _source_repo(tmp_path / "source")
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    marker = tmp_path / "fake-git-ran"
+    fake_git = fake_bin / "git"
+    fake_git.write_text(
+        "#!/bin/sh\nprintf 'invoked\\n' > \"${FAKE_GIT_MARKER}\"\nexit 97\n",
+        encoding="utf-8",
+    )
+    fake_git.chmod(0o755)
+
+    result = _run(
+        "check-source",
+        "--repo-root",
+        str(source),
+        "--source-sha",
+        source_sha,
+        check=False,
+        env={
+            **os.environ,
+            "FAKE_GIT_MARKER": str(marker),
+            "PATH": str(fake_bin),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+
+    assert not marker.exists()
+
+
+def test_check_source_rejects_non_commit_head_identity(tmp_path: Path) -> None:
+    source, _source_sha = _source_repo(tmp_path / "source")
+    tree_sha = subprocess.run(
+        ["git", "-C", source, "rev-parse", "HEAD^{tree}"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    (source / ".git" / "HEAD").write_text(f"{tree_sha}\n", encoding="ascii")
+
+    result = _run(
+        "check-source",
+        "--repo-root",
+        str(source),
+        "--source-sha",
+        tree_sha,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "not an exact commit" in result.stderr
+
+
+def test_check_source_accepts_materialized_lfs_bytes_bound_by_pointer(tmp_path: Path) -> None:
+    source, _source_sha = _source_repo(tmp_path / "source")
+    payload = b"materialized immutable payload\n"
+    payload_sha256 = hashlib.sha256(payload).hexdigest()
+    lfs_path = source / "payload.bin"
+    lfs_path.write_text(
+        "version https://git-lfs.github.com/spec/v1\n"
+        f"oid sha256:{payload_sha256}\n"
+        f"size {len(payload)}\n",
+        encoding="ascii",
+    )
+    subprocess.run(["git", "-C", source, "add", "payload.bin"], check=True)
+    subprocess.run(["git", "-C", source, "commit", "-qm", "LFS pointer fixture"], check=True)
+    (source / ".gitattributes").write_text("*.bin filter=lfs diff=lfs merge=lfs -text\n")
+    subprocess.run(["git", "-C", source, "add", ".gitattributes"], check=True)
+    subprocess.run(["git", "-C", source, "commit", "-qm", "LFS attributes fixture"], check=True)
+    source_sha = subprocess.run(
+        ["git", "-C", source, "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    lfs_path.write_bytes(payload)
+
+    result = _run(
+        "check-source",
+        "--repo-root",
+        str(source),
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+    lfs_path.write_bytes(payload + b"drift")
+    drifted = _run(
+        "check-source",
+        "--repo-root",
+        str(source),
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+    assert drifted.returncode == 1
+    assert "content or symlink-target drift" in drifted.stderr
+
+
 def test_assemble_requires_every_validator_once_in_canonical_order(tmp_path: Path) -> None:
     source, source_sha = _source_repo(tmp_path / "source")
     dist = _distributions(tmp_path / "dist")
@@ -434,6 +648,31 @@ def test_schema_accepts_emitted_manifest_and_invalid_schema_fails_closed(tmp_pat
 
     assert result.returncode == 1
     assert "draft 2020-12" in result.stderr
+
+
+def test_verify_rejects_syntactically_valid_weakened_schema(tmp_path: Path) -> None:
+    _source, source_sha, bundle = _assembled_candidate(tmp_path)
+    schema_path = HELPER.with_name("software_candidate_manifest.v1.schema.json")
+    poisoned_schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    poisoned_schema["properties"]["members"] = {"type": "string"}
+    poisoned_path = tmp_path / "poisoned-schema.json"
+    poisoned_path.write_text(json.dumps(poisoned_schema) + "\n", encoding="utf-8")
+
+    result = _run(
+        "verify",
+        "--bundle-dir",
+        str(bundle),
+        "--expected-source-sha",
+        source_sha,
+        "--expected-workflow-run-id",
+        "123456",
+        "--schema",
+        str(poisoned_path),
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "unreviewed contract drift" in result.stderr
 
 
 def test_verify_is_offline_and_has_no_build_tool_dependency(tmp_path: Path) -> None:

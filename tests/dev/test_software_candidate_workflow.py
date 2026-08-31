@@ -105,6 +105,27 @@ def test_workflow_builds_once_then_only_validates_and_admits_same_dist_bytes() -
     assert assemble_run.count("--validated") == 4
 
 
+def test_workflow_checks_hermetic_source_identity_around_the_only_build() -> None:
+    _text, workflow = _workflow()
+    steps = _steps(workflow)
+    source_checks = [
+        (index, step)
+        for index, step in enumerate(steps)
+        if "software_candidate_manifest.py check-source" in step.get("run", "")
+    ]
+    assert [step["name"] for _index, step in source_checks] == [
+        "Require hermetic exact source identity before build",
+        "Reject any source workspace mutation by the build",
+    ]
+    build_index = next(
+        index for index, step in enumerate(steps) if "uv build" in step.get("run", "")
+    )
+    assert source_checks[0][0] < build_index < source_checks[1][0]
+    for _index, step in source_checks:
+        assert '--repo-root "${GITHUB_WORKSPACE}"' in step["run"]
+        assert '--source-sha "${GITHUB_SHA}"' in step["run"]
+
+
 def test_workflow_uploads_checked_bundle_once_and_exposes_artifact_identity() -> None:
     _text, workflow = _workflow()
     steps = _steps(workflow)

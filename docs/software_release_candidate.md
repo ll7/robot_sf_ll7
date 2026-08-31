@@ -44,8 +44,16 @@ as one of its own payload members.
 The producer uses the existing version-alignment, Twine metadata/README, distribution
 archive/license, and clean wheel-install/entry-point owners. Assembly fails unless all four
 validator identities are present exactly once in canonical order. The helper independently
-rejects dirty or drifting source, fuzzy commit IDs, multiple/missing/unclassified distributions,
-duplicate or unsafe archive members, mismatched package metadata, and malformed SBOM input.
+reconstructs the expected tree from the exact commit through an absolute, configuration-empty
+Git carrier, then enumerates the workspace without consulting repository configuration, the
+index, ignore rules, or a `git` executable from `PATH`. Before and after the only build it hashes
+raw tracked file bytes and symlink targets, checks Git executable modes and path types, and rejects
+tracked changes or removals, untracked or ignored paths, and unsafe symlink targets. Build output
+and runtime scratch remain outside the checkout. A materialized Git LFS path is accepted only when
+the frozen commit marks that path `filter=lfs` and its bytes match the committed pointer's SHA-256
+and size; no LFS helper is executed. The helper also rejects fuzzy or non-commit IDs,
+multiple/missing/unclassified distributions, duplicate or unsafe archive members, mismatched
+package metadata, and malformed SBOM input.
 Pinned `uv 0.11.21` also writes a one-byte `*` `.gitignore` marker in a custom output directory;
 the helper classifies only that exact tool marker and never copies it into the candidate bundle.
 Any changed marker content remains an admission failure.
@@ -72,6 +80,11 @@ schema-invalid, source-drifted, run-drifted, size-drifted, or hash-drifted conte
 rechecks wheel/sdist metadata, archive-member safety, SBOM version binding, and provenance. A
 consumer or future promotion workflow must call this verifier on the downloaded bytes. It must
 not run `uv build`, `python -m build`, or any equivalent package build command.
+
+Schema admission is bound to the reviewed v1 schema bytes (SHA-256
+`ffa6635a7a37e21a36881ff8a89be59ee706c41107b94771ace8ed663d2f6469`) as well as its stable ID,
+version, closed-object shape, required fields, and exact four-member contract. Supplying a
+syntactically valid but weakened schema therefore fails before any candidate can be accepted.
 
 Passing this check means only that the software candidate bytes and their build-time validation
 evidence are internally consistent. Publication remains an author- and policy-gated operation.

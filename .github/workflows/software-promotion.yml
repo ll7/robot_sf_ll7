@@ -169,6 +169,10 @@ jobs:
               exit 1
             fi
           done
+          if [[ "${CANDIDATE_RUN_ID}" != "${RIGHTS_RUN_ID}" || "${CANDIDATE_RUN_ATTEMPT}" != "${RIGHTS_RUN_ATTEMPT}" ]]; then
+            echo "candidate and rights artifacts must come from the same producer run attempt" >&2
+            exit 1
+          fi
           for value in "${TEST_RESUME_RUN_ID}" "${TEST_RESUME_RUN_ATTEMPT}" "${TEST_RESUME_ARTIFACT_ID}" "${PRODUCTION_RESUME_RUN_ID}" "${PRODUCTION_RESUME_RUN_ATTEMPT}" "${PRODUCTION_RESUME_ARTIFACT_ID}"; do
             if [[ -n "${value}" && ! "${value}" =~ ^[1-9][0-9]*$ ]]; then
               echo "resume identity must be empty or a positive decimal" >&2

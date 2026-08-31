@@ -10,6 +10,7 @@
     "policy_id",
     "candidate_schema_version",
     "claim_boundary",
+    "supported_dependency_surface",
     "source_selection",
     "exclusion_reasons",
     "external_only",
@@ -21,6 +22,20 @@
     "policy_id": {"type": "string", "const": "robot_sf.software_release_rights_policy.v1"},
     "candidate_schema_version": {"type": "string", "const": "robot_sf.software_sanitized_candidate.v1"},
     "claim_boundary": {"type": "string", "minLength": 1},
+    "supported_dependency_surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile_manifest_path", "profile_ids", "extra_ids", "excluded_extra_ids"],
+      "properties": {
+        "profile_manifest_path": {"const": "scripts/validation/dependency_license_profiles.v1.json"},
+        "profile_ids": {"const": ["all"]},
+        "extra_ids": {
+          "type": "array",
+          "const": ["viz", "maps", "benchmark", "training", "gpu", "recurrent", "progress", "analytics", "browser", "sacadrl", "socnav", "criticality"]
+        },
+        "excluded_extra_ids": {"const": ["rllib"]}
+      }
+    },
     "source_selection": {
       "type": "object",
       "additionalProperties": false,

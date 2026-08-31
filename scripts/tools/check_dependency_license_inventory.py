@@ -85,6 +85,24 @@ _CANDIDATE_VALIDATION_COMMANDS_CURRENT = (
     ),
 )
 _CANDIDATE_SDIST_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz")
+# This is the v0.0.6 public software surface. The checked-in ``all`` profile is
+# the reviewed closure of these twelve extras; keep both lists stable because
+# they are emitted into the rights receipt and form the cross-workflow contract.
+SUPPORTED_SOFTWARE_CANDIDATE_PROFILE_IDS = ("all",)
+SUPPORTED_SOFTWARE_CANDIDATE_EXTRA_IDS = (
+    "viz",
+    "maps",
+    "benchmark",
+    "training",
+    "gpu",
+    "recurrent",
+    "progress",
+    "analytics",
+    "browser",
+    "sacadrl",
+    "socnav",
+    "criticality",
+)
 _REQUIREMENT_RE = re.compile(
     r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)"
     r"(?:\[(?P<extras>[A-Za-z0-9._,-]+)\])?"
@@ -623,9 +641,10 @@ def _candidate_manifest_contract(  # noqa: C901, PLR0912
         "validation",
         "members",
     }
-    if set(manifest) not in (expected_keys, expected_keys | {"materialization"}) or manifest.get(
-        "schema_version"
-    ) != _CANDIDATE_SCHEMA_VERSION:
+    if (
+        set(manifest) not in (expected_keys, expected_keys | {"materialization"})
+        or manifest.get("schema_version") != _CANDIDATE_SCHEMA_VERSION
+    ):
         raise ValueError("candidate manifest has missing or unclassified contract fields")
     if "materialization" in manifest:
         materialization = manifest["materialization"]
@@ -641,9 +660,9 @@ def _candidate_manifest_contract(  # noqa: C901, PLR0912
         }:
             raise ValueError("candidate manifest materialization contract is invalid")
         for field in ("candidate_commit_sha", "candidate_tree_sha"):
-            if not isinstance(materialization[field], str) or not _CANDIDATE_SOURCE_SHA_RE.fullmatch(
-                materialization[field]
-            ):
+            if not isinstance(
+                materialization[field], str
+            ) or not _CANDIDATE_SOURCE_SHA_RE.fullmatch(materialization[field]):
                 raise ValueError(f"candidate manifest materialization {field} is invalid")
         for field in ("policy_sha256", "source_inventory_sha256"):
             if not isinstance(materialization[field], str) or not _SHA256_RE.fullmatch(
@@ -949,6 +968,17 @@ def _candidate_bundle_binding(  # noqa: C901
             "candidate archives do not advertise selected extras: "
             f"{sorted(expected_extras - provided_extras)}"
         )
+    if selected_profile_ids == set(SUPPORTED_SOFTWARE_CANDIDATE_PROFILE_IDS):
+        missing_supported_extras = set(SUPPORTED_SOFTWARE_CANDIDATE_EXTRA_IDS) - provided_extras
+        unsupported_advertised_extras = (
+            provided_extras - set(SUPPORTED_SOFTWARE_CANDIDATE_EXTRA_IDS) - {"all", "rllib"}
+        )
+        if missing_supported_extras or unsupported_advertised_extras:
+            raise ValueError(
+                "candidate archives do not match the closed v0.0.6 supported extra roster "
+                f"(missing={sorted(missing_supported_extras) or 'none'}, "
+                f"unsupported={sorted(unsupported_advertised_extras) or 'none'})"
+            )
     return {
         "status": "bound",
         "manifest_sha256": _sha256_file(manifest_path),
@@ -2231,22 +2261,16 @@ def build_inventory(  # noqa: C901, PLR0912, PLR0915
         if candidate_bundle_path is None:
             selected_ids = set(profile_id_set)
         else:
-            # A software candidate is the narrow core surface. Optional extras and
-            # companion profiles remain visible context but are not implicitly claimed.
-            core_profiles = [
-                profile
-                for profile in profiles
-                if profile.get("kind") == "root"
-                and profile.get("root_package") == "robot-sf"
-                and not profile.get("extras")
-            ]
-            if len(core_profiles) != 1:
-                structural_issues.append(
-                    "candidate-bound inventory requires exactly one root core profile"
-                )
-                selected_ids = set()
-            else:
-                selected_ids = {core_profiles[0]["id"]}
+            # A v0.0.6 software candidate is the closed supported profile union.
+            # Core-only selection remains available only as an explicit diagnostic
+            # and can never satisfy the separate rights-admission receipt gate.
+            selected_ids = set(SUPPORTED_SOFTWARE_CANDIDATE_PROFILE_IDS)
+            missing_profiles = sorted(selected_ids - profile_id_set)
+            structural_issues.extend(
+                f"candidate-bound inventory is missing supported profile: {profile_id}"
+                for profile_id in missing_profiles
+            )
+            selected_ids &= profile_id_set
     else:
         selected_ids = {str(profile_id) for profile_id in selected_profile_ids}
         if not selected_ids:

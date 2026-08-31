@@ -102,13 +102,18 @@ version, and serializes the result canonically. Given identical input bytes and 
 SBOM, provenance, and manifest are byte-for-byte deterministic.
 
 The producer then runs the candidate-bound supported-surface dependency-license inventory with
-`--fail-on-unresolved`. Its report binds the exact candidate manifest/member bytes, canonical
-dependency policy/profile inputs, and the selected core profile into
-`supported_dependency_gate`. The separate `rights-admission.json` receipt conforms to
+`--profile all --fail-on-unresolved`. The reviewed `all` closure is the exact v0.0.6 public
+surface: `viz`, `maps`, `benchmark`, `training`, `gpu`, `recurrent`, `progress`, `analytics`,
+`browser`, `sacadrl`, `socnav`, and `criticality`; `rllib` and ORCA/pyrvo2 remain outside it. Its
+report binds the exact candidate manifest/member bytes, canonical dependency policy/profile
+inputs, and the `all` profile into `supported_dependency_gate`, including the explicit twelve-
+extra roster. A core-only report is rejected for this candidate even if it happens to have zero
+unresolved rows. The separate `rights-admission.json` receipt conforms to
 `robot_sf.software_rights_admission.v1` and is emitted only when both strict gates pass with
 `unresolved_count: 0`; a blocked dependency report cannot produce an accepted receipt. The
-current repository still has unresolved core rows, so a real current-head run is expected to
-stop before receipt upload. This is evidence of a fail-closed boundary, not publication approval.
+current repository still has unresolved rows on the full supported closure, so a real current-head
+run is expected to stop before receipt upload. This is evidence of a fail-closed boundary, not
+publication approval.
 
 ## Offline revalidation
 

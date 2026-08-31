@@ -64,10 +64,28 @@ SUPPORTED_DEPENDENCY_GATE_ID = "strict-supported-dependency-surface"
 SUPPORTED_DEPENDENCY_REPORT_NAME = "dependency-license-inventory.json"
 SUPPORTED_DEPENDENCY_POLICY_PATH = "scripts/validation/dependency_license_policy.v1.json"
 SUPPORTED_DEPENDENCY_PROFILE_PATH = "scripts/validation/dependency_license_profiles.v1.json"
+# The profile manifest's reviewed ``all`` closure is the v0.0.6 public surface.
+# Keep the explicit extra roster in the receipt so a core-only report cannot be
+# mistaken for admission of the wheel's supported optional dependencies.
+SUPPORTED_DEPENDENCY_PROFILE_IDS = ("all",)
+SUPPORTED_DEPENDENCY_EXTRA_IDS = (
+    "viz",
+    "maps",
+    "benchmark",
+    "training",
+    "gpu",
+    "recurrent",
+    "progress",
+    "analytics",
+    "browser",
+    "sacadrl",
+    "socnav",
+    "criticality",
+)
 SUPPORTED_DEPENDENCY_GATE_COMMAND = (
     "python scripts/tools/check_dependency_license_inventory.py "
     "--repo-root $BUILD_SOURCE --output $DEPENDENCY_REPORT "
-    "--candidate-bundle $CANDIDATE_BUNDLE --fail-on-unresolved"
+    "--candidate-bundle $CANDIDATE_BUNDLE --profile all --fail-on-unresolved"
 )
 UV_OUT_DIR_MARKER_NAME = ".gitignore"
 UV_OUT_DIR_MARKER_BYTES = b"*"
@@ -2062,6 +2080,7 @@ def _load_rights_policy(  # noqa: C901, PLR0912 - closed policy contract
         "policy_id",
         "candidate_schema_version",
         "claim_boundary",
+        "supported_dependency_surface",
         "source_selection",
         "exclusion_reasons",
         "external_only",
@@ -2079,6 +2098,25 @@ def _load_rights_policy(  # noqa: C901, PLR0912 - closed policy contract
         raise CandidateError("software release rights policy identity is unsupported")
     if not isinstance(payload["claim_boundary"], str) or not payload["claim_boundary"].strip():
         raise CandidateError("software release rights policy claim boundary is empty")
+    supported_surface = payload["supported_dependency_surface"]
+    if not isinstance(supported_surface, dict) or set(supported_surface) != {
+        "profile_manifest_path",
+        "profile_ids",
+        "extra_ids",
+        "excluded_extra_ids",
+    }:
+        raise CandidateError(
+            "software release rights policy supported dependency surface is malformed"
+        )
+    if (
+        supported_surface["profile_manifest_path"] != SUPPORTED_DEPENDENCY_PROFILE_PATH
+        or supported_surface["profile_ids"] != list(SUPPORTED_DEPENDENCY_PROFILE_IDS)
+        or supported_surface["extra_ids"] != list(SUPPORTED_DEPENDENCY_EXTRA_IDS)
+        or supported_surface["excluded_extra_ids"] != ["rllib"]
+    ):
+        raise CandidateError(
+            "software release rights policy supported dependency roster is invalid"
+        )
     selection = payload["source_selection"]
     if not isinstance(selection, dict) or set(selection) != {
         "allow_globs",
@@ -2944,6 +2982,11 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912 - closed depen
         or not all(isinstance(profile_id, str) and profile_id for profile_id in profile_ids)
     ):
         raise CandidateError("supported dependency report has no non-empty profile surface")
+    if profile_ids != list(SUPPORTED_DEPENDENCY_PROFILE_IDS):
+        raise CandidateError(
+            "supported dependency report profile surface does not match the closed v0.0.6 "
+            f"roster: expected {list(SUPPORTED_DEPENDENCY_PROFILE_IDS)}, found {profile_ids}"
+        )
     profile_manifest = report.get("profile_manifest")
     if (
         not isinstance(profile_manifest, dict)
@@ -2998,11 +3041,13 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912 - closed depen
         "policy_sha256": policy_sha256,
         "profile_manifest_path": SUPPORTED_DEPENDENCY_PROFILE_PATH,
         "profile_manifest_sha256": profile_manifest_sha256,
+        "profile_ids": list(SUPPORTED_DEPENDENCY_PROFILE_IDS),
         "report_filename": SUPPORTED_DEPENDENCY_REPORT_NAME,
         "report_sha256": _sha256(report_path),
         "schema_version": SUPPORTED_DEPENDENCY_SCHEMA_VERSION,
         "source_sha": source_sha,
         "status": "passed",
+        "supported_extra_ids": list(SUPPORTED_DEPENDENCY_EXTRA_IDS),
         "unresolved_count": 0,
     }
 
@@ -3070,9 +3115,16 @@ def _validate_rights_receipt(receipt: Any) -> dict[str, Any]:  # noqa: C901 - cl
         or not RUN_ID_PATTERN.fullmatch(candidate["workflow_run_id"])
     ):
         raise CandidateError("rights admission candidate binding is invalid")
-    _validate_members(candidate["members"], version=candidate["package"]["version"])
-    if candidate["package"] != {"name": "robot_sf", "version": candidate["package"].get("version")}:
+    package = candidate["package"]
+    if (
+        not isinstance(package, dict)
+        or set(package) != {"name", "version"}
+        or package.get("name") != "robot_sf"
+        or not isinstance(package.get("version"), str)
+        or not VERSION_PATTERN.fullmatch(package["version"])
+    ):
         raise CandidateError("rights admission candidate package identity is invalid")
+    _validate_members(candidate["members"], version=package["version"])
     sanitized = receipt["sanitized"]
     if not isinstance(sanitized, dict) or set(sanitized) != {
         "policy_id",
@@ -3124,11 +3176,13 @@ def _validate_rights_receipt(receipt: Any) -> dict[str, Any]:  # noqa: C901 - cl
         "policy_sha256",
         "profile_manifest_path",
         "profile_manifest_sha256",
+        "profile_ids",
         "report_filename",
         "report_sha256",
         "schema_version",
         "source_sha",
         "status",
+        "supported_extra_ids",
         "unresolved_count",
     }
     if not isinstance(dependency_gate, dict) or set(dependency_gate) != expected_dependency_keys:
@@ -3141,8 +3195,10 @@ def _validate_rights_receipt(receipt: Any) -> dict[str, Any]:  # noqa: C901 - cl
         or dependency_gate["command"] != SUPPORTED_DEPENDENCY_GATE_COMMAND
         or dependency_gate["policy_path"] != SUPPORTED_DEPENDENCY_POLICY_PATH
         or dependency_gate["profile_manifest_path"] != SUPPORTED_DEPENDENCY_PROFILE_PATH
+        or dependency_gate["profile_ids"] != list(SUPPORTED_DEPENDENCY_PROFILE_IDS)
         or dependency_gate["report_filename"] != SUPPORTED_DEPENDENCY_REPORT_NAME
         or dependency_gate["status"] != "passed"
+        or dependency_gate["supported_extra_ids"] != list(SUPPORTED_DEPENDENCY_EXTRA_IDS)
         or dependency_gate["source_sha"] != sanitized["source_sha"]
         or dependency_gate["candidate_manifest_sha256"] != candidate["manifest_sha256"]
         or dependency_gate["candidate_tree_sha256"] != sanitized["tree_sha256"]

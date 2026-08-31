@@ -50,13 +50,13 @@ explicit `resolution-markers` are proven false from the manifest target. Any
 remaining row is emitted as `unresolved_membership` and keeps strict mode
 blocked until a maintainer reviews its context.
 
-For release checks, narrow the command to the exact declared profile or profile union instead of
-using the whole development matrix:
+For release checks, select the exact reviewed profile or profile union instead of using the whole
+development matrix. The v0.0.6 software candidate uses the checked-in `all` closure, which covers
+the twelve public extras and excludes standalone `rllib`:
 
 ```bash
 python scripts/tools/check_dependency_license_inventory.py \
-  --profile core \
-  --profile viz \
+  --profile all \
   --fail-on-unresolved
 ```
 
@@ -68,23 +68,25 @@ rows sharing a lockfile do not silently become release members. On the full decl
 unexplained rows retain an `unresolved_membership` marker and continue to block strict mode.
 
 When the immutable software-candidate bundle has already been admitted, bind its exact wheel,
-source distribution, provenance, and CycloneDX software bill of materials (SBOM) to the selected
-frozen closure:
+source distribution, provenance, and CycloneDX software bill of materials (SBOM) to the reviewed
+v0.0.6 supported closure:
 
 ```bash
 python scripts/tools/check_dependency_license_inventory.py \
-  --profile core \
+  --profile all \
   --candidate-bundle output/validation/software-candidate \
   --output output/validation/dependency-license-inventory.json \
   --fail-on-unresolved
 ```
 
 Candidate binding verifies the closed manifest/provenance contract, member checksums, archive
-package identity and metadata, and the SBOM component set against the selected lock closure. It
-replaces ambient installed metadata for the selected rows with an `artifact_bound` identity
-observation, but it does not invent license facts: a reviewed exact policy disposition is still
-required for each dependency. The resulting `candidate_binding` record carries the candidate
-identity, member digests, and component digest needed for candidate-bundle admission.
+package identity and metadata, and the SBOM component set against the selected lock closure. A
+candidate invocation without `--profile` selects `all`; it never silently narrows to `core`. The
+separate rights-admission consumer rejects a report whose surface is not exactly `["all"]` with
+the twelve supported extra IDs. It replaces ambient installed metadata for the selected rows
+with an `artifact_bound` identity observation, but it does not invent license facts: a reviewed
+exact policy disposition is still required for each dependency. The resulting `candidate_binding`
+record carries the candidate identity, member digests, and component digest needed for admission.
 
 The committed profile matrix covers the root environment, every declared supported extra,
 the explicit `all` closure, standalone `fast-pysf`, and SocNavBench.

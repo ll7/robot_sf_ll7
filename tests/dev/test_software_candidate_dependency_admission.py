@@ -9,7 +9,9 @@ from typing import TYPE_CHECKING
 import pytest
 
 from scripts.dev.software_candidate_manifest import (
+    SUPPORTED_DEPENDENCY_EXTRA_IDS,
     SUPPORTED_DEPENDENCY_POLICY_PATH,
+    SUPPORTED_DEPENDENCY_PROFILE_IDS,
     SUPPORTED_DEPENDENCY_PROFILE_PATH,
     SUPPORTED_DEPENDENCY_REPORT_NAME,
     CandidateError,
@@ -76,7 +78,7 @@ def _report(identity: dict[str, object]) -> dict[str, object]:
         ],
         "schema_version": "robot-sf.dependency-license-inventory.v1",
         "summary": {"candidate_bound": True, "status": "complete", "unresolved_count": 0},
-        "surface": {"profile_ids": ["core"]},
+        "surface": {"profile_ids": list(SUPPORTED_DEPENDENCY_PROFILE_IDS)},
     }
 
 
@@ -102,6 +104,8 @@ def test_supported_dependency_report_binds_exact_candidate_and_input_digests(
     assert binding["policy_sha256"] == "c" * 64
     assert binding["profile_manifest_sha256"] == "d" * 64
     assert binding["report_sha256"] == hashlib.sha256(report_path.read_bytes()).hexdigest()
+    assert binding["profile_ids"] == list(SUPPORTED_DEPENDENCY_PROFILE_IDS)
+    assert binding["supported_extra_ids"] == list(SUPPORTED_DEPENDENCY_EXTRA_IDS)
     assert binding["unresolved_count"] == 0
 
 
@@ -144,6 +148,23 @@ def test_supported_dependency_report_rejects_wrong_filename(tmp_path: Path) -> N
     report_path.write_text(json.dumps(_report(identity)) + "\n", encoding="utf-8")
 
     with pytest.raises(CandidateError, match="must be named"):
+        _validate_supported_dependency_report(
+            report_path,
+            identity=identity,
+            source_sha=identity["source_sha"],
+            tree_sha256="e" * 64,
+        )
+
+
+def test_v006_candidate_rejects_core_only_dependency_report(tmp_path: Path) -> None:
+    """A core-only report cannot authorize the v0.0.6 supported extras surface."""
+    identity = _identity()
+    payload = _report(identity)
+    payload["surface"] = {"profile_ids": ["core"]}
+    report_path = tmp_path / SUPPORTED_DEPENDENCY_REPORT_NAME
+    report_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    with pytest.raises(CandidateError, match="closed v0.0.6 roster"):
         _validate_supported_dependency_report(
             report_path,
             identity=identity,

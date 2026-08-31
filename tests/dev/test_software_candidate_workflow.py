@@ -191,6 +191,8 @@ def test_workflow_builds_once_then_only_validates_and_admits_same_dist_bytes() -
     assert '--output "${DEPENDENCY_REPORT}"' in dependency_run
     assert "--fail-on-unresolved" in dependency_run
     assert dependency_index == positions[-1]
+    assert "--profile all" in dependency_run
+    assert "--profile core" not in dependency_run
 
     upload_index = next(index for index, step in enumerate(steps) if step.get("id") == "upload")
     rights_index, rights_run = next(
@@ -201,6 +203,9 @@ def test_workflow_builds_once_then_only_validates_and_admits_same_dist_bytes() -
     assert dependency_index < upload_index < rights_index
     assert '--dependency-report "${DEPENDENCY_REPORT}"' in rights_run
     assert '--candidate-artifact-id "${{ steps.upload.outputs.artifact-id }}"' in rights_run
+
+    sbom_run = next(run for _index, run in run_steps if "uv export" in run)
+    assert "--extra all" in sbom_run
 
 
 def test_workflow_checks_hermetic_source_identity_around_the_only_build() -> None:

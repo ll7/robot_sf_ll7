@@ -201,6 +201,7 @@ jobs:
         run: |
           cd "${BUILD_SOURCE}"
           uv export --preview-features sbom-export --frozen --no-dev --no-emit-project \
+            --extra all \
             --format cyclonedx1.5 --output-file "${RAW_SBOM}" >/dev/null
 
       - name: Assemble deterministic candidate manifest and provenance
@@ -234,6 +235,7 @@ jobs:
           --repo-root "${BUILD_SOURCE}"
           --output "${DEPENDENCY_REPORT}"
           --candidate-bundle "${BUNDLE_DIR}"
+          --profile all
           --fail-on-unresolved
 
       - name: Upload checked candidate bundle once

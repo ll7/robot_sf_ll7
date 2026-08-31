@@ -7435,3 +7435,11 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/future_work_cards
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/future_work_bridge_status.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

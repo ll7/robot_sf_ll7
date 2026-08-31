@@ -249,6 +249,42 @@ def test_state_qualifiers_are_preserved_during_execution_state_cleanup() -> None
     )
 
 
+def test_issue_audit_and_admission_share_execution_state_taxonomy() -> None:
+    """The audit and admission gates must not drift on execution-state labels."""
+    from scripts.dev import issue_implementability
+    from scripts.dev.issue_state_taxonomy import EXECUTION_STATE_LABELS
+
+    classification = classify_issue(
+        _issue(
+            105,
+            labels=["state:blocked", "state:parked"],
+            body="The source run is parked until the prerequisite closes.",
+        ),
+        available_labels={"state:blocked", "state:parked"},
+    )
+    report = issue_implementability.evaluate_issue(
+        {
+            "number": 105,
+            "title": "fixture issue",
+            "body": (
+                "## Objective\nFix it.\n\n## Scope\nOne file.\n\n## Inputs\n- file\n\n"
+                "## Acceptance criteria\n- pass\n\n## Validation\n- pytest\n"
+            ),
+            "state": "OPEN",
+            "url": "https://github.test/issues/105",
+            "labels": ["state:blocked", "state:parked"],
+            "assignees": [],
+        },
+        {"ok": True, "claimed": False, "claim_ref": None, "sha": None},
+    )
+
+    assert set(classification.execution_state_labels) == {"state:blocked"}
+    assert set(EXECUTION_STATE_LABELS) == set(
+        issue_implementability.execution_state_labels(set(EXECUTION_STATE_LABELS))
+    )
+    assert report["admission_reason"] != "state_label_conflict"
+
+
 def test_missing_optional_job_visibility_preserves_slurm_issue_without_blocker_claim() -> None:
     """Unavailable SLURM visibility blocks promotion without inventing a blocker."""
     classification = classify_issue(

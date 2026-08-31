@@ -114,7 +114,10 @@ def test_snapshot_claimable_issues_excludes_dispatch_stop_labels_from_dispatch(
     assert row["reason"] == (
         "the issue is already in review"
         if dispatch_stop_label == "state:review"
-        else "exactly one state:* label is required; found none"
+        else (
+            "exactly one execution state label is required unless a known hold qualifier already "
+            "blocks dispatch; found none; state qualifiers are none"
+        )
     )
 
 
@@ -550,7 +553,10 @@ def test_snapshot_issues_reads_rest_when_graphql_quota_exhausted() -> None:
     assert issue["state"] == "OPEN"
     assert issue["labels"] == ["enhancement", "workflow"]
     assert issue["classification"] == "state_conflict"
-    assert issue["reason"] == "exactly one state:* label is required; found none"
+    assert issue["reason"] == (
+        "exactly one execution state label is required unless a known hold qualifier already "
+        "blocks dispatch; found none; state qualifiers are none"
+    )
     assert issue["body_excerpt"] == rest_issue["body"]
     assert issue["body_truncated"] is False
     # Explicit reads must go through the REST reader, not the GraphQL CLI.

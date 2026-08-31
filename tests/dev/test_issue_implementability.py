@@ -236,13 +236,45 @@ def test_state_ready_is_required() -> None:
     assert report["ready"] is False
 
 
-def test_exactly_one_state_label_is_required() -> None:
+def test_two_execution_state_labels_fail_closed() -> None:
     report = evaluate_issue(
-        _issue(labels=["type:workflow", "state:ready", "state:parked"]), _claim()
+        _issue(labels=["type:workflow", "state:ready", "state:blocked"]), _claim()
     )
 
     assert report["classification"] == "state_conflict"
     assert report["admission_reason"] == "state_label_conflict"
+
+
+@pytest.mark.parametrize(
+    ("labels", "classification"),
+    [
+        (["state:ready", "state:review"], "review"),
+        (["state:ready", "state:needs-artifact-promotion"], "ready"),
+        (["state:ready", "state:blocked-no-code-slice"], "blocked"),
+        (["state:ready", "state:parked"], "blocked"),
+        (["state:ready", "state:deferred"], "blocked"),
+        (["state:ready", "state:working"], "working"),
+        (["state:blocked", "state:blocked-no-code-slice"], "blocked"),
+        (["state:blocked", "state:parked"], "blocked"),
+        (["state:running", "state:blocked-no-code-slice"], "stale_running"),
+        (["state:running", "state:parked"], "stale_running"),
+    ],
+)
+def test_state_qualifiers_do_not_create_execution_state_conflicts(
+    labels: list[str], classification: str
+) -> None:
+    report = evaluate_issue(_issue(labels=labels), _claim())
+
+    assert report["classification"] == classification
+    assert report["admission_reason"] != "state_label_conflict"
+
+
+def test_unknown_state_label_fails_closed_until_classified() -> None:
+    report = evaluate_issue(_issue(labels=["state:ready", "state:surprise"]), _claim())
+
+    assert report["classification"] == "state_conflict"
+    assert report["admission_reason"] == "state_label_conflict"
+    assert "unknown state:* label" in report["reasons"][0]
 
 
 def test_missing_contract_field_returns_needs_spec() -> None:
@@ -284,12 +316,12 @@ def test_alias_prefixed_headings_do_not_satisfy_contract(
         (["state:ready", "state:blocked"], "state_conflict"),
         (["state:blocked-no-code-slice"], "blocked"),
         (["state:ready", "deferred"], "blocked"),
-        (["state:ready", "state:deferred"], "state_conflict"),
-        (["state:ready", "state:parked"], "state_conflict"),
+        (["state:ready", "state:deferred"], "blocked"),
+        (["state:ready", "state:parked"], "blocked"),
         (["state:ready", "decision-required"], "human_decision"),
         (["state:ready", "parent"], "parent"),
         (["state:ready", "resource:slurm"], "needs_compute"),
-        (["state:ready", "state:working"], "state_conflict"),
+        (["state:ready", "state:working"], "working"),
         (["state:ready", "needs-review"], "review"),
     ],
 )

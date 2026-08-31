@@ -6,7 +6,13 @@ Autonomous implementation must use the repository label state and a complete iss
 
 An implementation worker may acquire `agent-claims/issue-<number>` only when the issue:
 
-- is open, has exactly one `state:*` lifecycle label, and is labeled `state:ready`;
+- is open, has exactly one execution-state lifecycle label, and is labeled `state:ready`;
+- may carry known composable `state:*` qualifiers such as `state:review`,
+  `state:needs-artifact-promotion`, `state:blocked-no-code-slice`, `state:parked`,
+  `state:deferred`, or `state:working`; these qualifiers do not replace the execution state;
+- preserves legacy standalone hold qualifiers such as `state:working`, `state:review`, or
+  `state:blocked-no-code-slice` as non-claimable holds rather than treating them as ready;
+- has no unknown `state:*` label until that label is classified in the shared taxonomy;
 - is unassigned and has no existing atomic claim;
 - is not a parent, epic, decision, review, active-work, compute, campaign, external-input, or blocked issue;
 - contains non-empty sections for the objective, scope, inputs or affected surfaces, acceptance criteria, and verification.

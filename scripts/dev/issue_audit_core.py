@@ -33,6 +33,16 @@ from typing import Any
 from urllib.parse import quote
 
 from scripts.dev.issue_completion_receipt import admit_completion_receipt
+from scripts.dev.issue_state_taxonomy import (
+    EXECUTION_STATE_LABELS,
+    STATE_QUALIFIER_LABELS,
+)
+from scripts.dev.issue_state_taxonomy import (
+    execution_state_labels as shared_execution_state_labels,
+)
+from scripts.dev.issue_state_taxonomy import (
+    state_labels as shared_state_labels,
+)
 from scripts.tools.issue_archetype_sync import SAFE_ARCHETYPE_LABEL_MAP
 from scripts.tools.issue_template_audit import audit_archetype_metadata
 
@@ -50,7 +60,6 @@ PLAN_SCHEMA = "issue_audit_plan.v1"
 ENVELOPE_SCHEMA = "issue_decision_envelope.v1"
 MAX_SOURCE_EXCERPT = 280
 
-STATE_PREFIX = "state:"
 RESOURCE_PREFIX = "resource:"
 TYPE_PREFIX = "type:"
 EVIDENCE_PREFIX = "evidence:"
@@ -65,29 +74,6 @@ BLOCKED_TRIAGE_BLOCK_RE = re.compile(
 )
 BLOCKED_BY_REFERENCE_RE = re.compile(
     r"(?im)^\s*(?:#{1,6}\s*)?blocked\s*-?\s*by\s*:\s*#[1-9][0-9]*\b"
-)
-
-# Canonical execution states are mutually exclusive.  The repository also has
-# composable ``state:*`` qualifiers such as ``state:review`` and
-# ``state:needs-artifact-promotion``; those qualify an issue without replacing
-# its execution state and must be preserved during cleanup.  Resource and
-# evidence labels are composable; type labels are expected to be singular, but
-# ambiguity is preserved rather than guessed.
-EXECUTION_STATE_LABELS = frozenset(
-    {
-        "state:blocked-external-input",
-        "state:blocked",
-        "state:hold",
-        "state:running",
-        "state:ready",
-    }
-)
-STATE_PRIORITY = (
-    "state:blocked-external-input",
-    "state:blocked",
-    "state:hold",
-    "state:running",
-    "state:ready",
 )
 
 BLOCKER_TERMS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
@@ -1443,10 +1429,8 @@ def classify_issue(
     body = str(issue.get("body") or "")
     title = str(issue.get("title") or "")
     text = _text_for_issue(issue)
-    state_labels = tuple(sorted(label for label in labels if label.startswith(STATE_PREFIX)))
-    execution_state_labels = tuple(
-        sorted(label for label in labels if label in EXECUTION_STATE_LABELS)
-    )
+    state_labels = tuple(shared_state_labels(labels))
+    execution_state_labels = tuple(shared_execution_state_labels(labels))
     resource_labels = tuple(sorted(label for label in labels if label.startswith(RESOURCE_PREFIX)))
     type_labels = tuple(sorted(label for label in labels if label.startswith(TYPE_PREFIX)))
     evidence_labels = tuple(sorted(label for label in labels if label.startswith(EVIDENCE_PREFIX)))
@@ -1971,7 +1955,7 @@ def build_audit_plan(
         "label_policy": {
             "create_missing": False,
             "mutually_exclusive": [sorted(EXECUTION_STATE_LABELS), TYPE_PREFIX],
-            "composable": [RESOURCE_PREFIX, EVIDENCE_PREFIX],
+            "composable": [RESOURCE_PREFIX, EVIDENCE_PREFIX, sorted(STATE_QUALIFIER_LABELS)],
             "preserve_state_qualifiers": True,
         },
         "inventory": inventory.get("inventory", {}),

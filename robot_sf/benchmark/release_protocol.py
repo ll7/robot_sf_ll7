@@ -2922,6 +2922,26 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _rollback_materialized_outputs(
+    originals: Mapping[Path, bytes | None],
+) -> None:
+    """Restore or remove outputs after source drift during materialization."""
+    rollback_errors: list[str] = []
+    for path, original in originals.items():
+        try:
+            if original is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(original)
+        except OSError as exc:
+            rollback_errors.append(f"{path.name}: {exc}")
+    if rollback_errors:
+        raise ValueError(
+            "failed to roll back resolved identity outputs after source drift: "
+            + "; ".join(rollback_errors)
+        )
+
+
 def write_resolved_release_identity(
     *,
     template_path: Path,
@@ -2976,11 +2996,34 @@ def write_resolved_release_identity(
         template_path=template,
     )
     identity_bytes = _canonical_json_bytes(envelope)
-    for path, expected in ((output, identity_bytes), (metadata_path, metadata_bytes)):
-        if path.exists() and path.read_bytes() != expected:
-            raise ValueError(f"refusing to overwrite stale resolved identity output: {path.name}")
-    _atomic_write_bytes(metadata_path, metadata_bytes)
-    _atomic_write_bytes(output, identity_bytes)
+    materialized_outputs = ((metadata_path, metadata_bytes), (output, identity_bytes))
+    originals = {
+        path: path.read_bytes() if path.is_file() else None for path, _ in materialized_outputs
+    }
+    materialization_started = False
+    try:
+        for path, expected in materialized_outputs:
+            if path.exists() and path.read_bytes() != expected:
+                raise ValueError(
+                    f"refusing to overwrite stale resolved identity output: {path.name}"
+                )
+        for path, expected in materialized_outputs:
+            materialization_started = True
+            _atomic_write_bytes(path, expected)
+            # Git status is checked immediately after each replacement.  If a tracked source
+            # mutates between the pre-write check and this replacement, no output survives.
+            _require_clean_exact_checkout(
+                root,
+                source_commit=normalized_source,
+                template_path=template,
+            )
+    except (OSError, ValueError) as exc:
+        if materialization_started:
+            try:
+                _rollback_materialized_outputs(originals)
+            except ValueError as rollback_error:
+                raise rollback_error from exc
+        raise
     return envelope
 
 

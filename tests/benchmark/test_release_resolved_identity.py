@@ -450,6 +450,40 @@ def test_generation_rechecks_cleanliness_after_resolving_inputs(
     assert not output.exists()
 
 
+def test_generation_rejects_source_mutation_during_materialization(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A source race immediately before atomic replacement must leave no new outputs."""
+    repo, template, source_commit = _release_template_repository(tmp_path)
+    output = repo / "output" / "materialization-race" / "release_identity.resolved.json"
+    original_atomic_write = release_protocol._atomic_write_bytes
+    mutation_applied = False
+
+    def _mutating_atomic_write(path: Path, data: bytes) -> None:
+        nonlocal mutation_applied
+        if not mutation_applied:
+            mutation_applied = True
+            scenarios = repo / "scenarios.yaml"
+            scenarios.write_text(
+                scenarios.read_text(encoding="utf-8") + "# changed before replacement\n",
+                encoding="utf-8",
+            )
+        original_atomic_write(path, data)
+
+    monkeypatch.setattr(release_protocol, "_atomic_write_bytes", _mutating_atomic_write)
+
+    with pytest.raises(ValueError, match="not clean"):
+        write_resolved_release_identity(
+            output_path=output,
+            **_identity_inputs(repo, template, source_commit),
+        )
+
+    assert mutation_applied is True
+    assert not output.exists()
+    assert not (output.parent / "zenodo_metadata.resolved.json").exists()
+
+
 def test_generation_rejects_symlinked_template_input(tmp_path: Path) -> None:
     repo, template, _ = _release_template_repository(tmp_path)
     linked_metadata = repo / "linked_metadata.json"

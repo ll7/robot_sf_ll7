@@ -25,8 +25,8 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          path = Path("scripts/dev/snapshot_issue_batch.py")
-          text = path.read_text(encoding="utf-8")
+          source_path = Path("scripts/dev/snapshot_issue_batch.py")
+          source = source_path.read_text(encoding="utf-8")
           old = (
               "    truncated, resumable, or started after page one; and\n"
               "    ``unavailable`` means discovery itself failed or was quota-blocked. A\n"
@@ -36,10 +36,29 @@ jobs:
               "    ``unavailable`` means discovery failed, was quota-blocked, or candidate\n"
               "    evaluation was unavailable. A\n"
           )
-          count = text.count(old)
+          count = source.count(old)
           if count != 1:
               raise SystemExit(f"queue-completeness wording: expected one match, found {count}")
-          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          source_path.write_text(source.replace(old, new, 1), encoding="utf-8")
+
+          test_path = Path("tests/dev/test_snapshot_claimable_queue_fail_closed.py")
+          test = test_path.read_text(encoding="utf-8")
+          old_imports = (
+              "import json\n"
+              "from pathlib import Path\n"
+              "from unittest.mock import patch\n"
+          )
+          new_imports = (
+              "import json\n"
+              "from typing import TYPE_CHECKING\n"
+              "from unittest.mock import patch\n\n"
+              "if TYPE_CHECKING:\n"
+              "    from pathlib import Path\n"
+          )
+          count = test.count(old_imports)
+          if count != 1:
+              raise SystemExit(f"typing-only Path import: expected one match, found {count}")
+          test_path.write_text(test.replace(old_imports, new_imports, 1), encoding="utf-8")
           PY
 
           python -m pip install --disable-pip-version-check --quiet ruff==0.16.4

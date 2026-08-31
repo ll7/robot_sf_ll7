@@ -11,10 +11,10 @@ drift cannot silently re-break agent workflows:
    rejected instead of crashing.
 3. ``gh_comment.sh`` publishes through the REST issue-comments endpoint and
    never depends on the GraphQL-backed ``gh issue comment`` path.
-4. ``gh_pr_merge.sh`` retries GraphQL quota exhaustion only after a REST guard
-   snapshot re-verifies exact head, PR state, clean mergeability, and the
-   ``merge-ready`` label; auth, repository, and other non-quota errors stay
-   fail-closed.
+4. ``gh_pr_merge.sh`` retries GraphQL quota exhaustion only after REST checks
+   re-verify exact head, PR state, clean mergeability, and a complete bounded
+   ``merge-ready`` label inventory; auth, repository, and other non-quota
+   errors stay fail-closed.
 """
 
 from __future__ import annotations
@@ -183,9 +183,17 @@ def test_merge_wrapper_quota_fallback_rechecks_rest_guard_snapshot() -> None:
     assert ".head.sha" in source
     assert ".draft" in source
     assert ".mergeable_state" in source
-    assert 'index("merge-ready")' in source
     assert "git config --get remote.origin.url" in source
     assert '-f sha="$expected_head_sha"' in source
+
+
+def test_merge_wrapper_uses_complete_bounded_rest_label_read() -> None:
+    source = _source("gh_pr_merge.sh")
+    assert "REST_LABEL_PAGE_SIZE=100" in source
+    assert "REST_LABEL_PAGE_CEILING=10" in source
+    assert "issues/${number}/labels?per_page=${REST_LABEL_PAGE_SIZE}&page=${page}" in source
+    assert 'any(.[]; .name == "merge-ready")' in source
+    assert "pagination exceeded the page ceiling" in source
 
 
 def test_merge_wrapper_quota_trigger_keeps_fail_closed_precedence() -> None:

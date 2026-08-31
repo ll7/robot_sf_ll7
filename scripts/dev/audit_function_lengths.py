@@ -49,6 +49,11 @@ class FunctionFinding:
     nesting: str
     file_digest: str
 
+    @property
+    def identity(self) -> str:
+        """Return the canonical module-qualified finding identity."""
+        return f"{self.module}::{self.qualified_name}"
+
     def as_dict(self) -> dict[str, Any]:
         """Return a JSON-ready dictionary."""
         return asdict(self)
@@ -213,26 +218,97 @@ def run_audit(
 
 
 def _allowlist_load(path: Path) -> dict[str, int]:
-    """Load an allowlist of ``qualified_name -> inclusive_lines``."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    """Load an allowlist of ``identity -> inclusive_lines``."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid JSON in allowlist file {path}: {exc}") from exc
     if not isinstance(payload, dict):
         raise ValueError("allowlist must be a JSON object mapping names to line counts")
-    return {str(key): int(value) for key, value in payload.items()}
+    allowlist: dict[str, int] = {}
+    for key, value in payload.items():
+        if not isinstance(key, str):
+            raise ValueError(f"allowlist keys must be strings, got {key!r}")
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(
+                f"allowlist value for {key!r} must be a non-negative integer, got {value!r}"
+            )
+        allowlist[key] = value
+    return allowlist
+
+
+def _validate_allowlist_values(allowlist: dict[str, int]) -> list[str]:
+    """Validate that allowlist values are non-boolean non-negative integers."""
+    problems: list[str] = []
+    for key, value in allowlist.items():
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            problems.append(
+                f"allowlist value for {key!r} must be a non-negative integer, got {value!r}"
+            )
+    return problems
+
+
+def _detect_ambiguous_legacy_keys(
+    allowlist: dict[str, int],
+    qname_to_findings: dict[str, list[dict[str, Any]]],
+) -> tuple[set[str], list[str]]:
+    """Detect unqualified legacy allowlist keys matching multiple findings."""
+    ambiguous: set[str] = set()
+    problems: list[str] = []
+    for key in allowlist:
+        if "::" not in key and key in qname_to_findings:
+            matches = qname_to_findings[key]
+            if len(matches) > 1:
+                ambiguous.add(key)
+                candidate_ids = [f"{m['module']}::{m['qualified_name']}" for m in matches]
+                problems.append(
+                    f"ambiguous legacy allowlist key {key!r} matches multiple findings: "
+                    f"{', '.join(sorted(candidate_ids))}; use module-qualified identities"
+                )
+    return (ambiguous, problems)
+
+
+def _check_finding(
+    finding: dict[str, Any],
+    allowlist: dict[str, int],
+    ambiguous_legacy_keys: set[str],
+) -> str | None:
+    """Check one finding against the allowlist and return an error problem if any."""
+    canonical_id = f"{finding['module']}::{finding['qualified_name']}"
+    qname = finding["qualified_name"]
+
+    allowed: int | None = None
+    if canonical_id in allowlist:
+        allowed = allowlist[canonical_id]
+    elif qname in allowlist and qname not in ambiguous_legacy_keys:
+        allowed = allowlist[qname]
+
+    if allowed is None:
+        return f"function over threshold without allowlist entry: {canonical_id}"
+
+    if finding["inclusive_lines"] > allowed:
+        return f"function {canonical_id} grew from {allowed} to {finding['inclusive_lines']} lines"
+    return None
 
 
 def run_check(report: dict[str, Any], allowlist: dict[str, int]) -> tuple[int, list[str]]:
     """Return ``(exit_code, problems)`` for the audit against an allowlist."""
-    problems: list[str] = []
-    allowlist_names = set(allowlist)
+    value_problems = _validate_allowlist_values(allowlist)
+    if value_problems:
+        return (1, value_problems)
+
+    qname_to_findings: dict[str, list[dict[str, Any]]] = {}
     for finding in report["findings"]:
-        name = finding["qualified_name"]
-        if name not in allowlist_names:
-            problems.append(f"function over threshold without allowlist entry: {name}")
-            continue
-        if allowlist[name] < finding["inclusive_lines"]:
-            problems.append(
-                f"function {name} grew from {allowlist[name]} to {finding['inclusive_lines']} lines"
-            )
+        qname_to_findings.setdefault(finding["qualified_name"], []).append(finding)
+
+    ambiguous_keys, ambiguous_problems = _detect_ambiguous_legacy_keys(allowlist, qname_to_findings)
+    problems: list[str] = list(ambiguous_problems)
+
+    for finding in report["findings"]:
+        problem = _check_finding(finding, allowlist, ambiguous_keys)
+        if problem is not None:
+            problems.append(problem)
+
     return (1 if problems else 0, problems)
 
 

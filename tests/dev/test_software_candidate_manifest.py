@@ -172,6 +172,15 @@ def test_assemble_is_deterministic_and_offline_verify_reuses_exact_bytes(tmp_pat
         "sbom",
         "provenance",
     }
+    provenance_member = next(
+        member for member in manifest["members"] if member["kind"] == "provenance"
+    )
+    provenance = json.loads((first / provenance_member["filename"]).read_text(encoding="utf-8"))
+    assert provenance["build"] == {
+        "command": "cd $BUILD_SOURCE && uv build --out-dir $DIST_DIR",
+        "count": 1,
+        "source_role": "disposable-exact-commit",
+    }
 
     sbom_member = next(member for member in manifest["members"] if member["kind"] == "sbom")
     sbom = json.loads((first / sbom_member["filename"]).read_text(encoding="utf-8"))
@@ -335,6 +344,277 @@ def test_check_source_rejects_ignored_workspace_mutation(tmp_path: Path) -> None
 
     assert result.returncode == 1
     assert "dirty or ambiguous" in result.stderr
+
+
+def test_checkout_root_build_version_file_mutation_fails_source_gate(tmp_path: Path) -> None:
+    source, _source_sha = _source_repo(tmp_path / "source")
+    (source / "robot_sf").mkdir()
+    (source / "robot_sf" / "__init__.py").write_text("", encoding="utf-8")
+    (source / ".gitignore").write_text("robot_sf/_version.py\n", encoding="utf-8")
+    subprocess.run(["git", "-C", source, "add", ".gitignore", "robot_sf"], check=True)
+    subprocess.run(["git", "-C", source, "commit", "-qm", "ignore generated version"], check=True)
+    source_sha = subprocess.run(
+        ["git", "-C", source, "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from pathlib import Path; "
+            "Path('robot_sf').mkdir(exist_ok=True); "
+            "Path('robot_sf/_version.py').write_text('generated\\n')",
+        ],
+        check=True,
+        cwd=source,
+    )
+    result = _run(
+        "check-source",
+        "--repo-root",
+        str(source),
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "untracked or ignored entry: robot_sf/_version.py" in result.stderr
+
+
+def test_stage_build_source_materializes_clean_exact_commit_outside_checkout(
+    tmp_path: Path,
+) -> None:
+    source, source_sha = _source_repo(tmp_path / "source")
+    build_root = tmp_path / "candidate" / "source"
+
+    result = _run(
+        "stage-build-source",
+        "--repo-root",
+        str(source),
+        "--build-root",
+        str(build_root),
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f"PASS: staged disposable build source at {source_sha}" in result.stdout
+    staged = _run(
+        "check-source",
+        "--repo-root",
+        str(build_root),
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+    assert staged.returncode == 0, staged.stderr
+    source_tree = subprocess.run(
+        ["/usr/bin/git", "-C", source, "rev-parse", "HEAD^{tree}"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    build_tree = subprocess.run(
+        ["/usr/bin/git", "-C", build_root, "rev-parse", "HEAD^{tree}"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert build_tree == source_tree
+
+
+def test_stage_build_source_rejects_wrong_commit_before_materialization(tmp_path: Path) -> None:
+    source, previous_sha = _source_repo(tmp_path / "source")
+    (source / "source.txt").write_text("new source\n", encoding="utf-8")
+    subprocess.run(["git", "-C", source, "commit", "-qam", "new head"], check=True)
+    build_root = tmp_path / "candidate" / "source"
+
+    result = _run(
+        "stage-build-source",
+        "--repo-root",
+        str(source),
+        "--build-root",
+        str(build_root),
+        "--source-sha",
+        previous_sha,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "source SHA drift" in result.stderr
+    assert not build_root.exists()
+
+
+def test_stage_build_source_rejects_preexisting_dirty_build_root(tmp_path: Path) -> None:
+    source, source_sha = _source_repo(tmp_path / "source")
+    build_root = tmp_path / "candidate" / "source"
+    build_root.mkdir(parents=True)
+    sentinel = build_root / "do-not-overwrite.txt"
+    sentinel.write_text("untrusted staged bytes\n", encoding="utf-8")
+
+    result = _run(
+        "stage-build-source",
+        "--repo-root",
+        str(source),
+        "--build-root",
+        str(build_root),
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "must not already exist" in result.stderr
+    assert sentinel.read_text(encoding="utf-8") == "untrusted staged bytes\n"
+
+
+def test_stage_build_source_rejects_build_root_inside_authoritative_checkout(
+    tmp_path: Path,
+) -> None:
+    source, source_sha = _source_repo(tmp_path / "source")
+    build_root = source / "generated-build-root"
+
+    result = _run(
+        "stage-build-source",
+        "--repo-root",
+        str(source),
+        "--build-root",
+        str(build_root),
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "must be outside the source repository" in result.stderr
+    assert not build_root.exists()
+
+
+def test_stage_build_source_rejects_symlink_path_escape(tmp_path: Path) -> None:
+    source, source_sha = _source_repo(tmp_path / "source")
+    escape = tmp_path / "external-looking"
+    escape.symlink_to(source, target_is_directory=True)
+    build_root = escape / "generated-build-root"
+
+    result = _run(
+        "stage-build-source",
+        "--repo-root",
+        str(source),
+        "--build-root",
+        str(build_root),
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "cannot traverse a symlink" in result.stderr
+    assert not (source / "generated-build-root").exists()
+
+
+def test_external_build_mutation_leaves_authoritative_checkout_exact(tmp_path: Path) -> None:
+    source, _source_sha = _source_repo(tmp_path / "source")
+    (source / "robot_sf").mkdir()
+    (source / "robot_sf" / "__init__.py").write_text("", encoding="utf-8")
+    (source / ".gitignore").write_text("robot_sf/_version.py\n", encoding="utf-8")
+    subprocess.run(["git", "-C", source, "add", ".gitignore", "robot_sf"], check=True)
+    subprocess.run(["git", "-C", source, "commit", "-qm", "build fixture"], check=True)
+    source_sha = subprocess.run(
+        ["git", "-C", source, "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    build_root = tmp_path / "candidate" / "source"
+    _run(
+        "stage-build-source",
+        "--repo-root",
+        str(source),
+        "--build-root",
+        str(build_root),
+        "--source-sha",
+        source_sha,
+    )
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from pathlib import Path; Path('robot_sf/_version.py').write_text('generated\\n')",
+        ],
+        check=True,
+        cwd=build_root,
+    )
+    authoritative = _run(
+        "check-source",
+        "--repo-root",
+        str(source),
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+    disposable = _run(
+        "check-source",
+        "--repo-root",
+        str(build_root),
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+
+    assert authoritative.returncode == 0, authoritative.stderr
+    assert not (source / "robot_sf" / "_version.py").exists()
+    assert disposable.returncode == 1
+    assert "untracked or ignored entry: robot_sf/_version.py" in disposable.stderr
+
+
+def test_stage_build_source_ignores_path_git_repository_config_and_hooks(
+    tmp_path: Path,
+) -> None:
+    source, source_sha = _source_repo(tmp_path / "source")
+    fake_git_marker = tmp_path / "fake-git-ran"
+    hook_marker = tmp_path / "source-hook-ran"
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    fake_git = fake_bin / "git"
+    fake_git.write_text(
+        f"#!/bin/sh\nprintf invoked > {fake_git_marker}\nexit 97\n",
+        encoding="utf-8",
+    )
+    fake_git.chmod(0o755)
+    hooks = tmp_path / "source-hooks"
+    hooks.mkdir()
+    post_checkout = hooks / "post-checkout"
+    post_checkout.write_text(
+        f"#!/bin/sh\nprintf invoked > {hook_marker}\n",
+        encoding="utf-8",
+    )
+    post_checkout.chmod(0o755)
+    subprocess.run(
+        ["git", "-C", source, "config", "core.hooksPath", str(hooks)],
+        check=True,
+    )
+    build_root = tmp_path / "candidate" / "source"
+
+    result = _run(
+        "stage-build-source",
+        "--repo-root",
+        str(source),
+        "--build-root",
+        str(build_root),
+        "--source-sha",
+        source_sha,
+        check=False,
+        env={**os.environ, "PATH": str(fake_bin)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not fake_git_marker.exists()
+    assert not hook_marker.exists()
 
 
 def test_check_source_rejects_mode_drift_hidden_by_repository_config(tmp_path: Path) -> None:

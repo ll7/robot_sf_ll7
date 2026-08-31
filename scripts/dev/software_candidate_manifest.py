@@ -78,6 +78,18 @@ class CandidateError(ValueError):
     """Raised when candidate admission or offline verification fails closed."""
 
 
+def _trusted_git_environment() -> dict[str, str]:
+    return {
+        "GIT_ATTR_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_OPTIONAL_LOCKS": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "",
+    }
+
+
 def _json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -461,16 +473,8 @@ def _source_carrier(
             "\tsymlinks = true\n",
             encoding="ascii",
         )
-        env = {
-            "GIT_ALTERNATE_OBJECT_DIRECTORIES": objects_text,
-            "GIT_ATTR_NOSYSTEM": "1",
-            "GIT_CONFIG_GLOBAL": os.devnull,
-            "GIT_CONFIG_NOSYSTEM": "1",
-            "GIT_OPTIONAL_LOCKS": "0",
-            "LANG": "C",
-            "LC_ALL": "C",
-            "PATH": "",
-        }
+        env = _trusted_git_environment()
+        env["GIT_ALTERNATE_OBJECT_DIRECTORIES"] = objects_text
         yield carrier, env
 
 
@@ -799,6 +803,125 @@ def _require_external(path: Path, *, repo_root: Path, label: str) -> None:
         raise CandidateError(f"{label} must be outside the source repository: {path}")
 
 
+def _run_staging_git(
+    *arguments: str,
+    cwd: Path,
+) -> subprocess.CompletedProcess[bytes]:
+    if not SYSTEM_GIT.is_file() or SYSTEM_GIT.is_symlink() or not os.access(SYSTEM_GIT, os.X_OK):
+        raise CandidateError(f"trusted system Git is unavailable: {SYSTEM_GIT}")
+    try:
+        return subprocess.run(
+            [str(SYSTEM_GIT), *arguments],
+            check=False,
+            capture_output=True,
+            cwd=cwd,
+            env=_trusted_git_environment(),
+        )
+    except OSError as exc:
+        raise CandidateError(f"cannot execute trusted staging Git: {exc}") from exc
+
+
+def _require_staging_git_success(
+    result: subprocess.CompletedProcess[bytes],
+    *,
+    operation: str,
+) -> None:
+    if result.returncode == 0:
+        return
+    detail = result.stderr.decode("utf-8", errors="replace").strip()
+    raise CandidateError(
+        f"trusted staging Git cannot {operation}: {detail or f'exit {result.returncode}'}"
+    )
+
+
+def _stage_build_source(args: argparse.Namespace) -> None:
+    repo_root = args.repo_root.resolve()
+    _validate_source(repo_root, args.source_sha)
+
+    build_root = Path(os.path.abspath(args.build_root))
+    resolved_build_root = args.build_root.resolve(strict=False)
+    if build_root != resolved_build_root:
+        raise CandidateError(
+            f"disposable build-root path cannot traverse a symlink: {args.build_root}"
+        )
+    _require_external(build_root, repo_root=repo_root, label="disposable build root")
+    if build_root.is_symlink() or build_root.exists():
+        raise CandidateError(f"disposable build root must not already exist: {build_root}")
+
+    try:
+        build_root.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise CandidateError(
+            f"cannot create disposable build-root parent: {build_root.parent}: {exc}"
+        ) from exc
+    if build_root.parent.is_symlink() or build_root.parent.resolve() != build_root.parent:
+        raise CandidateError(
+            f"disposable build-root parent is symlinked or ambiguous: {build_root.parent}"
+        )
+
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix=".robot-sf-build-source-",
+            dir=build_root.parent,
+        ) as staging_parent_text:
+            staging_parent = Path(staging_parent_text)
+            staging_root = staging_parent / "source"
+            empty_template = staging_parent / "empty-template"
+            empty_template.mkdir()
+            clone = _run_staging_git(
+                "-c",
+                "core.hooksPath=/dev/null",
+                "clone",
+                "--local",
+                "--shared",
+                "--no-checkout",
+                "--template",
+                str(empty_template),
+                "--",
+                str(repo_root),
+                str(staging_root),
+                cwd=build_root.parent,
+            )
+            _require_staging_git_success(clone, operation="clone the frozen object database")
+            checkout = _run_staging_git(
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-C",
+                str(staging_root),
+                "checkout",
+                "--detach",
+                "--force",
+                args.source_sha,
+                "--",
+                cwd=build_root.parent,
+            )
+            _require_staging_git_success(checkout, operation="materialize the exact source commit")
+            hooks = _run_staging_git(
+                "-C",
+                str(staging_root),
+                "config",
+                "--local",
+                "--replace-all",
+                "core.hooksPath",
+                "/dev/null",
+                cwd=build_root.parent,
+            )
+            _require_staging_git_success(hooks, operation="disable disposable-repository hooks")
+            _validate_source(staging_root, args.source_sha)
+            _validate_source(repo_root, args.source_sha)
+            os.rename(staging_root, build_root)
+    except CandidateError:
+        raise
+    except OSError as exc:
+        raise CandidateError(
+            f"cannot materialize disposable build root {build_root}: {exc}"
+        ) from exc
+
+    _validate_source(build_root, args.source_sha)
+    _validate_source(repo_root, args.source_sha)
+    print(f"PASS: staged disposable build source at {args.source_sha}: {build_root}")
+
+
 def _normalised_sbom(raw_sbom: Path, version: str) -> bytes:
     payload = _load_json(raw_sbom, label="raw SBOM")
     if not isinstance(payload, dict):
@@ -1025,7 +1148,11 @@ def _provenance_payload(
     sbom: dict[str, Any],
 ) -> dict[str, Any]:
     return {
-        "build": {"command": "uv build --out-dir $DIST_DIR", "count": 1},
+        "build": {
+            "command": "cd $BUILD_SOURCE && uv build --out-dir $DIST_DIR",
+            "count": 1,
+            "source_role": "disposable-exact-commit",
+        },
         "package": package,
         "repository": repository,
         "sbom": sbom,
@@ -1234,6 +1361,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     source.add_argument("--repo-root", type=Path, required=True)
     source.add_argument("--source-sha", required=True)
 
+    stage = subparsers.add_parser(
+        "stage-build-source",
+        help="materialize an exact commit in a disposable external build root",
+    )
+    stage.add_argument("--repo-root", type=Path, required=True)
+    stage.add_argument("--build-root", type=Path, required=True)
+    stage.add_argument("--source-sha", required=True)
+
     assemble = subparsers.add_parser("assemble", help="admit already-built candidate bytes")
     assemble.add_argument("--repo-root", type=Path, required=True)
     assemble.add_argument("--dist-dir", type=Path, required=True)
@@ -1261,6 +1396,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "check-source":
             _validate_source(args.repo_root.resolve(), args.source_sha)
             print(f"PASS: source identity is clean and exact at {args.source_sha}")
+        elif args.command == "stage-build-source":
+            _stage_build_source(args)
         elif args.command == "assemble":
             _assemble(args)
         elif args.command == "verify":

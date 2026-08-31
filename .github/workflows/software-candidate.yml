@@ -65,6 +65,7 @@ jobs:
           candidate_root="${RUNNER_TEMP}/robot-sf-software-candidate"
           {
             printf 'CANDIDATE_ROOT=%s\n' "${candidate_root}"
+            printf 'BUILD_SOURCE=%s/source\n' "${candidate_root}"
             printf 'DIST_DIR=%s/dist\n' "${candidate_root}"
             printf 'RAW_SBOM=%s/raw-sbom.cdx.json\n' "${candidate_root}"
             printf 'BUNDLE_DIR=%s/bundle\n' "${candidate_root}"
@@ -81,8 +82,23 @@ jobs:
       - name: Prepare isolated candidate directories
         run: mkdir -p "${DIST_DIR}" "${BUNDLE_DIR}"
 
+      - name: Stage exact commit in disposable build root
+        run: >-
+          python scripts/dev/software_candidate_manifest.py stage-build-source
+          --repo-root "${GITHUB_WORKSPACE}"
+          --build-root "${BUILD_SOURCE}"
+          --source-sha "${GITHUB_SHA}"
+
+      - name: Prove disposable build source is the exact commit
+        run: >-
+          python scripts/dev/software_candidate_manifest.py check-source
+          --repo-root "${BUILD_SOURCE}"
+          --source-sha "${GITHUB_SHA}"
+
       - name: Build exactly one wheel and one sdist once
-        run: uv build --out-dir "${DIST_DIR}"
+        run: |
+          cd "${BUILD_SOURCE}"
+          uv build --out-dir "${DIST_DIR}"
 
       - name: Reject any source workspace mutation by the build
         run: >-

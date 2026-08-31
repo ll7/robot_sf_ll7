@@ -63,6 +63,30 @@ def test_workflow_keeps_python_bytecode_outside_the_frozen_source() -> None:
     assert workflow["env"]["PYTHONDONTWRITEBYTECODE"] == "1"
 
 
+def test_workflow_builds_only_from_staged_external_exact_commit() -> None:
+    _text, workflow = _workflow()
+    steps = _steps(workflow)
+    identity_run = next(step["run"] for step in steps if step.get("id") == "identity")
+    stage_index, stage_run = next(
+        (index, step["run"])
+        for index, step in enumerate(steps)
+        if "software_candidate_manifest.py stage-build-source" in step.get("run", "")
+    )
+    build_index, build_run = next(
+        (index, step["run"])
+        for index, step in enumerate(steps)
+        if "uv build" in step.get("run", "")
+    )
+
+    assert "BUILD_SOURCE" in identity_run
+    assert '--repo-root "${GITHUB_WORKSPACE}"' in stage_run
+    assert '--build-root "${BUILD_SOURCE}"' in stage_run
+    assert '--source-sha "${GITHUB_SHA}"' in stage_run
+    assert stage_index < build_index
+    assert 'cd "${BUILD_SOURCE}"' in build_run
+    assert 'uv build --out-dir "${DIST_DIR}"' in build_run
+
+
 def test_workflow_builds_once_then_only_validates_and_admits_same_dist_bytes() -> None:
     _text, workflow = _workflow()
     steps = _steps(workflow)
@@ -121,15 +145,21 @@ def test_workflow_checks_hermetic_source_identity_around_the_only_build() -> Non
     ]
     assert [step["name"] for _index, step in source_checks] == [
         "Require hermetic exact source identity before build",
+        "Prove disposable build source is the exact commit",
         "Reject any source workspace mutation by the build",
     ]
     build_index = next(
         index for index, step in enumerate(steps) if "uv build" in step.get("run", "")
     )
-    assert source_checks[0][0] < build_index < source_checks[1][0]
-    for _index, step in source_checks:
+    assert source_checks[0][0] < source_checks[1][0] < build_index < source_checks[2][0]
+    for _index, step in (source_checks[0], source_checks[2]):
         assert '--repo-root "${GITHUB_WORKSPACE}"' in step["run"]
         assert '--source-sha "${GITHUB_SHA}"' in step["run"]
+    assert '--repo-root "${BUILD_SOURCE}"' in source_checks[1][1]["run"]
+    assert '--source-sha "${GITHUB_SHA}"' in source_checks[1][1]["run"]
+
+    assemble = next(step["run"] for step in steps if " assemble" in step.get("run", ""))
+    assert '--repo-root "${GITHUB_WORKSPACE}"' in assemble
 
 
 def test_workflow_uploads_checked_bundle_once_and_exposes_artifact_identity() -> None:

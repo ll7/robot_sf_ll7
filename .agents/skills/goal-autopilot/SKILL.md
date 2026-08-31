@@ -256,13 +256,17 @@ refresh_worker_routes()
 reconcile_satisfied_blockers()
 prepare_open_issue_contracts(limit=10)
 rerun_live_admission()
-if claimable_count == 0:
+if claimable_count == 0 and queue_completeness == "complete":
     complete_review_ready_prs()
-if claimable_count == 0:
+if claimable_count == 0 and queue_completeness == "complete":
     run_next_unsaturated_discovery_lane(max_new_issues=2)
     prepare_and_admit_new_candidates()
-if claimable_count == 0:
+if claimable_count == 0 and queue_completeness == "complete":
     stop as genuine_zero_work
+if claimable_count == 0 and queue_completeness != "complete":
+    record the incomplete/unavailable queue state and continue recovery:
+    incomplete -> resume from the returned cursor or raise --limit and re-scan
+    unavailable -> treat as no queue evidence; retry after quota/transport recovery
 ```
 
 The audit and queue snapshots must expose an admission-reason histogram. Use stable reasons such as
@@ -728,7 +732,9 @@ Stop the autopilot when any:
 - all eligible issues have been implemented and merged,
 - no new discovery candidates remain,
 - the audited candidate queue, review queue, external-input owners, and unsaturated discovery lanes
-  provide no defensible single-repository leaf (`genuine_zero_work`),
+  provide no defensible single-repository leaf with an explicit `queue_completeness: complete`
+  scan verdict (`genuine_zero_work`; an unqualified `claimable_count == 0` from an
+  incomplete or unavailable scan is never zero-work evidence),
 - auth/credentials/env blocker that affects all phases,
 - user requests stop.
 

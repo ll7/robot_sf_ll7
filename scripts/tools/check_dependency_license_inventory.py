@@ -68,6 +68,22 @@ _CANDIDATE_VALIDATION_COMMANDS = (
     ("archive-license", "python scripts/tools/check_distribution_licenses.py $DIST_DIR"),
     ("wheel-install", "bash scripts/validation/wheel_install_smoke.sh $DIST_DIR/robot_sf-*.whl"),
 )
+_CANDIDATE_VALIDATION_COMMANDS_CURRENT = (
+    ("version-alignment", "python scripts/dev/check_version_alignment.py"),
+    ("metadata", "twine check --strict $DIST_DIR/*.whl $DIST_DIR/*.tar.gz"),
+    (
+        "archive-license",
+        "cd $BUILD_SOURCE && python scripts/tools/check_distribution_licenses.py "
+        "$DIST_DIR --strict-asset-rights --repo-root $BUILD_SOURCE "
+        "--inventory $BUILD_SOURCE/scripts/validation/software_candidate_asset_rights.v1.json "
+        "--source-tree-ref HEAD",
+    ),
+    (
+        "wheel-install",
+        "cd $BUILD_SOURCE && bash scripts/validation/wheel_install_smoke.sh "
+        "$DIST_DIR/robot_sf-*.whl",
+    ),
+)
 _CANDIDATE_SDIST_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz")
 _REQUIREMENT_RE = re.compile(
     r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)"
@@ -581,12 +597,14 @@ def _candidate_member_path(
     return path, {"filename": filename, "kind": expected_kind, "sha256": digest, "size": size}
 
 
-def _candidate_validation_payload() -> dict[str, Any]:
+def _candidate_validation_payload(
+    commands: tuple[tuple[str, str], ...] = _CANDIDATE_VALIDATION_COMMANDS,
+) -> dict[str, Any]:
     """Return the canonical software-candidate validation roster."""
     return {
         "checks": [
             {"command": command, "id": identifier, "status": "passed"}
-            for identifier, command in _CANDIDATE_VALIDATION_COMMANDS
+            for identifier, command in commands
         ],
         "status": "passed",
     }
@@ -605,11 +623,48 @@ def _candidate_manifest_contract(  # noqa: C901, PLR0912
         "validation",
         "members",
     }
-    if (
-        set(manifest) != expected_keys
-        or manifest.get("schema_version") != _CANDIDATE_SCHEMA_VERSION
-    ):
+    if set(manifest) not in (expected_keys, expected_keys | {"materialization"}) or manifest.get(
+        "schema_version"
+    ) != _CANDIDATE_SCHEMA_VERSION:
         raise ValueError("candidate manifest has missing or unclassified contract fields")
+    if "materialization" in manifest:
+        materialization = manifest["materialization"]
+        if not isinstance(materialization, dict) or set(materialization) != {
+            "candidate_commit_sha",
+            "candidate_tree_sha",
+            "policy_path",
+            "policy_sha256",
+            "source_inventory_path",
+            "source_inventory_sha256",
+            "candidate_inventory_path",
+            "candidate_metadata_path",
+        }:
+            raise ValueError("candidate manifest materialization contract is invalid")
+        for field in ("candidate_commit_sha", "candidate_tree_sha"):
+            if not isinstance(materialization[field], str) or not _CANDIDATE_SOURCE_SHA_RE.fullmatch(
+                materialization[field]
+            ):
+                raise ValueError(f"candidate manifest materialization {field} is invalid")
+        for field in ("policy_sha256", "source_inventory_sha256"):
+            if not isinstance(materialization[field], str) or not _SHA256_RE.fullmatch(
+                materialization[field]
+            ):
+                raise ValueError(f"candidate manifest materialization {field} is invalid")
+        for field in (
+            "policy_path",
+            "source_inventory_path",
+            "candidate_inventory_path",
+            "candidate_metadata_path",
+        ):
+            value = materialization[field]
+            if (
+                not isinstance(value, str)
+                or not value
+                or value.startswith("/")
+                or "\\" in value
+                or Path(value).as_posix() != value
+            ):
+                raise ValueError(f"candidate manifest materialization {field} is invalid")
     repository = manifest.get("repository")
     if not isinstance(repository, str) or _CANDIDATE_REPOSITORY_RE.fullmatch(repository) is None:
         raise ValueError("candidate manifest repository identity is invalid")
@@ -636,7 +691,10 @@ def _candidate_manifest_contract(  # noqa: C901, PLR0912
         or _CANDIDATE_VERSION_RE.fullmatch(package["version"]) is None
     ):
         raise ValueError("candidate manifest package identity is invalid")
-    if manifest.get("validation") != _candidate_validation_payload():
+    if manifest.get("validation") not in (
+        _candidate_validation_payload(),
+        _candidate_validation_payload(_CANDIDATE_VALIDATION_COMMANDS_CURRENT),
+    ):
         raise ValueError("candidate manifest validation roster is invalid")
     members = manifest.get("members")
     if not isinstance(members, list) or len(members) != len(_CANDIDATE_MEMBER_KINDS):
@@ -780,6 +838,8 @@ def _candidate_provenance_contract(
         "validation": manifest["validation"],
         "workflow": manifest["workflow"],
     }
+    if "materialization" in manifest:
+        expected["materialization"] = manifest["materialization"]
     if provenance != expected:
         raise ValueError("candidate provenance does not exactly bind the manifest subjects")
 

@@ -11,6 +11,7 @@ from typing import Any
 
 from scripts.dev._gh_rest import gh_api_review_post as _gh_api_post
 from scripts.dev._gh_rest import parse_json as _parse_json
+from scripts.dev.pr_carrier_gate import _declared_base_sha, extract_full_shas
 from scripts.dev.pr_write_guard import DEFAULT_REPO, guard_pr_write, pr_write_lock
 
 REVIEW_EVENTS = ("COMMENT", "APPROVE", "REQUEST_CHANGES")
@@ -25,6 +26,33 @@ def _read_body_file(body_file: Path) -> tuple[str | None, str | None]:
     if not body.strip():
         return None, "review body file must not be empty"
     return body, None
+
+
+def _validate_review_body_shas(
+    body: str,
+    *,
+    expected_head_sha: str,
+    observed_base_sha: str | None,
+) -> dict[str, Any] | None:
+    """Validate that the review body cites the expected head and does not mismatch the base."""
+    cited_shas = {sha.lower() for sha in extract_full_shas(body)}
+    if expected_head_sha.lower() not in cited_shas:
+        return {
+            "status": "error",
+            "error": f"review body does not cite the expected head SHA {expected_head_sha}",
+        }
+
+    declared_base = _declared_base_sha(body)
+    if declared_base is not None and observed_base_sha:
+        if declared_base.lower() != str(observed_base_sha).lower():
+            return {
+                "status": "error",
+                "error": (
+                    f"review body declares base SHA {declared_base} which does not match "
+                    f"live base SHA {observed_base_sha}"
+                ),
+            }
+    return None
 
 
 def post_review(
@@ -57,6 +85,15 @@ def post_review(
             )
             if guard["status"] != "ok":
                 return guard
+
+            body_sha_error = _validate_review_body_shas(
+                body,
+                expected_head_sha=expected_head_sha,
+                observed_base_sha=guard.get("observed_base_sha"),
+            )
+            if body_sha_error is not None:
+                return body_sha_error
+
             result = _gh_api_post(
                 f"repos/{repo}/pulls/{number}/reviews",
                 {"body": body, "event": event, "commit_id": expected_head_sha},

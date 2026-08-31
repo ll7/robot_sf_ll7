@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 HEAD_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
+BASE_SHA = "f0e1d2c3b4a5968778695a4b3c2d1e0f00112233"
 
 
 def _proc(
@@ -22,7 +23,10 @@ def _proc(
     return subprocess.CompletedProcess(["gh", "api"], returncode, stdout=stdout, stderr=stderr)
 
 
-def _write_body(tmp_path: Path, body: str = "Exact-head review evidence.") -> Path:
+def _write_body(
+    tmp_path: Path,
+    body: str = f"Exact-head review evidence for {HEAD_SHA}.",
+) -> Path:
     """Write a review body fixture without passing Markdown through a shell."""
     path = tmp_path / "review.md"
     path.write_text(body, encoding="utf-8")
@@ -35,7 +39,7 @@ def test_post_review_binds_rest_payload_to_expected_head(tmp_path: Path) -> None
     with (
         patch(
             "scripts.dev.gh_pr_review_rest.guard_pr_write",
-            return_value={"status": "ok"},
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
         ) as mock_guard,
         patch(
             "scripts.dev.gh_pr_review_rest._gh_api_post",
@@ -71,8 +75,78 @@ def test_post_review_binds_rest_payload_to_expected_head(tmp_path: Path) -> None
     )
     mock_post.assert_called_once_with(
         "repos/ll7/robot_sf_ll7/pulls/7571/reviews",
-        {"body": "Exact-head review evidence.", "event": "COMMENT", "commit_id": HEAD_SHA},
+        {
+            "body": f"Exact-head review evidence for {HEAD_SHA}.",
+            "event": "COMMENT",
+            "commit_id": HEAD_SHA,
+        },
     )
+
+
+def test_missing_head_sha_in_body_fails_before_post(tmp_path: Path) -> None:
+    """A review body lacking the expected head SHA fails closed before POST."""
+    body_file = _write_body(tmp_path, "Review body citing no head SHA at all.")
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch("scripts.dev.gh_pr_review_rest._gh_api_post") as mock_post,
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA)
+
+    assert result["status"] == "error"
+    assert "does not cite the expected head SHA" in result["error"]
+    mock_post.assert_not_called()
+
+
+def test_mismatched_declared_base_in_body_fails_before_post(tmp_path: Path) -> None:
+    """A review body declaring a different base SHA fails closed before POST."""
+    other_base = "0000111122223333444455556666777788889999"
+    body_file = _write_body(
+        tmp_path,
+        f"Review for head {HEAD_SHA}\nBase reviewed: {other_base}",
+    )
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch("scripts.dev.gh_pr_review_rest._gh_api_post") as mock_post,
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA)
+
+    assert result["status"] == "error"
+    assert "declares base SHA" in result["error"]
+    assert "does not match live base" in result["error"]
+    mock_post.assert_not_called()
+
+
+def test_matching_declared_base_in_body_succeeds(tmp_path: Path) -> None:
+    """A review body declaring the matching base SHA succeeds."""
+    body_file = _write_body(
+        tmp_path,
+        f"Review for head {HEAD_SHA}\nBase reviewed: {BASE_SHA}",
+    )
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok", "observed_base_sha": BASE_SHA},
+        ),
+        patch(
+            "scripts.dev.gh_pr_review_rest._gh_api_post",
+            return_value=_proc(
+                stdout=json.dumps(
+                    {"id": 8, "commit_id": HEAD_SHA, "html_url": "https://example.test/review/8"}
+                )
+            ),
+        ) as mock_post,
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA)
+
+    assert result["status"] == "ok"
+    assert result["review_id"] == 8
+    mock_post.assert_called_once()
 
 
 def test_stale_guard_skips_review_post(tmp_path: Path) -> None:

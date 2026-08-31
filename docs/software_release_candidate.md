@@ -59,10 +59,13 @@ rechecks the authoritative checkout before returning. The sole `uv build` runs f
 disposable exact-commit root; build output and runtime scratch also remain external. Hatch-VCS may
 therefore generate ignored `robot_sf/_version.py` only inside the disposable root. That path is
 not allowlisted or ignored by the authoritative source gate, and assembly remains bound to the
-untouched authoritative checkout. Provenance records the disposable-exact-commit build role and
-the exact one-build command. A materialized Git LFS path is accepted only when the frozen commit
-marks that path `filter=lfs` and its bytes match the committed pointer's SHA-256 and size; no LFS
-helper is executed. The helper also rejects fuzzy or non-commit IDs,
+untouched authoritative checkout. The canonical wheel-install smoke wrapper also runs from the
+disposable root, confining its unavoidable `output/validation` scratch directory there while its
+report and wheel inputs remain absolute external paths. Provenance records the
+disposable-exact-commit build role and the exact one-build command. A materialized Git LFS path is
+accepted only when the frozen commit marks that path `filter=lfs` and its bytes match the committed
+pointer's SHA-256 and size; no LFS helper is executed. The helper also rejects fuzzy or non-commit
+IDs,
 multiple/missing/unclassified distributions, duplicate or unsafe archive members, mismatched
 package metadata, and malformed SBOM input.
 Pinned `uv 0.11.21` also writes a one-byte `*` `.gitignore` marker in a custom output directory;

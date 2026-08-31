@@ -10,6 +10,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "software-candidate.yml"
+WHEEL_INSTALL_SMOKE = REPO_ROOT / "scripts" / "validation" / "wheel_install_smoke.sh"
 ACTION_PINS = {
     "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
     "actions/setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97",
@@ -85,6 +86,29 @@ def test_workflow_builds_only_from_staged_external_exact_commit() -> None:
     assert stage_index < build_index
     assert 'cd "${BUILD_SOURCE}"' in build_run
     assert 'uv build --out-dir "${DIST_DIR}"' in build_run
+
+
+def test_workflow_confines_wheel_smoke_side_effects_to_disposable_source() -> None:
+    _text, workflow = _workflow()
+    steps = _steps(workflow)
+    wrapper_text = WHEEL_INSTALL_SMOKE.read_text(encoding="utf-8")
+    smoke_index, smoke_run = next(
+        (index, step["run"])
+        for index, step in enumerate(steps)
+        if "wheel_install_smoke.sh" in step.get("run", "")
+    )
+    assemble_index = next(
+        index
+        for index, step in enumerate(steps)
+        if "software_candidate_manifest.py assemble" in step.get("run", "")
+    )
+
+    assert 'VALIDATION_DIR="${REPO_ROOT}/output/validation"' in wrapper_text
+    assert 'mkdir -p "${VALIDATION_DIR}"' in wrapper_text
+    assert 'bash "${BUILD_SOURCE}/scripts/validation/wheel_install_smoke.sh"' in smoke_run
+    assert "bash scripts/validation/wheel_install_smoke.sh" not in smoke_run
+    assert smoke_index < assemble_index
+    assert '--repo-root "${GITHUB_WORKSPACE}"' in steps[assemble_index]["run"]
 
 
 def test_workflow_builds_once_then_only_validates_and_admits_same_dist_bytes() -> None:

@@ -132,7 +132,7 @@ jobs:
             echo "Expected exactly one Robot SF wheel for clean-install validation." >&2
             exit 1
           fi
-          bash scripts/validation/wheel_install_smoke.sh "${wheels[0]}"
+          bash "${BUILD_SOURCE}/scripts/validation/wheel_install_smoke.sh" "${wheels[0]}"
 
       - name: Export dependency SBOM without rebuilding
         run: >-

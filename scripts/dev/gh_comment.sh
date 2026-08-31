@@ -145,6 +145,12 @@ if [ ! -s "$body_file" ]; then
   exit 2
 fi
 
+if ! python3 "$SCRIPT_DIR/github_transport_policy.py" check \
+  --helper "$SCRIPT_DIR/gh_comment.sh" --root "$SCRIPT_DIR/../.." --json >/dev/null; then
+  echo "Error: gh_comment.sh is not admitted by the GitHub transport policy." >&2
+  exit 2
+fi
+
 if [ "$target_type" = "pr" ]; then
   api_repo="{owner}/{repo}"
   if [ -n "$repo_arg" ]; then

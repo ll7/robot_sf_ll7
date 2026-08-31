@@ -372,7 +372,7 @@ class TestRunModeOrcaPreflightIntegration:
         assert payload["campaign_execution_status"] == "failed"
         assert payload["evidence_status"] == "blocked"
         assert payload["exit_code"] == 2
-        assert "uv sync --extra orca" in payload["status_reason"]
+        assert "pip install third_party/python-rvo2" in payload["status_reason"]
 
     def test_run_mode_passes_when_no_orca_in_config(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -440,7 +440,7 @@ class TestOrcaRvo2PreflightCli:
         assert payload["no_submit"] is True
         assert payload["blockers"] == ["rvo2_unavailable"]
         assert payload["planner_keys"] == ["orca_nominal"]
-        assert "uv sync --extra orca" in payload["remediation"]
+        assert "pip install third_party/python-rvo2" in payload["remediation"]
 
     def test_cli_json_reports_ready_without_orca_dependency(self, tmp_path: Path, capsys) -> None:
         """JSON mode reports a passing gate without implying that it submits."""

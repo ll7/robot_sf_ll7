@@ -189,17 +189,6 @@
       "distribution_mode": "user_installed"
     },
     {
-      "id": "orca",
-      "kind": "root-extra",
-      "extra": "orca",
-      "extras": ["orca"],
-      "pyproject": "pyproject.toml",
-      "lockfile": "uv.lock",
-      "root_package": "robot-sf",
-      "expected_resolution": "locked",
-      "distribution_mode": "user_installed"
-    },
-    {
       "id": "socnav",
       "kind": "root-extra",
       "extra": "socnav",
@@ -236,7 +225,6 @@
         "analytics",
         "browser",
         "sacadrl",
-        "orca",
         "socnav",
         "criticality"
       ],
@@ -257,23 +245,6 @@
       "provenance_paths": ["fast-pysf/LICENSE"],
       "expected_resolution": "locked",
       "distribution_mode": "user_installed"
-    },
-    {
-      "id": "pyrvo2",
-      "kind": "built-companion",
-      "extras": [],
-      "pyproject": "pyproject.toml",
-      "lockfile": "uv.lock",
-      "root_package": "pyrvo2",
-      "provenance_paths": [
-        "third_party/python-rvo2/LICENSE",
-        "third_party/python-rvo2/UPSTREAM.md",
-        "third_party/python-rvo2/LOCAL_CHANGES.patch",
-        "THIRD_PARTY_NOTICES.md"
-      ],
-      "components": ["python-rvo2"],
-      "expected_resolution": "locked",
-      "distribution_mode": "built_companion"
     },
     {
       "id": "socnavbench",

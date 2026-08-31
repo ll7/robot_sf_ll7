@@ -48,10 +48,14 @@ explicit `resolution-markers` are proven false from the manifest target. Any
 remaining row is emitted as `unresolved_membership` and keeps strict mode
 blocked until a maintainer reviews its context.
 
-The committed profile matrix covers the root environment, every declared extra,
-the explicit `all` closure, standalone `fast-pysf`, `pyrvo2`, and SocNavBench.
+The committed profile matrix covers the root environment, every declared supported extra,
+the explicit `all` closure, standalone `fast-pysf`, and SocNavBench.
 `rllib` remains a standalone profile and is explicitly excluded from `all` by
 the current project declaration; the exclusion is reported rather than hidden.
+Per maintainer decision on #8021 (Option 2), ORCA (`pyrvo2`) is documented as an
+external optional installation and excluded from the supported release extras and sanitized
+package inventory. The local vendored companion remains development/source-checkout
+infrastructure, not a shipped or supported PyPI companion.
 The vendored Python-RVO2 and SocNavBench rows retain their upstream revision,
 license facts, notices, local-change/provenance paths, and evidence digests.
 

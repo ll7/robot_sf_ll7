@@ -1803,7 +1803,7 @@ def test_release_preflight_fails_closed_when_orca_rvo2_missing(
     assert payload["exit_code"] == 2
     assert payload["release_status"] == "orca_preflight_failed"
     assert payload["release_exit_code"] == 2
-    assert "uv sync --extra orca" in payload["release_status_reason"]
+    assert "pip install third_party/python-rvo2" in payload["release_status_reason"]
 
 
 def test_release_resume_receipt_requires_fixed_campaign_id(tmp_path: Path) -> None:

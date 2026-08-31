@@ -23,6 +23,7 @@ from scripts.dev.pr_contract_v2 import parse_pr_contract_v2
 
 REPORT_SCHEMA = "pr_contract_version_inventory.v1"
 RETIREMENT_POLICY = "compatibility"  # v1-compatible PRs are reported, not failed
+DEFAULT_PR_LIMIT = 1_000
 
 
 def _classify_pr(record: dict[str, Any]) -> dict[str, Any]:
@@ -61,7 +62,7 @@ def _classify_pr(record: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _fetch_open_prs(repo: str) -> list[dict[str, Any]]:
+def _fetch_open_prs(repo: str, *, limit: int = DEFAULT_PR_LIMIT) -> list[dict[str, Any]]:
     """Fetch open PR metadata through ``gh`` (REST-compatible JSON fields)."""
     command = [
         "gh",
@@ -71,6 +72,8 @@ def _fetch_open_prs(repo: str) -> list[dict[str, Any]]:
         repo,
         "--state",
         "open",
+        "--limit",
+        str(limit),
         "--json",
         "number,title,url,author,isDraft,headRefOid,body",
     ]
@@ -83,6 +86,12 @@ def _fetch_open_prs(repo: str) -> list[dict[str, Any]]:
         raise RuntimeError(f"gh pr list returned invalid JSON: {exc}") from exc
     if not isinstance(records, list):
         raise RuntimeError("gh pr list returned a non-list payload")
+    if len(records) == limit:
+        raise RuntimeError(
+            f"gh pr list returned {len(records)} rows, exactly the configured "
+            f"--limit {limit}; the inventory may be truncated. Rerun with a "
+            "higher --limit value."
+        )
     return records
 
 
@@ -123,11 +132,28 @@ def _check_inventory(report: dict[str, Any]) -> tuple[int, list[str]]:
     return (1 if problems else 0, problems)
 
 
+def _positive_int(value: str) -> int:
+    """Parse an argparse value that must be strictly positive."""
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the inventory CLI and return the process exit code."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", help="owner/repo to inventory through gh")
     parser.add_argument("--fixture", help="path to a JSON fixture of PR metadata records (offline)")
+    parser.add_argument(
+        "--limit",
+        type=_positive_int,
+        default=DEFAULT_PR_LIMIT,
+        help=f"maximum live PR rows to request (default: {DEFAULT_PR_LIMIT})",
+    )
     parser.add_argument("--check", action="store_true", help="fail closed on malformed v2 markers")
     parser.add_argument("--output", help="write the JSON report to this path")
     args = parser.parse_args(argv)
@@ -138,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("one of --repo or --fixture is required")
 
     if args.repo:
-        records = _fetch_open_prs(args.repo)
+        records = _fetch_open_prs(args.repo, limit=args.limit)
         report = build_inventory(records, source=args.repo)
     else:
         records = _load_fixture(args.fixture)

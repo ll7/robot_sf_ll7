@@ -7,6 +7,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from scripts.dev import audit_pr_contract_versions
 from scripts.dev.audit_pr_contract_versions import (
     REPORT_SCHEMA,
     _check_inventory,
@@ -74,6 +77,109 @@ def test_script_is_python_and_importable() -> None:
     assert SCRIPT.exists()
     assert SCRIPT.suffix == ".py"
     import scripts.dev.audit_pr_contract_versions  # noqa: F401
+
+
+def test_fetch_open_prs_uses_the_exact_explicit_limit(monkeypatch) -> None:
+    """Bind the requested completeness bound to the one live ``gh`` invocation."""
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout="[]", stderr="")
+
+    monkeypatch.setattr(audit_pr_contract_versions.subprocess, "run", fake_run)
+
+    assert audit_pr_contract_versions._fetch_open_prs("ll7/robot_sf_ll7", limit=37) == []
+    assert commands == [
+        [
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            "ll7/robot_sf_ll7",
+            "--state",
+            "open",
+            "--limit",
+            "37",
+            "--json",
+            "number,title,url,author,isDraft,headRefOid,body",
+        ]
+    ]
+
+
+def test_cli_accepts_live_rows_below_the_explicit_limit(monkeypatch, capsys) -> None:
+    """Keep complete live inventories below the operator's bound reportable."""
+    records = [_record(1, _v2_body()), _record(2, _v1_body())]
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps(records), stderr="")
+
+    monkeypatch.setattr(audit_pr_contract_versions.subprocess, "run", fake_run)
+
+    assert audit_pr_contract_versions.main(["--repo", "ll7/robot_sf_ll7", "--limit", "3"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["schema"] == REPORT_SCHEMA
+    assert report["counts"] == {"v2_valid": 1, "v1_compatibility": 1}
+
+
+def test_fetch_open_prs_rejects_the_exact_limit_as_potentially_truncated(
+    monkeypatch,
+) -> None:
+    """Fail closed when ``gh`` returns the full bound and may have truncated rows."""
+    records = [_record(1, _v1_body()), _record(2, _v1_body())]
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps(records), stderr="")
+
+    monkeypatch.setattr(audit_pr_contract_versions.subprocess, "run", fake_run)
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"exactly the configured --limit 2.*higher --limit",
+    ):
+        audit_pr_contract_versions._fetch_open_prs("ll7/robot_sf_ll7", limit=2)
+
+
+@pytest.mark.parametrize("limit", ["0", "-1"])
+def test_cli_rejects_non_positive_limits(tmp_path: Path, capsys, limit: str) -> None:
+    """Reject bounds that cannot distinguish a complete inventory from a cap."""
+    fixture = tmp_path / "prs.json"
+    fixture.write_text("[]", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="2"):
+        audit_pr_contract_versions.main(["--fixture", str(fixture), "--limit", limit])
+
+    assert "positive integer" in capsys.readouterr().err
+
+
+def test_fetch_open_prs_preserves_single_subprocess_failure(monkeypatch) -> None:
+    """Surface the first ``gh`` failure cleanly without adding retry behavior."""
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 2, stdout="", stderr="auth unavailable\n")
+
+    monkeypatch.setattr(audit_pr_contract_versions.subprocess, "run", fake_run)
+
+    with pytest.raises(
+        RuntimeError,
+        match=r"gh pr list failed \(exit 2\): auth unavailable",
+    ):
+        audit_pr_contract_versions._fetch_open_prs("ll7/robot_sf_ll7", limit=7)
+    assert len(commands) == 1
+
+
+def test_fetch_open_prs_preserves_invalid_json_failure(monkeypatch) -> None:
+    """Keep malformed live output explicit instead of emitting a partial report."""
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 0, stdout="{", stderr="")
+
+    monkeypatch.setattr(audit_pr_contract_versions.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="gh pr list returned invalid JSON"):
+        audit_pr_contract_versions._fetch_open_prs("ll7/robot_sf_ll7", limit=7)
 
 
 def test_classify_valid_v2_marker() -> None:
@@ -161,6 +267,7 @@ def test_credential_safe_output(tmp_path: Path) -> None:
 
 
 def test_cli_fixture_mode_is_deterministic(tmp_path: Path) -> None:
+    """Keep offline report bytes independent of the live-list safety bound."""
     fixture = tmp_path / "prs.json"
     records = [
         _record(1, _v2_body()),
@@ -180,8 +287,22 @@ def test_cli_fixture_mode_is_deterministic(tmp_path: Path) -> None:
         text=True,
         check=False,
     )
+    bounded = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--fixture",
+            str(fixture),
+            "--limit",
+            "1",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert first.returncode == 0
-    assert first.stdout == second.stdout
+    assert bounded.returncode == 0
+    assert first.stdout == second.stdout == bounded.stdout
     report = json.loads(first.stdout)
     assert report["counts"] == {"v2_valid": 1, "v1_compatibility": 1, "body_missing": 1}
 

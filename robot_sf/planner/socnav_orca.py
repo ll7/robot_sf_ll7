@@ -166,13 +166,14 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             if not self._fallback_warned:
                 logger.warning(
                     "rvo2 not available; falling back to heuristic ORCA behavior. "
-                    "Install the 'orca' extra for the benchmark-ready implementation.",
+                    "Install rvo2 externally (e.g. `pip install third_party/python-rvo2`) for the benchmark-ready implementation.",
                 )
                 self._fallback_warned = True
             return False
         raise RuntimeError(
             "rvo2 is required for the benchmark-ready ORCA planner. "
-            "Install via `uv sync --extra orca` or set allow_fallback=True."
+            "ORCA is an external optional dependency excluded from supported release extras. "
+            "Install rvo2 (e.g. `pip install third_party/python-rvo2` or `pip install git+https://github.com/mit-acl/Python-RVO2`) or set allow_fallback=True."
         )
 
     @staticmethod

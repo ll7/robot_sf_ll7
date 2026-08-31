@@ -16,12 +16,17 @@ from typing import Any
 import yaml
 
 from scripts.dev import gh_issue_rest, issue_claim, issue_dependency_packet
+from scripts.dev.issue_state_taxonomy import (
+    execution_state_labels,
+    state_labels,
+    state_qualifier_labels,
+    unknown_state_labels,
+)
 
 SCHEMA = "issue_implementability.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_REMOTE = "origin"
 READY_LABEL = "state:ready"
-STATE_LABEL_PREFIX = "state:"
 EXECUTION_HEADINGS = frozenset({"execution", "execution contract"})
 EXECUTION_FIELDS = frozenset({"owning_repo", "mutation_repos", "route_required", "external_inputs"})
 LOCAL_ROUTE = "local"
@@ -497,11 +502,6 @@ def _has_blocked_prefix(labels: set[str]) -> bool:
     return any(label.startswith("blocked:") for label in labels)
 
 
-def _state_labels(labels: set[str]) -> list[str]:
-    """Return all lifecycle labels in deterministic order."""
-    return sorted(label for label in labels if label.startswith(STATE_LABEL_PREFIX))
-
-
 def _pending_decision_heading(contract: dict[str, Any], labels: set[str]) -> bool:
     """Detect an unresolved decision heading unless a ruling label is present."""
     if "ruled" in labels or "domain-approved" in labels:
@@ -512,6 +512,18 @@ def _pending_decision_heading(contract: dict[str, Any], labels: set[str]) -> boo
         "required maintainer decision",
     }
     return bool(decision_headings & set(contract["headings"]))
+
+
+def _missing_execution_state_is_conflict(labels: set[str]) -> bool:
+    """Return whether absent execution state should stop before hold labels classify.
+
+    Historical hold labels such as ``state:working`` and ``state:review`` may appear
+    without ``state:ready``/``state:running`` and should remain working/review holds,
+    not become claimable issues. Unknown state labels still fail closed earlier.
+    """
+    if execution_state_labels(labels):
+        return False
+    return not bool(state_qualifier_labels(labels))
 
 
 def _classify_issue(
@@ -605,11 +617,23 @@ def _classify_issue(
             "assigned",
         ),
         (
-            len(_state_labels(labels)) != 1,
+            bool(unknown_state_labels(labels)),
             "state_conflict",
             (
-                "exactly one state:* label is required; found "
-                + (", ".join(_state_labels(labels)) or "none")
+                "unknown state:* label(s) must be classified before admission: "
+                + ", ".join(unknown_state_labels(labels))
+            ),
+            "state_label_conflict",
+        ),
+        (
+            len(execution_state_labels(labels)) > 1 or _missing_execution_state_is_conflict(labels),
+            "state_conflict",
+            (
+                "exactly one execution state label is required unless a known hold qualifier "
+                "already blocks dispatch; found "
+                + (", ".join(execution_state_labels(labels)) or "none")
+                + "; state qualifiers are "
+                + (", ".join(state_labels(labels)) or "none")
             ),
             "state_label_conflict",
         ),

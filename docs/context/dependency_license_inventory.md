@@ -78,13 +78,18 @@ python scripts/tools/check_dependency_license_inventory.py \
 ```
 
 Candidate binding verifies the closed manifest/provenance contract, member checksums, archive
-package identity and metadata, and the SBOM component set against the selected lock closure. A
-candidate invocation without `--profile` selects `all`; it never silently narrows to `core`. The
+package identity and metadata, and the SBOM component set against the selected lock closure. It
+replaces ambient installed metadata for the selected rows with an `artifact_bound` identity
+observation, but it does not invent license facts: a reviewed exact policy disposition is still
+required for each dependency. The resulting `candidate_binding` record carries the candidate
+identity, materialization commit/tree and policy/inventory identities, member digests, and
+component digest needed for candidate-bundle admission. A producer that omits the optional
+materialization envelope remains compatible; when present, it is validated and must match the
+provenance record exactly.
+A candidate invocation without `--profile` selects `all`; it never silently narrows to `core`. The
 separate rights-admission consumer rejects a report whose surface is not exactly `["all"]`; the
-report's `all` profile must carry the twelve supported extra IDs. It replaces ambient installed metadata for the selected rows
-with an `artifact_bound` identity observation, but it does not invent license facts: a reviewed
-exact policy disposition is still required for each dependency. The resulting `candidate_binding`
-record carries the candidate identity, member digests, and component digest needed for admission.
+report's `all` profile must carry the twelve supported extra IDs. It does not invent license facts:
+a reviewed exact policy disposition is still required for each dependency.
 
 The committed profile matrix covers the root environment, every declared supported extra,
 the explicit `all` closure, standalone `fast-pysf`, and SocNavBench.

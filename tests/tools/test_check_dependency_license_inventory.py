@@ -232,12 +232,20 @@ def _write_candidate_bundle(root: Path) -> Path:
                 "status": "passed",
             },
             {
-                "command": "python scripts/tools/check_distribution_licenses.py $DIST_DIR",
+                "command": (
+                    "cd $BUILD_SOURCE && python scripts/tools/check_distribution_licenses.py "
+                    "$DIST_DIR --strict-asset-rights --repo-root $BUILD_SOURCE "
+                    "--inventory $BUILD_SOURCE/scripts/validation/software_candidate_asset_rights.v1.json "
+                    "--source-tree-ref HEAD"
+                ),
                 "id": "archive-license",
                 "status": "passed",
             },
             {
-                "command": "bash scripts/validation/wheel_install_smoke.sh $DIST_DIR/robot_sf-*.whl",
+                "command": (
+                    "cd $BUILD_SOURCE && bash scripts/validation/wheel_install_smoke.sh "
+                    "$DIST_DIR/robot_sf-*.whl"
+                ),
                 "id": "wheel-install",
                 "status": "passed",
             },
@@ -296,6 +304,16 @@ def _write_candidate_bundle(root: Path) -> Path:
     wheel_member = member(wheel, "wheel")
     sdist_member = member(sdist, "sdist")
     sbom_member = member(sbom, "sbom")
+    materialization = {
+        "candidate_commit_sha": "1" * 40,
+        "candidate_tree_sha": "2" * 40,
+        "policy_path": "scripts/validation/software_candidate_policy.v1.json",
+        "policy_sha256": "3" * 64,
+        "source_inventory_path": "scripts/validation/asset_rights_inventory.v1.yaml",
+        "source_inventory_sha256": "4" * 64,
+        "candidate_inventory_path": "scripts/validation/software_candidate_asset_rights.v1.json",
+        "candidate_metadata_path": "SOFTWARE_CANDIDATE.json",
+    }
     provenance_payload = {
         "build": {
             "command": "cd $BUILD_SOURCE && uv build --out-dir $DIST_DIR",
@@ -310,6 +328,7 @@ def _write_candidate_bundle(root: Path) -> Path:
         "subjects": [wheel_member, sdist_member],
         "validation": validation,
         "workflow": workflow,
+        "materialization": materialization,
     }
     provenance.write_text(
         json.dumps(provenance_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -326,6 +345,7 @@ def _write_candidate_bundle(root: Path) -> Path:
                 "source_sha": source_sha,
                 "validation": validation,
                 "workflow": workflow,
+                "materialization": materialization,
             },
             indent=2,
         )
@@ -468,6 +488,7 @@ def test_candidate_bundle_binds_archives_and_sbom_to_selected_lock_closure(
     assert inventory["summary"]["candidate_bound"] is True
     assert inventory["candidate_binding"]["status"] == "bound"
     assert inventory["candidate_binding"]["profile_ids"] == ["core"]
+    assert inventory["candidate_binding"]["materialization"]["candidate_commit_sha"] == "1" * 40
     assert inventory["candidate_binding"]["sbom"]["component_count"] == 1
     root = next(row for row in inventory["packages"] if row["name"] == "robot-sf")
     assert root["observed_version"] == "0.0.1"
@@ -498,6 +519,29 @@ def test_candidate_bundle_drift_fails_closed(tmp_path: Path) -> None:
     assert inventory["summary"]["candidate_bound"] is False
     assert inventory["candidate_binding"]["status"] == "blocked"
     assert any("candidate bundle binding failed" in failure for failure in inventory["failures"])
+
+
+def test_candidate_materialization_path_drift_fails_closed(tmp_path: Path) -> None:
+    """A traversal path in the producer's materialization envelope cannot be bound."""
+    _write_inputs(tmp_path)
+    bundle = _write_candidate_bundle(tmp_path)
+    manifest_path = bundle / "candidate-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["materialization"]["candidate_metadata_path"] = "../SOFTWARE_CANDIDATE.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    inventory = build_inventory(
+        tmp_path,
+        distributions=[],
+        selected_profile_ids=["core"],
+        candidate_bundle_path=bundle,
+    )
+
+    assert inventory["summary"]["candidate_bound"] is False
+    assert any(
+        "candidate materialization candidate_metadata_path is invalid" in failure
+        for failure in inventory["failures"]
+    )
 
 
 def test_candidate_bound_report_freshness_rechecks_candidate_bytes(tmp_path: Path) -> None:

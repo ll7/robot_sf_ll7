@@ -47,8 +47,7 @@
     "robot_sf/maps/**/*.svg",
     "third_party/python-rvo2/src/**",
     "third_party/python-rvo2/examples/**",
-    "third_party/python-rvo2/doc/**",
-    "third_party/socnavbench/**"
+    "third_party/python-rvo2/doc/**"
   ],
   "required": [
     "pyproject.toml",

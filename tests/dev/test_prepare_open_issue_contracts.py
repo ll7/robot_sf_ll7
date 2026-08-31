@@ -272,6 +272,21 @@ def _recording_writer(log: list[tuple[int, str]]):
     return writer
 
 
+def _label_plan_fixture(*, numbers: tuple[int, ...] = (1001,)) -> tuple[dict, dict]:
+    """Build selected ready entries with one reviewed label transition each."""
+    audit = _audit_fixture()
+    for item in audit["items"]:
+        if item["number"] not in numbers:
+            continue
+        item["observed_classification"] = "ready"
+        item["classification"] = "ready"
+        item["dispatch_eligible"] = False
+        item["labels"] = ["priority:1"]
+        item["body_sha256"] = prep._sha256_text(f"body-{item['number']}")
+    full_plan = prep.build_plan(audit, batch_id="b1")
+    return audit, prep._restrict_plan(full_plan, numbers)
+
+
 def test_apply_dry_run_writes_nothing() -> None:
     """Dry-run apply produces would-write entries and calls no writer."""
     plan = prep.build_plan(_audit_fixture(), batch_id="b1")
@@ -386,6 +401,281 @@ def test_live_body_writer_uses_rest_path_and_verifies_readback(
     assert current_body.endswith(block)
 
 
+def test_apply_label_plan_writes_after_body_and_verifies_readback() -> None:
+    """A reviewed label plan is applied after the body and read back exactly."""
+    audit, plan = _label_plan_fixture()
+    issue = 1001
+    snapshots = {
+        issue: {
+            "number": issue,
+            "state": "open",
+            "body": f"body-{issue}",
+            "labels": ["priority:1"],
+            "assignees": [],
+        }
+    }
+    body_calls: list[int] = []
+    label_calls: list[tuple[int, str, str]] = []
+
+    def read_issue(number: int) -> dict:
+        snapshot = snapshots[number]
+        return {**snapshot, "labels": list(snapshot["labels"])}
+
+    def write_body(number: int, block: str) -> None:
+        body_calls.append(number)
+        snapshots[number]["body"] = prep._compose_body(snapshots[number]["body"], block)
+
+    def write_label(number: int, action: str, label: str) -> dict:
+        label_calls.append((number, action, label))
+        if action == "add":
+            snapshots[number]["labels"].append(label)
+        else:
+            snapshots[number]["labels"].remove(label)
+        return {"status": "ok"}
+
+    receipt = prep._apply_bodies(
+        audit,
+        plan,
+        mutation_ceiling=10,
+        batch_id="b1",
+        dry_run=False,
+        body_writer=write_body,
+        issue_reader=read_issue,
+        label_catalog={"priority:1", "state:ready"},
+        label_writer=write_label,
+    )
+
+    assert body_calls == [issue]
+    assert label_calls == [(issue, "add", "state:ready")]
+    assert receipt["written"] == 2
+    assert receipt["drifted"] == 0
+    assert snapshots[issue]["labels"] == ["priority:1", "state:ready"]
+    assert receipt["safe_order"] == "body_then_labels"
+    assert (
+        next(op for op in receipt["operations"] if op.get("kind") == "label")["api_status"] == "ok"
+    )
+
+
+def test_apply_aborts_before_writes_on_label_drift() -> None:
+    """Any expected-label drift aborts the whole batch before mutation."""
+    audit, plan = _label_plan_fixture()
+    body_calls: list[int] = []
+    label_calls: list[tuple[int, str, str]] = []
+
+    def read_issue(number: int) -> dict:
+        return {
+            "number": number,
+            "state": "open",
+            "body": f"body-{number}",
+            "labels": ["unexpected"],
+            "assignees": [],
+        }
+
+    receipt = prep._apply_bodies(
+        audit,
+        plan,
+        mutation_ceiling=10,
+        batch_id="b1",
+        dry_run=False,
+        body_writer=lambda issue, block: body_calls.append(issue),
+        issue_reader=read_issue,
+        label_catalog={"priority:1", "state:ready", "unexpected"},
+        label_writer=lambda issue, action, label: label_calls.append((issue, action, label)),
+    )
+
+    assert receipt["aborted"] is True
+    assert receipt["abort_reason"] == "preflight_drift_or_unavailable"
+    assert receipt["drifted"] == 1
+    assert body_calls == []
+    assert label_calls == []
+
+
+def test_apply_label_plan_supports_exact_remove() -> None:
+    """Reviewed removal uses the same exact-set and readback protocol."""
+    audit, plan = _label_plan_fixture()
+    entry = plan["entries"][0]
+    entry["labels"] = ["priority:1", "state:ready"]
+    entry["label_plan"] = [{"issue": "1001", "action": "remove", "label": "state:ready"}]
+    snapshots = {
+        1001: {
+            "number": 1001,
+            "state": "open",
+            "body": "body-1001",
+            "labels": ["priority:1", "state:ready"],
+            "assignees": [],
+        }
+    }
+
+    def read_issue(number: int) -> dict:
+        snapshot = snapshots[number]
+        return {**snapshot, "labels": list(snapshot["labels"])}
+
+    def write_label(number: int, action: str, label: str) -> dict:
+        snapshots[number]["labels"].remove(label)
+        return {"status": "ok"}
+
+    receipt = prep._apply_bodies(
+        audit,
+        plan,
+        mutation_ceiling=10,
+        batch_id="b1",
+        dry_run=False,
+        body_writer=lambda issue, block: None,
+        issue_reader=read_issue,
+        label_catalog={"priority:1", "state:ready"},
+        label_writer=write_label,
+    )
+
+    assert receipt["failed"] == 0
+    assert receipt["drifted"] == 0
+    assert snapshots[1001]["labels"] == ["priority:1"]
+    assert any(
+        op.get("action") == "remove" and op.get("operation") == "written"
+        for op in receipt["operations"]
+    )
+
+
+def test_apply_rejects_runner_label_before_any_body_write() -> None:
+    """Issue preparation cannot mutate PR runner labels or bypass the catalog."""
+    audit, plan = _label_plan_fixture()
+    plan["entries"][0]["label_plan"] = [{"issue": "1001", "action": "add", "label": "runner:luna"}]
+    body_calls: list[int] = []
+    receipt = prep._apply_bodies(
+        audit,
+        plan,
+        mutation_ceiling=10,
+        batch_id="b1",
+        dry_run=False,
+        body_writer=lambda issue, block: body_calls.append(issue),
+        label_catalog={"runner:luna"},
+        label_writer=lambda issue, action, label: {"status": "ok"},
+    )
+
+    assert receipt["abort_reason"] == "invalid_label_plan"
+    assert receipt["failed"] >= 1
+    assert any(op.get("reason") == "runner_label_forbidden" for op in receipt["operations"])
+    assert body_calls == []
+
+
+def test_apply_rejects_missing_label_before_any_body_write() -> None:
+    """A label absent from the repository catalog cannot be created implicitly."""
+    audit, plan = _label_plan_fixture()
+    plan["entries"][0]["label_plan"] = [
+        {"issue": "1001", "action": "add", "label": "not-in-catalog"}
+    ]
+    body_calls: list[int] = []
+    receipt = prep._apply_bodies(
+        audit,
+        plan,
+        mutation_ceiling=10,
+        batch_id="b1",
+        dry_run=False,
+        body_writer=lambda issue, block: body_calls.append(issue),
+        label_catalog={"priority:1", "state:ready"},
+        label_writer=lambda issue, action, label: {"status": "ok"},
+    )
+
+    assert receipt["abort_reason"] == "invalid_label_plan"
+    assert any(
+        op.get("reason") == "label_not_in_repository_catalog" for op in receipt["operations"]
+    )
+    assert body_calls == []
+
+
+def test_apply_rejects_more_than_hard_label_ceiling() -> None:
+    """The label budget is checked before the first body or label mutation."""
+    audit, plan = _label_plan_fixture()
+    entry = plan["entries"][0]
+    entry["body_patch"]["proposed"] = False
+    entry["label_plan"] = [
+        {"issue": "1001", "action": "add", "label": f"custom:{index}"}
+        for index in range(prep.HARD_LABEL_CEILING + 1)
+    ]
+    receipt = prep._apply_bodies(
+        audit,
+        plan,
+        mutation_ceiling=10,
+        batch_id="b1",
+        dry_run=False,
+        body_writer=lambda issue, block: pytest.fail("body writer called"),
+        label_catalog={f"custom:{index}" for index in range(prep.HARD_LABEL_CEILING + 1)},
+        label_writer=lambda issue, action, label: pytest.fail("label writer called"),
+    )
+
+    assert receipt["abort_reason"] == "label_operation_ceiling_exceeded"
+    assert receipt["label_operations_planned"] == prep.HARD_LABEL_CEILING + 1
+    assert receipt["written"] == 0
+
+
+def test_apply_records_partial_failure_after_body_write() -> None:
+    """Non-transactional body-then-label failure is explicit and resumable."""
+    audit, plan = _label_plan_fixture(numbers=(1001, 1002))
+    snapshots = {
+        number: {
+            "number": number,
+            "state": "open",
+            "body": f"body-{number}",
+            "labels": ["priority:1"],
+            "assignees": [],
+        }
+        for number in (1001, 1002)
+    }
+    body_calls: list[int] = []
+
+    def read_issue(number: int) -> dict:
+        snapshot = snapshots[number]
+        return {**snapshot, "labels": list(snapshot["labels"])}
+
+    def write_body(number: int, block: str) -> None:
+        body_calls.append(number)
+
+    def write_label(number: int, action: str, label: str) -> dict:
+        raise RuntimeError("simulated label service failure")
+
+    receipt = prep._apply_bodies(
+        audit,
+        plan,
+        mutation_ceiling=10,
+        batch_id="b1",
+        dry_run=False,
+        body_writer=write_body,
+        issue_reader=read_issue,
+        label_catalog={"priority:1", "state:ready"},
+        label_writer=write_label,
+    )
+
+    assert body_calls == [1001]
+    assert receipt["partial_failure"] is True
+    assert receipt["written"] == 1
+    assert receipt["failed"] == 1
+    assert any(
+        op.get("issue") == 1002 and op.get("status") == "skipped" for op in receipt["operations"]
+    )
+
+
+def test_apply_dry_run_includes_label_operations_without_writes() -> None:
+    """Dry-run renders body and label operations without requiring live issue reads."""
+    audit, plan = _label_plan_fixture()
+    body_calls: list[int] = []
+    receipt = prep._apply_bodies(
+        audit,
+        plan,
+        mutation_ceiling=10,
+        batch_id="b1",
+        dry_run=True,
+        body_writer=lambda issue, block: body_calls.append(issue),
+        label_catalog={"priority:1", "state:ready"},
+    )
+
+    assert receipt["would_write"] == 2
+    assert receipt["label_operations_attempted"] == 1
+    assert body_calls == []
+    assert any(
+        op.get("kind") == "label" and op.get("operation") == "would_write"
+        for op in receipt["operations"]
+    )
+
+
 def test_apply_ceiling_too_high_fails_closed(tmp_path: Path) -> None:
     """A ceiling above the hard max must fail closed."""
     audit_path = _audit_path(tmp_path)
@@ -411,6 +701,39 @@ def test_main_requires_apply_for_apply_mode(tmp_path: Path) -> None:
     audit_path = _audit_path(tmp_path)
     rc = prep.main(["--audit-json", str(audit_path), "--mode", "apply"])
     assert rc == 2
+
+
+def test_main_real_apply_requires_reviewed_digest_and_issue_list(tmp_path: Path) -> None:
+    """CLI mutation requires both exact membership and explicit review evidence."""
+    audit_path = _audit_path(tmp_path)
+    rc = prep.main(["--audit-json", str(audit_path), "--mode", "apply", "--apply"])
+    assert rc == 2
+
+    rc = prep.main(
+        [
+            "--audit-json",
+            str(audit_path),
+            "--mode",
+            "apply",
+            "--apply",
+            "--issues",
+            "1001",
+        ]
+    )
+    assert rc == 2
+
+
+def test_main_selected_plan_recomputes_digest(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """Explicit issue selection freezes a new exact plan digest."""
+    audit_path = _audit_path(tmp_path)
+    rc = prep.main(["--audit-json", str(audit_path), "--issues", "1001"])
+    assert rc == 0
+    plan = json.loads(capsys.readouterr().out)
+    assert plan["item_count"] == 1
+    assert plan["entries"][0]["issue"] == 1001
+    assert plan["content_sha256"] == prep._content_digest(plan)
 
 
 def test_main_plan_emits_stdout_json(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:

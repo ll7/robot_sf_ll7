@@ -95,7 +95,8 @@ report-only `open_issue_contract_audit.v1` output from
 [`audit_open_issue_contracts.py`](audit_open_issue_contracts.py) and emits per-issue
 `goal-autopilot` preparation packets (issue #7929). Plan, render, and verify modes
 are report-only; apply requires an explicit reviewed plan and a bounded, CAS-guarded
-batch.
+batch. Real apply additionally requires the exact selected issue list and its
+`content_sha256` passed as `--reviewed-plan-digest`.
 
 ```bash
 uv run python scripts/dev/prepare_open_issue_contracts.py \

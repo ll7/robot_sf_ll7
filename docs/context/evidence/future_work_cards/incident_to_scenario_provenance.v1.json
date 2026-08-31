@@ -1,0 +1,52 @@
+{
+  "admission_status": "diagnostic_only",
+  "bridge_id": "incident_to_scenario_provenance",
+  "card_digest": "8f5eb53c7a0994e649dbc6b0e02413b40c38ed28c43024f5226a2277f6021938",
+  "evidence_status": "synthetic_fixture",
+  "forbidden_inferences": [
+    "Legal fault or liability determination.",
+    "Real-world incident distribution representativeness.",
+    "Automatic admission of reconstructed incidents into official benchmark leaderboards."
+  ],
+  "implementation_status": "schema_and_tooling_only",
+  "implemented_now": [
+    "Fail-closed schema distinguishing source facts, extracted hypotheses, simulator assumptions, and replay identity.",
+    "Deterministic checksum-covered scenario generation from structured incident descriptors."
+  ],
+  "linked_issues": [
+    7900,
+    8048
+  ],
+  "missing_proof": [
+    "Ingestion and validation of real-world public transportation or robot collision incident reports.",
+    "Human-audited extraction accuracy and representativeness bounds.",
+    "Empirical validation that reconstructed scenarios faithfully represent real incidents."
+  ],
+  "next_decisive_experiment": {
+    "requirements": [
+      "Rights-cleared incident sources with human-verified extraction.",
+      "Immutable source digests with admissibility and rejection rules.",
+      "Deterministic mapping and replay with representativeness boundaries.",
+      "Separate author domain admission before benchmark use."
+    ],
+    "title": "Rights-Cleared Real Incident Ingestion and Verification Protocol"
+  },
+  "owner_paths": [
+    "robot_sf/provenance/",
+    "scripts/analysis/",
+    "docs/context/evidence/"
+  ],
+  "relationship_to_anchor": "introduced_after_anchor",
+  "safe_sentence": "A fail-closed provenance contract can distinguish source facts, extracted hypotheses, simulator assumptions, and replay identity for a synthetic incident fixture; real-report validity and representativeness remain future work.",
+  "schema": "future_work_bridge_status_card.v1",
+  "source_digest": "23d0377efd75e60931e68504e2807850d62655b42680c0365d848290095babd6",
+  "strongest_evidence_surface": "robot_sf/provenance/ and docs/context/evidence/",
+  "title": "Incident-to-Scenario Provenance",
+  "verified_now": [
+    {
+      "item": "Synthetic incident fixtures pass schema validation, digestion, and deterministic scenario generation.",
+      "status": "verified",
+      "tier": "Tier 0 (synthetic)"
+    }
+  ]
+}

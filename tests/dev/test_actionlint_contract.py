@@ -57,6 +57,82 @@ def _write_fake_actionlint(
     return path
 
 
+def _write_binding_probe_actionlint(
+    path: Path,
+    *,
+    invocation_marker: Path,
+    reject_invalid_workflow: bool,
+) -> Path:
+    invalid_workflow_command = ""
+    if reject_invalid_workflow:
+        invalid_workflow_command = "if grep -q 'invalid_event' \"${1:-}\"; then\n  exit 23\nfi\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "${1:-}" == "-version" ]]; then\n'
+        f"  printf '%s\\n' {EXPECTED_VERSION!r}\n"
+        "  exit 0\n"
+        "fi\n"
+        f"printf '%s\\n' invoked > {str(invocation_marker)!r}\n"
+        f"{invalid_workflow_command}"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+    return path
+
+
+def _assert_relative_candidate_is_bound(
+    tmp_path: Path,
+    relative_candidate: Path,
+    *,
+    candidate_source: str,
+) -> None:
+    caller_dir = tmp_path / "caller"
+    repo_root = tmp_path / "repo"
+    trusted_marker = tmp_path / "trusted-invoked"
+    shadow_marker = tmp_path / "shadow-invoked"
+    trusted_candidate = _write_binding_probe_actionlint(
+        caller_dir / relative_candidate,
+        invocation_marker=trusted_marker,
+        reject_invalid_workflow=True,
+    )
+    _write_binding_probe_actionlint(
+        repo_root / relative_candidate,
+        invocation_marker=shadow_marker,
+        reject_invalid_workflow=False,
+    )
+    wrapper = repo_root / "scripts" / "dev" / SCRIPT.name
+    wrapper.parent.mkdir(parents=True)
+    _script_trusting_test_binary(wrapper, trusted_candidate)
+    bad_workflow = _write_invalid_workflow(tmp_path / "bad-relative-candidate.yml")
+
+    env = os.environ.copy()
+    env["ACTIONLINT_BIN"] = ""
+    env["ROBOT_SF_ACTIONLINT_CACHE"] = str(tmp_path / "unused-cache")
+    if candidate_source == "override":
+        env["ACTIONLINT_BIN"] = str(relative_candidate)
+    elif candidate_source == "cache":
+        env["ROBOT_SF_ACTIONLINT_CACHE"] = str(relative_candidate.parents[1])
+    elif candidate_source == "path":
+        env["PATH"] = f"{relative_candidate.parent}:{env['PATH']}"
+    else:
+        raise AssertionError(f"unexpected candidate source: {candidate_source}")
+
+    res = subprocess.run(
+        ["bash", str(wrapper), str(bad_workflow)],
+        cwd=caller_dir,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+    assert res.returncode == 23, "the authenticated candidate must reject the invalid workflow"
+    assert trusted_marker.is_file(), "the authenticated candidate must be the executed file"
+    assert not shadow_marker.exists(), "the same-relative repository shadow must not execute"
+
+
 def _run_wrapper(
     workflow: Path,
     *,
@@ -261,6 +337,28 @@ def test_actionlint_rejects_untrusted_explicit_override(tmp_path: Path) -> None:
     assert "unknown Webhook event" not in diagnostics
 
 
+def test_actionlint_binds_relative_explicit_override_before_repository_chdir(
+    tmp_path: Path,
+) -> None:
+    """The exact relative override authenticated from the caller directory is executed."""
+    _assert_relative_candidate_is_bound(
+        tmp_path,
+        Path("relative-bin") / "actionlint",
+        candidate_source="override",
+    )
+
+
+def test_actionlint_binds_relative_cache_candidate_before_repository_chdir(
+    tmp_path: Path,
+) -> None:
+    """The exact cached candidate authenticated from the caller directory is executed."""
+    _assert_relative_candidate_is_bound(
+        tmp_path,
+        Path("relative-cache") / EXPECTED_VERSION / "actionlint",
+        candidate_source="cache",
+    )
+
+
 def test_actionlint_rejects_poisoned_cached_binary(tmp_path: Path) -> None:
     """A cached executable is revalidated from its bytes before every use."""
     cached_bin = tmp_path / "cache" / EXPECTED_VERSION / "actionlint"
@@ -293,6 +391,17 @@ def test_actionlint_rejects_path_binary_with_untrusted_bytes(tmp_path: Path) -> 
     assert res.returncode != 0
     assert "binary digest mismatch" in f"{res.stdout}\n{res.stderr}"
     assert not invocation_marker.exists(), "untrusted candidate must not be executed"
+
+
+def test_actionlint_binds_relative_path_candidate_before_repository_chdir(
+    tmp_path: Path,
+) -> None:
+    """The exact PATH candidate authenticated from the caller directory is executed."""
+    _assert_relative_candidate_is_bound(
+        tmp_path,
+        Path("relative-bin") / "actionlint",
+        candidate_source="path",
+    )
 
 
 @pytest.mark.parametrize("reported_version", ["1.7.11", "1.7.120"])

@@ -481,6 +481,9 @@ _FAST_FILES = {
     "test_release_doctor_edge_cases.py",
     "test_release_protocol.py",
     "test_release_protocol_edge_cases.py",
+    # Resolved release-identity tests are deterministic contract coverage for
+    # the source-freeze implementation; keep them in the changed-coverage lane.
+    "test_release_resolved_identity.py",
     "test_release_resume_admission.py",
     "test_runtime_smoke_admission.py",
     "test_predictive_mppi_planner.py",

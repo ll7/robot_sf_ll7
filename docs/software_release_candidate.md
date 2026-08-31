@@ -46,6 +46,9 @@ archive/license, and clean wheel-install/entry-point owners. Assembly fails unle
 validator identities are present exactly once in canonical order. The helper independently
 rejects dirty or drifting source, fuzzy commit IDs, multiple/missing/unclassified distributions,
 duplicate or unsafe archive members, mismatched package metadata, and malformed SBOM input.
+Pinned `uv 0.11.21` also writes a one-byte `*` `.gitignore` marker in a custom output directory;
+the helper classifies only that exact tool marker and never copies it into the candidate bundle.
+Any changed marker content remains an admission failure.
 
 `uv export` currently includes a fresh UUID and timestamp in each CycloneDX document. The helper
 removes only those volatile identity fields, binds the root component to the admitted wheel/sdist

@@ -206,6 +206,25 @@ def test_sbom_volatile_identity_is_removed_deterministically(tmp_path: Path) -> 
     }
 
 
+def test_assemble_classifies_only_the_exact_pinned_uv_out_dir_marker(tmp_path: Path) -> None:
+    source, source_sha = _source_repo(tmp_path / "source")
+    dist = _distributions(tmp_path / "dist")
+    raw_sbom = _raw_sbom(tmp_path / "raw-sbom.json")
+    marker = dist / ".gitignore"
+    marker.write_bytes(b"*")
+
+    _run(*_assemble_args(source, source_sha, dist, raw_sbom, tmp_path / "accepted"))
+    assert not (tmp_path / "accepted" / marker.name).exists()
+
+    marker.write_bytes(b"*\nchanged\n")
+    rejected = _run(
+        *_assemble_args(source, source_sha, dist, raw_sbom, tmp_path / "rejected"),
+        check=False,
+    )
+    assert rejected.returncode == 1
+    assert "pinned uv out-dir marker" in rejected.stderr
+
+
 @pytest.mark.parametrize(
     ("case", "message"),
     (

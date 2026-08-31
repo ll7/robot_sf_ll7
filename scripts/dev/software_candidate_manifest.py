@@ -29,6 +29,8 @@ PROVENANCE_VERSION = "robot_sf.software_candidate.provenance.v1"
 SCHEMA_PATH = Path(__file__).with_name("software_candidate_manifest.v1.schema.json")
 MANIFEST_NAME = "candidate-manifest.json"
 PROVENANCE_NAME = "candidate-provenance.json"
+UV_OUT_DIR_MARKER_NAME = ".gitignore"
+UV_OUT_DIR_MARKER_BYTES = b"*"
 SDIST_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz", ".zip")
 SHA_PATTERN = re.compile(r"[0-9a-f]{40}\Z")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
@@ -243,23 +245,29 @@ def _distribution_inputs(dist_dir: Path) -> tuple[Path, Path, str]:
     for path in entries:
         if path.is_symlink() or not path.is_file():
             raise CandidateError(f"unclassified distribution member: {path.name}")
-    wheels = [path for path in entries if path.suffix == ".whl"]
+    marker = next((path for path in entries if path.name == UV_OUT_DIR_MARKER_NAME), None)
+    if marker is not None and marker.read_bytes() != UV_OUT_DIR_MARKER_BYTES:
+        raise CandidateError(
+            f"pinned uv out-dir marker has unexpected content: {UV_OUT_DIR_MARKER_NAME}"
+        )
+    artifacts = [path for path in entries if path.name != UV_OUT_DIR_MARKER_NAME]
+    wheels = [path for path in artifacts if path.suffix == ".whl"]
     sdists = [
         path
-        for path in entries
+        for path in artifacts
         if any(path.name.endswith(suffix) for suffix in SDIST_SUFFIXES) and path.suffix != ".whl"
     ]
     classified = {*wheels, *sdists}
-    unclassified = [path.name for path in entries if path not in classified]
+    unclassified = [path.name for path in artifacts if path not in classified]
     if unclassified:
         raise CandidateError(
             f"unclassified distribution members: {', '.join(sorted(unclassified))}"
         )
-    if len(wheels) != 1 or len(sdists) != 1 or len(entries) != 2:
+    if len(wheels) != 1 or len(sdists) != 1 or len(artifacts) != 2:
         raise CandidateError(
             "candidate requires exactly one Robot SF wheel and one Robot SF sdist "
             f"(found {len(wheels)} wheel(s), {len(sdists)} sdist(s), "
-            f"{len(entries)} total member(s))"
+            f"{len(artifacts)} candidate artifact(s))"
         )
 
     wheel_name, wheel_version = _wheel_metadata(wheels[0])

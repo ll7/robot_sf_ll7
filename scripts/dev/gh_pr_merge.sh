@@ -19,6 +19,8 @@ set -euo pipefail
 # The exact-head binding is mandatory: without `--match-head-commit` the REST
 # fallback is refused and the wrapper exits 2.
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 usage() {
   cat <<'EOF'
 Usage: scripts/dev/gh_pr_merge.sh <pr-number> --match-head-commit <sha> [--repo owner/name]

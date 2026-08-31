@@ -1170,6 +1170,7 @@ def snapshot_claimable_issues(
         if isinstance(issue.get("admission"), dict)
         and issue["admission"].get("ok") is True
         and issue["admission"].get("outcome") == "ready_check_only"
+        and issue.get("dispatch_allowed", True) is not False
     ]
     admission_results_complete = all(
         isinstance(issue.get("admission"), dict)
@@ -1201,7 +1202,11 @@ def snapshot_claimable_issues(
         "admission_reason_histogram": dict(
             sorted(
                 Counter(
-                    _admission_reason(issue["admission"])
+                    (
+                        str(issue.get("classification") or "blocked")
+                        if issue.get("dispatch_allowed") is False
+                        else _admission_reason(issue["admission"])
+                    )
                     for issue in snapshots
                     if isinstance(issue.get("admission"), dict)
                 ).items()

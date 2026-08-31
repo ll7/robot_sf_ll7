@@ -5,7 +5,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
 import json
+import tarfile
+import zipfile
 from email.message import Message
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -207,6 +211,130 @@ def _resolved_distributions(*fields: tuple[str, str, dict[str, str]]) -> list[_D
     return [_Distribution(name, version, **metadata) for name, version, metadata in fields]
 
 
+def _write_candidate_bundle(root: Path) -> Path:
+    """Write an exact candidate bundle for the fixture's core profile."""
+    bundle = root / "candidate-bundle"
+    bundle.mkdir()
+    version = "0.0.1"
+    repository = "ll7/robot_sf_ll7"
+    source_sha = "0" * 40
+    workflow = {"run_attempt": 1, "run_id": "1"}
+    validation = {
+        "checks": [
+            {
+                "command": "python scripts/dev/check_version_alignment.py",
+                "id": "version-alignment",
+                "status": "passed",
+            },
+            {
+                "command": "twine check --strict $DIST_DIR/*.whl $DIST_DIR/*.tar.gz",
+                "id": "metadata",
+                "status": "passed",
+            },
+            {
+                "command": "python scripts/tools/check_distribution_licenses.py $DIST_DIR",
+                "id": "archive-license",
+                "status": "passed",
+            },
+            {
+                "command": "bash scripts/validation/wheel_install_smoke.sh $DIST_DIR/robot_sf-*.whl",
+                "id": "wheel-install",
+                "status": "passed",
+            },
+        ],
+        "status": "passed",
+    }
+    metadata = (
+        "Metadata-Version: 2.4\n"
+        "Name: robot_sf\n"
+        f"Version: {version}\n"
+        "Requires-Dist: demo-package>=1\n"
+        "\n"
+    ).encode()
+    wheel = bundle / f"robot_sf-{version}-py3-none-any.whl"
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr(f"robot_sf-{version}.dist-info/METADATA", metadata)
+    sdist = bundle / f"robot_sf-{version}.tar.gz"
+    with tarfile.open(sdist, "w:gz") as archive:
+        info = tarfile.TarInfo(f"robot_sf-{version}/PKG-INFO")
+        info.size = len(metadata)
+        archive.addfile(info, io.BytesIO(metadata))
+    sbom = bundle / f"robot_sf-{version}.cyclonedx.json"
+    sbom.write_text(
+        json.dumps(
+            {
+                "bomFormat": "CycloneDX",
+                "specVersion": "1.5",
+                "version": 1,
+                "metadata": {
+                    "component": {
+                        "bom-ref": f"pkg:pypi/robot-sf@{version}",
+                        "name": "robot-sf",
+                        "purl": f"pkg:pypi/robot-sf@{version}",
+                        "type": "library",
+                        "version": version,
+                    }
+                },
+                "components": [{"name": "demo-package", "version": "1.0.0"}],
+                "dependencies": [],
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    provenance = bundle / "candidate-provenance.json"
+
+    def member(path: Path, kind: str) -> dict[str, str | int]:
+        return {
+            "filename": path.name,
+            "kind": kind,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "size": path.stat().st_size,
+        }
+
+    wheel_member = member(wheel, "wheel")
+    sdist_member = member(sdist, "sdist")
+    sbom_member = member(sbom, "sbom")
+    provenance_payload = {
+        "build": {
+            "command": "cd $BUILD_SOURCE && uv build --out-dir $DIST_DIR",
+            "count": 1,
+            "source_role": "disposable-exact-commit",
+        },
+        "package": {"name": "robot_sf", "version": version},
+        "repository": repository,
+        "sbom": sbom_member,
+        "schema_version": "robot_sf.software_candidate.provenance.v1",
+        "source_sha": source_sha,
+        "subjects": [wheel_member, sdist_member],
+        "validation": validation,
+        "workflow": workflow,
+    }
+    provenance.write_text(
+        json.dumps(provenance_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    provenance_member = member(provenance, "provenance")
+    members = [wheel_member, sdist_member, sbom_member, provenance_member]
+    (bundle / "candidate-manifest.json").write_text(
+        json.dumps(
+            {
+                "members": members,
+                "package": {"name": "robot_sf", "version": version},
+                "repository": repository,
+                "schema_version": "robot_sf.software_candidate.v1",
+                "source_sha": source_sha,
+                "validation": validation,
+                "workflow": workflow,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return bundle
+
+
 def test_inventory_records_profiles_sources_and_deterministic_output(tmp_path: Path) -> None:
     """Every profile resolves the lock closure and preserves artifact identity."""
     _write_inputs(tmp_path)
@@ -233,6 +361,207 @@ def test_inventory_records_profiles_sources_and_deterministic_output(tmp_path: P
     assert set(demo["profiles"]) == {"core", "foo", "all"}
 
 
+def test_explicit_profile_selection_keeps_other_lock_context_visible(tmp_path: Path) -> None:
+    """A narrow surface changes strict scope without silently dropping context."""
+    _write_inputs(tmp_path)
+
+    inventory = build_inventory(tmp_path, distributions=[], selected_profile_ids=["core"])
+
+    assert inventory["surface"] == {
+        "profile_ids": ["core"],
+        "selection": "explicit_profile_selection",
+        "selected_lockfiles": ["uv.lock"],
+    }
+    assert inventory["summary"]["selected_profile_count"] == 1
+    assert inventory["summary"]["selected_package_count"] == 2
+    assert all(
+        row["surface_membership"] == "outside_selected_profiles"
+        for row in inventory["packages"]
+        if not row["selected_profiles"]
+    )
+    assert all(
+        row["surface_membership"] == "outside_selected_profiles"
+        for row in inventory["unrepresented_lock_package_dispositions"]
+        if row["status"] == "reviewed_exclusion"
+    )
+    assert all(
+        row["surface_membership"] == "outside_selected_profiles"
+        for row in inventory["unrepresented_lock_package_dispositions"]
+        if row["status"] == "unresolved"
+    )
+    assert not any("fast-pysf/uv.lock" in failure for failure in inventory["failures"])
+
+
+def test_unknown_profile_selection_fails_closed(tmp_path: Path) -> None:
+    """A typo cannot silently produce an empty release surface."""
+    _write_inputs(tmp_path)
+
+    inventory = build_inventory(tmp_path, distributions=[], selected_profile_ids=["missing"])
+
+    assert inventory["surface"]["profile_ids"] == []
+    assert any(
+        "selected profile does not exist: missing" in failure for failure in inventory["failures"]
+    )
+
+
+def test_candidate_bundle_binds_archives_and_sbom_to_selected_lock_closure(
+    tmp_path: Path,
+) -> None:
+    """Candidate bytes and the SBOM must describe the selected frozen closure exactly."""
+    _write_inputs(tmp_path)
+    bundle = _write_candidate_bundle(tmp_path)
+
+    inventory = build_inventory(
+        tmp_path,
+        distributions=_resolved_distributions(
+            ("robot_sf", "0.0.1", {"License_Expression": "GPL-3.0-only"}),
+            ("demo-package", "1.0.0", {"License_Expression": "MIT"}),
+        ),
+        selected_profile_ids=["core"],
+        candidate_bundle_path=bundle,
+    )
+
+    assert inventory["summary"]["candidate_bound"] is True
+    assert inventory["candidate_binding"]["status"] == "bound"
+    assert inventory["candidate_binding"]["profile_ids"] == ["core"]
+    assert inventory["candidate_binding"]["sbom"]["component_count"] == 1
+    root = next(row for row in inventory["packages"] if row["name"] == "robot-sf")
+    assert root["observed_version"] == "0.0.1"
+    demo = next(row for row in inventory["packages"] if row["name"] == "demo-package")
+    assert demo["observation_status"] == "artifact_bound"
+    assert demo["metadata_binding"] == "candidate_sbom_component_identity"
+    assert not any(
+        "candidate bundle binding failed" in failure for failure in inventory["failures"]
+    )
+
+
+def test_candidate_bundle_drift_fails_closed(tmp_path: Path) -> None:
+    """Changing an admitted candidate member cannot produce a bound report."""
+    _write_inputs(tmp_path)
+    bundle = _write_candidate_bundle(tmp_path)
+    sbom = next(bundle.glob("*.cyclonedx.json"))
+    sbom.write_text(
+        sbom.read_text(encoding="utf-8").replace("demo-package", "other-package"), encoding="utf-8"
+    )
+
+    inventory = build_inventory(
+        tmp_path,
+        distributions=[],
+        selected_profile_ids=["core"],
+        candidate_bundle_path=bundle,
+    )
+
+    assert inventory["summary"]["candidate_bound"] is False
+    assert inventory["candidate_binding"]["status"] == "blocked"
+    assert any("candidate bundle binding failed" in failure for failure in inventory["failures"])
+
+
+def test_candidate_bound_report_freshness_rechecks_candidate_bytes(tmp_path: Path) -> None:
+    """Freshness must cover candidate bytes as well as repository inputs."""
+    _write_inputs(tmp_path)
+    bundle = _write_candidate_bundle(tmp_path)
+    inventory = build_inventory(
+        tmp_path,
+        distributions=[],
+        selected_profile_ids=["core"],
+        candidate_bundle_path=bundle,
+    )
+    report_path = tmp_path / "candidate-report.json"
+    report_path.write_text(json.dumps(inventory, indent=2) + "\n", encoding="utf-8")
+
+    assert any(
+        "candidate-bound report freshness requires --candidate-bundle" in issue
+        for issue in check_report_freshness(tmp_path, report_path)
+    )
+    assert (
+        check_report_freshness(
+            tmp_path,
+            report_path,
+            candidate_bundle_path=bundle,
+        )
+        == []
+    )
+
+    sbom = next(bundle.glob("*.cyclonedx.json"))
+    sbom.write_text(
+        sbom.read_text(encoding="utf-8").replace("demo-package", "other-package"), encoding="utf-8"
+    )
+    assert any(
+        "candidate bundle binding differs" in issue
+        for issue in check_report_freshness(
+            tmp_path,
+            report_path,
+            candidate_bundle_path=bundle,
+        )
+    )
+
+
+def test_candidate_provenance_drift_fails_closed(tmp_path: Path) -> None:
+    """A rehashed but inconsistent provenance member cannot become bound evidence."""
+    _write_inputs(tmp_path)
+    bundle = _write_candidate_bundle(tmp_path)
+    provenance = bundle / "candidate-provenance.json"
+    provenance.write_text(
+        provenance.read_text(encoding="utf-8").replace('"count": 1', '"count": 2'), encoding="utf-8"
+    )
+    manifest_path = bundle / "candidate-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["members"][3]["sha256"] = hashlib.sha256(provenance.read_bytes()).hexdigest()
+    manifest["members"][3]["size"] = provenance.stat().st_size
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    inventory = build_inventory(
+        tmp_path,
+        distributions=[],
+        selected_profile_ids=["core"],
+        candidate_bundle_path=bundle,
+    )
+
+    assert inventory["summary"]["candidate_bound"] is False
+    assert any(
+        "candidate provenance does not exactly bind" in failure for failure in inventory["failures"]
+    )
+
+
+def test_cli_resolves_candidate_bundle_relative_to_repo_root(tmp_path: Path) -> None:
+    """CLI candidate paths follow the repository-root path contract."""
+    _write_inputs(tmp_path)
+    _write_candidate_bundle(tmp_path)
+    report_path = tmp_path / "candidate-report.json"
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--profile",
+                "core",
+                "--candidate-bundle",
+                "candidate-bundle",
+                "--fail-on-unresolved",
+                "--output",
+                str(report_path),
+            ]
+        )
+        == 2
+    )
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["summary"]["candidate_bound"] is True
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--check-freshness",
+                str(report_path),
+                "--candidate-bundle",
+                "candidate-bundle",
+            ]
+        )
+        == 0
+    )
+
+
 def test_unrepresented_rows_require_reviewed_reason_or_remain_strictly_unresolved(
     tmp_path: Path,
 ) -> None:
@@ -250,6 +579,7 @@ def test_unrepresented_rows_require_reviewed_reason_or_remain_strictly_unresolve
     assert dispositions["inactive-tool"]["reason_codes"] == ["marker_inactive"]
     assert dispositions["orphan-tool"]["status"] == "unresolved"
     assert dispositions["orphan-tool"]["reviewed"] is False
+    assert dispositions["orphan-tool"]["surface_membership"] == "unresolved_membership"
     assert inventory["summary"]["unrepresented_reviewed_exclusion_count"] == 2
     assert inventory["summary"]["unrepresented_unresolved_count"] == 1
     assert any("orphan-tool" in failure for failure in inventory["failures"])

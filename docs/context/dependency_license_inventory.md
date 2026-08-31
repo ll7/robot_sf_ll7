@@ -26,16 +26,18 @@ python scripts/tools/check_dependency_license_inventory.py \
 ```
 
 Strict mode returns `2` for unknown, proprietary, conflicting, unbound, stale,
-or policy-pending rows that belong to at least one declared profile. Lock rows
+or policy-pending rows that belong to the selected profile surface. Lock rows
 that no declared profile resolves remain listed under
 `unrepresented_lock_packages`, with one matching record in
 `unrepresented_lock_package_dispositions`. Each record is either a
 `reviewed_exclusion` (for a declared development/tooling group or a
 resolution marker proven inactive for the target) or `unresolved`; the latter
-is included in the strict failure count. A row without a reviewed reason is
-never silently treated as outside the release surface. The profile matrix —
-not the lock file alone — still defines the supported release surface, and a
-strict pass does not make a legal or redistribution claim. The report preserves
+is included in the strict failure count on the default full declared surface.
+An explicit `--profile` selection narrows this strict check to that profile
+closure while retaining outside rows as visible, non-member context. A row
+without a reviewed reason is never silently treated as approved. The profile
+matrix — not the lock file alone — still defines the supported release surface,
+and a strict pass does not make a legal or redistribution claim. The report preserves
 lock-provided source URLs, artifact filenames, SHA-256 values, and profile
 membership, while installed metadata is labelled
 `installed_distribution_not_artifact_bound` unless an exact artifact binding is
@@ -47,6 +49,42 @@ contexts. Resolver rows for another target are excluded only when their
 explicit `resolution-markers` are proven false from the manifest target. Any
 remaining row is emitted as `unresolved_membership` and keeps strict mode
 blocked until a maintainer reviews its context.
+
+For release checks, narrow the command to the exact declared profile or profile union instead of
+using the whole development matrix:
+
+```bash
+python scripts/tools/check_dependency_license_inventory.py \
+  --profile core \
+  --profile viz \
+  --fail-on-unresolved
+```
+
+The selected profile closure is recorded under `surface.profile_ids`. Other declared profiles,
+lock rows, and installed distributions remain visible in the report with an explicit
+`outside_selected_profiles` marker; selection never turns an unresolved row into an approval.
+Unrepresented rows are scoped by profile membership rather than by lockfile name, so unrelated
+rows sharing a lockfile do not silently become release members. On the full declared surface,
+unexplained rows retain an `unresolved_membership` marker and continue to block strict mode.
+
+When the immutable software-candidate bundle has already been admitted, bind its exact wheel,
+source distribution, provenance, and CycloneDX software bill of materials (SBOM) to the selected
+frozen closure:
+
+```bash
+python scripts/tools/check_dependency_license_inventory.py \
+  --profile core \
+  --candidate-bundle output/validation/software-candidate \
+  --output output/validation/dependency-license-inventory.json \
+  --fail-on-unresolved
+```
+
+Candidate binding verifies the closed manifest/provenance contract, member checksums, archive
+package identity and metadata, and the SBOM component set against the selected lock closure. It
+replaces ambient installed metadata for the selected rows with an `artifact_bound` identity
+observation, but it does not invent license facts: a reviewed exact policy disposition is still
+required for each dependency. The resulting `candidate_binding` record carries the candidate
+identity, member digests, and component digest needed for candidate-bundle admission.
 
 The committed profile matrix covers the root environment, every declared supported extra,
 the explicit `all` closure, standalone `fast-pysf`, and SocNavBench.

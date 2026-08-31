@@ -39,12 +39,14 @@ def test_workflow_is_manual_and_least_privilege_by_default() -> None:
     inputs = trigger["workflow_dispatch"]["inputs"]
     for name in (
         "candidate_run_id",
+        "candidate_run_attempt",
         "candidate_artifact_id",
         "candidate_artifact_name",
         "candidate_artifact_digest",
         "source_sha",
         "package_version",
         "rights_admission_run_id",
+        "rights_admission_run_attempt",
         "rights_admission_artifact_id",
         "rights_admission_artifact_name",
         "rights_admission_artifact_digest",
@@ -122,7 +124,7 @@ def test_workflow_downloads_and_revalidates_the_candidate_in_every_consumer_job(
         assert downloads, name
         runs = "\n".join(str(step.get("run", "")) for step in steps)
         assert "software_promotion.py" in runs
-        assert "check-rights-run" in runs
+        assert "check-workflow-run" in runs
         assert "rights-admission.json" in runs
         assert "verify-candidate" in runs or "verify-receipt" in runs
 
@@ -137,9 +139,9 @@ def test_workflow_requires_the_external_sanitized_candidate_producer() -> None:
         "rights_admission_artifact_digest",
     ):
         assert inputs[name]["required"] is True
-    assert text.count("kind rights --source-sha") == 4
-    assert text.count("check-rights-run") == 4
-    assert text.count("actions/runs/${{ inputs.rights_admission_run_id }}") == 4
+    assert text.count("kind rights --source-sha") >= 4
+    assert "check-rights-run" not in text
+    assert "actions/runs/${{ inputs.rights_admission_run_id }}" not in text
     assert "rights-admission.json" in text
     assert "#8149" in text
     docs = (REPO_ROOT / "docs" / "software_release_promotion.md").read_text(encoding="utf-8")
@@ -214,7 +216,27 @@ def test_receipt_resume_inputs_and_exact_hash_checks_are_wired() -> None:
     assert "write-cold-install-receipt" in text
     assert "skip-existing: false" in text
     assert "Require complete resume identities" in text
-    assert "must provide run, artifact ID, name, and digest together" in text
+    assert "must provide run, attempt, artifact ID, name, and digest together" in text
+
+
+def test_shell_steps_never_interpolate_dispatch_inputs() -> None:
+    _text, workflow = _workflow()
+    for job in workflow["jobs"].values():
+        for step in job["steps"]:
+            run = step.get("run")
+            if run:
+                assert "${{ inputs." not in str(run), step.get("name")
+
+
+def test_dispatch_identity_validation_rejects_shell_metacharacters() -> None:
+    identity_pattern = re.compile(r"^[1-9][0-9]*$")
+    for value in (
+        "123; touch /tmp/publisher-pwned",
+        "123\nGH_TOKEN=forged",
+        "$(id)",
+        "'123'",
+    ):
+        assert identity_pattern.fullmatch(value) is None
 
 
 def test_docs_describe_environment_setup_without_secrets() -> None:

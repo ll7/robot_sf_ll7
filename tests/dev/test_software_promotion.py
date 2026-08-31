@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -53,15 +54,32 @@ def _source_repo(path: Path) -> tuple[Path, str]:
 
 def _distributions(path: Path, version: str = "0.0.6") -> Path:
     path.mkdir()
+    extras = (
+        "viz",
+        "maps",
+        "benchmark",
+        "training",
+        "gpu",
+        "recurrent",
+        "progress",
+        "analytics",
+        "browser",
+        "sacadrl",
+        "socnav",
+        "criticality",
+    )
+    extra_metadata = "".join(f"Provides-Extra: {extra}\n" for extra in extras)
     wheel = path / f"robot_sf-{version}-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr(
             f"robot_sf-{version}.dist-info/METADATA",
-            f"Metadata-Version: 2.4\nName: robot_sf\nVersion: {version}\n\n",
+            f"Metadata-Version: 2.4\nName: robot_sf\nVersion: {version}\n{extra_metadata}\n",
         )
         archive.writestr("robot_sf/__init__.py", "")
     sdist = path / f"robot_sf-{version}.tar.gz"
-    metadata = f"Metadata-Version: 2.4\nName: robot_sf\nVersion: {version}\n\n".encode()
+    metadata = (
+        f"Metadata-Version: 2.4\nName: robot_sf\nVersion: {version}\n{extra_metadata}\n".encode()
+    )
     with tarfile.open(sdist, "w:gz") as archive:
         info = tarfile.TarInfo(f"robot_sf-{version}/PKG-INFO")
         info.size = len(metadata)
@@ -127,6 +145,86 @@ def _candidate(tmp_path: Path) -> tuple[Path, str, Path]:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     rights_dir = bundle.parent / "rights-admission-artifact"
     rights_dir.mkdir()
+    dependency_report = rights_dir / "dependency-license-inventory.json"
+    dependency_report.write_text(
+        json.dumps(
+            {
+                "candidate_binding": {
+                    "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+                    "members": manifest["members"],
+                    "package": manifest["package"],
+                    "repository": "ll7/robot_sf_ll7",
+                    "sbom": {"sha256": manifest["members"][2]["sha256"]},
+                    "source_sha": source_sha,
+                    "status": "bound",
+                    "workflow": {"run_attempt": 1, "run_id": "123456"},
+                },
+                "failures": [],
+                "policy": {
+                    "path": "scripts/validation/dependency_license_policy.v1.json",
+                    "schema_version": "robot-sf.dependency-license-policy.v1",
+                },
+                "profile_manifest": {
+                    "path": "scripts/validation/dependency_license_profiles.v1.json",
+                    "profile_ids": [
+                        "core",
+                        "viz",
+                        "maps",
+                        "benchmark",
+                        "training",
+                        "gpu",
+                        "recurrent",
+                        "progress",
+                        "analytics",
+                        "browser",
+                        "sacadrl",
+                        "socnav",
+                        "criticality",
+                    ],
+                    "schema_version": "robot-sf.dependency-license-profiles.v1",
+                },
+                "repository_inputs": [
+                    {
+                        "path": "scripts/validation/dependency_license_policy.v1.json",
+                        "sha256": "d" * 64,
+                    },
+                    {
+                        "path": "scripts/validation/dependency_license_profiles.v1.json",
+                        "sha256": "e" * 64,
+                    },
+                ],
+                "schema_version": "robot-sf.dependency-license-inventory.v1",
+                "surface": {
+                    "profile_ids": [
+                        "core",
+                        "viz",
+                        "maps",
+                        "benchmark",
+                        "training",
+                        "gpu",
+                        "recurrent",
+                        "progress",
+                        "analytics",
+                        "browser",
+                        "sacadrl",
+                        "socnav",
+                        "criticality",
+                    ],
+                    "selection": "explicit_profile_selection",
+                    "selected_lockfiles": ["uv.lock"],
+                },
+                "structural_issues": [],
+                "summary": {
+                    "candidate_bound": True,
+                    "status": "complete",
+                    "unresolved_count": 0,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    dependency_report_sha256 = hashlib.sha256(dependency_report.read_bytes()).hexdigest()
     rights_receipt = rights_dir / "rights-admission.json"
     rights_receipt.write_text(
         json.dumps(
@@ -183,7 +281,7 @@ def _candidate(tmp_path: Path) -> tuple[Path, str, Path]:
                     ),
                     "profile_manifest_sha256": "e" * 64,
                     "report_filename": "dependency-license-inventory.json",
-                    "report_sha256": "f" * 64,
+                    "report_sha256": dependency_report_sha256,
                     "schema_version": "robot-sf.dependency-license-inventory.v1",
                     "source_sha": source_sha,
                     "status": "passed",
@@ -330,6 +428,24 @@ def test_candidate_verification_rejects_forged_rights_binding(tmp_path: Path) ->
     assert "different candidate" in rejected.stderr
 
 
+def test_candidate_verification_rejects_core_only_dependency_roster(tmp_path: Path) -> None:
+    _source, source_sha, bundle = _candidate(tmp_path)
+    rights_dir = bundle.parent / "rights-admission-artifact"
+    report = rights_dir / "dependency-license-inventory.json"
+    report_payload = json.loads(report.read_text(encoding="utf-8"))
+    report_payload["surface"]["profile_ids"] = ["core"]
+    report.write_text(json.dumps(report_payload) + "\n", encoding="utf-8")
+    receipt = rights_dir / "rights-admission.json"
+    receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
+    receipt_payload["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
+        report.read_bytes()
+    ).hexdigest()
+    receipt.write_text(json.dumps(receipt_payload) + "\n", encoding="utf-8")
+    rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
+    assert rejected.returncode == 1
+    assert "profile roster" in rejected.stderr
+
+
 def test_candidate_validation_roster_allows_strict_rights_upgrade(tmp_path: Path) -> None:
     _source, source_sha, bundle = _candidate(tmp_path)
     manifest_path = bundle / "candidate-manifest.json"
@@ -352,6 +468,15 @@ def test_candidate_validation_roster_allows_strict_rights_upgrade(tmp_path: Path
     manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     rights["candidate"]["manifest_sha256"] = manifest_sha256
     rights["supported_dependency_gate"]["candidate_manifest_sha256"] = manifest_sha256
+    dependency_report = (
+        bundle.parent / "rights-admission-artifact" / "dependency-license-inventory.json"
+    )
+    dependency_payload = json.loads(dependency_report.read_text(encoding="utf-8"))
+    dependency_payload["candidate_binding"]["manifest_sha256"] = manifest_sha256
+    dependency_report.write_text(json.dumps(dependency_payload) + "\n", encoding="utf-8")
+    rights["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
+        dependency_report.read_bytes()
+    ).hexdigest()
     (bundle.parent / "rights-admission-artifact" / "rights-admission.json").write_text(
         json.dumps(rights, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
@@ -383,6 +508,102 @@ def test_receipt_round_trip_is_exact_and_channel_replay_fails(tmp_path: Path) ->
     )
     assert replay.returncode == 1
     assert "channel" in replay.stderr
+
+
+def test_receipt_rejects_top_level_package_rebinding(tmp_path: Path) -> None:
+    _source, source_sha, bundle = _candidate(tmp_path)
+    receipt = _write_upload_receipt(tmp_path, source_sha, bundle)
+    payload = json.loads(receipt.read_text(encoding="utf-8"))
+    payload["package"] = {"name": "other-package", "version": "0.0.6"}
+    receipt.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    rejected = _run_helper(
+        "verify-receipt",
+        *_candidate_args(source_sha, bundle),
+        "--channel",
+        "testpypi",
+        "--receipt",
+        str(receipt),
+        check=False,
+    )
+    assert rejected.returncode == 1
+    assert "package identity" in rejected.stderr
+
+
+def test_pypi_cold_verification_receipt_binds_both_downloaded_formats(tmp_path: Path) -> None:
+    _source, source_sha, bundle = _candidate(tmp_path)
+    production_receipt = tmp_path / "pypi-upload-receipt.json"
+    written = _run_helper(
+        "write-receipt",
+        *_candidate_args(source_sha, bundle),
+        "--channel",
+        "pypi",
+        "--promotion-run-id",
+        "222222",
+        "--promotion-run-attempt",
+        "1",
+        "--receipt",
+        str(production_receipt),
+    )
+    assert written.returncode == 0, written.stderr
+    download_dir = tmp_path / "pypi-download"
+    download_dir.mkdir()
+    for member in ("robot_sf-0.0.6-py3-none-any.whl", "robot_sf-0.0.6.tar.gz"):
+        shutil.copyfile(bundle / member, download_dir / member)
+    cold_receipt = tmp_path / "pypi-cold-verification-receipt.json"
+    written = _run_helper(
+        "write-index-verification-receipt",
+        *_candidate_args(source_sha, bundle),
+        "--channel",
+        "pypi",
+        "--production-receipt",
+        str(production_receipt),
+        "--production-run-id",
+        "222222",
+        "--production-run-attempt",
+        "1",
+        "--download-dir",
+        str(download_dir),
+        "--receipt",
+        str(cold_receipt),
+    )
+    assert written.returncode == 0, written.stderr
+    verified = _run_helper(
+        "verify-index-verification-receipt",
+        *_candidate_args(source_sha, bundle),
+        "--channel",
+        "pypi",
+        "--production-receipt",
+        str(production_receipt),
+        "--production-run-id",
+        "222222",
+        "--production-run-attempt",
+        "1",
+        "--download-dir",
+        str(download_dir),
+        "--receipt",
+        str(cold_receipt),
+    )
+    assert verified.returncode == 0, verified.stderr
+    (download_dir / "robot_sf-0.0.6.tar.gz").write_bytes(b"tampered")
+    rejected = _run_helper(
+        "verify-index-verification-receipt",
+        *_candidate_args(source_sha, bundle),
+        "--channel",
+        "pypi",
+        "--production-receipt",
+        str(production_receipt),
+        "--production-run-id",
+        "222222",
+        "--production-run-attempt",
+        "1",
+        "--download-dir",
+        str(download_dir),
+        "--receipt",
+        str(cold_receipt),
+        check=False,
+    )
+    assert rejected.returncode == 1
+    assert "bytes differ" in rejected.stderr
 
 
 def test_receipt_rejects_member_hash_drift_and_version_collision(tmp_path: Path) -> None:
@@ -783,6 +1004,114 @@ def test_rights_artifact_and_sanctioned_workflow_require_exact_run_and_digest(
     )
     assert rejected.returncode == 1
     assert "workflow-run ID" in rejected.stderr
+
+
+def test_workflow_run_binding_rejects_replay_and_unrelated_producer(
+    tmp_path: Path,
+) -> None:
+    source_sha = "a" * 40
+    metadata = tmp_path / "workflow-run.json"
+    metadata.write_text(
+        json.dumps(
+            {
+                "id": 123456,
+                "path": ".github/workflows/software-promotion.yml",
+                "head_sha": source_sha,
+                "event": "workflow_dispatch",
+                "status": "completed",
+                "conclusion": "success",
+                "run_attempt": 2,
+                "workflow_id": 8150,
+                "repository": {"full_name": "ll7/robot_sf_ll7"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    accepted = _run_helper(
+        "check-workflow-run",
+        "--metadata",
+        str(metadata),
+        "--run-id",
+        "123456",
+        "--run-attempt",
+        "2",
+        "--source-sha",
+        source_sha,
+        "--kind",
+        "promotion",
+    )
+    assert accepted.returncode == 0, accepted.stderr
+
+    for field, value, message in (
+        ("path", ".github/workflows/other.yml", "sanctioned workflow"),
+        ("event", "workflow_call", "event is not sanctioned"),
+        ("run_attempt", 1, "attempt drifted"),
+    ):
+        payload = json.loads(metadata.read_text(encoding="utf-8"))
+        payload[field] = value
+        metadata.write_text(json.dumps(payload), encoding="utf-8")
+        rejected = _run_helper(
+            "check-workflow-run",
+            "--metadata",
+            str(metadata),
+            "--run-id",
+            "123456",
+            "--run-attempt",
+            "2",
+            "--source-sha",
+            source_sha,
+            "--kind",
+            "promotion",
+            check=False,
+        )
+        assert rejected.returncode == 1
+        assert message in rejected.stderr
+        payload[field] = {
+            "path": ".github/workflows/software-promotion.yml",
+            "event": "workflow_dispatch",
+            "run_attempt": 2,
+        }.get(field, value)
+        metadata.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_artifact_attempt_is_bound_to_name_and_nested_run_metadata(tmp_path: Path) -> None:
+    metadata = tmp_path / "artifact.json"
+    source_sha = "a" * 40
+    name = "robot-sf-software-candidate-" + source_sha + "-123456-2"
+    metadata.write_text(
+        json.dumps(
+            {
+                "id": 987654,
+                "name": name,
+                "digest": "sha256:" + "a" * 64,
+                "expired": False,
+                "workflow_run": {"id": 123456, "head_sha": source_sha, "run_attempt": 2},
+            }
+        ),
+        encoding="utf-8",
+    )
+    rejected = _run_helper(
+        "check-artifact",
+        "--metadata",
+        str(metadata),
+        "--artifact-id",
+        "987654",
+        "--artifact-name",
+        name,
+        "--artifact-digest",
+        "sha256:" + "a" * 64,
+        "--run-id",
+        "123456",
+        "--run-attempt",
+        "1",
+        "--kind",
+        "candidate",
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+    assert rejected.returncode == 1
+    assert "attempt" in rejected.stderr
 
 
 def test_receipts_never_include_credential_fields(tmp_path: Path) -> None:

@@ -38,7 +38,7 @@ does not bypass #8019, #8017, or the sanitized source candidate from #8149.
 The current broad development tree is not eligible for package publication.
 The dispatch form therefore requires four additional values for the exact
 GitHub artifact produced by the sanctioned #8149 workflow:
-`rights_admission_run_id`, `rights_admission_artifact_id`,
+`rights_admission_run_id`, `rights_admission_run_attempt`, `rights_admission_artifact_id`,
 `rights_admission_artifact_name`, and `rights_admission_artifact_digest`.
 The producer run must be a successful completed
 `.github/workflows/software-candidate.yml` run at the same source SHA, using
@@ -51,8 +51,9 @@ reviewed sanitized direct-dispatch producer before this promotion can be
 dispatched with real inputs. A reusable `workflow_call` producer is not
 accepted without a separately bound, reviewed caller identity.
 
-The artifact must contain only `rights-admission.json` conforming to
-`robot_sf.software_rights_admission.v1`. Its closed receipt binds the exact
+The artifact must contain exactly `rights-admission.json` and
+`dependency-license-inventory.json`. The receipt conforms to
+`robot_sf.software_rights_admission.v1` and binds the exact
 candidate artifact and manifest, declares
 `robot_sf.software_sanitized_candidate.v1`, names
 `scripts/validation/software_release_rights_policy.v1.json` and its SHA-256,
@@ -63,7 +64,9 @@ report: schema `robot-sf.dependency-license-inventory.v1`, the exact
 candidate manifest and sanitized source-tree digests, the canonical
 dependency policy/profile paths and their SHA-256 values, the report SHA-256,
 and `unresolved_count: 0` from the exact
-`check_dependency_license_inventory.py --fail-on-unresolved` command. A
+`check_dependency_license_inventory.py --fail-on-unresolved` command. The
+publisher parses and re-hashes that transported report independently; a
+receipt field containing only a claimed report digest is insufficient. A
 rights-only receipt without this zero-unresolved dependency admission is not
 a software release admission and is rejected. The publisher validates all
 bindings in every package-producing job; it never accepts a locally authored
@@ -77,8 +80,9 @@ cannot upload the current candidate.
    rights-admission artifact identity. Then run the reusable
    [`software-candidate.yml`](../.github/workflows/software-candidate.yml)
    workflow at the same reviewed source ref. Record its exact artifact ID, artifact
-   name, `sha256:` artifact digest, workflow run ID, source SHA, and package
-   version from the run summary as well as the four rights-admission values.
+   name, `sha256:` artifact digest, workflow run ID and attempt, source SHA,
+   and package version from the run summary as well as the five rights-admission
+   values.
 2. Dispatch `software-promotion.yml` with the candidate and rights-admission
    values. The
    candidate artifact is downloaded by immutable artifact ID, and its GitHub
@@ -96,6 +100,10 @@ cannot upload the current candidate.
    the same staged wheel and source distribution to PyPI. A pre-existing
    version is an error; the workflow never overwrites or silently skips a
    collision.
+6. The post-production cold-verification job downloads both PyPI formats from
+   the public Simple index and compares their filenames, sizes, and SHA-256
+   bytes with the immutable candidate. It stores a separate verification
+   receipt; production is not accepted as complete without this cold download.
 
 Receipt artifact IDs and `sha256:` digests are printed as non-secret run
    metadata. Preserve them with the release record so an interrupted run can
@@ -111,7 +119,9 @@ cold-install gate.
 
 If PyPI accepted the package but the workflow stopped while recording its
 receipt, supply the analogous prior PyPI receipt values. The production job
-then verifies that receipt and skips a duplicate upload. Missing, expired,
+then verifies that receipt and skips a duplicate upload; the downstream
+cold-verification job still downloads both formats and rechecks their exact
+hashes. Missing, expired,
 replayed, wrong-version, wrong-source, wrong-candidate, or hash-mismatched
 receipts fail closed. Never use `skip-existing: true` as a recovery method.
 

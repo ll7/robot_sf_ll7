@@ -16,16 +16,22 @@ import json
 import re
 import shutil
 import sys
+import zipfile
 from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = "robot_sf.software_promotion.receipt.v1"
 COLD_INSTALL_SCHEMA_VERSION = "robot_sf.software_promotion.cold_install.v1"
+INDEX_VERIFICATION_SCHEMA_VERSION = "robot_sf.software_promotion.index_verification.v1"
 RIGHTS_ADMISSION_SCHEMA_VERSION = "robot_sf.software_rights_admission.v1"
 REPOSITORY = "ll7/robot_sf_ll7"
 INDEX_URLS = {
     "testpypi": "https://test.pypi.org/legacy/",
     "pypi": "https://upload.pypi.org/legacy/",
+}
+PUBLIC_INDEX_URLS = {
+    "testpypi": "https://test.pypi.org/simple",
+    "pypi": "https://pypi.org/simple",
 }
 SHA_PATTERN = re.compile(r"[0-9a-f]{40}\Z")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
@@ -52,16 +58,36 @@ RIGHTS_POLICY_PATH = "scripts/validation/software_release_rights_policy.v1.json"
 SANITIZED_CANDIDATE_SCHEMA = "robot_sf.software_sanitized_candidate.v1"
 RIGHTS_GATE_ID = "strict-distribution-rights"
 RIGHTS_WORKFLOW_PATH = ".github/workflows/software-candidate.yml"
+PROMOTION_WORKFLOW_PATH = ".github/workflows/software-promotion.yml"
 # The current producer contract is a direct, reviewed manual dispatch.  A
 # reusable caller would need its own explicit identity binding before it could
 # be admitted; accepting ``workflow_call`` based only on the workflow path
 # would not identify that caller.
 RIGHTS_WORKFLOW_EVENTS = frozenset({"workflow_dispatch"})
+PRODUCER_WORKFLOW_EVENTS = frozenset({"workflow_dispatch"})
 RIGHTS_GATE_COMMAND = (
     "python scripts/tools/check_distribution_licenses.py $DIST_DIR "
     "--strict-asset-rights --repo-root $BUILD_SOURCE --source-tree-ref $SOURCE_SHA"
 )
 SUPPORTED_DEPENDENCY_SCHEMA_VERSION = "robot-sf.dependency-license-inventory.v1"
+SUPPORTED_DEPENDENCY_POLICY_SCHEMA_VERSION = "robot-sf.dependency-license-policy.v1"
+SUPPORTED_DEPENDENCY_PROFILE_SCHEMA_VERSION = "robot-sf.dependency-license-profiles.v1"
+SUPPORTED_RELEASE_EXTRAS = frozenset(
+    {
+        "viz",
+        "maps",
+        "benchmark",
+        "training",
+        "gpu",
+        "recurrent",
+        "progress",
+        "analytics",
+        "browser",
+        "sacadrl",
+        "socnav",
+        "criticality",
+    }
+)
 SUPPORTED_DEPENDENCY_GATE_ID = "strict-supported-dependency-surface"
 SUPPORTED_DEPENDENCY_REPORT_NAME = "dependency-license-inventory.json"
 SUPPORTED_DEPENDENCY_POLICY_PATH = "scripts/validation/dependency_license_policy.v1.json"
@@ -74,8 +100,18 @@ SUPPORTED_DEPENDENCY_GATE_COMMAND = (
 VALIDATION_ROSTER = (
     ("version-alignment", "python scripts/dev/check_version_alignment.py"),
     ("metadata", "twine check --strict $DIST_DIR/*.whl $DIST_DIR/*.tar.gz"),
-    ("archive-license", "python scripts/tools/check_distribution_licenses.py $DIST_DIR"),
-    ("wheel-install", "bash scripts/validation/wheel_install_smoke.sh $DIST_DIR/robot_sf-*.whl"),
+    (
+        "archive-license",
+        "cd $BUILD_SOURCE && python scripts/tools/check_distribution_licenses.py "
+        "$DIST_DIR --strict-asset-rights --repo-root $BUILD_SOURCE "
+        "--inventory $BUILD_SOURCE/scripts/validation/software_candidate_asset_rights.v1.json "
+        "--source-tree-ref HEAD",
+    ),
+    (
+        "wheel-install",
+        "cd $BUILD_SOURCE && bash scripts/validation/wheel_install_smoke.sh "
+        "$DIST_DIR/robot_sf-*.whl",
+    ),
 )
 
 
@@ -359,6 +395,33 @@ def _validate_candidate_provenance(
         raise PromotionError("candidate provenance subjects do not match candidate members")
 
 
+def _distribution_extras(path: Path) -> frozenset[str]:
+    """Read optional extras from the candidate wheel's exact metadata bytes."""
+
+    _require_real_file(path, label="candidate wheel")
+    try:
+        with zipfile.ZipFile(path) as archive:
+            metadata_names = [
+                name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+            ]
+            if len(metadata_names) != 1:
+                raise PromotionError("candidate wheel must contain exactly one METADATA file")
+            metadata = archive.read(metadata_names[0]).decode("utf-8")
+    except (OSError, UnicodeError, zipfile.BadZipFile) as exc:
+        raise PromotionError(f"candidate wheel metadata is unreadable: {path}") from exc
+    extras = frozenset(
+        line.partition(":")[2].strip()
+        for line in metadata.splitlines()
+        if line.startswith("Provides-Extra:") and line.partition(":")[2].strip()
+    )
+    if not SUPPORTED_RELEASE_EXTRAS.issubset(extras):
+        missing = sorted(SUPPORTED_RELEASE_EXTRAS - extras)
+        raise PromotionError(
+            f"candidate wheel is missing supported Provides-Extra values: {missing}"
+        )
+    return extras
+
+
 def _load_candidate(
     bundle_dir: Path,
     *,
@@ -395,11 +458,13 @@ def _load_candidate(
     identity = {
         "source_sha": source_sha,
         "workflow_run_id": run_id,
+        "workflow_run_attempt": manifest["workflow"]["run_attempt"],
         "package": package,
         "members": validated_members,
         "manifest_sha256": _sha256(manifest_path),
         "provenance_sha256": provenance_member["sha256"],
         "sbom_sha256": validated_members[2]["sha256"],
+        "distribution_extras": _distribution_extras(bundle_dir / validated_members[0]["filename"]),
     }
     return manifest, identity
 
@@ -419,7 +484,7 @@ def _validate_artifact_source(
         raise PromotionError("source SHA is only valid for candidate artifact metadata")
 
 
-def _artifact_metadata(  # noqa: C901 - artifact identity branches are fail-closed
+def _artifact_metadata(  # noqa: C901, PLR0912 - identity branches fail closed
     metadata_path: Path,
     *,
     expected_id: str,
@@ -428,6 +493,7 @@ def _artifact_metadata(  # noqa: C901 - artifact identity branches are fail-clos
     expected_run_id: str,
     kind: str,
     expected_source_sha: str | None = None,
+    expected_run_attempt: int | None = None,
 ) -> None:
     metadata = _load_json(metadata_path, label="GitHub artifact metadata")
     if not isinstance(metadata, dict):
@@ -447,6 +513,10 @@ def _artifact_metadata(  # noqa: C901 - artifact identity branches are fail-clos
         label="artifact workflow run ID",
         pattern=RUN_ID_PATTERN,
     )
+    if expected_run_attempt is not None and (
+        isinstance(expected_run_attempt, bool) or expected_run_attempt < 1
+    ):
+        raise PromotionError("artifact workflow run attempt must be positive")
     if kind == "candidate":
         expected_prefix = f"robot-sf-software-candidate-{_source_sha(expected_source_sha or '')}-"
         if not actual_name.startswith(expected_prefix) or not actual_name[
@@ -463,6 +533,10 @@ def _artifact_metadata(  # noqa: C901 - artifact identity branches are fail-clos
             raise PromotionError("GitHub rights artifact name is not bound to source/run")
     elif actual_name.split("-")[-2] != expected_run:
         raise PromotionError("GitHub receipt artifact name is not bound to its workflow run")
+    if expected_run_attempt is not None and actual_name.rsplit("-", 1)[-1] != str(
+        expected_run_attempt
+    ):
+        raise PromotionError("GitHub artifact name is not bound to its workflow run attempt")
     if metadata.get("expired") is not False:
         raise PromotionError("GitHub artifact is expired or has no explicit unexpired status")
     digest = metadata.get("digest")
@@ -491,6 +565,60 @@ def _published_members(identity: dict[str, Any]) -> list[dict[str, Any]]:
     return [member for member in members if member["kind"] in PUBLISHED_MEMBER_KINDS]
 
 
+def _validate_workflow_run_metadata(  # noqa: C901 - closed metadata contract
+    metadata: Any,
+    *,
+    run_id: str,
+    run_attempt: int | None,
+    source_sha: str,
+    kind: str,
+) -> int:
+    """Validate one canonical, successful producer or promotion run."""
+
+    if not isinstance(metadata, dict):
+        raise PromotionError(f"{kind} workflow-run metadata must be an object")
+    expected_run_id = _positive_identity(
+        run_id,
+        label=f"{kind} workflow run ID",
+        pattern=RUN_ID_PATTERN,
+    )
+    expected_source = _source_sha(source_sha)
+    paths = {
+        "candidate": RIGHTS_WORKFLOW_PATH,
+        "rights": RIGHTS_WORKFLOW_PATH,
+        "promotion": PROMOTION_WORKFLOW_PATH,
+    }
+    if kind not in paths:
+        raise PromotionError(f"unsupported workflow-run kind: {kind}")
+    if str(metadata.get("id")) != expected_run_id:
+        raise PromotionError(f"{kind} workflow-run ID drifted from the dispatch identity")
+    if metadata.get("path") != paths[kind]:
+        raise PromotionError(f"{kind} admission was not produced by the sanctioned workflow")
+    if metadata.get("event") not in PRODUCER_WORKFLOW_EVENTS:
+        allowed = ", ".join(sorted(PRODUCER_WORKFLOW_EVENTS))
+        raise PromotionError(f"{kind} workflow event is not sanctioned ({allowed})")
+    if metadata.get("head_sha") != expected_source:
+        raise PromotionError(f"{kind} workflow-run source SHA drifted from the dispatch identity")
+    if metadata.get("status") != "completed" or metadata.get("conclusion") != "success":
+        raise PromotionError(f"{kind} workflow-run did not complete successfully")
+    repository = metadata.get("repository")
+    if not isinstance(repository, dict) or repository.get("full_name") != REPOSITORY:
+        raise PromotionError(f"{kind} workflow-run repository is not canonical")
+    workflow_id = metadata.get("workflow_id")
+    if isinstance(workflow_id, bool) or not isinstance(workflow_id, int) or workflow_id < 1:
+        raise PromotionError(f"{kind} workflow-run has no valid workflow identity")
+    observed_attempt = metadata.get("run_attempt")
+    if (
+        isinstance(observed_attempt, bool)
+        or not isinstance(observed_attempt, int)
+        or observed_attempt < 1
+    ):
+        raise PromotionError(f"{kind} workflow-run has no valid run attempt")
+    if run_attempt is not None and observed_attempt != run_attempt:
+        raise PromotionError(f"{kind} workflow-run attempt drifted from the dispatch identity")
+    return observed_attempt
+
+
 def _candidate_identity_from_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     candidate = receipt.get("candidate")
     if not isinstance(candidate, dict):
@@ -512,11 +640,13 @@ def _candidate_identity_from_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     return candidate
 
 
-def _assert_receipt_candidate(
+def _assert_receipt_candidate(  # noqa: C901 - closed receipt contract
     receipt: dict[str, Any],
     identity: dict[str, Any],
     *,
     expected_channel: str,
+    expected_promotion_run_id: str | None = None,
+    expected_promotion_run_attempt: int | None = None,
 ) -> None:
     expected_receipt_keys = {
         "candidate",
@@ -538,6 +668,8 @@ def _assert_receipt_candidate(
         raise PromotionError("promotion receipt index URL is not canonical for its channel")
     if receipt.get("status") != "accepted":
         raise PromotionError("promotion receipt is not an accepted publication")
+    if receipt.get("package") != identity["package"]:
+        raise PromotionError("promotion receipt package identity differs from candidate")
     candidate = _candidate_identity_from_receipt(receipt)
     expected_candidate = {
         "artifact_digest": identity["artifact_digest"],
@@ -571,6 +703,21 @@ def _assert_receipt_candidate(
         or promotion["run_attempt"] < 1
     ):
         raise PromotionError("promotion receipt has no valid publisher workflow identity")
+    if expected_promotion_run_id is not None:
+        expected_run_id = _positive_identity(
+            expected_promotion_run_id,
+            label="expected promotion workflow run ID",
+            pattern=RUN_ID_PATTERN,
+        )
+        if promotion["workflow_run_id"] != expected_run_id:
+            raise PromotionError("promotion receipt is bound to a different publisher run")
+    if expected_promotion_run_attempt is not None:
+        if (
+            isinstance(expected_promotion_run_attempt, bool)
+            or expected_promotion_run_attempt < 1
+            or promotion["run_attempt"] != expected_promotion_run_attempt
+        ):
+            raise PromotionError("promotion receipt is bound to a different publisher attempt")
 
 
 def _receipt_identity(
@@ -596,6 +743,125 @@ def _receipt_identity(
     }
 
 
+def _dependency_input_digest(report: dict[str, Any], path: str, *, label: str) -> str:
+    """Return the uniquely recorded digest for one canonical dependency input."""
+
+    inputs = report.get("repository_inputs")
+    if not isinstance(inputs, list):
+        raise PromotionError("supported dependency report has no repository input digest list")
+    matches = [item for item in inputs if isinstance(item, dict) and item.get("path") == path]
+    if len(matches) != 1:
+        raise PromotionError(f"supported dependency report must bind exactly one {label} input")
+    digest = matches[0].get("sha256")
+    if not isinstance(digest, str) or not SHA256_PATTERN.fullmatch(digest):
+        raise PromotionError(f"supported dependency report {label} digest is invalid")
+    return digest
+
+
+def _validate_supported_dependency_report(  # noqa: C901, PLR0912 - closed report contract
+    path: Path,
+    *,
+    identity: dict[str, Any],
+    tree_sha256: str,
+    expected_gate: dict[str, Any],
+) -> None:
+    """Validate the transported dependency report, not only its receipt digest."""
+
+    _require_real_file(path, label="supported dependency report")
+    if path.name != SUPPORTED_DEPENDENCY_REPORT_NAME:
+        raise PromotionError(
+            f"supported dependency report must be named {SUPPORTED_DEPENDENCY_REPORT_NAME}"
+        )
+    report = _load_json(path, label="supported dependency report")
+    if not isinstance(report, dict):
+        raise PromotionError("supported dependency report must be a JSON object")
+    if report.get("schema_version") != SUPPORTED_DEPENDENCY_SCHEMA_VERSION:
+        raise PromotionError("supported dependency report schema version is unsupported")
+    summary = report.get("summary")
+    if not isinstance(summary, dict):
+        raise PromotionError("supported dependency report has no summary")
+    if summary.get("status") != "complete" or summary.get("candidate_bound") is not True:
+        raise PromotionError("supported dependency report is not a complete candidate binding")
+    unresolved = summary.get("unresolved_count")
+    if isinstance(unresolved, bool) or not isinstance(unresolved, int) or unresolved != 0:
+        raise PromotionError("supported dependency report contains unresolved rows")
+    if report.get("failures") != [] or report.get("structural_issues") != []:
+        raise PromotionError("supported dependency report contains failures")
+
+    profile_manifest = report.get("profile_manifest")
+    if not isinstance(profile_manifest, dict) or profile_manifest.get("path") != (
+        SUPPORTED_DEPENDENCY_PROFILE_PATH
+    ):
+        raise PromotionError("supported dependency report profile manifest path is unsupported")
+    if profile_manifest.get("schema_version") != SUPPORTED_DEPENDENCY_PROFILE_SCHEMA_VERSION:
+        raise PromotionError("supported dependency report profile schema is unsupported")
+    surface = report.get("surface")
+    profile_ids = surface.get("profile_ids") if isinstance(surface, dict) else None
+    if (
+        not isinstance(profile_ids, list)
+        or not profile_ids
+        or any(not isinstance(value, str) or not value for value in profile_ids)
+    ):
+        raise PromotionError("supported dependency report selected profile surface is invalid")
+    expected_profiles = {"core", *SUPPORTED_RELEASE_EXTRAS}
+    if set(profile_ids) != expected_profiles:
+        raise PromotionError(
+            "supported dependency report profile roster differs from the v0.0.6 supported surface"
+        )
+    if not SUPPORTED_RELEASE_EXTRAS.issubset(identity["distribution_extras"]):
+        raise PromotionError("candidate archive does not advertise the supported profile surface")
+    policy = report.get("policy")
+    if not isinstance(policy, dict) or policy.get("path") != SUPPORTED_DEPENDENCY_POLICY_PATH:
+        raise PromotionError("supported dependency report policy path is unsupported")
+    if policy.get("schema_version") != SUPPORTED_DEPENDENCY_POLICY_SCHEMA_VERSION:
+        raise PromotionError("supported dependency report policy schema is unsupported")
+
+    binding = report.get("candidate_binding")
+    expected_binding = {
+        "status": "bound",
+        "repository": REPOSITORY,
+        "source_sha": identity["source_sha"],
+        "workflow": {
+            "run_id": identity["workflow_run_id"],
+            "run_attempt": identity["workflow_run_attempt"],
+        },
+        "package": identity["package"],
+    }
+    if not isinstance(binding, dict) or any(
+        binding.get(key) != value for key, value in expected_binding.items()
+    ):
+        raise PromotionError("supported dependency report candidate binding differs from candidate")
+    if binding.get("manifest_sha256") != identity["manifest_sha256"]:
+        raise PromotionError("supported dependency report manifest binding differs from candidate")
+    members = binding.get("members")
+    expected_members = {member["kind"]: member for member in identity["members"]}
+    if (
+        not isinstance(members, list)
+        or {member.get("kind"): member for member in members if isinstance(member, dict)}
+        != expected_members
+    ):
+        raise PromotionError("supported dependency report member binding differs from candidate")
+    sbom = binding.get("sbom")
+    if not isinstance(sbom, dict) or sbom.get("sha256") != identity["sbom_sha256"]:
+        raise PromotionError("supported dependency report SBOM binding differs from candidate")
+
+    policy_sha256 = _dependency_input_digest(
+        report, SUPPORTED_DEPENDENCY_POLICY_PATH, label="policy"
+    )
+    profile_sha256 = _dependency_input_digest(
+        report, SUPPORTED_DEPENDENCY_PROFILE_PATH, label="profile manifest"
+    )
+    if (
+        expected_gate["policy_sha256"] != policy_sha256
+        or expected_gate["profile_manifest_sha256"] != profile_sha256
+    ):
+        raise PromotionError("supported dependency report input digests differ from receipt")
+    if expected_gate["report_sha256"] != _sha256(path):
+        raise PromotionError("supported dependency report bytes differ from receipt")
+    if expected_gate["candidate_tree_sha256"] != tree_sha256:
+        raise PromotionError("supported dependency report tree binding differs from receipt")
+
+
 def _validate_rights_admission(  # noqa: C901, PLR0912, PLR0915 - closed rights receipt gate
     path: Path,
     *,
@@ -615,8 +881,11 @@ def _validate_rights_admission(  # noqa: C901, PLR0912, PLR0915 - closed rights 
         raise PromotionError(f"rights admission receipt must be named {RIGHTS_RECEIPT_NAME}")
     _require_real_dir(path.parent, label="rights admission artifact directory")
     entries = sorted(path.parent.iterdir(), key=lambda entry: entry.name)
-    if [entry.name for entry in entries] != [RIGHTS_RECEIPT_NAME]:
-        raise PromotionError("rights admission artifact must contain only rights-admission.json")
+    expected_entries = sorted([RIGHTS_RECEIPT_NAME, SUPPORTED_DEPENDENCY_REPORT_NAME])
+    if [entry.name for entry in entries] != expected_entries:
+        raise PromotionError(
+            "rights admission artifact must contain exactly the receipt and dependency report"
+        )
     _require_real_file(path, label="rights admission receipt")
     receipt = _load_json(path, label="rights admission receipt")
     if not isinstance(receipt, dict):
@@ -751,6 +1020,12 @@ def _validate_rights_admission(  # noqa: C901, PLR0912, PLR0915 - closed rights 
         or unresolved_count != 0
     ):
         raise PromotionError("rights admission supported-dependency gate reports unresolved rows")
+    _validate_supported_dependency_report(
+        path.parent / SUPPORTED_DEPENDENCY_REPORT_NAME,
+        identity=identity,
+        tree_sha256=tree_sha256,
+        expected_gate=dependency_gate,
+    )
 
 
 def _load_and_bind_candidate(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -786,6 +1061,7 @@ def _check_artifact(args: argparse.Namespace) -> None:
         expected_run_id=args.run_id,
         kind=args.kind,
         expected_source_sha=args.source_sha,
+        expected_run_attempt=args.run_attempt,
     )
     print(f"PASS: {args.kind} artifact metadata is bound to run {args.run_id}")
 
@@ -794,35 +1070,30 @@ def _check_rights_workflow_run(args: argparse.Namespace) -> None:
     """Verify that the rights receipt came from the sanctioned successful workflow run."""
 
     metadata = _load_json(args.metadata, label="rights workflow-run metadata")
-    if not isinstance(metadata, dict):
-        raise PromotionError("rights workflow-run metadata must be an object")
-    run_id = _positive_identity(
-        args.run_id,
-        label="rights workflow run ID",
-        pattern=RUN_ID_PATTERN,
+    run_attempt = _validate_workflow_run_metadata(
+        metadata,
+        run_id=args.run_id,
+        run_attempt=args.run_attempt,
+        source_sha=args.source_sha,
+        kind="rights",
     )
-    if str(metadata.get("id")) != run_id:
-        raise PromotionError("rights workflow-run ID drifted from the dispatch identity")
-    if metadata.get("path") != RIGHTS_WORKFLOW_PATH:
-        raise PromotionError("rights admission was not produced by the sanctioned workflow")
-    event = metadata.get("event")
-    if event not in RIGHTS_WORKFLOW_EVENTS:
-        allowed = ", ".join(sorted(RIGHTS_WORKFLOW_EVENTS))
-        raise PromotionError(f"rights admission workflow event is not sanctioned ({allowed})")
-    if metadata.get("head_sha") != _source_sha(args.source_sha):
-        raise PromotionError("rights workflow-run source SHA drifted from the dispatch identity")
-    if metadata.get("status") != "completed" or metadata.get("conclusion") != "success":
-        raise PromotionError("rights workflow-run did not complete successfully")
-    repository = metadata.get("repository")
-    if not isinstance(repository, dict) or repository.get("full_name") != REPOSITORY:
-        raise PromotionError("rights workflow-run repository is not canonical")
-    workflow_id = metadata.get("workflow_id")
-    if isinstance(workflow_id, bool) or not isinstance(workflow_id, int) or workflow_id < 1:
-        raise PromotionError("rights workflow-run has no valid workflow identity")
-    run_attempt = metadata.get("run_attempt")
-    if isinstance(run_attempt, bool) or not isinstance(run_attempt, int) or run_attempt < 1:
-        raise PromotionError("rights workflow-run has no valid run attempt")
-    print(f"PASS: sanctioned rights workflow run {run_id} completed successfully")
+    print(f"PASS: sanctioned rights workflow run {args.run_id} attempt {run_attempt} succeeded")
+
+
+def _check_workflow_run(args: argparse.Namespace) -> None:
+    """Verify a candidate, rights, or promotion run using one closed contract."""
+
+    metadata = _load_json(args.metadata, label=f"{args.kind} workflow-run metadata")
+    run_attempt = _validate_workflow_run_metadata(
+        metadata,
+        run_id=args.run_id,
+        run_attempt=args.run_attempt,
+        source_sha=args.source_sha,
+        kind=args.kind,
+    )
+    print(
+        f"PASS: sanctioned {args.kind} workflow run {args.run_id} attempt {run_attempt} succeeded"
+    )
 
 
 def _verify_candidate(args: argparse.Namespace) -> None:
@@ -897,7 +1168,13 @@ def _load_receipt(path: Path) -> dict[str, Any]:
 def _verify_receipt(args: argparse.Namespace) -> None:
     _manifest, identity = _load_and_bind_candidate(args)
     receipt = _load_receipt(args.receipt)
-    _assert_receipt_candidate(receipt, identity, expected_channel=args.channel)
+    _assert_receipt_candidate(
+        receipt,
+        identity,
+        expected_channel=args.channel,
+        expected_promotion_run_id=args.promotion_run_id,
+        expected_promotion_run_attempt=args.promotion_run_attempt,
+    )
     print(f"PASS: {args.channel} receipt reuses the exact candidate bytes")
 
 
@@ -938,6 +1215,74 @@ def _verify_index_artifacts(args: argparse.Namespace) -> None:
         if path.stat().st_size != member["size"] or _sha256(path) != member["sha256"]:
             raise PromotionError(f"public index bytes differ from candidate: {path.name}")
     print("PASS: public index returned byte-identical wheel and sdist")
+
+
+def _write_index_verification_receipt(args: argparse.Namespace) -> None:
+    """Record a byte-identical public-index download for a published candidate."""
+
+    if args.channel != "pypi":
+        raise PromotionError("production index verification is only accepted for PyPI")
+    _manifest, identity = _load_and_bind_candidate(args)
+    production_receipt = _load_receipt(args.production_receipt)
+    _assert_receipt_candidate(
+        production_receipt,
+        identity,
+        expected_channel="pypi",
+        expected_promotion_run_id=args.production_run_id,
+        expected_promotion_run_attempt=args.production_run_attempt,
+    )
+    _verify_index_artifacts(args)
+    receipt = {
+        "candidate": _receipt_identity(
+            identity=identity,
+            artifact_id=args.candidate_artifact_id,
+            artifact_name=args.candidate_artifact_name,
+            artifact_digest=args.candidate_artifact_digest,
+        ),
+        "channel": args.channel,
+        "files": _published_members(identity),
+        "index_url": PUBLIC_INDEX_URLS[args.channel],
+        "production_receipt_sha256": _sha256(args.production_receipt),
+        "schema_version": INDEX_VERIFICATION_SCHEMA_VERSION,
+        "status": "passed",
+    }
+    _write_new_json(args.receipt, receipt, label="index verification receipt")
+    print("PASS: wrote PyPI byte-verification receipt")
+
+
+def _verify_index_verification_receipt(args: argparse.Namespace) -> None:
+    """Verify a production receipt and its independent public-index proof."""
+
+    if args.channel != "pypi":
+        raise PromotionError("production index verification is only accepted for PyPI")
+    _manifest, identity = _load_and_bind_candidate(args)
+    production_receipt = _load_receipt(args.production_receipt)
+    _assert_receipt_candidate(
+        production_receipt,
+        identity,
+        expected_channel="pypi",
+        expected_promotion_run_id=args.production_run_id,
+        expected_promotion_run_attempt=args.production_run_attempt,
+    )
+    receipt = _load_json(args.receipt, label="index verification receipt")
+    expected = {
+        "candidate": _receipt_identity(
+            identity=identity,
+            artifact_id=args.candidate_artifact_id,
+            artifact_name=args.candidate_artifact_name,
+            artifact_digest=args.candidate_artifact_digest,
+        ),
+        "channel": "pypi",
+        "files": _published_members(identity),
+        "index_url": PUBLIC_INDEX_URLS["pypi"],
+        "production_receipt_sha256": _sha256(args.production_receipt),
+        "schema_version": INDEX_VERIFICATION_SCHEMA_VERSION,
+        "status": "passed",
+    }
+    if receipt != expected:
+        raise PromotionError("index verification receipt is not bound to the exact PyPI result")
+    _verify_index_artifacts(args)
+    print("PASS: PyPI index verification receipt is bound to exact candidate bytes")
 
 
 def _write_cold_install_receipt(args: argparse.Namespace) -> None:
@@ -1017,7 +1362,7 @@ def _verify_cold_install(args: argparse.Namespace) -> None:
     print("PASS: TestPyPI cold-install receipt is bound to the exact candidate")
 
 
-def _parser() -> argparse.ArgumentParser:
+def _parser() -> argparse.ArgumentParser:  # noqa: PLR0915 - one versioned CLI surface
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -1027,6 +1372,7 @@ def _parser() -> argparse.ArgumentParser:
     artifact.add_argument("--artifact-name", required=True)
     artifact.add_argument("--artifact-digest", required=True)
     artifact.add_argument("--run-id", required=True)
+    artifact.add_argument("--run-attempt", type=int)
     artifact.add_argument("--kind", choices=("candidate", "receipt", "rights"), required=True)
     artifact.add_argument("--source-sha")
 
@@ -1035,7 +1381,17 @@ def _parser() -> argparse.ArgumentParser:
     )
     rights_run.add_argument("--metadata", type=Path, required=True)
     rights_run.add_argument("--run-id", required=True)
+    rights_run.add_argument("--run-attempt", type=int)
     rights_run.add_argument("--source-sha", required=True)
+
+    workflow_run = subparsers.add_parser(
+        "check-workflow-run", help="verify a sanctioned candidate, rights, or promotion run"
+    )
+    workflow_run.add_argument("--metadata", type=Path, required=True)
+    workflow_run.add_argument("--run-id", required=True)
+    workflow_run.add_argument("--run-attempt", type=int, required=True)
+    workflow_run.add_argument("--source-sha", required=True)
+    workflow_run.add_argument("--kind", choices=("candidate", "rights", "promotion"), required=True)
 
     def add_candidate_arguments(command: argparse.ArgumentParser) -> None:
         command.add_argument("--candidate-dir", type=Path, required=True)
@@ -1070,12 +1426,38 @@ def _parser() -> argparse.ArgumentParser:
     add_candidate_arguments(verify_receipt)
     verify_receipt.add_argument("--channel", choices=tuple(INDEX_URLS), required=True)
     verify_receipt.add_argument("--receipt", type=Path, required=True)
+    verify_receipt.add_argument("--promotion-run-id")
+    verify_receipt.add_argument("--promotion-run-attempt", type=int)
 
     index = subparsers.add_parser(
         "verify-index-artifacts", help="verify public-index package bytes"
     )
     add_candidate_arguments(index)
     index.add_argument("--download-dir", type=Path, required=True)
+
+    index_receipt = subparsers.add_parser(
+        "write-index-verification-receipt",
+        help="write a receipt for byte-identical production-index downloads",
+    )
+    add_candidate_arguments(index_receipt)
+    index_receipt.add_argument("--channel", choices=("pypi",), required=True)
+    index_receipt.add_argument("--production-receipt", type=Path, required=True)
+    index_receipt.add_argument("--production-run-id", required=True)
+    index_receipt.add_argument("--production-run-attempt", type=int, required=True)
+    index_receipt.add_argument("--download-dir", type=Path, required=True)
+    index_receipt.add_argument("--receipt", type=Path, required=True)
+
+    verify_index_receipt = subparsers.add_parser(
+        "verify-index-verification-receipt",
+        help="verify a production-index byte-verification receipt",
+    )
+    add_candidate_arguments(verify_index_receipt)
+    verify_index_receipt.add_argument("--channel", choices=("pypi",), required=True)
+    verify_index_receipt.add_argument("--production-receipt", type=Path, required=True)
+    verify_index_receipt.add_argument("--production-run-id", required=True)
+    verify_index_receipt.add_argument("--production-run-attempt", type=int, required=True)
+    verify_index_receipt.add_argument("--download-dir", type=Path, required=True)
+    verify_index_receipt.add_argument("--receipt", type=Path, required=True)
 
     cold = subparsers.add_parser("write-cold-install-receipt", help="write a TestPyPI cold receipt")
     add_candidate_arguments(cold)
@@ -1104,6 +1486,8 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - bounded CLI disp
             _check_artifact(args)
         elif args.command == "check-rights-run":
             _check_rights_workflow_run(args)
+        elif args.command == "check-workflow-run":
+            _check_workflow_run(args)
         elif args.command == "verify-candidate":
             _verify_candidate(args)
         elif args.command == "stage-packages":
@@ -1114,6 +1498,10 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - bounded CLI disp
             _verify_receipt(args)
         elif args.command == "verify-index-artifacts":
             _verify_index_artifacts(args)
+        elif args.command == "write-index-verification-receipt":
+            _write_index_verification_receipt(args)
+        elif args.command == "verify-index-verification-receipt":
+            _verify_index_verification_receipt(args)
         elif args.command == "write-cold-install-receipt":
             _write_cold_install_receipt(args)
         elif args.command == "verify-cold-install":

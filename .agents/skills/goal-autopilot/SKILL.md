@@ -269,6 +269,11 @@ if claimable_count == 0 and queue_completeness != "complete":
     unavailable -> treat as no queue evidence; retry after quota/transport recovery
 ```
 
+`queue_completeness: complete` is authoritative only for a page-one ready-candidate
+scan with no remaining truncation or resume cursor and with usable canonical admission
+and atomic-claim results for every discovered row. A resumed final page, admission
+error, or unavailable claim read is never complete queue evidence.
+
 The audit and queue snapshots must expose an admission-reason histogram. Use stable reasons such as
 `wrong_owner_repo`, `external_input_missing`, `covering_pr_open`, `parent_not_leaf`, `needs_spec`,
 `dependency_missing`, `stale_route_state`, and `claimable`; do not report only a total such as

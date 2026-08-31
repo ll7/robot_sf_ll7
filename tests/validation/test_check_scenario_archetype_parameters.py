@@ -112,8 +112,7 @@ def test_integration_pinned_group_crossing_surfaces_groups_driver_gap() -> None:
     """
     repo_root = Path(__file__).resolve().parents[2]
     scenario = repo_root / "configs/scenarios/archetypes/classic_group_crossing.yaml"
-    if not scenario.exists():
-        pytest.skip("pinned archetype scenarios not present")
+    assert scenario.is_file(), f"required pinned archetype scenario missing: {scenario}"
     reports = inspect_scenario_parameters(scenario)
     assert reports
     groups_findings = [
@@ -126,8 +125,7 @@ def test_integration_pinned_group_crossing_surfaces_groups_driver_gap() -> None:
 def test_cli_default_exit_zero_and_fail_flag(tmp_path: Path, capsys) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     scenario = repo_root / "configs/scenarios/archetypes/classic_doorway.yaml"
-    if not scenario.exists():
-        pytest.skip("pinned archetype scenarios not present")
+    assert scenario.is_file(), f"required pinned archetype scenario missing: {scenario}"
     # The doorway archetype has no known unresolved keys today; informational mode
     # still exits 0 even with the group-crossing finding present in the default set.
     assert main(["--scenario", str(scenario)]) == 0

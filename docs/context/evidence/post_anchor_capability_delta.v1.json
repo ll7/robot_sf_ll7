@@ -1,0 +1,347 @@
+{
+  "base_ref": "0.0.3.post1",
+  "base_sha": "ded9027d2928512c14bc241397e0ab1d8f586654",
+  "capabilities": [
+    {
+      "candidates_for": [
+        "planner_development_disclosure",
+        "capability_status_table"
+      ],
+      "capability_id": "anisotropic_gaussian_human_cost_planner",
+      "category": "planner_and_policy",
+      "dissertation_relationship": "post_anchor_candidate",
+      "evidence_status": "diagnostic_only",
+      "first_commit": "76030000",
+      "implementation_status": "implemented_and_tested",
+      "linked_issues": [
+        7603,
+        8046
+      ],
+      "missing_proof": [
+        "Standardized benchmark comparison across all 4 benchmark tracks.",
+        "Frozen model checkpoint registration and runtime profiling."
+      ],
+      "owner_paths": [
+        "robot_sf/planner/predictive_human_cost.py",
+        "tests/planner/test_anisotropic_gaussian_cost.py"
+      ],
+      "release_relationship": "unreleased_prototype",
+      "status": "introduced_after_anchor",
+      "strongest_permitted_statement": "Anisotropic Gaussian human-cost planner core implemented and unit-tested; not evaluated against benchmark release suites.",
+      "title": "Anisotropic Gaussian Human-Cost Planner"
+    },
+    {
+      "candidates_for": [
+        "planner_development_disclosure",
+        "capability_status_table"
+      ],
+      "capability_id": "force_coupled_potential_field",
+      "category": "planner_and_policy",
+      "dissertation_relationship": "post_anchor_candidate",
+      "evidence_status": "diagnostic_only",
+      "first_commit": "78890000",
+      "implementation_status": "implemented_and_tested",
+      "linked_issues": [
+        7889,
+        8015,
+        8046
+      ],
+      "missing_proof": [
+        "Paired closed-loop evaluations on benchmark splits.",
+        "Convergence and oscillation proof in dense crowds."
+      ],
+      "owner_paths": [
+        "robot_sf/planner/force_coupled_potential_field.py",
+        "tests/planner/test_force_coupled_potential_field.py"
+      ],
+      "release_relationship": "unreleased_prototype",
+      "status": "introduced_after_anchor",
+      "strongest_permitted_statement": "Force-coupled potential-field planner implemented as a local navigation comparator; benchmark-grade evaluation unestablished.",
+      "title": "Force-Coupled Potential-Field Core and Comparator"
+    },
+    {
+      "candidates_for": [
+        "planner_development_disclosure",
+        "capability_status_table"
+      ],
+      "capability_id": "recurrent_ppo_stateful_adapter",
+      "category": "planner_and_policy",
+      "dissertation_relationship": "post_anchor_candidate",
+      "evidence_status": "diagnostic_only",
+      "first_commit": "78450000",
+      "implementation_status": "implemented_and_tested",
+      "linked_issues": [
+        7845,
+        7848,
+        8046
+      ],
+      "missing_proof": [
+        "Trained recurrent policy checkpoint with deterministic seed verification.",
+        "Comparative performance against standard feed-forward PPO baselines."
+      ],
+      "owner_paths": [
+        "robot_sf/planner/recurrent_ppo_learned_adapter.py",
+        "tests/planner/test_recurrent_ppo_learned_adapter.py"
+      ],
+      "release_relationship": "unreleased_prototype",
+      "status": "introduced_after_anchor",
+      "strongest_permitted_statement": "RecurrentPPO stateful observation and hidden-state handling adapter implemented; full training campaign results unverified.",
+      "title": "Stateful RecurrentPPO Planner Adapter"
+    },
+    {
+      "candidates_for": [
+        "capability_status_table",
+        "repository_only_documentation"
+      ],
+      "capability_id": "route_side_homotopy_observability",
+      "category": "diagnostic_method",
+      "dissertation_relationship": "post_anchor_candidate",
+      "evidence_status": "synthetic_fixture",
+      "first_commit": "78900000",
+      "implementation_status": "implemented_and_tested",
+      "linked_issues": [
+        7890,
+        8033,
+        8046
+      ],
+      "missing_proof": [
+        "Empirical human perceptual study data.",
+        "Ground-truth route preference distributions from real pedestrians."
+      ],
+      "owner_paths": [
+        "robot_sf/benchmark/route_choice_observability.py",
+        "tests/benchmark/test_route_choice_observability.py"
+      ],
+      "release_relationship": "unreleased_diagnostic",
+      "status": "introduced_after_anchor",
+      "strongest_permitted_statement": "Deterministic route-side and topological homotopy classification verified on synthetic fixtures; human perceptual validation unevaluated.",
+      "title": "Route-Side and Homotopy Observability Diagnostics"
+    },
+    {
+      "candidates_for": [
+        "capability_status_table",
+        "repository_only_documentation"
+      ],
+      "capability_id": "incident_to_scenario_provenance",
+      "category": "diagnostic_method",
+      "dissertation_relationship": "post_anchor_candidate",
+      "evidence_status": "synthetic_fixture",
+      "first_commit": "78880000",
+      "implementation_status": "implemented_and_tested",
+      "linked_issues": [
+        7888,
+        7900,
+        8046
+      ],
+      "missing_proof": [
+        "Ingestion of real public transit / robot collision records.",
+        "Audited conversion accuracy from official reports to simulation maps."
+      ],
+      "owner_paths": [
+        "robot_sf/benchmark/collision/incident_scenario_provenance.py",
+        "tests/benchmark/test_incident_scenario_provenance.py"
+      ],
+      "release_relationship": "unreleased_diagnostic",
+      "status": "introduced_after_anchor",
+      "strongest_permitted_statement": "Incident-to-scenario provenance contract validated on synthetic fixtures; real-world incident report ingestion remains future work.",
+      "title": "Incident-to-Scenario Provenance Framework"
+    },
+    {
+      "candidates_for": [
+        "capability_status_table"
+      ],
+      "capability_id": "scenario_search_feasibility_diagnostics",
+      "category": "diagnostic_method",
+      "dissertation_relationship": "post_anchor_candidate",
+      "evidence_status": "diagnostic_only",
+      "first_commit": "79000000",
+      "implementation_status": "implemented_and_tested",
+      "linked_issues": [
+        7900,
+        8046
+      ],
+      "missing_proof": [
+        "Full-scale search campaign across full scenario catalog."
+      ],
+      "owner_paths": [
+        "scripts/validation/run_feasibility_first_scenario_search.py",
+        "docs/feasibility_first_scenario_search.md"
+      ],
+      "release_relationship": "unreleased_diagnostic",
+      "status": "materially_extended_after_anchor",
+      "strongest_permitted_statement": "Scenario search feasibility pruning diagnostics materially extended; computational efficiency improved on synthetic envelopes.",
+      "title": "Feasibility-First Scenario Search Diagnostics"
+    },
+    {
+      "candidates_for": [
+        "capability_status_table",
+        "outlook_status_alignment"
+      ],
+      "capability_id": "carla_cross_simulator_bridge",
+      "category": "prototype_transfer_bridge",
+      "dissertation_relationship": "future_work_bridge",
+      "evidence_status": "diagnostic_only",
+      "first_commit": "57000000",
+      "implementation_status": "partial_prototype",
+      "linked_issues": [
+        5700,
+        7000,
+        8048,
+        8046
+      ],
+      "missing_proof": [
+        "Actor-complete replay parity between CARLA and Robot SF.",
+        "Metric semantic equivalence proof."
+      ],
+      "owner_paths": [
+        "robot_sf_carla_bridge/",
+        "scripts/carla/"
+      ],
+      "release_relationship": "unreleased_prototype",
+      "status": "introduced_after_anchor",
+      "strongest_permitted_statement": "CARLA connector client/server prototype verified on diagnostic fixtures; cross-simulator policy transfer unestablished.",
+      "title": "CARLA Cross-Simulator Bridge Prototype"
+    },
+    {
+      "candidates_for": [
+        "capability_status_table",
+        "outlook_status_alignment"
+      ],
+      "capability_id": "amv_actuation_realism_bridge",
+      "category": "prototype_transfer_bridge",
+      "dissertation_relationship": "future_work_bridge",
+      "evidence_status": "unsupported_proxy",
+      "first_commit": "22270000",
+      "implementation_status": "proxy_baseline_only",
+      "linked_issues": [
+        2227,
+        8048,
+        8046
+      ],
+      "missing_proof": [
+        "Physical hardware dynamometer and trajectory tracking measurements."
+      ],
+      "owner_paths": [
+        "robot_sf/sim/",
+        "configs/algos/"
+      ],
+      "release_relationship": "included_proxy",
+      "status": "present_at_anchor_unchanged",
+      "strongest_permitted_statement": "2D kinematic clipping and e-scooter acceleration proxy profiles active; physical platform hardware system identification absent.",
+      "title": "AMV Actuation Realism and Proxy Dynamics"
+    },
+    {
+      "candidates_for": [
+        "repository_only_documentation"
+      ],
+      "capability_id": "release_candidate_builder_and_verification",
+      "category": "operational_reproducibility",
+      "dissertation_relationship": "repository_only",
+      "evidence_status": "operational_only",
+      "first_commit": "81090000",
+      "implementation_status": "implemented_and_tested",
+      "linked_issues": [
+        8109,
+        8046
+      ],
+      "missing_proof": [
+        "None (operational tooling)."
+      ],
+      "owner_paths": [
+        "scripts/dev/software_candidate_manifest.py",
+        "tests/dev/test_software_candidate_manifest.py"
+      ],
+      "release_relationship": "operational_tooling",
+      "status": "introduced_after_anchor",
+      "strongest_permitted_statement": "Hermetic candidate artifact build, extraction, and validation tooling active.",
+      "title": "Immutable Software Candidate Release Builder"
+    },
+    {
+      "candidates_for": [
+        "repository_only_documentation"
+      ],
+      "capability_id": "actionlint_and_ci_workflow_ratchets",
+      "category": "operational_reproducibility",
+      "dissertation_relationship": "repository_only",
+      "evidence_status": "operational_only",
+      "first_commit": "80410000",
+      "implementation_status": "implemented_and_tested",
+      "linked_issues": [
+        8041,
+        8054,
+        8046
+      ],
+      "missing_proof": [
+        "None (operational tooling)."
+      ],
+      "owner_paths": [
+        "tests/dev/test_actionlint_contract.py",
+        ".github/workflows/"
+      ],
+      "release_relationship": "operational_tooling",
+      "status": "introduced_after_anchor",
+      "strongest_permitted_statement": "Automated static validation of GitHub Action workflows and pagination bounds.",
+      "title": "Repository-Owned Actionlint and CI Workflow Ratchets"
+    },
+    {
+      "candidates_for": [
+        "repository_only_documentation"
+      ],
+      "capability_id": "function_length_and_complexity_audits",
+      "category": "operational_reproducibility",
+      "dissertation_relationship": "repository_only",
+      "evidence_status": "operational_only",
+      "first_commit": "80550000",
+      "implementation_status": "implemented_and_tested",
+      "linked_issues": [
+        8055,
+        8056,
+        8059,
+        8046
+      ],
+      "missing_proof": [
+        "None (operational tooling)."
+      ],
+      "owner_paths": [
+        "scripts/dev/audit_function_lengths.py",
+        "scripts/dev/audit_validation_helpers.py",
+        "scripts/dev/audit_config_families.py"
+      ],
+      "release_relationship": "operational_tooling",
+      "status": "introduced_after_anchor",
+      "strongest_permitted_statement": "Module-qualified identity and call attribution for static linters and config audits.",
+      "title": "Function-Length and Helper Call Attribution Audits"
+    },
+    {
+      "candidates_for": [
+        "repository_only_documentation"
+      ],
+      "capability_id": "issue_claim_and_queue_automation",
+      "category": "operational_reproducibility",
+      "dissertation_relationship": "repository_only",
+      "evidence_status": "operational_only",
+      "first_commit": "81350000",
+      "implementation_status": "implemented_and_tested",
+      "linked_issues": [
+        8135,
+        8046
+      ],
+      "missing_proof": [
+        "None (operational tooling)."
+      ],
+      "owner_paths": [
+        "scripts/dev/issue_claim.py",
+        "scripts/dev/goal_issue_admission.py"
+      ],
+      "release_relationship": "operational_tooling",
+      "status": "introduced_after_anchor",
+      "strongest_permitted_statement": "Autonomous issue claim lifecycle and prepublication ancestry validation active.",
+      "title": "Agent Issue Claim and Queue Admission Tooling"
+    }
+  ],
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "row_count": 12,
+  "schema": "post_anchor_capability_delta.v1",
+  "target_ref": "HEAD",
+  "target_sha": "960d0cc91934778f27c6570e852cc376a92ecb87"
+}

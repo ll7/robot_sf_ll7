@@ -7443,3 +7443,11 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/post_anchor_capability_delta.v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/post_anchor_capability_delta.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

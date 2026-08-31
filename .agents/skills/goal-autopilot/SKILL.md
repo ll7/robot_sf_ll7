@@ -255,15 +255,27 @@ refresh_project_permission_status()
 refresh_worker_routes()
 reconcile_satisfied_blockers()
 prepare_open_issue_contracts(limit=10)
-rerun_live_admission()
-if claimable_count == 0:
+snapshot = rerun_live_admission()
+if snapshot.queue_status in {incomplete, unavailable}:
+    follow_resume_cursor_or_raise_limit()
+    stop as non_authoritative_queue_evidence if completeness cannot be established
+if snapshot.claimable_count == 0:
     complete_review_ready_prs()
-if claimable_count == 0:
+    snapshot = rerun_live_admission()
+if snapshot.claimable_count == 0:
     run_next_unsaturated_discovery_lane(max_new_issues=2)
     prepare_and_admit_new_candidates()
-if claimable_count == 0:
+    snapshot = rerun_live_admission()
+if snapshot.zero_work_authoritative:
     stop as genuine_zero_work
 ```
+
+Never infer `genuine_zero_work` from `claimable_count` alone. The canonical snapshot must report
+`candidate_scope: state:ready` and `zero_work_authoritative: true`. A numeric zero accompanied by
+`queue_status: incomplete` or `queue_status: unavailable`, a resume cursor, truncation, an admission
+error, or an unavailable claim read is non-authoritative route evidence. Follow the cursor or raise
+the ready-candidate limit; if completeness still cannot be established, stop with the evidence gap
+rather than claiming that no work exists.
 
 The audit and queue snapshots must expose an admission-reason histogram. Use stable reasons such as
 `wrong_owner_repo`, `external_input_missing`, `covering_pr_open`, `parent_not_leaf`, `needs_spec`,
@@ -319,7 +331,8 @@ Before each phase, run a delegation checkpoint:
   discovery scout.
 - Before broad issue or PR queue review, prefer compact parent-thread snapshots:
   `uv run python -m scripts.dev.snapshot_issue_batch --claimable --limit <n> --json` for a
-  no-arg candidate queue (use only its live-admitted `claimable_issues`),
+  no-arg candidate queue (use only its live-admitted `claimable_issues`; treat a zero as final only
+  when `candidate_scope` is `state:ready` and `zero_work_authoritative` is true),
   `uv run python -m scripts.dev.snapshot_issue_batch <first> <last> --json`
   for explicit issue batches, `uv run python -m scripts.dev.snapshot_pr_queue --active --limit <n>
   --json` for the active PR queue, and `uv run python -m scripts.dev.snapshot_pr_queue --prs <pr>
@@ -427,7 +440,8 @@ uv run python -m scripts.dev.compact_ci_snapshot <pr> [<pr> ...] \
 
 # Compact no-arg next-issue queue and explicit issue batch snapshots
 uv run python -m scripts.dev.snapshot_issue_batch --claimable --limit <n> --json
-# The command is a candidate queue; only its live-admitted `claimable_issues` are claimable.
+# The command is a readiness-scoped candidate queue. Only live-admitted `claimable_issues` are
+# claimable, and a numeric zero is final only when `zero_work_authoritative` is true.
 uv run python -m scripts.dev.snapshot_issue_batch <first> <last> \
   --json --capsule-dir <artifact-dir>
 
@@ -727,8 +741,9 @@ If the phase used `worker_sparse_artifacts`, require the self-review companion t
 Stop the autopilot when any:
 - all eligible issues have been implemented and merged,
 - no new discovery candidates remain,
-- the audited candidate queue, review queue, external-input owners, and unsaturated discovery lanes
-  provide no defensible single-repository leaf (`genuine_zero_work`),
+- the audited candidate queue reports `candidate_scope: state:ready` and
+  `zero_work_authoritative: true`, while the review queue, external-input owners, and unsaturated
+  discovery lanes also provide no defensible single-repository leaf (`genuine_zero_work`),
 - auth/credentials/env blocker that affects all phases,
 - user requests stop.
 

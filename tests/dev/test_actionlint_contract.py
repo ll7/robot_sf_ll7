@@ -39,11 +39,11 @@ def _write_fake_actionlint(
     path: Path,
     *,
     version: str,
-    invocation_marker: Path | None = None,
+    mark_invocation: bool = False,
 ) -> Path:
     marker_command = ""
-    if invocation_marker is not None:
-        marker_command = f"printf '%s\\n' invoked > {str(invocation_marker)!r}\\n"
+    if mark_invocation:
+        marker_command = "printf '%s\\n' invoked > \"${BASH_SOURCE[0]}.invoked\"\n"
     path.write_text(
         "#!/usr/bin/env bash\n"
         f"{marker_command}"
@@ -60,7 +60,6 @@ def _write_fake_actionlint(
 def _write_binding_probe_actionlint(
     path: Path,
     *,
-    invocation_marker: Path,
     reject_invalid_workflow: bool,
 ) -> Path:
     invalid_workflow_command = ""
@@ -70,10 +69,14 @@ def _write_binding_probe_actionlint(
     path.write_text(
         "#!/usr/bin/env bash\n"
         'if [[ "${1:-}" == "-version" ]]; then\n'
+        "  printf '%s\\n' validated > \"${BASH_SOURCE[0]}.validated\"\n"
         f"  printf '%s\\n' {EXPECTED_VERSION!r}\n"
         "  exit 0\n"
         "fi\n"
-        f"printf '%s\\n' invoked > {str(invocation_marker)!r}\n"
+        "printf '%s\\n' invoked > \"${BASH_SOURCE[0]}.invoked\"\n"
+        'if [[ ! -f "${BASH_SOURCE[0]}.validated" ]]; then\n'
+        "  exit 24\n"
+        "fi\n"
         f"{invalid_workflow_command}"
         "exit 0\n",
         encoding="utf-8",
@@ -90,18 +93,16 @@ def _assert_relative_candidate_is_bound(
 ) -> None:
     caller_dir = tmp_path / "caller"
     repo_root = tmp_path / "repo"
-    trusted_marker = tmp_path / "trusted-invoked"
-    shadow_marker = tmp_path / "shadow-invoked"
     trusted_candidate = _write_binding_probe_actionlint(
         caller_dir / relative_candidate,
-        invocation_marker=trusted_marker,
         reject_invalid_workflow=True,
     )
-    _write_binding_probe_actionlint(
+    shadow_candidate = _write_binding_probe_actionlint(
         repo_root / relative_candidate,
-        invocation_marker=shadow_marker,
         reject_invalid_workflow=False,
     )
+    trusted_source_marker = Path(f"{trusted_candidate}.invoked")
+    shadow_marker = Path(f"{shadow_candidate}.invoked")
     wrapper = repo_root / "scripts" / "dev" / SCRIPT.name
     wrapper.parent.mkdir(parents=True)
     _script_trusting_test_binary(wrapper, trusted_candidate)
@@ -129,7 +130,7 @@ def _assert_relative_candidate_is_bound(
     )
 
     assert res.returncode == 23, "the authenticated candidate must reject the invalid workflow"
-    assert trusted_marker.is_file(), "the authenticated candidate must be the executed file"
+    assert not trusted_source_marker.exists(), "the source is copied instead of executed in place"
     assert not shadow_marker.exists(), "the same-relative repository shadow must not execute"
 
 
@@ -378,12 +379,12 @@ def test_actionlint_rejects_path_binary_with_untrusted_bytes(tmp_path: Path) -> 
     """A PATH candidate claiming the pinned version must also match trusted release bytes."""
     fake_bin_dir = tmp_path / "bin"
     fake_bin_dir.mkdir()
-    invocation_marker = tmp_path / "invoked"
-    _write_fake_actionlint(
+    fake_actionlint = _write_fake_actionlint(
         fake_bin_dir / "actionlint",
         version=EXPECTED_VERSION,
-        invocation_marker=invocation_marker,
+        mark_invocation=True,
     )
+    invocation_marker = Path(f"{fake_actionlint}.invoked")
     bad_workflow = _write_invalid_workflow(tmp_path / "bad_path.yml")
 
     res = _run_wrapper(bad_workflow, tmp_path=tmp_path, path_prefix=fake_bin_dir)

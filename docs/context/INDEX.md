@@ -6,6 +6,13 @@ analytic smoke, and explicit implementation-only evidence boundaries. It does no
 planner performance, safety, social compliance, or source-method reproduction:
 [issue_7889_force_coupled_potential_field.md](issue_7889_force_coupled_potential_field.md).
 
+Issue #8015 force-coupled comparator method card: a deterministic diagnostic comparison harness
+that evaluates the opt-in `force_coupled_potential_field` local planner against reference
+baselines (`pure_pursuit_goal`, attractive-dominant ablation, and repulsive-dominant ablation) on
+canonical analytic scenarios. Smoke-only implementation-integrity evidence; not a benchmark
+ranking, release-roster change, or social-compliance certification:
+[issue_8015_force_coupled_comparator.md](issue_8015_force_coupled_comparator.md).
+
 Issue #7890 route-choice observability contract: frame-explicit route-side labels,
 canonical grid-corridor identities, denominator-separated temporal consistency, and a versioned
 analysis-only diagnostic receipt. The contract observes planner routes and does not establish

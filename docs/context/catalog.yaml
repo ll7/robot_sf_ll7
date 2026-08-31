@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-08-28
+updated_at: 2026-08-31
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -28,6 +28,10 @@ entries:
   status: current
   freshness: maintained
   area: planner
+- path: docs/context/issue_8015_force_coupled_comparator.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
 - path: docs/context/issue_7883_biased_route_generator.md
   status: current
   freshness: maintained

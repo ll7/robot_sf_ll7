@@ -118,8 +118,14 @@ Split broad ideas before writing.
    - record confidence (high if direct signal, medium if one-step derived, low if speculative).
 4. De-duplicate against open/closed issues before creation.
 5. Draft/update through `gh-issue-creator` only when state is `issue_ready`.
-6. Route Project #5 metadata in a single batch pass with score sync once at the end.
-7. Stop on no new candidates, budget/time expiry, or blocked writes.
+6. When a new issue is created, do not seed `state:ready` in the initial issue payload. Instead,
+   exact-read the created issue through the canonical REST owner, run the live
+   `scripts/dev/goal_issue_admission.py <issue-number> --check-only` gate, and add `state:ready`
+   only after the fresh check passes. Any `needs_spec`, `blocked`, `human_decision`, `already_claimed`,
+   `state_conflict`, exact-read mismatch, or stale route/freshness outcome must leave readiness absent
+   and return a stable machine-readable reason for the next agent step.
+7. Route Project #5 metadata in a single batch pass with score sync once at the end.
+8. Stop on no new candidates, budget/time expiry, or blocked writes.
 
 ## Proof, Validation, and Artifact Rules
 

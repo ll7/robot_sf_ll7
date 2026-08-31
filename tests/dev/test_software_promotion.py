@@ -513,12 +513,8 @@ def test_candidate_verification_rejects_rebound_manifest_attempt_drift(tmp_path:
     receipt["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
         report_path.read_bytes()
     ).hexdigest()
-    receipt_path.write_text(
-        json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    rejected = _run_helper(
-        "verify-candidate", *_candidate_args(source_sha, bundle), check=False
-    )
+    receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
     assert rejected.returncode == 1
     assert "run attempt" in rejected.stderr
 
@@ -537,12 +533,8 @@ def test_candidate_verification_rejects_rebound_embedded_profile_roster(tmp_path
     receipt["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
         report_path.read_bytes()
     ).hexdigest()
-    receipt_path.write_text(
-        json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    rejected = _run_helper(
-        "verify-candidate", *_candidate_args(source_sha, bundle), check=False
-    )
+    receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
     assert rejected.returncode == 1
     assert "embedded profile roster" in rejected.stderr
 

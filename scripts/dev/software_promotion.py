@@ -380,7 +380,7 @@ def _validate_optional_candidate_materialization(
     return _validate_candidate_materialization(manifest["materialization"])
 
 
-def _validate_manifest_header(
+def _validate_manifest_header(  # noqa: C901 - closed manifest contract
     manifest: Any,
     *,
     expected_source_sha: str,

@@ -47,6 +47,12 @@ def test_workflow_is_reusable_single_job_and_least_privilege() -> None:
     job = workflow["jobs"]["build-candidate"]
     assert "permissions" not in job
     assert "environment" not in job
+    assert all("runner." not in str(value) for value in job.get("env", {}).values())
+    identity_run = next(step["run"] for step in _steps(workflow) if step.get("id") == "identity")
+    assert "RUNNER_TEMP" in identity_run
+    assert "GITHUB_ENV" in identity_run
+    for name in ("CANDIDATE_ROOT", "DIST_DIR", "RAW_SBOM", "BUNDLE_DIR"):
+        assert name in identity_run
     assert "secrets" not in text.lower()
     assert "id-token" not in text.lower()
 

@@ -38,10 +38,6 @@ jobs:
     env:
       ARTIFACT_NAME: >-
         robot-sf-software-candidate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-      CANDIDATE_ROOT: ${{ runner.temp }}/robot-sf-software-candidate
-      DIST_DIR: ${{ runner.temp }}/robot-sf-software-candidate/dist
-      RAW_SBOM: ${{ runner.temp }}/robot-sf-software-candidate/raw-sbom.cdx.json
-      BUNDLE_DIR: ${{ runner.temp }}/robot-sf-software-candidate/bundle
     steps:
       - name: Checkout exact source without credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -65,6 +61,13 @@ jobs:
       - name: Bind artifact identity
         id: identity
         run: |
+          candidate_root="${RUNNER_TEMP}/robot-sf-software-candidate"
+          {
+            printf 'CANDIDATE_ROOT=%s\n' "${candidate_root}"
+            printf 'DIST_DIR=%s/dist\n' "${candidate_root}"
+            printf 'RAW_SBOM=%s/raw-sbom.cdx.json\n' "${candidate_root}"
+            printf 'BUNDLE_DIR=%s/bundle\n' "${candidate_root}"
+          } >> "${GITHUB_ENV}"
           printf 'artifact-name=%s\n' "${ARTIFACT_NAME}" >> "${GITHUB_OUTPUT}"
           printf 'source-sha=%s\n' "${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
 

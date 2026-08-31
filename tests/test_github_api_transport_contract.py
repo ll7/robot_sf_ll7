@@ -11,6 +11,10 @@ drift cannot silently re-break agent workflows:
    rejected instead of crashing.
 3. ``gh_comment.sh`` publishes through the REST issue-comments endpoint and
    never depends on the GraphQL-backed ``gh issue comment`` path.
+4. ``gh_pr_merge.sh`` retries GraphQL quota exhaustion only after a REST guard
+   snapshot re-verifies exact head, PR state, clean mergeability, and the
+   ``merge-ready`` label; auth, repository, and other non-quota errors stay
+   fail-closed.
 """
 
 from __future__ import annotations
@@ -168,3 +172,34 @@ def test_comment_wrapper_documents_the_transport_rule() -> None:
     source = _source("gh_comment.sh")
     assert "REST" in source
     assert "GraphQL" in source
+
+
+# --- gh_pr_merge.sh: quota-only guarded REST fallback ------------------------
+
+
+def test_merge_wrapper_quota_fallback_rechecks_rest_guard_snapshot() -> None:
+    source = _source("gh_pr_merge.sh")
+    assert 'gh api "repos/${repo}/pulls/${pr_number}"' in source
+    assert ".head.sha" in source
+    assert ".draft" in source
+    assert ".mergeable_state" in source
+    assert 'index("merge-ready")' in source
+    assert 'git config --get remote.origin.url' in source
+    assert '-f sha="$expected_head_sha"' in source
+
+
+def test_merge_wrapper_quota_trigger_keeps_fail_closed_precedence() -> None:
+    source = _source("gh_pr_merge.sh").casefold()
+    assert 'elif is_graphql_quota_failure "$merge_error"; then' in source
+    assert '"graphql:"' in source
+    assert '"rate limit"' in source
+    assert '"quota"' in source
+    for marker in (
+        "bad credentials",
+        "http 401",
+        "requires authentication",
+        "resource not accessible",
+        "could not resolve to a repository",
+        "repository not found",
+    ):
+        assert marker in source

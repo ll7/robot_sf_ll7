@@ -204,8 +204,14 @@ def test_gate_issue_readback_failure_reports_unverified_write() -> None:
     assert payload["verified"] is False
 
 
-def test_create_issue_strips_readiness_from_initial_labels() -> None:
+def test_create_issue_strips_readiness_from_initial_labels(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """Creation omits state:ready from the initial label set and parses the new number."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text(
+        "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n## Inputs\n\nx\n\n"
+        "## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n",
+        encoding="utf-8",
+    )
     created = _issue(8110, labels=["bug"])
     gated_ready = _issue(8110, labels=["bug", READY_LABEL])
     with (
@@ -231,7 +237,7 @@ def test_create_issue_strips_readiness_from_initial_labels() -> None:
         add_label.return_value = {"status": "ok"}
         payload = issue_readiness_gate.create_issue(
             title="t",
-            body_file="/tmp/body.md",
+            body_file=str(body_file),
             labels=["bug", READY_LABEL],
             repo="ll7/robot_sf_ll7",
         )
@@ -244,15 +250,21 @@ def test_create_issue_strips_readiness_from_initial_labels() -> None:
     add_label.assert_called_once_with(8110, READY_LABEL, repo="ll7/robot_sf_ll7")
 
 
-def test_create_issue_fails_closed_when_url_is_unparseable() -> None:
+def test_create_issue_fails_closed_when_url_is_unparseable(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """An unparseable create output is an error with no issue or label write."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text(
+        "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n## Inputs\n\nx\n\n"
+        "## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n",
+        encoding="utf-8",
+    )
     with patch.object(issue_readiness_gate.subprocess, "run") as run:
         run.return_value = type(
             "Completed", (), {"returncode": 0, "stdout": "unexpected", "stderr": ""}
         )()
         payload = issue_readiness_gate.create_issue(
             title="t",
-            body_file="/tmp/body.md",
+            body_file=str(body_file),
             labels=[],
             repo="ll7/robot_sf_ll7",
         )
@@ -277,3 +289,44 @@ def test_main_gate_json_output_is_stable(capsys) -> None:  # type: ignore[no-unt
     assert payload["schema"] == "issue_readiness_gate.v1"
     assert payload["outcome"] == "needs_spec"
     assert payload["ready_added"] is False
+
+
+def test_create_issue_rejects_incomplete_body_without_create_call(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """An incomplete body stops the workflow with zero GitHub create calls."""
+    body_file = tmp_path / "incomplete.md"
+    body_file.write_text("## Goal / Problem\n\nx\n", encoding="utf-8")
+    with patch.object(issue_readiness_gate.subprocess, "run") as run:
+        payload = issue_readiness_gate.create_issue(
+            title="t",
+            body_file=str(body_file),
+            labels=[],
+            repo="ll7/robot_sf_ll7",
+        )
+
+    assert payload["outcome"] == "preflight_rejected"
+    assert payload["issue"] is None
+    assert payload["ready_added"] is False
+    assert payload["missing_fields"] == [
+        "scope",
+        "inputs",
+        "acceptance",
+        "verification",
+    ]
+    assert payload["body_sha256"]
+    run.assert_not_called()
+
+
+def test_create_issue_fails_closed_when_body_file_is_missing(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """An unreadable body file is an operational error with no create call."""
+    with patch.object(issue_readiness_gate.subprocess, "run") as run:
+        payload = issue_readiness_gate.create_issue(
+            title="t",
+            body_file=str(tmp_path / "does-not-exist.md"),
+            labels=[],
+            repo="ll7/robot_sf_ll7",
+        )
+
+    assert payload["outcome"] == "error"
+    assert payload["phase"] == "create"
+    assert "body file unreadable" in payload["error"]
+    run.assert_not_called()

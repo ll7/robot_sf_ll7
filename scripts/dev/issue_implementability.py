@@ -208,6 +208,32 @@ def inspect_contract(body: str) -> dict[str, Any]:
     }
 
 
+def preflight_body_text(body: str) -> dict[str, Any]:
+    """Run the deterministic zero-write preflight for one issue body.
+
+    Returns a stable JSON-ready verdict with ``ready``, the exact ``missing_fields``
+    (objective, scope, inputs, acceptance, verification), and the body digest so a
+    worker can repair the local draft before any GitHub create request. This guard
+    creates no labels, comments, projects, claims, or issues; the live
+    ``goal_issue_admission`` boundary remains responsible for state, claims,
+    blockers, and freshness.
+    """
+    contract = inspect_contract(body)
+    missing_fields = list(contract["missing_fields"])
+    return {
+        "schema": "issue_body_preflight.v1",
+        "ready": not missing_fields,
+        "missing_fields": missing_fields,
+        "body_sha256": contract["body_sha256"],
+    }
+
+
+def preflight_body_file(path: str | Path) -> dict[str, Any]:
+    """Read one issue-body file from disk and run the offline preflight."""
+    body = Path(path).read_text(encoding="utf-8")
+    return preflight_body_text(body)
+
+
 def _parse_route_timestamp(value: object) -> dt.datetime | None:
     """Parse an RFC 3339 timestamp used by a route-preflight artifact."""
     if not isinstance(value, str) or not value.strip():
@@ -797,10 +823,24 @@ def _parse_claimed(value: str) -> dict[str, Any]:
 def _build_parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("issue", type=int, help="Positive GitHub issue number.")
+    parser.add_argument(
+        "issue",
+        type=int,
+        nargs="?",
+        default=0,
+        help="Positive GitHub issue number (not required with --preflight-body).",
+    )
     parser.add_argument("--repo", default=DEFAULT_REPO, help="Repository as OWNER/REPO.")
     parser.add_argument(
         "--remote", default=DEFAULT_REMOTE, help="Git remote used for claim status."
+    )
+    parser.add_argument(
+        "--preflight-body",
+        type=Path,
+        help=(
+            "Offline zero-write mode: validate one issue-body file against the "
+            "canonical contract before any GitHub create request and exit."
+        ),
     )
     parser.add_argument("--body-file", help="Offline mode: read the issue body from this file.")
     parser.add_argument("--title", default="offline issue", help="Offline issue title.")
@@ -849,6 +889,21 @@ def _error_report(number: int, message: str) -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _build_parser().parse_args(argv)
+    if args.preflight_body is not None:
+        try:
+            report = preflight_body_file(args.preflight_body)
+        except OSError as exc:
+            report = {
+                "schema": "issue_body_preflight.v1",
+                "ready": False,
+                "missing_fields": [],
+                "body_sha256": "",
+                "error": str(exc),
+            }
+        print(json.dumps(report, indent=2, sort_keys=True))
+        if report.get("ready") is True:
+            return 0
+        return 2
     try:
         if args.issue <= 0:
             raise ValueError("issue number must be positive")

@@ -46,6 +46,13 @@ execution.
    they carry unique technical state such as paths, checksums, missing-file
    specifics, asset identifiers, or per-step unblock conditions.
 6. Create issue:
+   - before any create request, run the deterministic zero-write body preflight:
+     `uv run python scripts/dev/issue_implementability.py --preflight-body <body.md>`
+     It rejects an incomplete body (missing objective, scope, inputs, acceptance, or
+     verification) with the exact missing field names and the body digest; repair the
+     local draft and re-run until it reports ready. Every supported body source
+     (canonical templates, rendered preparation packets, custom `--body-file`
+     content) must pass this same preflight.
    - use GitHub REST API or `gh` for deterministic issue creation:
      `gh issue create --title "<title>" --body-file <body.md> --label "<labels>"`
      (do not combine `--template` with `--body` or `--body-file`, as the GitHub CLI rejects combining them)

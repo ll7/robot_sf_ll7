@@ -118,6 +118,10 @@ Split broad ideas before writing.
    - record confidence (high if direct signal, medium if one-step derived, low if speculative).
 4. De-duplicate against open/closed issues before creation.
 5. Draft/update through `gh-issue-creator` only when state is `issue_ready`.
+   - Before any create request, run the zero-write body preflight
+     `uv run python scripts/dev/issue_implementability.py --preflight-body <body.md>`;
+     an incomplete body (missing objective, scope, inputs, acceptance, or
+     verification) stops the workflow before GitHub with the exact missing fields.
    - Issue creation must not set `state:ready` up front. Use
      `scripts/dev/issue_readiness_gate.py create ...` (or run `gate <number>` on the
      freshly created issue): create without readiness, exact-read through the REST

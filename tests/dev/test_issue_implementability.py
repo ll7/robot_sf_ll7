@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
-from scripts.dev import issue_dependency_packet
+from scripts.dev import issue_dependency_packet, issue_implementability
 from scripts.dev.issue_implementability import evaluate_issue, inspect_contract, live_issue_report
 
 REPOSITORY = "ll7/robot_sf_ll7"
@@ -476,3 +476,134 @@ def test_all_repository_markdown_issue_templates_satisfy_contract(template_path:
 
     report = evaluate_issue(_issue(body=body), _claim())
     assert report["contract"]["missing_fields"] == []
+
+
+def test_preflight_body_text_accepts_complete_body() -> None:
+    """A body with all five canonical fields passes the zero-write preflight."""
+    body = (
+        "## Goal / Problem\n\nFix the thing.\n\n"
+        "## Scope Boundary\n\nOnly this file.\n\n"
+        "## Inputs\n\n- one file\n\n"
+        "## Acceptance Criteria\n\n- checker green\n\n"
+        "## Verification\n\n- run the checker\n"
+    )
+    payload = issue_implementability.preflight_body_text(body)
+
+    assert payload["schema"] == "issue_body_preflight.v1"
+    assert payload["ready"] is True
+    assert payload["missing_fields"] == []
+    assert payload["body_sha256"] == issue_implementability.preflight_body_text(body)["body_sha256"]
+
+
+@pytest.mark.parametrize(
+    ("missing", "headings"),
+    [
+        (
+            "objective",
+            [
+                "## Scope Boundary\n\ntext\n",
+                "## Inputs\n\ntext\n",
+                "## Acceptance Criteria\n\ntext\n",
+                "## Verification\n\ntext\n",
+            ],
+        ),
+        (
+            "scope",
+            [
+                "## Goal / Problem\n\ntext\n",
+                "## Inputs\n\ntext\n",
+                "## Acceptance Criteria\n\ntext\n",
+                "## Verification\n\ntext\n",
+            ],
+        ),
+        (
+            "inputs",
+            [
+                "## Goal / Problem\n\ntext\n",
+                "## Scope Boundary\n\ntext\n",
+                "## Acceptance Criteria\n\ntext\n",
+                "## Verification\n\ntext\n",
+            ],
+        ),
+        (
+            "acceptance",
+            [
+                "## Goal / Problem\n\ntext\n",
+                "## Scope Boundary\n\ntext\n",
+                "## Inputs\n\ntext\n",
+                "## Verification\n\ntext\n",
+            ],
+        ),
+        (
+            "verification",
+            [
+                "## Goal / Problem\n\ntext\n",
+                "## Scope Boundary\n\ntext\n",
+                "## Inputs\n\ntext\n",
+                "## Acceptance Criteria\n\ntext\n",
+            ],
+        ),
+    ],
+)
+def test_preflight_body_text_rejects_each_missing_field(missing: str, headings: list[str]) -> None:
+    """Each observed incomplete-body shape is rejected with the exact field name."""
+    body = "".join(headings)
+    payload = issue_implementability.preflight_body_text(body)
+
+    assert payload["ready"] is False
+    assert payload["missing_fields"] == [missing]
+
+
+def test_preflight_body_text_rejects_empty_body() -> None:
+    """An empty body is missing all five canonical fields."""
+    payload = issue_implementability.preflight_body_text("")
+
+    assert payload["ready"] is False
+    assert payload["missing_fields"] == [
+        "objective",
+        "scope",
+        "inputs",
+        "acceptance",
+        "verification",
+    ]
+
+
+def test_preflight_body_file_reads_disk_without_network(tmp_path: Path) -> None:
+    """The file preflight reads one local file and returns the same verdict shape."""
+    body_path = tmp_path / "body.md"
+    body_path.write_text(
+        "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n## Inputs\n\nx\n\n"
+        "## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n",
+        encoding="utf-8",
+    )
+    payload = issue_implementability.preflight_body_file(body_path)
+
+    assert payload["ready"] is True
+    assert payload["missing_fields"] == []
+
+
+def test_main_preflight_body_mode_is_zero_write(tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    """The CLI preflight mode reports ready/incomplete without any issue argument."""
+    complete = tmp_path / "complete.md"
+    complete.write_text(
+        "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n## Inputs\n\nx\n\n"
+        "## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n",
+        encoding="utf-8",
+    )
+    incomplete = tmp_path / "incomplete.md"
+    incomplete.write_text("## Goal / Problem\n\nx\n", encoding="utf-8")
+
+    assert issue_implementability.main(["--preflight-body", str(complete)]) == 0
+    ready_payload = json.loads(capsys.readouterr().out)
+    assert ready_payload["schema"] == "issue_body_preflight.v1"
+    assert ready_payload["ready"] is True
+
+    assert issue_implementability.main(["--preflight-body", str(incomplete)]) == 2
+    incomplete_payload = json.loads(capsys.readouterr().out)
+    assert incomplete_payload["ready"] is False
+    assert incomplete_payload["missing_fields"] == [
+        "scope",
+        "inputs",
+        "acceptance",
+        "verification",
+    ]

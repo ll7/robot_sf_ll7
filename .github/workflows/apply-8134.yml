@@ -19,405 +19,356 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.ref_name }}
 
-      - name: Apply bounded source and regression patch
+      - name: Apply checked source patch
         shell: bash
         run: |
-          python - <<'PY'
+          cat > /tmp/issue-8134.patch <<'PATCH'
+          diff --git a/scripts/dev/snapshot_issue_batch.py b/scripts/dev/snapshot_issue_batch.py
+          --- a/scripts/dev/snapshot_issue_batch.py
+          +++ b/scripts/dev/snapshot_issue_batch.py
+          @@
+          -    ``queue_completeness`` makes zero-work claims explicit: ``complete`` means the
+          -    ready-candidate universe was fully scanned and every live admission succeeded;
+          -    ``incomplete`` means the ready-candidate page was truncated or resumable; and
+          +    ``queue_completeness`` makes zero-work claims explicit: ``complete`` means the
+          +    ready-candidate universe was scanned from page one and every live admission and
+          +    claim-state read succeeded; ``incomplete`` means the ready-candidate page was
+          +    truncated, resumable, or started after page one; and
+               ``unavailable`` means discovery itself failed or was quota-blocked. A
+               ``claimable_count == 0`` result may only be treated as ``genuine_zero_work`` when
+               ``queue_completeness`` is ``complete``.
+          @@
+               else:
+                   truncation_note = ""
+          +    claimable_issues = [
+          +        issue
+          +        for issue in issues
+          +        if isinstance(issue.get("admission"), dict)
+          +        and issue["admission"].get("ok") is True
+          +        and issue["admission"].get("outcome") == "ready_check_only"
+          +        and issue.get("dispatch_allowed", True) is not False
+          +    ]
+          +    admission_results_complete = all(
+          +        isinstance(issue.get("admission"), dict)
+          +        and issue["admission"].get("outcome") != "error"
+          +        and issue["admission"].get("classification") != "error"
+          +        and issue["admission"].get("claim_outcome")
+          +        in {"unclaimed", "already_claimed"}
+          +        for issue in snapshots
+          +    )
+          +    if not admission_results_complete:
+          +        queue_completeness = "unavailable"
+          +    elif resume_page > 1 or truncated:
+          +        queue_completeness = "incomplete"
+          +    else:
+          +        queue_completeness = "complete"
+               return {
+                   **base,
+                   "mode": "candidate_queue",
+                   "legacy_mode": "claimable",
+          -        "queue_completeness": "incomplete" if truncated else "complete",
+          +        "queue_completeness": queue_completeness,
+                   "truncated": truncated,
+                   "truncation_note": truncation_note,
+                   "include_blocked_external": include_blocked_external,
+                   "candidate_count": len(issues),
+          -        "claimable_issues": [
+          -            issue
+          -            for issue in issues
+          -            if isinstance(issue.get("admission"), dict)
+          -            and issue["admission"].get("ok") is True
+          -            and issue["admission"].get("outcome") == "ready_check_only"
+          -        ],
+          -        "claimable_count": sum(
+          -            1
+          -            for issue in issues
+          -            if isinstance(issue.get("admission"), dict)
+          -            and issue["admission"].get("ok") is True
+          -            and issue["admission"].get("outcome") == "ready_check_only"
+          -        ),
+          +        "claimable_issues": claimable_issues,
+          +        "claimable_count": len(claimable_issues),
+                   "admission_reason_histogram": dict(
+                       sorted(
+                           Counter(
+          -                    _admission_reason(issue["admission"])
+          +                    (
+          +                        str(issue.get("classification") or "blocked")
+          +                        if issue.get("dispatch_allowed") is False
+          +                        else _admission_reason(issue["admission"])
+          +                    )
+                               for issue in snapshots
+                               if isinstance(issue.get("admission"), dict)
+                           ).items()
+          diff --git a/.agents/skills/goal-autopilot/SKILL.md b/.agents/skills/goal-autopilot/SKILL.md
+          --- a/.agents/skills/goal-autopilot/SKILL.md
+          +++ b/.agents/skills/goal-autopilot/SKILL.md
+          @@
+               unavailable -> treat as no queue evidence; retry after quota/transport recovery
+           ```
+          
+          +`queue_completeness: complete` is authoritative only for a page-one ready-candidate
+          +scan with no remaining truncation or resume cursor and with usable canonical admission
+          +and atomic-claim results for every discovered row. A resumed final page, admission
+          +error, or unavailable claim read is never complete queue evidence.
+          +
+           The audit and queue snapshots must expose an admission-reason histogram. Use stable reasons such as
+           `wrong_owner_repo`, `external_input_missing`, `covering_pr_open`, `parent_not_leaf`, `needs_spec`,
+           `dependency_missing`, `stale_route_state`, and `claimable`; do not report only a total such as
+          PATCH
+
+          git apply --check /tmp/issue-8134.patch
+          git apply /tmp/issue-8134.patch
+
+          cat > tests/dev/test_snapshot_claimable_queue_fail_closed.py <<'PY'
+          """Regression tests for fail-closed claimable-queue truth."""
+
+          from __future__ import annotations
+
+          import json
           from pathlib import Path
-          import re
-          from textwrap import dedent
+          from unittest.mock import patch
 
+          import pytest
 
-          def replace_once(text: str, old: str, new: str, label: str) -> str:
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{label}: expected one match, found {count}")
-              return text.replace(old, new, 1)
-
-
-          source_path = Path("scripts/dev/snapshot_issue_batch.py")
-          source = source_path.read_text(encoding="utf-8")
-          source = replace_once(
-              source,
-              """    ``queue_completeness`` makes zero-work claims explicit: ``complete`` means the
-              ready-candidate universe was fully scanned and every live admission succeeded;
-              ``incomplete`` means the ready-candidate page was truncated or resumable; and
-              """,
-              """    ``queue_completeness`` makes zero-work claims explicit: ``complete`` means the
-              ready-candidate universe was scanned from page one and every live admission and
-              claim-state read succeeded; ``incomplete`` means the ready-candidate page was
-              truncated, resumable, or started after page one; and
-              """,
-              "queue-completeness docstring",
+          from scripts.dev import (
+              goal_issue_admission,
+              issue_implementability,
+              snapshot_issue_batch,
           )
-          source = replace_once(
-              source,
-              """    else:
-                  truncation_note = ""
+
+
+          def _claim_status(number: int, *, ok: bool = True) -> dict[str, object]:
+              """Return one compact claim-state fixture."""
               return {
-              """,
-              """    else:
-                  truncation_note = ""
-              claimable_issues = [
-                  issue
-                  for issue in issues
-                  if isinstance(issue.get("admission"), dict)
-                  and issue["admission"].get("ok") is True
-                  and issue["admission"].get("outcome") == "ready_check_only"
-                  and issue.get("dispatch_allowed", True) is not False
-              ]
-              admission_results_complete = all(
-                  isinstance(issue.get("admission"), dict)
-                  and issue["admission"].get("outcome") != "error"
-                  and issue["admission"].get("classification") != "error"
-                  and issue["admission"].get("claim_outcome")
-                  in {"unclaimed", "already_claimed"}
-                  for issue in snapshots
-              )
-              if not admission_results_complete:
-                  queue_completeness = "unavailable"
-              elif resume_page > 1 or truncated:
-                  queue_completeness = "incomplete"
-              else:
-                  queue_completeness = "complete"
+                  "ok": ok,
+                  "claimed": False if ok else None,
+                  "claim_ref": f"agent-claims/issue-{number}",
+                  "sha": None,
+              }
+
+
+          def _ready_issue(number: int) -> dict[str, object]:
+              """Return one state:ready candidate-list row."""
               return {
-              """,
-              "queue calculations",
-          )
-          source = replace_once(
-              source,
-              '        "queue_completeness": "incomplete" if truncated else "complete",\n',
-              '        "queue_completeness": queue_completeness,\n',
-              "queue-completeness result",
-          )
-          source = replace_once(
-              source,
-              """        "claimable_issues": [
-                      issue
-                      for issue in issues
-                      if isinstance(issue.get("admission"), dict)
-                      and issue["admission"].get("ok") is True
-                      and issue["admission"].get("outcome") == "ready_check_only"
-                  ],
-                  "claimable_count": sum(
-                      1
-                      for issue in issues
-                      if isinstance(issue.get("admission"), dict)
-                      and issue["admission"].get("ok") is True
-                      and issue["admission"].get("outcome") == "ready_check_only"
+                  "number": number,
+                  "title": f"ready issue {number}",
+                  "state": "OPEN",
+                  "url": f"https://github.test/issues/{number}",
+                  "labels": [{"name": issue_implementability.READY_LABEL}],
+                  "assignees": [],
+              }
+
+
+          def _listing(
+              rows: list[dict[str, object]],
+              *,
+              data_source: str = "graphql",
+              resume_cursor: dict[str, object] | None = None,
+          ) -> dict[str, object]:
+              """Return one successful bounded listing fixture."""
+              return {
+                  "status": "ok",
+                  "listed": rows,
+                  "error": "",
+                  "data_source": data_source,
+                  "rate_limit": {},
+                  "quota": {},
+                  "resume_cursor": resume_cursor,
+              }
+
+
+          def _admission(number: int, *, ready: bool) -> dict[str, object]:
+              """Return one canonical live-admission wrapper fixture."""
+              claim = _claim_status(number)
+              preflight = {
+                  "schema": "issue_implementability.v1",
+                  "classification": "ready" if ready else "needs_spec",
+                  "admission_reason": "claimable" if ready else "needs_spec",
+                  "reasons": ["issue is ready" if ready else "missing contract section"],
+                  "ready": ready,
+                  "write_allowed": ready,
+                  "claim": claim,
+              }
+              return {
+                  "schema": goal_issue_admission.SCHEMA,
+                  "ok": ready,
+                  "outcome": "ready_check_only" if ready else "not_admitted",
+                  "write_attempted": False,
+                  "source_ref": goal_issue_admission.DEFAULT_SOURCE_REF,
+                  "preflight": preflight,
+                  "claim": claim,
+              }
+
+
+          def test_resumed_final_page_is_not_global_complete() -> None:
+              """A standalone final resume page cannot prove prior pages were scanned."""
+              with patch(
+                  "scripts.dev.snapshot_issue_batch._list_open_issues",
+                  return_value=_listing([], data_source="rest"),
+              ):
+                  payload = snapshot_issue_batch.snapshot_claimable_issues(
+                      repo="ll7/robot_sf_ll7",
+                      remote="origin",
+                      body_limit=150,
+                      limit=20,
+                      resume_page=2,
+                  )
+
+              assert payload["claimable_count"] == 0
+              assert payload["queue_completeness"] == "incomplete"
+
+
+          def test_admission_error_makes_queue_unavailable() -> None:
+              """An admission exception must forbid a complete zero-work conclusion."""
+              number = 9001
+              with (
+                  patch(
+                      "scripts.dev.snapshot_issue_batch._list_open_issues",
+                      return_value=_listing([_ready_issue(number)]),
                   ),
-              """,
-              """        "claimable_issues": claimable_issues,
-                  "claimable_count": len(claimable_issues),
-              """,
-              "final claimable selection",
-          )
-
-          histogram_pattern = re.compile(
-              r'(?m)^(?P<expr_indent>[ ]*)_admission_reason\(issue\["admission"\]\)\n'
-              r'(?P<loop_indent>[ ]*)for issue in snapshots\n'
-              r'(?P=loop_indent)if isinstance\(issue\.get\("admission"\), dict\)$'
-          )
-          histogram_match = histogram_pattern.search(source)
-          if histogram_match is None or histogram_pattern.search(source, histogram_match.end()):
-              raise SystemExit("final admission reason: expected exactly one match")
-          expr_indent = histogram_match.group("expr_indent")
-          loop_indent = histogram_match.group("loop_indent")
-          histogram_replacement = (
-              f'{expr_indent}(\n'
-              f'{expr_indent}    str(issue.get("classification") or "blocked")\n'
-              f'{expr_indent}    if issue.get("dispatch_allowed") is False\n'
-              f'{expr_indent}    else _admission_reason(issue["admission"])\n'
-              f'{expr_indent})\n'
-              f'{loop_indent}for issue in snapshots\n'
-              f'{loop_indent}if isinstance(issue.get("admission"), dict)'
-          )
-          source = (
-              source[: histogram_match.start()]
-              + histogram_replacement
-              + source[histogram_match.end() :]
-          )
-          source_path.write_text(source, encoding="utf-8")
-
-          skill_path = Path(".agents/skills/goal-autopilot/SKILL.md")
-          skill = skill_path.read_text(encoding="utf-8")
-          skill = replace_once(
-              skill,
-              """    unavailable -> treat as no queue evidence; retry after quota/transport recovery
-              ```
-
-              The audit and queue snapshots must expose an admission-reason histogram.
-              """,
-              """    unavailable -> treat as no queue evidence; retry after quota/transport recovery
-              ```
-
-              `queue_completeness: complete` is authoritative only for a page-one ready-candidate
-              scan with no remaining truncation or resume cursor and with usable canonical admission
-              and atomic-claim results for every discovered row. A resumed final page, admission
-              error, or unavailable claim read is never complete queue evidence.
-
-              The audit and queue snapshots must expose an admission-reason histogram.
-              """,
-              "goal-autopilot queue authority",
-          )
-          skill_path.write_text(skill, encoding="utf-8")
-
-          test_path = Path("tests/dev/test_snapshot_claimable_queue_fail_closed.py")
-          test_path.write_text(
-              dedent(
-                  '''\
-                  """Regression tests for fail-closed claimable-queue truth."""
-
-                  from __future__ import annotations
-
-                  import json
-                  from pathlib import Path
-                  from unittest.mock import patch
-
-                  import pytest
-
-                  from scripts.dev import (
-                      goal_issue_admission,
-                      issue_implementability,
-                      snapshot_issue_batch,
+                  patch(
+                      "scripts.dev.snapshot_issue_batch._batch_claim_statuses",
+                      return_value={number: _claim_status(number)},
+                  ),
+                  patch(
+                      "scripts.dev.snapshot_issue_batch.goal_issue_admission.admit_issue",
+                      side_effect=RuntimeError("admission unavailable"),
+                  ),
+              ):
+                  payload = snapshot_issue_batch.snapshot_claimable_issues(
+                      repo="ll7/robot_sf_ll7",
+                      remote="origin",
+                      body_limit=150,
+                      limit=20,
                   )
 
-
-                  def _claim_status(number: int, *, ok: bool = True) -> dict[str, object]:
-                      """Return one compact claim-state fixture."""
-                      return {
-                          "ok": ok,
-                          "claimed": False if ok else None,
-                          "claim_ref": f"agent-claims/issue-{number}",
-                          "sha": None,
-                      }
+              assert payload["claimable_count"] == 0
+              assert payload["queue_completeness"] == "unavailable"
+              assert payload["admission_reason_histogram"] == {"error": 1}
 
 
-                  def _ready_issue(number: int) -> dict[str, object]:
-                      """Return one state:ready candidate-list row."""
-                      return {
-                          "number": number,
-                          "title": f"ready issue {number}",
-                          "state": "OPEN",
-                          "url": f"https://github.test/issues/{number}",
-                          "labels": [{"name": issue_implementability.READY_LABEL}],
-                          "assignees": [],
-                      }
-
-
-                  def _listing(
-                      rows: list[dict[str, object]],
-                      *,
-                      data_source: str = "graphql",
-                      resume_cursor: dict[str, object] | None = None,
-                  ) -> dict[str, object]:
-                      """Return one successful bounded listing fixture."""
-                      return {
-                          "status": "ok",
-                          "listed": rows,
-                          "error": "",
-                          "data_source": data_source,
-                          "rate_limit": {},
-                          "quota": {},
-                          "resume_cursor": resume_cursor,
-                      }
-
-
-                  def _admission(number: int, *, ready: bool) -> dict[str, object]:
-                      """Return one canonical live-admission wrapper fixture."""
-                      claim = _claim_status(number)
-                      preflight = {
-                          "schema": "issue_implementability.v1",
-                          "classification": "ready" if ready else "needs_spec",
-                          "admission_reason": "claimable" if ready else "needs_spec",
-                          "reasons": ["issue is ready" if ready else "missing contract section"],
-                          "ready": ready,
-                          "write_allowed": ready,
-                          "claim": claim,
-                      }
-                      return {
-                          "schema": goal_issue_admission.SCHEMA,
-                          "ok": ready,
-                          "outcome": "ready_check_only" if ready else "not_admitted",
-                          "write_attempted": False,
-                          "source_ref": goal_issue_admission.DEFAULT_SOURCE_REF,
-                          "preflight": preflight,
-                          "claim": claim,
-                      }
-
-
-                  def test_resumed_final_page_is_not_global_complete() -> None:
-                      """A standalone final resume page cannot prove prior pages were scanned."""
-                      with patch(
-                          "scripts.dev.snapshot_issue_batch._list_open_issues",
-                          return_value=_listing([], data_source="rest"),
-                      ):
-                          payload = snapshot_issue_batch.snapshot_claimable_issues(
-                              repo="ll7/robot_sf_ll7",
-                              remote="origin",
-                              body_limit=150,
-                              limit=20,
-                              resume_page=2,
-                          )
-
-                      assert payload["claimable_count"] == 0
-                      assert payload["queue_completeness"] == "incomplete"
-
-
-                  def test_admission_error_makes_queue_unavailable() -> None:
-                      """An admission exception must forbid a complete zero-work conclusion."""
-                      number = 9001
-                      with (
-                          patch(
-                              "scripts.dev.snapshot_issue_batch._list_open_issues",
-                              return_value=_listing([_ready_issue(number)]),
-                          ),
-                          patch(
-                              "scripts.dev.snapshot_issue_batch._batch_claim_statuses",
-                              return_value={number: _claim_status(number)},
-                          ),
-                          patch(
-                              "scripts.dev.snapshot_issue_batch.goal_issue_admission.admit_issue",
-                              side_effect=RuntimeError("admission unavailable"),
-                          ),
-                      ):
-                          payload = snapshot_issue_batch.snapshot_claimable_issues(
-                              repo="ll7/robot_sf_ll7",
-                              remote="origin",
-                              body_limit=150,
-                              limit=20,
-                          )
-
-                      assert payload["claimable_count"] == 0
-                      assert payload["queue_completeness"] == "unavailable"
-                      assert payload["admission_reason_histogram"] == {"error": 1}
-
-
-                  def test_unavailable_claim_read_makes_queue_unavailable() -> None:
-                      """An unusable claim read must not become complete zero-work evidence."""
-                      number = 9002
-                      unavailable_claim = _claim_status(number, ok=False)
-                      preflight = {
-                          "schema": "issue_implementability.v1",
-                          "classification": "needs_spec",
-                          "admission_reason": "needs_spec",
-                          "reasons": ["missing contract section"],
-                          "ready": False,
-                          "write_allowed": False,
-                          "claim": unavailable_claim,
-                      }
-                      with (
-                          patch(
-                              "scripts.dev.snapshot_issue_batch._list_open_issues",
-                              return_value=_listing([_ready_issue(number)]),
-                          ),
-                          patch(
-                              "scripts.dev.snapshot_issue_batch._batch_claim_statuses",
-                              return_value={number: unavailable_claim},
-                          ),
-                          patch(
-                              "scripts.dev.snapshot_issue_batch.issue_implementability.evaluate_issue",
-                              return_value=preflight,
-                          ),
-                      ):
-                          payload = snapshot_issue_batch.snapshot_claimable_issues(
-                              repo="ll7/robot_sf_ll7",
-                              remote="origin",
-                              body_limit=150,
-                              limit=20,
-                          )
-
-                      assert payload["claimable_count"] == 0
-                      assert payload["queue_completeness"] == "unavailable"
-
-
-                  def test_complete_nonclaimable_scan_can_prove_zero_work() -> None:
-                      """A page-one exhaustive, fully evaluated scan may remain complete."""
-                      number = 9003
-                      with (
-                          patch(
-                              "scripts.dev.snapshot_issue_batch._list_open_issues",
-                              return_value=_listing([_ready_issue(number)]),
-                          ),
-                          patch(
-                              "scripts.dev.snapshot_issue_batch._batch_claim_statuses",
-                              return_value={number: _claim_status(number)},
-                          ),
-                          patch(
-                              "scripts.dev.snapshot_issue_batch.goal_issue_admission.admit_issue",
-                              return_value=_admission(number, ready=False),
-                          ),
-                      ):
-                          payload = snapshot_issue_batch.snapshot_claimable_issues(
-                              repo="ll7/robot_sf_ll7",
-                              remote="origin",
-                              body_limit=150,
-                              limit=20,
-                          )
-
-                      assert payload["claimable_count"] == 0
-                      assert payload["queue_completeness"] == "complete"
-
-
-                  @pytest.mark.parametrize(
-                      ("status", "expected_reason"),
-                      [
-                          ("blocked_unchanged", "blocked_receipt"),
-                          ("blocker_changed", "needs_re_evaluation"),
-                          ("re_evaluate", "needs_re_evaluation"),
-                      ],
+          def test_unavailable_claim_read_makes_queue_unavailable() -> None:
+              """An unusable claim read must not become complete zero-work evidence."""
+              number = 9002
+              unavailable_claim = _claim_status(number, ok=False)
+              preflight = {
+                  "schema": "issue_implementability.v1",
+                  "classification": "needs_spec",
+                  "admission_reason": "needs_spec",
+                  "reasons": ["missing contract section"],
+                  "ready": False,
+                  "write_allowed": False,
+                  "claim": unavailable_claim,
+              }
+              with (
+                  patch(
+                      "scripts.dev.snapshot_issue_batch._list_open_issues",
+                      return_value=_listing([_ready_issue(number)]),
+                  ),
+                  patch(
+                      "scripts.dev.snapshot_issue_batch._batch_claim_statuses",
+                      return_value={number: unavailable_claim},
+                  ),
+                  patch(
+                      "scripts.dev.snapshot_issue_batch.issue_implementability.evaluate_issue",
+                      return_value=preflight,
+                  ),
+              ):
+                  payload = snapshot_issue_batch.snapshot_claimable_issues(
+                      repo="ll7/robot_sf_ll7",
+                      remote="origin",
+                      body_limit=150,
+                      limit=20,
                   )
-                  def test_blocker_receipt_fences_final_claimable_selection(
-                      tmp_path: Path, status: str, expected_reason: str
-                  ) -> None:
-                      """A final blocker receipt must override a ready live admission."""
-                      number = 9004
-                      decision_path = tmp_path / "blocker-decision.json"
-                      decision_path.write_text(
-                          json.dumps(
-                              {
-                                  "issue": number,
-                                  "status": status,
-                                  "reason": "external blocker decision",
-                                  "receipt_digest": "a" * 64,
-                                  "current_fingerprint": "b" * 64,
-                              }
-                          ),
-                          encoding="utf-8",
-                      )
-                      with (
-                          patch(
-                              "scripts.dev.snapshot_issue_batch._list_open_issues",
-                              return_value=_listing([_ready_issue(number)]),
-                          ),
-                          patch(
-                              "scripts.dev.snapshot_issue_batch._batch_claim_statuses",
-                              return_value={number: _claim_status(number)},
-                          ),
-                          patch(
-                              "scripts.dev.snapshot_issue_batch.goal_issue_admission.admit_issue",
-                              return_value=_admission(number, ready=True),
-                          ),
-                      ):
-                          payload = snapshot_issue_batch.snapshot_claimable_issues(
-                              repo="ll7/robot_sf_ll7",
-                              remote="origin",
-                              body_limit=150,
-                              limit=20,
-                              blocker_decision_paths=[str(decision_path)],
-                          )
 
-                      row = payload["issues"][0]
-                      assert row["dispatch_allowed"] is False
-                      assert row["classification"] == expected_reason
-                      assert payload["claimable_issues"] == []
-                      assert payload["claimable_count"] == 0
-                      assert payload["admission_reason_histogram"] == {expected_reason: 1}
-                      assert payload["queue_completeness"] == "complete"
-                  '''
-              ),
-              encoding="utf-8",
+              assert payload["claimable_count"] == 0
+              assert payload["queue_completeness"] == "unavailable"
+
+
+          def test_complete_nonclaimable_scan_can_prove_zero_work() -> None:
+              """A page-one exhaustive, fully evaluated scan may remain complete."""
+              number = 9003
+              with (
+                  patch(
+                      "scripts.dev.snapshot_issue_batch._list_open_issues",
+                      return_value=_listing([_ready_issue(number)]),
+                  ),
+                  patch(
+                      "scripts.dev.snapshot_issue_batch._batch_claim_statuses",
+                      return_value={number: _claim_status(number)},
+                  ),
+                  patch(
+                      "scripts.dev.snapshot_issue_batch.goal_issue_admission.admit_issue",
+                      return_value=_admission(number, ready=False),
+                  ),
+              ):
+                  payload = snapshot_issue_batch.snapshot_claimable_issues(
+                      repo="ll7/robot_sf_ll7",
+                      remote="origin",
+                      body_limit=150,
+                      limit=20,
+                  )
+
+              assert payload["claimable_count"] == 0
+              assert payload["queue_completeness"] == "complete"
+
+
+          @pytest.mark.parametrize(
+              ("status", "expected_reason"),
+              [
+                  ("blocked_unchanged", "blocked_receipt"),
+                  ("blocker_changed", "needs_re_evaluation"),
+                  ("re_evaluate", "needs_re_evaluation"),
+              ],
           )
+          def test_blocker_receipt_fences_final_claimable_selection(
+              tmp_path: Path, status: str, expected_reason: str
+          ) -> None:
+              """A final blocker receipt must override a ready live admission."""
+              number = 9004
+              decision_path = tmp_path / "blocker-decision.json"
+              decision_path.write_text(
+                  json.dumps(
+                      {
+                          "issue": number,
+                          "status": status,
+                          "reason": "external blocker decision",
+                          "receipt_digest": "a" * 64,
+                          "current_fingerprint": "b" * 64,
+                      }
+                  ),
+                  encoding="utf-8",
+              )
+              with (
+                  patch(
+                      "scripts.dev.snapshot_issue_batch._list_open_issues",
+                      return_value=_listing([_ready_issue(number)]),
+                  ),
+                  patch(
+                      "scripts.dev.snapshot_issue_batch._batch_claim_statuses",
+                      return_value={number: _claim_status(number)},
+                  ),
+                  patch(
+                      "scripts.dev.snapshot_issue_batch.goal_issue_admission.admit_issue",
+                      return_value=_admission(number, ready=True),
+                  ),
+              ):
+                  payload = snapshot_issue_batch.snapshot_claimable_issues(
+                      repo="ll7/robot_sf_ll7",
+                      remote="origin",
+                      body_limit=150,
+                      limit=20,
+                      blocker_decision_paths=[str(decision_path)],
+                  )
+
+              row = payload["issues"][0]
+              assert row["dispatch_allowed"] is False
+              assert row["classification"] == expected_reason
+              assert payload["claimable_issues"] == []
+              assert payload["claimable_count"] == 0
+              assert payload["admission_reason_histogram"] == {expected_reason: 1}
+              assert payload["queue_completeness"] == "complete"
           PY
 
           python -m py_compile \

@@ -184,7 +184,7 @@ def test_merge_wrapper_quota_fallback_rechecks_rest_guard_snapshot() -> None:
     assert ".draft" in source
     assert ".mergeable_state" in source
     assert 'index("merge-ready")' in source
-    assert 'git config --get remote.origin.url' in source
+    assert "git config --get remote.origin.url" in source
     assert '-f sha="$expected_head_sha"' in source
 
 

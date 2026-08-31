@@ -6,7 +6,7 @@
 ## 1. Evidence Anchor
 
 - **Base Anchor Ref**: `0.0.3.post1` (`ded9027d2928`)
-- **Target Ref**: `HEAD` (`556888e89b9f`)
+- **Target Ref**: `HEAD` (`960d0cc91934`)
 - **Scope**: Changes introduced or materially modified after the frozen dissertation release anchor.
 - **Core Rule**: Implementation chronology is NOT scientific evidence promotion. Software progress reduces engineering distance but does not alter frozen dissertation claims.
 

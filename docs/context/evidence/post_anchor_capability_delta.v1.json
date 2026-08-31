@@ -22,8 +22,8 @@
         "Frozen model checkpoint registration and runtime profiling."
       ],
       "owner_paths": [
-        "robot_sf/planner/human_cost.py",
-        "tests/planner/test_human_cost.py"
+        "robot_sf/planner/predictive_human_cost.py",
+        "tests/planner/test_anisotropic_gaussian_cost.py"
       ],
       "release_relationship": "unreleased_prototype",
       "status": "introduced_after_anchor",
@@ -51,8 +51,8 @@
         "Convergence and oscillation proof in dense crowds."
       ],
       "owner_paths": [
-        "robot_sf/planner/potential_field.py",
-        "tests/planner/test_potential_field.py"
+        "robot_sf/planner/force_coupled_potential_field.py",
+        "tests/planner/test_force_coupled_potential_field.py"
       ],
       "release_relationship": "unreleased_prototype",
       "status": "introduced_after_anchor",
@@ -80,8 +80,8 @@
         "Comparative performance against standard feed-forward PPO baselines."
       ],
       "owner_paths": [
-        "robot_sf/planner/recurrent_ppo.py",
-        "tests/planner/test_recurrent_ppo.py"
+        "robot_sf/planner/recurrent_ppo_learned_adapter.py",
+        "tests/planner/test_recurrent_ppo_learned_adapter.py"
       ],
       "release_relationship": "unreleased_prototype",
       "status": "introduced_after_anchor",
@@ -109,8 +109,8 @@
         "Ground-truth route preference distributions from real pedestrians."
       ],
       "owner_paths": [
-        "robot_sf/planner/",
-        "tests/planner/test_route_homotopy.py"
+        "robot_sf/benchmark/route_choice_observability.py",
+        "tests/benchmark/test_route_choice_observability.py"
       ],
       "release_relationship": "unreleased_diagnostic",
       "status": "introduced_after_anchor",
@@ -138,8 +138,8 @@
         "Audited conversion accuracy from official reports to simulation maps."
       ],
       "owner_paths": [
-        "robot_sf/provenance/",
-        "scripts/analysis/"
+        "robot_sf/benchmark/collision/incident_scenario_provenance.py",
+        "tests/benchmark/test_incident_scenario_provenance.py"
       ],
       "release_relationship": "unreleased_diagnostic",
       "status": "introduced_after_anchor",
@@ -164,8 +164,8 @@
         "Full-scale search campaign across full scenario catalog."
       ],
       "owner_paths": [
-        "robot_sf/benchmark/scenario_search.py",
-        "tests/benchmark/test_scenario_search.py"
+        "scripts/validation/run_feasibility_first_scenario_search.py",
+        "docs/feasibility_first_scenario_search.md"
       ],
       "release_relationship": "unreleased_diagnostic",
       "status": "materially_extended_after_anchor",
@@ -248,8 +248,8 @@
         "None (operational tooling)."
       ],
       "owner_paths": [
-        "scripts/dev/build_software_candidate.py",
-        "tests/dev/test_build_software_candidate.py"
+        "scripts/dev/software_candidate_manifest.py",
+        "tests/dev/test_software_candidate_manifest.py"
       ],
       "release_relationship": "operational_tooling",
       "status": "introduced_after_anchor",
@@ -275,7 +275,7 @@
         "None (operational tooling)."
       ],
       "owner_paths": [
-        "scripts/ci/run_actionlint.py",
+        "tests/dev/test_actionlint_contract.py",
         ".github/workflows/"
       ],
       "release_relationship": "operational_tooling",
@@ -343,5 +343,5 @@
   "row_count": 12,
   "schema": "post_anchor_capability_delta.v1",
   "target_ref": "HEAD",
-  "target_sha": "556888e89b9f690c377d3908d786a2871bd373f8"
+  "target_sha": "960d0cc91934778f27c6570e852cc376a92ecb87"
 }

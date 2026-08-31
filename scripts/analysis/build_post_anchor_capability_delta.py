@@ -71,7 +71,10 @@ def get_canonical_capabilities() -> list[CapabilityRow]:
             evidence_status="diagnostic_only",
             release_relationship="unreleased_prototype",
             dissertation_relationship="post_anchor_candidate",
-            owner_paths=["robot_sf/planner/human_cost.py", "tests/planner/test_human_cost.py"],
+            owner_paths=[
+                "robot_sf/planner/predictive_human_cost.py",
+                "tests/planner/test_anisotropic_gaussian_cost.py",
+            ],
             linked_issues=[7603, 8046],
             first_commit="76030000",
             strongest_permitted_statement=(
@@ -94,8 +97,8 @@ def get_canonical_capabilities() -> list[CapabilityRow]:
             release_relationship="unreleased_prototype",
             dissertation_relationship="post_anchor_candidate",
             owner_paths=[
-                "robot_sf/planner/potential_field.py",
-                "tests/planner/test_potential_field.py",
+                "robot_sf/planner/force_coupled_potential_field.py",
+                "tests/planner/test_force_coupled_potential_field.py",
             ],
             linked_issues=[7889, 8015, 8046],
             first_commit="78890000",
@@ -119,8 +122,8 @@ def get_canonical_capabilities() -> list[CapabilityRow]:
             release_relationship="unreleased_prototype",
             dissertation_relationship="post_anchor_candidate",
             owner_paths=[
-                "robot_sf/planner/recurrent_ppo.py",
-                "tests/planner/test_recurrent_ppo.py",
+                "robot_sf/planner/recurrent_ppo_learned_adapter.py",
+                "tests/planner/test_recurrent_ppo_learned_adapter.py",
             ],
             linked_issues=[7845, 7848, 8046],
             first_commit="78450000",
@@ -144,7 +147,10 @@ def get_canonical_capabilities() -> list[CapabilityRow]:
             evidence_status="synthetic_fixture",
             release_relationship="unreleased_diagnostic",
             dissertation_relationship="post_anchor_candidate",
-            owner_paths=["robot_sf/planner/", "tests/planner/test_route_homotopy.py"],
+            owner_paths=[
+                "robot_sf/benchmark/route_choice_observability.py",
+                "tests/benchmark/test_route_choice_observability.py",
+            ],
             linked_issues=[7890, 8033, 8046],
             first_commit="78900000",
             strongest_permitted_statement=(
@@ -166,7 +172,10 @@ def get_canonical_capabilities() -> list[CapabilityRow]:
             evidence_status="synthetic_fixture",
             release_relationship="unreleased_diagnostic",
             dissertation_relationship="post_anchor_candidate",
-            owner_paths=["robot_sf/provenance/", "scripts/analysis/"],
+            owner_paths=[
+                "robot_sf/benchmark/collision/incident_scenario_provenance.py",
+                "tests/benchmark/test_incident_scenario_provenance.py",
+            ],
             linked_issues=[7888, 7900, 8046],
             first_commit="78880000",
             strongest_permitted_statement=(
@@ -189,8 +198,8 @@ def get_canonical_capabilities() -> list[CapabilityRow]:
             release_relationship="unreleased_diagnostic",
             dissertation_relationship="post_anchor_candidate",
             owner_paths=[
-                "robot_sf/benchmark/scenario_search.py",
-                "tests/benchmark/test_scenario_search.py",
+                "scripts/validation/run_feasibility_first_scenario_search.py",
+                "docs/feasibility_first_scenario_search.md",
             ],
             linked_issues=[7900, 8046],
             first_commit="79000000",
@@ -258,8 +267,8 @@ def get_canonical_capabilities() -> list[CapabilityRow]:
             release_relationship="operational_tooling",
             dissertation_relationship="repository_only",
             owner_paths=[
-                "scripts/dev/build_software_candidate.py",
-                "tests/dev/test_build_software_candidate.py",
+                "scripts/dev/software_candidate_manifest.py",
+                "tests/dev/test_software_candidate_manifest.py",
             ],
             linked_issues=[8109, 8046],
             first_commit="81090000",
@@ -279,7 +288,7 @@ def get_canonical_capabilities() -> list[CapabilityRow]:
             release_relationship="operational_tooling",
             dissertation_relationship="repository_only",
             owner_paths=[
-                "scripts/ci/run_actionlint.py",
+                "tests/dev/test_actionlint_contract.py",
                 ".github/workflows/",
             ],
             linked_issues=[8041, 8054, 8046],

@@ -242,7 +242,17 @@ def create_issue(
             missing_fields=list(preflight.get("missing_fields", [])),
             body_sha256=preflight.get("body_sha256", ""),
         )
-    args = ["issue", "create", "--repo", repo, "--title", title, "--body-file", body_file]
+    args = [
+        "gh",
+        "issue",
+        "create",
+        "--repo",
+        repo,
+        "--title",
+        title,
+        "--body-file",
+        body_file,
+    ]
     for label in initial_labels:
         args.extend(["--label", label])
     result = subprocess.run(args, capture_output=True, text=True, check=False)

@@ -330,3 +330,29 @@ def test_create_issue_fails_closed_when_body_file_is_missing(tmp_path) -> None: 
     assert payload["phase"] == "create"
     assert "body file unreadable" in payload["error"]
     run.assert_not_called()
+
+
+def test_create_issue_invokes_the_gh_executable(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The create subprocess command starts with the gh executable (live-caught bug)."""
+    body_file = tmp_path / "body.md"
+    body_file.write_text(
+        "## Goal / Problem\n\nx\n\n## Scope\n\nx\n\n## Inputs\n\nx\n\n"
+        "## Acceptance Criteria\n\nx\n\n## Verification\n\nx\n",
+        encoding="utf-8",
+    )
+    with patch.object(issue_readiness_gate.subprocess, "run") as run:
+        run.return_value = type(
+            "Completed",
+            (),
+            {"returncode": 1, "stdout": "", "stderr": "aborted"},
+        )()
+        issue_readiness_gate.create_issue(
+            title="t",
+            body_file=str(body_file),
+            labels=[],
+            repo="ll7/robot_sf_ll7",
+        )
+
+    command = run.call_args.args[0]
+    assert command[0] == "gh"
+    assert command[1:3] == ["issue", "create"]

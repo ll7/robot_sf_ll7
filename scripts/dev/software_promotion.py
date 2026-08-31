@@ -109,6 +109,23 @@ SUPPORTED_RELEASE_EXTRAS = frozenset(
         "criticality",
     }
 )
+# Preserve the checked-in profile manifest order while excluding the unsupported
+# ``rllib``, ``fast-pysf``, and ``socnavbench`` profiles.
+SUPPORTED_RELEASE_PROFILE_ROSTER = (
+    "core",
+    "viz",
+    "maps",
+    "benchmark",
+    "gpu",
+    "training",
+    "recurrent",
+    "progress",
+    "analytics",
+    "browser",
+    "sacadrl",
+    "socnav",
+    "criticality",
+)
 SUPPORTED_DEPENDENCY_GATE_ID = "strict-supported-dependency-surface"
 SUPPORTED_DEPENDENCY_REPORT_NAME = "dependency-license-inventory.json"
 SUPPORTED_DEPENDENCY_POLICY_PATH = "scripts/validation/dependency_license_policy.v1.json"
@@ -368,6 +385,7 @@ def _validate_manifest_header(
     *,
     expected_source_sha: str,
     expected_workflow_run_id: str,
+    expected_workflow_run_attempt: int,
     expected_version: str,
 ) -> tuple[str, str, dict[str, str], dict[str, Any] | None]:
     if not isinstance(manifest, dict):
@@ -407,6 +425,8 @@ def _validate_manifest_header(
         or workflow["run_attempt"] < 1
     ):
         raise PromotionError("candidate workflow run attempt is invalid")
+    if workflow["run_attempt"] != expected_workflow_run_attempt:
+        raise PromotionError("candidate workflow run attempt does not match the dispatch identity")
 
     package = manifest["package"]
     version = _version(expected_version)
@@ -501,10 +521,12 @@ def _distribution_extras(path: Path) -> frozenset[str]:
         for line in metadata.splitlines()
         if line.startswith("Provides-Extra:") and line.partition(":")[2].strip()
     )
-    if not SUPPORTED_RELEASE_EXTRAS.issubset(extras):
+    if extras != SUPPORTED_RELEASE_EXTRAS:
         missing = sorted(SUPPORTED_RELEASE_EXTRAS - extras)
+        unsupported = sorted(extras - SUPPORTED_RELEASE_EXTRAS)
         raise PromotionError(
-            f"candidate wheel is missing supported Provides-Extra values: {missing}"
+            "candidate wheel Provides-Extra values differ from the closed supported surface: "
+            f"missing={missing}, unsupported={unsupported}"
         )
     return extras
 
@@ -514,6 +536,7 @@ def _load_candidate(
     *,
     expected_source_sha: str,
     expected_workflow_run_id: str,
+    expected_workflow_run_attempt: int,
     expected_version: str,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Load a candidate and return ``(manifest, identity)`` after byte checks."""
@@ -529,6 +552,7 @@ def _load_candidate(
         manifest,
         expected_source_sha=expected_source_sha,
         expected_workflow_run_id=expected_workflow_run_id,
+        expected_workflow_run_attempt=expected_workflow_run_attempt,
         expected_version=expected_version,
     )
     validated_members = _validate_candidate_members(bundle_dir, entries, manifest["members"])
@@ -898,7 +922,13 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - clo
         raise PromotionError(
             "supported dependency report profile roster differs from the v0.0.6 supported surface"
         )
-    if not SUPPORTED_RELEASE_EXTRAS.issubset(identity["distribution_extras"]):
+    embedded_profile_ids = profile_manifest.get("profile_ids")
+    if embedded_profile_ids != list(SUPPORTED_RELEASE_PROFILE_ROSTER):
+        raise PromotionError(
+            "supported dependency report embedded profile roster differs from the closed "
+            "supported surface"
+        )
+    if identity["distribution_extras"] != SUPPORTED_RELEASE_EXTRAS:
         raise PromotionError("candidate archive does not advertise the supported profile surface")
     policy = report.get("policy")
     if not isinstance(policy, dict) or policy.get("path") != SUPPORTED_DEPENDENCY_POLICY_PATH:
@@ -1153,6 +1183,7 @@ def _load_and_bind_candidate(args: argparse.Namespace) -> tuple[dict[str, Any], 
         args.candidate_dir,
         expected_source_sha=args.source_sha,
         expected_workflow_run_id=args.candidate_run_id,
+        expected_workflow_run_attempt=args.candidate_run_attempt,
         expected_version=args.version,
     )
     identity["artifact_digest"] = args.candidate_artifact_digest
@@ -1513,6 +1544,7 @@ def _parser() -> argparse.ArgumentParser:  # noqa: PLR0915 - one versioned CLI s
         )
         command.add_argument("--source-sha", required=True)
         command.add_argument("--candidate-run-id", required=True)
+        command.add_argument("--candidate-run-attempt", type=int, required=True)
         command.add_argument("--candidate-artifact-id", required=True)
         command.add_argument("--candidate-artifact-name", required=True)
         command.add_argument("--candidate-artifact-digest", required=True)

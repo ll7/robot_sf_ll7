@@ -313,6 +313,7 @@ jobs:
             --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
             --source-sha "${SOURCE_SHA}" \
             --candidate-run-id "${RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
             --candidate-artifact-id "${ARTIFACT_ID}" \
             --candidate-artifact-name "${ARTIFACT_NAME}" \
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" \
@@ -444,7 +445,8 @@ jobs:
             --candidate-dir "${CANDIDATE_DIR}" \
             --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
             --source-sha "${SOURCE_SHA}" \
-            --candidate-run-id "${RUN_ID}" --candidate-artifact-id "${ARTIFACT_ID}" \
+            --candidate-run-id "${RUN_ID}" --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${ARTIFACT_ID}" \
             --candidate-artifact-name "${ARTIFACT_NAME}" \
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}"
           python scripts/dev/software_candidate_manifest.py verify \
@@ -468,6 +470,7 @@ jobs:
             --candidate-dir "${CANDIDATE_DIR}" --output-dir "${PACKAGE_DIR}" \
             --rights-receipt "${RIGHTS_RECEIPT}" \
             --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
             --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}"
 
@@ -516,6 +519,7 @@ jobs:
             --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_RECEIPT}" \
             --receipt "${RESUME_DIR}/testpypi-upload-receipt.json" \
             --channel testpypi --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
             --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}" \
             --promotion-run-id "${PRIOR_RUN_ID}" --promotion-run-attempt "${PRIOR_RUN_ATTEMPT}"
@@ -552,6 +556,7 @@ jobs:
             --channel testpypi \
             --receipt "${RECEIPT_DIR}/testpypi-upload-receipt.json" \
             --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
             --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}" \
             --promotion-run-id "${GITHUB_RUN_ID}" --promotion-run-attempt "${GITHUB_RUN_ATTEMPT}"
@@ -722,6 +727,7 @@ jobs:
             --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
             --receipt "${RECEIPT_DIR}/testpypi-upload-receipt.json" --channel testpypi \
             --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
             --candidate-artifact-id "${CANDIDATE_ID}" --candidate-artifact-name "${CANDIDATE_NAME}" \
             --candidate-artifact-digest "${CANDIDATE_DIGEST}" --version "${VERSION}"
 
@@ -756,6 +762,7 @@ jobs:
             --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
             --download-dir "${INDEX_ROOT}" \
             --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
             --candidate-artifact-id "${CANDIDATE_ID}" --candidate-artifact-name "${CANDIDATE_NAME}" \
             --candidate-artifact-digest "${CANDIDATE_DIGEST}" --version "${VERSION}"
 
@@ -794,6 +801,7 @@ jobs:
             --downloaded-wheel "${wheel}" --index-url https://test.pypi.org/simple \
             --report "${REPORT}" --receipt "${RECEIPT}" \
             --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
             --candidate-artifact-id "${CANDIDATE_ID}" --candidate-artifact-name "${CANDIDATE_NAME}" \
             --candidate-artifact-digest "${CANDIDATE_DIGEST}" --version "${VERSION}"
 
@@ -968,6 +976,7 @@ jobs:
             --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
             --receipt "${TEST_RECEIPT_DIR}/testpypi-upload-receipt.json" \
             --channel testpypi --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
             --candidate-artifact-id "${CANDIDATE_ID}" --candidate-artifact-name "${CANDIDATE_NAME}" \
             --candidate-artifact-digest "${CANDIDATE_DIGEST}" --version "${VERSION}"
           python scripts/dev/software_promotion.py verify-cold-install \
@@ -976,6 +985,7 @@ jobs:
             --receipt "${COLD_DIR}/testpypi-cold-install-receipt.json" \
             --report "${COLD_DIR}/wheel-install-smoke.json" \
             --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
             --candidate-artifact-id "${CANDIDATE_ID}" --candidate-artifact-name "${CANDIDATE_NAME}" \
             --candidate-artifact-digest "${CANDIDATE_DIGEST}" --version "${VERSION}"
 
@@ -996,6 +1006,7 @@ jobs:
             --candidate-dir "${CANDIDATE_DIR}" --output-dir "${PACKAGE_DIR}" \
             --rights-receipt "${RIGHTS_RECEIPT}" \
             --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
             --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}"
 
@@ -1044,6 +1055,7 @@ jobs:
             --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_RECEIPT}" \
             --receipt "${RESUME_DIR}/pypi-upload-receipt.json" \
             --channel pypi --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
             --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}" \
             --promotion-run-id "${PRIOR_RUN_ID}" --promotion-run-attempt "${PRIOR_RUN_ATTEMPT}"
@@ -1080,6 +1092,7 @@ jobs:
             --channel pypi \
             --receipt "${RECEIPT_DIR}/pypi-upload-receipt.json" \
             --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
             --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}" \
             --promotion-run-id "${GITHUB_RUN_ID}" --promotion-run-attempt "${GITHUB_RUN_ATTEMPT}"
@@ -1233,7 +1246,8 @@ jobs:
           python scripts/dev/software_promotion.py verify-receipt \
             --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
             --receipt "${PRODUCTION_RECEIPT}" --channel pypi --source-sha "${SOURCE_SHA}" \
-            --candidate-run-id "${CANDIDATE_RUN_ID}" --candidate-artifact-id "${CANDIDATE_ARTIFACT_ID}" \
+            --candidate-run-id "${CANDIDATE_RUN_ID}" --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${CANDIDATE_ARTIFACT_ID}" \
             --candidate-artifact-name "${CANDIDATE_ARTIFACT_NAME}" \
             --candidate-artifact-digest "${CANDIDATE_ARTIFACT_DIGEST}" --version "${VERSION}" \
             --promotion-run-id "${GITHUB_RUN_ID}" --promotion-run-attempt "${GITHUB_RUN_ATTEMPT}"
@@ -1243,6 +1257,7 @@ jobs:
             --production-run-attempt "${GITHUB_RUN_ATTEMPT}" --channel pypi \
             --download-dir "${INDEX_ROOT}" --receipt "${COLD_RECEIPT}" \
             --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
             --candidate-artifact-id "${CANDIDATE_ARTIFACT_ID}" --candidate-artifact-name "${CANDIDATE_ARTIFACT_NAME}" \
             --candidate-artifact-digest "${CANDIDATE_ARTIFACT_DIGEST}" --version "${VERSION}"
 

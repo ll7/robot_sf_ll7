@@ -21,6 +21,20 @@ VALIDATORS = (
     "archive-license",
     "wheel-install",
 )
+SUPPORTED_EXTRAS = (
+    "viz",
+    "maps",
+    "benchmark",
+    "training",
+    "gpu",
+    "recurrent",
+    "progress",
+    "analytics",
+    "browser",
+    "sacadrl",
+    "socnav",
+    "criticality",
+)
 
 
 def _run_helper(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -52,22 +66,10 @@ def _source_repo(path: Path) -> tuple[Path, str]:
     return path, sha
 
 
-def _distributions(path: Path, version: str = "0.0.6") -> Path:
+def _distributions(
+    path: Path, version: str = "0.0.6", extras: tuple[str, ...] = SUPPORTED_EXTRAS
+) -> Path:
     path.mkdir()
-    extras = (
-        "viz",
-        "maps",
-        "benchmark",
-        "training",
-        "gpu",
-        "recurrent",
-        "progress",
-        "analytics",
-        "browser",
-        "sacadrl",
-        "socnav",
-        "criticality",
-    )
     extra_metadata = "".join(f"Provides-Extra: {extra}\n" for extra in extras)
     wheel = path / f"robot_sf-{version}-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
@@ -114,9 +116,14 @@ def _raw_sbom(path: Path) -> Path:
     return path
 
 
-def _candidate(tmp_path: Path, *, include_materialization: bool = False) -> tuple[Path, str, Path]:
+def _candidate(
+    tmp_path: Path,
+    *,
+    include_materialization: bool = False,
+    extras: tuple[str, ...] = SUPPORTED_EXTRAS,
+) -> tuple[Path, str, Path]:
     source, source_sha = _source_repo(tmp_path / "source")
-    dist = _distributions(tmp_path / "dist")
+    dist = _distributions(tmp_path / "dist", extras=extras)
     raw_sbom = _raw_sbom(tmp_path / "raw-sbom.json")
     bundle = tmp_path / "bundle"
     args = [
@@ -201,8 +208,8 @@ def _candidate(tmp_path: Path, *, include_materialization: bool = False) -> tupl
                         "viz",
                         "maps",
                         "benchmark",
-                        "training",
                         "gpu",
+                        "training",
                         "recurrent",
                         "progress",
                         "analytics",
@@ -321,6 +328,8 @@ def _candidate_args(source_sha: str, bundle: Path) -> list[str]:
         source_sha,
         "--candidate-run-id",
         "123456",
+        "--candidate-run-attempt",
+        "1",
         "--candidate-artifact-id",
         "987654",
         "--candidate-artifact-name",
@@ -460,6 +469,82 @@ def test_candidate_verification_rejects_core_only_dependency_roster(tmp_path: Pa
     rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
     assert rejected.returncode == 1
     assert "profile roster" in rejected.stderr
+
+
+def test_candidate_verification_rejects_rebound_unsupported_distribution_extras(
+    tmp_path: Path,
+) -> None:
+    """Reject rllib/orca even when the candidate and rights bindings are freshly generated."""
+
+    for unsupported in ("rllib", "orca", "future-extra"):
+        case_dir = tmp_path / unsupported
+        case_dir.mkdir()
+        _source, source_sha, bundle = _candidate(
+            case_dir,
+            extras=SUPPORTED_EXTRAS + (unsupported,),
+        )
+        rejected = _run_helper(
+            "verify-candidate", *_candidate_args(source_sha, bundle), check=False
+        )
+        assert rejected.returncode == 1
+        assert "closed supported surface" in rejected.stderr
+
+
+def test_candidate_verification_rejects_rebound_manifest_attempt_drift(tmp_path: Path) -> None:
+    """A fully rebound manifest cannot relabel the authoritative producer attempt."""
+
+    _source, source_sha, bundle = _candidate(tmp_path)
+    manifest_path = bundle / "candidate-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["workflow"]["run_attempt"] = 2
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    rights_dir = bundle.parent / "rights-admission-artifact"
+    report_path = rights_dir / "dependency-license-inventory.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["candidate_binding"]["manifest_sha256"] = manifest_sha256
+    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    receipt_path = rights_dir / "rights-admission.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["candidate"]["manifest_sha256"] = manifest_sha256
+    receipt["supported_dependency_gate"]["candidate_manifest_sha256"] = manifest_sha256
+    receipt["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
+        report_path.read_bytes()
+    ).hexdigest()
+    receipt_path.write_text(
+        json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    rejected = _run_helper(
+        "verify-candidate", *_candidate_args(source_sha, bundle), check=False
+    )
+    assert rejected.returncode == 1
+    assert "run attempt" in rejected.stderr
+
+
+def test_candidate_verification_rejects_rebound_embedded_profile_roster(tmp_path: Path) -> None:
+    """Refreshing report and receipt hashes must not authorize an unsupported profile."""
+
+    _source, source_sha, bundle = _candidate(tmp_path)
+    rights_dir = bundle.parent / "rights-admission-artifact"
+    report_path = rights_dir / "dependency-license-inventory.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["profile_manifest"]["profile_ids"] = [*SUPPORTED_EXTRAS, "core", "rllib"]
+    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    receipt_path = rights_dir / "rights-admission.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
+        report_path.read_bytes()
+    ).hexdigest()
+    receipt_path.write_text(
+        json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    rejected = _run_helper(
+        "verify-candidate", *_candidate_args(source_sha, bundle), check=False
+    )
+    assert rejected.returncode == 1
+    assert "embedded profile roster" in rejected.stderr
 
 
 def test_candidate_validation_roster_allows_strict_rights_upgrade(tmp_path: Path) -> None:

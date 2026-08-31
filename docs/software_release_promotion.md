@@ -5,7 +5,7 @@ software candidate from the build-once workflow. It does not rebuild the
 package. Every job rechecks the candidate manifest, the GitHub artifact ID,
 name, archive digest, source commit, version, wheel/sdist hashes, SBOM, and
 provenance before it can use the bytes. It also requires an independent,
-successful rights-clean admission from #8149; protected-environment setup or a
+successful rights-clean admission from the sanctioned candidate workflow; protected-environment setup or a
 caller-provided JSON file cannot clear unresolved release rights.
 
 This is the software-package lane, separate from the benchmark-data release
@@ -31,13 +31,13 @@ not put a token in workflow inputs, artifacts, comments, or logs.
 
 The package names must be reserved and the final metadata/rights candidate
 must be accepted before running the workflow. In particular, this workflow
-does not bypass #8019, #8017, or the sanitized source candidate from #8149.
+does not bypass #8019, #8017, or the sanitized source candidate gate.
 
 ## Rights-clean admission is mandatory
 
 The current broad development tree is not eligible for package publication.
-The dispatch form therefore requires four additional values for the exact
-GitHub artifact produced by the sanctioned #8149 workflow:
+The dispatch form therefore requires five additional values for the exact
+GitHub artifact produced by the sanctioned candidate workflow:
 `rights_admission_run_id`, `rights_admission_run_attempt`, `rights_admission_artifact_id`,
 `rights_admission_artifact_name`, and `rights_admission_artifact_digest`.
 The producer run must be a successful completed
@@ -46,7 +46,7 @@ the sanctioned direct `workflow_dispatch` event. Every consumer
 downloads that artifact by ID, checks its API ID/name/digest/run/head SHA,
 repository, workflow identity, event, and run attempt, and verifies the
 workflow run conclusion before reading the receipt. The current `main` copy
-is reusable-only and has no in-repository caller; #8149 must provide the
+is reusable-only and has no in-repository caller; the producer must provide the
 reviewed sanitized direct-dispatch producer before this promotion can be
 dispatched with real inputs. A reusable `workflow_call` producer is not
 accepted without a separately bound, reviewed caller identity.
@@ -73,13 +73,13 @@ receipt field containing only a claimed report digest is insufficient. A
 rights-only receipt without this zero-unresolved dependency admission is not
 a software release admission and is rejected. The publisher validates all
 bindings in every package-producing job; it never accepts a locally authored
-or caller-provided rights assertion. Until #8149 and #8021 emit this complete
+or caller-provided rights assertion. Until the producer and #8021 emit this complete
 receipt, the promotion workflow is intentionally technically ineligible and
 cannot upload the current candidate.
 
 ## First promotion
 
-1. Run the rights-clean candidate workflow from #8149 and retain its exact
+1. Run the rights-clean candidate workflow and retain its exact
    rights-admission artifact identity. Then run the reusable
    [`software-candidate.yml`](../.github/workflows/software-candidate.yml)
    workflow at the same reviewed source ref. Record its exact artifact ID, artifact

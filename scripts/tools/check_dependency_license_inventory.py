@@ -21,9 +21,14 @@ import importlib.metadata
 import json
 import platform
 import re
+import stat
 import sys
+import tarfile
 import tomllib
+import zipfile
 from collections import Counter, defaultdict, deque
+from email.parser import BytesParser
+from email.policy import default as email_policy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote, urlsplit
@@ -47,6 +52,22 @@ _REVIEW_MARKERS = (
     "non commercial",
     "no redistribution",
 )
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_CANDIDATE_MANIFEST_NAME = "candidate-manifest.json"
+_CANDIDATE_SCHEMA_VERSION = "robot_sf.software_candidate.v1"
+_CANDIDATE_PROVENANCE_VERSION = "robot_sf.software_candidate.provenance.v1"
+_CANDIDATE_MEMBER_KINDS = ("wheel", "sdist", "sbom", "provenance")
+_CANDIDATE_REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+_CANDIDATE_SOURCE_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_CANDIDATE_RUN_ID_RE = re.compile(r"^[1-9][0-9]*$")
+_CANDIDATE_VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+!_-]*$")
+_CANDIDATE_VALIDATION_COMMANDS = (
+    ("version-alignment", "python scripts/dev/check_version_alignment.py"),
+    ("metadata", "twine check --strict $DIST_DIR/*.whl $DIST_DIR/*.tar.gz"),
+    ("archive-license", "python scripts/tools/check_distribution_licenses.py $DIST_DIR"),
+    ("wheel-install", "bash scripts/validation/wheel_install_smoke.sh $DIST_DIR/robot_sf-*.whl"),
+)
+_CANDIDATE_SDIST_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz")
 _REQUIREMENT_RE = re.compile(
     r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)"
     r"(?:\[(?P<extras>[A-Za-z0-9._,-]+)\])?"
@@ -391,6 +412,502 @@ def _observed_distributions(
     for values in observed.values():
         values.sort(key=lambda item: (str(item.version), str(item.name).lower()))
     return dict(observed)
+
+
+def _candidate_archive_name(name: str, *, archive: Path) -> str:
+    """Normalize one candidate archive member name and reject unsafe paths."""
+    normalized = name.replace("\\", "/")
+    parts = normalized.rstrip("/").split("/")
+    if (
+        not normalized
+        or normalized.startswith("/")
+        or not parts
+        or any(
+            not part
+            or part in {".", ".."}
+            or ":" in part
+            or part.endswith((".", " "))
+            or any(ord(character) < 0x20 or ord(character) == 0x7F for character in part)
+            for part in parts
+        )
+    ):
+        raise ValueError(f"{archive.name}: unsafe candidate archive member path: {name!r}")
+    return "/".join(parts)
+
+
+def _candidate_metadata(raw: bytes, *, archive: Path) -> dict[str, Any]:
+    """Read the package identity and declared extras from an archive metadata file."""
+    message = BytesParser(policy=email_policy).parsebytes(raw)
+    name = message.get("Name")
+    version = message.get("Version")
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError(f"{archive.name}: archive metadata has no Name field")
+    if not isinstance(version, str) or not version.strip():
+        raise ValueError(f"{archive.name}: archive metadata has no Version field")
+    requires_dist = sorted(
+        str(value).strip()
+        for value in (message.get_all("Requires-Dist") or [])
+        if str(value).strip()
+    )
+    provides_extra = sorted(
+        str(value).strip().lower()
+        for value in (message.get_all("Provides-Extra") or [])
+        if str(value).strip()
+    )
+    return {
+        "name": name,
+        "normalized_name": _canonicalize_name(name),
+        "version": version,
+        "requires_dist": requires_dist,
+        "provides_extra": provides_extra,
+    }
+
+
+def _candidate_zip_infos(archive: Path) -> tuple[list[zipfile.ZipInfo], list[str]]:
+    """Read and validate the member names of a candidate zip archive."""
+    with zipfile.ZipFile(archive) as source:
+        infos = source.infolist()
+        names = [_candidate_archive_name(info.filename, archive=archive) for info in infos]
+        if len(names) != len(set(names)):
+            raise ValueError(f"{archive.name}: candidate archive has duplicate members")
+        if any(stat.S_ISLNK(info.external_attr >> 16) for info in infos):
+            raise ValueError(f"{archive.name}: candidate archive contains a symlink")
+        return infos, names
+
+
+def _candidate_zip_metadata(archive: Path, *, member_suffix: str) -> dict[str, Any]:
+    """Read one metadata member from a candidate wheel or zip sdist."""
+    try:
+        infos, names = _candidate_zip_infos(archive)
+        matches = [
+            (info, name)
+            for info, name in zip(infos, names, strict=True)
+            if name.count("/") == 1 and name.endswith(member_suffix)
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                f"{archive.name}: expected one {member_suffix} member; found {len(matches)}"
+            )
+        with zipfile.ZipFile(archive) as source:
+            return _candidate_metadata(source.read(matches[0][0]), archive=archive)
+    except ValueError:
+        raise
+    except (OSError, zipfile.BadZipFile, KeyError) as exc:
+        raise ValueError(f"cannot read candidate zip metadata from {archive}: {exc}") from exc
+
+
+def _candidate_tar_metadata(archive: Path) -> dict[str, Any]:
+    """Read one root PKG-INFO member from a candidate tar sdist."""
+    try:
+        with tarfile.open(archive, mode="r:*") as source:
+            members = source.getmembers()
+            names = [_candidate_archive_name(member.name, archive=archive) for member in members]
+            if len(names) != len(set(names)):
+                raise ValueError(f"{archive.name}: candidate archive has duplicate members")
+            non_regular = [
+                member.name for member in members if not member.isfile() and not member.isdir()
+            ]
+            if non_regular:
+                raise ValueError(
+                    f"{archive.name}: candidate archive has non-regular members: "
+                    f"{', '.join(sorted(non_regular))}"
+                )
+            matches = [
+                (member, name)
+                for member, name in zip(members, names, strict=True)
+                if name.count("/") == 1 and name.endswith("/PKG-INFO")
+            ]
+            if len(matches) != 1:
+                raise ValueError(
+                    f"{archive.name}: expected one root PKG-INFO member; found {len(matches)}"
+                )
+            extracted = source.extractfile(matches[0][0])
+            if extracted is None:
+                raise ValueError(f"{archive.name}: cannot read root PKG-INFO")
+            return _candidate_metadata(extracted.read(), archive=archive)
+    except ValueError:
+        raise
+    except (OSError, tarfile.TarError) as exc:
+        raise ValueError(f"cannot read candidate sdist metadata from {archive}: {exc}") from exc
+
+
+def _candidate_archive_metadata(archive: Path, kind: str) -> dict[str, Any]:
+    """Read exactly one root package metadata member from a candidate archive."""
+    if kind == "wheel":
+        return _candidate_zip_metadata(archive, member_suffix=".dist-info/METADATA")
+    if kind != "sdist":
+        raise ValueError(f"unsupported candidate archive kind: {kind}")
+    if archive.name.endswith(".zip"):
+        return _candidate_zip_metadata(archive, member_suffix="/PKG-INFO")
+    return _candidate_tar_metadata(archive)
+
+
+def _candidate_member_path(
+    bundle: Path,
+    member: Any,
+    *,
+    expected_kind: str,
+) -> tuple[Path, dict[str, Any]]:
+    """Validate one candidate manifest member and return its bound file."""
+    if not isinstance(member, dict):
+        raise ValueError(f"candidate {expected_kind} member is not an object")
+    filename = member.get("filename")
+    digest = member.get("sha256")
+    size = member.get("size")
+    if (
+        not isinstance(filename, str)
+        or not filename
+        or filename in {".", "..", _CANDIDATE_MANIFEST_NAME}
+        or Path(filename).name != filename
+        or "\\" in filename
+        or not isinstance(digest, str)
+        or _SHA256_RE.fullmatch(digest) is None
+        or not isinstance(size, int)
+        or isinstance(size, bool)
+        or size < 1
+    ):
+        raise ValueError(f"candidate {expected_kind} member has an invalid binding")
+    path = bundle / filename
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"candidate {expected_kind} member is not a regular file: {filename}")
+    actual_size = path.stat().st_size
+    actual_digest = _sha256_file(path)
+    if actual_size != size or actual_digest != digest:
+        raise ValueError(
+            f"candidate {expected_kind} member drift: {filename} expected "
+            f"size={size} sha256={digest}, found size={actual_size} sha256={actual_digest}"
+        )
+    return path, {"filename": filename, "kind": expected_kind, "sha256": digest, "size": size}
+
+
+def _candidate_validation_payload() -> dict[str, Any]:
+    """Return the canonical software-candidate validation roster."""
+    return {
+        "checks": [
+            {"command": command, "id": identifier, "status": "passed"}
+            for identifier, command in _CANDIDATE_VALIDATION_COMMANDS
+        ],
+        "status": "passed",
+    }
+
+
+def _candidate_manifest_contract(  # noqa: C901, PLR0912
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate the closed v1 candidate manifest shape before binding its bytes."""
+    expected_keys = {
+        "schema_version",
+        "repository",
+        "source_sha",
+        "workflow",
+        "package",
+        "validation",
+        "members",
+    }
+    if (
+        set(manifest) != expected_keys
+        or manifest.get("schema_version") != _CANDIDATE_SCHEMA_VERSION
+    ):
+        raise ValueError("candidate manifest has missing or unclassified contract fields")
+    repository = manifest.get("repository")
+    if not isinstance(repository, str) or _CANDIDATE_REPOSITORY_RE.fullmatch(repository) is None:
+        raise ValueError("candidate manifest repository identity is invalid")
+    source_sha = manifest.get("source_sha")
+    if not isinstance(source_sha, str) or _CANDIDATE_SOURCE_SHA_RE.fullmatch(source_sha) is None:
+        raise ValueError("candidate manifest source SHA is invalid")
+    workflow = manifest.get("workflow")
+    if (
+        not isinstance(workflow, dict)
+        or set(workflow) != {"run_id", "run_attempt"}
+        or not isinstance(workflow.get("run_id"), str)
+        or _CANDIDATE_RUN_ID_RE.fullmatch(workflow["run_id"]) is None
+        or not isinstance(workflow.get("run_attempt"), int)
+        or isinstance(workflow["run_attempt"], bool)
+        or workflow["run_attempt"] < 1
+    ):
+        raise ValueError("candidate manifest workflow identity is invalid")
+    package = manifest.get("package")
+    if (
+        not isinstance(package, dict)
+        or set(package) != {"name", "version"}
+        or package.get("name") != "robot_sf"
+        or not isinstance(package.get("version"), str)
+        or _CANDIDATE_VERSION_RE.fullmatch(package["version"]) is None
+    ):
+        raise ValueError("candidate manifest package identity is invalid")
+    if manifest.get("validation") != _candidate_validation_payload():
+        raise ValueError("candidate manifest validation roster is invalid")
+    members = manifest.get("members")
+    if not isinstance(members, list) or len(members) != len(_CANDIDATE_MEMBER_KINDS):
+        raise ValueError("candidate manifest must bind exactly four payload members")
+    filenames: set[str] = set()
+    for member, expected_kind in zip(members, _CANDIDATE_MEMBER_KINDS, strict=True):
+        if not isinstance(member, dict) or set(member) != {"filename", "kind", "sha256", "size"}:
+            raise ValueError("candidate manifest member record is invalid")
+        filename = member["filename"]
+        if (
+            not isinstance(filename, str)
+            or not filename
+            or filename in {".", "..", _CANDIDATE_MANIFEST_NAME}
+            or Path(filename).name != filename
+            or "\\" in filename
+        ):
+            raise ValueError("candidate manifest member filename is unsafe or reserved")
+        if member["kind"] != expected_kind:
+            raise ValueError("candidate manifest member kinds or ordering are invalid")
+        if not isinstance(member["sha256"], str) or _SHA256_RE.fullmatch(member["sha256"]) is None:
+            raise ValueError(f"candidate member {filename} has an invalid SHA-256")
+        if (
+            not isinstance(member["size"], int)
+            or isinstance(member["size"], bool)
+            or member["size"] < 1
+        ):
+            raise ValueError(f"candidate member {filename} has an invalid size")
+        filenames.add(filename)
+    if len(filenames) != len(members):
+        raise ValueError("candidate manifest contains duplicate filenames")
+    if members[2]["filename"] != f"robot_sf-{package['version']}.cyclonedx.json":
+        raise ValueError("candidate manifest SBOM filename is invalid")
+    if members[3]["filename"] != "candidate-provenance.json":
+        raise ValueError("candidate manifest provenance filename is invalid")
+    return package
+
+
+def _candidate_manifest_members(
+    bundle: Path,
+    manifest: dict[str, Any],
+) -> tuple[dict[str, Path], dict[str, dict[str, Any]]]:
+    """Validate and resolve all members named by a candidate manifest."""
+    members = manifest.get("members")
+    if not isinstance(members, list) or not members:
+        raise ValueError("candidate manifest has no member list")
+    members_by_kind: dict[str, dict[str, Any]] = {}
+    for member in members:
+        if not isinstance(member, dict) or not isinstance(member.get("kind"), str):
+            raise ValueError("candidate manifest contains an unclassified member")
+        kind = member["kind"]
+        if kind in members_by_kind:
+            raise ValueError(f"candidate manifest has duplicate {kind} members")
+        members_by_kind[kind] = member
+    for kind in ("wheel", "sdist", "sbom", "provenance"):
+        if kind not in members_by_kind:
+            raise ValueError(f"candidate manifest is missing its {kind} member")
+    expected_names = {_CANDIDATE_MANIFEST_NAME}
+    paths_by_kind: dict[str, Path] = {}
+    bound_members: dict[str, dict[str, Any]] = {}
+    for kind, member in members_by_kind.items():
+        path, bound = _candidate_member_path(bundle, member, expected_kind=kind)
+        paths_by_kind[kind] = path
+        bound_members[kind] = bound
+        expected_names.add(bound["filename"])
+    actual_names = {path.name for path in bundle.iterdir()}
+    if actual_names != expected_names:
+        missing = sorted(expected_names - actual_names)
+        unclassified = sorted(actual_names - expected_names)
+        raise ValueError(
+            "candidate bundle membership drift "
+            f"(missing={missing or 'none'}, unclassified={unclassified or 'none'})"
+        )
+    return paths_by_kind, bound_members
+
+
+def _candidate_archive_contract(
+    paths_by_kind: dict[str, Path],
+    package: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Validate matching wheel and sdist metadata for a candidate package."""
+    wheel = paths_by_kind["wheel"]
+    if not wheel.name.endswith(".whl"):
+        raise ValueError(f"candidate wheel has an unsupported filename: {wheel.name}")
+    wheel_parts = wheel.name.removesuffix(".whl").split("-")
+    if (
+        len(wheel_parts) < 5
+        or wheel_parts[0] != "robot_sf"
+        or wheel_parts[1] != package["version"].replace("-", "_")
+    ):
+        raise ValueError(f"candidate wheel filename does not match package version: {wheel.name}")
+    sdist = paths_by_kind["sdist"]
+    if not any(
+        sdist.name == f"robot_sf-{package['version']}{suffix}"
+        for suffix in _CANDIDATE_SDIST_SUFFIXES
+    ):
+        raise ValueError(f"candidate sdist filename does not match package version: {sdist.name}")
+    wheel_metadata = _candidate_archive_metadata(paths_by_kind["wheel"], "wheel")
+    sdist_metadata = _candidate_archive_metadata(paths_by_kind["sdist"], "sdist")
+    for label, metadata in (("wheel", wheel_metadata), ("sdist", sdist_metadata)):
+        if metadata["normalized_name"] != "robot-sf":
+            raise ValueError(f"candidate {label} metadata is not for robot_sf")
+        if metadata["version"] != package["version"]:
+            raise ValueError(
+                f"candidate {label} version {metadata['version']!r} does not match "
+                f"manifest version {package['version']!r}"
+            )
+    if set(wheel_metadata["provides_extra"]) != set(sdist_metadata["provides_extra"]):
+        raise ValueError("candidate wheel and sdist advertise different optional extras")
+    wheel_names = {
+        _canonicalize_name(value.split("[", maxsplit=1)[0].split(";", maxsplit=1)[0])
+        for value in wheel_metadata["requires_dist"]
+    }
+    sdist_names = {
+        _canonicalize_name(value.split("[", maxsplit=1)[0].split(";", maxsplit=1)[0])
+        for value in sdist_metadata["requires_dist"]
+    }
+    if wheel_names != sdist_names:
+        raise ValueError("candidate wheel and sdist advertise different direct dependencies")
+    return wheel_metadata, sdist_metadata
+
+
+def _candidate_provenance_contract(
+    path: Path,
+    manifest: dict[str, Any],
+) -> None:
+    """Verify that candidate provenance exactly binds the manifest subjects."""
+    provenance = _read_json(path)
+    members = manifest["members"]
+    expected = {
+        "build": {
+            "command": "cd $BUILD_SOURCE && uv build --out-dir $DIST_DIR",
+            "count": 1,
+            "source_role": "disposable-exact-commit",
+        },
+        "package": manifest["package"],
+        "repository": manifest["repository"],
+        "sbom": members[2],
+        "schema_version": _CANDIDATE_PROVENANCE_VERSION,
+        "source_sha": manifest["source_sha"],
+        "subjects": [members[0], members[1]],
+        "validation": manifest["validation"],
+        "workflow": manifest["workflow"],
+    }
+    if provenance != expected:
+        raise ValueError("candidate provenance does not exactly bind the manifest subjects")
+
+
+def _candidate_sbom_components(path: Path, package: dict[str, Any]) -> set[tuple[str, str]]:
+    """Read a normalized candidate SBOM and return its component identities."""
+    sbom = _read_json(path)
+    if (
+        sbom.get("bomFormat") != "CycloneDX"
+        or sbom.get("specVersion") != "1.5"
+        or sbom.get("version") != 1
+        or "serialNumber" in sbom
+    ):
+        raise ValueError("candidate SBOM must be CycloneDX 1.5 document version 1")
+    sbom_metadata = sbom.get("metadata")
+    if not isinstance(sbom_metadata, dict) or "timestamp" in sbom_metadata:
+        raise ValueError("candidate SBOM metadata is not deterministic")
+    root_component = sbom_metadata.get("component") if isinstance(sbom_metadata, dict) else None
+    if (
+        not isinstance(root_component, dict)
+        or _canonicalize_name(str(root_component.get("name", ""))) != "robot-sf"
+        or root_component.get("version") != package["version"]
+    ):
+        raise ValueError("candidate SBOM root identity does not match the archives")
+    components = sbom.get("components")
+    if not isinstance(components, list) or not isinstance(sbom.get("dependencies"), list):
+        raise ValueError("candidate SBOM must contain components and dependencies arrays")
+    identities: set[tuple[str, str]] = set()
+    for component in components:
+        if not isinstance(component, dict):
+            raise ValueError("candidate SBOM contains an unclassified component")
+        name = component.get("name")
+        version = component.get("version")
+        if not isinstance(name, str) or not name.strip() or not isinstance(version, str):
+            raise ValueError("candidate SBOM component is missing name or version")
+        identity = (_canonicalize_name(name), version)
+        if identity in identities:
+            raise ValueError(f"candidate SBOM contains duplicate component: {name}@{version}")
+        identities.add(identity)
+    return identities
+
+
+def _candidate_bundle_binding(  # noqa: C901
+    bundle_path: Path,
+    *,
+    selected_profile_ids: set[str],
+    selected_package_ids: set[str],
+    all_packages: dict[str, dict[str, Any]],
+    profiles: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Bind a candidate bundle's archives and SBOM to selected lock closures."""
+    if bundle_path.is_symlink() or not bundle_path.is_dir():
+        raise ValueError(f"candidate bundle is not a real directory: {bundle_path}")
+    bundle = bundle_path.resolve()
+    if bundle.is_symlink() or not bundle.is_dir():
+        raise ValueError(f"candidate bundle is not a real directory: {bundle_path}")
+    manifest_path = bundle / _CANDIDATE_MANIFEST_NAME
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise ValueError("candidate manifest is not a regular file")
+    manifest = _read_json(manifest_path)
+    package = _candidate_manifest_contract(manifest)
+    paths_by_kind, bound_members = _candidate_manifest_members(bundle, manifest)
+    wheel_metadata, sdist_metadata = _candidate_archive_contract(paths_by_kind, package)
+    _candidate_provenance_contract(paths_by_kind["provenance"], manifest)
+    actual_components = _candidate_sbom_components(paths_by_kind["sbom"], package)
+
+    selected_profiles = [
+        profile for profile in profiles if profile.get("id") in selected_profile_ids
+    ]
+    non_robot_roots = sorted(
+        str(profile.get("id"))
+        for profile in selected_profiles
+        if _canonicalize_name(str(profile.get("root_package", ""))) != "robot-sf"
+    )
+    if non_robot_roots:
+        raise ValueError(
+            "candidate bundle can only bind profiles rooted at robot-sf; "
+            f"non-robot profiles={non_robot_roots}"
+        )
+    expected_components: set[tuple[str, str]] = set()
+    for package_id in selected_package_ids:
+        package_row = all_packages.get(package_id)
+        if package_row is None:
+            raise ValueError(f"selected profile references an unknown lock package: {package_id}")
+        if package_row["normalized_name"] == "robot-sf":
+            continue
+        version = package_row.get("version")
+        if not isinstance(version, str) or not version:
+            raise ValueError(
+                f"selected lock package has no version for SBOM binding: {package_row['name']}"
+            )
+        expected_components.add((package_row["normalized_name"], version))
+    missing_components = sorted(expected_components - actual_components)
+    unexpected_components = sorted(actual_components - expected_components)
+    if missing_components or unexpected_components:
+        raise ValueError(
+            "candidate SBOM component closure differs from selected lock profiles "
+            f"(missing={missing_components or 'none'}, "
+            f"unexpected={unexpected_components or 'none'})"
+        )
+    expected_extras = {
+        extra for profile in selected_profiles for extra in _profile_extra_names(profile)
+    }
+    provided_extras = set(wheel_metadata["provides_extra"])
+    if not expected_extras <= provided_extras:
+        raise ValueError(
+            "candidate archives do not advertise selected extras: "
+            f"{sorted(expected_extras - provided_extras)}"
+        )
+    return {
+        "status": "bound",
+        "manifest_sha256": _sha256_file(manifest_path),
+        "repository": manifest["repository"],
+        "source_sha": manifest["source_sha"],
+        "workflow": _normalise_json(manifest["workflow"]),
+        "package": {"name": package["name"], "version": package["version"]},
+        "members": [bound_members[kind] for kind in sorted(bound_members)],
+        "archives": {"wheel": wheel_metadata, "sdist": sdist_metadata},
+        "sbom": {
+            "filename": bound_members["sbom"]["filename"],
+            "sha256": bound_members["sbom"]["sha256"],
+            "component_count": len(actual_components),
+            "component_set_sha256": _sha256_value(
+                [f"{name}@{version}" for name, version in sorted(actual_components)]
+            ),
+        },
+        "profile_ids": sorted(selected_profile_ids),
+        "expected_component_count": len(expected_components),
+    }
 
 
 def _profile_extra_names(profile: dict[str, Any]) -> set[str]:
@@ -1425,7 +1942,11 @@ def _match_package_disposition(
         failures.append(f"distribution mode {mode} is not allowed by exact policy")
     if policy.get("status") != "reviewed":
         failures.append(f"exact policy status is {policy.get('status')}")
-    if observation.get("license_expression") != policy.get("license_expression"):
+    if observation.get(
+        "metadata_binding"
+    ) != "candidate_sbom_component_identity" and observation.get(
+        "license_expression"
+    ) != policy.get("license_expression"):
         failures.append("observed license expression does not match exact policy")
     expected_profiles = set(policy.get("profiles", []))
     if not profiles <= expected_profiles:
@@ -1534,6 +2055,30 @@ def _package_observation(
     return record, failures
 
 
+def _candidate_package_observation(
+    package: dict[str, Any],
+    *,
+    candidate_version: str,
+) -> dict[str, Any]:
+    """Represent candidate-bound identity without inventing license metadata."""
+    return {
+        "observed_version": package.get("version") or candidate_version,
+        "observation_status": "artifact_bound",
+        "metadata_binding": "candidate_sbom_component_identity",
+        "license_status": "unknown",
+        "raw_license_metadata": {
+            "License-Expression": None,
+            "License": None,
+            "Classifier": [],
+        },
+        "license_expression": None,
+        "license_classifiers": [],
+        "review_reasons": [
+            "candidate SBOM binds package identity; a reviewed policy must supply license facts"
+        ],
+    }
+
+
 def _input_paths(  # noqa: C901, PLR0912
     repo_root: Path,
     manifest: dict[str, Any],
@@ -1590,15 +2135,23 @@ def _input_paths(  # noqa: C901, PLR0912
     return inputs, issues
 
 
-def build_inventory(  # noqa: C901, PLR0915
+def build_inventory(  # noqa: C901, PLR0912, PLR0915
     repo_root: Path,
     *,
     distributions: Iterable[Any] | None = None,
     profile_manifest_path: Path | None = None,
     policy_path: Path | None = None,
     generator_path: Path | None = None,
+    selected_profile_ids: Iterable[str] | None = None,
+    candidate_bundle_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Build a lock/profile/environment inventory without network or writes."""
+    """Build a lock/profile/environment inventory without network or writes.
+
+    By default every declared profile is audited. ``selected_profile_ids`` narrows the
+    strict release surface while retaining all declared profiles and lock rows in the
+    report. ``candidate_bundle_path`` additionally binds the selected lock closure to
+    the exact wheel, sdist, and SBOM admitted by a software-candidate manifest.
+    """
     repo_root = repo_root.resolve()
     manifest_path = profile_manifest_path or (repo_root / CANONICAL_PROFILE_MANIFEST)
     policy_file = policy_path or repo_root / CANONICAL_POLICY
@@ -1612,6 +2165,19 @@ def build_inventory(  # noqa: C901, PLR0915
         if isinstance(profile, dict) and isinstance(profile.get("id"), str)
     ]
     structural_issues = _validate_manifest(manifest, root_document)
+    profile_id_set = {profile["id"] for profile in profiles}
+    if selected_profile_ids is None:
+        selected_ids = set(profile_id_set)
+    else:
+        selected_ids = {str(profile_id) for profile_id in selected_profile_ids}
+        if not selected_ids:
+            structural_issues.append("selected profile surface cannot be empty")
+        structural_issues.extend(
+            f"selected profile does not exist: {profile_id}"
+            for profile_id in sorted(selected_ids - profile_id_set)
+        )
+        selected_ids &= profile_id_set
+    selected_profiles = [profile for profile in profiles if profile["id"] in selected_ids]
     unrepresented_rules, unrepresented_fallback, unrepresented_policy_issues = (
         _validate_unrepresented_policy(manifest)
     )
@@ -1643,6 +2209,7 @@ def build_inventory(  # noqa: C901, PLR0915
 
     profile_results: list[dict[str, Any]] = []
     package_profiles: dict[str, set[str]] = defaultdict(set)
+    selected_package_profiles: dict[str, set[str]] = defaultdict(set)
     resolution_failures: list[str] = []
     for profile in profiles:
         lockfile = profile.get("lockfile")
@@ -1651,13 +2218,39 @@ def build_inventory(  # noqa: C901, PLR0915
         profile_results.append(result)
         for package_id in result.get("package_ids", []):
             package_profiles[package_id].add(result["id"])
-        resolution_failures.extend(
-            f"{result['id']}: {failure}"
-            for failure in [
-                *result.get("missing_dependencies", []),
-                *result.get("conflicting_dependencies", []),
-            ]
-        )
+            if result["id"] in selected_ids:
+                selected_package_profiles[package_id].add(result["id"])
+        if result["id"] in selected_ids:
+            resolution_failures.extend(
+                f"{result['id']}: {failure}"
+                for failure in [
+                    *result.get("missing_dependencies", []),
+                    *result.get("conflicting_dependencies", []),
+                ]
+            )
+
+    selected_package_ids = set(selected_package_profiles)
+    selected_lockfiles = {
+        profile["lockfile"]
+        for profile in selected_profiles
+        if isinstance(profile.get("lockfile"), str)
+    }
+    candidate_binding: dict[str, Any] | None = None
+    if candidate_bundle_path is not None:
+        try:
+            candidate_binding = _candidate_bundle_binding(
+                candidate_bundle_path,
+                selected_profile_ids=selected_ids,
+                selected_package_ids=selected_package_ids,
+                all_packages=all_packages,
+                profiles=profiles,
+            )
+        except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as exc:
+            candidate_binding = {
+                "status": "blocked",
+                "failures": [str(exc)],
+            }
+            structural_issues.append(f"candidate bundle binding failed: {exc}")
 
     unrepresented_dispositions, unrepresented_context_issues = _classify_unrepresented_packages(
         list(all_packages.values()),
@@ -1670,6 +2263,15 @@ def build_inventory(  # noqa: C901, PLR0915
     )
     structural_issues.extend(unrepresented_context_issues)
     unrepresented_by_id = {record["package_id"]: record for record in unrepresented_dispositions}
+    full_surface_selection = selected_ids == profile_id_set
+    for record in unrepresented_dispositions:
+        record["surface_membership"] = (
+            "selected_profile_closure"
+            if record.get("package_id") in selected_package_ids
+            else "unresolved_membership"
+            if full_surface_selection and record.get("status") == "unresolved"
+            else "outside_selected_profiles"
+        )
     observed = _observed_distributions(distributions)
     package_records: list[dict[str, Any]] = []
     package_failures: list[str] = []
@@ -1684,13 +2286,24 @@ def build_inventory(  # noqa: C901, PLR0915
             structural_issues.append(f"no policy rule for distribution mode: {mode}")
             rule = {"id": "missing-policy-rule", "disposition": "review_required"}
         observation, failures = _package_observation(package, observed)
-        package_failures.extend(failure for failure in failures if package_id in package_profiles)
         package_profile_ids = package_profiles.get(package_id, set())
+        selected_package_profile_ids = selected_package_profiles.get(package_id, set())
+        if (
+            selected_package_profile_ids
+            and candidate_binding is not None
+            and candidate_binding.get("status") == "bound"
+        ):
+            observation = _candidate_package_observation(
+                package,
+                candidate_version=candidate_binding["package"]["version"],
+            )
+            failures = []
+        package_failures.extend(failure for failure in failures if selected_package_profile_ids)
         exact_policy, exact_failures = _match_package_disposition(
             package,
             observation,
             mode,
-            package_profile_ids,
+            selected_package_profile_ids,
             manifest.get("target", {}) if isinstance(manifest.get("target"), dict) else {},
             package_disposition_by_name,
         )
@@ -1701,6 +2314,10 @@ def build_inventory(  # noqa: C901, PLR0915
             "policy_rule_id": rule.get("id"),
             "policy_disposition": rule.get("disposition"),
             "profiles": sorted(package_profile_ids),
+            "selected_profiles": sorted(selected_package_profile_ids),
+            "surface_membership": (
+                "selected" if selected_package_profile_ids else "outside_selected_profiles"
+            ),
             "originating_extras": sorted(
                 {
                     extra
@@ -1716,18 +2333,18 @@ def build_inventory(  # noqa: C901, PLR0915
             record["exact_policy_disposition"] = exact_policy.get("disposition")
             record["exact_policy_evidence"] = exact_policy.get("evidence", [])
             record["policy_disposition"] = exact_policy.get("disposition")
-            if exact_failures:
+            if exact_failures and selected_package_profile_ids:
                 policy_failures.extend(
                     f"{package['name']}: exact policy {exact_policy['id']}: {failure}"
                     for failure in exact_failures
                 )
-            elif package_profile_ids:
+            elif not exact_failures and selected_package_profile_ids:
                 exact_policy_match_count += 1
         if package_id in unrepresented_by_id:
             record["unrepresented_disposition"] = unrepresented_by_id[package_id]
         status_counts[record["license_status"]] += 1
         if (
-            package_profile_ids
+            selected_package_profile_ids
             and exact_policy is None
             and rule.get("disposition") == "review_required"
         ):
@@ -1747,6 +2364,13 @@ def build_inventory(  # noqa: C901, PLR0915
     component_failures = [
         f"component {component['id']}: disposition is {component['disposition']}"
         for component in components
+        if component.get("id")
+        in {
+            component_id
+            for profile in selected_profiles
+            for component_id in profile.get("components", [])
+            if isinstance(component_id, str)
+        }
         if component.get("status") != "reviewed" or component.get("disposition") != "approved"
     ]
     unrepresented = [record["package_id"] for record in unrepresented_dispositions]
@@ -1754,6 +2378,7 @@ def build_inventory(  # noqa: C901, PLR0915
         f"{record['name']} ({record['lockfile']}): unrepresented lock row has no reviewed exclusion reason"
         for record in unrepresented_dispositions
         if record["status"] == "unresolved"
+        and (full_surface_selection or record.get("package_id") in selected_package_ids)
     ]
     unrepresented_reason_counts: Counter[str] = Counter(
         reason_code
@@ -1796,6 +2421,15 @@ def build_inventory(  # noqa: C901, PLR0915
             "schema_version": manifest.get("schema_version"),
             "profile_ids": [profile["id"] for profile in profiles],
         },
+        "surface": {
+            "profile_ids": sorted(selected_ids),
+            "selection": (
+                "all_declared_profiles"
+                if selected_ids == profile_id_set
+                else "explicit_profile_selection"
+            ),
+            "selected_lockfiles": sorted(selected_lockfiles),
+        },
         "policy": {
             "path": _relative_path(repo_root, policy_file),
             "schema_version": policy.get("schema_version"),
@@ -1819,6 +2453,7 @@ def build_inventory(  # noqa: C901, PLR0915
             "platform": platform.platform(),
             "machine": platform.machine(),
         },
+        "candidate_binding": candidate_binding,
         "profiles": profile_results,
         "packages": package_records,
         "unrepresented_lock_packages": unrepresented,
@@ -1836,7 +2471,10 @@ def build_inventory(  # noqa: C901, PLR0915
         "failures": failures,
         "summary": {
             "profile_count": len(profile_results),
+            "selected_profile_count": len(selected_profiles),
             "locked_package_count": len(package_records),
+            "selected_package_count": len(selected_package_ids),
+            "outside_selected_package_count": len(all_packages) - len(selected_package_ids),
             "profile_membership_edge_count": sum(
                 len(result.get("package_ids", [])) for result in profile_results
             ),
@@ -1857,6 +2495,8 @@ def build_inventory(  # noqa: C901, PLR0915
             "policy_pending_component_count": len(component_failures),
             "policy_exact_disposition_count": len(package_dispositions),
             "policy_exact_match_count": exact_policy_match_count,
+            "candidate_bound": candidate_binding is not None
+            and candidate_binding.get("status") == "bound",
             "structural_issue_count": len(set(structural_issues)),
             "unresolved_count": len(failures),
             "status": "blocked" if failures else "complete",
@@ -1864,7 +2504,12 @@ def build_inventory(  # noqa: C901, PLR0915
     }
 
 
-def check_report_freshness(repo_root: Path, report_path: Path) -> list[str]:
+def check_report_freshness(  # noqa: C901
+    repo_root: Path,
+    report_path: Path,
+    *,
+    candidate_bundle_path: Path | None = None,
+) -> list[str]:
     """Recompute every recorded input digest for an existing report.
 
     Freshness also binds the report to the canonical profile manifest and policy. A report
@@ -1897,6 +2542,34 @@ def check_report_freshness(repo_root: Path, report_path: Path) -> list[str]:
                 f"freshness digest mismatch for {item['path']}: "
                 f"report={item.get('sha256')} actual={actual}"
             )
+    recorded_candidate = report.get("candidate_binding")
+    if recorded_candidate is not None:
+        if not isinstance(recorded_candidate, dict):
+            issues.append("report contains an invalid candidate_binding record")
+        elif candidate_bundle_path is None:
+            issues.append("candidate-bound report freshness requires --candidate-bundle")
+        else:
+            surface = report.get("surface")
+            profile_ids = surface.get("profile_ids") if isinstance(surface, dict) else None
+            if not isinstance(profile_ids, list) or not all(
+                isinstance(profile_id, str) for profile_id in profile_ids
+            ):
+                issues.append("candidate-bound report has no valid selected profile surface")
+            else:
+                try:
+                    current = build_inventory(
+                        repo_root,
+                        distributions=[],
+                        selected_profile_ids=profile_ids,
+                        candidate_bundle_path=candidate_bundle_path,
+                    )
+                except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as exc:
+                    issues.append(f"candidate bundle freshness could not be checked: {exc}")
+                else:
+                    if current.get("candidate_binding") != recorded_candidate:
+                        issues.append("candidate bundle binding differs from the recorded report")
+    elif candidate_bundle_path is not None:
+        issues.append("candidate bundle supplied for a report without candidate_binding")
     return sorted(set(issues))
 
 
@@ -1928,6 +2601,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Disposition policy path, relative to --repo-root by default.",
     )
     parser.add_argument(
+        "--profile",
+        dest="profiles",
+        action="append",
+        help=(
+            "Audit one declared release profile (repeat for a union of profiles); "
+            "all profiles are retained as visible context."
+        ),
+    )
+    parser.add_argument(
+        "--candidate-bundle",
+        type=Path,
+        help=(
+            "Bind the selected profile closure to an exact software-candidate bundle "
+            "containing a wheel, sdist, provenance, and CycloneDX SBOM."
+        ),
+    )
+    parser.add_argument(
         "--check-freshness",
         type=Path,
         help="Check an existing report's recorded input digests and do not regenerate it.",
@@ -1939,11 +2629,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     repo_root = args.repo_root.resolve()
+    candidate_bundle_path = (
+        _resolve_path(repo_root, args.candidate_bundle) if args.candidate_bundle else None
+    )
 
     try:
         if args.check_freshness:
             report_path = args.check_freshness.resolve()
-            issues = check_report_freshness(repo_root, report_path)
+            issues = check_report_freshness(
+                repo_root,
+                report_path,
+                candidate_bundle_path=candidate_bundle_path,
+            )
             unresolved = _reported_unresolved_count(report_path)
             print(
                 json.dumps(
@@ -1970,6 +2667,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 _resolve_path(repo_root, args.profile_manifest) if args.profile_manifest else None
             ),
             policy_path=_resolve_path(repo_root, args.policy) if args.policy else None,
+            selected_profile_ids=args.profiles,
+            candidate_bundle_path=candidate_bundle_path,
         )
     except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as exc:
         print(f"FAIL: dependency license inventory could not be built: {exc}", file=sys.stderr)

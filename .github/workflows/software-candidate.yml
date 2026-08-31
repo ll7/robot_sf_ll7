@@ -20,6 +20,7 @@ permissions:
   contents: read
 
 env:
+  PYTHONDONTWRITEBYTECODE: "1"
   PYTHONUNBUFFERED: "1"
   SDL_VIDEODRIVER: dummy
   MPLBACKEND: Agg

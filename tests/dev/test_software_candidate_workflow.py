@@ -57,6 +57,12 @@ def test_workflow_is_reusable_single_job_and_least_privilege() -> None:
     assert "id-token" not in text.lower()
 
 
+def test_workflow_keeps_python_bytecode_outside_the_frozen_source() -> None:
+    _text, workflow = _workflow()
+
+    assert workflow["env"]["PYTHONDONTWRITEBYTECODE"] == "1"
+
+
 def test_workflow_builds_once_then_only_validates_and_admits_same_dist_bytes() -> None:
     _text, workflow = _workflow()
     steps = _steps(workflow)

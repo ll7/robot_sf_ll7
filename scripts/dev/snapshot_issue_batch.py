@@ -1062,8 +1062,9 @@ def snapshot_claimable_issues(
     ``resume_cursor`` is returned when another page exists.
 
     ``queue_completeness`` makes zero-work claims explicit: ``complete`` means the
-    ready-candidate universe was fully scanned and every live admission succeeded;
-    ``incomplete`` means the ready-candidate page was truncated or resumable; and
+    ready-candidate universe was scanned from page one and every live admission and
+    claim-state read succeeded; ``incomplete`` means the ready-candidate page was
+    truncated, resumable, or started after page one; and
     ``unavailable`` means discovery itself failed or was quota-blocked. A
     ``claimable_count == 0`` result may only be treated as ``genuine_zero_work`` when
     ``queue_completeness`` is ``complete``.
@@ -1165,33 +1166,47 @@ def snapshot_claimable_issues(
         )
     else:
         truncation_note = ""
+    claimable_issues = [
+        issue
+        for issue in issues
+        if isinstance(issue.get("admission"), dict)
+        and issue["admission"].get("ok") is True
+        and issue["admission"].get("outcome") == "ready_check_only"
+        and issue.get("dispatch_allowed", True) is not False
+    ]
+    admission_results_complete = all(
+        isinstance(issue.get("admission"), dict)
+        and issue["admission"].get("outcome") != "error"
+        and issue["admission"].get("classification") != "error"
+        and issue["admission"].get("claim_outcome")
+        in {"unclaimed", "already_claimed"}
+        for issue in snapshots
+    )
+    if not admission_results_complete:
+        queue_completeness = "unavailable"
+    elif resume_page > 1 or truncated:
+        queue_completeness = "incomplete"
+    else:
+        queue_completeness = "complete"
     return {
         **base,
         "mode": "candidate_queue",
         "legacy_mode": "claimable",
-        "queue_completeness": "incomplete" if truncated else "complete",
+        "queue_completeness": queue_completeness,
         "truncated": truncated,
         "truncation_note": truncation_note,
         "include_blocked_external": include_blocked_external,
         "candidate_count": len(issues),
-        "claimable_issues": [
-            issue
-            for issue in issues
-            if isinstance(issue.get("admission"), dict)
-            and issue["admission"].get("ok") is True
-            and issue["admission"].get("outcome") == "ready_check_only"
-        ],
-        "claimable_count": sum(
-            1
-            for issue in issues
-            if isinstance(issue.get("admission"), dict)
-            and issue["admission"].get("ok") is True
-            and issue["admission"].get("outcome") == "ready_check_only"
-        ),
+        "claimable_issues": claimable_issues,
+        "claimable_count": len(claimable_issues),
         "admission_reason_histogram": dict(
             sorted(
                 Counter(
-                    _admission_reason(issue["admission"])
+                    (
+                        str(issue.get("classification") or "blocked")
+                        if issue.get("dispatch_allowed") is False
+                        else _admission_reason(issue["admission"])
+                    )
                     for issue in snapshots
                     if isinstance(issue.get("admission"), dict)
                 ).items()

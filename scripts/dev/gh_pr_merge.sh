@@ -60,21 +60,29 @@ is_graphql_quota_failure() {
   esac
 
   [[ "$normalized" == *"graphql:"* ]] || return 1
-  [[ "$normalized" == *"rate limit"* || "$normalized" == *"quota"* ]]
+  [[ "$normalized" == *"rate limit"* ||
+    ( "$normalized" == *"quota"* &&
+      ( "$normalized" == *"exhausted"* || "$normalized" == *"exceeded"* ) ) ]]
 }
 
 repo_from_git_remote() {
-  local remote_url candidate
+  local remote_url host_path host candidate
+  local expected_host="${GH_HOST:-github.com}"
   remote_url="$(git config --get remote.origin.url 2>/dev/null || true)"
   [[ -n "$remote_url" ]] || return 1
   remote_url="${remote_url%.git}"
 
   case "$remote_url" in
     *://*/*/*)
-      candidate="${remote_url#*://}"
-      candidate="${candidate#*/}"
+      host_path="${remote_url#*://}"
+      host_path="${host_path#*@}"
+      host="${host_path%%/*}"
+      host="${host%%:*}"
+      candidate="${host_path#*/}"
       ;;
     *:*/*)
+      host="${remote_url%%:*}"
+      host="${host#*@}"
       candidate="${remote_url#*:}"
       ;;
     *)
@@ -82,6 +90,7 @@ repo_from_git_remote() {
       ;;
   esac
 
+  [[ "$host" == "$expected_host" ]] || return 1
   if [[ "$candidate" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
     printf '%s\n' "$candidate"
     return 0
@@ -235,6 +244,10 @@ if [[ -z "$repo" ]]; then
 fi
 if [[ -z "$repo" ]]; then
   printf 'ERROR: cannot resolve owner/name for the REST merge fallback.\n' >&2
+  exit 2
+fi
+if ! [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+  printf 'ERROR: invalid owner/name for the REST merge fallback: %q\n' "$repo" >&2
   exit 2
 fi
 repo_args=(--repo "$repo")

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 import numpy as np
@@ -70,6 +71,57 @@ def _require_covariance_array(value: NDArray[np.float32], *, steps: int) -> NDAr
     if np.any(np.linalg.eigvalsh(covariance) < -1e-6):
         raise ValueError("covariance matrices must be positive semidefinite")
     return covariance.astype(np.float32, copy=False)
+
+
+def _readonly_float_array(
+    name: str,
+    value: NDArray[np.float32],
+    *,
+    ndim: int,
+) -> NDArray[np.float32]:
+    """Return an owned, read-only float32 array for immutable runtime records."""
+    array = np.array(_require_float_array(name, value, ndim=ndim), copy=True)
+    array.setflags(write=False)
+    return array
+
+
+def _readonly_covariance_array(
+    value: NDArray[np.float32],
+    *,
+    steps: int,
+) -> NDArray[np.float32]:
+    """Return an owned, read-only covariance array for immutable runtime records."""
+    array = np.array(_require_covariance_array(value, steps=steps), copy=True)
+    array.setflags(write=False)
+    return array
+
+
+def _validate_mode_id(mode_id: str) -> str:
+    """Return a normalized non-empty mode identifier."""
+    if not isinstance(mode_id, str):
+        raise ValueError("mode_id must be a non-empty string")
+    normalized = mode_id.strip()
+    if not normalized:
+        raise ValueError("mode_id must be a non-empty string")
+    return normalized
+
+
+def _validate_unit_interval(name: str, value: float) -> float:
+    """Return a finite float constrained to [0, 1]."""
+    normalized = float(value)
+    if not np.isfinite(normalized):
+        raise ValueError(f"{name} must be finite")
+    if not 0.0 <= normalized <= 1.0:
+        raise ValueError(f"{name} must be in [0, 1]")
+    return normalized
+
+
+def _validate_provenance(provenance: str) -> str:
+    """Return a normalized non-empty provenance label."""
+    normalized = str(provenance).strip()
+    if not normalized:
+        raise ValueError("provenance must be a non-empty string")
+    return normalized
 
 
 def _validate_modes_sequence(
@@ -261,7 +313,7 @@ class ProbabilisticPrediction:
                     )
 
 
-@dataclass
+@dataclass(frozen=True)
 class TrajectoryMode:
     """One predicted future trajectory mode for a single pedestrian.
 
@@ -273,6 +325,7 @@ class TrajectoryMode:
         std: Per-timestep per-axis standard deviation, shape ``(T, 2)``.
         covariance: Full per-timestep covariance matrices, shape ``(T, 2, 2)``.
         intent: Optional semantic intent label (e.g. "crossing", "waiting").
+        provenance: Stable source identifier for this mode.
         metadata: Free-form key-value store for mode-specific information.
     """
 
@@ -282,38 +335,36 @@ class TrajectoryMode:
     std: NDArray[np.float32] | None = None
     covariance: NDArray[np.float32] | None = None
     intent: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+    provenance: str = "unspecified"
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Validate and defensively normalize mode fields."""
-        if not isinstance(self.mode_id, str):
-            raise ValueError("mode_id must be a non-empty string")
-        self.mode_id = self.mode_id.strip()
-        if not self.mode_id:
-            raise ValueError("mode_id must be a non-empty string")
+        object.__setattr__(self, "mode_id", _validate_mode_id(self.mode_id))
+        object.__setattr__(
+            self, "probability", _validate_unit_interval("mode probability", self.probability)
+        )
 
-        prob = float(self.probability)
-        if not np.isfinite(prob):
-            raise ValueError("mode probability must be finite")
-        if not 0.0 <= prob <= 1.0:
-            raise ValueError("mode probability must be in [0, 1]")
-        self.probability = prob
-
-        self.mean = np.array(_require_float_array("mean", self.mean, ndim=2), copy=True)
+        mean = _readonly_float_array("mean", self.mean, ndim=2)
+        object.__setattr__(self, "mean", mean)
         if self.std is not None:
-            self.std = np.array(_require_float_array("std", self.std, ndim=2), copy=True)
-            if self.std.shape != self.mean.shape:
+            std = _readonly_float_array("std", self.std, ndim=2)
+            if std.shape != mean.shape:
                 raise ValueError("std must match mean shape")
-            if np.any(self.std < 0.0):
+            if np.any(std < 0.0):
                 raise ValueError("std must be non-negative")
+            object.__setattr__(self, "std", std)
         if self.covariance is not None:
-            self.covariance = np.array(
-                _require_covariance_array(self.covariance, steps=self.mean.shape[0]),
-                copy=True,
-            )
+            cov = _readonly_covariance_array(self.covariance, steps=mean.shape[0])
+            object.__setattr__(self, "covariance", cov)
         if self.intent is not None:
-            self.intent = str(self.intent)
-        self.metadata = dict(self.metadata) if self.metadata else {}
+            object.__setattr__(self, "intent", str(self.intent))
+        object.__setattr__(self, "provenance", _validate_provenance(self.provenance))
+        object.__setattr__(
+            self,
+            "metadata",
+            MappingProxyType(dict(self.metadata)) if self.metadata else MappingProxyType({}),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable dictionary representation.
@@ -332,6 +383,7 @@ class TrajectoryMode:
             payload["covariance"] = self.covariance.tolist()
         if self.intent is not None:
             payload["intent"] = self.intent
+        payload["provenance"] = self.provenance
         if self.metadata:
             payload["metadata"] = dict(self.metadata)
         return payload
@@ -354,11 +406,12 @@ class TrajectoryMode:
             if "covariance" in payload and payload["covariance"] is not None
             else None,
             intent=payload.get("intent"),
+            provenance=str(payload.get("provenance", "unspecified")),
             metadata=dict(payload.get("metadata", {})),
         )
 
 
-@dataclass
+@dataclass(frozen=True)
 class PedestrianForecast:
     """Multimodal future trajectory forecast for a single pedestrian.
 
@@ -366,38 +419,56 @@ class PedestrianForecast:
         pedestrian_id: Track ID or index of this pedestrian.
         modes: List of distinct trajectory modes representing alternate hypotheses.
         existence_probability: Probability in [0, 1] that this pedestrian exists.
-        confidence: Overall forecast confidence in [0, 1].
-        age: Observation age / duration in seconds.
+        source_confidence: Overall source confidence in [0, 1].
+        age_steps: Non-negative integer observation age in timesteps.
         metadata: Free-form key-value store for per-pedestrian forecast data.
     """
 
     pedestrian_id: int
-    modes: list[TrajectoryMode] = field(default_factory=list)
+    modes: tuple[TrajectoryMode, ...] = field(default_factory=tuple)
     existence_probability: float = 1.0
-    confidence: float = 1.0
-    age: float = 0.0
-    metadata: dict[str, Any] = field(default_factory=dict)
+    source_confidence: float = 1.0
+    age_steps: int = 0
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Validate and defensively normalize pedestrian forecast fields."""
-        self.pedestrian_id = int(self.pedestrian_id)
+        object.__setattr__(self, "pedestrian_id", int(self.pedestrian_id))
         exist_prob = float(self.existence_probability)
         if not np.isfinite(exist_prob) or not 0.0 <= exist_prob <= 1.0:
             raise ValueError("existence_probability must be in [0, 1]")
-        self.existence_probability = exist_prob
+        object.__setattr__(self, "existence_probability", exist_prob)
 
-        conf = float(self.confidence)
+        conf = float(self.source_confidence)
         if not np.isfinite(conf) or not 0.0 <= conf <= 1.0:
-            raise ValueError("confidence must be in [0, 1]")
-        self.confidence = conf
+            raise ValueError("source_confidence must be in [0, 1]")
+        object.__setattr__(self, "source_confidence", conf)
 
-        age = float(self.age)
-        if not np.isfinite(age) or age < 0.0:
-            raise ValueError("age must be non-negative and finite")
-        self.age = age
+        age_steps = int(self.age_steps)
+        if age_steps < 0 or age_steps != self.age_steps:
+            raise ValueError("age_steps must be a non-negative integer")
+        object.__setattr__(self, "age_steps", age_steps)
 
-        self.metadata = dict(self.metadata) if self.metadata else {}
-        self.modes = _validate_modes_sequence(self.modes, self.pedestrian_id)
+        object.__setattr__(
+            self,
+            "metadata",
+            MappingProxyType(dict(self.metadata)) if self.metadata else MappingProxyType({}),
+        )
+        object.__setattr__(
+            self,
+            "modes",
+            tuple(_validate_modes_sequence(self.modes, self.pedestrian_id)),
+        )
+
+    @property
+    def track_id(self) -> int:
+        """Return the canonical track identifier."""
+        return self.pedestrian_id
+
+    @property
+    def confidence(self) -> float:
+        """Backward-readable alias for source_confidence."""
+        return self.source_confidence
 
     def primary_mode(self) -> TrajectoryMode:
         """Return the highest-probability mode, with mode_id tie-breaking.
@@ -424,8 +495,8 @@ class PedestrianForecast:
         payload: dict[str, Any] = {
             "pedestrian_id": int(self.pedestrian_id),
             "existence_probability": float(self.existence_probability),
-            "confidence": float(self.confidence),
-            "age": float(self.age),
+            "source_confidence": float(self.source_confidence),
+            "age_steps": int(self.age_steps),
             "modes": [m.to_dict() for m in self.sorted_modes()],
         }
         if self.metadata:
@@ -444,13 +515,15 @@ class PedestrianForecast:
             pedestrian_id=int(payload["pedestrian_id"]),
             modes=modes,
             existence_probability=float(payload.get("existence_probability", 1.0)),
-            confidence=float(payload.get("confidence", 1.0)),
-            age=float(payload.get("age", 0.0)),
+            source_confidence=float(
+                payload.get("source_confidence", payload.get("confidence", 1.0))
+            ),
+            age_steps=int(payload.get("age_steps", payload.get("age", 0))),
             metadata=dict(payload.get("metadata", {})),
         )
 
 
-@dataclass
+@dataclass(frozen=True)
 class MultimodalPrediction:
     """Multi-agent multimodal future trajectory prediction container.
 
@@ -464,33 +537,54 @@ class MultimodalPrediction:
         metadata: Free-form key-value store for predictor-specific metadata.
     """
 
-    forecasts: dict[int, PedestrianForecast] = field(default_factory=dict)
+    forecasts: Mapping[int, PedestrianForecast] = field(default_factory=dict)
     prediction_horizon: float = 0.0
     prediction_dt: float = 0.1
     timestamp: float = -1.0
     sample_count: int = 1
     schema_version: str = "multimodal-prediction.v1"
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Validate and defensively normalize multimodal prediction fields."""
-        self.prediction_horizon = float(self.prediction_horizon)
-        self.prediction_dt = float(self.prediction_dt)
-        self.timestamp = float(self.timestamp)
-        self.sample_count = int(self.sample_count)
-        self.schema_version = str(self.schema_version)
-        self.metadata = dict(self.metadata) if self.metadata else {}
+        prediction_horizon = float(self.prediction_horizon)
+        prediction_dt = float(self.prediction_dt)
+        object.__setattr__(self, "prediction_horizon", prediction_horizon)
+        object.__setattr__(self, "prediction_dt", prediction_dt)
+        object.__setattr__(self, "timestamp", float(self.timestamp))
+        object.__setattr__(self, "sample_count", int(self.sample_count))
+        object.__setattr__(self, "schema_version", str(self.schema_version))
+        object.__setattr__(
+            self,
+            "metadata",
+            MappingProxyType(dict(self.metadata)) if self.metadata else MappingProxyType({}),
+        )
 
-        if not np.isfinite(self.prediction_horizon) or self.prediction_horizon < 0.0:
+        if not np.isfinite(prediction_horizon) or prediction_horizon < 0.0:
             raise ValueError("prediction_horizon must be non-negative and finite")
-        if not np.isfinite(self.prediction_dt) or self.prediction_dt <= 0.0:
+        if not np.isfinite(prediction_dt) or prediction_dt <= 0.0:
             raise ValueError("prediction_dt must be positive and finite")
         if self.sample_count < 1:
             raise ValueError("sample_count must be at least 1")
 
         normalized = _normalize_forecast_mapping(self.forecasts)
-        _validate_prediction_steps(normalized, self.prediction_horizon, self.prediction_dt)
-        self.forecasts = normalized
+        _validate_prediction_steps(normalized, prediction_horizon, prediction_dt)
+        object.__setattr__(self, "forecasts", MappingProxyType(dict(normalized)))
+
+    @property
+    def dt(self) -> float:
+        """Return the canonical forecast timestep in seconds."""
+        return self.prediction_dt
+
+    @property
+    def horizon(self) -> int:
+        """Return the canonical integer horizon length in timesteps."""
+        return round(self.prediction_horizon / self.prediction_dt)
+
+    @property
+    def by_pedestrian(self) -> Mapping[int, PedestrianForecast]:
+        """Return the canonical pedestrian-keyed forecast mapping."""
+        return self.forecasts
 
     def ordered_pedestrian_ids(self) -> list[int]:
         """Return pedestrian IDs sorted in canonical ascending order.
@@ -566,7 +660,7 @@ class MultimodalPrediction:
                     covariance=primary.covariance.copy()
                     if primary.covariance is not None
                     else None,
-                    confidence=float(forecast.confidence * primary.probability),
+                    confidence=float(forecast.source_confidence * primary.probability),
                     pedestrian_id=pid,
                 )
             )
@@ -584,7 +678,8 @@ class MultimodalPrediction:
         cls,
         prediction: ProbabilisticPrediction,
         *,
-        mode_id: str = "primary",
+        mode_id: str = "unimodal",
+        provenance: str = "legacy_adapter",
     ) -> MultimodalPrediction:
         """Convert legacy unimodal ProbabilisticPrediction into MultimodalPrediction.
 
@@ -599,13 +694,14 @@ class MultimodalPrediction:
                 mean=dist.mean.copy(),
                 std=dist.std.copy() if dist.std is not None else None,
                 covariance=dist.covariance.copy() if dist.covariance is not None else None,
+                provenance=provenance,
             )
             forecast = PedestrianForecast(
                 pedestrian_id=dist.pedestrian_id,
-                modes=[mode],
+                modes=(mode,),
                 existence_probability=1.0,
-                confidence=dist.confidence,
-                age=0.0,
+                source_confidence=dist.confidence,
+                age_steps=0,
             )
             forecasts[dist.pedestrian_id] = forecast
 
@@ -621,11 +717,16 @@ class MultimodalPrediction:
 
 def as_multimodal_prediction(
     prediction: ProbabilisticPrediction | MultimodalPrediction,
+    *,
+    default_mode_id: str = "unimodal",
+    provenance: str = "legacy_adapter",
 ) -> MultimodalPrediction:
     """Normalize a prediction into canonical MultimodalPrediction format.
 
     Args:
         prediction: Either a ProbabilisticPrediction or MultimodalPrediction instance.
+        default_mode_id: Mode ID to use when adapting a legacy unimodal prediction.
+        provenance: Provenance label to use when adapting a legacy unimodal prediction.
 
     Returns:
         MultimodalPrediction: Canonical multimodal representation.
@@ -636,7 +737,11 @@ def as_multimodal_prediction(
     if isinstance(prediction, MultimodalPrediction):
         return prediction
     if isinstance(prediction, ProbabilisticPrediction):
-        return MultimodalPrediction.from_probabilistic_prediction(prediction)
+        return MultimodalPrediction.from_probabilistic_prediction(
+            prediction,
+            mode_id=default_mode_id,
+            provenance=provenance,
+        )
     raise TypeError(
         f"expected ProbabilisticPrediction or MultimodalPrediction, got {type(prediction).__name__}"
     )
@@ -670,7 +775,8 @@ def build_normalized_modes(
             NDArray[np.float32] | None,
             NDArray[np.float32] | None,
             str | None,
-            dict[str, Any],
+            str,
+            Mapping[str, Any],
         ]
     ] = []
 
@@ -682,6 +788,7 @@ def build_normalized_modes(
             std = item.std
             cov = item.covariance
             intent = item.intent
+            provenance = item.provenance
             meta = item.metadata
         elif isinstance(item, dict):
             w = float(item.get("probability", item.get("weight", 0.0)))
@@ -700,19 +807,22 @@ def build_normalized_modes(
                 else None
             )
             intent = item.get("intent")
+            provenance = str(item.get("provenance", "builder"))
             meta = dict(item.get("metadata", {}))
         else:
             raise TypeError(f"expected dict or TrajectoryMode, got {type(item).__name__}")
         weights.append(w)
-        items.append((mode_id, mean, std, cov, intent, meta))
+        items.append((mode_id, mean, std, cov, intent, provenance, meta))
 
     total_weight = sum(weights)
     if total_weight <= 0.0 or not np.isfinite(total_weight):
         raise ValueError(f"sum of mode weights must be positive and finite, got {total_weight}")
 
     normalized: list[TrajectoryMode] = []
-    for i, (mode_id, mean, std, cov, intent, meta) in enumerate(items):
+    for i, (mode_id, mean, std, cov, intent, provenance, meta) in enumerate(items):
         prob = weights[i] / total_weight
+        meta = dict(meta)
+        meta["pre_normalization_total"] = total_weight
         normalized.append(
             TrajectoryMode(
                 mode_id=mode_id,
@@ -721,6 +831,7 @@ def build_normalized_modes(
                 std=std,
                 covariance=cov,
                 intent=intent,
+                provenance=provenance,
                 metadata=meta,
             )
         )

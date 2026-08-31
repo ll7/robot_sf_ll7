@@ -60,6 +60,7 @@ def _sample_mode(
         std=std,
         covariance=cov,
         intent="cross",
+        provenance="unit_test",
     )
 
 
@@ -74,15 +75,17 @@ class TestMultimodalPredictiveTypes:
             pedestrian_id=10,
             modes=[m1, m2],
             existence_probability=0.95,
-            confidence=0.9,
-            age=1.5,
+            source_confidence=0.9,
+            age_steps=15,
         )
         assert forecast.pedestrian_id == 10
+        assert forecast.track_id == 10
         assert len(forecast.modes) == 2
         assert forecast.primary_mode().mode_id == "left"
         assert forecast.existence_probability == 0.95
+        assert forecast.source_confidence == 0.9
         assert forecast.confidence == 0.9
-        assert forecast.age == 1.5
+        assert forecast.age_steps == 15
 
         pred = MultimodalPrediction(
             forecasts={10: forecast},
@@ -147,8 +150,9 @@ class TestMultimodalPredictiveTypes:
         assert f.confidence == 0.88
         assert len(f.modes) == 1
         mode = f.modes[0]
-        assert mode.mode_id == "primary"
+        assert mode.mode_id == "unimodal"
         assert mode.probability == 1.0
+        assert mode.provenance == "legacy_adapter"
         np.testing.assert_array_equal(mode.mean, mean)
         np.testing.assert_array_equal(mode.std, std)
         np.testing.assert_array_equal(mode.covariance, cov)
@@ -251,10 +255,10 @@ class TestMultimodalPredictiveTypes:
         modes = [_sample_mode("m1", 1.0, steps=3)]
         with pytest.raises(ValueError, match="existence_probability"):
             PedestrianForecast(pedestrian_id=1, modes=modes, existence_probability=-0.1)
-        with pytest.raises(ValueError, match="confidence"):
-            PedestrianForecast(pedestrian_id=1, modes=modes, confidence=1.2)
-        with pytest.raises(ValueError, match="age"):
-            PedestrianForecast(pedestrian_id=1, modes=modes, age=-1.0)
+        with pytest.raises(ValueError, match="source_confidence"):
+            PedestrianForecast(pedestrian_id=1, modes=modes, source_confidence=1.2)
+        with pytest.raises(ValueError, match="age_steps"):
+            PedestrianForecast(pedestrian_id=1, modes=modes, age_steps=-1)
 
     def test_12_track_key_mismatch_rejected(self) -> None:
         """12. Track-key mismatch rejected."""
@@ -273,10 +277,10 @@ class TestMultimodalPredictiveTypes:
         pred = MultimodalPrediction(
             forecasts={1: forecast}, prediction_horizon=0.4, prediction_dt=0.1
         )
-        mode.mean[0, 0] = 777.0
-        assert (
-            pred.forecasts[1].modes[0].mean[0, 0] == 777.0
-        )  # mode itself was not mutated externally
+        with pytest.raises(ValueError, match="read-only"):
+            mode.mean[0, 0] = 777.0
+        with pytest.raises(TypeError):
+            pred.forecasts[1] = forecast
 
     def test_14_json_safe_export_is_deterministic_and_rejects_nonfinite(self) -> None:
         """14. JSON-safe export is deterministic and rejects non-finite values."""
@@ -359,8 +363,8 @@ class TestMultimodalPredictiveTypes:
             pedestrian_id=8,
             modes=[m1, m2],
             existence_probability=0.99,
-            confidence=0.85,
-            age=3.2,
+            source_confidence=0.85,
+            age_steps=32,
             metadata={"sensor": "lidar"},
         )
         orig = MultimodalPrediction(
@@ -385,8 +389,8 @@ class TestMultimodalPredictiveTypes:
         f_loaded = loaded.forecasts[8]
         assert f_loaded.pedestrian_id == 8
         assert f_loaded.existence_probability == orig.forecasts[8].existence_probability
-        assert f_loaded.confidence == orig.forecasts[8].confidence
-        assert f_loaded.age == orig.forecasts[8].age
+        assert f_loaded.source_confidence == orig.forecasts[8].source_confidence
+        assert f_loaded.age_steps == orig.forecasts[8].age_steps
         assert f_loaded.metadata == orig.forecasts[8].metadata
 
         assert len(f_loaded.modes) == 2
@@ -395,6 +399,7 @@ class TestMultimodalPredictiveTypes:
             load_m = f_loaded.sorted_modes()[i]
             assert load_m.mode_id == orig_m.mode_id
             assert load_m.probability == pytest.approx(orig_m.probability)
+            assert load_m.provenance == orig_m.provenance
             np.testing.assert_allclose(load_m.mean, orig_m.mean)
             assert orig_m.std is not None and load_m.std is not None
             np.testing.assert_allclose(load_m.std, orig_m.std)

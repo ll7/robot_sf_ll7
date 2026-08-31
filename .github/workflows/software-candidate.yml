@@ -1,6 +1,7 @@
 name: Build Immutable Software Candidate
 
 on:
+  workflow_dispatch:
   workflow_call:
     outputs:
       artifact-id:
@@ -21,6 +22,15 @@ on:
       candidate-tree-sha:
         description: Exact rights-scoped source candidate tree used for the build
         value: ${{ jobs.build-candidate.outputs.candidate-tree-sha }}
+      rights-artifact-id:
+        description: Exact GitHub artifact identity for the separate rights receipt
+        value: ${{ jobs.build-candidate.outputs.rights-artifact-id }}
+      rights-artifact-digest:
+        description: GitHub SHA-256 digest for the separate rights receipt artifact
+        value: ${{ jobs.build-candidate.outputs.rights-artifact-digest }}
+      rights-artifact-name:
+        description: Deterministic name of the separate rights receipt artifact
+        value: ${{ jobs.build-candidate.outputs.rights-artifact-name }}
 
 permissions:
   contents: read
@@ -44,9 +54,14 @@ jobs:
       source-sha: ${{ steps.identity.outputs.source-sha }}
       candidate-source-sha: ${{ steps.materialize.outputs.candidate-source-sha }}
       candidate-tree-sha: ${{ steps.materialize.outputs.candidate-tree-sha }}
+      rights-artifact-id: ${{ steps.upload-rights.outputs.artifact-id }}
+      rights-artifact-digest: ${{ steps.upload-rights.outputs.artifact-digest }}
+      rights-artifact-name: ${{ steps.identity.outputs.rights-artifact-name }}
     env:
       ARTIFACT_NAME: >-
         robot-sf-software-candidate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+      RIGHTS_ARTIFACT_NAME: >-
+        robot-sf-software-rights-admission-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout exact source without credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,8 +94,12 @@ jobs:
             printf 'DIST_DIR=%s/dist\n' "${candidate_root}"
             printf 'RAW_SBOM=%s/raw-sbom.cdx.json\n' "${candidate_root}"
             printf 'BUNDLE_DIR=%s/bundle\n' "${candidate_root}"
+            printf 'DEPENDENCY_REPORT=%s/dependency-license-inventory.json\n' "${candidate_root}"
+            printf 'RIGHTS_MANIFEST=%s/sanitized-candidate.json\n' "${candidate_root}"
+            printf 'RIGHTS_DIR=%s/rights-admission\n' "${candidate_root}"
           } >> "${GITHUB_ENV}"
           printf 'artifact-name=%s\n' "${ARTIFACT_NAME}" >> "${GITHUB_OUTPUT}"
+          printf 'rights-artifact-name=%s\n' "${RIGHTS_ARTIFACT_NAME}" >> "${GITHUB_OUTPUT}"
           printf 'source-sha=%s\n' "${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
 
       - name: Require hermetic exact source identity before build
@@ -118,7 +137,7 @@ jobs:
           PY
 
       - name: Prepare isolated candidate directories
-        run: mkdir -p "${DIST_DIR}" "${BUNDLE_DIR}"
+        run: mkdir -p "${DIST_DIR}" "${BUNDLE_DIR}" "${RIGHTS_DIR}"
 
       - name: Stage exact rights-scoped candidate in disposable build root
         run: >-
@@ -209,12 +228,51 @@ jobs:
           --expected-source-sha "${GITHUB_SHA}"
           --expected-workflow-run-id "${GITHUB_RUN_ID}"
 
+      - name: Generate strict supported dependency inventory from finalized candidate
+        run: >-
+          python "${BUILD_SOURCE}/scripts/tools/check_dependency_license_inventory.py"
+          --repo-root "${BUILD_SOURCE}"
+          --output "${DEPENDENCY_REPORT}"
+          --candidate-bundle "${BUNDLE_DIR}"
+          --fail-on-unresolved
+
       - name: Upload checked candidate bundle once
         id: upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: ${{ runner.temp }}/robot-sf-software-candidate/bundle/
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+          retention-days: 30
+
+      - name: Admit rights and dependency evidence into a separate receipt
+        run: >-
+          python scripts/dev/software_candidate_manifest.py rights-admission
+          --repo-root "${GITHUB_WORKSPACE}"
+          --candidate-root "${CANDIDATE_SOURCE}"
+          --materialization-report "${MATERIALIZATION_REPORT}"
+          --sanitized-manifest "${RIGHTS_MANIFEST}"
+          --candidate-bundle "${BUNDLE_DIR}"
+          --dependency-report "${DEPENDENCY_REPORT}"
+          --output-dir "${RIGHTS_DIR}"
+          --source-sha "${GITHUB_SHA}"
+          --candidate-version "${CANDIDATE_VERSION}"
+          --workflow-run-id "${GITHUB_RUN_ID}"
+          --workflow-run-attempt "${GITHUB_RUN_ATTEMPT}"
+          --candidate-artifact-id "${{ steps.upload.outputs.artifact-id }}"
+          --candidate-artifact-name "${ARTIFACT_NAME}"
+          --candidate-artifact-digest "${{ steps.upload.outputs.artifact-digest }}"
+          --policy "${GITHUB_WORKSPACE}/scripts/validation/software_release_rights_policy.v1.json"
+
+      - name: Upload rights-admission receipt separately
+        id: upload-rights
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.RIGHTS_ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/robot-sf-software-candidate/rights-admission/
           if-no-files-found: error
           compression-level: 0
           overwrite: false

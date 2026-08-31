@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 SCHEMA_VERSION = "robot-sf.dependency-license-inventory.v1"
 CANONICAL_PROFILE_MANIFEST = "scripts/validation/dependency_license_profiles.v1.json"
 CANONICAL_POLICY = "scripts/validation/dependency_license_policy.v1.json"
+CANONICAL_GENERATOR = "scripts/tools/check_dependency_license_inventory.py"
 PROFILE_SCHEMA_VERSION = "robot-sf.dependency-license-profiles.v1"
 UNREPRESENTED_POLICY_SCHEMA_VERSION = "robot-sf.dependency-license-unrepresented.v1"
 POLICY_SCHEMA_VERSION = "robot-sf.dependency-license-policy.v1"
@@ -2167,7 +2168,25 @@ def build_inventory(  # noqa: C901, PLR0912, PLR0915
     structural_issues = _validate_manifest(manifest, root_document)
     profile_id_set = {profile["id"] for profile in profiles}
     if selected_profile_ids is None:
-        selected_ids = set(profile_id_set)
+        if candidate_bundle_path is None:
+            selected_ids = set(profile_id_set)
+        else:
+            # A software candidate is the narrow core surface. Optional extras and
+            # companion profiles remain visible context but are not implicitly claimed.
+            core_profiles = [
+                profile
+                for profile in profiles
+                if profile.get("kind") == "root"
+                and profile.get("root_package") == "robot-sf"
+                and not profile.get("extras")
+            ]
+            if len(core_profiles) != 1:
+                structural_issues.append(
+                    "candidate-bound inventory requires exactly one root core profile"
+                )
+                selected_ids = set()
+            else:
+                selected_ids = {core_profiles[0]["id"]}
     else:
         selected_ids = {str(profile_id) for profile_id in selected_profile_ids}
         if not selected_ids:
@@ -2391,6 +2410,13 @@ def build_inventory(  # noqa: C901, PLR0912, PLR0915
     unrepresented_unresolved_count = sum(
         record["status"] == "unresolved" for record in unrepresented_dispositions
     )
+    effective_generator_path = generator_path
+    if effective_generator_path is None:
+        effective_generator_path = (
+            repo_root / CANONICAL_GENERATOR
+            if candidate_bundle_path is not None
+            else Path(__file__).resolve()
+        )
     inputs, input_issues = _input_paths(
         repo_root,
         manifest,
@@ -2398,7 +2424,7 @@ def build_inventory(  # noqa: C901, PLR0912, PLR0915
         profiles,
         manifest_path,
         policy_file,
-        generator_path or Path(__file__).resolve(),
+        effective_generator_path,
     )
     structural_issues.extend(input_issues)
 

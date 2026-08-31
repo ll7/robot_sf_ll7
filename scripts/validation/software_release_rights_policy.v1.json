@@ -1,0 +1,163 @@
+{
+  "$schema": "https://robot-sf.dev/schema/software_release_rights_policy.v1.schema.json",
+  "schema_version": "robot_sf.software_release_rights_policy.v1",
+  "policy_id": "robot_sf.software_release_rights_policy.v1",
+  "candidate_schema_version": "robot_sf.software_sanitized_candidate.v1",
+  "claim_boundary": "This policy admits only the regular source members selected by the reviewed software-candidate policy. It does not clear omitted assets, models, maps, recordings, datasets, benchmark evidence, or external source checkouts. Supported dependency admission is an independent fail-closed gate and is not waived by this receipt.",
+  "source_selection": {
+    "allow_globs": [
+      "pyproject.toml",
+      "uv.lock",
+      "README.md",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
+      "robot_sf/**",
+      "robot_sf_carla_bridge/**",
+      "fast-pysf/LICENSE",
+      "fast-pysf/README.md",
+      "fast-pysf/pyproject.toml",
+      "fast-pysf/uv.lock",
+      "fast-pysf/pysocialforce/**",
+      "benchmarks/**",
+      "scripts/carla_bridge/diagnose_replay_semantics.py",
+      "scripts/dev/check_version_alignment.py",
+      "scripts/dev/software_candidate_manifest.py",
+      "scripts/dev/software_candidate_manifest.v1.schema.json",
+      "scripts/tools/__init__.py",
+      "scripts/tools/check_asset_rights_inventory.py",
+      "scripts/tools/check_dependency_license_inventory.py",
+      "scripts/tools/check_distribution_licenses.py",
+      "scripts/tools/manage_external_data.py",
+      "scripts/tools/migrate_artifacts.py",
+      "scripts/validation/asset_rights_inventory.v1.yaml",
+      "scripts/validation/dependency_license_policy.v1.json",
+      "scripts/validation/dependency_license_policy.v1.schema.json",
+      "scripts/validation/dependency_license_profiles.v1.json",
+      "scripts/validation/dependency_license_profiles.v1.schema.json",
+      "scripts/validation/software_candidate_policy.v1.json",
+      "scripts/validation/software_release_rights_policy.v1.json",
+      "scripts/validation/software_release_rights_policy.v1.schema.json",
+      "scripts/validation/software_rights_admission.v1.schema.json",
+      "scripts/validation/software_sanitized_candidate.v1.schema.json",
+      "scripts/validation/wheel_install_smoke.sh",
+      "third_party/python-rvo2/LICENSE",
+      "third_party/python-rvo2/UPSTREAM.md",
+      "third_party/python-rvo2/LOCAL_CHANGES.patch",
+      "third_party/socnavbench/LICENSE",
+      "third_party/socnavbench/LICENSES/Apache-2.0.txt",
+      "third_party/socnavbench/LICENSING.yaml",
+      "third_party/socnavbench/UPSTREAM.md",
+      "docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md",
+      "scripts/validation/software_candidate_asset_rights.v1.json",
+      "SOFTWARE_CANDIDATE.json"
+    ],
+    "exclude_globs": [
+      "model/**",
+      "maps/**",
+      "fast-pysf/maps/**",
+      "examples/**",
+      "robot_sf/maps/**/*.svg",
+      "third_party/python-rvo2/src/**",
+      "third_party/python-rvo2/examples/**",
+      "third_party/python-rvo2/doc/**",
+      "third_party/socnavbench/**",
+      ".github/**",
+      "tests/**",
+      "output/**"
+    ],
+    "required_paths": [
+      "pyproject.toml",
+      "uv.lock",
+      "README.md",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
+      "robot_sf/**",
+      "robot_sf_carla_bridge/**",
+      "fast-pysf/LICENSE",
+      "fast-pysf/pysocialforce/**",
+      "fast-pysf/pyproject.toml",
+      "fast-pysf/uv.lock",
+      "scripts/dev/software_candidate_manifest.py",
+      "scripts/tools/__init__.py",
+      "scripts/tools/check_asset_rights_inventory.py",
+      "scripts/tools/check_dependency_license_inventory.py",
+      "scripts/tools/check_distribution_licenses.py",
+      "scripts/validation/asset_rights_inventory.v1.yaml",
+      "scripts/validation/dependency_license_policy.v1.json",
+      "scripts/validation/dependency_license_policy.v1.schema.json",
+      "scripts/validation/dependency_license_profiles.v1.json",
+      "scripts/validation/dependency_license_profiles.v1.schema.json",
+      "scripts/validation/software_candidate_policy.v1.json",
+      "scripts/validation/software_release_rights_policy.v1.json",
+      "scripts/validation/software_release_rights_policy.v1.schema.json",
+      "scripts/validation/software_rights_admission.v1.schema.json",
+      "scripts/validation/software_sanitized_candidate.v1.schema.json",
+      "scripts/validation/wheel_install_smoke.sh",
+      "third_party/python-rvo2/LICENSE",
+      "third_party/python-rvo2/UPSTREAM.md",
+      "third_party/python-rvo2/LOCAL_CHANGES.patch",
+      "third_party/socnavbench/LICENSE",
+      "third_party/socnavbench/LICENSES/Apache-2.0.txt",
+      "third_party/socnavbench/LICENSING.yaml",
+      "third_party/socnavbench/UPSTREAM.md",
+      "docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md"
+    ]
+  },
+  "exclusion_reasons": [
+    {
+      "glob": "model/**",
+      "reason": "model bytes use an independent provenance and rights lane and are not software payload"
+    },
+    {
+      "glob": "maps/**",
+      "reason": "map assets remain outside this narrow software surface"
+    },
+    {
+      "glob": "examples/**",
+      "reason": "recordings and datasets remain bring-your-own external assets"
+    },
+    {
+      "glob": "third_party/python-rvo2/**",
+      "reason": "ORCA/pyrvo2 is an external source checkout; only legal notices are retained"
+    },
+    {
+      "glob": "third_party/socnavbench/**",
+      "reason": "SocNavBench is an external source checkout; only legal notices are retained"
+    },
+    {
+      "glob": "benchmarks/**",
+      "reason": "benchmark evidence is not a software release claim"
+    },
+    {
+      "glob": "tests/**",
+      "reason": "tests are development-only source"
+    },
+    {
+      "glob": ".github/**",
+      "reason": "workflow and repository-control files are not software payload"
+    }
+  ],
+  "external_only": [
+    {
+      "glob": "third_party/python-rvo2/**",
+      "name": "ORCA/pyrvo2",
+      "reason": "use the reviewed external source checkout when explicitly needed; no pyrvo2 source or wheel is redistributed"
+    },
+    {
+      "glob": "third_party/socnavbench/**",
+      "name": "SocNavBench",
+      "reason": "use the reviewed external source checkout when explicitly needed; no source payload is redistributed"
+    },
+    {
+      "glob": "model/**",
+      "name": "model artifacts",
+      "reason": "hydrate through the independent model registry and rights/provenance gate"
+    }
+  ],
+  "materialization": {
+    "commit_parent": "source_sha",
+    "commit_message": "Materialize Robot SF software candidate",
+    "commit_timestamp": "2000-01-01T00:00:00Z",
+    "tree_digest": "sha256(canonical UTF-8 JSON of source SHA and sorted admitted members; generated manifest is not a tree member)"
+  }
+}

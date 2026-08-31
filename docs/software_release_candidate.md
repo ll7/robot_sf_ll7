@@ -1,9 +1,10 @@
 # Immutable software candidate
 
 `.github/workflows/software-candidate.yml` is the credential-free producer for a Robot SF
-software-package candidate. It is a reusable workflow, not a publication workflow and not a
-manual dispatch target. One job builds one wheel and one source distribution once, validates
-those exact files, creates deterministic provenance, and uploads the checked bundle once.
+software-package candidate. Its canonical invocation is a direct `workflow_dispatch` at the
+reviewed source head; it also remains callable by a pinned reusable caller. One job builds one
+wheel and one source distribution once, validates those exact files, creates deterministic
+provenance, and uploads the checked bundle once.
 
 This slice does **not** authorize or perform a package-index upload, GitHub Release, Zenodo
 deposit, DOI reservation, tag, environment approval, or trusted-publisher/OIDC exchange. It does
@@ -22,10 +23,13 @@ jobs:
     uses: ll7/robot_sf_ll7/.github/workflows/software-candidate.yml@<exact-commit-sha>
 ```
 
-The call requests no secrets. Its outputs are `artifact-id`, `artifact-digest`, `artifact-name`,
-`source-sha`, `candidate-source-sha`, and `candidate-tree-sha`. A later consumer must bind all
-six values before downloading or promoting an artifact; a matching name alone is not identity
-evidence.
+The call requests no secrets. Its outputs are the candidate identity (`artifact-id`,
+`artifact-digest`, `artifact-name`, `source-sha`, `candidate-source-sha`, and `candidate-tree-sha`)
+plus the separately uploaded rights-receipt identity (`rights-artifact-id`,
+`rights-artifact-digest`, and `rights-artifact-name`). A later consumer must bind every returned
+identity before downloading or promoting either artifact; a matching name alone is not identity
+evidence. Direct dispatch uses the deterministic name
+`robot-sf-software-rights-admission-<source-sha>-<run-id>-<attempt>` for the receipt artifact.
 
 ## Candidate contents
 
@@ -48,7 +52,7 @@ as one of its own payload members.
 Before building, the producer reads the tracked
 `scripts/validation/software_candidate_policy.v1.json` from the exact source commit. The
 `materialize-source` command selects the policy's regular files, excludes models, maps, examples,
-and other non-candidate paths, requires release-safe evidence for selected asset-like files, and
+other non-candidate paths, keeps ORCA/pyrvo2 and SocNavBench source checkouts external, requires release-safe evidence for selected asset-like files, and
 creates a standalone deterministic Git candidate. The generated `SOFTWARE_CANDIDATE.json` and
 candidate-local rights inventory record the source SHA, policy and inventory hashes, selected
 members, and explicit exclusions. The external materialization report records the candidate
@@ -96,6 +100,15 @@ Any changed marker content remains an admission failure.
 removes only those volatile identity fields, binds the root component to the admitted wheel/sdist
 version, and serializes the result canonically. Given identical input bytes and identities, the
 SBOM, provenance, and manifest are byte-for-byte deterministic.
+
+The producer then runs the candidate-bound supported-surface dependency-license inventory with
+`--fail-on-unresolved`. Its report binds the exact candidate manifest/member bytes, canonical
+dependency policy/profile inputs, and the selected core profile into
+`supported_dependency_gate`. The separate `rights-admission.json` receipt conforms to
+`robot_sf.software_rights_admission.v1` and is emitted only when both strict gates pass with
+`unresolved_count: 0`; a blocked dependency report cannot produce an accepted receipt. The
+current repository still has unresolved core rows, so a real current-head run is expected to
+stop before receipt upload. This is evidence of a fail-closed boundary, not publication approval.
 
 ## Offline revalidation
 

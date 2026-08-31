@@ -35,8 +35,19 @@ SCHEMA_ID = "https://robot-sf.dev/schema/software-candidate-manifest.v1.json"
 SCHEMA_SHA256 = "ffa6635a7a37e21a36881ff8a89be59ee706c41107b94771ace8ed663d2f6469"
 PROVENANCE_VERSION = "robot_sf.software_candidate.provenance.v1"
 SCHEMA_PATH = Path(__file__).with_name("software_candidate_manifest.v1.schema.json")
+DEFAULT_MATERIALIZATION_POLICY = (
+    Path(__file__).resolve().parents[1] / "validation" / "software_candidate_policy.v1.json"
+)
+DEFAULT_MATERIALIZATION_POLICY_RELATIVE = "scripts/validation/software_candidate_policy.v1.json"
 MANIFEST_NAME = "candidate-manifest.json"
 PROVENANCE_NAME = "candidate-provenance.json"
+MATERIALIZATION_SCHEMA_VERSION = "robot_sf.software_candidate_materialization.v1"
+MATERIALIZATION_POLICY_SCHEMA_VERSION = "robot_sf.software_candidate_policy.v1"
+MATERIALIZATION_INVENTORY_SCHEMA_VERSION = "robot_sf.asset_rights_inventory.v1"
+MATERIALIZATION_METADATA_NAME = "SOFTWARE_CANDIDATE.json"
+DEFAULT_MATERIALIZATION_INVENTORY = (
+    "scripts/validation/software_candidate_asset_rights.v1.json"
+)
 UV_OUT_DIR_MARKER_NAME = ".gitignore"
 UV_OUT_DIR_MARKER_BYTES = b"*"
 SDIST_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz", ".zip")
@@ -70,6 +81,30 @@ VALIDATION_COMMANDS = (
 )
 VALIDATOR_IDS = tuple(identifier for identifier, _command in VALIDATION_COMMANDS)
 MEMBER_KINDS = ("wheel", "sdist", "sbom", "provenance")
+MATERIALIZATION_ALLOWED_ASSET_STATUSES = frozenset({"cleared", "project-authored"})
+MATERIALIZATION_ASSET_SUFFIXES = frozenset(
+    {
+        ".bag",
+        ".geojson",
+        ".gif",
+        ".jpeg",
+        ".jpg",
+        ".mp4",
+        ".mov",
+        ".osm",
+        ".pbf",
+        ".pkl",
+        ".png",
+        ".svg",
+        ".wav",
+    }
+)
+MATERIALIZATION_ASSET_PATH_HINTS = frozenset(
+    {"assets", "data", "datasets", "maps", "media", "recordings"}
+)
+MATERIALIZATION_NON_ASSET_SUFFIXES = frozenset(
+    {".md", ".py", ".pyi", ".rst", ".sh", ".toml", ".txt"}
+)
 SYSTEM_GIT = Path("/usr/bin/git")
 SYSTEM_TEMP = Path("/tmp")
 
@@ -934,6 +969,757 @@ def _stage_build_source(args: argparse.Namespace) -> None:
     print(f"PASS: staged disposable build source at {args.source_sha}: {build_root}")
 
 
+def _materialization_path(value: Any, *, label: str) -> str:
+    """Validate one candidate-relative path without permitting traversal."""
+    if not isinstance(value, str) or not value:
+        raise CandidateError(f"{label} must be a non-empty repository-relative path")
+    if (
+        value.startswith("/")
+        or "\\" in value
+        or "\x00" in value
+        or PurePosixPath(value).as_posix() != value
+    ):
+        raise CandidateError(f"{label} is unsafe or ambiguous: {value!r}")
+    parts = PurePosixPath(value).parts
+    if any(part in {"", ".", ".."} for part in parts) or parts[0] == ".git":
+        raise CandidateError(f"{label} is unsafe or ambiguous: {value!r}")
+    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in value):
+        raise CandidateError(f"{label} contains a control character: {value!r}")
+    return value
+
+
+def _materialization_pattern(value: Any, *, label: str) -> str:
+    """Validate one simple POSIX glob used by the candidate policy."""
+    pattern = _materialization_path(value, label=label)
+    if "[" in pattern or "]" in pattern:
+        raise CandidateError(f"{label} uses unsupported character-class syntax: {pattern!r}")
+    return pattern
+
+
+def _materialization_glob_regex(pattern: str) -> re.Pattern[str]:
+    """Compile the repository's small, cross-platform candidate glob dialect."""
+    chunks: list[str] = []
+    index = 0
+    while index < len(pattern):
+        if pattern.startswith("**/", index):
+            chunks.append("(?:.*/)?")
+            index += 3
+            continue
+        if pattern.startswith("**", index):
+            chunks.append(".*")
+            index += 2
+            continue
+        character = pattern[index]
+        if character == "*":
+            chunks.append("[^/]*")
+        elif character == "?":
+            chunks.append("[^/]")
+        else:
+            chunks.append(re.escape(character))
+        index += 1
+    return re.compile("^" + "".join(chunks) + "$")
+
+
+def _materialization_matches(path: str, pattern: str) -> bool:
+    """Return whether one candidate path matches one policy pattern."""
+    return bool(_materialization_glob_regex(pattern).match(path))
+
+
+def _materialization_string_list(value: Any, *, label: str, patterns: bool) -> tuple[str, ...]:
+    """Validate and normalise a non-empty policy string list."""
+    if not isinstance(value, list) or not value or not all(isinstance(item, str) for item in value):
+        raise CandidateError(f"{label} must be a non-empty list of strings")
+    result = tuple(
+        (
+            _materialization_pattern(item, label=f"{label}[{index}]")
+            if patterns
+            else _materialization_path(item, label=f"{label}[{index}]")
+        )
+        for index, item in enumerate(value)
+    )
+    if len(set(result)) != len(result):
+        raise CandidateError(f"{label} contains duplicate entries")
+    return result
+
+
+def _validate_materialization_asset_rule(raw_rule: Any, *, index: int) -> dict[str, Any]:
+    """Validate one release-safe asset classification in the candidate policy."""
+    if not isinstance(raw_rule, dict):
+        raise CandidateError(f"asset_rules[{index}] must be an object")
+    required_keys = {
+        "id",
+        "scope",
+        "patterns",
+        "status",
+        "source",
+        "source_revision_or_access_date",
+        "license_or_rights",
+        "attribution",
+        "checksum_policy",
+        "modification_status",
+        "evidence",
+    }
+    if set(raw_rule) != required_keys:
+        raise CandidateError(f"asset_rules[{index}] has missing or unclassified fields")
+    rule_id = raw_rule.get("id")
+    if not isinstance(rule_id, str) or not rule_id:
+        raise CandidateError(f"asset_rules[{index}] has an invalid id")
+    scope = raw_rule.get("scope")
+    if not isinstance(scope, str) or not scope:
+        raise CandidateError(f"asset_rules[{index}].scope must be non-empty text")
+    patterns = _materialization_string_list(
+        raw_rule.get("patterns"), label=f"asset_rules[{index}].patterns", patterns=True
+    )
+    status = raw_rule.get("status")
+    if status not in MATERIALIZATION_ALLOWED_ASSET_STATUSES:
+        raise CandidateError(
+            f"asset_rules[{index}].status must be one of the release-safe statuses: "
+            f"{sorted(MATERIALIZATION_ALLOWED_ASSET_STATUSES)}"
+        )
+    text_fields = (
+        "source",
+        "source_revision_or_access_date",
+        "license_or_rights",
+        "attribution",
+        "checksum_policy",
+        "modification_status",
+    )
+    if any(
+        not isinstance(raw_rule.get(field), str) or not raw_rule[field].strip()
+        for field in text_fields
+    ):
+        raise CandidateError(f"asset_rules[{index}] has empty rights metadata")
+    evidence = _materialization_string_list(
+        raw_rule.get("evidence"), label=f"asset_rules[{index}].evidence", patterns=False
+    )
+    return {
+        "id": rule_id,
+        "scope": scope,
+        "patterns": list(patterns),
+        "status": status,
+        **{field: raw_rule[field] for field in text_fields},
+        "evidence": list(evidence),
+    }
+
+
+def _validate_materialization_policy(payload: Any) -> dict[str, Any]:
+    """Validate the closed, deterministic source-selection policy."""
+    if not isinstance(payload, dict):
+        raise CandidateError("materialization policy must be a JSON object")
+    expected_keys = {
+        "schema_version",
+        "package",
+        "source_inventory_path",
+        "candidate_inventory_path",
+        "metadata_path",
+        "include",
+        "exclude",
+        "required",
+        "asset_rules",
+    }
+    if set(payload) != expected_keys:
+        raise CandidateError("materialization policy has missing or unclassified fields")
+    if payload.get("schema_version") != MATERIALIZATION_POLICY_SCHEMA_VERSION:
+        raise CandidateError("materialization policy schema_version is invalid")
+    package = payload.get("package")
+    if not isinstance(package, dict) or set(package) != {"name", "version"}:
+        raise CandidateError("materialization policy package identity is invalid")
+    if package.get("name") != "robot_sf" or not isinstance(package.get("version"), str):
+        raise CandidateError("materialization policy must identify robot_sf")
+    if not VERSION_PATTERN.fullmatch(package["version"]):
+        raise CandidateError("materialization policy package version is invalid")
+
+    source_inventory_path = _materialization_path(
+        payload.get("source_inventory_path"), label="source_inventory_path"
+    )
+    candidate_inventory_path = _materialization_path(
+        payload.get("candidate_inventory_path"), label="candidate_inventory_path"
+    )
+    metadata_path = _materialization_path(payload.get("metadata_path"), label="metadata_path")
+    if len({source_inventory_path, candidate_inventory_path, metadata_path}) != 3:
+        raise CandidateError("materialization policy generated paths must be distinct")
+
+    include = _materialization_string_list(payload.get("include"), label="include", patterns=True)
+    exclude = _materialization_string_list(payload.get("exclude"), label="exclude", patterns=True)
+    required = _materialization_string_list(payload.get("required"), label="required", patterns=True)
+
+    asset_rules_raw = payload.get("asset_rules")
+    if not isinstance(asset_rules_raw, list):
+        raise CandidateError("materialization policy asset_rules must be a list")
+    asset_rules = [
+        _validate_materialization_asset_rule(raw_rule, index=index)
+        for index, raw_rule in enumerate(asset_rules_raw)
+    ]
+    rule_ids = [rule["id"] for rule in asset_rules]
+    if len(set(rule_ids)) != len(rule_ids):
+        raise CandidateError("materialization policy asset rule IDs must be unique")
+
+    return {
+        "schema_version": MATERIALIZATION_POLICY_SCHEMA_VERSION,
+        "package": {"name": "robot_sf", "version": package["version"]},
+        "source_inventory_path": source_inventory_path,
+        "candidate_inventory_path": candidate_inventory_path,
+        "metadata_path": metadata_path,
+        "include": list(include),
+        "exclude": list(exclude),
+        "required": list(required),
+        "asset_rules": asset_rules,
+    }
+
+
+def _run_candidate_git(
+    *arguments: str,
+    cwd: Path,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[bytes]:
+    """Run the absolute system Git with configuration and replacement objects disabled."""
+    if not SYSTEM_GIT.is_file() or SYSTEM_GIT.is_symlink() or not os.access(SYSTEM_GIT, os.X_OK):
+        raise CandidateError(f"trusted system Git is unavailable: {SYSTEM_GIT}")
+    try:
+        return subprocess.run(
+            [str(SYSTEM_GIT), "--no-replace-objects", *arguments],
+            check=False,
+            capture_output=True,
+            cwd=cwd,
+            env=env or _trusted_git_environment(),
+        )
+    except OSError as exc:
+        raise CandidateError(f"cannot execute trusted candidate Git: {exc}") from exc
+
+
+def _candidate_git_output(result: subprocess.CompletedProcess[bytes], *, operation: str) -> bytes:
+    """Return successful Git output or a useful fail-closed error."""
+    if result.returncode == 0:
+        return result.stdout
+    detail = result.stderr.decode("utf-8", errors="replace").strip()
+    raise CandidateError(f"trusted candidate Git cannot {operation}: {detail or result.returncode}")
+
+
+def _candidate_source_tree(
+    repo_root: Path,
+    source_sha: str,
+) -> dict[str, tuple[str, str, str]]:
+    """Return exact source-tree entries after proving a clean reviewed checkout."""
+    if not SHA_PATTERN.fullmatch(source_sha):
+        raise CandidateError("source SHA must be one exact lowercase 40-hex commit identity")
+    if not repo_root.is_dir() or repo_root.is_symlink():
+        raise CandidateError(f"source repository is not a real directory: {repo_root}")
+    head = _candidate_git_output(
+        _run_candidate_git("rev-parse", "--verify", "HEAD^{commit}", cwd=repo_root),
+        operation="resolve source HEAD",
+    ).decode("ascii", errors="strict").strip()
+    if head != source_sha:
+        raise CandidateError(f"source SHA drift: expected {source_sha}, found {head}")
+    status = _candidate_git_output(
+        _run_candidate_git("status", "--porcelain=v1", "--untracked-files=no", cwd=repo_root),
+        operation="check source cleanliness",
+    )
+    if status:
+        raise CandidateError(
+            "source checkout has tracked changes; materialization requires the reviewed clean tree"
+        )
+    raw_tree = _candidate_git_output(
+        _run_candidate_git("ls-tree", "-r", "-z", "--full-tree", source_sha, cwd=repo_root),
+        operation="read source tree",
+    )
+    entries: dict[str, tuple[str, str, str]] = {}
+    for raw_entry in raw_tree.split(b"\x00"):
+        if not raw_entry:
+            continue
+        try:
+            header, raw_path = raw_entry.split(b"\t", maxsplit=1)
+            mode_bytes, object_type_bytes, object_id_bytes = header.split(b" ", maxsplit=2)
+            path = raw_path.decode("utf-8")
+            mode = mode_bytes.decode("ascii")
+            object_type = object_type_bytes.decode("ascii")
+            object_id = object_id_bytes.decode("ascii")
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise CandidateError("source tree contains a malformed Git entry") from exc
+        _materialization_path(path, label="source tree path")
+        if path in entries:
+            raise CandidateError(f"source tree contains duplicate path: {path}")
+        if not SHA_PATTERN.fullmatch(object_id):
+            raise CandidateError(f"source tree object identity is invalid: {path}")
+        entries[path] = (mode, object_type, object_id)
+    return entries
+
+
+def _candidate_blob(repo_root: Path, object_id: str) -> bytes:
+    """Read one reviewed Git blob by object identity."""
+    result = _run_candidate_git("cat-file", "blob", object_id, cwd=repo_root)
+    return _candidate_git_output(result, operation=f"read source blob {object_id}")
+
+
+def _materialization_is_asset_like(path: str) -> bool:
+    """Use the inventory's conservative asset heuristic for selected source paths."""
+    suffix = PurePosixPath(path).suffix.lower()
+    return suffix in MATERIALIZATION_ASSET_SUFFIXES or (
+        suffix not in MATERIALIZATION_NON_ASSET_SUFFIXES
+        and bool(MATERIALIZATION_ASSET_PATH_HINTS.intersection(PurePosixPath(path).parts))
+    )
+
+
+def _candidate_inventory_payload(
+    policy: dict[str, Any],
+    selected_paths: tuple[str, ...],
+    *,
+    source_sha: str,
+    policy_sha256: str,
+    source_inventory_sha256: str,
+) -> dict[str, Any]:
+    """Build the candidate-local inventory that strict archive/tree checks can consume."""
+    selected = set(selected_paths)
+    used_rules = [
+        rule
+        for rule in policy["asset_rules"]
+        if any(
+            path in selected
+            and any(_materialization_matches(path, pattern) for pattern in rule["patterns"])
+            for path in selected_paths
+        )
+    ]
+    scopes: list[dict[str, Any]] = []
+    for scope in dict.fromkeys(rule["scope"] for rule in used_rules):
+        scope_patterns = list(
+            dict.fromkeys(
+                pattern
+                for rule in used_rules
+                if rule["scope"] == scope
+                for pattern in rule["patterns"]
+            )
+        )
+        scopes.append(
+            {
+                "id": scope,
+                "globs": scope_patterns,
+                "release_relevant": True,
+            }
+        )
+    rows: list[dict[str, Any]] = []
+    for rule in used_rules:
+        rows.append(
+            {
+                "id": rule["id"],
+                "scope": rule["scope"],
+                "globs": rule["patterns"],
+                "status": rule["status"],
+                "source": rule["source"],
+                "source_revision_or_access_date": rule["source_revision_or_access_date"],
+                "license_or_rights": rule["license_or_rights"],
+                "attribution": rule["attribution"],
+                "checksum_policy": rule["checksum_policy"],
+                "modification_status": rule["modification_status"],
+                "evidence": rule["evidence"],
+            }
+        )
+    return {
+        "schema_version": MATERIALIZATION_INVENTORY_SCHEMA_VERSION,
+        "claim_boundary": (
+            "Candidate-local release inventory generated only from the reviewed materialization "
+            "policy; it does not clear excluded source assets or model weights."
+        ),
+        "source_sha": source_sha,
+        "source_inventory_sha256": source_inventory_sha256,
+        "materialization_policy_sha256": policy_sha256,
+        "tracked_scopes": scopes,
+        "rows": rows,
+    }
+
+
+def _write_candidate_file(root: Path, relative_path: str, content: bytes, *, mode: str = "100644") -> None:
+    """Write one generated candidate file with a regular-file mode."""
+    destination = root / relative_path
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with destination.open("xb") as handle:
+            handle.write(content)
+        os.chmod(destination, 0o755 if mode == "100755" else 0o644)
+    except FileExistsError as exc:
+        raise CandidateError(f"candidate generated path already exists: {relative_path}") from exc
+    except OSError as exc:
+        raise CandidateError(f"cannot write candidate member {relative_path}: {exc}") from exc
+
+
+def _materialization_inputs(
+    args: argparse.Namespace,
+    source_root: Path,
+    source_entries: dict[str, tuple[str, str, str]],
+) -> tuple[dict[str, Any], str, str, bytes, bytes, str, str]:
+    """Load policy and inventory bytes from the exact reviewed source tree."""
+    policy_input = args.policy
+    if policy_input is None:
+        policy_input = source_root / DEFAULT_MATERIALIZATION_POLICY_RELATIVE
+    elif not policy_input.is_absolute():
+        policy_input = source_root / policy_input
+    if policy_input.is_symlink():
+        raise CandidateError(f"materialization policy must be a regular file in source: {policy_input}")
+    policy_path = policy_input.resolve(strict=False)
+    if not policy_path.is_relative_to(source_root) or not policy_path.is_file():
+        raise CandidateError(f"materialization policy must be a regular file in source: {policy_path}")
+    policy_rel = policy_path.relative_to(source_root).as_posix()
+    policy_raw = policy_path.read_bytes()
+    policy = _validate_materialization_policy(_load_json(policy_path, label="materialization policy"))
+    policy_entry = source_entries.get(policy_rel)
+    if policy_entry is None or policy_entry[0] not in {"100644", "100755"} or policy_entry[1] != "blob":
+        raise CandidateError(f"materialization policy is not a regular tracked file: {policy_rel}")
+    if _candidate_blob(source_root, policy_entry[2]) != policy_raw:
+        raise CandidateError(f"materialization policy changed outside the reviewed source tree: {policy_rel}")
+
+    source_inventory_rel = policy["source_inventory_path"]
+    inventory_path = source_root / source_inventory_rel
+    if inventory_path.is_symlink() or not inventory_path.is_file():
+        raise CandidateError(f"source rights inventory is not a regular file: {source_inventory_rel}")
+    inventory_entry = source_entries.get(source_inventory_rel)
+    if inventory_entry is None or inventory_entry[0] not in {"100644", "100755"} or inventory_entry[1] != "blob":
+        raise CandidateError(f"source rights inventory is not a regular tracked file: {source_inventory_rel}")
+    inventory_raw = _candidate_blob(source_root, inventory_entry[2])
+    if inventory_raw != inventory_path.read_bytes():
+        raise CandidateError(f"source rights inventory changed outside the reviewed source tree: {source_inventory_rel}")
+    return (
+        policy,
+        policy_rel,
+        source_inventory_rel,
+        policy_raw,
+        inventory_raw,
+        hashlib.sha256(policy_raw).hexdigest(),
+        hashlib.sha256(inventory_raw).hexdigest(),
+    )
+
+
+def _select_materialization_entries(
+    source_entries: dict[str, tuple[str, str, str]],
+    policy: dict[str, Any],
+    *,
+    policy_rel: str,
+) -> tuple[dict[str, tuple[str, str, str]], list[str], list[str]]:
+    """Select regular source members and report policy/non-regular exclusions."""
+    metadata_rel = policy["metadata_path"]
+    candidate_inventory_rel = policy["candidate_inventory_path"]
+    if metadata_rel in source_entries or candidate_inventory_rel in source_entries:
+        raise CandidateError("generated candidate path already exists in the reviewed source tree")
+    selected: dict[str, tuple[str, str, str]] = {}
+    excluded_paths: list[str] = []
+    excluded_non_regular: list[str] = []
+    for path, entry in sorted(source_entries.items()):
+        if not any(_materialization_matches(path, pattern) for pattern in policy["include"]):
+            continue
+        if entry[0] not in {"100644", "100755"} or entry[1] != "blob":
+            excluded_non_regular.append(path)
+        elif any(_materialization_matches(path, pattern) for pattern in policy["exclude"]):
+            excluded_paths.append(path)
+        else:
+            selected[path] = entry
+    selected_paths = tuple(sorted(selected))
+    for required in policy["required"]:
+        if not any(_materialization_matches(path, required) for path in selected_paths):
+            raise CandidateError(f"materialization policy requirement is not selected: {required}")
+    if not selected_paths:
+        raise CandidateError("materialization policy selected no regular source members")
+    _validate_materialization_assets(selected_paths, selected, policy, policy_rel=policy_rel)
+    return selected, sorted(excluded_paths), sorted(excluded_non_regular)
+
+
+def _validate_materialization_assets(
+    selected_paths: tuple[str, ...],
+    selected: dict[str, tuple[str, str, str]],
+    policy: dict[str, Any],
+    *,
+    policy_rel: str,
+) -> None:
+    """Require every selected asset-like path to have one release-safe rule."""
+    del policy_rel  # The parameter keeps this check's error context tied to the policy caller.
+    for path in selected_paths:
+        if "model" in PurePosixPath(path).parts:
+            raise CandidateError(f"model member selected by materialization policy: {path}")
+        if not _materialization_is_asset_like(path):
+            continue
+        matches = [
+            rule
+            for rule in policy["asset_rules"]
+            if any(_materialization_matches(path, pattern) for pattern in rule["patterns"])
+        ]
+        if len(matches) != 1:
+            raise CandidateError(
+                f"asset member is not covered by exactly one release-safe asset rule: {path}"
+            )
+        rule = matches[0]
+        if rule["status"] not in MATERIALIZATION_ALLOWED_ASSET_STATUSES:
+            raise CandidateError(f"asset member has a non-release status: {path}")
+        if any(evidence not in selected for evidence in rule["evidence"]):
+            raise CandidateError(
+                f"asset rule evidence is not present in the candidate source: {rule['id']}"
+            )
+
+
+def _materialization_members(
+    source_root: Path,
+    selected: dict[str, tuple[str, str, str]],
+) -> tuple[tuple[str, ...], dict[str, bytes], list[dict[str, Any]]]:
+    """Read selected source blobs and build their deterministic member records."""
+    selected_paths = tuple(sorted(selected))
+    member_bytes: dict[str, bytes] = {}
+    members: list[dict[str, Any]] = []
+    for path in selected_paths:
+        mode, _object_type, object_id = selected[path]
+        content = _candidate_blob(source_root, object_id)
+        member_bytes[path] = content
+        members.append(
+            {
+                "mode": mode,
+                "object_sha": object_id,
+                "path": path,
+                "sha256": hashlib.sha256(content).hexdigest(),
+                "size": len(content),
+            }
+        )
+    return selected_paths, member_bytes, members
+
+
+def _materialization_metadata(  # noqa: PLR0913 - explicit provenance fields stay visible
+    policy: dict[str, Any],
+    *,
+    source_sha: str,
+    policy_rel: str,
+    source_inventory_rel: str,
+    policy_sha256: str,
+    source_inventory_sha256: str,
+    members: list[dict[str, Any]],
+    excluded_paths: list[str],
+    excluded_non_regular: list[str],
+) -> tuple[bytes, bytes]:
+    """Build generated candidate inventory and provenance envelope bytes."""
+    candidate_inventory = _candidate_inventory_payload(
+        policy,
+        tuple(member["path"] for member in members),
+        source_sha=source_sha,
+        policy_sha256=policy_sha256,
+        source_inventory_sha256=source_inventory_sha256,
+    )
+    candidate_inventory_bytes = _json_bytes(candidate_inventory)
+    metadata = {
+        "schema_version": MATERIALIZATION_SCHEMA_VERSION,
+        "package": policy["package"],
+        "source": {
+            "commit_sha": source_sha,
+            "inventory_path": source_inventory_rel,
+            "inventory_sha256": source_inventory_sha256,
+        },
+        "policy": {"path": policy_rel, "sha256": policy_sha256},
+        "candidate_inventory": {
+            "path": policy["candidate_inventory_path"],
+            "sha256": hashlib.sha256(candidate_inventory_bytes).hexdigest(),
+            "size": len(candidate_inventory_bytes),
+        },
+        "members": members,
+        "excluded_paths": excluded_paths,
+        "excluded_non_regular_paths": excluded_non_regular,
+        "envelope_path": policy["metadata_path"],
+    }
+    return candidate_inventory_bytes, _json_bytes(metadata)
+
+
+def _candidate_commit(staging_root: Path, empty_template: Path) -> tuple[str, str]:
+    """Create the fixed-identity candidate commit and return commit/tree SHAs."""
+    init = _run_candidate_git(
+        "-c",
+        "core.hooksPath=/dev/null",
+        "init",
+        "--quiet",
+        "--initial-branch=main",
+        f"--template={empty_template}",
+        cwd=staging_root,
+    )
+    _candidate_git_output(init, operation="initialize candidate repository")
+    for key, value in (
+        ("user.name", "Robot SF candidate"),
+        ("user.email", "candidate@robot-sf.invalid"),
+        ("core.hooksPath", "/dev/null"),
+    ):
+        _candidate_git_output(
+            _run_candidate_git("config", "--local", key, value, cwd=staging_root),
+            operation=f"configure candidate {key}",
+        )
+    candidate_env = _trusted_git_environment()
+    candidate_env.update(
+        {
+            "GIT_AUTHOR_NAME": "Robot SF candidate",
+            "GIT_AUTHOR_EMAIL": "candidate@robot-sf.invalid",
+            "GIT_AUTHOR_DATE": "2000-01-01T00:00:00Z",
+            "GIT_COMMITTER_NAME": "Robot SF candidate",
+            "GIT_COMMITTER_EMAIL": "candidate@robot-sf.invalid",
+            "GIT_COMMITTER_DATE": "2000-01-01T00:00:00Z",
+        }
+    )
+    _candidate_git_output(
+        _run_candidate_git("add", "--all", "--", ".", cwd=staging_root, env=candidate_env),
+        operation="stage candidate members",
+    )
+    _candidate_git_output(
+        _run_candidate_git(
+            "commit",
+            "--quiet",
+            "--no-gpg-sign",
+            "-m",
+            "Materialize Robot SF software candidate",
+            cwd=staging_root,
+            env=candidate_env,
+        ),
+        operation="commit candidate members",
+    )
+    commit_sha = _candidate_git_output(
+        _run_candidate_git("rev-parse", "--verify", "HEAD^{commit}", cwd=staging_root),
+        operation="resolve candidate commit",
+    ).decode("ascii").strip()
+    tree_sha = _candidate_git_output(
+        _run_candidate_git("rev-parse", "--verify", "HEAD^{tree}", cwd=staging_root),
+        operation="resolve candidate tree",
+    ).decode("ascii").strip()
+    return commit_sha, tree_sha
+
+
+def _build_candidate_root(  # noqa: PLR0913 - explicit candidate write inputs stay visible
+    candidate_root: Path,
+    *,
+    parent: Path,
+    selected_paths: tuple[str, ...],
+    selected: dict[str, tuple[str, str, str]],
+    member_bytes: dict[str, bytes],
+    candidate_inventory_rel: str,
+    candidate_inventory_bytes: bytes,
+    metadata_rel: str,
+    metadata_bytes: bytes,
+) -> tuple[str, str]:
+    """Write and commit one candidate root atomically."""
+    try:
+        with tempfile.TemporaryDirectory(prefix=".robot-sf-materialization-", dir=parent) as temp_text:
+            staging_root = Path(temp_text) / "candidate"
+            staging_root.mkdir()
+            for path in selected_paths:
+                _write_candidate_file(
+                    staging_root,
+                    path,
+                    member_bytes[path],
+                    mode=selected[path][0],
+                )
+            _write_candidate_file(staging_root, candidate_inventory_rel, candidate_inventory_bytes)
+            _write_candidate_file(staging_root, metadata_rel, metadata_bytes)
+            empty_template = Path(temp_text) / "empty-template"
+            empty_template.mkdir()
+            candidate_commit_sha, candidate_tree_sha = _candidate_commit(
+                staging_root, empty_template
+            )
+            candidate_entries = _candidate_source_tree(staging_root, candidate_commit_sha)
+            expected_paths = set(selected_paths) | {candidate_inventory_rel, metadata_rel}
+            if set(candidate_entries) != expected_paths or any(
+                mode not in {"100644", "100755"} or object_type != "blob"
+                for mode, object_type, _object_id in candidate_entries.values()
+            ):
+                raise CandidateError("candidate commit contains unexpected or non-regular members")
+            os.rename(staging_root, candidate_root)
+            return candidate_commit_sha, candidate_tree_sha
+    except CandidateError:
+        raise
+    except OSError as exc:
+        raise CandidateError(f"cannot finalize candidate root {candidate_root}: {exc}") from exc
+
+
+def _write_materialization_report(
+    report_path: Path,
+    report_payload: dict[str, Any],
+    *,
+    source_root: Path,
+    candidate_root: Path,
+) -> None:
+    """Write the external candidate report without overwriting any existing path."""
+    _require_external(report_path, repo_root=source_root, label="materialization report")
+    if report_path.resolve(strict=False).is_relative_to(candidate_root):
+        raise CandidateError(f"materialization report must be outside candidate root: {report_path}")
+    if report_path.exists() or report_path.is_symlink():
+        raise CandidateError(f"materialization report must not already exist: {report_path}")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_bytes(_json_bytes(report_payload))
+
+
+def _materialize_source(args: argparse.Namespace) -> None:
+    """Materialize a deterministic, rights-scoped Git candidate and commit it once."""
+    source_root = args.repo_root.resolve()
+    source_entries = _candidate_source_tree(source_root, args.source_sha)
+    (
+        policy,
+        policy_rel,
+        source_inventory_rel,
+        policy_raw,
+        inventory_raw,
+        policy_sha256,
+        source_inventory_sha256,
+    ) = _materialization_inputs(args, source_root, source_entries)
+    del policy_raw, inventory_raw
+    selected, excluded_paths, excluded_non_regular = _select_materialization_entries(
+        source_entries, policy, policy_rel=policy_rel
+    )
+    selected_paths, member_bytes, members = _materialization_members(source_root, selected)
+    candidate_inventory_bytes, metadata_bytes = _materialization_metadata(
+        policy,
+        source_sha=args.source_sha,
+        policy_rel=policy_rel,
+        source_inventory_rel=source_inventory_rel,
+        policy_sha256=policy_sha256,
+        source_inventory_sha256=source_inventory_sha256,
+        members=members,
+        excluded_paths=excluded_paths,
+        excluded_non_regular=excluded_non_regular,
+    )
+    candidate_root = Path(os.path.abspath(args.candidate_root))
+    _require_external(candidate_root, repo_root=source_root, label="candidate root")
+    if candidate_root.exists() or candidate_root.is_symlink():
+        raise CandidateError(f"candidate root must not already exist: {candidate_root}")
+    parent = candidate_root.parent
+    if parent.is_symlink() or parent.resolve() != parent:
+        raise CandidateError(f"candidate root parent is symlinked or ambiguous: {parent}")
+    parent.mkdir(parents=True, exist_ok=True)
+    if parent.is_symlink() or parent.resolve() != parent:
+        raise CandidateError(f"candidate root parent is symlinked or ambiguous: {parent}")
+
+    candidate_commit_sha, candidate_tree_sha = _build_candidate_root(
+        candidate_root,
+        parent=parent,
+        selected_paths=selected_paths,
+        selected=selected,
+        member_bytes=member_bytes,
+        candidate_inventory_rel=policy["candidate_inventory_path"],
+        candidate_inventory_bytes=candidate_inventory_bytes,
+        metadata_rel=policy["metadata_path"],
+        metadata_bytes=metadata_bytes,
+    )
+    report_payload = {
+        "schema_version": MATERIALIZATION_SCHEMA_VERSION,
+        "package": policy["package"],
+        "source_sha": args.source_sha,
+        "policy_path": policy_rel,
+        "policy_sha256": policy_sha256,
+        "source_inventory_path": source_inventory_rel,
+        "source_inventory_sha256": source_inventory_sha256,
+        "candidate_inventory_path": policy["candidate_inventory_path"],
+        "candidate_metadata_path": policy["metadata_path"],
+        "candidate_commit_sha": candidate_commit_sha,
+        "candidate_tree_sha": candidate_tree_sha,
+        "members": members,
+        "excluded_paths": excluded_paths,
+        "excluded_non_regular_paths": excluded_non_regular,
+    }
+    if args.report is not None:
+        _write_materialization_report(
+            Path(os.path.abspath(args.report)),
+            report_payload,
+            source_root=source_root,
+            candidate_root=candidate_root,
+        )
+    print(
+        f"PASS: materialized Robot SF {policy['package']['version']} candidate "
+        f"from {args.source_sha} at {candidate_commit_sha}"
+    )
+
+
 def _normalised_sbom(raw_sbom: Path, version: str) -> bytes:
     payload = _load_json(raw_sbom, label="raw SBOM")
     if not isinstance(payload, dict):
@@ -1385,6 +2171,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     stage.add_argument("--build-root", type=Path, required=True)
     stage.add_argument("--source-sha", required=True)
 
+    materialize = subparsers.add_parser(
+        "materialize-source",
+        help="materialize and commit a deterministic rights-scoped source candidate",
+    )
+    materialize.add_argument("--repo-root", type=Path, required=True)
+    materialize.add_argument("--candidate-root", type=Path, required=True)
+    materialize.add_argument("--source-sha", required=True)
+    materialize.add_argument("--policy", type=Path, default=None)
+    materialize.add_argument("--report", type=Path, default=None)
+
     assemble = subparsers.add_parser("assemble", help="admit already-built candidate bytes")
     assemble.add_argument("--repo-root", type=Path, required=True)
     assemble.add_argument("--dist-dir", type=Path, required=True)
@@ -1414,6 +2210,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"PASS: source identity is clean and exact at {args.source_sha}")
         elif args.command == "stage-build-source":
             _stage_build_source(args)
+        elif args.command == "materialize-source":
+            _materialize_source(args)
         elif args.command == "assemble":
             _assemble(args)
         elif args.command == "verify":

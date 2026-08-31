@@ -60,6 +60,8 @@ RIGHTS_GATE_COMMAND = (
     "--strict-asset-rights --repo-root $BUILD_SOURCE --source-tree-ref $SOURCE_SHA"
 )
 SUPPORTED_DEPENDENCY_SCHEMA_VERSION = "robot-sf.dependency-license-inventory.v1"
+SUPPORTED_DEPENDENCY_POLICY_SCHEMA_VERSION = "robot-sf.dependency-license-policy.v1"
+SUPPORTED_DEPENDENCY_PROFILE_SCHEMA_VERSION = "robot-sf.dependency-license-profiles.v1"
 SUPPORTED_DEPENDENCY_GATE_ID = "strict-supported-dependency-surface"
 SUPPORTED_DEPENDENCY_REPORT_NAME = "dependency-license-inventory.json"
 SUPPORTED_DEPENDENCY_POLICY_PATH = "scripts/validation/dependency_license_policy.v1.json"
@@ -85,7 +87,7 @@ SUPPORTED_DEPENDENCY_EXTRA_IDS = (
 SUPPORTED_DEPENDENCY_GATE_COMMAND = (
     "python scripts/tools/check_dependency_license_inventory.py "
     "--repo-root $BUILD_SOURCE --output $DEPENDENCY_REPORT "
-    "--candidate-bundle $CANDIDATE_BUNDLE --profile all --fail-on-unresolved"
+    "--candidate-bundle $CANDIDATE_BUNDLE --fail-on-unresolved"
 )
 UV_OUT_DIR_MARKER_NAME = ".gitignore"
 UV_OUT_DIR_MARKER_BYTES = b"*"
@@ -2884,6 +2886,7 @@ def _candidate_receipt_identity(
     *,
     source_sha: str,
     candidate_run_id: str,
+    candidate_run_attempt: int,
     candidate_artifact_id: str,
     candidate_artifact_name: str,
     candidate_artifact_digest: str,
@@ -2897,6 +2900,10 @@ def _candidate_receipt_identity(
         raise CandidateError("candidate manifest source SHA differs from rights admission input")
     if manifest["workflow"]["run_id"] != candidate_run_id:
         raise CandidateError("candidate manifest workflow run differs from rights admission input")
+    if manifest["workflow"]["run_attempt"] != candidate_run_attempt:
+        raise CandidateError(
+            "candidate manifest workflow attempt differs from rights admission input"
+        )
     _verify_bundle_membership(bundle_dir, entries, manifest)
     _verify_archives_and_sbom(bundle_dir, manifest)
     _verify_provenance(bundle_dir, manifest)
@@ -2907,9 +2914,13 @@ def _candidate_receipt_identity(
         raise CandidateError("candidate artifact ID must be a positive decimal identity")
     candidate_name_pattern = re.compile(
         rf"robot-sf-software-candidate-{re.escape(source_sha)}-{re.escape(candidate_run_id)}-"
-        rf"[1-9][0-9]*\Z"
+        rf"([1-9][0-9]*)\Z"
     )
-    if not candidate_name_pattern.fullmatch(candidate_artifact_name):
+    candidate_name_match = candidate_name_pattern.fullmatch(candidate_artifact_name)
+    if (
+        candidate_name_match is None
+        or candidate_name_match.group(1) != str(candidate_run_attempt)
+    ):
         raise CandidateError("candidate artifact name is not bound to source and workflow identity")
     members = manifest["members"]
     members_by_kind = {member["kind"]: member for member in members}
@@ -2991,11 +3002,39 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912 - closed depen
     if (
         not isinstance(profile_manifest, dict)
         or profile_manifest.get("path") != SUPPORTED_DEPENDENCY_PROFILE_PATH
+        or profile_manifest.get("schema_version") != SUPPORTED_DEPENDENCY_PROFILE_SCHEMA_VERSION
     ):
-        raise CandidateError("supported dependency report profile manifest path is unsupported")
+        raise CandidateError("supported dependency report profile manifest is unsupported")
     policy = report.get("policy")
-    if not isinstance(policy, dict) or policy.get("path") != SUPPORTED_DEPENDENCY_POLICY_PATH:
-        raise CandidateError("supported dependency report policy path is unsupported")
+    if (
+        not isinstance(policy, dict)
+        or policy.get("path") != SUPPORTED_DEPENDENCY_POLICY_PATH
+        or policy.get("schema_version") != SUPPORTED_DEPENDENCY_POLICY_SCHEMA_VERSION
+    ):
+        raise CandidateError("supported dependency report policy is unsupported")
+    profiles = report.get("profiles")
+    all_profile = (
+        next(
+            (
+                profile
+                for profile in profiles
+                if isinstance(profile, dict) and profile.get("id") == "all"
+            ),
+            None,
+        )
+        if isinstance(profiles, list)
+        else None
+    )
+    if (
+        not isinstance(all_profile, dict)
+        or all_profile.get("extras") != list(SUPPORTED_DEPENDENCY_EXTRA_IDS)
+        or all_profile.get("excluded_extras") != ["rllib"]
+    ):
+        raise CandidateError(
+            "supported dependency report all profile does not match the closed v0.0.6 extra roster"
+        )
+    if report.get("failures") != [] or report.get("structural_issues") != []:
+        raise CandidateError("supported dependency report contains failures")
     binding = report.get("candidate_binding")
     if not isinstance(binding, dict) or binding.get("status") != "bound":
         raise CandidateError("supported dependency report candidate binding is not bound")
@@ -3041,13 +3080,11 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912 - closed depen
         "policy_sha256": policy_sha256,
         "profile_manifest_path": SUPPORTED_DEPENDENCY_PROFILE_PATH,
         "profile_manifest_sha256": profile_manifest_sha256,
-        "profile_ids": list(SUPPORTED_DEPENDENCY_PROFILE_IDS),
         "report_filename": SUPPORTED_DEPENDENCY_REPORT_NAME,
         "report_sha256": _sha256(report_path),
         "schema_version": SUPPORTED_DEPENDENCY_SCHEMA_VERSION,
         "source_sha": source_sha,
         "status": "passed",
-        "supported_extra_ids": list(SUPPORTED_DEPENDENCY_EXTRA_IDS),
         "unresolved_count": 0,
     }
 
@@ -3176,13 +3213,11 @@ def _validate_rights_receipt(receipt: Any) -> dict[str, Any]:  # noqa: C901 - cl
         "policy_sha256",
         "profile_manifest_path",
         "profile_manifest_sha256",
-        "profile_ids",
         "report_filename",
         "report_sha256",
         "schema_version",
         "source_sha",
         "status",
-        "supported_extra_ids",
         "unresolved_count",
     }
     if not isinstance(dependency_gate, dict) or set(dependency_gate) != expected_dependency_keys:
@@ -3195,10 +3230,8 @@ def _validate_rights_receipt(receipt: Any) -> dict[str, Any]:  # noqa: C901 - cl
         or dependency_gate["command"] != SUPPORTED_DEPENDENCY_GATE_COMMAND
         or dependency_gate["policy_path"] != SUPPORTED_DEPENDENCY_POLICY_PATH
         or dependency_gate["profile_manifest_path"] != SUPPORTED_DEPENDENCY_PROFILE_PATH
-        or dependency_gate["profile_ids"] != list(SUPPORTED_DEPENDENCY_PROFILE_IDS)
         or dependency_gate["report_filename"] != SUPPORTED_DEPENDENCY_REPORT_NAME
         or dependency_gate["status"] != "passed"
-        or dependency_gate["supported_extra_ids"] != list(SUPPORTED_DEPENDENCY_EXTRA_IDS)
         or dependency_gate["source_sha"] != sanitized["source_sha"]
         or dependency_gate["candidate_manifest_sha256"] != candidate["manifest_sha256"]
         or dependency_gate["candidate_tree_sha256"] != sanitized["tree_sha256"]
@@ -3214,7 +3247,7 @@ def _validate_rights_receipt(receipt: Any) -> dict[str, Any]:  # noqa: C901 - cl
     return receipt
 
 
-def _admit_rights(args: argparse.Namespace) -> None:  # noqa: C901 - closed receipt workflow
+def _admit_rights(args: argparse.Namespace) -> None:  # noqa: C901, PLR0915 - closed receipt workflow
     """Create the separately downloadable exact rights-admission receipt."""
     repo_root = args.repo_root.resolve()
     if not SHA_PATTERN.fullmatch(args.source_sha):
@@ -3256,6 +3289,7 @@ def _admit_rights(args: argparse.Namespace) -> None:  # noqa: C901 - closed rece
         args.candidate_bundle,
         source_sha=args.source_sha,
         candidate_run_id=args.workflow_run_id,
+        candidate_run_attempt=args.workflow_run_attempt,
         candidate_artifact_id=args.candidate_artifact_id,
         candidate_artifact_name=args.candidate_artifact_name,
         candidate_artifact_digest=args.candidate_artifact_digest,
@@ -3265,8 +3299,9 @@ def _admit_rights(args: argparse.Namespace) -> None:  # noqa: C901 - closed rece
         or manifest["package"]["version"] != args.candidate_version
     ):
         raise CandidateError("rights admission candidate package differs from requested version")
+    dependency_report_path = args.dependency_report.resolve()
     supported_dependency_gate = _validate_supported_dependency_report(
-        args.dependency_report.resolve(),
+        dependency_report_path,
         identity=identity,
         source_sha=args.source_sha,
         tree_sha256=sanitized["tree_sha256"],
@@ -3295,6 +3330,16 @@ def _admit_rights(args: argparse.Namespace) -> None:  # noqa: C901 - closed rece
         repo_root=repo_root,
         label="rights admission artifact directory",
     )
+    dependency_report_copy = output_dir / SUPPORTED_DEPENDENCY_REPORT_NAME
+    try:
+        shutil.copyfile(dependency_report_path, dependency_report_copy)
+    except OSError as exc:
+        raise CandidateError(
+            "cannot copy supported dependency report into rights admission artifact: "
+            f"{dependency_report_copy}: {exc}"
+        ) from exc
+    if _sha256(dependency_report_copy) != supported_dependency_gate["report_sha256"]:
+        raise CandidateError("copied supported dependency report bytes differ from validated input")
     receipt = {
         "candidate": identity,
         "sanitized": {

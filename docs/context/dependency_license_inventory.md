@@ -56,7 +56,6 @@ the twelve public extras and excludes standalone `rllib`:
 
 ```bash
 python scripts/tools/check_dependency_license_inventory.py \
-  --profile all \
   --fail-on-unresolved
 ```
 
@@ -73,7 +72,6 @@ v0.0.6 supported closure:
 
 ```bash
 python scripts/tools/check_dependency_license_inventory.py \
-  --profile all \
   --candidate-bundle output/validation/software-candidate \
   --output output/validation/dependency-license-inventory.json \
   --fail-on-unresolved
@@ -82,8 +80,8 @@ python scripts/tools/check_dependency_license_inventory.py \
 Candidate binding verifies the closed manifest/provenance contract, member checksums, archive
 package identity and metadata, and the SBOM component set against the selected lock closure. A
 candidate invocation without `--profile` selects `all`; it never silently narrows to `core`. The
-separate rights-admission consumer rejects a report whose surface is not exactly `["all"]` with
-the twelve supported extra IDs. It replaces ambient installed metadata for the selected rows
+separate rights-admission consumer rejects a report whose surface is not exactly `["all"]`; the
+report's `all` profile must carry the twelve supported extra IDs. It replaces ambient installed metadata for the selected rows
 with an `artifact_bound` identity observation, but it does not invent license facts: a reviewed
 exact policy disposition is still required for each dependency. The resulting `candidate_binding`
 record carries the candidate identity, member digests, and component digest needed for admission.

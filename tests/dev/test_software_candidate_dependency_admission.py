@@ -11,8 +11,10 @@ import pytest
 from scripts.dev.software_candidate_manifest import (
     SUPPORTED_DEPENDENCY_EXTRA_IDS,
     SUPPORTED_DEPENDENCY_POLICY_PATH,
+    SUPPORTED_DEPENDENCY_POLICY_SCHEMA_VERSION,
     SUPPORTED_DEPENDENCY_PROFILE_IDS,
     SUPPORTED_DEPENDENCY_PROFILE_PATH,
+    SUPPORTED_DEPENDENCY_PROFILE_SCHEMA_VERSION,
     SUPPORTED_DEPENDENCY_REPORT_NAME,
     CandidateError,
     _validate_supported_dependency_report,
@@ -70,13 +72,28 @@ def _report(identity: dict[str, object]) -> dict[str, object]:
             "sbom": {"sha256": identity["sbom_sha256"]},
             "workflow": {"run_id": identity["workflow_run_id"]},
         },
-        "policy": {"path": SUPPORTED_DEPENDENCY_POLICY_PATH},
-        "profile_manifest": {"path": SUPPORTED_DEPENDENCY_PROFILE_PATH},
+        "policy": {
+            "path": SUPPORTED_DEPENDENCY_POLICY_PATH,
+            "schema_version": SUPPORTED_DEPENDENCY_POLICY_SCHEMA_VERSION,
+        },
+        "profile_manifest": {
+            "path": SUPPORTED_DEPENDENCY_PROFILE_PATH,
+            "schema_version": SUPPORTED_DEPENDENCY_PROFILE_SCHEMA_VERSION,
+        },
+        "profiles": [
+            {
+                "id": "all",
+                "extras": list(SUPPORTED_DEPENDENCY_EXTRA_IDS),
+                "excluded_extras": ["rllib"],
+            }
+        ],
         "repository_inputs": [
             {"path": SUPPORTED_DEPENDENCY_POLICY_PATH, "sha256": "c" * 64},
             {"path": SUPPORTED_DEPENDENCY_PROFILE_PATH, "sha256": "d" * 64},
         ],
         "schema_version": "robot-sf.dependency-license-inventory.v1",
+        "failures": [],
+        "structural_issues": [],
         "summary": {"candidate_bound": True, "status": "complete", "unresolved_count": 0},
         "surface": {"profile_ids": list(SUPPORTED_DEPENDENCY_PROFILE_IDS)},
     }
@@ -104,8 +121,6 @@ def test_supported_dependency_report_binds_exact_candidate_and_input_digests(
     assert binding["policy_sha256"] == "c" * 64
     assert binding["profile_manifest_sha256"] == "d" * 64
     assert binding["report_sha256"] == hashlib.sha256(report_path.read_bytes()).hexdigest()
-    assert binding["profile_ids"] == list(SUPPORTED_DEPENDENCY_PROFILE_IDS)
-    assert binding["supported_extra_ids"] == list(SUPPORTED_DEPENDENCY_EXTRA_IDS)
     assert binding["unresolved_count"] == 0
 
 

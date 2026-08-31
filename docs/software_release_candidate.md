@@ -102,7 +102,8 @@ version, and serializes the result canonically. Given identical input bytes and 
 SBOM, provenance, and manifest are byte-for-byte deterministic.
 
 The producer then runs the candidate-bound supported-surface dependency-license inventory with
-`--profile all --fail-on-unresolved`. The reviewed `all` closure is the exact v0.0.6 public
+`--candidate-bundle ... --fail-on-unresolved`; candidate binding selects the closed `all` profile.
+The reviewed `all` closure is the exact v0.0.6 public
 surface: `viz`, `maps`, `benchmark`, `training`, `gpu`, `recurrent`, `progress`, `analytics`,
 `browser`, `sacadrl`, `socnav`, and `criticality`; `rllib` and ORCA/pyrvo2 remain outside it. Its
 report binds the exact candidate manifest/member bytes, canonical dependency policy/profile

@@ -68,7 +68,7 @@
     "supported_dependency_gate": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["candidate_manifest_sha256", "candidate_tree_sha256", "command", "id", "policy_path", "policy_sha256", "profile_ids", "profile_manifest_path", "profile_manifest_sha256", "report_filename", "report_sha256", "schema_version", "source_sha", "status", "supported_extra_ids", "unresolved_count"],
+      "required": ["candidate_manifest_sha256", "candidate_tree_sha256", "command", "id", "policy_path", "policy_sha256", "profile_manifest_path", "profile_manifest_sha256", "report_filename", "report_sha256", "schema_version", "source_sha", "status", "unresolved_count"],
       "properties": {
         "candidate_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "candidate_tree_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
@@ -76,7 +76,6 @@
         "id": {"const": "strict-supported-dependency-surface"},
         "policy_path": {"const": "scripts/validation/dependency_license_policy.v1.json"},
         "policy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "profile_ids": {"const": ["all"]},
         "profile_manifest_path": {"const": "scripts/validation/dependency_license_profiles.v1.json"},
         "profile_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "report_filename": {"const": "dependency-license-inventory.json"},
@@ -84,7 +83,6 @@
         "schema_version": {"const": "robot-sf.dependency-license-inventory.v1"},
         "source_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
         "status": {"const": "passed"},
-        "supported_extra_ids": {"const": ["viz", "maps", "benchmark", "training", "gpu", "recurrent", "progress", "analytics", "browser", "sacadrl", "socnav", "criticality"]},
         "unresolved_count": {"const": 0}
       }
     }

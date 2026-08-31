@@ -392,6 +392,50 @@ def test_explicit_profile_selection_keeps_other_lock_context_visible(tmp_path: P
     assert not any("fast-pysf/uv.lock" in failure for failure in inventory["failures"])
 
 
+def test_profile_follows_lock_dependency_extras_into_optional_dependencies(tmp_path: Path) -> None:
+    """A locked dependency extra must include its optional dependency closure."""
+    _write_inputs(tmp_path)
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        pyproject.read_text(encoding="utf-8").replace(
+            'dependencies = ["demo-package>=1"]',
+            'dependencies = ["demo-package[plug]>=1"]',
+        ),
+        encoding="utf-8",
+    )
+    lockfile = tmp_path / "uv.lock"
+    lockfile.write_text(
+        lockfile.read_text(encoding="utf-8")
+        .replace(
+            'dependencies = [{ name = "demo-package" }]',
+            'dependencies = [{ name = "demo-package", extras = ["plug"] }]',
+        )
+        .replace(
+            'sdist = { url = "https://files.example/demo-package-1.0.0.tar.gz", '
+            'hash = "sha256:abc123", size = 12 }',
+            'sdist = { url = "https://files.example/demo-package-1.0.0.tar.gz", '
+            'hash = "sha256:abc123", size = 12 }\n'
+            "[package.optional-dependencies]\n"
+            'plug = [{ name = "nested-package" }]\n',
+        )
+        + "\n[[package]]\n"
+        'name = "nested-package"\n'
+        'version = "1.0.0"\n'
+        'source = { registry = "https://pypi.org/simple" }\n',
+        encoding="utf-8",
+    )
+
+    inventory = build_inventory(tmp_path, distributions=[], selected_profile_ids=["core"])
+
+    assert inventory["summary"]["selected_package_count"] == 3
+    core = next(profile for profile in inventory["profiles"] if profile["id"] == "core")
+    assert {row.split("@", maxsplit=1)[0] for row in core["package_ids"]} == {
+        "robot-sf",
+        "demo-package",
+        "nested-package",
+    }
+
+
 def test_unknown_profile_selection_fails_closed(tmp_path: Path) -> None:
     """A typo cannot silently produce an empty release surface."""
     _write_inputs(tmp_path)

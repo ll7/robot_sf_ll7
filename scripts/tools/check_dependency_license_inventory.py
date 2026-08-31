@@ -279,6 +279,13 @@ def _dependency_record(dependency: Any) -> dict[str, Any] | None:
     if not isinstance(dependency, dict) or not isinstance(dependency.get("name"), str):
         return None
     entry: dict[str, Any] = {"name": dependency["name"]}
+    extras = dependency.get("extras", dependency.get("extra"))
+    if isinstance(extras, str):
+        extras = [extras]
+    if isinstance(extras, list):
+        entry["extras"] = sorted(
+            value for value in extras if isinstance(value, str) and value.strip()
+        )
     for key in ("marker", "version"):
         if isinstance(dependency.get(key), str):
             entry[key] = dependency[key]
@@ -287,7 +294,7 @@ def _dependency_record(dependency: Any) -> dict[str, Any] | None:
     return entry
 
 
-def _lock_packages(path: Path, repo_relative_path: str) -> list[dict[str, Any]]:
+def _lock_packages(path: Path, repo_relative_path: str) -> list[dict[str, Any]]:  # noqa: C901
     """Read and normalize all package identities from one uv lock."""
     payload = tomllib.loads(path.read_text(encoding="utf-8"))
     packages = payload.get("package")
@@ -322,6 +329,18 @@ def _lock_packages(path: Path, repo_relative_path: str) -> list[dict[str, Any]]:
             entry = _dependency_record(dependency)
             if entry is not None:
                 dependencies.append(entry)
+        optional_dependencies: dict[str, list[dict[str, Any]]] = {}
+        raw_optional_dependencies = package.get("optional-dependencies")
+        if isinstance(raw_optional_dependencies, dict):
+            for extra, raw_edges in raw_optional_dependencies.items():
+                if not isinstance(extra, str) or not isinstance(raw_edges, list):
+                    continue
+                edges = [
+                    entry
+                    for raw_edge in raw_edges
+                    if (entry := _dependency_record(raw_edge)) is not None
+                ]
+                optional_dependencies[extra.casefold()] = edges
         identity = {
             "lockfile": repo_relative_path,
             "name": package["name"],
@@ -346,6 +365,7 @@ def _lock_packages(path: Path, repo_relative_path: str) -> list[dict[str, Any]]:
                 "resolution_markers": resolution_markers,
                 "artifacts": artifacts,
                 "dependencies": dependencies,
+                "optional_dependencies": optional_dependencies,
                 "identity_sha256": _sha256_value(identity),
             }
         )
@@ -908,6 +928,7 @@ def _candidate_bundle_binding(  # noqa: C901
     selected_package_ids: set[str],
     all_packages: dict[str, dict[str, Any]],
     profiles: list[dict[str, Any]],
+    target: dict[str, Any],
 ) -> dict[str, Any]:
     """Bind a candidate bundle's archives and SBOM to selected lock closures."""
     if bundle_path.is_symlink() or not bundle_path.is_dir():
@@ -952,7 +973,24 @@ def _candidate_bundle_binding(  # noqa: C901
             )
         expected_components.add((package_row["normalized_name"], version))
     missing_components = sorted(expected_components - actual_components)
-    unexpected_components = sorted(actual_components - expected_components)
+    lock_rows_by_component: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for package_row in all_packages.values():
+        version = package_row.get("version")
+        if isinstance(version, str) and version:
+            lock_rows_by_component[(package_row["normalized_name"], version)].append(package_row)
+    target_environment = _target_marker_environment({"target": target})
+    inactive_components = sorted(
+        identity
+        for identity in actual_components - expected_components
+        if lock_rows_by_component.get(identity)
+        and all(
+            _resolution_marker_state(package_row, target_environment) is False
+            for package_row in lock_rows_by_component[identity]
+        )
+    )
+    unexpected_components = sorted(
+        actual_components - expected_components - set(inactive_components)
+    )
     if missing_components or unexpected_components:
         raise ValueError(
             "candidate SBOM component closure differs from selected lock profiles "
@@ -985,6 +1023,9 @@ def _candidate_bundle_binding(  # noqa: C901
         "repository": manifest["repository"],
         "source_sha": manifest["source_sha"],
         "workflow": _normalise_json(manifest["workflow"]),
+        "materialization": _normalise_json(manifest["materialization"])
+        if "materialization" in manifest
+        else None,
         "package": {"name": package["name"], "version": package["version"]},
         "members": [bound_members[kind] for kind in sorted(bound_members)],
         "archives": {"wheel": wheel_metadata, "sdist": sdist_metadata},
@@ -995,6 +1036,9 @@ def _candidate_bundle_binding(  # noqa: C901
             "component_set_sha256": _sha256_value(
                 [f"{name}@{version}" for name, version in sorted(actual_components)]
             ),
+            "target_inactive_components": [
+                f"{name}@{version}" for name, version in inactive_components
+            ],
         },
         "profile_ids": sorted(selected_profile_ids),
         "expected_component_count": len(expected_components),
@@ -1463,7 +1507,7 @@ def _lock_group_dependencies(
     return result, issues
 
 
-def _dependency_context_closure(
+def _dependency_context_closure(  # noqa: C901
     lock_packages: list[dict[str, Any]],
     direct_dependencies: list[dict[str, Any]],
     environment: dict[str, str],
@@ -1472,29 +1516,51 @@ def _dependency_context_closure(
     packages_by_name: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for package in lock_packages:
         packages_by_name[package["normalized_name"]].append(package)
-    queue: deque[dict[str, Any]] = deque()
+    queue: deque[tuple[dict[str, Any], frozenset[str]]] = deque()
     for dependency in direct_dependencies:
         marker_state = _marker_state(dependency.get("marker"), set(), environment)
         if marker_state is False:
             continue
+        dependency_extras = frozenset(
+            value.casefold()
+            for value in dependency.get("extras", [])
+            if isinstance(value, str) and value.strip()
+        )
         queue.extend(
-            variant
+            (variant, dependency_extras)
             for variant in _package_variants(packages_by_name, dependency)
             if _resolution_marker_state(variant, environment) is not False
         )
     seen: set[str] = set()
+    processed_extras: dict[str, set[str]] = defaultdict(set)
     while queue:
-        package = queue.popleft()
+        package, requested_extras = queue.popleft()
         package_id = package["package_id"]
-        if package_id in seen:
+        new_extras = requested_extras - processed_extras[package_id]
+        if package_id in seen and not new_extras:
             continue
         seen.add(package_id)
-        for dependency in package["dependencies"]:
-            marker_state = _marker_state(dependency.get("marker"), set(), environment)
+        processed_extras[package_id].update(requested_extras)
+        dependencies = list(package["dependencies"])
+        optional_dependencies = package.get("optional_dependencies", {})
+        if isinstance(optional_dependencies, dict):
+            for extra in requested_extras:
+                edges = optional_dependencies.get(extra)
+                if isinstance(edges, list):
+                    dependencies.extend(edges)
+        for dependency in dependencies:
+            marker_state = _marker_state(
+                dependency.get("marker"), set(requested_extras), environment
+            )
             if marker_state is False:
                 continue
+            dependency_extras = frozenset(
+                value.casefold()
+                for value in dependency.get("extras", [])
+                if isinstance(value, str) and value.strip()
+            )
             queue.extend(
-                variant
+                (variant, dependency_extras)
                 for variant in _package_variants(packages_by_name, dependency)
                 if _resolution_marker_state(variant, environment) is not False
             )
@@ -1617,7 +1683,7 @@ def _direct_package_variants(
     return list(selected.values()) or _package_variants(packages_by_name, dependency)
 
 
-def _resolve_profile(  # noqa: C901
+def _resolve_profile(  # noqa: C901, PLR0912, PLR0915
     profile: dict[str, Any],
     lock_packages: list[dict[str, Any]],
     manifest: dict[str, Any],
@@ -1669,8 +1735,11 @@ def _resolve_profile(  # noqa: C901
         if isinstance(target, dict) and isinstance(target.get("python"), dict)
         else None
     )
-    queue: deque[tuple[dict[str, Any], str]] = deque((root, "direct") for root in roots)
+    queue: deque[tuple[dict[str, Any], str, frozenset[str]]] = deque(
+        (root, "direct", frozenset()) for root in roots
+    )
     seen: dict[str, str] = {}
+    processed_extras: dict[str, set[str]] = defaultdict(set)
     for direct_requirement in result.get("direct_requirements", []):
         variants = _direct_package_variants(
             packages_by_name,
@@ -1689,20 +1758,35 @@ def _resolve_profile(  # noqa: C901
                 f"profile {profile_id} -> {direct_requirement['name']} has "
                 f"{len(variants)} lock variants"
             )
-        queue.extend((variant, "direct") for variant in variants)
+        requested_extras = frozenset(
+            value.casefold()
+            for value in direct_requirement.get("extras", [])
+            if isinstance(value, str) and value.strip()
+        )
+        queue.extend((variant, "direct", requested_extras) for variant in variants)
     while queue:
-        package, relationship = queue.popleft()
+        package, relationship, requested_extras = queue.popleft()
         package_id = package["package_id"]
         previous = seen.get(package_id)
         if previous is None or relationship == "direct":
             seen[package_id] = relationship
-        if previous is not None:
+        new_extras = requested_extras - processed_extras[package_id]
+        if previous is not None and not new_extras:
             continue
-        for dependency in package["dependencies"]:
+        processed_extras[package_id].update(requested_extras)
+        marker_extras = set(requested_extras) or allowed_extras
+        dependencies = list(package["dependencies"])
+        optional_dependencies = package.get("optional_dependencies", {})
+        if isinstance(optional_dependencies, dict):
+            for extra in requested_extras:
+                edges = optional_dependencies.get(extra)
+                if isinstance(edges, list):
+                    dependencies.extend(edges)
+        for dependency in dependencies:
             marker = dependency.get("marker")
             if not _marker_applies(
                 marker if isinstance(marker, str) else None,
-                allowed_extras,
+                marker_extras,
                 target_python if isinstance(target_python, str) else None,
             ):
                 continue
@@ -1714,7 +1798,12 @@ def _resolve_profile(  # noqa: C901
                 result["conflicting_dependencies"].append(
                     f"{package['name']} -> {dependency['name']} has {len(variants)} lock variants"
                 )
-            queue.extend((variant, "transitive") for variant in variants)
+            dependency_extras = frozenset(
+                value.casefold()
+                for value in dependency.get("extras", [])
+                if isinstance(value, str) and value.strip()
+            )
+            queue.extend((variant, "transitive", dependency_extras) for variant in variants)
 
     result["package_ids"] = sorted(seen)
     result["relationships"] = [
@@ -2347,6 +2436,9 @@ def build_inventory(  # noqa: C901, PLR0912, PLR0915
                 selected_package_ids=selected_package_ids,
                 all_packages=all_packages,
                 profiles=profiles,
+                target=manifest.get("target", {})
+                if isinstance(manifest.get("target"), dict)
+                else {},
             )
         except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as exc:
             candidate_binding = {

@@ -1,0 +1,53 @@
+{
+  "admission_status": "diagnostic_only",
+  "bridge_id": "route_choice_homotopy_observability",
+  "card_digest": "df156582547b0b3978891190a5022e1df7416b5d576471b99cc4243bcc2371b4",
+  "evidence_status": "synthetic_fixture",
+  "forbidden_inferences": [
+    "Human acceptance or preference validation.",
+    "Demonstrated improvement in real-world human-robot interaction predictability.",
+    "Validated pedestrian perception of robot intent."
+  ],
+  "implementation_status": "synthetic_fixture_only",
+  "implemented_now": [
+    "Deterministic classification of route side (left/right passing) and topological homotopy consistency.",
+    "Static topological feature extractors for planned trajectories on SVG and grid maps."
+  ],
+  "linked_issues": [
+    5308,
+    8048
+  ],
+  "missing_proof": [
+    "Human behavioral ground-truth or preference datasets validating route observability.",
+    "Empirical proof that visible topological features improve human trajectory prediction or perceived social comfort.",
+    "Controlled user studies or real-world pedestrian interaction logs."
+  ],
+  "next_decisive_experiment": {
+    "requirements": [
+      "Preregistered route conditions with planner-visible inputs.",
+      "Paired scenarios/seeds with route-side/homotopy outcomes separated from hard safety metrics.",
+      "Human-response data or clearly bounded simulator-only proxy interpretation.",
+      "Uncertainty and missingness quantification."
+    ],
+    "title": "Preregistered Route Observability and Human Response Study"
+  },
+  "owner_paths": [
+    "robot_sf/planner/",
+    "robot_sf/nav/",
+    "scripts/tools/"
+  ],
+  "relationship_to_anchor": "introduced_after_anchor",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "safe_sentence": "The repository can deterministically classify route side and homotopy consistency on synthetic fixtures; whether those observables improve human predictability or social acceptance remains unevaluated.",
+  "schema": "future_work_bridge_status_card.v1",
+  "source_digest": "3b3854fc19502eb64275ea6ec14a93f5eb4d2bdec67fa21d09d83ca28799c10b",
+  "strongest_evidence_surface": "tests/planner/ and synthetic topological maps",
+  "title": "Route Choice and Homotopy Observability",
+  "verified_now": [
+    {
+      "item": "Synthetic geometric corridor and obstacle fixtures classify topological homotopy classes deterministically.",
+      "status": "verified",
+      "tier": "Tier 0 (synthetic)"
+    }
+  ]
+}

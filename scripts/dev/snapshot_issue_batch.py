@@ -1055,10 +1055,18 @@ def snapshot_claimable_issues(
 ) -> dict[str, Any]:
     """Return a compact candidate/open issue snapshot with live claimable rows separated.
 
-    GraphQL discovery is used only when the quota preflight leaves the configured safety margin.
-    Otherwise the bounded REST page is used, and a ``resume_cursor`` is returned when another page
-    exists. If neither source is safe or available, the result is ``quota_blocked`` with no issue
-    rows, so a caller cannot mistake a partial discovery for a complete queue.
+    Claimable discovery constrains issue listing to ``state:ready`` candidates before the
+    bounded page size, so newer non-ready issues cannot evict older ready leaves from the
+    scanned window. GraphQL discovery is used only when the quota preflight leaves the
+    configured safety margin. Otherwise the bounded REST page is used, and a
+    ``resume_cursor`` is returned when another page exists.
+
+    ``queue_completeness`` makes zero-work claims explicit: ``complete`` means the
+    ready-candidate universe was fully scanned and every live admission succeeded;
+    ``incomplete`` means the ready-candidate page was truncated or resumable; and
+    ``unavailable`` means discovery itself failed or was quota-blocked. A
+    ``claimable_count == 0`` result may only be treated as ``genuine_zero_work`` when
+    ``queue_completeness`` is ``complete``.
     """
     body_limit = body_limit if body_limit > 0 else BODY_EXCERPT_CHARS
     blocker_decisions, blocker_errors = _load_blocker_decisions(blocker_decision_paths or [])
@@ -1071,6 +1079,7 @@ def snapshot_claimable_issues(
             "legacy_mode": "claimable",
             "status": "error",
             "data_source": "none",
+            "queue_completeness": "unavailable",
             "blocker_decision_paths": blocker_decision_paths or [],
             "errors": blocker_errors,
             "issues": [{"status": "error", "error": error} for error in blocker_errors],
@@ -1084,6 +1093,7 @@ def snapshot_claimable_issues(
         limit=limit,
         min_graphql_remaining=min_graphql_remaining,
         resume_page=resume_page,
+        label=issue_implementability.READY_LABEL,
     )
     base = {
         "schema": "issue_batch_snapshot.v1",
@@ -1096,6 +1106,7 @@ def snapshot_claimable_issues(
         "rate_limit": listing["rate_limit"],
         "quota": listing["quota"],
         "resume_cursor": listing["resume_cursor"],
+        "queue_completeness": "unavailable",
         "blocker_decision_paths": blocker_decision_paths or [],
         "candidate_count": 0,
         "claimable_issues": [],
@@ -1158,6 +1169,7 @@ def snapshot_claimable_issues(
         **base,
         "mode": "candidate_queue",
         "legacy_mode": "claimable",
+        "queue_completeness": "incomplete" if truncated else "complete",
         "truncated": truncated,
         "truncation_note": truncation_note,
         "include_blocked_external": include_blocked_external,

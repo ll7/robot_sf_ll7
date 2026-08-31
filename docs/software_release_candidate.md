@@ -52,8 +52,9 @@ as one of its own payload members.
 Before building, the producer reads the tracked
 `scripts/validation/software_candidate_policy.v1.json` from the exact source commit. The
 `materialize-source` command selects the policy's regular files, excludes models, maps, examples,
-other non-candidate paths, keeps ORCA/pyrvo2 and SocNavBench source checkouts external, requires release-safe evidence for selected asset-like files, and
-creates a standalone deterministic Git candidate. The generated `SOFTWARE_CANDIDATE.json` and
+other non-candidate paths, keeps ORCA/pyrvo2 and SocNavBench source checkouts external, and
+requires release-safe evidence for selected asset-like files. It creates a standalone
+deterministic Git candidate. The generated `SOFTWARE_CANDIDATE.json` and
 candidate-local rights inventory record the source SHA, policy and inventory hashes, selected
 members, and explicit exclusions. The external materialization report records the candidate
 commit and tree used by the later build.

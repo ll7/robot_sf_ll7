@@ -872,6 +872,21 @@ def test_assemble_requires_every_validator_once_in_canonical_order(tmp_path: Pat
     assert not (tmp_path / "bundle").exists()
 
 
+def test_assemble_rejects_partial_materialization_identity(tmp_path: Path) -> None:
+    """Assembly must not carry a candidate root without its materialization report."""
+    source, source_sha = _source_repo(tmp_path / "source")
+    dist = _distributions(tmp_path / "dist")
+    raw_sbom = _raw_sbom(tmp_path / "raw-sbom.json")
+    args = _assemble_args(source, source_sha, dist, raw_sbom, tmp_path / "bundle")
+    args.extend(("--candidate-source-root", str(tmp_path / "candidate")))
+
+    result = _run(*args, check=False)
+
+    assert result.returncode == 1
+    assert "must be supplied together" in result.stderr
+    assert not (tmp_path / "bundle").exists()
+
+
 @pytest.mark.parametrize("case", ("missing", "unclassified", "hash"))
 def test_verify_rejects_missing_unclassified_or_hash_drifted_bundle_members(
     tmp_path: Path,

@@ -23,8 +23,9 @@ jobs:
 ```
 
 The call requests no secrets. Its outputs are `artifact-id`, `artifact-digest`, `artifact-name`,
-and `source-sha`. A later consumer must bind all four values before downloading or promoting an
-artifact; a matching name alone is not identity evidence.
+`source-sha`, `candidate-source-sha`, and `candidate-tree-sha`. A later consumer must bind all
+six values before downloading or promoting an artifact; a matching name alone is not identity
+evidence.
 
 ## Candidate contents
 
@@ -37,9 +38,28 @@ artifact; a matching name alone is not identity evidence.
 - `candidate-provenance.json`.
 
 Every member record includes its exact filename, size, kind, and SHA-256. The envelope also binds
-the source commit, repository, workflow run ID and attempt, package version, and the complete
+the source commit, the rights-scoped candidate commit and tree, repository, workflow run ID and
+attempt, package version, materialization policy and source-inventory hashes, and the complete
 validation roster. The manifest itself is the admission envelope, so it is not recursively listed
 as one of its own payload members.
+
+## Rights-scoped source materialization
+
+Before building, the producer reads the tracked
+`scripts/validation/software_candidate_policy.v1.json` from the exact source commit. The
+`materialize-source` command selects the policy's regular files, excludes models, maps, examples,
+and other non-candidate paths, requires release-safe evidence for selected asset-like files, and
+creates a standalone deterministic Git candidate. The generated `SOFTWARE_CANDIDATE.json` and
+candidate-local rights inventory record the source SHA, policy and inventory hashes, selected
+members, and explicit exclusions. The external materialization report records the candidate
+commit and tree used by the later build.
+
+The build root is then staged from that candidate commit, not directly from the authoritative
+checkout. The strict distribution-license gate runs against the staged candidate tree and its
+candidate-local inventory. The clean-install smoke still exercises the installed core runtime
+and every console entry point; when the candidate has no packaged map files, its runtime check
+uses a deterministic programmatic core map. This is runtime smoke evidence only, not benchmark or
+scientific evidence.
 
 The producer uses the existing version-alignment, Twine metadata/README, distribution
 archive/license, and clean wheel-install/entry-point owners. Assembly fails unless all four
@@ -51,17 +71,17 @@ staging, after the only build, and during assembly it hashes raw tracked file by
 targets, checks Git executable modes and path types, and rejects tracked changes or removals,
 untracked or ignored paths, and unsafe symlink targets.
 
-The authoritative checkout supplies identity, validators, and admission only. Before the build,
-`stage-build-source` uses absolute system Git with empty global/system configuration, an empty
-template, disabled hooks, and no executable search path to create a new external
-`$BUILD_SOURCE`. It verifies that disposable root against the exact candidate commit/tree and
-rechecks the authoritative checkout before returning. The sole `uv build` runs from that
-disposable exact-commit root; build output and runtime scratch also remain external. Hatch-VCS may
-therefore generate ignored `robot_sf/_version.py` only inside the disposable root. That path is
-not allowlisted or ignored by the authoritative source gate, and assembly remains bound to the
-untouched authoritative checkout. The canonical wheel-install smoke wrapper also runs from the
-disposable root, confining its unavoidable `output/validation` scratch directory there while its
-report and wheel inputs remain absolute external paths. Provenance records the
+The authoritative checkout supplies identity, materialization policy, validators, and admission
+only. Before the build, `stage-build-source` uses absolute system Git with empty global/system
+configuration, an empty template, disabled hooks, and no executable search path to create a new
+external `$BUILD_SOURCE`. It verifies that disposable root against the exact materialized
+candidate commit/tree and rechecks the candidate source before returning. The sole `uv build` runs
+from that disposable exact-commit root; build output and runtime scratch also remain external.
+Hatch-VCS may therefore generate ignored `robot_sf/_version.py` only inside the disposable root.
+That path is not allowlisted or ignored by the authoritative source gate, and assembly remains
+bound to the untouched authoritative checkout. The canonical wheel-install smoke wrapper also
+runs from the disposable root, confining its unavoidable `output/validation` scratch directory
+there while its report and wheel inputs remain absolute external paths. Provenance records the
 disposable-exact-commit build role and the exact one-build command. A materialized Git LFS path is
 accepted only when the frozen commit marks that path `filter=lfs` and its bytes match the committed
 pointer's SHA-256 and size; no LFS helper is executed. The helper also rejects fuzzy or non-commit
@@ -96,7 +116,7 @@ consumer or future promotion workflow must call this verifier on the downloaded 
 not run `uv build`, `python -m build`, or any equivalent package build command.
 
 Schema admission is bound to the reviewed v1 schema bytes (SHA-256
-`ffa6635a7a37e21a36881ff8a89be59ee706c41107b94771ace8ed663d2f6469`) as well as its stable ID,
+`d7bd1f2d7c4146b85fb23ee2d6462bb363f94c79c749b50336832742caf6bdad`) as well as its stable ID,
 version, closed-object shape, required fields, and exact four-member contract. Supplying a
 syntactically valid but weakened schema therefore fails before any candidate can be accepted.
 

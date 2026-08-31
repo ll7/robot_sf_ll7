@@ -41,6 +41,54 @@
       "minItems": 4,
       "type": "array"
     },
+    "materialization": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_commit_sha": {
+          "pattern": "^[0-9a-f]{40}$",
+          "type": "string"
+        },
+        "candidate_inventory_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "candidate_metadata_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "candidate_tree_sha": {
+          "pattern": "^[0-9a-f]{40}$",
+          "type": "string"
+        },
+        "policy_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "policy_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "source_inventory_path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "source_inventory_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate_commit_sha",
+        "candidate_tree_sha",
+        "policy_path",
+        "policy_sha256",
+        "source_inventory_path",
+        "source_inventory_sha256",
+        "candidate_inventory_path",
+        "candidate_metadata_path"
+      ],
+      "type": "object"
+    },
     "package": {
       "additionalProperties": false,
       "properties": {

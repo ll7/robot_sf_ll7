@@ -118,6 +118,16 @@ Split broad ideas before writing.
    - record confidence (high if direct signal, medium if one-step derived, low if speculative).
 4. De-duplicate against open/closed issues before creation.
 5. Draft/update through `gh-issue-creator` only when state is `issue_ready`.
+   - Issue creation must not set `state:ready` up front. Use
+     `scripts/dev/issue_readiness_gate.py create ...` (or run `gate <number>` on the
+     freshly created issue): create without readiness, exact-read through the REST
+     owner, run the live `goal_issue_admission.py --check-only` gate, re-read for
+     drift, and add `state:ready` only after a passing, unclaimed, current check with
+     a verified label readback. A failed, stale, or unavailable check leaves the new
+     issue without `state:ready` and returns a stable JSON outcome
+     (`needs_spec`, `blocked`, `parent`, `human_decision`, `already_claimed`,
+     `state_conflict`, `drift`, or `error`) naming the next authority. Retries are
+     idempotent and never remove labels owned by a human or another workflow.
 6. Route Project #5 metadata in a single batch pass with score sync once at the end.
 7. Stop on no new candidates, budget/time expiry, or blocked writes.
 

@@ -50,6 +50,13 @@ execution.
      `gh issue create --title "<title>" --body-file <body.md> --label "<labels>"`
      (do not combine `--template` with `--body` or `--body-file`, as the GitHub CLI rejects combining them)
    - prefer existing labels; avoid inventing taxonomy
+   - never include `state:ready` in the initial label set; readiness is a verified
+     post-create result produced by `scripts/dev/issue_readiness_gate.py create ...`
+     (create without readiness -> exact REST read -> live
+     `goal_issue_admission.py --check-only` gate -> drift re-read -> conditional
+     verified label write). A failed, stale, or unavailable check leaves the issue
+     without `state:ready` and emits a stable JSON outcome for follow-up; retries
+     are idempotent and never remove labels.
 7. Project routing:
    - use `gh project item-add` when the CLI route is the active Project #5 write path
    - use `gh project item-edit` for explicit field updates when the CLI route is active

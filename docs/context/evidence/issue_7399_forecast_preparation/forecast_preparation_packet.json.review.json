@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_7399_forecast_preparation/forecast_preparation_packet.json",
-  "artifact_sha256": "56b1404542b5381c1dfd7a8394cb3816ffa0a5464a248ead45d909455690e200",
+  "artifact_sha256": "539616f5889e219c7c6af595282a45c41c02887cf871c8a43cba981f642afeae",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

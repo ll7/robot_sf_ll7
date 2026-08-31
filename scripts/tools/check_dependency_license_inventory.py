@@ -29,7 +29,7 @@ import zipfile
 from collections import Counter, defaultdict, deque
 from email.parser import BytesParser
 from email.policy import default as email_policy
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote, urlsplit
 
@@ -57,6 +57,26 @@ _CANDIDATE_MANIFEST_NAME = "candidate-manifest.json"
 _CANDIDATE_SCHEMA_VERSION = "robot_sf.software_candidate.v1"
 _CANDIDATE_PROVENANCE_VERSION = "robot_sf.software_candidate.provenance.v1"
 _CANDIDATE_MEMBER_KINDS = ("wheel", "sdist", "sbom", "provenance")
+_CANDIDATE_MATERIALIZATION_FIELDS = {
+    "candidate_commit_sha",
+    "candidate_tree_sha",
+    "policy_path",
+    "policy_sha256",
+    "source_inventory_path",
+    "source_inventory_sha256",
+    "candidate_inventory_path",
+    "candidate_metadata_path",
+}
+_CANDIDATE_MATERIALIZATION_PATH_FIELDS = {
+    "policy_path",
+    "source_inventory_path",
+    "candidate_inventory_path",
+    "candidate_metadata_path",
+}
+_CANDIDATE_MATERIALIZATION_SHA_FIELDS = {
+    "policy_sha256",
+    "source_inventory_sha256",
+}
 _CANDIDATE_REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _CANDIDATE_SOURCE_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _CANDIDATE_RUN_ID_RE = re.compile(r"^[1-9][0-9]*$")
@@ -64,8 +84,18 @@ _CANDIDATE_VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+!_-]*$")
 _CANDIDATE_VALIDATION_COMMANDS = (
     ("version-alignment", "python scripts/dev/check_version_alignment.py"),
     ("metadata", "twine check --strict $DIST_DIR/*.whl $DIST_DIR/*.tar.gz"),
-    ("archive-license", "python scripts/tools/check_distribution_licenses.py $DIST_DIR"),
-    ("wheel-install", "bash scripts/validation/wheel_install_smoke.sh $DIST_DIR/robot_sf-*.whl"),
+    (
+        "archive-license",
+        "cd $BUILD_SOURCE && python scripts/tools/check_distribution_licenses.py "
+        "$DIST_DIR --strict-asset-rights --repo-root $BUILD_SOURCE "
+        "--inventory $BUILD_SOURCE/scripts/validation/software_candidate_asset_rights.v1.json "
+        "--source-tree-ref HEAD",
+    ),
+    (
+        "wheel-install",
+        "cd $BUILD_SOURCE && bash scripts/validation/wheel_install_smoke.sh "
+        "$DIST_DIR/robot_sf-*.whl",
+    ),
 )
 _CANDIDATE_SDIST_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz")
 _REQUIREMENT_RE = re.compile(
@@ -591,11 +621,45 @@ def _candidate_validation_payload() -> dict[str, Any]:
     }
 
 
+def _candidate_materialization_contract(value: Any) -> dict[str, Any]:
+    """Validate the optional rights-scoped source identity envelope."""
+    if not isinstance(value, dict) or set(value) != _CANDIDATE_MATERIALIZATION_FIELDS:
+        raise ValueError("candidate materialization identity is missing or unclassified")
+    for field in ("candidate_commit_sha", "candidate_tree_sha"):
+        identity = value.get(field)
+        if not isinstance(identity, str) or _CANDIDATE_SOURCE_SHA_RE.fullmatch(identity) is None:
+            raise ValueError(f"candidate materialization {field} is invalid")
+    for field in _CANDIDATE_MATERIALIZATION_SHA_FIELDS:
+        digest = value.get(field)
+        if not isinstance(digest, str) or _SHA256_RE.fullmatch(digest) is None:
+            raise ValueError(f"candidate materialization {field} is invalid")
+    for field in _CANDIDATE_MATERIALIZATION_PATH_FIELDS:
+        path = value.get(field)
+        if not isinstance(path, str) or not path:
+            raise ValueError(f"candidate materialization {field} is invalid")
+        if (
+            path.startswith("/")
+            or "\\" in path
+            or "\x00" in path
+            or PurePosixPath(path).as_posix() != path
+        ):
+            raise ValueError(f"candidate materialization {field} is invalid")
+        parts = PurePosixPath(path).parts
+        if (
+            not parts
+            or parts[0] == ".git"
+            or any(part in {"", ".", ".."} for part in parts)
+            or any(ord(character) < 0x20 or ord(character) == 0x7F for character in path)
+        ):
+            raise ValueError(f"candidate materialization {field} is invalid")
+    return value
+
+
 def _candidate_manifest_contract(  # noqa: C901, PLR0912
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
     """Validate the closed v1 candidate manifest shape before binding its bytes."""
-    expected_keys = {
+    required_keys = {
         "schema_version",
         "repository",
         "source_sha",
@@ -605,7 +669,7 @@ def _candidate_manifest_contract(  # noqa: C901, PLR0912
         "members",
     }
     if (
-        set(manifest) != expected_keys
+        set(manifest) not in (required_keys, required_keys | {"materialization"})
         or manifest.get("schema_version") != _CANDIDATE_SCHEMA_VERSION
     ):
         raise ValueError("candidate manifest has missing or unclassified contract fields")
@@ -637,6 +701,8 @@ def _candidate_manifest_contract(  # noqa: C901, PLR0912
         raise ValueError("candidate manifest package identity is invalid")
     if manifest.get("validation") != _candidate_validation_payload():
         raise ValueError("candidate manifest validation roster is invalid")
+    if "materialization" in manifest:
+        _candidate_materialization_contract(manifest["materialization"])
     members = manifest.get("members")
     if not isinstance(members, list) or len(members) != len(_CANDIDATE_MEMBER_KINDS):
         raise ValueError("candidate manifest must bind exactly four payload members")
@@ -779,6 +845,8 @@ def _candidate_provenance_contract(
         "validation": manifest["validation"],
         "workflow": manifest["workflow"],
     }
+    if "materialization" in manifest:
+        expected["materialization"] = manifest["materialization"]
     if provenance != expected:
         raise ValueError("candidate provenance does not exactly bind the manifest subjects")
 
@@ -894,6 +962,9 @@ def _candidate_bundle_binding(  # noqa: C901
         "repository": manifest["repository"],
         "source_sha": manifest["source_sha"],
         "workflow": _normalise_json(manifest["workflow"]),
+        "materialization": _normalise_json(manifest["materialization"])
+        if "materialization" in manifest
+        else None,
         "package": {"name": package["name"], "version": package["version"]},
         "members": [bound_members[kind] for kind in sorted(bound_members)],
         "archives": {"wheel": wheel_metadata, "sdist": sdist_metadata},

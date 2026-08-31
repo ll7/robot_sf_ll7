@@ -84,7 +84,10 @@ package identity and metadata, and the SBOM component set against the selected l
 replaces ambient installed metadata for the selected rows with an `artifact_bound` identity
 observation, but it does not invent license facts: a reviewed exact policy disposition is still
 required for each dependency. The resulting `candidate_binding` record carries the candidate
-identity, member digests, and component digest needed for candidate-bundle admission.
+identity, materialization commit/tree and policy/inventory identities, member digests, and
+component digest needed for candidate-bundle admission. A producer that omits the optional
+materialization envelope remains compatible; when present, it is validated and must match the
+provenance record exactly.
 
 The committed profile matrix covers the root environment, every declared supported extra,
 the explicit `all` closure, standalone `fast-pysf`, and SocNavBench.

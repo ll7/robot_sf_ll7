@@ -22,7 +22,6 @@ def _rest_preflight(
     draft: bool = False,
     mergeable: bool = True,
     mergeable_state: str = "clean",
-    merge_ready: bool = True,
 ) -> str:
     return "\t".join(
         (
@@ -32,7 +31,6 @@ def _rest_preflight(
             str(draft).lower(),
             str(mergeable).lower(),
             mergeable_state,
-            str(merge_ready).lower(),
         )
     )
 
@@ -42,9 +40,9 @@ def _fake_gh_bin(tmp_path: Path) -> Path:
 
     The fake is controlled through FAKE_GH_PLAN, a JSON mapping from a short
     key (``merge_ok``, ``worktree_conflict``, ``other_error``, ``repo_view``,
-    ``pr_view``, ``rest_preflight``, ``rest_merge_ok``, ``rest_merge_error``,
-    ``branch_delete_ok``, ``branch_delete_fail``) to
-    ``{"stdout": ..., "stderr": ..., "exit": n}``.
+    ``pr_view``, ``rest_preflight``, ``rest_labels``, ``rest_labels_page_N``,
+    ``rest_merge_ok``, ``rest_merge_error``, ``branch_delete_ok``,
+    ``branch_delete_fail``) to ``{"stdout": ..., "stderr": ..., "exit": n}``.
     """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -68,6 +66,13 @@ def _fake_gh_bin(tmp_path: Path) -> Path:
         "        sys.exit(0)\n"
         "elif args[:2] == ['api', 'repos/o/r/pulls/1234']:\n"
         "    key = 'rest_preflight'\n"
+        "elif len(args) >= 2 and args[0] == 'api' and args[1].startswith(\n"
+        "    'repos/o/r/issues/1234/labels?'\n"
+        "):\n"
+        "    page = args[1].rsplit('page=', 1)[-1]\n"
+        "    key = f'rest_labels_page_{page}'\n"
+        "    if key not in plan:\n"
+        "        key = 'rest_labels'\n"
         "elif args[:3] == ['api', '-X', 'PUT']:\n"
         "    key = plan['rest_key']\n"
         "elif args[:5] == ['api', '-X', 'DELETE', 'repos/o/r/git/refs/heads/branch']:\n"
@@ -114,6 +119,24 @@ def _run_wrapper(
     )
 
 
+def _successful_quota_plan() -> dict[str, object]:
+    return {
+        "merge_key": "graphql_quota",
+        "graphql_quota": {
+            "stderr": "GraphQL: API rate limit already exceeded for user ID 123.",
+            "exit": 1,
+        },
+        "rest_preflight": {"stdout": _rest_preflight(), "exit": 0},
+        "rest_labels": {"stdout": "ok\t1\ttrue", "exit": 0},
+        "rest_key": "rest_merge_ok",
+        "rest_merge_ok": {
+            "stdout": json.dumps({"merged": True, "sha": "c0ffee" * 5, "message": "ok"}),
+            "exit": 0,
+        },
+        "branch_delete_ok": {"exit": 0},
+    }
+
+
 def test_merge_success_path_uses_native_gh(tmp_path: Path) -> None:
     """When gh pr merge succeeds the wrapper exits 0 with no REST call."""
     result = _run_wrapper(
@@ -152,26 +175,21 @@ def test_worktree_conflict_falls_back_to_rest(tmp_path: Path) -> None:
 
 def test_graphql_quota_falls_back_after_rest_guard_reverification(tmp_path: Path) -> None:
     """Quota exhaustion retries only after the REST guard snapshot is merge-ready."""
-    result = _run_wrapper(
-        tmp_path,
-        {
-            "merge_key": "graphql_quota",
-            "graphql_quota": {
-                "stderr": "GraphQL: API rate limit already exceeded for user ID 123.",
-                "exit": 1,
-            },
-            "rest_preflight": {"stdout": _rest_preflight(), "exit": 0},
-            "rest_key": "rest_merge_ok",
-            "rest_merge_ok": {
-                "stdout": json.dumps({"merged": True, "sha": "c0ffee" * 5, "message": "ok"}),
-                "exit": 0,
-            },
-            "branch_delete_ok": {"exit": 0},
-        },
-    )
+    result = _run_wrapper(tmp_path, _successful_quota_plan())
     assert result.returncode == 0, result.stderr
     assert "GraphQL quota exhaustion" in result.stderr
     assert "re-verifying guarded state through REST" in result.stderr
+    assert "Merged via REST fallback" in result.stderr
+
+
+def test_quota_fallback_reads_merge_ready_from_second_label_page(tmp_path: Path) -> None:
+    """The authority label remains visible when it is not on the first REST page."""
+    plan = _successful_quota_plan()
+    plan.pop("rest_labels")
+    plan["rest_labels_page_1"] = {"stdout": "ok\t100\tfalse", "exit": 0}
+    plan["rest_labels_page_2"] = {"stdout": "ok\t1\ttrue", "exit": 0}
+    result = _run_wrapper(tmp_path, plan)
+    assert result.returncode == 0, result.stderr
     assert "Merged via REST fallback" in result.stderr
 
 
@@ -186,17 +204,7 @@ def test_quota_fallback_resolves_repo_from_git_origin(tmp_path: Path) -> None:
     )
     result = _run_wrapper(
         tmp_path,
-        {
-            "merge_key": "graphql_quota",
-            "graphql_quota": {"stderr": "GraphQL: API quota exhausted", "exit": 1},
-            "rest_preflight": {"stdout": _rest_preflight(), "exit": 0},
-            "rest_key": "rest_merge_ok",
-            "rest_merge_ok": {
-                "stdout": json.dumps({"merged": True, "sha": "c0ffee" * 5, "message": "ok"}),
-                "exit": 0,
-            },
-            "branch_delete_ok": {"exit": 0},
-        },
+        _successful_quota_plan(),
         include_repo_arg=False,
         cwd=checkout,
     )
@@ -319,11 +327,27 @@ def test_quota_fallback_refuses_missing_merge_ready_label(tmp_path: Path) -> Non
         {
             "merge_key": "graphql_quota",
             "graphql_quota": {"stderr": "GraphQL: API rate limit exceeded", "exit": 1},
-            "rest_preflight": {"stdout": _rest_preflight(merge_ready=False), "exit": 0},
+            "rest_preflight": {"stdout": _rest_preflight(), "exit": 0},
+            "rest_labels": {"stdout": "ok\t0\tfalse", "exit": 0},
         },
     )
     assert result.returncode == 2
     assert "without the merge-ready label" in result.stderr
+
+
+def test_quota_fallback_refuses_malformed_label_inventory(tmp_path: Path) -> None:
+    """Malformed authority-label data cannot be treated as a complete inventory."""
+    result = _run_wrapper(
+        tmp_path,
+        {
+            "merge_key": "graphql_quota",
+            "graphql_quota": {"stderr": "GraphQL: API rate limit exceeded", "exit": 1},
+            "rest_preflight": {"stdout": _rest_preflight(), "exit": 0},
+            "rest_labels": {"stdout": "error\tmalformed-label-row\t", "exit": 0},
+        },
+    )
+    assert result.returncode == 1
+    assert "label page 1 was malformed" in result.stderr
 
 
 def test_quota_fallback_refuses_non_clean_mergeability(tmp_path: Path) -> None:

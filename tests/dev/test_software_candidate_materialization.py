@@ -143,12 +143,15 @@ def test_materialization_is_deterministic_and_reports_exclusions(tmp_path: Path)
     assert first_payload["source_sha"] == source_sha
     assert first_payload["excluded_paths"] == ["secret/excluded.txt"]
     assert first_payload["excluded_non_regular_paths"] == ["link.bin"]
-    assert first_payload["candidate_commit_sha"] == subprocess.run(
-        ["git", "-C", str(first), "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    assert (
+        first_payload["candidate_commit_sha"]
+        == subprocess.run(
+            ["git", "-C", str(first), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    )
 
     metadata = json.loads((first / "SOFTWARE_CANDIDATE.json").read_text(encoding="utf-8"))
     inventory = json.loads(

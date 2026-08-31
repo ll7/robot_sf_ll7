@@ -45,9 +45,7 @@ MATERIALIZATION_SCHEMA_VERSION = "robot_sf.software_candidate_materialization.v1
 MATERIALIZATION_POLICY_SCHEMA_VERSION = "robot_sf.software_candidate_policy.v1"
 MATERIALIZATION_INVENTORY_SCHEMA_VERSION = "robot_sf.asset_rights_inventory.v1"
 MATERIALIZATION_METADATA_NAME = "SOFTWARE_CANDIDATE.json"
-DEFAULT_MATERIALIZATION_INVENTORY = (
-    "scripts/validation/software_candidate_asset_rights.v1.json"
-)
+DEFAULT_MATERIALIZATION_INVENTORY = "scripts/validation/software_candidate_asset_rights.v1.json"
 UV_OUT_DIR_MARKER_NAME = ".gitignore"
 UV_OUT_DIR_MARKER_BYTES = b"*"
 SDIST_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz", ".zip")
@@ -1171,7 +1169,9 @@ def _validate_materialization_policy(payload: Any) -> dict[str, Any]:
 
     include = _materialization_string_list(payload.get("include"), label="include", patterns=True)
     exclude = _materialization_string_list(payload.get("exclude"), label="exclude", patterns=True)
-    required = _materialization_string_list(payload.get("required"), label="required", patterns=True)
+    required = _materialization_string_list(
+        payload.get("required"), label="required", patterns=True
+    )
 
     asset_rules_raw = payload.get("asset_rules")
     if not isinstance(asset_rules_raw, list):
@@ -1234,10 +1234,14 @@ def _candidate_source_tree(
         raise CandidateError("source SHA must be one exact lowercase 40-hex commit identity")
     if not repo_root.is_dir() or repo_root.is_symlink():
         raise CandidateError(f"source repository is not a real directory: {repo_root}")
-    head = _candidate_git_output(
-        _run_candidate_git("rev-parse", "--verify", "HEAD^{commit}", cwd=repo_root),
-        operation="resolve source HEAD",
-    ).decode("ascii", errors="strict").strip()
+    head = (
+        _candidate_git_output(
+            _run_candidate_git("rev-parse", "--verify", "HEAD^{commit}", cwd=repo_root),
+            operation="resolve source HEAD",
+        )
+        .decode("ascii", errors="strict")
+        .strip()
+    )
     if head != source_sha:
         raise CandidateError(f"source SHA drift: expected {source_sha}, found {head}")
     status = _candidate_git_output(
@@ -1356,7 +1360,9 @@ def _candidate_inventory_payload(
     }
 
 
-def _write_candidate_file(root: Path, relative_path: str, content: bytes, *, mode: str = "100644") -> None:
+def _write_candidate_file(
+    root: Path, relative_path: str, content: bytes, *, mode: str = "100644"
+) -> None:
     """Write one generated candidate file with a regular-file mode."""
     destination = root / relative_path
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -1382,29 +1388,51 @@ def _materialization_inputs(
     elif not policy_input.is_absolute():
         policy_input = source_root / policy_input
     if policy_input.is_symlink():
-        raise CandidateError(f"materialization policy must be a regular file in source: {policy_input}")
+        raise CandidateError(
+            f"materialization policy must be a regular file in source: {policy_input}"
+        )
     policy_path = policy_input.resolve(strict=False)
     if not policy_path.is_relative_to(source_root) or not policy_path.is_file():
-        raise CandidateError(f"materialization policy must be a regular file in source: {policy_path}")
+        raise CandidateError(
+            f"materialization policy must be a regular file in source: {policy_path}"
+        )
     policy_rel = policy_path.relative_to(source_root).as_posix()
     policy_raw = policy_path.read_bytes()
-    policy = _validate_materialization_policy(_load_json(policy_path, label="materialization policy"))
+    policy = _validate_materialization_policy(
+        _load_json(policy_path, label="materialization policy")
+    )
     policy_entry = source_entries.get(policy_rel)
-    if policy_entry is None or policy_entry[0] not in {"100644", "100755"} or policy_entry[1] != "blob":
+    if (
+        policy_entry is None
+        or policy_entry[0] not in {"100644", "100755"}
+        or policy_entry[1] != "blob"
+    ):
         raise CandidateError(f"materialization policy is not a regular tracked file: {policy_rel}")
     if _candidate_blob(source_root, policy_entry[2]) != policy_raw:
-        raise CandidateError(f"materialization policy changed outside the reviewed source tree: {policy_rel}")
+        raise CandidateError(
+            f"materialization policy changed outside the reviewed source tree: {policy_rel}"
+        )
 
     source_inventory_rel = policy["source_inventory_path"]
     inventory_path = source_root / source_inventory_rel
     if inventory_path.is_symlink() or not inventory_path.is_file():
-        raise CandidateError(f"source rights inventory is not a regular file: {source_inventory_rel}")
+        raise CandidateError(
+            f"source rights inventory is not a regular file: {source_inventory_rel}"
+        )
     inventory_entry = source_entries.get(source_inventory_rel)
-    if inventory_entry is None or inventory_entry[0] not in {"100644", "100755"} or inventory_entry[1] != "blob":
-        raise CandidateError(f"source rights inventory is not a regular tracked file: {source_inventory_rel}")
+    if (
+        inventory_entry is None
+        or inventory_entry[0] not in {"100644", "100755"}
+        or inventory_entry[1] != "blob"
+    ):
+        raise CandidateError(
+            f"source rights inventory is not a regular tracked file: {source_inventory_rel}"
+        )
     inventory_raw = _candidate_blob(source_root, inventory_entry[2])
     if inventory_raw != inventory_path.read_bytes():
-        raise CandidateError(f"source rights inventory changed outside the reviewed source tree: {source_inventory_rel}")
+        raise CandidateError(
+            f"source rights inventory changed outside the reviewed source tree: {source_inventory_rel}"
+        )
     return (
         policy,
         policy_rel,
@@ -1596,14 +1624,22 @@ def _candidate_commit(staging_root: Path, empty_template: Path) -> tuple[str, st
         ),
         operation="commit candidate members",
     )
-    commit_sha = _candidate_git_output(
-        _run_candidate_git("rev-parse", "--verify", "HEAD^{commit}", cwd=staging_root),
-        operation="resolve candidate commit",
-    ).decode("ascii").strip()
-    tree_sha = _candidate_git_output(
-        _run_candidate_git("rev-parse", "--verify", "HEAD^{tree}", cwd=staging_root),
-        operation="resolve candidate tree",
-    ).decode("ascii").strip()
+    commit_sha = (
+        _candidate_git_output(
+            _run_candidate_git("rev-parse", "--verify", "HEAD^{commit}", cwd=staging_root),
+            operation="resolve candidate commit",
+        )
+        .decode("ascii")
+        .strip()
+    )
+    tree_sha = (
+        _candidate_git_output(
+            _run_candidate_git("rev-parse", "--verify", "HEAD^{tree}", cwd=staging_root),
+            operation="resolve candidate tree",
+        )
+        .decode("ascii")
+        .strip()
+    )
     return commit_sha, tree_sha
 
 
@@ -1621,7 +1657,9 @@ def _build_candidate_root(  # noqa: PLR0913 - explicit candidate write inputs st
 ) -> tuple[str, str]:
     """Write and commit one candidate root atomically."""
     try:
-        with tempfile.TemporaryDirectory(prefix=".robot-sf-materialization-", dir=parent) as temp_text:
+        with tempfile.TemporaryDirectory(
+            prefix=".robot-sf-materialization-", dir=parent
+        ) as temp_text:
             staging_root = Path(temp_text) / "candidate"
             staging_root.mkdir()
             for path in selected_paths:
@@ -1663,7 +1701,9 @@ def _write_materialization_report(
     """Write the external candidate report without overwriting any existing path."""
     _require_external(report_path, repo_root=source_root, label="materialization report")
     if report_path.resolve(strict=False).is_relative_to(candidate_root):
-        raise CandidateError(f"materialization report must be outside candidate root: {report_path}")
+        raise CandidateError(
+            f"materialization report must be outside candidate root: {report_path}"
+        )
     if report_path.exists() or report_path.is_symlink():
         raise CandidateError(f"materialization report must not already exist: {report_path}")
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1873,10 +1913,17 @@ def _validate_materialization_schema(properties: dict[str, Any]) -> None:
     materialization = properties.get("materialization")
     if not isinstance(materialization, dict):
         raise CandidateError("candidate manifest schema has no materialization contract")
-    if materialization.get("type") != "object" or materialization.get("additionalProperties") is not False:
-        raise CandidateError("candidate manifest schema has the wrong materialization object contract")
+    if (
+        materialization.get("type") != "object"
+        or materialization.get("additionalProperties") is not False
+    ):
+        raise CandidateError(
+            "candidate manifest schema has the wrong materialization object contract"
+        )
     if set(materialization.get("required", ())) != set(MATERIALIZATION_PAYLOAD_FIELDS):
-        raise CandidateError("candidate manifest schema has the wrong materialization required fields")
+        raise CandidateError(
+            "candidate manifest schema has the wrong materialization required fields"
+        )
     materialization_properties = materialization.get("properties")
     if not isinstance(materialization_properties, dict) or set(materialization_properties) != set(
         MATERIALIZATION_PAYLOAD_FIELDS
@@ -1956,10 +2003,7 @@ def _validate_materialization_report(payload: Any) -> dict[str, Any]:
     source_sha = payload.get("source_sha")
     if not isinstance(source_sha, str) or not SHA_PATTERN.fullmatch(source_sha):
         raise CandidateError("materialization report source_sha is invalid")
-    identity = {
-        field: payload[field]
-        for field in MATERIALIZATION_PAYLOAD_FIELDS
-    }
+    identity = {field: payload[field] for field in MATERIALIZATION_PAYLOAD_FIELDS}
     _validate_materialization_payload(identity)
     if not isinstance(payload.get("members"), list):
         raise CandidateError("materialization report members must be a list")
@@ -2112,10 +2156,14 @@ def _load_assembly_materialization_report(
     candidate_root = Path(os.path.abspath(candidate_source_root))
     _require_external(candidate_root, repo_root=repo_root, label="materialized candidate source")
     _validate_source(candidate_root, report["candidate_commit_sha"])
-    candidate_tree_sha = _candidate_git_output(
-        _run_candidate_git("rev-parse", "--verify", "HEAD^{tree}", cwd=candidate_root),
-        operation="resolve materialized candidate tree",
-    ).decode("ascii", errors="strict").strip()
+    candidate_tree_sha = (
+        _candidate_git_output(
+            _run_candidate_git("rev-parse", "--verify", "HEAD^{tree}", cwd=candidate_root),
+            operation="resolve materialized candidate tree",
+        )
+        .decode("ascii", errors="strict")
+        .strip()
+    )
     if candidate_tree_sha != report["candidate_tree_sha"]:
         raise CandidateError(
             "materialization candidate tree drift: "

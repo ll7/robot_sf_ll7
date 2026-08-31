@@ -115,9 +115,7 @@ def test_workflow_confines_wheel_smoke_side_effects_to_disposable_source() -> No
     assert 'VALIDATION_DIR="${REPO_ROOT}/output/validation"' in wrapper_text
     assert 'mkdir -p "${VALIDATION_DIR}"' in wrapper_text
     assert "programmatic-core-map" in wrapper_text
-    materialize = next(
-        step["run"] for step in steps if step.get("id") == "materialize"
-    )
+    materialize = next(step["run"] for step in steps if step.get("id") == "materialize")
     assert "software_candidate_manifest.py materialize-source" in materialize
     assert '--candidate-root "${CANDIDATE_SOURCE}"' in materialize
     assert '--report "${MATERIALIZATION_REPORT}"' in materialize

@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 SCHEMA_VERSION = "robot_sf.software_candidate.v1"
 SCHEMA_ID = "https://robot-sf.dev/schema/software-candidate-manifest.v1.json"
-SCHEMA_SHA256 = "ffa6635a7a37e21a36881ff8a89be59ee706c41107b94771ace8ed663d2f6469"
+SCHEMA_SHA256 = "d7bd1f2d7c4146b85fb23ee2d6462bb363f94c79c749b50336832742caf6bdad"
 PROVENANCE_VERSION = "robot_sf.software_candidate.provenance.v1"
 SCHEMA_PATH = Path(__file__).with_name("software_candidate_manifest.v1.schema.json")
 DEFAULT_MATERIALIZATION_POLICY = (
@@ -105,6 +105,32 @@ MATERIALIZATION_ASSET_PATH_HINTS = frozenset(
 MATERIALIZATION_NON_ASSET_SUFFIXES = frozenset(
     {".md", ".py", ".pyi", ".rst", ".sh", ".toml", ".txt"}
 )
+MATERIALIZATION_PAYLOAD_FIELDS = (
+    "candidate_commit_sha",
+    "candidate_tree_sha",
+    "policy_path",
+    "policy_sha256",
+    "source_inventory_path",
+    "source_inventory_sha256",
+    "candidate_inventory_path",
+    "candidate_metadata_path",
+)
+MATERIALIZATION_REPORT_FIELDS = {
+    "schema_version",
+    "package",
+    "source_sha",
+    "policy_path",
+    "policy_sha256",
+    "source_inventory_path",
+    "source_inventory_sha256",
+    "candidate_inventory_path",
+    "candidate_metadata_path",
+    "candidate_commit_sha",
+    "candidate_tree_sha",
+    "members",
+    "excluded_paths",
+    "excluded_non_regular_paths",
+}
 SYSTEM_GIT = Path("/usr/bin/git")
 SYSTEM_TEMP = Path("/tmp")
 
@@ -1838,6 +1864,22 @@ def _validate_members_schema(properties: dict[str, Any]) -> None:
         raise CandidateError("candidate manifest schema has the wrong member kinds")
 
 
+def _validate_materialization_schema(properties: dict[str, Any]) -> None:
+    """Require the optional materialization property to retain its closed contract."""
+    materialization = properties.get("materialization")
+    if not isinstance(materialization, dict):
+        raise CandidateError("candidate manifest schema has no materialization contract")
+    if materialization.get("type") != "object" or materialization.get("additionalProperties") is not False:
+        raise CandidateError("candidate manifest schema has the wrong materialization object contract")
+    if set(materialization.get("required", ())) != set(MATERIALIZATION_PAYLOAD_FIELDS):
+        raise CandidateError("candidate manifest schema has the wrong materialization required fields")
+    materialization_properties = materialization.get("properties")
+    if not isinstance(materialization_properties, dict) or set(materialization_properties) != set(
+        MATERIALIZATION_PAYLOAD_FIELDS
+    ):
+        raise CandidateError("candidate manifest schema has the wrong materialization properties")
+
+
 def _validate_schema_file(schema_path: Path) -> None:
     raw_schema, schema = _load_schema(schema_path)
     properties = _schema_properties(schema)
@@ -1850,6 +1892,7 @@ def _validate_schema_file(schema_path: Path) -> None:
     if schema.get("$id") != SCHEMA_ID:
         raise CandidateError("candidate manifest schema has the wrong stable schema ID")
     _validate_members_schema(properties)
+    _validate_materialization_schema(properties)
 
 
 def _validate_workflow_identity(workflow: Any) -> None:
@@ -1872,6 +1915,58 @@ def _validate_package_identity(package: Any) -> str:
     if not VERSION_PATTERN.fullmatch(version):
         raise CandidateError("candidate manifest package version is invalid")
     return version
+
+
+def _validate_materialization_payload(payload: Any) -> dict[str, Any]:
+    """Validate the materialized-source identity carried by a bundle envelope."""
+    if not isinstance(payload, dict) or set(payload) != set(MATERIALIZATION_PAYLOAD_FIELDS):
+        raise CandidateError("candidate materialization identity is missing or unclassified")
+    for field in ("candidate_commit_sha", "candidate_tree_sha"):
+        value = payload[field]
+        if not isinstance(value, str) or not SHA_PATTERN.fullmatch(value):
+            raise CandidateError(f"candidate materialization {field} is invalid")
+    for field in ("policy_sha256", "source_inventory_sha256"):
+        value = payload[field]
+        if not isinstance(value, str) or not SHA256_PATTERN.fullmatch(value):
+            raise CandidateError(f"candidate materialization {field} is invalid")
+    paths = []
+    for field in (
+        "policy_path",
+        "source_inventory_path",
+        "candidate_inventory_path",
+        "candidate_metadata_path",
+    ):
+        paths.append(_materialization_path(payload[field], label=f"materialization.{field}"))
+    if len(set(paths)) != len(paths):
+        raise CandidateError("candidate materialization paths must be distinct")
+    return payload
+
+
+def _validate_materialization_report(payload: Any) -> dict[str, Any]:
+    """Validate the external report shape before binding it to the source tree."""
+    if not isinstance(payload, dict) or set(payload) != MATERIALIZATION_REPORT_FIELDS:
+        raise CandidateError("materialization report has missing or unclassified fields")
+    if payload.get("schema_version") != MATERIALIZATION_SCHEMA_VERSION:
+        raise CandidateError("materialization report schema_version is invalid")
+    _validate_package_identity(payload.get("package"))
+    source_sha = payload.get("source_sha")
+    if not isinstance(source_sha, str) or not SHA_PATTERN.fullmatch(source_sha):
+        raise CandidateError("materialization report source_sha is invalid")
+    identity = {
+        field: payload[field]
+        for field in MATERIALIZATION_PAYLOAD_FIELDS
+    }
+    _validate_materialization_payload(identity)
+    if not isinstance(payload.get("members"), list):
+        raise CandidateError("materialization report members must be a list")
+    for field in ("excluded_paths", "excluded_non_regular_paths"):
+        values = payload.get(field)
+        if not isinstance(values, list) or any(
+            _materialization_path(value, label=f"materialization report {field}") != value
+            for value in values
+        ):
+            raise CandidateError(f"materialization report {field} is invalid")
+    return payload
 
 
 def _validated_member(member: Any) -> dict[str, Any]:
@@ -1921,7 +2016,8 @@ def _validate_manifest(payload: Any) -> dict[str, Any]:
         "validation",
         "members",
     }
-    if set(payload) != expected_keys:
+    actual_keys = set(payload)
+    if actual_keys not in (expected_keys, expected_keys | {"materialization"}):
         raise CandidateError("candidate manifest has missing or unclassified top-level fields")
     if payload.get("schema_version") != SCHEMA_VERSION:
         raise CandidateError("candidate manifest schema_version is invalid")
@@ -1936,6 +2032,8 @@ def _validate_manifest(payload: Any) -> dict[str, Any]:
     if payload.get("validation") != _validation_payload():
         raise CandidateError("candidate manifest validation roster is missing or invalid")
     _validate_members(payload.get("members"), version=version)
+    if "materialization" in payload:
+        _validate_materialization_payload(payload["materialization"])
     return payload
 
 
@@ -1948,8 +2046,9 @@ def _provenance_payload(
     wheel: dict[str, Any],
     sdist: dict[str, Any],
     sbom: dict[str, Any],
+    materialization: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload = {
         "build": {
             "command": "cd $BUILD_SOURCE && uv build --out-dir $DIST_DIR",
             "count": 1,
@@ -1964,6 +2063,9 @@ def _provenance_payload(
         "validation": _validation_payload(),
         "workflow": workflow,
     }
+    if materialization is not None:
+        payload["materialization"] = materialization
+    return payload
 
 
 def _fresh_bundle_dir(path: Path) -> None:
@@ -1976,6 +2078,185 @@ def _fresh_bundle_dir(path: Path) -> None:
             raise CandidateError(f"bundle directory must be empty: {path}")
     else:
         path.mkdir(parents=True)
+
+
+def _load_assembly_materialization_report(
+    args: argparse.Namespace,
+    repo_root: Path,
+) -> tuple[Path, dict[str, Any]] | None:
+    """Load and validate the external materialization report envelope."""
+    candidate_source_root = getattr(args, "candidate_source_root", None)
+    materialization_report = getattr(args, "materialization_report", None)
+    if (candidate_source_root is None) != (materialization_report is None):
+        raise CandidateError(
+            "candidate source root and materialization report must be supplied together"
+        )
+    if candidate_source_root is None:
+        return None
+    report_path = Path(os.path.abspath(materialization_report))
+    _require_external(report_path, repo_root=repo_root, label="materialization report")
+    if report_path.is_symlink() or not report_path.is_file():
+        raise CandidateError(f"materialization report must be a regular file: {report_path}")
+    report = _validate_materialization_report(
+        _load_json(report_path, label="materialization report")
+    )
+    if report["source_sha"] != args.source_sha:
+        raise CandidateError(
+            "materialization report source drift: "
+            f"expected {args.source_sha}, found {report['source_sha']}"
+        )
+    candidate_root = Path(os.path.abspath(candidate_source_root))
+    _require_external(candidate_root, repo_root=repo_root, label="materialized candidate source")
+    _validate_source(candidate_root, report["candidate_commit_sha"])
+    candidate_tree_sha = _candidate_git_output(
+        _run_candidate_git("rev-parse", "--verify", "HEAD^{tree}", cwd=candidate_root),
+        operation="resolve materialized candidate tree",
+    ).decode("ascii", errors="strict").strip()
+    if candidate_tree_sha != report["candidate_tree_sha"]:
+        raise CandidateError(
+            "materialization candidate tree drift: "
+            f"expected {report['candidate_tree_sha']}, found {candidate_tree_sha}"
+        )
+    return candidate_root, report
+
+
+def _recompute_materialization(
+    args: argparse.Namespace,
+    repo_root: Path,
+    report: dict[str, Any],
+) -> tuple[
+    dict[str, Any],
+    dict[str, tuple[str, str, str]],
+    tuple[str, ...],
+    dict[str, bytes],
+    bytes,
+    bytes,
+]:
+    """Recompute source selection, generated metadata, and candidate inventory bytes."""
+    source_entries = _candidate_source_tree(repo_root, args.source_sha)
+    policy_input = repo_root / report["policy_path"]
+    policy_args = argparse.Namespace(policy=policy_input)
+    (
+        policy,
+        policy_rel,
+        source_inventory_rel,
+        _policy_raw,
+        _inventory_raw,
+        policy_sha256,
+        source_inventory_sha256,
+    ) = _materialization_inputs(policy_args, repo_root, source_entries)
+    if report["package"] != policy["package"]:
+        raise CandidateError("materialization report package does not match its policy")
+    if (
+        report["policy_path"],
+        report["source_inventory_path"],
+        report["policy_sha256"],
+        report["source_inventory_sha256"],
+    ) != (policy_rel, source_inventory_rel, policy_sha256, source_inventory_sha256):
+        raise CandidateError("materialization report policy or inventory identity drifted")
+    if (
+        report["candidate_inventory_path"],
+        report["candidate_metadata_path"],
+    ) != (policy["candidate_inventory_path"], policy["metadata_path"]):
+        raise CandidateError("materialization report generated-path identity drifted")
+
+    selected, excluded_paths, excluded_non_regular = _select_materialization_entries(
+        source_entries, policy, policy_rel=policy_rel
+    )
+    selected_paths, member_bytes, members = _materialization_members(repo_root, selected)
+    if report["members"] != members:
+        raise CandidateError("materialization report selected-member inventory drifted")
+    if report["excluded_paths"] != excluded_paths:
+        raise CandidateError("materialization report excluded-path inventory drifted")
+    if report["excluded_non_regular_paths"] != excluded_non_regular:
+        raise CandidateError("materialization report non-regular exclusion inventory drifted")
+    candidate_inventory_bytes, metadata_bytes = _materialization_metadata(
+        policy,
+        source_sha=args.source_sha,
+        policy_rel=policy_rel,
+        source_inventory_rel=source_inventory_rel,
+        policy_sha256=policy_sha256,
+        source_inventory_sha256=source_inventory_sha256,
+        members=members,
+        excluded_paths=excluded_paths,
+        excluded_non_regular=excluded_non_regular,
+    )
+    return policy, selected, selected_paths, member_bytes, candidate_inventory_bytes, metadata_bytes
+
+
+def _validate_materialized_candidate_tree(
+    candidate_root: Path,
+    report: dict[str, Any],
+    policy: dict[str, Any],
+    selected: dict[str, tuple[str, str, str]],
+    selected_paths: tuple[str, ...],
+    member_bytes: dict[str, bytes],
+    candidate_inventory_bytes: bytes,
+    metadata_bytes: bytes,
+) -> None:
+    """Verify every candidate tree member against the recomputed materialization."""
+    candidate_entries = _candidate_source_tree(candidate_root, report["candidate_commit_sha"])
+    expected_paths = set(selected_paths) | {
+        policy["candidate_inventory_path"],
+        policy["metadata_path"],
+    }
+    if set(candidate_entries) != expected_paths:
+        raise CandidateError("materialized candidate tree contains unexpected paths")
+    for path in selected_paths:
+        expected_mode = selected[path][0]
+        actual_mode, actual_type, actual_object = candidate_entries[path]
+        if actual_mode != expected_mode or actual_type != "blob":
+            raise CandidateError(f"materialized candidate member mode or type drifted: {path}")
+        if _candidate_blob(candidate_root, actual_object) != member_bytes[path]:
+            raise CandidateError(f"materialized candidate member bytes drifted: {path}")
+    for path, expected_bytes in (
+        (policy["candidate_inventory_path"], candidate_inventory_bytes),
+        (policy["metadata_path"], metadata_bytes),
+    ):
+        mode, object_type, object_id = candidate_entries[path]
+        if (mode, object_type) != ("100644", "blob"):
+            raise CandidateError(f"materialized generated member mode or type drifted: {path}")
+        if _candidate_blob(candidate_root, object_id) != expected_bytes:
+            raise CandidateError(f"materialized generated member bytes drifted: {path}")
+
+
+def _materialization_identity(
+    args: argparse.Namespace,
+    repo_root: Path,
+    *,
+    expected_version: str,
+) -> dict[str, Any] | None:
+    """Recompute and bind the reviewed source materialization used for the build."""
+    loaded = _load_assembly_materialization_report(args, repo_root)
+    if loaded is None:
+        return None
+    candidate_root, report = loaded
+    if report["package"]["version"] != expected_version:
+        raise CandidateError(
+            "materialization package version does not match the built distribution: "
+            f"expected {expected_version}, found {report['package']['version']}"
+        )
+    (
+        policy,
+        selected,
+        selected_paths,
+        member_bytes,
+        candidate_inventory_bytes,
+        metadata_bytes,
+    ) = _recompute_materialization(args, repo_root, report)
+    _validate_materialized_candidate_tree(
+        candidate_root,
+        report,
+        policy,
+        selected,
+        selected_paths,
+        member_bytes,
+        candidate_inventory_bytes,
+        metadata_bytes,
+    )
+    return _validate_materialization_payload(
+        {field: report[field] for field in MATERIALIZATION_PAYLOAD_FIELDS}
+    )
 
 
 def _assemble(args: argparse.Namespace) -> None:
@@ -2001,6 +2282,11 @@ def _assemble(args: argparse.Namespace) -> None:
         raise CandidateError("workflow run attempt must be positive")
 
     wheel_input, sdist_input, version = _distribution_inputs(args.dist_dir)
+    materialization = _materialization_identity(
+        args,
+        repo_root,
+        expected_version=version,
+    )
     sbom_bytes = _normalised_sbom(args.raw_sbom, version)
     _validate_source(repo_root, args.source_sha)
     _fresh_bundle_dir(args.bundle_dir)
@@ -2031,6 +2317,7 @@ def _assemble(args: argparse.Namespace) -> None:
                 wheel=wheel_member,
                 sdist=sdist_member,
                 sbom=sbom_member,
+                materialization=materialization,
             )
         )
     )
@@ -2043,6 +2330,8 @@ def _assemble(args: argparse.Namespace) -> None:
         "validation": _validation_payload(),
         "workflow": workflow,
     }
+    if materialization is not None:
+        manifest["materialization"] = materialization
     _validate_manifest(manifest)
     (args.bundle_dir / MANIFEST_NAME).write_bytes(_json_bytes(manifest))
     _validate_source(repo_root, args.source_sha)
@@ -2121,6 +2410,7 @@ def _verify_provenance(bundle_dir: Path, manifest: dict[str, Any]) -> None:
         wheel=wheel_member,
         sdist=sdist_member,
         sbom=sbom_member,
+        materialization=manifest.get("materialization"),
     )
     if provenance != expected_provenance:
         raise CandidateError("candidate provenance does not exactly bind the manifest subjects")
@@ -2191,6 +2481,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     assemble.add_argument("--workflow-run-id", required=True)
     assemble.add_argument("--workflow-run-attempt", type=int, required=True)
     assemble.add_argument("--validated", action="append", default=[])
+    assemble.add_argument("--candidate-source-root", type=Path, default=None)
+    assemble.add_argument("--materialization-report", type=Path, default=None)
     assemble.add_argument("--schema", type=Path, default=SCHEMA_PATH)
 
     verify = subparsers.add_parser("verify", help="offline verification without rebuilding")

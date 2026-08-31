@@ -34,7 +34,7 @@ def _validate_review_body_shas(
     expected_head_sha: str,
     observed_base_sha: str | None,
 ) -> dict[str, Any] | None:
-    """Validate that the review body cites the expected head and does not mismatch the base."""
+    """Require the live head and reject an unverifiable or mismatched declared base."""
     cited_shas = {sha.lower() for sha in extract_full_shas(body)}
     if expected_head_sha.lower() not in cited_shas:
         return {
@@ -43,15 +43,24 @@ def _validate_review_body_shas(
         }
 
     declared_base = _declared_base_sha(body)
-    if declared_base is not None and observed_base_sha:
-        if declared_base.lower() != str(observed_base_sha).lower():
-            return {
-                "status": "error",
-                "error": (
-                    f"review body declares base SHA {declared_base} which does not match "
-                    f"live base SHA {observed_base_sha}"
-                ),
-            }
+    if declared_base is None:
+        return None
+    if not isinstance(observed_base_sha, str) or not observed_base_sha:
+        return {
+            "status": "error",
+            "error": (
+                f"review body declares base SHA {declared_base}, but the live base SHA "
+                "is unavailable"
+            ),
+        }
+    if declared_base.lower() != observed_base_sha.lower():
+        return {
+            "status": "error",
+            "error": (
+                f"review body declares base SHA {declared_base} which does not match "
+                f"live base SHA {observed_base_sha}"
+            ),
+        }
     return None
 
 

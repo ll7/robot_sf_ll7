@@ -100,6 +100,26 @@ def test_missing_head_sha_in_body_fails_before_post(tmp_path: Path) -> None:
     mock_post.assert_not_called()
 
 
+def test_declared_base_without_live_base_fails_before_post(tmp_path: Path) -> None:
+    """A declared base cannot publish when the live guard result lacks a base SHA."""
+    body_file = _write_body(
+        tmp_path,
+        f"Review for head {HEAD_SHA}\nBase reviewed: {BASE_SHA}",
+    )
+    with (
+        patch(
+            "scripts.dev.gh_pr_review_rest.guard_pr_write",
+            return_value={"status": "ok"},
+        ),
+        patch("scripts.dev.gh_pr_review_rest._gh_api_post") as mock_post,
+    ):
+        result = post_review(7571, body_file, expected_head_sha=HEAD_SHA)
+
+    assert result["status"] == "error"
+    assert "live base SHA is unavailable" in result["error"]
+    mock_post.assert_not_called()
+
+
 def test_mismatched_declared_base_in_body_fails_before_post(tmp_path: Path) -> None:
     """A review body declaring a different base SHA fails closed before POST."""
     other_base = "0000111122223333444455556666777788889999"
@@ -146,7 +166,14 @@ def test_matching_declared_base_in_body_succeeds(tmp_path: Path) -> None:
 
     assert result["status"] == "ok"
     assert result["review_id"] == 8
-    mock_post.assert_called_once()
+    mock_post.assert_called_once_with(
+        "repos/ll7/robot_sf_ll7/pulls/7571/reviews",
+        {
+            "body": f"Review for head {HEAD_SHA}\nBase reviewed: {BASE_SHA}",
+            "event": "COMMENT",
+            "commit_id": HEAD_SHA,
+        },
+    )
 
 
 def test_stale_guard_skips_review_post(tmp_path: Path) -> None:

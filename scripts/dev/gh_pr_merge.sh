@@ -27,6 +27,9 @@ set -euo pipefail
 # The exact-head binding is mandatory: without `--match-head-commit` the REST
 # fallback is refused and the wrapper exits 2.
 
+REST_LABEL_PAGE_SIZE=100
+REST_LABEL_PAGE_CEILING=10
+
 usage() {
   cat <<'EOF_USAGE'
 Usage: scripts/dev/gh_pr_merge.sh <pr-number> --match-head-commit <sha> [--repo owner/name]
@@ -83,6 +86,71 @@ repo_from_git_remote() {
     printf '%s\n' "$candidate"
     return 0
   fi
+  return 1
+}
+
+read_merge_ready_label() {
+  local repo_name="$1"
+  local number="$2"
+  local error_file="$3"
+  local page page_result status count found
+  local has_merge_ready="false"
+
+  for ((page = 1; page <= REST_LABEL_PAGE_CEILING; page++)); do
+    : >"$error_file"
+    if ! page_result="$(gh api \
+      "repos/${repo_name}/issues/${number}/labels?per_page=${REST_LABEL_PAGE_SIZE}&page=${page}" \
+      --jq 'if type != "array" then
+              ["error", "expected-array", ""]
+            elif (all(.[]; if type == "object" then
+              ((.name | type) == "string" and (.name | length) > 0)
+            else false end) | not) then
+              ["error", "malformed-label-row", ""]
+            else
+              ["ok", (length | tostring),
+               ((any(.[]; .name == "merge-ready")) | tostring)]
+            end | @tsv' \
+      2>"$error_file")"; then
+      printf 'ERROR: REST merge-ready label read failed on page %s:\n%s\n' \
+        "$page" "$(cat "$error_file")" >&2
+      return 1
+    fi
+
+    status=""
+    count=""
+    found=""
+    IFS=$'\t' read -r status count found <<<"$page_result"
+    if [[ "$status" != "ok" ]]; then
+      printf 'ERROR: REST merge-ready label page %s was malformed (%s).\n' \
+        "$page" "${count:-unknown-error}" >&2
+      return 1
+    fi
+    if ! [[ "$count" =~ ^[0-9]+$ ]]; then
+      printf 'ERROR: REST merge-ready label page %s returned an invalid count %q.\n' \
+        "$page" "$count" >&2
+      return 1
+    fi
+    if ((count > REST_LABEL_PAGE_SIZE)); then
+      printf 'ERROR: REST merge-ready label page %s exceeded page size %s.\n' \
+        "$page" "$REST_LABEL_PAGE_SIZE" >&2
+      return 1
+    fi
+    if [[ "$found" != "true" && "$found" != "false" ]]; then
+      printf 'ERROR: REST merge-ready label page %s returned an invalid match flag %q.\n' \
+        "$page" "$found" >&2
+      return 1
+    fi
+    if [[ "$found" == "true" ]]; then
+      has_merge_ready="true"
+    fi
+    if ((count < REST_LABEL_PAGE_SIZE)); then
+      printf '%s\n' "$has_merge_ready"
+      return 0
+    fi
+  done
+
+  printf 'ERROR: REST merge-ready label pagination exceeded the page ceiling of %s.\n' \
+    "$REST_LABEL_PAGE_CEILING" >&2
   return 1
 }
 
@@ -177,7 +245,7 @@ if [[ "$fallback_mode" == "graphql_quota" ]]; then
   : >"$_gh_pr_merge_err"
   rest_preflight=""
   if ! rest_preflight="$(gh api "repos/${repo}/pulls/${pr_number}" \
-    --jq '[.head.sha // "", .head.ref // "", .state // "", (.draft | tostring), (.mergeable | tostring), (.mergeable_state // ""), (([.labels[]?.name] | index("merge-ready") != null) | tostring)] | @tsv' \
+    --jq '[.head.sha // "", .head.ref // "", .state // "", (.draft | tostring), (.mergeable | tostring), (.mergeable_state // "")] | @tsv' \
     2>"$_gh_pr_merge_err")"; then
     printf 'ERROR: REST merge preflight failed:\n%s\n' "$(cat "$_gh_pr_merge_err")" >&2
     exit 1
@@ -186,9 +254,8 @@ if [[ "$fallback_mode" == "graphql_quota" ]]; then
   draft=""
   mergeable=""
   mergeable_state=""
-  has_merge_ready=""
   IFS=$'\t' read -r live_head head_ref pr_state draft mergeable mergeable_state \
-    has_merge_ready <<<"$rest_preflight"
+    <<<"$rest_preflight"
 
   if [[ -z "$live_head" || "$live_head" != "$expected_head_sha" ]]; then
     printf 'ERROR: REST fallback refuses stale head (expected %s, live %s).\n' \
@@ -204,6 +271,9 @@ if [[ "$fallback_mode" == "graphql_quota" ]]; then
     printf 'ERROR: REST fallback refuses non-clean mergeability (mergeable=%s, state=%s).\n' \
       "${mergeable:-<unknown>}" "${mergeable_state:-<unknown>}" >&2
     exit 2
+  fi
+  if ! has_merge_ready="$(read_merge_ready_label "$repo" "$pr_number" "$_gh_pr_merge_err")"; then
+    exit 1
   fi
   if [[ "$has_merge_ready" != "true" ]]; then
     printf 'ERROR: REST fallback refuses PR without the merge-ready label.\n' >&2

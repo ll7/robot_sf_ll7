@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import copy
+import hashlib
 import json
 import math
+import os
 import re
+import subprocess
+import tempfile
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -20,11 +25,16 @@ from robot_sf.benchmark.effective_algorithm_branches import WITNESS_KINDS
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
 from robot_sf.benchmark.release_tag_identity import (
     HISTORICAL_RELEASE_TAG,
+    check_canonical_source_tag,
 )
+from robot_sf.benchmark.zenodo_publisher import ZenodoPublisherError, load_dataset_metadata
 from robot_sf.common.artifact_paths import get_repository_root
 
 RELEASE_MANIFEST_SCHEMA_VERSION = "benchmark-release-manifest.v0.1"
 RELEASE_MANIFEST_SCHEMA_VERSION_V0_2 = "benchmark-release-manifest.v0.2"
+RELEASE_IDENTITY_TEMPLATE_SCHEMA_VERSION = "benchmark-release-identity-template.v1"
+RESOLVED_RELEASE_IDENTITY_SCHEMA_VERSION = "benchmark-release-resolved-identity.v1"
+RESOLVED_RELEASE_METADATA_FILENAME = "zenodo_metadata.resolved.json"
 SUPPORTED_RELEASE_MANIFEST_SCHEMA_VERSIONS = frozenset(
     {RELEASE_MANIFEST_SCHEMA_VERSION, RELEASE_MANIFEST_SCHEMA_VERSION_V0_2}
 )
@@ -41,6 +51,13 @@ HISTORICAL_ZENODO_CONCEPT_DOIS = frozenset(
 _SEMVER_RE = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _GIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_ZENODO_DOI_RE = re.compile(r"^10\.5281/zenodo\.[1-9][0-9]*$")
+_RELEASE_IDENTITY_TOKENS = {
+    "{{release_tag}}": "release_tag",
+    "{{source_sha}}": "source_sha",
+    "{{concept_doi}}": "concept_doi",
+    "{{version_doi}}": "version_doi",
+}
 DIAGNOSTIC_STRESS_RELEASE_KIND = "benchmark-stress-smoke"
 STRESS_SMOKE_CONTRACT_SCHEMA_VERSION = "hybrid-release-stress-smoke.v1"
 STRESS_SMOKE_SOURCE_POLICY = "exact-immutable-worktree-sha-required"
@@ -105,6 +122,242 @@ def _has_symlink_component(path: Path) -> bool:
         if current.is_symlink():
             return True
     return False
+
+
+def _canonical_json_bytes(payload: Mapping[str, Any]) -> bytes:
+    """Serialize a mapping with the stable release-identity JSON contract.
+
+    Returns:
+        Canonical UTF-8 JSON bytes with one trailing newline.
+    """
+    return (
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            allow_nan=False,
+            indent=2,
+            sort_keys=True,
+            separators=(",", ": "),
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
+def _run_git(repository_root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
+    """Run one non-interactive Git query without invoking a shell.
+
+    Returns:
+        Completed process carrying raw stdout and stderr bytes.
+    """
+    return subprocess.run(
+        ["git", *args],
+        cwd=repository_root,
+        check=False,
+        capture_output=True,
+    )
+
+
+def _git_stdout(repository_root: Path, *args: str, label: str) -> bytes:
+    """Return stdout for a successful Git query or fail closed."""
+    result = _run_git(repository_root, *args)
+    if result.returncode != 0:
+        raise ValueError(f"{label} could not be established from the candidate checkout")
+    return result.stdout
+
+
+def _safe_repository_file(path: Path, repository_root: Path, *, field_name: str) -> Path:
+    """Resolve a symlink-free regular file contained by the source checkout.
+
+    Returns:
+        Validated absolute file path.
+    """
+    candidate = path if path.is_absolute() else repository_root / path
+    if _has_symlink_component(candidate):
+        raise ValueError(f"{field_name} must not contain symlink components")
+    resolved = candidate.resolve()
+    try:
+        resolved.relative_to(repository_root)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be contained by the repository checkout") from exc
+    if not resolved.is_file():
+        raise ValueError(f"{field_name} must be an existing regular file")
+    return resolved
+
+
+def _safe_identity_output(path: Path, repository_root: Path, *, field_name: str) -> Path:
+    """Resolve an ignored, symlink-free output path inside the source checkout.
+
+    Returns:
+        Validated absolute output path.
+    """
+    candidate = path if path.is_absolute() else repository_root / path
+    if _has_symlink_component(candidate):
+        raise ValueError(f"{field_name} must not contain symlink components")
+    resolved = candidate.resolve()
+    try:
+        relative = resolved.relative_to(repository_root)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be contained by the repository checkout") from exc
+    if not relative.parts or relative == Path("."):
+        raise ValueError(f"{field_name} must name a file below the repository root")
+    ignored = _run_git(repository_root, "check-ignore", "-q", "--", relative.as_posix())
+    if ignored.returncode != 0:
+        raise ValueError(f"{field_name} must be Git-ignored so generation keeps the tree clean")
+    tracked = _run_git(repository_root, "ls-files", "--error-unmatch", "--", relative.as_posix())
+    if tracked.returncode == 0:
+        raise ValueError(f"{field_name} must not overwrite a tracked source file")
+    return resolved
+
+
+def _require_clean_exact_checkout(
+    repository_root: Path,
+    *,
+    source_commit: str,
+    template_path: Path,
+) -> str:
+    """Require one clean checkout whose tracked template bytes belong to exact ``HEAD``.
+
+    Returns:
+        Normalized exact source commit SHA.
+    """
+    root = repository_root.resolve()
+    top_level = Path(
+        _git_stdout(root, "rev-parse", "--show-toplevel", label="repository root")
+        .decode("utf-8")
+        .strip()
+    ).resolve()
+    if top_level != root:
+        raise ValueError("repository_root does not name the exact Git checkout root")
+    normalized_source = str(source_commit).strip().lower()
+    if _GIT_SHA_RE.fullmatch(normalized_source) is None:
+        raise ValueError("source_commit must be an exact 40-character Git SHA")
+    exists = _run_git(root, "cat-file", "-e", f"{normalized_source}^{{commit}}")
+    if exists.returncode != 0:
+        raise ValueError("source_commit is not reachable in the candidate repository")
+    head = (
+        _git_stdout(root, "rev-parse", "HEAD^{commit}", label="checked-out source commit")
+        .decode("ascii")
+        .strip()
+        .lower()
+    )
+    if head != normalized_source:
+        raise ValueError("checked-out source commit does not match source_commit")
+    status = _git_stdout(
+        root,
+        "status",
+        "--porcelain=v1",
+        "--untracked-files=normal",
+        label="source worktree cleanliness",
+    )
+    if status:
+        raise ValueError("release source worktree is not clean")
+
+    relative_template = template_path.resolve().relative_to(root).as_posix()
+    tracked = _run_git(root, "cat-file", "-e", f"{normalized_source}:{relative_template}")
+    if tracked.returncode != 0:
+        raise ValueError("release identity template is not tracked at source_commit")
+    committed_bytes = _git_stdout(
+        root,
+        "show",
+        f"{normalized_source}:{relative_template}",
+        label="tracked release identity template",
+    )
+    if committed_bytes != template_path.read_bytes():
+        raise ValueError("release identity template bytes differ from source_commit")
+    return normalized_source
+
+
+def _require_source_derived_release_tag(
+    repository_root: Path,
+    *,
+    release_tag: str,
+    source_commit: str,
+    allow_existing_exact_tag: bool = False,
+) -> None:
+    """Require the one canonical ``<prefix>-<full SHA>`` tag representation."""
+    tag_problems = check_canonical_source_tag(release_tag, source_commit)
+    if tag_problems:
+        raise ValueError(tag_problems[0])
+    tag = release_tag
+    ref_check = _run_git(repository_root, "check-ref-format", f"refs/tags/{tag}")
+    if ref_check.returncode != 0:
+        raise ValueError("release_tag is not a valid Git tag reference")
+    existing = _run_git(repository_root, "rev-parse", "--verify", f"refs/tags/{tag}^{{commit}}")
+    if existing.returncode == 0:
+        target = existing.stdout.decode("ascii").strip().lower()
+        if not allow_existing_exact_tag or target != source_commit:
+            raise ValueError("release tag already exists and collides with identity generation")
+    else:
+        raw_existing = _run_git(repository_root, "show-ref", "--verify", f"refs/tags/{tag}")
+        if raw_existing.returncode == 0:
+            raise ValueError("release tag already exists and is not a commit identity")
+
+
+def _require_publication_coordinates(concept_doi: Any, version_doi: Any) -> tuple[str, str]:
+    """Validate exact, distinct Zenodo coordinates supplied after source freeze.
+
+    Returns:
+        Canonical concept and version DOI strings.
+    """
+    if not isinstance(concept_doi, str) or _ZENODO_DOI_RE.fullmatch(concept_doi) is None:
+        raise ValueError("concept_doi must be an exact reserved Zenodo DOI")
+    if not isinstance(version_doi, str) or _ZENODO_DOI_RE.fullmatch(version_doi) is None:
+        raise ValueError("version_doi must be an exact reserved Zenodo DOI")
+    if concept_doi == version_doi:
+        raise ValueError("concept_doi and version_doi must be distinct")
+    return concept_doi, version_doi
+
+
+def _replace_identity_tokens(value: Any, replacements: Mapping[str, str]) -> Any:
+    """Recursively replace the four explicit release-template tokens.
+
+    Returns:
+        Copy-safe structure with all identity tokens resolved.
+    """
+    if isinstance(value, dict):
+        resolved_mapping: dict[str, Any] = {}
+        for key, item in value.items():
+            resolved_key = _replace_identity_tokens(str(key), replacements)
+            if resolved_key in resolved_mapping:
+                raise ValueError("release identity token resolution creates a duplicate key")
+            resolved_mapping[resolved_key] = _replace_identity_tokens(item, replacements)
+        return resolved_mapping
+    if isinstance(value, list):
+        return [_replace_identity_tokens(item, replacements) for item in value]
+    if isinstance(value, str):
+        resolved = value
+        for token, field in _RELEASE_IDENTITY_TOKENS.items():
+            resolved = resolved.replace(token, replacements[field])
+        if re.search(r"\{\{[^{}]+\}\}", resolved):
+            raise ValueError("resolved release identity retains an unresolved template token")
+        return resolved
+    return value
+
+
+def _repository_relative_value(path: Path, repository_root: Path) -> str:
+    """Return one canonical repository-relative path for an identity document."""
+    return path.resolve().relative_to(repository_root.resolve()).as_posix()
+
+
+def _normalize_identity_paths(value: Any, repository_root: Path) -> Any:
+    """Normalize absolute checkout paths recursively for checkout-independent bytes.
+
+    Returns:
+        Structure with contained absolute paths rewritten repository-relative.
+    """
+    if isinstance(value, dict):
+        return {
+            str(key): _normalize_identity_paths(item, repository_root)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_normalize_identity_paths(item, repository_root) for item in value]
+    if isinstance(value, str) and Path(value).is_absolute():
+        try:
+            return Path(value).resolve().relative_to(repository_root.resolve()).as_posix()
+        except ValueError:
+            return value
+    return value
 
 
 @dataclass(frozen=True)
@@ -193,6 +446,10 @@ class BenchmarkReleaseManifest:
     stress_smoke_scenario_source_pins: tuple[StressSmokeAssetPin, ...] = ()
     stress_smoke_hybrid_config_pins: tuple[StressSmokeAssetPin, ...] = ()
     stress_smoke_branch_witnesses: tuple[StressSmokeBranchWitness, ...] = ()
+    resolved_identity_path: Path | None = None
+    identity_template_path: Path | None = None
+    identity_template_sha256: str | None = None
+    resolved_manifest_payload: dict[str, Any] | None = None
 
 
 def _resolve_required_file(
@@ -1122,6 +1379,11 @@ def load_release_manifest(
     if not manifest_path.exists():
         raise FileNotFoundError(f"Benchmark release manifest not found: {manifest_path}")
     payload = _load_mapping(manifest_path)
+    if payload.get("schema_version") == RESOLVED_RELEASE_IDENTITY_SCHEMA_VERSION:
+        return verify_resolved_release_identity(
+            manifest_path,
+            repository_root=repository_root,
+        )
     identity = _load_manifest_identity(payload)
     release_metadata = _load_manifest_release_metadata(payload)
     # Check top-level shapes before resolving any filesystem-backed side input.
@@ -1211,6 +1473,43 @@ def load_release_manifest(
     )
 
 
+def load_release_campaign_config(
+    manifest: BenchmarkReleaseManifest,
+    *,
+    repository_root: Path | None = None,
+) -> CampaignConfig:
+    """Load the campaign config with generated publication identity overlays.
+
+    Tracked campaign templates retain stable scientific bytes and explicit
+    ``{{release_tag}}`` / ``{{version_doi}}`` slots.  A verified resolved
+    identity supplies only those two publication fields at runtime.
+
+    Returns:
+        Validated campaign configuration for this release identity.
+    """
+    if getattr(manifest, "resolved_identity_path", None) is None:
+        return load_campaign_config(
+            manifest.canonical_campaign_config_path,
+            repository_root=repository_root,
+        )
+    root = (repository_root or get_repository_root()).resolve()
+    resolved_payload = manifest.resolved_manifest_payload
+    if not isinstance(resolved_payload, Mapping):
+        raise ValueError("resolved release identity is missing its manifest payload")
+    config_value = resolved_payload.get("canonical_campaign_config")
+    if not isinstance(config_value, str) or not config_value.strip():
+        raise ValueError("resolved release identity has no canonical campaign config path")
+    config_path = _safe_repository_file(
+        Path(config_value),
+        root,
+        field_name="canonical campaign config",
+    )
+    if _sha256_file(config_path) != manifest.campaign_config_sha256:
+        raise ValueError("canonical campaign config hash does not match resolved identity")
+    cfg = load_campaign_config(config_path, repository_root=root)
+    return replace(cfg, release_tag=manifest.release_tag, doi=manifest.doi)
+
+
 def validate_release_manifest(
     manifest: BenchmarkReleaseManifest,
     *,
@@ -1223,8 +1522,8 @@ def validate_release_manifest(
         Validation payload with status and problem list.
     """
     repository_root = (repository_root or get_repository_root()).resolve()
-    cfg = campaign_config or load_campaign_config(
-        manifest.canonical_campaign_config_path,
+    cfg = campaign_config or load_release_campaign_config(
+        manifest,
         repository_root=repository_root,
     )
     problems: list[str] = []
@@ -1900,6 +2199,52 @@ def _resolve_release_source_sha(
     return explicit or declared
 
 
+def _build_planner_config_identities(
+    cfg: CampaignConfig,
+    *,
+    repository_root: Path | None = None,
+) -> list[dict[str, str | None]]:
+    """Return ordered, content-addressed planner-config inputs for a release.
+
+    The campaign-config digest proves which paths were selected, but it does
+    not prove the bytes subsequently loaded from those paths. Keep the
+    planner roster and its configuration bytes explicit in the resolved
+    identity. Arms without an external config are represented with null path
+    and digest so the roster remains one-to-one and deterministic.
+
+    Returns:
+        One JSON-safe identity record for every configured planner arm.
+    """
+    root = (repository_root or get_repository_root()).resolve()
+    identities: list[dict[str, str | None]] = []
+    for planner in cfg.planners:
+        path = planner.algo_config_path
+        if path is None:
+            identities.append(
+                {
+                    "key": planner.key,
+                    "algo": planner.algo,
+                    "path": None,
+                    "sha256": None,
+                }
+            )
+            continue
+        resolved = _safe_repository_file(
+            path,
+            root,
+            field_name=f"planner config for {planner.key}",
+        )
+        identities.append(
+            {
+                "key": planner.key,
+                "algo": planner.algo,
+                "path": _repository_relative_value(resolved, root),
+                "sha256": _sha256_file(resolved),
+            }
+        )
+    return identities
+
+
 def build_release_provenance(
     manifest: BenchmarkReleaseManifest,
     *,
@@ -2023,13 +2368,21 @@ def build_resolved_release_manifest(
     *,
     campaign_config: CampaignConfig | None = None,
     source_commit: str | None = None,
+    repository_root: Path | None = None,
 ) -> dict[str, Any]:
     """Build a JSON-serializable resolved manifest payload for archival.
 
     Returns:
         Resolved release manifest payload with normalized repo-relative paths.
     """
-    cfg = campaign_config or load_campaign_config(manifest.canonical_campaign_config_path)
+    root = (repository_root or get_repository_root()).resolve()
+    if manifest.resolved_manifest_payload is not None:
+        _resolve_release_source_sha(manifest, source_commit)
+        cfg = campaign_config or load_release_campaign_config(manifest, repository_root=root)
+        if cfg.release_tag != manifest.release_tag or cfg.doi != manifest.doi:
+            raise ValueError("campaign config identity does not match resolved release identity")
+        return copy.deepcopy(manifest.resolved_manifest_payload)
+    cfg = campaign_config or load_release_campaign_config(manifest, repository_root=root)
     payload = {
         "schema_version": manifest.schema_version,
         "benchmark_protocol_version": manifest.benchmark_protocol_version,
@@ -2037,6 +2390,7 @@ def build_resolved_release_manifest(
         "release_tag": manifest.release_tag,
         "maturity": manifest.maturity,
         "canonical_campaign_config": _repo_relative(manifest.canonical_campaign_config_path),
+        "canonical_campaign_config_sha256": manifest.campaign_config_sha256,
         "canonical_campaign_name": cfg.name,
         "paper_facing": cfg.paper_facing,
         "paper_profile_version": cfg.paper_profile_version,
@@ -2070,6 +2424,10 @@ def build_resolved_release_manifest(
         "planners": {
             "keys": list(manifest.planner_keys),
             "groups": dict(manifest.planner_groups),
+            "config_identities": _build_planner_config_identities(
+                cfg,
+                repository_root=root,
+            ),
         },
         "kinematics": {
             "matrix": list(manifest.expected_kinematics_matrix),
@@ -2115,6 +2473,11 @@ def build_resolved_release_manifest(
     }
     source_sha = _resolve_release_source_sha(manifest, source_commit)
     if source_sha is not None:
+        # Keep the final source identity at the resolved-manifest root as well
+        # as in provenance. The root field is the v0.2 contract consumed by
+        # cold-checkout and publication tooling; provenance retains the
+        # historical nested aliases for older readers.
+        payload["source_sha"] = source_sha
         payload["provenance"]["source_sha"] = source_sha
         payload["provenance"]["source_commit"] = source_sha
     if manifest.planning_base_sha is not None:
@@ -2187,6 +2550,558 @@ def build_resolved_release_manifest(
             ],
         }
     return payload
+
+
+def _identity_template_payload(  # noqa: C901
+    template_path: Path,
+    *,
+    repository_root: Path,
+) -> tuple[dict[str, Any], Path, bytes]:
+    """Load and validate the explicit tracked-template boundary.
+
+    Returns:
+        Template payload, metadata-template path, and exact metadata bytes.
+    """
+    payload = _load_mapping(template_path)
+    marker = payload.get("identity_resolution")
+    if not isinstance(marker, Mapping) or marker.get("schema_version") != (
+        RELEASE_IDENTITY_TEMPLATE_SCHEMA_VERSION
+    ):
+        raise ValueError(
+            "release template must declare identity_resolution.schema_version="
+            f"{RELEASE_IDENTITY_TEMPLATE_SCHEMA_VERSION}"
+        )
+    if payload.get("schema_version") != RELEASE_MANIFEST_SCHEMA_VERSION_V0_2:
+        raise ValueError("release identity template must describe a v0.2 release manifest")
+    if payload.get("release_kind") != "benchmark-data":
+        raise ValueError("release identity template must describe a benchmark-data release")
+    if payload.get("source_sha") is not None:
+        raise ValueError("tracked release identity template must omit source_sha")
+    required_slots = {
+        "release_id": "{{release_tag}}",
+        "release_tag": "{{release_tag}}",
+    }
+    for field, expected in required_slots.items():
+        if payload.get(field) != expected:
+            raise ValueError(f"release template {field} must be the explicit {expected} slot")
+    campaign_template = _resolve_required_file(
+        template_path,
+        payload.get("canonical_campaign_config"),
+        "canonical_campaign_config",
+        repository_root=repository_root,
+    )
+    campaign_payload = _load_mapping(campaign_template)
+    for field, expected in (
+        ("release_tag", "{{release_tag}}"),
+        ("doi", "{{version_doi}}"),
+    ):
+        if campaign_payload.get(field) != expected:
+            raise ValueError(f"campaign {field} must use the explicit {expected} slot")
+    publication = payload.get("publication")
+    provenance = payload.get("provenance")
+    if not isinstance(publication, Mapping) or not isinstance(provenance, Mapping):
+        raise ValueError("release template publication and provenance must be mappings")
+    if publication.get("concept_doi") != "{{concept_doi}}":
+        raise ValueError("release template concept DOI must use {{concept_doi}}")
+    if publication.get("version_doi") != "{{version_doi}}":
+        raise ValueError("release template version DOI must use {{version_doi}}")
+    if provenance.get("doi") != "{{version_doi}}":
+        raise ValueError("release template provenance DOI must use {{version_doi}}")
+
+    metadata_template = _resolve_required_file(
+        template_path,
+        publication.get("metadata_path"),
+        "publication.metadata_path",
+        repository_root=repository_root,
+    )
+    expected_metadata_sha = str(publication.get("metadata_sha256", "")).strip().lower()
+    metadata_template_bytes = metadata_template.read_bytes()
+    if _SHA256_RE.fullmatch(expected_metadata_sha) is None or (
+        hashlib.sha256(metadata_template_bytes).hexdigest() != expected_metadata_sha
+    ):
+        raise ValueError("publication metadata template hash does not match tracked bytes")
+    metadata_text = metadata_template_bytes.decode("utf-8")
+    for token in _RELEASE_IDENTITY_TOKENS:
+        if token not in metadata_text:
+            raise ValueError(f"publication metadata template must contain {token}")
+    return payload, metadata_template, metadata_template_bytes
+
+
+def _absolute_template_file(
+    template_path: Path,
+    raw_value: Any,
+    *,
+    repository_root: Path,
+    field_name: str,
+) -> str:
+    """Resolve one template-relative path to an absolute contained input.
+
+    Returns:
+        Absolute repository-contained path string.
+    """
+    return str(
+        _resolve_required_file(
+            template_path,
+            raw_value,
+            field_name,
+            repository_root=repository_root,
+        )
+    )
+
+
+def _materialize_release_template_payload(  # noqa: PLR0913
+    template_payload: Mapping[str, Any],
+    *,
+    template_path: Path,
+    metadata_path: Path,
+    metadata_sha256: str,
+    source_commit: str,
+    release_tag: str,
+    concept_doi: str,
+    version_doi: str,
+    repository_root: Path,
+) -> dict[str, Any]:
+    """Resolve identity slots and path declarations without editing tracked bytes.
+
+    Returns:
+        Materialized v0.2 manifest payload ready for strict validation.
+    """
+    replacements = {
+        "release_tag": release_tag,
+        "source_sha": source_commit,
+        "concept_doi": concept_doi,
+        "version_doi": version_doi,
+    }
+    payload = _replace_identity_tokens(copy.deepcopy(dict(template_payload)), replacements)
+    payload.pop("identity_resolution", None)
+    payload["release_id"] = release_tag
+    payload["release_tag"] = release_tag
+    payload["source_sha"] = source_commit
+
+    payload["canonical_campaign_config"] = _absolute_template_file(
+        template_path,
+        template_payload.get("canonical_campaign_config"),
+        repository_root=repository_root,
+        field_name="canonical_campaign_config",
+    )
+    for field in ("citation_path", "release_checklist_path"):
+        payload[field] = _absolute_template_file(
+            template_path,
+            template_payload.get(field),
+            repository_root=repository_root,
+            field_name=field,
+        )
+    path_fields = {
+        "scenario": ("matrix_path", "suite_policy_path", "route_certification_path"),
+        "seed_policy": ("seed_sets_path",),
+        "metrics": ("snqi_weights_path", "snqi_baseline_path"),
+    }
+    for section_name, fields in path_fields.items():
+        raw_section = template_payload.get(section_name)
+        section = payload.get(section_name)
+        if not isinstance(raw_section, Mapping) or not isinstance(section, dict):
+            continue
+        for field in fields:
+            if raw_section.get(field) is None:
+                continue
+            section[field] = _absolute_template_file(
+                template_path,
+                raw_section.get(field),
+                repository_root=repository_root,
+                field_name=f"{section_name}.{field}",
+            )
+    publication = payload.get("publication")
+    if not isinstance(publication, dict):
+        raise ValueError("resolved publication identity must be a mapping")
+    publication.update(
+        {
+            "concept_doi": concept_doi,
+            "version_doi": version_doi,
+            "metadata_path": str(metadata_path),
+            "metadata_sha256": metadata_sha256,
+        }
+    )
+    provenance = payload.get("provenance")
+    if not isinstance(provenance, dict):
+        raise ValueError("resolved provenance identity must be a mapping")
+    provenance["doi"] = version_doi
+    return payload
+
+
+def _require_tracked_input_at_source(
+    path: Path,
+    *,
+    repository_root: Path,
+    source_commit: str,
+    label: str,
+) -> None:
+    """Require exact file bytes to be tracked at the selected source commit."""
+    relative = _repository_relative_value(path, repository_root)
+    result = _run_git(repository_root, "show", f"{source_commit}:{relative}")
+    if result.returncode != 0:
+        raise ValueError(f"{label} is not tracked at source_commit")
+    if result.stdout != path.read_bytes():
+        raise ValueError(f"{label} bytes differ from source_commit")
+
+
+def _build_resolved_release_identity(
+    *,
+    template_path: Path,
+    output_path: Path,
+    source_commit: str,
+    release_tag: str,
+    concept_doi: str,
+    version_doi: str,
+    repository_root: Path,
+) -> tuple[dict[str, Any], bytes, BenchmarkReleaseManifest]:
+    """Build canonical identity and metadata bytes after all read-only admissions.
+
+    Returns:
+        Identity envelope, metadata bytes, and loaded resolved manifest.
+    """
+    template_payload, metadata_template, metadata_template_bytes = _identity_template_payload(
+        template_path,
+        repository_root=repository_root,
+    )
+    replacements = {
+        "release_tag": release_tag,
+        "source_sha": source_commit,
+        "concept_doi": concept_doi,
+        "version_doi": version_doi,
+    }
+    try:
+        metadata_template_payload = json.loads(metadata_template_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("publication metadata template must be valid UTF-8 JSON") from exc
+    if not isinstance(metadata_template_payload, dict):
+        raise ValueError("publication metadata template must be a JSON object")
+    resolved_metadata = _replace_identity_tokens(metadata_template_payload, replacements)
+    if not isinstance(resolved_metadata, dict):  # pragma: no cover - recursive shape guard
+        raise ValueError("resolved publication metadata must be a JSON object")
+    metadata_bytes = _canonical_json_bytes(resolved_metadata)
+    metadata_sha256 = hashlib.sha256(metadata_bytes).hexdigest()
+    final_metadata_path = output_path.parent / RESOLVED_RELEASE_METADATA_FILENAME
+
+    with tempfile.TemporaryDirectory(prefix="release-identity-", dir=output_path.parent) as scratch:
+        scratch_root = Path(scratch)
+        scratch_metadata = scratch_root / RESOLVED_RELEASE_METADATA_FILENAME
+        scratch_metadata.write_bytes(metadata_bytes)
+        try:
+            load_dataset_metadata(
+                scratch_metadata,
+                expected_source_tag=release_tag,
+                expected_metadata_sha256=metadata_sha256,
+            )
+        except ZenodoPublisherError as exc:
+            raise ValueError(f"resolved Zenodo metadata is invalid: {exc}") from exc
+        materialized_payload = _materialize_release_template_payload(
+            template_payload,
+            template_path=template_path,
+            metadata_path=scratch_metadata,
+            metadata_sha256=metadata_sha256,
+            source_commit=source_commit,
+            release_tag=release_tag,
+            concept_doi=concept_doi,
+            version_doi=version_doi,
+            repository_root=repository_root,
+        )
+        materialized_path = scratch_root / "release_manifest.materialized.json"
+        materialized_path.write_bytes(_canonical_json_bytes(materialized_payload))
+        manifest = load_release_manifest(materialized_path, repository_root=repository_root)
+        cfg = load_campaign_config(
+            manifest.canonical_campaign_config_path,
+            repository_root=repository_root,
+        )
+        cfg = replace(cfg, release_tag=release_tag, doi=version_doi)
+        validation = validate_release_manifest(
+            manifest,
+            campaign_config=cfg,
+            repository_root=repository_root,
+        )
+        if validation.get("status") != "valid":
+            problems = "; ".join(str(item) for item in validation.get("problems", []))
+            raise ValueError(f"resolved release template validation failed: {problems}")
+        resolved_manifest = build_resolved_release_manifest(
+            manifest,
+            campaign_config=cfg,
+            source_commit=source_commit,
+            repository_root=repository_root,
+        )
+
+    tracked_inputs = (
+        (template_path, "release identity template"),
+        (metadata_template, "publication metadata template"),
+        (manifest.canonical_campaign_config_path, "canonical campaign config"),
+        (manifest.scenario_matrix_path, "scenario matrix"),
+        (manifest.suite_policy_path, "suite policy"),
+        (manifest.route_certification_path, "route certification"),
+        (cfg.seed_policy.seed_sets_path, "seed sets"),
+        (manifest.snqi_weights_path, "SNQI weights"),
+        (manifest.snqi_baseline_path, "SNQI baseline"),
+        (manifest.citation_path, "citation"),
+        (manifest.release_checklist_path, "release checklist"),
+    )
+    planner_inputs = tuple(
+        (planner.algo_config_path, f"planner config for {planner.key}")
+        for planner in cfg.planners
+        if planner.algo_config_path is not None
+    )
+    for path, label in (*tracked_inputs, *planner_inputs):
+        if path is not None:
+            _require_tracked_input_at_source(
+                path,
+                repository_root=repository_root,
+                source_commit=source_commit,
+                label=label,
+            )
+
+    resolved_manifest = _normalize_identity_paths(resolved_manifest, repository_root)
+    resolved_provenance = resolved_manifest.get("provenance")
+    if not isinstance(resolved_provenance, dict):
+        raise ValueError("resolved manifest provenance must be a mapping")
+    resolved_metadata_path = _repository_relative_value(final_metadata_path, repository_root)
+    resolved_provenance["metadata_path"] = resolved_metadata_path
+    resolved_provenance["metadata_sha256"] = metadata_sha256
+    template_sha256 = hashlib.sha256(template_path.read_bytes()).hexdigest()
+    metadata_template_sha256 = hashlib.sha256(metadata_template_bytes).hexdigest()
+    resolved_manifest["identity_resolution"] = {
+        "schema_version": RESOLVED_RELEASE_IDENTITY_SCHEMA_VERSION,
+        "template_path": _repository_relative_value(template_path, repository_root),
+        "template_sha256": template_sha256,
+        "metadata_template_path": _repository_relative_value(metadata_template, repository_root),
+        "metadata_template_sha256": metadata_template_sha256,
+    }
+    resolved_manifest_sha256 = hashlib.sha256(_canonical_json_bytes(resolved_manifest)).hexdigest()
+    envelope = {
+        "schema_version": RESOLVED_RELEASE_IDENTITY_SCHEMA_VERSION,
+        "template": {
+            "path": _repository_relative_value(template_path, repository_root),
+            "sha256": template_sha256,
+        },
+        "source_commit": source_commit,
+        "release_tag": release_tag,
+        "publication": {
+            "concept_doi": concept_doi,
+            "version_doi": version_doi,
+            "metadata_file": RESOLVED_RELEASE_METADATA_FILENAME,
+            "metadata_path": resolved_metadata_path,
+            "metadata_sha256": metadata_sha256,
+            "metadata_template_path": _repository_relative_value(
+                metadata_template, repository_root
+            ),
+            "metadata_template_sha256": metadata_template_sha256,
+        },
+        "resolved_manifest": resolved_manifest,
+        "resolved_manifest_sha256": resolved_manifest_sha256,
+    }
+    manifest = replace(
+        manifest,
+        path=output_path,
+        metadata_path=final_metadata_path,
+        metadata_sha256=metadata_sha256,
+        resolved_identity_path=output_path,
+        identity_template_path=template_path,
+        identity_template_sha256=template_sha256,
+        resolved_manifest_payload=copy.deepcopy(resolved_manifest),
+    )
+    return envelope, metadata_bytes, manifest
+
+
+def _atomic_write_bytes(path: Path, data: bytes) -> None:
+    """Atomically replace one task-owned ignored output file."""
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.tmp-{os.getpid()}-",
+        dir=path.parent,
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(data)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _rollback_materialized_outputs(
+    originals: Mapping[Path, bytes | None],
+) -> None:
+    """Restore or remove outputs after source drift during materialization."""
+    rollback_errors: list[str] = []
+    for path, original in originals.items():
+        try:
+            if original is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(original)
+        except OSError as exc:
+            rollback_errors.append(f"{path.name}: {exc}")
+    if rollback_errors:
+        raise ValueError(
+            "failed to roll back resolved identity outputs after source drift: "
+            + "; ".join(rollback_errors)
+        )
+
+
+def write_resolved_release_identity(
+    *,
+    template_path: Path,
+    output_path: Path,
+    source_commit: str,
+    release_tag: str,
+    concept_doi: str,
+    version_doi: str,
+    repository_root: Path | None = None,
+) -> dict[str, Any]:
+    """Generate one canonical resolved release identity without source edits.
+
+    Returns:
+        The canonical identity payload written to ``output_path``.
+    """
+    root = (repository_root or get_repository_root()).resolve()
+    template = _safe_repository_file(
+        Path(template_path), root, field_name="release identity template"
+    )
+    output = _safe_identity_output(Path(output_path), root, field_name="resolved identity output")
+    if output.name == RESOLVED_RELEASE_METADATA_FILENAME:
+        raise ValueError("resolved identity output must not collide with metadata output")
+    metadata_path = _safe_identity_output(
+        output.parent / RESOLVED_RELEASE_METADATA_FILENAME,
+        root,
+        field_name="resolved metadata output",
+    )
+    normalized_source = _require_clean_exact_checkout(
+        root,
+        source_commit=source_commit,
+        template_path=template,
+    )
+    _require_source_derived_release_tag(
+        root,
+        release_tag=release_tag,
+        source_commit=normalized_source,
+    )
+    concept_doi, version_doi = _require_publication_coordinates(concept_doi, version_doi)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    envelope, metadata_bytes, _ = _build_resolved_release_identity(
+        template_path=template,
+        output_path=output,
+        source_commit=normalized_source,
+        release_tag=release_tag,
+        concept_doi=concept_doi,
+        version_doi=version_doi,
+        repository_root=root,
+    )
+    _require_clean_exact_checkout(
+        root,
+        source_commit=normalized_source,
+        template_path=template,
+    )
+    identity_bytes = _canonical_json_bytes(envelope)
+    materialized_outputs = ((metadata_path, metadata_bytes), (output, identity_bytes))
+    originals = {
+        path: path.read_bytes() if path.is_file() else None for path, _ in materialized_outputs
+    }
+    materialization_started = False
+    try:
+        for path, expected in materialized_outputs:
+            if path.exists() and path.read_bytes() != expected:
+                raise ValueError(
+                    f"refusing to overwrite stale resolved identity output: {path.name}"
+                )
+        for path, expected in materialized_outputs:
+            materialization_started = True
+            _atomic_write_bytes(path, expected)
+            # Git status is checked immediately after each replacement.  If a tracked source
+            # mutates between the pre-write check and this replacement, no output survives.
+            _require_clean_exact_checkout(
+                root,
+                source_commit=normalized_source,
+                template_path=template,
+            )
+    except (OSError, ValueError) as exc:
+        if materialization_started:
+            try:
+                _rollback_materialized_outputs(originals)
+            except ValueError as rollback_error:
+                raise rollback_error from exc
+        raise
+    return envelope
+
+
+def verify_resolved_release_identity(
+    path: str | Path,
+    *,
+    repository_root: Path | None = None,
+) -> BenchmarkReleaseManifest:
+    """Reproduce and byte-verify a resolved identity at the exact clean source.
+
+    Returns:
+        Verified manifest routed to release consumers.
+    """
+    root = (repository_root or get_repository_root()).resolve()
+    identity_path = _safe_repository_file(Path(path), root, field_name="resolved release identity")
+    _safe_identity_output(identity_path, root, field_name="resolved identity output")
+    metadata_path = _safe_identity_output(
+        identity_path.parent / RESOLVED_RELEASE_METADATA_FILENAME,
+        root,
+        field_name="resolved metadata output",
+    )
+    try:
+        observed = json.loads(identity_path.read_bytes())
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("resolved release identity must be valid UTF-8 JSON") from exc
+    if not isinstance(observed, dict):
+        raise ValueError("resolved release identity must be a JSON object")
+    if observed.get("schema_version") != RESOLVED_RELEASE_IDENTITY_SCHEMA_VERSION:
+        raise ValueError("resolved release identity schema_version is unsupported")
+    template = observed.get("template")
+    publication = observed.get("publication")
+    if not isinstance(template, Mapping) or not isinstance(publication, Mapping):
+        raise ValueError("resolved release identity template/publication blocks are malformed")
+    template_path = _safe_repository_file(
+        Path(str(template.get("path", ""))),
+        root,
+        field_name="resolved identity template path",
+    )
+    source_commit = str(observed.get("source_commit", "")).strip().lower()
+    release_tag = str(observed.get("release_tag", "")).strip()
+    concept_doi, version_doi = _require_publication_coordinates(
+        publication.get("concept_doi"),
+        publication.get("version_doi"),
+    )
+    metadata_file = publication.get("metadata_file")
+    if metadata_file != RESOLVED_RELEASE_METADATA_FILENAME:
+        raise ValueError("resolved publication metadata filename is not canonical")
+    normalized_source = _require_clean_exact_checkout(
+        root,
+        source_commit=source_commit,
+        template_path=template_path,
+    )
+    _require_source_derived_release_tag(
+        root,
+        release_tag=release_tag,
+        source_commit=normalized_source,
+        allow_existing_exact_tag=True,
+    )
+    envelope, metadata_bytes, manifest = _build_resolved_release_identity(
+        template_path=template_path,
+        output_path=identity_path,
+        source_commit=normalized_source,
+        release_tag=release_tag,
+        concept_doi=concept_doi,
+        version_doi=version_doi,
+        repository_root=root,
+    )
+    _require_clean_exact_checkout(
+        root,
+        source_commit=normalized_source,
+        template_path=template_path,
+    )
+    expected_identity_bytes = _canonical_json_bytes(envelope)
+    if identity_path.read_bytes() != expected_identity_bytes:
+        raise ValueError("resolved release identity is stale or non-canonical")
+    if not metadata_path.is_file() or metadata_path.read_bytes() != metadata_bytes:
+        raise ValueError("resolved publication metadata is stale or non-canonical")
+    return manifest
 
 
 def parse_release_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -2288,8 +3203,11 @@ __all__ = [
     "BENCHMARK_PROTOCOL_VERSION",
     "DIAGNOSTIC_STRESS_RELEASE_KIND",
     "HISTORICAL_ZENODO_CONCEPT_DOIS",
+    "RELEASE_IDENTITY_TEMPLATE_SCHEMA_VERSION",
     "RELEASE_MANIFEST_SCHEMA_VERSION",
     "RELEASE_MANIFEST_SCHEMA_VERSION_V0_2",
+    "RESOLVED_RELEASE_IDENTITY_SCHEMA_VERSION",
+    "RESOLVED_RELEASE_METADATA_FILENAME",
     "STRESS_SMOKE_EXPECTED_DT",
     "STRESS_SMOKE_EXPECTED_EPISODE_CELLS",
     "STRESS_SMOKE_EXPECTED_HORIZON_STEPS",
@@ -2305,9 +3223,12 @@ __all__ = [
     "build_release_provenance",
     "build_resolved_release_manifest",
     "is_diagnostic_stress_smoke",
+    "load_release_campaign_config",
     "load_release_manifest",
     "parse_release_args",
     "validate_release_manifest",
     "validate_release_planner_roster",
     "validate_stress_smoke_runtime_identity",
+    "verify_resolved_release_identity",
+    "write_resolved_release_identity",
 ]

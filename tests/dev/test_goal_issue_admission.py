@@ -183,6 +183,36 @@ def test_changed_label_that_makes_issue_non_ready_fails_closed() -> None:
     acquire.assert_not_called()
 
 
+def test_changed_label_with_state_qualifier_uses_blocker_semantics() -> None:
+    initial = _preflight(ready=True)
+    changed = _preflight(ready=False)
+    changed["issue"] = {
+        **changed["issue"],
+        "labels": ["state:ready", "state:parked"],
+    }
+    changed["classification"] = "blocked"
+    changed["admission_reason"] = "blocked"
+    with (
+        patch(
+            "scripts.dev.goal_issue_admission.issue_implementability.live_issue_report",
+            side_effect=[initial, changed],
+        ),
+        patch("scripts.dev.goal_issue_admission.issue_claim.acquire_issue") as acquire,
+    ):
+        payload = admit_issue(
+            7611,
+            repo="ll7/robot_sf_ll7",
+            remote="origin",
+            source_ref="origin/main",
+            check_only=False,
+        )
+
+    assert payload["outcome"] == "not_admitted"
+    assert payload["preflight"]["classification"] == "blocked"
+    assert payload["claim_outcome"] == "unclaimed"
+    acquire.assert_not_called()
+
+
 def test_compact_admission_preserves_claim_and_write_boundary() -> None:
     """Queue projections must retain the canonical admission and claim outcomes."""
     payload = compact_admission(

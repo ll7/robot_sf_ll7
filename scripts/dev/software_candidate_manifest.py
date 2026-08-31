@@ -72,11 +72,15 @@ VALIDATION_COMMANDS = (
     ),
     (
         "archive-license",
-        "python scripts/tools/check_distribution_licenses.py $DIST_DIR",
+        "cd $BUILD_SOURCE && python scripts/tools/check_distribution_licenses.py "
+        "$DIST_DIR --strict-asset-rights --repo-root $BUILD_SOURCE "
+        "--inventory $BUILD_SOURCE/scripts/validation/software_candidate_asset_rights.v1.json "
+        "--source-tree-ref HEAD",
     ),
     (
         "wheel-install",
-        "bash scripts/validation/wheel_install_smoke.sh $DIST_DIR/robot_sf-*.whl",
+        "cd $BUILD_SOURCE && bash scripts/validation/wheel_install_smoke.sh "
+        "$DIST_DIR/robot_sf-*.whl",
     ),
 )
 VALIDATOR_IDS = tuple(identifier for identifier, _command in VALIDATION_COMMANDS)

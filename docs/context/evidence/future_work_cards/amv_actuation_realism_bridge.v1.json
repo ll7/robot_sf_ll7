@@ -1,0 +1,53 @@
+{
+  "admission_status": "diagnostic_only",
+  "bridge_id": "amv_actuation_realism_bridge",
+  "card_digest": "27a398b3f415899362ea5c9efb4c3d0b16331e07b324bad2f571a95660e0ba75",
+  "evidence_status": "unsupported_proxy",
+  "forbidden_inferences": [
+    "Physical AMV validation or sim-to-real transfer.",
+    "Accurate physical dynamics beyond 2D kinematic approximations.",
+    "Vehicle-specific safety guarantees on real hardware."
+  ],
+  "implementation_status": "proxy_baseline_only",
+  "implemented_now": [
+    "Bounded 2D unicycle and differential-drive kinematic models with acceleration, velocity, and jerk limits.",
+    "Literature-backed longitudinal e-scooter proxy acceleration and deceleration profiles."
+  ],
+  "linked_issues": [
+    2227,
+    8048
+  ],
+  "missing_proof": [
+    "Physical vehicle platform system identification (measured command-to-motion latency, motor response curves).",
+    "Rotational dynamics, tire slip, terrain-dependent friction, and non-holonomic yaw inertia.",
+    "Closed-loop sim-to-real trajectory tracking validation on a physical AMV."
+  ],
+  "next_decisive_experiment": {
+    "requirements": [
+      "Named physical platform with measured command-to-motion response.",
+      "Longitudinal and rotational dynamics, latency, and update rate measurements.",
+      "Braking and stopping behavior, geometry, and mass identification protocol.",
+      "Held-out validation with uncertainty mapped into simulator runtime parameters."
+    ],
+    "title": "Hardware AMV Actuation Identification and Step-Response Benchmark"
+  },
+  "owner_paths": [
+    "robot_sf/sim/",
+    "configs/algos/",
+    "configs/training/"
+  ],
+  "relationship_to_anchor": "present_at_anchor",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "safe_sentence": "Public longitudinal e-scooter evidence provides a bounded proxy-source basis, while platform-specific yaw, latency, dynamics, and physical calibration remain absent.",
+  "schema": "future_work_bridge_status_card.v1",
+  "source_digest": "86a62f04f49decb3678124f792a3080b22bc7a4fd034ca84227e09704bbd4100",
+  "strongest_evidence_surface": "configs/algos/ and kinematic simulator parameters",
+  "title": "AMV Actuation Realism Bridge",
+  "verified_now": [
+    {
+      "item": "Simulator enforces kinematic bounds and clipping on synthetic trajectory integration.",
+      "status": "verified",
+      "tier": "Tier 0 (synthetic)"
+    }
+  ]
+}

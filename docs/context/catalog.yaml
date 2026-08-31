@@ -7451,3 +7451,11 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/planner_development_funnel.v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/planner_development_funnel.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

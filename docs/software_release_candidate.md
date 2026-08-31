@@ -10,6 +10,11 @@ deposit, DOI reservation, tag, environment approval, or trusted-publisher/OIDC e
 not admit benchmark, model, dataset, or scientific evidence. Parent publication issue #8023
 remains blocked until its independent metadata, rights, policy, and author gates are satisfied.
 
+The next protected promotion stage is documented in
+[`software_release_promotion.md`](./software_release_promotion.md). It consumes this candidate by
+immutable artifact ID and digest, publishes to TestPyPI and PyPI through separate protected
+environments, and requires a byte-checked TestPyPI cold-install receipt before production.
+
 ## Dispatching the producer
 
 Dispatch the workflow at the reviewed source head. It requests no secrets and emits two separate

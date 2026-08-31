@@ -59,6 +59,12 @@ python scripts/tools/check_dependency_license_inventory.py \
   --fail-on-unresolved
 ```
 
+The development checkout still declares `rllib` for local use. The rights-clean candidate
+materializer removes only that stanza from its copied `pyproject.toml`, preserving the `all`
+aggregator and the twelve supported extras. Its wheel and source distribution therefore must
+advertise exactly thirteen `Provides-Extra` values (`all` plus those twelve); the source checkout
+is never modified.
+
 The selected profile closure is recorded under `surface.profile_ids`. Other declared profiles,
 lock rows, and installed distributions remain visible in the report with an explicit
 `outside_selected_profiles` marker; selection never turns an unresolved row into an approval.

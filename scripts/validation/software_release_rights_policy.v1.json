@@ -3,7 +3,7 @@
   "schema_version": "robot_sf.software_release_rights_policy.v1",
   "policy_id": "robot_sf.software_release_rights_policy.v1",
   "candidate_schema_version": "robot_sf.software_sanitized_candidate.v1",
-  "claim_boundary": "This policy admits only the regular source members selected by the reviewed software-candidate policy. It does not clear omitted assets, models, maps, recordings, datasets, benchmark evidence, or external source checkouts. Supported dependency admission is an independent fail-closed gate and is not waived by this receipt.",
+  "claim_boundary": "This policy admits only the regular source members selected by the reviewed software-candidate policy. It does not clear omitted assets, models, maps, recordings, datasets, benchmark evidence, or external source checkouts. The candidate materializer removes the development-only rllib optional-dependency stanza from its copied pyproject.toml while retaining all plus the twelve supported extras; the authoritative checkout is not changed. Supported dependency admission is an independent fail-closed gate and is not waived by this receipt.",
   "supported_dependency_surface": {
     "profile_manifest_path": "scripts/validation/dependency_license_profiles.v1.json",
     "profile_ids": ["all"],

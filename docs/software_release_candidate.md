@@ -46,6 +46,13 @@ candidate-local rights inventory record the source SHA, policy and inventory has
 members, and explicit exclusions. The external materialization report records the candidate
 commit and tree used by the later build.
 
+The development checkout retains its standalone `rllib` extra. During this separate
+materialization, only the copied `pyproject.toml` removes that stanza; the public `all` aggregator
+and its twelve supported extras remain. Consequently both candidate archives must advertise
+exactly those thirteen `Provides-Extra` values. This transformation is deterministic and the
+candidate member bytes and tree hashes bind the resulting metadata; the authoritative checkout is
+never edited.
+
 The build root is then staged from that candidate commit, not directly from the authoritative
 checkout. The strict distribution-license gate runs against the staged candidate tree and its
 candidate-local inventory. The clean-install smoke still exercises the installed core runtime

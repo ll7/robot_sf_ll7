@@ -117,6 +117,15 @@ SUPPORTED_SOFTWARE_CANDIDATE_EXTRA_IDS = (
     "socnav",
     "criticality",
 )
+SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS = (
+    *SUPPORTED_SOFTWARE_CANDIDATE_EXTRA_IDS,
+    "all",
+)
+# The source checkout declares this development-only extra, while the
+# rights-clean materialization removes it from the copied project metadata.
+# Keep the exclusion explicit in the profile manifest without treating the
+# candidate's absence of ``rllib`` as an unresolved all-profile mismatch.
+SUPPORTED_SOFTWARE_CANDIDATE_EXCLUDED_EXTRA_IDS = frozenset({"rllib"})
 _REQUIREMENT_RE = re.compile(
     r"^\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)"
     r"(?:\[(?P<extras>[A-Za-z0-9._,-]+)\])?"
@@ -1014,9 +1023,11 @@ def _candidate_bundle_binding(  # noqa: C901
             f"{sorted(expected_extras - provided_extras)}"
         )
     if selected_profile_ids == set(SUPPORTED_SOFTWARE_CANDIDATE_PROFILE_IDS):
-        missing_supported_extras = set(SUPPORTED_SOFTWARE_CANDIDATE_EXTRA_IDS) - provided_extras
-        unsupported_advertised_extras = (
-            provided_extras - set(SUPPORTED_SOFTWARE_CANDIDATE_EXTRA_IDS) - {"all", "rllib"}
+        unsupported_advertised_extras = provided_extras - set(
+            SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS
+        )
+        missing_supported_extras = (
+            set(SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS) - provided_extras
         )
         if missing_supported_extras or unsupported_advertised_extras:
             raise ValueError(
@@ -1318,7 +1329,9 @@ def _validate_manifest(  # noqa: C901
             for value in (all_profile or {}).get("excluded_extras", [])
             if isinstance(value, str)
         }
-        undeclared_exclusions = exclusions - declared
+        undeclared_exclusions = (
+            exclusions - declared - set(SUPPORTED_SOFTWARE_CANDIDATE_EXCLUDED_EXTRA_IDS)
+        )
         if undeclared_exclusions:
             issues.append(
                 f"all profile excludes undeclared extras: {sorted(undeclared_exclusions)}"

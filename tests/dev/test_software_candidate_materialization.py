@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import subprocess
 import sys
 import tarfile
+import tomllib
 import zipfile
 from pathlib import Path
 
@@ -126,6 +128,31 @@ def _raw_sbom(path: Path) -> Path:
     return path
 
 
+def _archive_extras(path: Path) -> set[str]:
+    """Read the exact Provides-Extra values from one built archive."""
+    if path.suffix == ".whl":
+        with zipfile.ZipFile(path) as archive:
+            metadata_names = [
+                name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+            ]
+            assert len(metadata_names) == 1
+            metadata = archive.read(metadata_names[0]).decode("utf-8")
+    else:
+        with tarfile.open(path, "r:*") as archive:
+            metadata_names = [
+                member for member in archive.getmembers() if member.name.endswith("/PKG-INFO")
+            ]
+            assert len(metadata_names) == 1
+            stream = archive.extractfile(metadata_names[0])
+            assert stream is not None
+            metadata = stream.read().decode("utf-8")
+    return {
+        line.partition(":")[2].strip().lower()
+        for line in metadata.splitlines()
+        if line.startswith("Provides-Extra:")
+    }
+
+
 def test_materialization_is_deterministic_and_reports_exclusions(tmp_path: Path) -> None:
     """The same reviewed tree must produce byte-identical candidate identities."""
     source, source_sha = _fixture_source(tmp_path / "source")
@@ -173,6 +200,94 @@ def test_materialization_is_deterministic_and_reports_exclusions(tmp_path: Path)
         "generated/candidate-inventory.json",
         "SOFTWARE_CANDIDATE.json",
     }
+
+
+def test_real_materialized_candidate_build_has_only_supported_extras(tmp_path: Path) -> None:
+    """The sanitized candidate archives retain ``all`` but never advertise ``rllib``."""
+    source = REPO_ROOT
+    source_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=source,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    candidate = tmp_path / "candidate"
+    report = tmp_path / "materialization.json"
+    _run(
+        "materialize-source",
+        "--repo-root",
+        str(source),
+        "--candidate-root",
+        str(candidate),
+        "--source-sha",
+        source_sha,
+        "--policy",
+        str(source / "scripts/validation/software_candidate_policy.v1.json"),
+        "--report",
+        str(report),
+    )
+    source_pyproject = (source / "pyproject.toml").read_text(encoding="utf-8")
+    candidate_pyproject = (candidate / "pyproject.toml").read_text(encoding="utf-8")
+    assert "rllib = [" in source_pyproject
+    assert "rllib = [" not in candidate_pyproject
+    candidate_optional = tomllib.loads(candidate_pyproject)["project"]["optional-dependencies"]
+    assert set(candidate_optional) == {
+        "all",
+        "viz",
+        "maps",
+        "benchmark",
+        "training",
+        "gpu",
+        "recurrent",
+        "progress",
+        "analytics",
+        "browser",
+        "sacadrl",
+        "socnav",
+        "criticality",
+    }
+
+    build_root = tmp_path / "build-source"
+    _run(
+        "stage-build-source",
+        "--repo-root",
+        str(candidate),
+        "--build-root",
+        str(build_root),
+        "--source-sha",
+        json.loads(report.read_text(encoding="utf-8"))["candidate_commit_sha"],
+    )
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    build_environment = os.environ.copy()
+    build_environment["SETUPTOOLS_SCM_PRETEND_VERSION"] = "0.0.6"
+    subprocess.run(
+        ["uv", "build", "--out-dir", str(dist), "--quiet"],
+        cwd=build_root,
+        env=build_environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    expected = {
+        "all",
+        "viz",
+        "maps",
+        "benchmark",
+        "training",
+        "gpu",
+        "recurrent",
+        "progress",
+        "analytics",
+        "browser",
+        "sacadrl",
+        "socnav",
+        "criticality",
+    }
+    archives = [*dist.glob("*.whl"), *dist.glob("*.tar.gz")]
+    assert len(archives) == 2
+    assert all(_archive_extras(archive) == expected for archive in archives)
 
 
 def test_assemble_and_verify_bind_materialization_identity(tmp_path: Path) -> None:

@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
 import zipfile
 from contextlib import contextmanager
 from email.parser import BytesParser
@@ -149,6 +150,30 @@ MATERIALIZATION_ASSET_PATH_HINTS = frozenset(
 )
 MATERIALIZATION_NON_ASSET_SUFFIXES = frozenset(
     {".md", ".py", ".pyi", ".rst", ".sh", ".toml", ".txt"}
+)
+# The development checkout keeps the standalone RLlib integration available,
+# but it is not part of the rights-clean software surface.  The candidate
+# materializer removes only that optional-dependency stanza from the copied
+# ``pyproject.toml``.  The public ``all`` aggregator and its twelve reviewed
+# members remain unchanged in the candidate package metadata.
+CANDIDATE_PYPROJECT_PATH = "pyproject.toml"
+SUPPORTED_CANDIDATE_EXTRA_IDS = (
+    "viz",
+    "maps",
+    "benchmark",
+    "training",
+    "gpu",
+    "recurrent",
+    "progress",
+    "analytics",
+    "browser",
+    "sacadrl",
+    "socnav",
+    "criticality",
+)
+SUPPORTED_CANDIDATE_DISTRIBUTION_EXTRA_IDS = (
+    *SUPPORTED_CANDIDATE_EXTRA_IDS,
+    "all",
 )
 MATERIALIZATION_PAYLOAD_FIELDS = (
     "candidate_commit_sha",
@@ -1327,6 +1352,93 @@ def _candidate_blob(repo_root: Path, object_id: str) -> bytes:
     return _candidate_git_output(result, operation=f"read source blob {object_id}")
 
 
+def _sanitized_candidate_source_bytes(  # noqa: C901, PLR0912 - closed metadata transform
+    path: str, content: bytes
+) -> bytes:
+    """Remove the non-release RLlib extra from the candidate packaging metadata.
+
+    The source checkout intentionally retains ``rllib`` for normal development.
+    A rights-clean candidate is a separate, deterministic Git materialization,
+    so its copied ``pyproject.toml`` may remove that one optional dependency
+    before the candidate commit is built.  This keeps the development checkout
+    untouched while making the wheel and sdist metadata match the admitted
+    twelve-extra plus ``all`` surface.
+    """
+    if path != CANDIDATE_PYPROJECT_PATH:
+        return content
+    try:
+        source_text = content.decode("utf-8")
+        source_document = tomllib.loads(source_text)
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        raise CandidateError("candidate pyproject.toml is not valid UTF-8 TOML") from exc
+
+    project = source_document.get("project")
+    optional = project.get("optional-dependencies") if isinstance(project, dict) else None
+    if not isinstance(optional, dict):
+        raise CandidateError("candidate pyproject.toml has no optional-dependencies table")
+    expected_source_extras = {
+        *SUPPORTED_CANDIDATE_DISTRIBUTION_EXTRA_IDS,
+        "rllib",
+    }
+    if set(optional) != expected_source_extras:
+        raise CandidateError(
+            "candidate pyproject.toml optional extras do not match the reviewed development "
+            f"surface: expected {sorted(expected_source_extras)}, found {sorted(optional)}"
+        )
+    if "rllib" not in optional:
+        raise CandidateError("candidate pyproject.toml has no standalone rllib extra to exclude")
+
+    lines = source_text.splitlines(keepends=True)
+    optional_section = None
+    for index, line in enumerate(lines):
+        if line.strip() == "[project.optional-dependencies]":
+            optional_section = index
+            break
+    if optional_section is None:
+        raise CandidateError("candidate pyproject.toml optional-dependencies section is missing")
+
+    rllib_start = None
+    section_end = len(lines)
+    for index in range(optional_section + 1, len(lines)):
+        stripped = lines[index].strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            section_end = index
+            break
+        if re.fullmatch(r"rllib\s*=\s*\[\s*", stripped):
+            rllib_start = index
+            break
+    if rllib_start is None:
+        raise CandidateError(
+            "candidate pyproject.toml rllib extra is not a deterministic multiline array"
+        )
+    rllib_end = None
+    for index in range(rllib_start + 1, section_end):
+        if lines[index].strip() == "]":
+            rllib_end = index
+            break
+    if rllib_end is None:
+        raise CandidateError("candidate pyproject.toml rllib extra has no closing array")
+
+    sanitized_text = "".join(lines[:rllib_start] + lines[rllib_end + 1 :])
+    try:
+        sanitized_document = tomllib.loads(sanitized_text)
+    except tomllib.TOMLDecodeError as exc:
+        raise CandidateError("sanitized candidate pyproject.toml is not valid TOML") from exc
+    sanitized_project = sanitized_document.get("project")
+    sanitized_optional = (
+        sanitized_project.get("optional-dependencies")
+        if isinstance(sanitized_project, dict)
+        else None
+    )
+    if not isinstance(sanitized_optional, dict) or set(sanitized_optional) != set(
+        SUPPORTED_CANDIDATE_DISTRIBUTION_EXTRA_IDS
+    ):
+        raise CandidateError(
+            "sanitized candidate pyproject.toml does not have the exact supported extra roster"
+        )
+    return sanitized_text.encode("utf-8")
+
+
 def _materialization_is_asset_like(path: str) -> bool:
     """Use the inventory's conservative asset heuristic for selected source paths."""
     suffix = PurePosixPath(path).suffix.lower()
@@ -1562,7 +1674,10 @@ def _materialization_members(
     members: list[dict[str, Any]] = []
     for path in selected_paths:
         mode, _object_type, object_id = selected[path]
-        content = _candidate_blob(source_root, object_id)
+        content = _sanitized_candidate_source_bytes(
+            path,
+            _candidate_blob(source_root, object_id),
+        )
         member_bytes[path] = content
         members.append(
             {

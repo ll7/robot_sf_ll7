@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from scripts.tools.check_dependency_license_inventory import (
+    SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS,
     build_inventory,
     check_report_freshness,
     main,
@@ -211,7 +212,7 @@ def _resolved_distributions(*fields: tuple[str, str, dict[str, str]]) -> list[_D
     return [_Distribution(name, version, **metadata) for name, version, metadata in fields]
 
 
-def _write_candidate_bundle(root: Path) -> Path:
+def _write_candidate_bundle(root: Path, *, extras: Iterable[str] = ()) -> Path:
     """Write an exact candidate bundle for the fixture's core profile."""
     bundle = root / "candidate-bundle"
     bundle.mkdir()
@@ -257,7 +258,8 @@ def _write_candidate_bundle(root: Path) -> Path:
         "Name: robot_sf\n"
         f"Version: {version}\n"
         "Requires-Dist: demo-package>=1\n"
-        "\n"
+        + "".join(f"Provides-Extra: {extra}\n" for extra in extras)
+        + "\n"
     ).encode()
     wheel = bundle / f"robot_sf-{version}-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
@@ -498,6 +500,40 @@ def test_candidate_bundle_binds_archives_and_sbom_to_selected_lock_closure(
     assert not any(
         "candidate bundle binding failed" in failure for failure in inventory["failures"]
     )
+
+
+def test_candidate_bound_all_rejects_rllib_distribution_metadata(tmp_path: Path) -> None:
+    """The supported all-surface binding rejects the development-only RLlib extra."""
+    _write_inputs(tmp_path)
+    bundle = _write_candidate_bundle(
+        tmp_path,
+        extras=[*SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS, "foo", "rllib"],
+    )
+
+    inventory = build_inventory(
+        tmp_path,
+        distributions=_resolved_distributions(
+            ("robot_sf", "0.0.1", {"License_Expression": "GPL-3.0-only"}),
+            ("demo-package", "1.0.0", {"License_Expression": "MIT"}),
+        ),
+        selected_profile_ids=["all"],
+        candidate_bundle_path=bundle,
+    )
+
+    assert inventory["summary"]["candidate_bound"] is False
+    assert any(
+        "closed v0.0.6 supported extra roster" in failure for failure in inventory["failures"]
+    )
+
+
+def test_sanitized_project_can_retain_explicit_rllib_exclusion(tmp_path: Path) -> None:
+    """A candidate project may omit rllib when its profile exclusion remains explicit."""
+    _write_inputs(tmp_path, all_excluded=["rllib"])
+
+    inventory = build_inventory(tmp_path, distributions=[], selected_profile_ids=["all"])
+
+    assert inventory["structural_issues"] == []
+    assert inventory["surface"]["profile_ids"] == ["all"]
 
 
 def test_candidate_bundle_drift_fails_closed(tmp_path: Path) -> None:

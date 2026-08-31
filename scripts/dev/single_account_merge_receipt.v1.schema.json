@@ -139,7 +139,7 @@
           ],
           "properties": {
             "status": {"enum": ["ordinary", "base_sensitive", "unknown"]},
-            "selector": {"const": "pytest-marker-files.v1"},
+            "selector": {"const": "pytest-marker-files.v2"},
             "candidate_files": {
               "type": "array",
               "items": {"type": "string"},

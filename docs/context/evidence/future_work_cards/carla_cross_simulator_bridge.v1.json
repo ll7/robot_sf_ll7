@@ -41,6 +41,7 @@
     "docs/context/carla_replay_parity.md"
   ],
   "relationship_to_anchor": "introduced_after_anchor",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "safe_sentence": "A pinned CARLA live-replay prototype exists and has demonstrated client/server connection plus bounded replay handling; matched actor-complete replay, metric parity, and cross-simulator validation remain unestablished.",
   "schema": "future_work_bridge_status_card.v1",
   "source_digest": "5ed40ff4744c43e2ec7fe4b4ed1675422188beb199adbef11534654a98d5a2fd",

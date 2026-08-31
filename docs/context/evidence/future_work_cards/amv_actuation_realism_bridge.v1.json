@@ -37,6 +37,7 @@
     "configs/training/"
   ],
   "relationship_to_anchor": "present_at_anchor",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "safe_sentence": "Public longitudinal e-scooter evidence provides a bounded proxy-source basis, while platform-specific yaw, latency, dynamics, and physical calibration remain absent.",
   "schema": "future_work_bridge_status_card.v1",
   "source_digest": "86a62f04f49decb3678124f792a3080b22bc7a4fd034ca84227e09704bbd4100",

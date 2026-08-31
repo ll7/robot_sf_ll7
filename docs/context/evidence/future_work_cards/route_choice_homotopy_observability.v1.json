@@ -37,6 +37,7 @@
     "scripts/tools/"
   ],
   "relationship_to_anchor": "introduced_after_anchor",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "safe_sentence": "The repository can deterministically classify route side and homotopy consistency on synthetic fixtures; whether those observables improve human predictability or social acceptance remains unevaluated.",
   "schema": "future_work_bridge_status_card.v1",
   "source_digest": "3b3854fc19502eb64275ea6ec14a93f5eb4d2bdec67fa21d09d83ca28799c10b",

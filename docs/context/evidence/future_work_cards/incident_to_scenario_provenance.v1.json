@@ -37,6 +37,7 @@
     "docs/context/evidence/"
   ],
   "relationship_to_anchor": "introduced_after_anchor",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "safe_sentence": "A fail-closed provenance contract can distinguish source facts, extracted hypotheses, simulator assumptions, and replay identity for a synthetic incident fixture; real-report validity and representativeness remain future work.",
   "schema": "future_work_bridge_status_card.v1",
   "source_digest": "23d0377efd75e60931e68504e2807850d62655b42680c0365d848290095babd6",

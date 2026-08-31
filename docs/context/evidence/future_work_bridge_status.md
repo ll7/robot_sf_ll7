@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (#8048) - NEEDS-REVIEW -->
 # Future-Work Bridge Status Summary
 
 <!-- schema: future_work_bridge_summary.v1 -->
@@ -16,7 +17,9 @@ This summary documents the current engineering capability and empirical evidence
 ## Claim Boundary & Caution
 
 > [!IMPORTANT]
-> None of the future-work bridges documented here have established physical transfer, human preference > validation, legal fault attribution, or unconstrained benchmark admission. > All evidence is currently diagnostic-only, proxy-based, or synthetic-fixture-only.
+> None of the future-work bridges documented here have established physical transfer, human preference 
+> validation, legal fault attribution, or unconstrained benchmark admission. 
+> All evidence is currently diagnostic-only, proxy-based, or synthetic-fixture-only.
 
 ## Versioned Card Manifest
 

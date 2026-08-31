@@ -22,6 +22,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.evidence.writers import review_marker_json, write_json, write_text
+
 SCHEMA = "future_work_bridge_status_card.v1"
 SUMMARY_SCHEMA = "future_work_bridge_summary.v1"
 
@@ -344,8 +346,8 @@ def generate_summary_markdown(cards: list[BridgeCard]) -> str:
             "## Claim Boundary & Caution",
             "",
             "> [!IMPORTANT]",
-            "> None of the future-work bridges documented here have established physical transfer, human preference "
-            "> validation, legal fault attribution, or unconstrained benchmark admission. "
+            "> None of the future-work bridges documented here have established physical transfer, human preference ",
+            "> validation, legal fault attribution, or unconstrained benchmark admission. ",
             "> All evidence is currently diagnostic-only, proxy-based, or synthetic-fixture-only.",
             "",
             "## Versioned Card Manifest",
@@ -365,7 +367,7 @@ def generate_summary_markdown(cards: list[BridgeCard]) -> str:
 
 
 def build_all(cards_dir: Path, summary_file: Path) -> dict[str, Any]:
-    """Generate cards and summary report."""
+    """Generate cards and summary report using standard evidence writers."""
     cards_dir.mkdir(parents=True, exist_ok=True)
     summary_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -376,13 +378,11 @@ def build_all(cards_dir: Path, summary_file: Path) -> dict[str, Any]:
         validate_safe_sentence(card.safe_sentence)
         card_path = cards_dir / f"{card.bridge_id}.v1.json"
         card_data = asdict(card)
-        card_path.write_text(
-            json.dumps(card_data, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
+        write_json(card_path, card_data)
         written_cards.append(str(card_path))
 
     summary_md = generate_summary_markdown(cards)
-    summary_file.write_text(summary_md, encoding="utf-8")
+    write_text(summary_file, summary_md, issue_ref="#8048")
 
     return {
         "schema": SUMMARY_SCHEMA,
@@ -407,11 +407,13 @@ def check_all(cards_dir: Path, summary_file: Path) -> bool:
             disk_data = json.loads(card_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             return False
-        if disk_data != asdict(card):
+        expected_dict = {"review_marker": review_marker_json(), **asdict(card)}
+        if disk_data != expected_dict:
             return False
 
+    summary_disk = summary_file.read_text(encoding="utf-8")
     expected_summary = generate_summary_markdown(expected_cards)
-    if summary_file.read_text(encoding="utf-8") != expected_summary:
+    if not summary_disk.endswith(expected_summary):
         return False
 
     return True

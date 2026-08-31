@@ -212,6 +212,29 @@ def test_quota_fallback_resolves_repo_from_git_origin(tmp_path: Path) -> None:
     assert "Merged via REST fallback" in result.stderr
 
 
+def test_quota_fallback_rejects_non_github_origin(tmp_path: Path) -> None:
+    """Repository discovery must not reinterpret a non-GitHub origin."""
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    subprocess.run(["git", "init", "-q", str(checkout)], check=True)
+    subprocess.run(
+        ["git", "-C", str(checkout), "remote", "add", "origin", "git@gitlab.com:o/r.git"],
+        check=True,
+    )
+    result = _run_wrapper(
+        tmp_path,
+        {
+            "merge_key": "graphql_quota",
+            "graphql_quota": {"stderr": "GraphQL: API quota exhausted", "exit": 1},
+            "repo_view": {"stderr": "GraphQL: API quota exhausted", "exit": 1},
+        },
+        include_repo_arg=False,
+        cwd=checkout,
+    )
+    assert result.returncode == 2
+    assert "cannot resolve owner/name" in result.stderr
+
+
 def test_quota_fallback_refuses_stale_head(tmp_path: Path) -> None:
     """A moved head fails before the REST compare-and-swap merge is attempted."""
     result = _run_wrapper(
@@ -280,20 +303,26 @@ def test_non_worktree_failure_stays_fail_closed(tmp_path: Path) -> None:
     assert "REST fallback" not in result.stderr
 
 
-def test_generic_graphql_failure_stays_fail_closed(tmp_path: Path) -> None:
-    """A GraphQL diagnostic without a quota marker is not fallback eligible."""
+@pytest.mark.parametrize(
+    "diagnostic",
+    (
+        "GraphQL: Something went wrong resolving PullRequest.",
+        "GraphQL: Repository quota metadata is unavailable.",
+    ),
+)
+def test_non_quota_graphql_failure_stays_fail_closed(
+    tmp_path: Path, diagnostic: str
+) -> None:
+    """Generic GraphQL and incidental quota text are not fallback eligible."""
     result = _run_wrapper(
         tmp_path,
         {
             "merge_key": "graphql_error",
-            "graphql_error": {
-                "stderr": "GraphQL: Something went wrong resolving PullRequest.",
-                "exit": 1,
-            },
+            "graphql_error": {"stderr": diagnostic, "exit": 1},
         },
     )
     assert result.returncode == 1
-    assert "Something went wrong" in result.stderr
+    assert diagnostic in result.stderr
     assert "re-verifying guarded state" not in result.stderr
 
 

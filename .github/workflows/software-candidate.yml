@@ -59,9 +59,11 @@ jobs:
             printf 'RIGHTS_MANIFEST=%s/sanitized-candidate.json\n' "${candidate_root}"
             printf 'RIGHTS_DIR=%s/rights-admission\n' "${candidate_root}"
           } >> "${GITHUB_ENV}"
-          printf 'artifact-name=%s\n' "${ARTIFACT_NAME}" >> "${GITHUB_OUTPUT}"
-          printf 'rights-artifact-name=%s\n' "${RIGHTS_ARTIFACT_NAME}" >> "${GITHUB_OUTPUT}"
-          printf 'source-sha=%s\n' "${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+          {
+            printf 'artifact-name=%s\n' "${ARTIFACT_NAME}"
+            printf 'rights-artifact-name=%s\n' "${RIGHTS_ARTIFACT_NAME}"
+            printf 'source-sha=%s\n' "${GITHUB_SHA}"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Require hermetic exact source identity before build
         run: >-

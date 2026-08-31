@@ -15,6 +15,12 @@ on:
       source-sha:
         description: Exact source commit bound by the candidate manifest
         value: ${{ jobs.build-candidate.outputs.source-sha }}
+      candidate-source-sha:
+        description: Exact rights-scoped source candidate commit used for the build
+        value: ${{ jobs.build-candidate.outputs.candidate-source-sha }}
+      candidate-tree-sha:
+        description: Exact rights-scoped source candidate tree used for the build
+        value: ${{ jobs.build-candidate.outputs.candidate-tree-sha }}
 
 permissions:
   contents: read
@@ -36,6 +42,8 @@ jobs:
       artifact-digest: ${{ steps.upload.outputs.artifact-digest }}
       artifact-name: ${{ steps.identity.outputs.artifact-name }}
       source-sha: ${{ steps.identity.outputs.source-sha }}
+      candidate-source-sha: ${{ steps.materialize.outputs.candidate-source-sha }}
+      candidate-tree-sha: ${{ steps.materialize.outputs.candidate-tree-sha }}
     env:
       ARTIFACT_NAME: >-
         robot-sf-software-candidate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -65,7 +73,9 @@ jobs:
           candidate_root="${RUNNER_TEMP}/robot-sf-software-candidate"
           {
             printf 'CANDIDATE_ROOT=%s\n' "${candidate_root}"
-            printf 'BUILD_SOURCE=%s/source\n' "${candidate_root}"
+            printf 'CANDIDATE_SOURCE=%s/source\n' "${candidate_root}"
+            printf 'MATERIALIZATION_REPORT=%s/materialization.json\n' "${candidate_root}"
+            printf 'BUILD_SOURCE=%s/build-source\n' "${candidate_root}"
             printf 'DIST_DIR=%s/dist\n' "${candidate_root}"
             printf 'RAW_SBOM=%s/raw-sbom.cdx.json\n' "${candidate_root}"
             printf 'BUNDLE_DIR=%s/bundle\n' "${candidate_root}"
@@ -79,25 +89,54 @@ jobs:
           --repo-root "${GITHUB_WORKSPACE}"
           --source-sha "${GITHUB_SHA}"
 
+      - name: Materialize the rights-scoped source candidate
+        id: materialize
+        run: |
+          python scripts/dev/software_candidate_manifest.py materialize-source \
+            --repo-root "${GITHUB_WORKSPACE}" \
+            --candidate-root "${CANDIDATE_SOURCE}" \
+            --source-sha "${GITHUB_SHA}" \
+            --policy "${GITHUB_WORKSPACE}/scripts/validation/software_candidate_policy.v1.json" \
+            --report "${MATERIALIZATION_REPORT}"
+          python - "${MATERIALIZATION_REPORT}" "${GITHUB_ENV}" "${GITHUB_OUTPUT}" <<'PY'
+          import json
+          import sys
+
+          report_path, env_path, output_path = sys.argv[1:]
+          report = json.load(open(report_path, encoding="utf-8"))
+          values = {
+              "CANDIDATE_SOURCE_SHA": report["candidate_commit_sha"],
+              "CANDIDATE_TREE_SHA": report["candidate_tree_sha"],
+              "CANDIDATE_VERSION": report["package"]["version"],
+          }
+          with open(env_path, "a", encoding="utf-8") as env_file:
+              for key, value in values.items():
+                  env_file.write(f"{key}={value}\n")
+          with open(output_path, "a", encoding="utf-8") as output_file:
+              output_file.write(f"candidate-source-sha={values['CANDIDATE_SOURCE_SHA']}\n")
+              output_file.write(f"candidate-tree-sha={values['CANDIDATE_TREE_SHA']}\n")
+          PY
+
       - name: Prepare isolated candidate directories
         run: mkdir -p "${DIST_DIR}" "${BUNDLE_DIR}"
 
-      - name: Stage exact commit in disposable build root
+      - name: Stage exact rights-scoped candidate in disposable build root
         run: >-
           python scripts/dev/software_candidate_manifest.py stage-build-source
-          --repo-root "${GITHUB_WORKSPACE}"
+          --repo-root "${CANDIDATE_SOURCE}"
           --build-root "${BUILD_SOURCE}"
-          --source-sha "${GITHUB_SHA}"
+          --source-sha "${CANDIDATE_SOURCE_SHA}"
 
       - name: Prove disposable build source is the exact commit
         run: >-
           python scripts/dev/software_candidate_manifest.py check-source
           --repo-root "${BUILD_SOURCE}"
-          --source-sha "${GITHUB_SHA}"
+          --source-sha "${CANDIDATE_SOURCE_SHA}"
 
       - name: Build exactly one wheel and one sdist once
         run: |
           cd "${BUILD_SOURCE}"
+          export SETUPTOOLS_SCM_PRETEND_VERSION="${CANDIDATE_VERSION}"
           uv build --out-dir "${DIST_DIR}"
 
       - name: Reject any source workspace mutation by the build
@@ -116,10 +155,15 @@ jobs:
           uv run --no-project --with 'twine==7.0.0'
           twine check --strict "${DIST_DIR}"/*.whl "${DIST_DIR}"/*.tar.gz
 
-      - name: Validate archive members and licenses
-        run: >-
-          uv run --no-project --with 'pyyaml==6.0.3' --with 'packaging==26.0'
-          python scripts/tools/check_distribution_licenses.py "${DIST_DIR}"
+      - name: Validate candidate archive members and strict rights
+        run: |
+          cd "${BUILD_SOURCE}"
+          uv run --no-project --with 'pyyaml==6.0.3' --with 'packaging==26.0' \
+            python scripts/tools/check_distribution_licenses.py "${DIST_DIR}" \
+            --strict-asset-rights \
+            --repo-root "${BUILD_SOURCE}" \
+            --inventory "${BUILD_SOURCE}/scripts/validation/software_candidate_asset_rights.v1.json" \
+            --source-tree-ref HEAD
 
       - name: Validate clean install and every entry point
         env:
@@ -135,9 +179,10 @@ jobs:
           bash "${BUILD_SOURCE}/scripts/validation/wheel_install_smoke.sh" "${wheels[0]}"
 
       - name: Export dependency SBOM without rebuilding
-        run: >-
-          uv export --preview-features sbom-export --frozen --no-dev --no-emit-project
-          --format cyclonedx1.5 --output-file "${RAW_SBOM}" >/dev/null
+        run: |
+          cd "${BUILD_SOURCE}"
+          uv export --preview-features sbom-export --frozen --no-dev --no-emit-project \
+            --format cyclonedx1.5 --output-file "${RAW_SBOM}" >/dev/null
 
       - name: Assemble deterministic candidate manifest and provenance
         run: >-
@@ -147,6 +192,8 @@ jobs:
           --raw-sbom "${RAW_SBOM}"
           --bundle-dir "${BUNDLE_DIR}"
           --source-sha "${GITHUB_SHA}"
+          --candidate-source-root "${CANDIDATE_SOURCE}"
+          --materialization-report "${MATERIALIZATION_REPORT}"
           --repository "${GITHUB_REPOSITORY}"
           --workflow-run-id "${GITHUB_RUN_ID}"
           --workflow-run-attempt "${GITHUB_RUN_ATTEMPT}"

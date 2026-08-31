@@ -803,8 +803,10 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912 - closed repor
         or any(not isinstance(value, str) or not value for value in profile_ids)
     ):
         raise PromotionError("supported dependency report selected profile surface is invalid")
-    expected_profiles = {"core", *SUPPORTED_RELEASE_EXTRAS}
-    if set(profile_ids) != expected_profiles:
+    # #8146's release surface is selected through the closed ``all`` profile;
+    # that profile expands to the twelve supported extras.  A core-only report
+    # is therefore not a software release admission.
+    if profile_ids != ["all"]:
         raise PromotionError(
             "supported dependency report profile roster differs from the v0.0.6 supported surface"
         )

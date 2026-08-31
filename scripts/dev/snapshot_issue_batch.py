@@ -1055,11 +1055,20 @@ def snapshot_claimable_issues(
 ) -> dict[str, Any]:
     """Return a compact, readiness-scoped candidate queue with live admission verdicts.
 
-    Discovery filters to ``state:ready`` before applying the bounded page size. GraphQL is used
-    only when the quota preflight leaves the configured safety margin; otherwise one bounded REST
-    page is returned with a resume cursor. A numeric observed zero is authoritative only when the
-    ready-candidate universe started at page one, was completely scanned, and every admission and
-    claim-state read was usable.
+    Claimable discovery constrains issue listing to ``state:ready`` candidates before the
+    bounded page size, so newer non-ready issues cannot evict older ready leaves from the
+    scanned window. GraphQL discovery is used only when the quota preflight leaves the
+    configured safety margin; otherwise one bounded REST page is returned with a resume
+    cursor.
+
+    ``queue_completeness`` makes zero-work claims explicit: ``complete`` means the
+    ready-candidate universe was fully scanned and every live admission succeeded;
+    ``incomplete`` means the ready-candidate page was truncated or resumable; and
+    ``unavailable`` means discovery itself failed or was quota-blocked. A
+    ``claimable_count == 0`` result may only be treated as ``genuine_zero_work`` when
+    ``queue_completeness`` is ``complete``. The companion fields ``candidate_scope``,
+    ``candidate_universe_complete``, ``queue_status``, and ``zero_work_authoritative``
+    express the same completeness state for queue consumers.
     """
     body_limit = body_limit if body_limit > 0 else BODY_EXCERPT_CHARS
     blocker_decisions, blocker_errors = _load_blocker_decisions(blocker_decision_paths or [])
@@ -1075,6 +1084,7 @@ def snapshot_claimable_issues(
             "candidate_scope": issue_implementability.READY_LABEL,
             "candidate_universe_complete": False,
             "queue_status": "unavailable",
+            "queue_completeness": "unavailable",
             "zero_work_authoritative": False,
             "blocker_decision_paths": blocker_decision_paths or [],
             "errors": blocker_errors,
@@ -1105,6 +1115,7 @@ def snapshot_claimable_issues(
         "candidate_scope": issue_implementability.READY_LABEL,
         "candidate_universe_complete": False,
         "queue_status": "unavailable" if listing["status"] != "ok" else "incomplete",
+        "queue_completeness": "unavailable",
         "zero_work_authoritative": False,
         "blocker_decision_paths": blocker_decision_paths or [],
         "candidate_count": 0,
@@ -1180,6 +1191,7 @@ def snapshot_claimable_issues(
         for issue in snapshots
     )
     candidate_universe_complete = resume_page == 1 and not truncated
+    queue_completeness = "incomplete" if truncated else "complete"
     if claimable_issues:
         queue_status = "claimable"
     elif candidate_universe_complete and admission_results_complete:
@@ -1192,6 +1204,7 @@ def snapshot_claimable_issues(
         "legacy_mode": "claimable",
         "candidate_universe_complete": candidate_universe_complete,
         "queue_status": queue_status,
+        "queue_completeness": queue_completeness,
         "zero_work_authoritative": queue_status == "exhausted",
         "truncated": truncated,
         "truncation_note": truncation_note,

@@ -266,8 +266,12 @@ if snapshot.claimable_count == 0:
     run_next_unsaturated_discovery_lane(max_new_issues=2)
     prepare_and_admit_new_candidates()
     snapshot = rerun_live_admission()
-if snapshot.zero_work_authoritative:
+if snapshot.zero_work_authoritative and snapshot.queue_completeness == "complete":
     stop as genuine_zero_work
+if snapshot.claimable_count == 0 and snapshot.queue_completeness != "complete":
+    record the incomplete/unavailable queue state and continue recovery:
+    incomplete -> resume from the returned cursor or raise the ready-candidate limit and re-scan
+    unavailable -> treat as no queue evidence; retry after quota/transport recovery
 ```
 
 Never infer `genuine_zero_work` from `claimable_count` alone. The canonical snapshot must report
@@ -741,9 +745,11 @@ If the phase used `worker_sparse_artifacts`, require the self-review companion t
 Stop the autopilot when any:
 - all eligible issues have been implemented and merged,
 - no new discovery candidates remain,
-- the audited candidate queue reports `candidate_scope: state:ready` and
-  `zero_work_authoritative: true`, while the review queue, external-input owners, and unsaturated
-  discovery lanes also provide no defensible single-repository leaf (`genuine_zero_work`),
+- the audited candidate queue reports `candidate_scope: state:ready` with
+  `zero_work_authoritative: true` and an explicit `queue_completeness: complete` scan verdict,
+  while the review queue, external-input owners, and unsaturated discovery lanes also provide no
+  defensible single-repository leaf (`genuine_zero_work`; an unqualified `claimable_count == 0`
+  from an incomplete or unavailable scan is never zero-work evidence),
 - auth/credentials/env blocker that affects all phases,
 - user requests stop.
 

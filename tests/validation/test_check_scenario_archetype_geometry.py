@@ -132,8 +132,7 @@ def test_integration_pinned_doorway_reproduces_audit(tmp_path: Path) -> None:
 
     repo_root = Path(__file__).resolve().parents[2]
     svg = repo_root / "maps/svg_maps/classic_doorway.svg"
-    if not svg.exists():
-        pytest.skip("pinned archetype maps not present")
+    assert svg.is_file(), f"required pinned archetype map missing: {svg}"
     report = inspect_map_geometry(svg)
     robot = [e for e in report.endpoints if e.route_kind == "robot"]
     offsets = {e.end: e.offset_to_centre_m for e in robot}
@@ -146,8 +145,7 @@ def test_integration_pinned_doorway_reproduces_audit(tmp_path: Path) -> None:
 def test_cli_default_exit_zero_and_fail_flag(tmp_path: Path, capsys) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     svg = repo_root / "maps/svg_maps/classic_doorway.svg"
-    if not svg.exists():
-        pytest.skip("pinned archetype maps not present")
+    assert svg.is_file(), f"required pinned archetype map missing: {svg}"
     assert main(["--map", str(svg)]) == 0
     assert main(["--map", str(svg), "--fail-on-violation"]) == 2
     out = capsys.readouterr().out

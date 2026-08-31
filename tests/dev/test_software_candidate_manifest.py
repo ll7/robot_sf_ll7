@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import runpy
 import shutil
 import subprocess
 import sys
@@ -147,6 +148,22 @@ def _assembled_candidate(tmp_path: Path) -> tuple[Path, str, Path]:
     return source, source_sha, bundle
 
 
+def _candidate_json_bytes(payload: object) -> bytes:
+    return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
+
+
+def _bundle_snapshot(bundle: Path) -> dict[str, bytes]:
+    return {path.name: path.read_bytes() for path in bundle.iterdir()}
+
+
+def _refresh_member(manifest: dict[str, object], *, kind: str, path: Path) -> None:
+    members = manifest["members"]
+    assert isinstance(members, list)
+    member = next(item for item in members if item["kind"] == kind)
+    member["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+    member["size"] = path.stat().st_size
+
+
 def test_assemble_is_deterministic_and_offline_verify_reuses_exact_bytes(tmp_path: Path) -> None:
     source, source_sha = _source_repo(tmp_path / "source")
     dist = _distributions(tmp_path / "dist")
@@ -214,6 +231,43 @@ def test_sbom_volatile_identity_is_removed_deterministically(tmp_path: Path) -> 
     assert {path.name: path.read_bytes() for path in first.iterdir()} == {
         path.name: path.read_bytes() for path in second.iterdir()
     }
+
+
+@pytest.mark.parametrize("constant", ("NaN", "Infinity", "-Infinity"))
+@pytest.mark.parametrize("preexisting_bundle", (False, True))
+def test_assemble_rejects_nonfinite_raw_sbom_without_admitting_output(
+    tmp_path: Path,
+    constant: str,
+    preexisting_bundle: bool,
+) -> None:
+    source, source_sha = _source_repo(tmp_path / "source")
+    dist = _distributions(tmp_path / "dist")
+    raw_sbom = _raw_sbom(tmp_path / "raw-sbom.json")
+    raw_sbom.write_text(
+        raw_sbom.read_text(encoding="utf-8").replace(
+            '"components":',
+            f'"poison_non_json_number": {constant}, "components":',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    bundle = tmp_path / "bundle"
+    if preexisting_bundle:
+        bundle.mkdir()
+        (bundle / "sentinel.txt").write_text("do not overwrite\n", encoding="utf-8")
+    before = _bundle_snapshot(bundle) if preexisting_bundle else None
+
+    result = _run(
+        *_assemble_args(source, source_sha, dist, raw_sbom, bundle),
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "non-finite JSON constant" in result.stderr
+    if preexisting_bundle:
+        assert _bundle_snapshot(bundle) == before
+    else:
+        assert not bundle.exists()
 
 
 def test_assemble_classifies_only_the_exact_pinned_uv_out_dir_marker(tmp_path: Path) -> None:
@@ -874,6 +928,105 @@ def test_verify_rejects_duplicate_manifest_filenames(tmp_path: Path) -> None:
     assert "duplicate filenames" in result.stderr
 
 
+def test_verify_rejects_nonfinite_candidate_manifest_without_mutating_bundle(
+    tmp_path: Path,
+) -> None:
+    _source, source_sha, bundle = _assembled_candidate(tmp_path)
+    manifest_path = bundle / "candidate-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["workflow"]["run_attempt"] = float("nan")
+    manifest_path.write_bytes(_candidate_json_bytes(manifest))
+    before = _bundle_snapshot(bundle)
+
+    result = _run(
+        "verify",
+        "--bundle-dir",
+        str(bundle),
+        "--expected-source-sha",
+        source_sha,
+        "--expected-workflow-run-id",
+        "123456",
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "non-finite JSON constant" in result.stderr
+    assert _bundle_snapshot(bundle) == before
+
+
+def test_verify_rejects_nonfinite_normalised_sbom_without_mutating_bundle(
+    tmp_path: Path,
+) -> None:
+    _source, source_sha, bundle = _assembled_candidate(tmp_path)
+    manifest_path = bundle / "candidate-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    sbom_member = next(member for member in manifest["members"] if member["kind"] == "sbom")
+    sbom_path = bundle / sbom_member["filename"]
+    sbom = json.loads(sbom_path.read_text(encoding="utf-8"))
+    sbom["metadata"]["poison_non_json_number"] = float("nan")
+    sbom_path.write_bytes(_candidate_json_bytes(sbom))
+    _refresh_member(manifest, kind="sbom", path=sbom_path)
+
+    provenance_member = next(
+        member for member in manifest["members"] if member["kind"] == "provenance"
+    )
+    provenance_path = bundle / provenance_member["filename"]
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    provenance["sbom"] = next(member for member in manifest["members"] if member["kind"] == "sbom")
+    provenance_path.write_bytes(_candidate_json_bytes(provenance))
+    _refresh_member(manifest, kind="provenance", path=provenance_path)
+    manifest_path.write_bytes(_candidate_json_bytes(manifest))
+    before = _bundle_snapshot(bundle)
+
+    result = _run(
+        "verify",
+        "--bundle-dir",
+        str(bundle),
+        "--expected-source-sha",
+        source_sha,
+        "--expected-workflow-run-id",
+        "123456",
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "non-finite JSON constant" in result.stderr
+    assert _bundle_snapshot(bundle) == before
+
+
+def test_verify_rejects_nonfinite_provenance_without_mutating_bundle(
+    tmp_path: Path,
+) -> None:
+    _source, source_sha, bundle = _assembled_candidate(tmp_path)
+    manifest_path = bundle / "candidate-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    provenance_member = next(
+        member for member in manifest["members"] if member["kind"] == "provenance"
+    )
+    provenance_path = bundle / provenance_member["filename"]
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    provenance["poison_non_json_number"] = float("nan")
+    provenance_path.write_bytes(_candidate_json_bytes(provenance))
+    _refresh_member(manifest, kind="provenance", path=provenance_path)
+    manifest_path.write_bytes(_candidate_json_bytes(manifest))
+    before = _bundle_snapshot(bundle)
+
+    result = _run(
+        "verify",
+        "--bundle-dir",
+        str(bundle),
+        "--expected-source-sha",
+        source_sha,
+        "--expected-workflow-run-id",
+        "123456",
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "non-finite JSON constant" in result.stderr
+    assert _bundle_snapshot(bundle) == before
+
+
 def test_verify_rejects_source_and_workflow_run_drift(tmp_path: Path) -> None:
     _source, source_sha, bundle = _assembled_candidate(tmp_path)
     source_drift = _run(
@@ -930,6 +1083,31 @@ def test_schema_accepts_emitted_manifest_and_invalid_schema_fails_closed(tmp_pat
     assert "draft 2020-12" in result.stderr
 
 
+def test_schema_rejects_nonfinite_json_before_contract_validation(tmp_path: Path) -> None:
+    _source, source_sha, bundle = _assembled_candidate(tmp_path)
+    schema_path = HELPER.with_name("software_candidate_manifest.v1.schema.json")
+    poisoned_schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    poisoned_schema["poison_non_json_number"] = float("nan")
+    poisoned_path = tmp_path / "poisoned-schema.json"
+    poisoned_path.write_bytes(_candidate_json_bytes(poisoned_schema))
+
+    result = _run(
+        "verify",
+        "--bundle-dir",
+        str(bundle),
+        "--expected-source-sha",
+        source_sha,
+        "--expected-workflow-run-id",
+        "123456",
+        "--schema",
+        str(poisoned_path),
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert "non-finite JSON constant" in result.stderr
+
+
 def test_verify_rejects_syntactically_valid_weakened_schema(tmp_path: Path) -> None:
     _source, source_sha, bundle = _assembled_candidate(tmp_path)
     schema_path = HELPER.with_name("software_candidate_manifest.v1.schema.json")
@@ -970,3 +1148,10 @@ def test_verify_is_offline_and_has_no_build_tool_dependency(tmp_path: Path) -> N
     )
 
     assert "reused exact bytes" in result.stdout
+
+
+def test_json_output_serialization_rejects_nonfinite_values() -> None:
+    helper = runpy.run_path(str(HELPER), run_name="software_candidate_manifest_test")
+
+    with pytest.raises(helper["CandidateError"], match="non-finite JSON value"):
+        helper["_json_bytes"]({"poison_non_json_number": float("nan")})

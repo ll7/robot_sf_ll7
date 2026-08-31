@@ -99,10 +99,18 @@ def _json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def _reject_nonfinite_json_constant(value: str) -> Any:
+    raise CandidateError(f"non-finite JSON constant is forbidden: {value}")
+
+
 def _load_json(path: Path, *, label: str) -> Any:
     try:
         raw = path.read_bytes()
-        return json.loads(raw.decode("utf-8"), object_pairs_hook=_json_object)
+        return json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_json_object,
+            parse_constant=_reject_nonfinite_json_constant,
+        )
     except CandidateError:
         raise
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -110,7 +118,11 @@ def _load_json(path: Path, *, label: str) -> Any:
 
 
 def _json_bytes(payload: Any) -> bytes:
-    return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode()
+    try:
+        text = json.dumps(payload, allow_nan=False, indent=2, sort_keys=True)
+    except ValueError as exc:
+        raise CandidateError("candidate output contains a non-finite JSON value") from exc
+    return (text + "\n").encode()
 
 
 def _sha256(path: Path) -> str:
@@ -976,7 +988,11 @@ def _validation_payload() -> dict[str, Any]:
 def _load_schema(schema_path: Path) -> tuple[bytes, dict[str, Any]]:
     try:
         raw_schema = schema_path.read_bytes()
-        schema = json.loads(raw_schema.decode("utf-8"), object_pairs_hook=_json_object)
+        schema = json.loads(
+            raw_schema.decode("utf-8"),
+            object_pairs_hook=_json_object,
+            parse_constant=_reject_nonfinite_json_constant,
+        )
     except CandidateError:
         raise
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:

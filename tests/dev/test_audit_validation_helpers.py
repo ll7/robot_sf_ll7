@@ -81,24 +81,95 @@ def test_different_bodies_do_not_cluster(tmp_path: Path) -> None:
 
 
 def test_run_inventory_counts_call_sites(tmp_path: Path) -> None:
-    _write(tmp_path, "common.py", IDENTICAL_HELPER)
+    _write(tmp_path, "a.py", IDENTICAL_HELPER)
+    _write(tmp_path, "b.py", IDENTICAL_HELPER)
+    _write(tmp_path, "c.py", IDENTICAL_HELPER)
     _write(
         tmp_path,
         "user.py",
-        "from common import validate_finite\nx = validate_finite(1.0)\ny = validate_finite(2)\n",
+        "from a import validate_finite\nx = validate_finite(1.0)\ny = validate_finite(2)\n",
     )
     report = run_inventory(tmp_path)
     assert report["schema"] == SCHEMA
-    assert report["scan"]["helper_count"] == 1
-    helper = report["scan"]
-    del helper  # scan summary only
-    # Re-scan and check the call-site count on the record.
-    records = []
-    for path in sorted(tmp_path.glob("*.py")):
-        if path.name == "user.py":
-            continue
-        records.extend(_scan_file_for_helpers_and_calls(path, tmp_path)[0])
+    assert report["scan"]["helper_count"] == 3
+    assert report["cluster_count"] == 1
+    cluster_members = next(iter(report["candidate_clusters"].values()))
+    by_name = {m["qualified_name"]: m for m in cluster_members}
+    assert by_name["a.validate_finite"]["call_sites"] == 2
+    assert by_name["b.validate_finite"]["call_sites"] == 0
+    assert by_name["c.validate_finite"]["call_sites"] == 0
+
+
+def test_exact_call_site_attribution_regression(tmp_path: Path) -> None:
+    """A caller importing helper from a.py only attributes calls to a.py, not b.py."""
+    _write(tmp_path, "a.py", IDENTICAL_HELPER)
+    _write(tmp_path, "b.py", IDENTICAL_HELPER)
+    _write(
+        tmp_path,
+        "user.py",
+        "from a import validate_finite\nx = validate_finite(1.0)\ny = validate_finite(2.0)\n",
+    )
+    report = run_inventory(tmp_path)
+    records, _ = _scan_file_for_helpers_and_calls(tmp_path / "a.py", tmp_path)
     assert len(records) == 1
+    # Run full inventory and check all records by re-scanning or inspecting clusters
+    _write(tmp_path, "c.py", IDENTICAL_HELPER)
+    report = run_inventory(tmp_path)
+    cluster = next(iter(report["candidate_clusters"].values()))
+    lookup = {m["qualified_name"]: m["call_sites"] for m in cluster}
+    assert lookup["a.validate_finite"] == 2
+    assert lookup["b.validate_finite"] == 0
+    assert lookup["c.validate_finite"] == 0
+
+
+def test_import_alias_and_module_import_attribution(tmp_path: Path) -> None:
+    """Aliased and module-attribute imports resolve to their exact target module."""
+    _write(tmp_path, "a.py", IDENTICAL_HELPER)
+    _write(tmp_path, "b.py", IDENTICAL_HELPER)
+    _write(tmp_path, "c.py", IDENTICAL_HELPER)
+    _write(
+        tmp_path,
+        "user_alias.py",
+        "from a import validate_finite as my_check\nx = my_check(1.0)\n",
+    )
+    _write(
+        tmp_path,
+        "user_mod.py",
+        "import b as mod_b\ny = mod_b.validate_finite(2.0)\n",
+    )
+    report = run_inventory(tmp_path)
+    cluster = next(iter(report["candidate_clusters"].values()))
+    lookup = {m["qualified_name"]: m["call_sites"] for m in cluster}
+    assert lookup["a.validate_finite"] == 1
+    assert lookup["b.validate_finite"] == 1
+    assert lookup["c.validate_finite"] == 0
+
+
+def test_same_module_calls_and_unresolved_method_calls(tmp_path: Path) -> None:
+    """Same-module bare calls resolve locally while object methods remain unassigned."""
+    same_mod = """def validate_finite(value):
+    if not isinstance(value, (int, float)):
+        raise ValueError("not a number")
+    return value
+
+def helper():
+    validate_finite(10)
+"""
+    _write(tmp_path, "a.py", same_mod)
+    _write(tmp_path, "b.py", IDENTICAL_HELPER)
+    _write(tmp_path, "c.py", IDENTICAL_HELPER)
+    _write(
+        tmp_path,
+        "user_obj.py",
+        "class Obj:\n    def validate_finite(self, v):\n        return v\n\no = Obj()\no.validate_finite(99)\n",
+    )
+    report = run_inventory(tmp_path)
+    cluster = next(iter(report["candidate_clusters"].values()))
+    lookup = {m["qualified_name"]: m["call_sites"] for m in cluster}
+    assert lookup["a.validate_finite"] == 1
+    assert lookup["b.validate_finite"] == 0
+    assert lookup["c.validate_finite"] == 0
+    assert report["scan"]["unresolved_calls"] >= 1
 
 
 def test_syntax_error_fails_closed(tmp_path: Path) -> None:

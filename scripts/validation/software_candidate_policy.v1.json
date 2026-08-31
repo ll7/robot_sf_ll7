@@ -37,7 +37,8 @@
     "third_party/socnavbench/LICENSE",
     "third_party/socnavbench/LICENSES/Apache-2.0.txt",
     "third_party/socnavbench/LICENSING.yaml",
-    "third_party/socnavbench/UPSTREAM.md"
+    "third_party/socnavbench/UPSTREAM.md",
+    "third_party/socnavbench/**"
   ],
   "exclude": [
     "model/**",

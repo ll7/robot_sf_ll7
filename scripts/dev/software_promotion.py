@@ -21,6 +21,7 @@ from typing import Any
 
 SCHEMA_VERSION = "robot_sf.software_promotion.receipt.v1"
 COLD_INSTALL_SCHEMA_VERSION = "robot_sf.software_promotion.cold_install.v1"
+RIGHTS_ADMISSION_SCHEMA_VERSION = "robot_sf.software_rights_admission.v1"
 REPOSITORY = "ll7/robot_sf_ll7"
 INDEX_URLS = {
     "testpypi": "https://test.pypi.org/legacy/",
@@ -38,10 +39,23 @@ ARTIFACT_NAME_PATTERN = re.compile(
 RECEIPT_ARTIFACT_NAME_PATTERN = re.compile(
     r"robot-sf-(?:testpypi|pypi)-(?:receipt|cold-install)-[1-9][0-9]*-[1-9][0-9]*\Z"
 )
+RIGHTS_ARTIFACT_NAME_PATTERN = re.compile(
+    r"robot-sf-software-rights-admission-[0-9a-f]{40}-[1-9][0-9]*-[1-9][0-9]*\Z"
+)
 CANDIDATE_MEMBER_KINDS = ("wheel", "sdist", "sbom", "provenance")
 PUBLISHED_MEMBER_KINDS = ("wheel", "sdist")
 MANIFEST_NAME = "candidate-manifest.json"
 PROVENANCE_NAME = "candidate-provenance.json"
+RIGHTS_RECEIPT_NAME = "rights-admission.json"
+RIGHTS_POLICY_ID = "robot_sf.software_release_rights_policy.v1"
+RIGHTS_POLICY_PATH = "scripts/validation/software_release_rights_policy.v1.json"
+SANITIZED_CANDIDATE_SCHEMA = "robot_sf.software_sanitized_candidate.v1"
+RIGHTS_GATE_ID = "strict-distribution-rights"
+RIGHTS_WORKFLOW_PATH = ".github/workflows/software-candidate.yml"
+RIGHTS_GATE_COMMAND = (
+    "python scripts/tools/check_distribution_licenses.py $DIST_DIR "
+    "--strict-asset-rights --repo-root $BUILD_SOURCE --source-tree-ref $SOURCE_SHA"
+)
 VALIDATION_ROSTER = (
     ("version-alignment", "python scripts/dev/check_version_alignment.py"),
     ("metadata", "twine check --strict $DIST_DIR/*.whl $DIST_DIR/*.tar.gz"),
@@ -149,7 +163,13 @@ def _artifact_digest(value: str) -> str:
 
 
 def _artifact_name(value: str, *, kind: str) -> str:
-    pattern = ARTIFACT_NAME_PATTERN if kind == "candidate" else RECEIPT_ARTIFACT_NAME_PATTERN
+    pattern = {
+        "candidate": ARTIFACT_NAME_PATTERN,
+        "receipt": RECEIPT_ARTIFACT_NAME_PATTERN,
+        "rights": RIGHTS_ARTIFACT_NAME_PATTERN,
+    }.get(kind)
+    if pattern is None:
+        raise PromotionError(f"unsupported artifact kind: {kind}")
     if not isinstance(value, str) or not pattern.fullmatch(value):
         raise PromotionError(f"{kind} artifact name is not a recognized immutable identity")
     return value
@@ -180,18 +200,45 @@ def _member_record(value: Any, *, expected_kind: str | None = None) -> dict[str,
     return value
 
 
-def _validate_validation_roster(validation: Any) -> None:
+def _validate_validation_roster(validation: Any) -> None:  # noqa: C901 - versioned roster gate
     if not isinstance(validation, dict) or validation.get("status") != "passed":
         raise PromotionError("candidate validation envelope is not passed")
     checks = validation.get("checks")
     if not isinstance(checks, list) or any(not isinstance(item, dict) for item in checks):
         raise PromotionError("candidate validation roster is malformed")
-    expected_checks = [
-        {"command": command, "id": identifier, "status": "passed"}
-        for identifier, command in VALIDATION_ROSTER
-    ]
-    if checks != expected_checks:
-        raise PromotionError("candidate validation roster is incomplete or reordered")
+    if len({item.get("id") for item in checks}) != len(checks):
+        raise PromotionError("candidate validation roster contains duplicate IDs")
+    required = {identifier for identifier, _command in VALIDATION_ROSTER}
+    observed = {item.get("id") for item in checks}
+    if not required.issubset(observed):
+        raise PromotionError("candidate validation roster is missing a required base check")
+    for item in checks:
+        if set(item) != {"command", "id", "status"}:
+            raise PromotionError("candidate validation roster contains unclassified fields")
+        if not isinstance(item["id"], str) or not item["id"]:
+            raise PromotionError("candidate validation roster contains an invalid check ID")
+        if (
+            item["status"] != "passed"
+            or not isinstance(item["command"], str)
+            or not item["command"]
+        ):
+            raise PromotionError("candidate validation roster contains an unpassed check")
+    expected_commands = dict(VALIDATION_ROSTER)
+    for identifier, command in expected_commands.items():
+        matching = next(item for item in checks if item["id"] == identifier)
+        if identifier == "archive-license":
+            # #8149 may replace the broad candidate gate with its strict
+            # rights-clean command.  The separate rights admission receipt
+            # below remains mandatory, so accepting that additive upgrade
+            # does not permit the current unresolved tree to publish.
+            accepted_strict_command = matching["command"] == RIGHTS_GATE_COMMAND or (
+                "scripts/tools/check_distribution_licenses.py" in matching["command"]
+                and "--strict-asset-rights" in matching["command"]
+            )
+            if matching["command"] != command and not accepted_strict_command:
+                raise PromotionError("candidate archive-license check command is unsupported")
+        elif matching["command"] != command:
+            raise PromotionError(f"candidate validation command drifted for {identifier}")
 
 
 def _validate_manifest_header(
@@ -348,16 +395,16 @@ def _validate_artifact_source(
     kind: str,
     expected_source_sha: str | None,
 ) -> None:
-    if kind == "candidate":
+    if kind in {"candidate", "rights"}:
         if workflow_run.get("head_sha") != _source_sha(expected_source_sha or ""):
             raise PromotionError(
-                "GitHub candidate artifact source SHA drifted from the dispatch identity"
+                f"GitHub {kind} artifact source SHA drifted from the dispatch identity"
             )
     elif expected_source_sha is not None:
         raise PromotionError("source SHA is only valid for candidate artifact metadata")
 
 
-def _artifact_metadata(
+def _artifact_metadata(  # noqa: C901 - artifact identity branches are fail-closed
     metadata_path: Path,
     *,
     expected_id: str,
@@ -380,6 +427,27 @@ def _artifact_metadata(
     actual_name = metadata.get("name")
     if actual_name != _artifact_name(expected_name, kind=kind):
         raise PromotionError("GitHub artifact name drifted from the dispatch identity")
+    expected_run = _positive_identity(
+        expected_run_id,
+        label="artifact workflow run ID",
+        pattern=RUN_ID_PATTERN,
+    )
+    if kind == "candidate":
+        expected_prefix = f"robot-sf-software-candidate-{_source_sha(expected_source_sha or '')}-"
+        if not actual_name.startswith(expected_prefix) or not actual_name[
+            len(expected_prefix) :
+        ].startswith(f"{expected_run}-"):
+            raise PromotionError("GitHub candidate artifact name is not bound to source/run")
+    elif kind == "rights":
+        expected_prefix = (
+            f"robot-sf-software-rights-admission-{_source_sha(expected_source_sha or '')}-"
+        )
+        if not actual_name.startswith(expected_prefix) or not actual_name[
+            len(expected_prefix) :
+        ].startswith(f"{expected_run}-"):
+            raise PromotionError("GitHub rights artifact name is not bound to source/run")
+    elif actual_name.split("-")[-2] != expected_run:
+        raise PromotionError("GitHub receipt artifact name is not bound to its workflow run")
     if metadata.get("expired") is not False:
         raise PromotionError("GitHub artifact is expired or has no explicit unexpired status")
     digest = metadata.get("digest")
@@ -388,11 +456,7 @@ def _artifact_metadata(
     workflow_run = metadata.get("workflow_run")
     if not isinstance(workflow_run, dict):
         raise PromotionError("GitHub artifact has no workflow-run binding")
-    if str(workflow_run.get("id")) != _positive_identity(
-        expected_run_id,
-        label="artifact workflow run ID",
-        pattern=RUN_ID_PATTERN,
-    ):
+    if str(workflow_run.get("id")) != expected_run:
         raise PromotionError("GitHub artifact workflow run drifted from the dispatch identity")
     _validate_artifact_source(
         workflow_run,
@@ -517,6 +581,96 @@ def _receipt_identity(
     }
 
 
+def _validate_rights_admission(  # noqa: C901, PLR0912 - closed rights receipt gate
+    path: Path,
+    *,
+    identity: dict[str, Any],
+) -> None:
+    """Require #8149's independent rights-clean admission before publication.
+
+    The current build candidate is intentionally not rights-clean.  A separate
+    receipt produced by the sanitized-candidate workflow must therefore bind
+    the exact candidate artifact and manifest, its policy digest, and a passed
+    strict archive/tree gate.  This contract is deliberately checked in this
+    publisher, so protected-environment configuration alone cannot publish an
+    unresolved development tree.
+    """
+
+    if path.name != RIGHTS_RECEIPT_NAME:
+        raise PromotionError(f"rights admission receipt must be named {RIGHTS_RECEIPT_NAME}")
+    _require_real_dir(path.parent, label="rights admission artifact directory")
+    entries = sorted(path.parent.iterdir(), key=lambda entry: entry.name)
+    if [entry.name for entry in entries] != [RIGHTS_RECEIPT_NAME]:
+        raise PromotionError("rights admission artifact must contain only rights-admission.json")
+    _require_real_file(path, label="rights admission receipt")
+    receipt = _load_json(path, label="rights admission receipt")
+    if not isinstance(receipt, dict):
+        raise PromotionError("rights admission receipt must be a JSON object")
+    if set(receipt) != {"candidate", "sanitized", "strict_gate", "status", "schema_version"}:
+        raise PromotionError("rights admission receipt has missing or unclassified fields")
+    if receipt.get("schema_version") != RIGHTS_ADMISSION_SCHEMA_VERSION:
+        raise PromotionError("rights admission receipt schema version is unsupported")
+    if receipt.get("status") != "accepted":
+        raise PromotionError("rights admission receipt is not accepted")
+
+    expected_candidate = _receipt_identity(
+        identity=identity,
+        artifact_id=identity["artifact_id"],
+        artifact_name=identity["artifact_name"],
+        artifact_digest=identity["artifact_digest"],
+    )
+    if receipt.get("candidate") != expected_candidate:
+        raise PromotionError("rights admission receipt is bound to a different candidate")
+
+    sanitized = receipt.get("sanitized")
+    if not isinstance(sanitized, dict) or set(sanitized) != {
+        "policy_id",
+        "policy_path",
+        "policy_sha256",
+        "schema_version",
+        "source_sha",
+        "tree_sha256",
+    }:
+        raise PromotionError("rights admission sanitized-candidate binding is incomplete")
+    if sanitized.get("schema_version") != SANITIZED_CANDIDATE_SCHEMA:
+        raise PromotionError("rights admission sanitized-candidate schema is unsupported")
+    if sanitized.get("source_sha") != identity["source_sha"]:
+        raise PromotionError("rights admission sanitized source SHA differs from candidate")
+    if sanitized.get("policy_id") != RIGHTS_POLICY_ID:
+        raise PromotionError("rights admission policy identity is unsupported")
+    if sanitized.get("policy_path") != RIGHTS_POLICY_PATH:
+        raise PromotionError("rights admission policy path is unsupported")
+    policy_sha256 = sanitized.get("policy_sha256")
+    if not isinstance(policy_sha256, str) or not SHA256_PATTERN.fullmatch(policy_sha256):
+        raise PromotionError("rights admission policy digest is invalid")
+    tree_sha256 = sanitized.get("tree_sha256")
+    if not isinstance(tree_sha256, str) or not SHA256_PATTERN.fullmatch(tree_sha256):
+        raise PromotionError("rights admission sanitized tree digest is invalid")
+
+    strict_gate = receipt.get("strict_gate")
+    if not isinstance(strict_gate, dict) or set(strict_gate) != {
+        "command",
+        "findings",
+        "id",
+        "policy_sha256",
+        "source_sha",
+        "status",
+    }:
+        raise PromotionError("rights admission strict-gate receipt is incomplete")
+    command = strict_gate.get("command")
+    if command != RIGHTS_GATE_COMMAND:
+        raise PromotionError("rights admission strict gate command is not the canonical check")
+    if strict_gate.get("id") != RIGHTS_GATE_ID or strict_gate.get("status") != "passed":
+        raise PromotionError("rights admission strict gate did not pass")
+    if strict_gate.get("source_sha") != identity["source_sha"]:
+        raise PromotionError("rights admission strict gate source SHA differs from candidate")
+    if strict_gate.get("policy_sha256") != policy_sha256:
+        raise PromotionError("rights admission strict gate policy digest differs from binding")
+    findings = strict_gate.get("findings")
+    if isinstance(findings, bool) or not isinstance(findings, int) or findings != 0:
+        raise PromotionError("rights admission strict gate reports unresolved findings")
+
+
 def _load_and_bind_candidate(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
     _source_sha(args.source_sha)
     _version(args.version)
@@ -537,6 +691,7 @@ def _load_and_bind_candidate(args: argparse.Namespace) -> tuple[dict[str, Any], 
     identity["artifact_digest"] = args.candidate_artifact_digest
     identity["artifact_id"] = args.candidate_artifact_id
     identity["artifact_name"] = args.candidate_artifact_name
+    _validate_rights_admission(args.rights_receipt, identity=identity)
     return manifest, identity
 
 
@@ -551,6 +706,39 @@ def _check_artifact(args: argparse.Namespace) -> None:
         expected_source_sha=args.source_sha,
     )
     print(f"PASS: {args.kind} artifact metadata is bound to run {args.run_id}")
+
+
+def _check_rights_workflow_run(args: argparse.Namespace) -> None:
+    """Verify that the rights receipt came from the sanctioned successful workflow run."""
+
+    metadata = _load_json(args.metadata, label="rights workflow-run metadata")
+    if not isinstance(metadata, dict):
+        raise PromotionError("rights workflow-run metadata must be an object")
+    run_id = _positive_identity(
+        args.run_id,
+        label="rights workflow run ID",
+        pattern=RUN_ID_PATTERN,
+    )
+    if str(metadata.get("id")) != run_id:
+        raise PromotionError("rights workflow-run ID drifted from the dispatch identity")
+    if metadata.get("path") != RIGHTS_WORKFLOW_PATH:
+        raise PromotionError("rights admission was not produced by the sanctioned workflow")
+    if metadata.get("event") != "workflow_call":
+        raise PromotionError("rights admission workflow event is not workflow_call")
+    if metadata.get("head_sha") != _source_sha(args.source_sha):
+        raise PromotionError("rights workflow-run source SHA drifted from the dispatch identity")
+    if metadata.get("status") != "completed" or metadata.get("conclusion") != "success":
+        raise PromotionError("rights workflow-run did not complete successfully")
+    repository = metadata.get("repository")
+    if not isinstance(repository, dict) or repository.get("full_name") != REPOSITORY:
+        raise PromotionError("rights workflow-run repository is not canonical")
+    workflow_id = metadata.get("workflow_id")
+    if isinstance(workflow_id, bool) or not isinstance(workflow_id, int) or workflow_id < 1:
+        raise PromotionError("rights workflow-run has no valid workflow identity")
+    run_attempt = metadata.get("run_attempt")
+    if isinstance(run_attempt, bool) or not isinstance(run_attempt, int) or run_attempt < 1:
+        raise PromotionError("rights workflow-run has no valid run attempt")
+    print(f"PASS: sanctioned rights workflow run {run_id} completed successfully")
 
 
 def _verify_candidate(args: argparse.Namespace) -> None:
@@ -755,11 +943,24 @@ def _parser() -> argparse.ArgumentParser:
     artifact.add_argument("--artifact-name", required=True)
     artifact.add_argument("--artifact-digest", required=True)
     artifact.add_argument("--run-id", required=True)
-    artifact.add_argument("--kind", choices=("candidate", "receipt"), required=True)
+    artifact.add_argument("--kind", choices=("candidate", "receipt", "rights"), required=True)
     artifact.add_argument("--source-sha")
+
+    rights_run = subparsers.add_parser(
+        "check-rights-run", help="verify the sanctioned rights-admission workflow run"
+    )
+    rights_run.add_argument("--metadata", type=Path, required=True)
+    rights_run.add_argument("--run-id", required=True)
+    rights_run.add_argument("--source-sha", required=True)
 
     def add_candidate_arguments(command: argparse.ArgumentParser) -> None:
         command.add_argument("--candidate-dir", type=Path, required=True)
+        command.add_argument(
+            "--rights-receipt",
+            type=Path,
+            required=True,
+            help="Independent #8149 rights-clean admission receipt",
+        )
         command.add_argument("--source-sha", required=True)
         command.add_argument("--candidate-run-id", required=True)
         command.add_argument("--candidate-artifact-id", required=True)
@@ -810,13 +1011,15 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: C901 - bounded CLI dispatch
     """Run one fail-closed promotion verification or receipt command."""
 
     args = _parser().parse_args(argv)
     try:
         if args.command == "check-artifact":
             _check_artifact(args)
+        elif args.command == "check-rights-run":
+            _check_rights_workflow_run(args)
         elif args.command == "verify-candidate":
             _verify_candidate(args)
         elif args.command == "stage-packages":

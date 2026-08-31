@@ -44,6 +44,10 @@ def test_workflow_is_manual_and_least_privilege_by_default() -> None:
         "candidate_artifact_digest",
         "source_sha",
         "package_version",
+        "rights_admission_run_id",
+        "rights_admission_artifact_id",
+        "rights_admission_artifact_name",
+        "rights_admission_artifact_digest",
     ):
         assert inputs[name]["required"] is True
     assert workflow["permissions"] == {"actions": "read", "contents": "read"}
@@ -92,6 +96,13 @@ def test_cross_run_downloads_keep_candidate_and_receipts_on_their_own_runs() -> 
             if step.get("with", {}).get("artifact-ids") == "${{ inputs.candidate_artifact_id }}"
         )
         assert candidate_download["with"]["run-id"] == "${{ inputs.candidate_run_id }}"
+        rights_download = next(
+            step
+            for step in downloads
+            if step.get("with", {}).get("artifact-ids")
+            == "${{ inputs.rights_admission_artifact_id }}"
+        )
+        assert rights_download["with"]["run-id"] == "${{ inputs.rights_admission_run_id }}"
         assert any(
             step.get("with", {}).get("run-id") == "${{ github.run_id }}"
             for step in downloads
@@ -111,7 +122,26 @@ def test_workflow_downloads_and_revalidates_the_candidate_in_every_consumer_job(
         assert downloads, name
         runs = "\n".join(str(step.get("run", "")) for step in steps)
         assert "software_promotion.py" in runs
+        assert "check-rights-run" in runs
+        assert "rights-admission.json" in runs
         assert "verify-candidate" in runs or "verify-receipt" in runs
+
+
+def test_workflow_requires_the_external_sanitized_candidate_producer() -> None:
+    text, workflow = _workflow()
+    inputs = _trigger(workflow)["workflow_dispatch"]["inputs"]
+    for name in (
+        "rights_admission_run_id",
+        "rights_admission_artifact_id",
+        "rights_admission_artifact_name",
+        "rights_admission_artifact_digest",
+    ):
+        assert inputs[name]["required"] is True
+    assert text.count("kind rights --source-sha") == 4
+    assert text.count("check-rights-run") == 4
+    assert text.count("actions/runs/${{ inputs.rights_admission_run_id }}") == 4
+    assert "rights-admission.json" in text
+    assert "#8149" in text
 
 
 def test_workflow_has_no_rebuild_or_long_lived_package_credentials() -> None:

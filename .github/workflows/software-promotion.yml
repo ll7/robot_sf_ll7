@@ -27,6 +27,22 @@ on:
         description: "Package version recorded in candidate-manifest.json"
         required: true
         type: string
+      rights_admission_run_id:
+        description: "#8149 workflow run ID that produced the rights-clean admission receipt"
+        required: true
+        type: string
+      rights_admission_artifact_id:
+        description: "Exact GitHub artifact ID for the #8149 rights-clean admission receipt"
+        required: true
+        type: string
+      rights_admission_artifact_name:
+        description: "Exact rights-admission artifact name"
+        required: true
+        type: string
+      rights_admission_artifact_digest:
+        description: "Exact GitHub rights-admission artifact digest (sha256:<64 hex>)"
+        required: true
+        type: string
       resume_testpypi_run_id:
         description: "Optional prior promotion run containing an accepted TestPyPI receipt"
         required: false
@@ -157,6 +173,18 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
             > "${RUNNER_TEMP}/candidate-metadata/artifact.json"
 
+      - name: Read rights-admission artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ inputs.rights_admission_artifact_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/rights-metadata"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+            > "${RUNNER_TEMP}/rights-metadata/artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${{ inputs.rights_admission_run_id }}" \
+            > "${RUNNER_TEMP}/rights-metadata/workflow-run.json"
+
       - name: Download exact candidate artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -165,6 +193,15 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ inputs.candidate_run_id }}
           path: ${{ runner.temp }}/software-candidate
+
+      - name: Download exact rights admission from its producer run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.rights_admission_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.rights_admission_run_id }}
+          path: ${{ runner.temp }}/rights-admission
 
       - name: Verify artifact identity and candidate bytes
         id: verify
@@ -177,6 +214,13 @@ jobs:
           RUN_ID: ${{ inputs.candidate_run_id }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           VERSION: ${{ inputs.package_version }}
+          RIGHTS_METADATA: ${{ runner.temp }}/rights-metadata/artifact.json
+          RIGHTS_RUN_METADATA: ${{ runner.temp }}/rights-metadata/workflow-run.json
+          RIGHTS_DIR: ${{ runner.temp }}/rights-admission
+          RIGHTS_ID: ${{ inputs.rights_admission_artifact_id }}
+          RIGHTS_NAME: ${{ inputs.rights_admission_artifact_name }}
+          RIGHTS_DIGEST: ${{ inputs.rights_admission_artifact_digest }}
+          RIGHTS_RUN_ID: ${{ inputs.rights_admission_run_id }}
         run: |
           set -euo pipefail
           python scripts/dev/software_promotion.py check-artifact \
@@ -186,8 +230,19 @@ jobs:
             --artifact-digest "${ARTIFACT_DIGEST}" \
             --run-id "${RUN_ID}" \
             --kind candidate --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${RIGHTS_METADATA}" \
+            --artifact-id "${RIGHTS_ID}" \
+            --artifact-name "${RIGHTS_NAME}" \
+            --artifact-digest "${RIGHTS_DIGEST}" \
+            --run-id "${RIGHTS_RUN_ID}" \
+            --kind rights --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-rights-run \
+            --metadata "${RIGHTS_RUN_METADATA}" --run-id "${RIGHTS_RUN_ID}" \
+            --source-sha "${SOURCE_SHA}"
           python scripts/dev/software_promotion.py verify-candidate \
             --candidate-dir "${CANDIDATE_DIR}" \
+            --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
             --source-sha "${SOURCE_SHA}" \
             --candidate-run-id "${RUN_ID}" \
             --candidate-artifact-id "${ARTIFACT_ID}" \
@@ -237,6 +292,18 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
             > "${RUNNER_TEMP}/candidate-metadata/artifact.json"
 
+      - name: Read rights-admission artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ inputs.rights_admission_artifact_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/rights-metadata"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+            > "${RUNNER_TEMP}/rights-metadata/artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${{ inputs.rights_admission_run_id }}" \
+            > "${RUNNER_TEMP}/rights-metadata/workflow-run.json"
+
       - name: Download and verify candidate before upload
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -245,6 +312,15 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ inputs.candidate_run_id }}
           path: ${{ runner.temp }}/software-candidate
+
+      - name: Download exact rights admission before upload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.rights_admission_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.rights_admission_run_id }}
+          path: ${{ runner.temp }}/rights-admission
 
       - name: Verify candidate admission
         env:
@@ -256,14 +332,30 @@ jobs:
           RUN_ID: ${{ inputs.candidate_run_id }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           VERSION: ${{ inputs.package_version }}
+          RIGHTS_METADATA: ${{ runner.temp }}/rights-metadata/artifact.json
+          RIGHTS_RUN_METADATA: ${{ runner.temp }}/rights-metadata/workflow-run.json
+          RIGHTS_DIR: ${{ runner.temp }}/rights-admission
+          RIGHTS_ID: ${{ inputs.rights_admission_artifact_id }}
+          RIGHTS_NAME: ${{ inputs.rights_admission_artifact_name }}
+          RIGHTS_DIGEST: ${{ inputs.rights_admission_artifact_digest }}
+          RIGHTS_RUN_ID: ${{ inputs.rights_admission_run_id }}
         run: |
           set -euo pipefail
           python scripts/dev/software_promotion.py check-artifact \
             --metadata "${METADATA}" --artifact-id "${ARTIFACT_ID}" \
             --artifact-name "${ARTIFACT_NAME}" --artifact-digest "${ARTIFACT_DIGEST}" \
             --run-id "${RUN_ID}" --kind candidate --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${RIGHTS_METADATA}" --artifact-id "${RIGHTS_ID}" \
+            --artifact-name "${RIGHTS_NAME}" --artifact-digest "${RIGHTS_DIGEST}" \
+            --run-id "${RIGHTS_RUN_ID}" --kind rights --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-rights-run \
+            --metadata "${RIGHTS_RUN_METADATA}" --run-id "${RIGHTS_RUN_ID}" \
+            --source-sha "${SOURCE_SHA}"
           python scripts/dev/software_promotion.py verify-candidate \
-            --candidate-dir "${CANDIDATE_DIR}" --source-sha "${SOURCE_SHA}" \
+            --candidate-dir "${CANDIDATE_DIR}" \
+            --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
+            --source-sha "${SOURCE_SHA}" \
             --candidate-run-id "${RUN_ID}" --candidate-artifact-id "${ARTIFACT_ID}" \
             --candidate-artifact-name "${ARTIFACT_NAME}" \
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}"
@@ -274,6 +366,7 @@ jobs:
       - name: Stage exact wheel and sdist without rebuilding
         env:
           CANDIDATE_DIR: ${{ runner.temp }}/software-candidate
+          RIGHTS_RECEIPT: ${{ runner.temp }}/rights-admission/rights-admission.json
           PACKAGE_DIR: ${{ runner.temp }}/software-packages
           ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
           ARTIFACT_NAME: ${{ inputs.candidate_artifact_name }}
@@ -285,6 +378,7 @@ jobs:
           set -euo pipefail
           python scripts/dev/software_promotion.py stage-packages \
             --candidate-dir "${CANDIDATE_DIR}" --output-dir "${PACKAGE_DIR}" \
+            --rights-receipt "${RIGHTS_RECEIPT}" \
             --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
             --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}"
@@ -308,6 +402,7 @@ jobs:
           PRIOR_ARTIFACT_NAME: ${{ inputs.resume_testpypi_receipt_artifact_name }}
           PRIOR_ARTIFACT_DIGEST: ${{ inputs.resume_testpypi_receipt_artifact_digest }}
           CANDIDATE_DIR: ${{ runner.temp }}/software-candidate
+          RIGHTS_RECEIPT: ${{ runner.temp }}/rights-admission/rights-admission.json
           RESUME_DIR: ${{ runner.temp }}/prior-testpypi-receipt
           SOURCE_SHA: ${{ inputs.source_sha }}
           VERSION: ${{ inputs.package_version }}
@@ -324,7 +419,8 @@ jobs:
             --artifact-name "${PRIOR_ARTIFACT_NAME}" --artifact-digest "${PRIOR_ARTIFACT_DIGEST}" \
             --run-id "${PRIOR_RUN_ID}" --kind receipt
           python scripts/dev/software_promotion.py verify-receipt \
-            --candidate-dir "${CANDIDATE_DIR}" --receipt "${RESUME_DIR}/testpypi-upload-receipt.json" \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_RECEIPT}" \
+            --receipt "${RESUME_DIR}/testpypi-upload-receipt.json" \
             --channel testpypi --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
             --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}"
@@ -340,6 +436,7 @@ jobs:
       - name: Bind TestPyPI receipt to the exact candidate
         env:
           CANDIDATE_DIR: ${{ runner.temp }}/software-candidate
+          RIGHTS_RECEIPT: ${{ runner.temp }}/rights-admission/rights-admission.json
           RECEIPT_DIR: ${{ runner.temp }}/testpypi-receipt
           SOURCE_SHA: ${{ inputs.source_sha }}
           VERSION: ${{ inputs.package_version }}
@@ -357,7 +454,8 @@ jobs:
               "${RECEIPT_DIR}/testpypi-upload-receipt.json"
           else
             python scripts/dev/software_promotion.py write-receipt \
-              --candidate-dir "${CANDIDATE_DIR}" --channel testpypi \
+              --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_RECEIPT}" \
+              --channel testpypi \
               --receipt "${RECEIPT_DIR}/testpypi-upload-receipt.json" \
               --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
               --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
@@ -427,6 +525,18 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
             > "${RUNNER_TEMP}/candidate-metadata/artifact.json"
 
+      - name: Read rights-admission artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ inputs.rights_admission_artifact_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/rights-metadata"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+            > "${RUNNER_TEMP}/rights-metadata/artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${{ inputs.rights_admission_run_id }}" \
+            > "${RUNNER_TEMP}/rights-metadata/workflow-run.json"
+
       - name: Download exact candidate from its build run
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -445,6 +555,15 @@ jobs:
           run-id: ${{ github.run_id }}
           path: ${{ runner.temp }}/promotion-inputs/robot-sf-testpypi-receipt-${{ github.run_id }}-${{ github.run_attempt }}
 
+      - name: Download exact rights admission from its producer run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.rights_admission_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.rights_admission_run_id }}
+          path: ${{ runner.temp }}/promotion-inputs/rights-admission
+
       - name: Verify candidate, receipt, and receipt artifact metadata
         env:
           GH_TOKEN: ${{ github.token }}
@@ -459,6 +578,13 @@ jobs:
           RECEIPT_ID: ${{ needs.testpypi-upload.outputs.receipt-artifact-id }}
           RECEIPT_DIGEST: ${{ needs.testpypi-upload.outputs.receipt-artifact-digest }}
           RECEIPT_NAME: ${{ needs.testpypi-upload.outputs.receipt-artifact-name }}
+          RIGHTS_METADATA: ${{ runner.temp }}/rights-metadata/artifact.json
+          RIGHTS_RUN_METADATA: ${{ runner.temp }}/rights-metadata/workflow-run.json
+          RIGHTS_DIR: ${{ runner.temp }}/promotion-inputs/rights-admission
+          RIGHTS_ID: ${{ inputs.rights_admission_artifact_id }}
+          RIGHTS_NAME: ${{ inputs.rights_admission_artifact_name }}
+          RIGHTS_DIGEST: ${{ inputs.rights_admission_artifact_digest }}
+          RIGHTS_RUN_ID: ${{ inputs.rights_admission_run_id }}
         run: |
           set -euo pipefail
           receipt_metadata="${RUNNER_TEMP}/testpypi-receipt-metadata.json"
@@ -468,6 +594,13 @@ jobs:
             --artifact-id "${CANDIDATE_ID}" --artifact-name "${CANDIDATE_NAME}" \
             --artifact-digest "${CANDIDATE_DIGEST}" --run-id "${CANDIDATE_RUN_ID}" \
             --kind candidate --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${RIGHTS_METADATA}" --artifact-id "${RIGHTS_ID}" \
+            --artifact-name "${RIGHTS_NAME}" --artifact-digest "${RIGHTS_DIGEST}" \
+            --run-id "${RIGHTS_RUN_ID}" --kind rights --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-rights-run \
+            --metadata "${RIGHTS_RUN_METADATA}" --run-id "${RIGHTS_RUN_ID}" \
+            --source-sha "${SOURCE_SHA}"
           python scripts/dev/software_candidate_manifest.py verify \
             --bundle-dir "${CANDIDATE_DIR}" --expected-source-sha "${SOURCE_SHA}" \
             --expected-workflow-run-id "${CANDIDATE_RUN_ID}"
@@ -477,6 +610,7 @@ jobs:
             --run-id "${GITHUB_RUN_ID}" --kind receipt
           python scripts/dev/software_promotion.py verify-receipt \
             --candidate-dir "${CANDIDATE_DIR}" \
+            --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
             --receipt "${RECEIPT_DIR}/testpypi-upload-receipt.json" --channel testpypi \
             --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
             --candidate-artifact-id "${CANDIDATE_ID}" --candidate-artifact-name "${CANDIDATE_NAME}" \
@@ -499,6 +633,7 @@ jobs:
       - name: Verify public-index package bytes
         env:
           CANDIDATE_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+          RIGHTS_DIR: ${{ runner.temp }}/promotion-inputs/rights-admission
           INDEX_ROOT: ${{ runner.temp }}/testpypi-index
           SOURCE_SHA: ${{ inputs.source_sha }}
           VERSION: ${{ inputs.package_version }}
@@ -509,7 +644,8 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/dev/software_promotion.py verify-index-artifacts \
-            --candidate-dir "${CANDIDATE_DIR}" --download-dir "${INDEX_ROOT}" \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
+            --download-dir "${INDEX_ROOT}" \
             --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
             --candidate-artifact-id "${CANDIDATE_ID}" --candidate-artifact-name "${CANDIDATE_NAME}" \
             --candidate-artifact-digest "${CANDIDATE_DIGEST}" --version "${VERSION}"
@@ -528,6 +664,7 @@ jobs:
       - name: Bind cold-install receipt to TestPyPI and candidate
         env:
           CANDIDATE_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+          RIGHTS_DIR: ${{ runner.temp }}/promotion-inputs/rights-admission
           TEST_RECEIPT: ${{ runner.temp }}/promotion-inputs/robot-sf-testpypi-receipt-${{ github.run_id }}-${{ github.run_attempt }}/testpypi-upload-receipt.json
           INDEX_ROOT: ${{ runner.temp }}/testpypi-index
           REPORT: ${{ runner.temp }}/testpypi-cold-install/wheel-install-smoke.json
@@ -543,7 +680,8 @@ jobs:
           mkdir -p "$(dirname "${RECEIPT}")"
           wheel="$(find "${INDEX_ROOT}" -maxdepth 1 -type f -name '*.whl' -print -quit)"
           python scripts/dev/software_promotion.py write-cold-install-receipt \
-            --candidate-dir "${CANDIDATE_DIR}" --test-receipt "${TEST_RECEIPT}" \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
+            --test-receipt "${TEST_RECEIPT}" \
             --downloaded-wheel "${wheel}" --index-url https://test.pypi.org/simple \
             --report "${REPORT}" --receipt "${RECEIPT}" \
             --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
@@ -598,6 +736,18 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
             > "${RUNNER_TEMP}/candidate-metadata/artifact.json"
 
+      - name: Read rights-admission artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ inputs.rights_admission_artifact_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/rights-metadata"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+            > "${RUNNER_TEMP}/rights-metadata/artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${{ inputs.rights_admission_run_id }}" \
+            > "${RUNNER_TEMP}/rights-metadata/workflow-run.json"
+
       - name: Download exact candidate from its build run
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -606,6 +756,15 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ inputs.candidate_run_id }}
           path: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+
+      - name: Download exact rights admission from its producer run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.rights_admission_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.rights_admission_run_id }}
+          path: ${{ runner.temp }}/promotion-inputs/rights-admission
 
       - name: Download TestPyPI receipt and cold-install evidence
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -620,6 +779,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CANDIDATE_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+          RIGHTS_METADATA: ${{ runner.temp }}/rights-metadata/artifact.json
+          RIGHTS_RUN_METADATA: ${{ runner.temp }}/rights-metadata/workflow-run.json
+          RIGHTS_DIR: ${{ runner.temp }}/promotion-inputs/rights-admission
           TEST_RECEIPT_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-testpypi-receipt-${{ github.run_id }}-${{ github.run_attempt }}
           COLD_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-testpypi-cold-install-${{ github.run_id }}-${{ github.run_attempt }}
           SOURCE_SHA: ${{ inputs.source_sha }}
@@ -633,6 +795,10 @@ jobs:
           TEST_NAME: ${{ needs.testpypi-upload.outputs.receipt-artifact-name }}
           COLD_ID: ${{ needs.testpypi-cold-install.outputs.artifact-id }}
           COLD_DIGEST: ${{ needs.testpypi-cold-install.outputs.artifact-digest }}
+          RIGHTS_ID: ${{ inputs.rights_admission_artifact_id }}
+          RIGHTS_NAME: ${{ inputs.rights_admission_artifact_name }}
+          RIGHTS_DIGEST: ${{ inputs.rights_admission_artifact_digest }}
+          RIGHTS_RUN_ID: ${{ inputs.rights_admission_run_id }}
         run: |
           set -euo pipefail
           candidate_metadata="${RUNNER_TEMP}/candidate-metadata/artifact.json"
@@ -644,6 +810,13 @@ jobs:
             --metadata "${candidate_metadata}" --artifact-id "${CANDIDATE_ID}" \
             --artifact-name "${CANDIDATE_NAME}" --artifact-digest "${CANDIDATE_DIGEST}" \
             --run-id "${CANDIDATE_RUN_ID}" --kind candidate --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${RIGHTS_METADATA}" --artifact-id "${RIGHTS_ID}" \
+            --artifact-name "${RIGHTS_NAME}" --artifact-digest "${RIGHTS_DIGEST}" \
+            --run-id "${RIGHTS_RUN_ID}" --kind rights --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-rights-run \
+            --metadata "${RIGHTS_RUN_METADATA}" --run-id "${RIGHTS_RUN_ID}" \
+            --source-sha "${SOURCE_SHA}"
           python scripts/dev/software_candidate_manifest.py verify \
             --bundle-dir "${CANDIDATE_DIR}" --expected-source-sha "${SOURCE_SHA}" \
             --expected-workflow-run-id "${CANDIDATE_RUN_ID}"
@@ -656,12 +829,14 @@ jobs:
             --artifact-name "robot-sf-testpypi-cold-install-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
             --artifact-digest "${COLD_DIGEST}" --run-id "${GITHUB_RUN_ID}" --kind receipt
           python scripts/dev/software_promotion.py verify-receipt \
-            --candidate-dir "${CANDIDATE_DIR}" --receipt "${TEST_RECEIPT_DIR}/testpypi-upload-receipt.json" \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
+            --receipt "${TEST_RECEIPT_DIR}/testpypi-upload-receipt.json" \
             --channel testpypi --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
             --candidate-artifact-id "${CANDIDATE_ID}" --candidate-artifact-name "${CANDIDATE_NAME}" \
             --candidate-artifact-digest "${CANDIDATE_DIGEST}" --version "${VERSION}"
           python scripts/dev/software_promotion.py verify-cold-install \
-            --candidate-dir "${CANDIDATE_DIR}" --test-receipt "${TEST_RECEIPT_DIR}/testpypi-upload-receipt.json" \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
+            --test-receipt "${TEST_RECEIPT_DIR}/testpypi-upload-receipt.json" \
             --receipt "${COLD_DIR}/testpypi-cold-install-receipt.json" \
             --report "${COLD_DIR}/wheel-install-smoke.json" \
             --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
@@ -671,6 +846,7 @@ jobs:
       - name: Stage exact wheel and sdist without rebuilding
         env:
           CANDIDATE_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+          RIGHTS_RECEIPT: ${{ runner.temp }}/promotion-inputs/rights-admission/rights-admission.json
           PACKAGE_DIR: ${{ runner.temp }}/software-packages
           ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
           ARTIFACT_NAME: ${{ inputs.candidate_artifact_name }}
@@ -682,6 +858,7 @@ jobs:
           set -euo pipefail
           python scripts/dev/software_promotion.py stage-packages \
             --candidate-dir "${CANDIDATE_DIR}" --output-dir "${PACKAGE_DIR}" \
+            --rights-receipt "${RIGHTS_RECEIPT}" \
             --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
             --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}"
@@ -705,6 +882,7 @@ jobs:
           PRIOR_ARTIFACT_NAME: ${{ inputs.resume_production_receipt_artifact_name }}
           PRIOR_ARTIFACT_DIGEST: ${{ inputs.resume_production_receipt_artifact_digest }}
           CANDIDATE_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+          RIGHTS_RECEIPT: ${{ runner.temp }}/promotion-inputs/rights-admission/rights-admission.json
           RESUME_DIR: ${{ runner.temp }}/prior-pypi-receipt
           SOURCE_SHA: ${{ inputs.source_sha }}
           VERSION: ${{ inputs.package_version }}
@@ -721,7 +899,8 @@ jobs:
             --artifact-name "${PRIOR_ARTIFACT_NAME}" --artifact-digest "${PRIOR_ARTIFACT_DIGEST}" \
             --run-id "${PRIOR_RUN_ID}" --kind receipt
           python scripts/dev/software_promotion.py verify-receipt \
-            --candidate-dir "${CANDIDATE_DIR}" --receipt "${RESUME_DIR}/pypi-upload-receipt.json" \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_RECEIPT}" \
+            --receipt "${RESUME_DIR}/pypi-upload-receipt.json" \
             --channel pypi --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
             --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}"
@@ -737,6 +916,7 @@ jobs:
       - name: Bind PyPI receipt to the exact candidate
         env:
           CANDIDATE_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+          RIGHTS_RECEIPT: ${{ runner.temp }}/promotion-inputs/rights-admission/rights-admission.json
           RECEIPT_DIR: ${{ runner.temp }}/pypi-receipt
           SOURCE_SHA: ${{ inputs.source_sha }}
           VERSION: ${{ inputs.package_version }}
@@ -753,7 +933,8 @@ jobs:
             cp "${RESUME_DIR}/pypi-upload-receipt.json" "${RECEIPT_DIR}/pypi-upload-receipt.json"
           else
             python scripts/dev/software_promotion.py write-receipt \
-              --candidate-dir "${CANDIDATE_DIR}" --channel pypi \
+              --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_RECEIPT}" \
+              --channel pypi \
               --receipt "${RECEIPT_DIR}/pypi-upload-receipt.json" \
               --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
               --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \

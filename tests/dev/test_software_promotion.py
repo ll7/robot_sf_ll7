@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import subprocess
@@ -122,6 +123,53 @@ def _candidate(tmp_path: Path) -> tuple[Path, str, Path]:
     for validator in VALIDATORS:
         args.extend(("--validated", validator))
     subprocess.run([sys.executable, str(CANDIDATE_HELPER), *args], check=True)
+    manifest_path = bundle / "candidate-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    rights_dir = bundle.parent / "rights-admission-artifact"
+    rights_dir.mkdir()
+    rights_receipt = rights_dir / "rights-admission.json"
+    rights_receipt.write_text(
+        json.dumps(
+            {
+                "candidate": {
+                    "artifact_digest": "sha256:" + "a" * 64,
+                    "artifact_id": "987654",
+                    "artifact_name": "robot-sf-software-candidate-" + source_sha + "-123456-1",
+                    "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+                    "members": manifest["members"],
+                    "package": manifest["package"],
+                    "provenance_sha256": manifest["members"][3]["sha256"],
+                    "sbom_sha256": manifest["members"][2]["sha256"],
+                    "source_sha": source_sha,
+                    "workflow_run_id": "123456",
+                },
+                "sanitized": {
+                    "policy_id": "robot_sf.software_release_rights_policy.v1",
+                    "policy_path": "scripts/validation/software_release_rights_policy.v1.json",
+                    "policy_sha256": "b" * 64,
+                    "schema_version": "robot_sf.software_sanitized_candidate.v1",
+                    "source_sha": source_sha,
+                    "tree_sha256": "c" * 64,
+                },
+                "schema_version": "robot_sf.software_rights_admission.v1",
+                "status": "accepted",
+                "strict_gate": {
+                    "command": (
+                        "python scripts/tools/check_distribution_licenses.py $DIST_DIR "
+                        "--strict-asset-rights --repo-root $BUILD_SOURCE "
+                        "--source-tree-ref $SOURCE_SHA"
+                    ),
+                    "findings": 0,
+                    "id": "strict-distribution-rights",
+                    "policy_sha256": "b" * 64,
+                    "source_sha": source_sha,
+                    "status": "passed",
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     return source, source_sha, bundle
 
 
@@ -129,6 +177,8 @@ def _candidate_args(source_sha: str, bundle: Path) -> list[str]:
     return [
         "--candidate-dir",
         str(bundle),
+        "--rights-receipt",
+        str(bundle.parent / "rights-admission-artifact" / "rights-admission.json"),
         "--source-sha",
         source_sha,
         "--candidate-run-id",
@@ -188,6 +238,63 @@ def test_candidate_verification_rejects_wrong_artifact_identity(tmp_path: Path) 
     )
     assert rejected.returncode == 1
     assert not receipt.exists()
+
+
+def test_candidate_verification_rejects_missing_or_unresolved_rights_admission(
+    tmp_path: Path,
+) -> None:
+    _source, source_sha, bundle = _candidate(tmp_path)
+    missing = _candidate_args(source_sha, bundle)
+    missing[missing.index("--rights-receipt") + 1] = str(tmp_path / "missing-rights.json")
+    rejected = _run_helper("verify-candidate", *missing, check=False)
+    assert rejected.returncode == 1
+    assert "rights admission receipt" in rejected.stderr
+
+    receipt = bundle.parent / "rights-admission-artifact" / "rights-admission.json"
+    payload = json.loads(receipt.read_text(encoding="utf-8"))
+    payload["strict_gate"]["findings"] = 1
+    receipt.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
+    assert rejected.returncode == 1
+    assert "unresolved findings" in rejected.stderr
+
+
+def test_candidate_verification_rejects_forged_rights_binding(tmp_path: Path) -> None:
+    _source, source_sha, bundle = _candidate(tmp_path)
+    receipt = bundle.parent / "rights-admission-artifact" / "rights-admission.json"
+    payload = json.loads(receipt.read_text(encoding="utf-8"))
+    payload["candidate"]["artifact_id"] = "987655"
+    receipt.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
+    assert rejected.returncode == 1
+    assert "different candidate" in rejected.stderr
+
+
+def test_candidate_validation_roster_allows_strict_rights_upgrade(tmp_path: Path) -> None:
+    _source, source_sha, bundle = _candidate(tmp_path)
+    manifest_path = bundle / "candidate-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    archive_check = next(
+        check for check in manifest["validation"]["checks"] if check["id"] == "archive-license"
+    )
+    archive_check["command"] = (
+        "python scripts/tools/check_distribution_licenses.py $DIST_DIR "
+        "--strict-asset-rights --repo-root $BUILD_SOURCE --source-tree-ref $SOURCE_SHA"
+    )
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    rights = json.loads(
+        (bundle.parent / "rights-admission-artifact" / "rights-admission.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    rights["candidate"]["manifest_sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    (bundle.parent / "rights-admission-artifact" / "rights-admission.json").write_text(
+        json.dumps(rights, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    accepted = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle))
+    assert accepted.returncode == 0, accepted.stderr
 
 
 def test_receipt_round_trip_is_exact_and_channel_replay_fails(tmp_path: Path) -> None:
@@ -385,6 +492,205 @@ def test_github_artifact_metadata_requires_exact_digest_and_run(tmp_path: Path) 
     )
     assert rejected.returncode == 1
     assert "digest" in rejected.stderr
+
+
+def test_rights_artifact_and_sanctioned_workflow_require_exact_run_and_digest(
+    tmp_path: Path,
+) -> None:
+    source_sha = "a" * 40
+    rights_name = "robot-sf-software-rights-admission-" + source_sha + "-123456-1"
+    metadata = tmp_path / "rights-artifact.json"
+    metadata.write_text(
+        json.dumps(
+            {
+                "id": 987654,
+                "name": rights_name,
+                "digest": "sha256:" + "a" * 64,
+                "expired": False,
+                "archive_download_url": (
+                    "https://api.github.com/repos/ll7/robot_sf_ll7/actions/artifacts/987654/zip"
+                ),
+                "workflow_run": {"id": 123456, "head_sha": source_sha},
+            }
+        ),
+        encoding="utf-8",
+    )
+    accepted = _run_helper(
+        "check-artifact",
+        "--metadata",
+        str(metadata),
+        "--artifact-id",
+        "987654",
+        "--artifact-name",
+        rights_name,
+        "--artifact-digest",
+        "sha256:" + "a" * 64,
+        "--run-id",
+        "123456",
+        "--kind",
+        "rights",
+        "--source-sha",
+        source_sha,
+    )
+    assert accepted.returncode == 0, accepted.stderr
+
+    metadata.write_text(
+        metadata.read_text(encoding="utf-8").replace("sha256:" + "a" * 64, "sha256:" + "b" * 64),
+        encoding="utf-8",
+    )
+    rejected = _run_helper(
+        "check-artifact",
+        "--metadata",
+        str(metadata),
+        "--artifact-id",
+        "987654",
+        "--artifact-name",
+        rights_name,
+        "--artifact-digest",
+        "sha256:" + "a" * 64,
+        "--run-id",
+        "123456",
+        "--kind",
+        "rights",
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+    assert rejected.returncode == 1
+    assert "digest" in rejected.stderr
+
+    metadata.write_text(
+        metadata.read_text(encoding="utf-8").replace('"id": 987654', '"id": 987655'),
+        encoding="utf-8",
+    )
+    rejected = _run_helper(
+        "check-artifact",
+        "--metadata",
+        str(metadata),
+        "--artifact-id",
+        "987654",
+        "--artifact-name",
+        rights_name,
+        "--artifact-digest",
+        "sha256:" + "a" * 64,
+        "--run-id",
+        "123456",
+        "--kind",
+        "rights",
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+    assert rejected.returncode == 1
+    assert "artifact ID" in rejected.stderr
+
+    metadata.write_text(
+        metadata.read_text(encoding="utf-8")
+        .replace("sha256:" + "b" * 64, "sha256:" + "a" * 64)
+        .replace('"id": 987655', '"id": 987654')
+        .replace('"id": 123456', '"id": 123457'),
+        encoding="utf-8",
+    )
+    rejected = _run_helper(
+        "check-artifact",
+        "--metadata",
+        str(metadata),
+        "--artifact-id",
+        "987654",
+        "--artifact-name",
+        rights_name,
+        "--artifact-digest",
+        "sha256:" + "a" * 64,
+        "--run-id",
+        "123456",
+        "--kind",
+        "rights",
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+    assert rejected.returncode == 1
+    assert "workflow run" in rejected.stderr
+
+    run_metadata = tmp_path / "rights-run.json"
+    run_metadata.write_text(
+        json.dumps(
+            {
+                "id": 123456,
+                "path": ".github/workflows/software-candidate.yml",
+                "head_sha": source_sha,
+                "event": "workflow_call",
+                "status": "completed",
+                "conclusion": "success",
+                "run_attempt": 1,
+                "workflow_id": 8101,
+                "repository": {"full_name": "ll7/robot_sf_ll7"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    accepted = _run_helper(
+        "check-rights-run",
+        "--metadata",
+        str(run_metadata),
+        "--run-id",
+        "123456",
+        "--source-sha",
+        source_sha,
+    )
+    assert accepted.returncode == 0, accepted.stderr
+    run_payload = json.loads(run_metadata.read_text(encoding="utf-8"))
+    run_payload.pop("repository")
+    run_metadata.write_text(json.dumps(run_payload), encoding="utf-8")
+    rejected = _run_helper(
+        "check-rights-run",
+        "--metadata",
+        str(run_metadata),
+        "--run-id",
+        "123456",
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+    assert rejected.returncode == 1
+    assert "repository" in rejected.stderr
+    run_payload["repository"] = {"full_name": "ll7/robot_sf_ll7"}
+    run_metadata.write_text(json.dumps(run_payload), encoding="utf-8")
+    run_metadata.write_text(
+        run_metadata.read_text(encoding="utf-8").replace(
+            ".github/workflows/software-candidate.yml", ".github/workflows/ci.yml"
+        ),
+        encoding="utf-8",
+    )
+    rejected = _run_helper(
+        "check-rights-run",
+        "--metadata",
+        str(run_metadata),
+        "--run-id",
+        "123456",
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+    assert rejected.returncode == 1
+    assert "sanctioned workflow" in rejected.stderr
+
+    run_metadata.write_text(
+        run_metadata.read_text(encoding="utf-8").replace('"id": 123456', '"id": 123457'),
+        encoding="utf-8",
+    )
+    rejected = _run_helper(
+        "check-rights-run",
+        "--metadata",
+        str(run_metadata),
+        "--run-id",
+        "123456",
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+    assert rejected.returncode == 1
+    assert "workflow-run ID" in rejected.stderr
 
 
 def test_receipts_never_include_credential_fields(tmp_path: Path) -> None:

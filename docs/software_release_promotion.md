@@ -4,7 +4,9 @@
 software candidate from the build-once workflow. It does not rebuild the
 package. Every job rechecks the candidate manifest, the GitHub artifact ID,
 name, archive digest, source commit, version, wheel/sdist hashes, SBOM, and
-provenance before it can use the bytes.
+provenance before it can use the bytes. It also requires an independent,
+successful rights-clean admission from #8149; protected-environment setup or a
+caller-provided JSON file cannot clear unresolved release rights.
 
 This is the software-package lane, separate from the benchmark-data release
 and from Zenodo publication. The workflow does not create a tag or GitHub
@@ -31,14 +33,43 @@ The package names must be reserved and the final metadata/rights candidate
 must be accepted before running the workflow. In particular, this workflow
 does not bypass #8019, #8017, or the sanitized source candidate from #8149.
 
+## Rights-clean admission is mandatory
+
+The current broad development tree is not eligible for package publication.
+The dispatch form therefore requires four additional values for the exact
+GitHub artifact produced by the sanctioned #8149 workflow:
+`rights_admission_run_id`, `rights_admission_artifact_id`,
+`rights_admission_artifact_name`, and `rights_admission_artifact_digest`.
+The producer run must be a successful completed
+`.github/workflows/software-candidate.yml` run at the same source SHA. Every
+consumer downloads that artifact by ID, checks its API ID/name/digest/run/head
+SHA, and verifies the workflow run conclusion before reading the receipt.
+That workflow is currently reusable-only and has no in-repository caller;
+#8149 must extend it with the sanitized materialization/receipt producer and a
+reviewed caller before this promotion can be dispatched with real inputs.
+
+The artifact must contain only `rights-admission.json` conforming to
+`robot_sf.software_rights_admission.v1`. Its closed receipt binds the exact
+candidate artifact and manifest, declares
+`robot_sf.software_sanitized_candidate.v1`, names
+`scripts/validation/software_release_rights_policy.v1.json` and its SHA-256,
+and records a zero-finding passed
+`check_distribution_licenses.py --strict-asset-rights --source-tree-ref ...`
+gate. The publisher validates those bindings in every package-producing job;
+it never accepts a locally authored or caller-provided rights assertion. Until
+#8149 emits this artifact, the promotion workflow is intentionally
+technically ineligible and cannot upload the current candidate.
+
 ## First promotion
 
-1. Run the reusable
+1. Run the rights-clean candidate workflow from #8149 and retain its exact
+   rights-admission artifact identity. Then run the reusable
    [`software-candidate.yml`](../.github/workflows/software-candidate.yml)
-   workflow at the reviewed source ref. Record its exact artifact ID, artifact
+   workflow at the same reviewed source ref. Record its exact artifact ID, artifact
    name, `sha256:` artifact digest, workflow run ID, source SHA, and package
-   version from the run summary.
-2. Dispatch `software-promotion.yml` with those six candidate values. The
+   version from the run summary as well as the four rights-admission values.
+2. Dispatch `software-promotion.yml` with the candidate and rights-admission
+   values. The
    candidate artifact is downloaded by immutable artifact ID, and its GitHub
    API metadata is checked before its files are inspected.
 3. Approve `testpypi`. The upload job sends only the candidate wheel and source

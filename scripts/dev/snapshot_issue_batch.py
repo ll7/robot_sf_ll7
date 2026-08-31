@@ -1065,7 +1065,8 @@ def snapshot_claimable_issues(
     ready-candidate universe was scanned from page one and every live admission and
     claim-state read succeeded; ``incomplete`` means the ready-candidate page was
     truncated, resumable, or started after page one; and
-    ``unavailable`` means discovery itself failed or was quota-blocked. A
+    ``unavailable`` means discovery failed, was quota-blocked, or candidate
+    evaluation was unavailable. A
     ``claimable_count == 0`` result may only be treated as ``genuine_zero_work`` when
     ``queue_completeness`` is ``complete``.
     """
@@ -1178,8 +1179,7 @@ def snapshot_claimable_issues(
         isinstance(issue.get("admission"), dict)
         and issue["admission"].get("outcome") != "error"
         and issue["admission"].get("classification") != "error"
-        and issue["admission"].get("claim_outcome")
-        in {"unclaimed", "already_claimed"}
+        and issue["admission"].get("claim_outcome") in {"unclaimed", "already_claimed"}
         for issue in snapshots
     )
     if not admission_results_complete:

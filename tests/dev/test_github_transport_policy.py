@@ -77,6 +77,16 @@ def test_helper_specific_fallback_policy_is_centralized() -> None:
     assert denied["matched_fail_closed_markers"] == ["permission denied"]
 
 
+def test_issue_view_wrapper_matches_delegated_issue_reader() -> None:
+    """The compatibility wrapper exposes the route implemented by its reader."""
+    wrapper = get_transport_contract("gh_issue_view.sh")
+    reader = get_transport_contract("gh_issue_rest.py")
+
+    assert wrapper.allowed_transports == reader.allowed_transports
+    assert wrapper.fallback_markers == reader.fallback_markers
+    assert wrapper.fail_closed_markers == reader.fail_closed_markers
+
+
 def test_all_contracts_declare_help_and_smoke_paths() -> None:
     """The registry keeps discoverability and focused proof mandatory."""
     for name in TRANSPORT_CONTRACTS:

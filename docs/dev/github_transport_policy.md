@@ -30,7 +30,7 @@ name a focused smoke-test path. Missing registration or proof fails the audit.
 | Helper family | Allowed route | Fallback boundary |
 | --- | --- | --- |
 | Issue thread reader | native `gh`, then REST | Known GraphQL/deprecated-field errors only |
-| Issue-view compatibility wrapper | shared REST-backed reader | Inherited from the issue thread reader |
+| Issue-view compatibility wrapper | native `gh` via shared reader, then REST (comments mode is REST-only) | Same known GraphQL-path errors as the issue reader |
 | Issue and pull-request comments | REST | None |
 | Pull-request body, labels, comments, and reviews | REST | None |
 | Pull-request merge | native `gh`, then REST | Exact worktree-base conflict only, with exact-head binding |

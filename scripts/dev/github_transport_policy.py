@@ -105,10 +105,13 @@ TRANSPORT_CONTRACTS: dict[str, TransportContract] = {
         fail_closed_markers=FAIL_CLOSED_ERROR_MARKERS,
         smoke_test="tests/dev/test_gh_issue_rest.py",
     ),
-    "gh_issue_view.sh": _rest_contract(
-        "gh_issue_view.sh",
-        "provide the issue-view compatibility entry point",
-        "tests/test_ci_script_contract.py",
+    "gh_issue_view.sh": TransportContract(
+        helper="gh_issue_view.sh",
+        purpose="provide the issue-view compatibility entry point",
+        allowed_transports=("native_gh", "rest_fallback"),
+        fallback_markers=FALLBACK_ELIGIBLE_MARKERS,
+        fail_closed_markers=FAIL_CLOSED_ERROR_MARKERS,
+        smoke_test="tests/test_ci_script_contract.py",
     ),
     "gh_pr_body_rest.py": _rest_contract(
         "gh_pr_body_rest.py",

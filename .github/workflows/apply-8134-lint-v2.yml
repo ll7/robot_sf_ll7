@@ -1,0 +1,72 @@
+name: Apply issue 8134 canonical lint correction
+
+on:
+  push:
+    branches:
+      - fix/8134-claimable-queue-fail-closed
+
+permissions:
+  contents: write
+
+jobs:
+  apply-canonical-lint:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_name }}
+
+      - name: Apply canonical Ruff correction
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/dev/snapshot_issue_batch.py")
+          text = path.read_text(encoding="utf-8")
+          old = (
+              "    truncated, resumable, or started after page one; and\n"
+              "    ``unavailable`` means discovery itself failed or was quota-blocked. A\n"
+          )
+          new = (
+              "    truncated, resumable, or started after page one; and\n"
+              "    ``unavailable`` means discovery failed, was quota-blocked, or candidate\n"
+              "    evaluation was unavailable. A\n"
+          )
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f"queue-completeness wording: expected one match, found {count}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+
+          python -m pip install --disable-pip-version-check --quiet ruff==0.16.4
+          ruff check --fix \
+            scripts/dev/snapshot_issue_batch.py \
+            tests/dev/test_snapshot_claimable_queue_fail_closed.py
+          ruff format \
+            scripts/dev/snapshot_issue_batch.py \
+            tests/dev/test_snapshot_claimable_queue_fail_closed.py
+          ruff check \
+            scripts/dev/snapshot_issue_batch.py \
+            tests/dev/test_snapshot_claimable_queue_fail_closed.py
+          ruff format --check \
+            scripts/dev/snapshot_issue_batch.py \
+            tests/dev/test_snapshot_claimable_queue_fail_closed.py
+          python -m py_compile \
+            scripts/dev/snapshot_issue_batch.py \
+            tests/dev/test_snapshot_claimable_queue_fail_closed.py
+
+      - name: Commit bounded correction
+        shell: bash
+        run: |
+          rm .github/workflows/apply-8134-lint.yml
+          rm .github/workflows/apply-8134-lint-v2.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(workflow): satisfy queue fail-closed lint (#8134)"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

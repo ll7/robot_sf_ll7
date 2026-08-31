@@ -1411,7 +1411,10 @@ def test_snapshot_claimable_issues_marks_truncated_scan_incomplete(
     with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
         mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(rows), stderr="")
         with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
-            claim.return_value = {}
+            claim.return_value = {
+                2801: _claim_status(2801),
+                2802: _claim_status(2802),
+            }
             payload = snapshot_issue_batch.snapshot_claimable_issues(
                 repo="ll7/robot_sf_ll7",
                 remote="origin",

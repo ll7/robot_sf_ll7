@@ -21,7 +21,7 @@ import sys
 from typing import Any
 
 from scripts.dev import gh_issue_rest, gh_pr_label_rest, goal_issue_admission
-from scripts.dev.issue_implementability import READY_LABEL
+from scripts.dev.issue_implementability import READY_LABEL, preflight_body_file
 
 DEFAULT_REMOTE = "origin"
 DEFAULT_SOURCE_REF = "origin/main"
@@ -221,7 +221,38 @@ def create_issue(
     produced by a passing live admission check.
     """
     initial_labels = [label for label in labels if label != READY_LABEL]
-    args = ["issue", "create", "--repo", repo, "--title", title, "--body-file", body_file]
+    try:
+        preflight = preflight_body_file(body_file)
+    except OSError as exc:
+        return _result(
+            "error",
+            issue=None,
+            ready_added=False,
+            verified=False,
+            phase="create",
+            error=f"body file unreadable: {exc}",
+        )
+    if preflight.get("ready") is not True:
+        return _result(
+            "preflight_rejected",
+            issue=None,
+            ready_added=False,
+            verified=False,
+            phase="create",
+            missing_fields=list(preflight.get("missing_fields", [])),
+            body_sha256=preflight.get("body_sha256", ""),
+        )
+    args = [
+        "gh",
+        "issue",
+        "create",
+        "--repo",
+        repo,
+        "--title",
+        title,
+        "--body-file",
+        body_file,
+    ]
     for label in initial_labels:
         args.extend(["--label", label])
     result = subprocess.run(args, capture_output=True, text=True, check=False)

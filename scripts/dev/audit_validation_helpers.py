@@ -154,10 +154,119 @@ def _layer(module: str) -> str:
     return "other"
 
 
+def _extract_imports_and_locals(
+    tree: ast.AST, module_path: str
+) -> tuple[set[str], dict[str, tuple[str, str, str]]]:
+    """Extract local function definitions and imports from a module's AST."""
+    local_functions: set[str] = set()
+    imports: dict[str, tuple[str, str, str]] = {}
+
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            local_functions.add(node.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                name_parts = alias.name.split(".")
+                if alias.asname:
+                    imports[alias.asname] = ("module", alias.name.replace(".", "/"), "")
+                else:
+                    imports[name_parts[0]] = ("package_prefix", alias.name, "")
+        elif isinstance(node, ast.ImportFrom):
+            base_module = _resolve_import_from_base(node, module_path)
+            for alias in node.names:
+                local_name = alias.asname or alias.name
+                imports[local_name] = ("from", base_module, alias.name)
+
+    return local_functions, imports
+
+
+def _resolve_import_from_base(node: ast.ImportFrom, module_path: str) -> str:
+    """Resolve the base module path for an ast.ImportFrom node."""
+    if node.level == 0:
+        return (node.module or "").replace(".", "/")
+    parts = module_path.split("/")[:-1]
+    up = node.level - 1
+    prefix_parts = (
+        parts[: len(parts) - up] if up > 0 and up <= len(parts) else parts if up == 0 else []
+    )
+    if node.module:
+        return "/".join([*prefix_parts, *node.module.split(".")])
+    return "/".join(prefix_parts)
+
+
+def _extract_attr_chain(node: ast.Attribute) -> tuple[str, list[str]] | None:
+    """Extract (base_name, [attr1, attr2, ...]) from an attribute AST node."""
+    attrs = [node.attr]
+    curr = node.value
+    while isinstance(curr, ast.Attribute):
+        attrs.append(curr.attr)
+        curr = curr.value
+    if isinstance(curr, ast.Name):
+        attrs.reverse()
+        return (curr.id, attrs)
+    return None
+
+
+def _resolve_name_call(
+    func: ast.Name,
+    module_path: str,
+    local_functions: set[str],
+    imports: dict[str, tuple[str, str, str]],
+) -> str | None:
+    """Resolve an ast.Name call node."""
+    if func.id in local_functions:
+        return f"{module_path}.{func.id}"
+    if func.id in imports:
+        kind, base_mod, orig_name = imports[func.id]
+        if kind == "from":
+            return f"{base_mod}.{orig_name}" if base_mod else orig_name
+    return None
+
+
+def _resolve_attribute_call(
+    func: ast.Attribute,
+    imports: dict[str, tuple[str, str, str]],
+) -> str | None:
+    """Resolve an ast.Attribute call node."""
+    chain = _extract_attr_chain(func)
+    if chain is None:
+        return None
+    base_id, attrs = chain
+    if base_id not in imports:
+        return None
+    kind, base_mod, _ = imports[base_id]
+    if kind == "module":
+        return f"{base_mod}.{'.'.join(attrs)}"
+    if kind == "package_prefix":
+        full_imported = base_mod
+        full_call_dotted = f"{base_id}.{'.'.join(attrs)}"
+        if full_call_dotted == full_imported or full_call_dotted.startswith(full_imported + "."):
+            remainder = full_call_dotted[len(full_imported) + 1 :]
+            return f"{full_imported.replace('.', '/')}.{remainder}"
+    if kind == "from":
+        full_mod = f"{base_mod}/{base_id}".strip("/") if base_mod else base_id
+        return f"{full_mod}.{'.'.join(attrs)}"
+    return None
+
+
+def _resolve_call_target(
+    func: ast.AST,
+    module_path: str,
+    local_functions: set[str],
+    imports: dict[str, tuple[str, str, str]],
+) -> str | None:
+    """Resolve a call node's func to a module-qualified target string if possible."""
+    if isinstance(func, ast.Name):
+        return _resolve_name_call(func, module_path, local_functions, imports)
+    if isinstance(func, ast.Attribute):
+        return _resolve_attribute_call(func, imports)
+    return None
+
+
 def _scan_file_for_helpers_and_calls(
     path: Path, root: Path
 ) -> tuple[list[HelperRecord], dict[str, int]]:
-    """Parse one file once, returning (helper records, call-site counts by short name)."""
+    """Parse one file once, returning (helper records, call-site counts by resolved target)."""
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(path))
     module = str(path.relative_to(root)).replace("\\", "/").removesuffix(".py")
@@ -165,13 +274,14 @@ def _scan_file_for_helpers_and_calls(
     records: list[HelperRecord] = []
     calls: dict[str, int] = {}
 
+    local_functions, imports = _extract_imports_and_locals(tree, module)
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
-            func = node.func
-            if isinstance(func, ast.Name):
-                calls[func.id] = calls.get(func.id, 0) + 1
-            elif isinstance(func, ast.Attribute):
-                calls[func.attr] = calls.get(func.attr, 0) + 1
+            target = _resolve_call_target(node.func, module, local_functions, imports)
+            key = target if target is not None else ""
+            calls[key] = calls.get(key, 0) + 1
+
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         body_text = ast.unparse(node)
@@ -210,15 +320,35 @@ def run_inventory(root: Path, *, include_all: bool = False) -> dict[str, Any]:
     """Scan ``root`` and return the versioned inventory report."""
     files = sorted(path for path in root.rglob("*.py") if path.is_file())
     records: list[HelperRecord] = []
-    call_counts: dict[str, int] = {}
+    file_call_lists: list[dict[str, int]] = []
     for path in files:
         try:
             file_records, file_calls = _scan_file_for_helpers_and_calls(path, root)
         except (OSError, SyntaxError, UnicodeDecodeError) as exc:
             raise RuntimeError(f"scan failed for {path}: {exc}") from exc
         records.extend(file_records)
-        for name, count in file_calls.items():
-            call_counts[name] = call_counts.get(name, 0) + count
+        file_call_lists.append(file_calls)
+
+    helper_by_canonical: dict[str, str] = {}
+    for r in records:
+        helper_by_canonical[r.qualified_name] = r.qualified_name
+        helper_by_canonical[r.qualified_name.replace("/", ".")] = r.qualified_name
+
+    call_counts: dict[str, int] = {}
+    unresolved_calls = 0
+
+    for file_calls in file_call_lists:
+        for target, count in file_calls.items():
+            if not target:
+                unresolved_calls += count
+                continue
+            canonical = helper_by_canonical.get(target) or helper_by_canonical.get(
+                target.replace("/", ".")
+            )
+            if canonical:
+                call_counts[canonical] = call_counts.get(canonical, 0) + count
+            else:
+                unresolved_calls += count
 
     for index, record in enumerate(records):
         records[index] = HelperRecord(
@@ -229,7 +359,7 @@ def run_inventory(root: Path, *, include_all: bool = False) -> dict[str, Any]:
             source_digest=record.source_digest,
             return_paths=record.return_paths,
             raises=record.raises,
-            call_sites=call_counts.get(record.qualified_name.rsplit(".", maxsplit=1)[-1], 0),
+            call_sites=call_counts.get(record.qualified_name, 0),
             layer=record.layer,
             features=record.features,
         )
@@ -245,6 +375,7 @@ def run_inventory(root: Path, *, include_all: bool = False) -> dict[str, Any]:
         "scan": {
             "file_count": len(files),
             "helper_count": len(records),
+            "unresolved_calls": unresolved_calls,
         },
         "candidate_clusters": clusters,
         "cluster_count": len(clusters),

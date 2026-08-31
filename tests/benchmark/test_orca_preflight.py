@@ -153,19 +153,19 @@ class TestCheckRvo2Importable:
             with pytest.raises(OrcaRvo2PreflightError) as exc_info:
                 check_rvo2_importable()
             assert "rvo2" in str(exc_info.value).lower()
-            assert "uv sync --extra orca" in str(exc_info.value)
-            assert "uv sync --all-extras" in str(exc_info.value)
+            assert "pip install third_party/python-rvo2" in str(exc_info.value)
+            assert "pip install git+https://github.com/mit-acl/Python-RVO2" in str(exc_info.value)
 
     def test_raises_when_native_extension_import_fails(self) -> None:
-        """Native-extension import failures are reported with actionable sync commands."""
+        """Native-extension import failures are reported with actionable install commands."""
         with _rvo2_import_raises(OSError("libRVO.so: cannot open shared object file")):
             with pytest.raises(OrcaRvo2PreflightError) as exc_info:
                 check_rvo2_importable()
         message = str(exc_info.value)
         assert "rvo2" in message.lower()
         assert "OSError" in message
-        assert "uv sync --extra orca" in message
-        assert "uv sync --all-extras" in message
+        assert "pip install third_party/python-rvo2" in message
+        assert "pip install git+https://github.com/mit-acl/Python-RVO2" in message
 
 
 class TestCheckOrcaRvo2Preflight:
@@ -220,7 +220,7 @@ class TestCheckOrcaRvo2Preflight:
             assert "rvo2" in message.lower()
 
     def test_error_message_names_orca_keys_and_sync_commands(self) -> None:
-        """Error message contains ORCA planner keys and both sync commands."""
+        """Error message contains ORCA planner keys and both install commands."""
         cfg = _make_cfg(
             planners=(
                 _planner("orca", "orca"),
@@ -234,8 +234,8 @@ class TestCheckOrcaRvo2Preflight:
         assert "orca" in message
         assert "social_nav" in message
         assert "rvo2" in message.lower()
-        assert "uv sync --extra orca" in message
-        assert "uv sync --all-extras" in message
+        assert "pip install third_party/python-rvo2" in message
+        assert "pip install git+https://github.com/mit-acl/Python-RVO2" in message
 
     def test_orca_hybrid_sampler_detected(self) -> None:
         """hybrid_orca_sampler is detected as ORCA-dependent."""
@@ -253,8 +253,8 @@ class TestCheckOrcaRvo2Preflight:
         message = str(exc_info.value)
         assert "orca" in message
         assert "OSError" in message
-        assert "uv sync --extra orca" in message
-        assert "uv sync --all-extras" in message
+        assert "pip install third_party/python-rvo2" in message
+        assert "pip install git+https://github.com/mit-acl/Python-RVO2" in message
 
 
 class TestCheckOrcaRvo2PreflightFromConfig:

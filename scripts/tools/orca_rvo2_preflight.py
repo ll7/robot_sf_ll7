@@ -80,7 +80,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         check_orca_rvo2_preflight_from_config(config_path)
     except OrcaRvo2PreflightError as exc:
         report["blockers"] = ["rvo2_unavailable"]
-        report["remediation"] = ["uv sync --extra orca", "uv sync --all-extras"]
+        report["remediation"] = [
+            "pip install third_party/python-rvo2",
+            "pip install git+https://github.com/mit-acl/Python-RVO2",
+        ]
         report["planner_keys"] = list(exc.planner_keys)
         report["detail"] = str(exc)
         _emit_report(report, as_json=args.json)

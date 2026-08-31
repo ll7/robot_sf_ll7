@@ -18,9 +18,10 @@ Modes
 - verify: check that every prepared issue body contains exactly one
   ``goal-autopilot-preparation:v1`` marker and that bytes outside the marker
   region are unchanged.
-- apply (``--apply``): bounded, compare-and-swap guarded, exact-item body and
-  label mutations with a credential-free receipt. Requires an explicit reviewed
-  plan digest and issue list; aborts the whole batch on any drift.
+- apply (``--apply``): bounded, exact-item body and label mutations with a
+  label-set compare-and-swap guard and a credential-free receipt. Requires an
+  explicit reviewed plan digest and issue list; aborts the whole batch on any
+  relevant drift.
 
 The tool defaults to no-write mode and never creates labels, never adds PR
 runner labels to issues, and never mutates issue state, assignments,
@@ -35,11 +36,9 @@ import json
 import re
 import sys
 from collections import Counter
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+from typing import Any
 
 MARKER_START = "<!-- goal-autopilot-preparation:v1:start -->"
 MARKER_END = "<!-- goal-autopilot-preparation:v1:end -->"
@@ -50,6 +49,8 @@ RECEIPT_SCHEMA = "open_issue_preparation_receipt.v1"
 DEFAULT_MUTATION_CEILING = 10
 HARD_BODY_CEILING = 25
 HARD_LABEL_CEILING = 50
+DEFAULT_REPOSITORY = "ll7/robot_sf_ll7"
+_RUNNER_LABELS = frozenset({"runner:luna", "runner:max"})
 
 # LunaRunner: bounded docs/tests/config/CLI/adapter work with no planner,
 # metric, model, safety, or evidence semantics. MaxRunner: anything touching
@@ -131,6 +132,113 @@ def _stable_json(payload: object) -> str:
 
 def _sha256_json(payload: object) -> str:
     return _sha256_text(_stable_json(payload))
+
+
+def _content_digest(plan: Mapping[str, Any]) -> str:
+    """Compute the deterministic digest of a plan without its digest field."""
+    digest_input = {key: value for key, value in plan.items() if key != "content_sha256"}
+    return _sha256_json(digest_input)
+
+
+def _normalize_label_names(value: Any) -> list[str]:
+    """Normalize REST or fixture label values to sorted unique names."""
+    if not isinstance(value, list):
+        raise ValueError("labels must be a list")
+    names: list[str] = []
+    for row in value:
+        name = row.get("name") if isinstance(row, Mapping) else row
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("labels must contain non-empty names")
+        names.append(name)
+    if len(names) != len(set(names)):
+        raise ValueError("labels must not contain duplicate names")
+    return sorted(names)
+
+
+def _normalize_assignee_names(value: Any) -> list[str]:
+    """Normalize REST or fixture assignee values to sorted unique logins."""
+    if not isinstance(value, list):
+        raise ValueError("assignees must be a list")
+    names: list[str] = []
+    for row in value:
+        name = row.get("login") if isinstance(row, Mapping) else row
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError("assignees must contain non-empty names")
+        names.append(name)
+    if len(names) != len(set(names)):
+        raise ValueError("assignees must not contain duplicate names")
+    return sorted(names)
+
+
+def _live_repository_label_names(
+    *,
+    repo: str = DEFAULT_REPOSITORY,
+    page_size: int = 100,
+    page_ceiling: int = 10,
+) -> set[str]:
+    """Read the repository label catalog through the shared REST transport."""
+    from scripts.dev import _gh_rest
+
+    names: set[str] = set()
+    for page in range(1, page_ceiling + 1):
+        path = f"repos/{repo}/labels?per_page={page_size}&page={page}"
+        result = _gh_rest.run_gh_api(path)
+        if result.returncode != 0:
+            detail = result.stderr.strip() or result.stdout.strip() or "REST read failed"
+            raise RuntimeError(f"repository label catalog read failed on page {page}: {detail}")
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"repository label catalog page {page} was not valid JSON") from exc
+        if not isinstance(payload, list):
+            raise RuntimeError(
+                f"repository label catalog page {page} was not a list: {type(payload).__name__}"
+            )
+        try:
+            names.update(_normalize_label_names(payload))
+        except ValueError as exc:
+            raise RuntimeError(
+                f"repository label catalog page {page} was malformed: {exc}"
+            ) from exc
+        if len(payload) < page_size:
+            return names
+    raise RuntimeError(f"repository label catalog exceeded the page ceiling of {page_ceiling}")
+
+
+def _live_issue_reader(issue: int, *, repo: str = DEFAULT_REPOSITORY) -> dict[str, Any]:
+    """Read and strictly normalize one issue before a bounded mutation."""
+    from scripts.dev import _gh_rest
+
+    result = _gh_rest.run_gh_api(f"repos/{repo}/issues/{issue}")
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or "REST read failed"
+        raise RuntimeError(f"issue {issue} read failed: {detail}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"issue {issue} read was not valid JSON") from exc
+    if not isinstance(payload, Mapping):
+        raise RuntimeError(f"issue {issue} read was not an object")
+    try:
+        labels = _normalize_label_names(payload.get("labels", []))
+    except ValueError as exc:
+        raise RuntimeError(f"issue {issue} labels were malformed: {exc}") from exc
+    try:
+        assignee_names = _normalize_assignee_names(payload.get("assignees", []))
+    except ValueError as exc:
+        raise RuntimeError(f"issue {issue} assignees were malformed: {exc}") from exc
+    body = payload.get("body")
+    if not isinstance(body, str):
+        raise RuntimeError(f"issue {issue} body was not a string")
+    return {
+        "number": payload.get("number"),
+        "state": str(payload.get("state") or "").lower(),
+        "body": body,
+        "body_sha256": _sha256_text(body),
+        "labels": labels,
+        "assignees": assignee_names,
+        "updated_at": str(payload.get("updated_at") or ""),
+    }
 
 
 def _worker_route(item: Mapping[str, Any]) -> str:
@@ -239,6 +347,7 @@ def build_plan(audit: Mapping[str, Any], *, batch_id: str) -> dict[str, Any]:
                 "url": item.get("url", ""),
                 "labels": item.get("labels", []),
                 "assignees": item.get("assignees", []),
+                "state": str(item.get("state") or "open").lower(),
                 "body_sha256": item.get("body_sha256"),
                 "claim_state": item.get("claim"),
                 "classification_before": item.get("observed_classification"),
@@ -288,7 +397,7 @@ def build_plan(audit: Mapping[str, Any], *, batch_id: str) -> dict[str, Any]:
             "label_operations": sum(len(e["label_plan"]) for e in entries),
         },
     }
-    plan["content_sha256"] = _sha256_json(plan)
+    plan["content_sha256"] = _content_digest(plan)
     return plan
 
 
@@ -373,34 +482,471 @@ def _verify_batch(plan: Mapping[str, Any], bodies: Mapping[str, str]) -> list[di
     return findings
 
 
-def _apply_bodies(
+def _compose_body(body: str, block: str) -> str:
+    """Return the body with exactly one marker block and no other edits."""
+    if _MARKER_BLOCK_RE.search(body):
+        return _MARKER_BLOCK_RE.sub(block.rstrip("\n"), body)
+    if body.endswith("\n"):
+        return body + "\n" + block.rstrip("\n")
+    return body + block.rstrip("\n")
+
+
+def _normalize_issue_snapshot(snapshot: Mapping[str, Any], issue: int) -> dict[str, Any]:
+    """Normalize an injected or REST issue snapshot for CAS comparisons."""
+    raw_number = snapshot.get("number")
+    if raw_number is None:
+        raise ValueError(f"issue identity missing for {issue}")
+    try:
+        if isinstance(raw_number, bool) or int(raw_number) != issue:
+            raise ValueError(f"issue identity mismatch: expected {issue}, got {raw_number}")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"issue identity mismatch for {issue}: {raw_number!r}") from exc
+    body = snapshot.get("body")
+    if not isinstance(body, str):
+        raise ValueError(f"issue {issue} body was not a string")
+    try:
+        labels = _normalize_label_names(snapshot.get("labels", []))
+    except ValueError as exc:
+        raise ValueError(f"issue {issue} labels were malformed: {exc}") from exc
+    try:
+        assignees = _normalize_assignee_names(snapshot.get("assignees", []))
+    except ValueError as exc:
+        raise ValueError(f"issue {issue} assignees were malformed: {exc}") from exc
+    return {
+        "number": issue,
+        "state": str(snapshot.get("state") or "open").lower(),
+        "body": body,
+        "body_sha256": _sha256_text(body),
+        "labels": labels,
+        "assignees": assignees,
+        "updated_at": str(snapshot.get("updated_at") or ""),
+    }
+
+
+def _validate_one_label_operation(
+    operation: object,
+    *,
+    issue: object,
+    issue_number: int | None,
+    label_catalog: set[str] | None,
+    seen: set[tuple[str, str]],
+) -> list[dict[str, Any]]:
+    """Return all validation errors for one reviewed label operation."""
+    if not isinstance(operation, Mapping):
+        return [{"issue": issue, "operation": "failed", "reason": "label_plan_item_not_object"}]
+    errors: list[dict[str, Any]] = []
+    operation_issue = operation.get("issue")
+    try:
+        if (
+            issue_number is None
+            or isinstance(operation_issue, bool)
+            or int(operation_issue) != issue_number
+        ):
+            raise ValueError(f"operation issue {operation_issue!r} does not match entry {issue!r}")
+    except (TypeError, ValueError) as exc:
+        errors.append(
+            {
+                "issue": issue,
+                "operation": "failed",
+                "reason": f"label_operation_issue_mismatch:{exc}",
+            }
+        )
+    action = operation.get("action")
+    label = operation.get("label")
+    if action not in {"add", "remove"}:
+        errors.append(
+            {
+                "issue": issue,
+                "operation": "failed",
+                "reason": f"unsupported_label_action:{action}",
+            }
+        )
+        return errors
+    if not isinstance(label, str) or not label.strip():
+        errors.append({"issue": issue, "operation": "failed", "reason": "label_name_not_nonempty"})
+        return errors
+    if label != label.strip():
+        errors.append(
+            {
+                "issue": issue,
+                "operation": "failed",
+                "action": action,
+                "label": label,
+                "reason": "label_name_has_surrounding_whitespace",
+            }
+        )
+        return errors
+    if label in _RUNNER_LABELS:
+        errors.append(
+            {
+                "issue": issue,
+                "operation": "failed",
+                "action": action,
+                "label": label,
+                "reason": "runner_label_forbidden",
+            }
+        )
+    if label_catalog is not None and label not in label_catalog:
+        errors.append(
+            {
+                "issue": issue,
+                "operation": "failed",
+                "action": action,
+                "label": label,
+                "reason": "label_not_in_repository_catalog",
+            }
+        )
+    key = (str(action), label)
+    if key in seen:
+        errors.append(
+            {
+                "issue": issue,
+                "operation": "failed",
+                "action": action,
+                "label": label,
+                "reason": "duplicate_label_operation",
+            }
+        )
+    seen.add(key)
+    return errors
+
+
+def _validate_label_entry(
+    entry: Mapping[str, Any],
+    *,
+    label_catalog: set[str] | None,
+) -> tuple[int, list[dict[str, Any]]]:
+    """Validate one plan entry's expected labels and label operations."""
+    issue = entry.get("issue")
+    try:
+        if isinstance(issue, bool):
+            raise ValueError("boolean issue number")
+        issue_number = int(issue)
+        if issue_number < 1:
+            raise ValueError("issue number must be positive")
+    except (TypeError, ValueError) as exc:
+        issue_number = None
+        issue_error = {
+            "issue": issue,
+            "operation": "failed",
+            "reason": f"invalid_issue:{exc}",
+        }
+    else:
+        issue_error = None
+    errors: list[dict[str, Any]] = []
+    if issue_error is not None:
+        errors.append(issue_error)
+    try:
+        _normalize_label_names(entry.get("labels", []))
+    except ValueError as exc:
+        errors.append(
+            {
+                "issue": issue,
+                "operation": "failed",
+                "reason": f"expected_labels_invalid:{exc}",
+            }
+        )
+    operations = entry.get("label_plan", [])
+    if not isinstance(operations, list):
+        errors.append({"issue": issue, "operation": "failed", "reason": "label_plan_not_list"})
+        return 0, errors
+    seen: set[tuple[str, str]] = set()
+    for operation in operations:
+        errors.extend(
+            _validate_one_label_operation(
+                operation,
+                issue=issue,
+                issue_number=issue_number,
+                label_catalog=label_catalog,
+                seen=seen,
+            )
+        )
+    return len(operations), errors
+
+
+def _validate_label_operations(
+    entries: Sequence[Mapping[str, Any]],
+    *,
+    label_catalog: set[str] | None,
+) -> tuple[int, list[dict[str, Any]]]:
+    """Validate exact reviewed label plans before any body or label write."""
+    planned = 0
+    errors: list[dict[str, Any]] = []
+    for entry in entries:
+        entry_planned, entry_errors = _validate_label_entry(
+            entry,
+            label_catalog=label_catalog,
+        )
+        planned += entry_planned
+        errors.extend(entry_errors)
+    return planned, errors
+
+
+def _base_receipt(
+    *,
+    audit: Mapping[str, Any],
+    plan: Mapping[str, Any],
+    mutation_ceiling: int,
+    batch_id: str,
+    dry_run: bool,
+    issues: Sequence[int],
+) -> dict[str, Any]:
+    """Build the stable receipt fields shared by successful and failed batches."""
+    return {
+        "schema": RECEIPT_SCHEMA,
+        "repository": plan.get("repository", audit.get("repository", DEFAULT_REPOSITORY)),
+        "base_sha": audit.get("base_sha"),
+        "audit_digest": plan.get("audit_digest", ""),
+        "plan_digest": plan.get("content_sha256", ""),
+        "issues": sorted(issues),
+        "batch_id": batch_id,
+        "mutation_ceiling": mutation_ceiling,
+        "hard_body_ceiling": HARD_BODY_CEILING,
+        "hard_label_ceiling": HARD_LABEL_CEILING,
+        "dry_run": dry_run,
+        "safe_order": "body_then_labels",
+        "transactional": False,
+        "partial_failure": False,
+        "aborted": False,
+        "abort_reason": None,
+        "unauthorized_mutations": False,
+        "operations": [],
+        "written": 0,
+        "would_write": 0,
+        "idempotent": 0,
+        "skipped": 0,
+        "drifted": 0,
+        "failed": 0,
+        "label_operations_planned": 0,
+        "label_operations_attempted": 0,
+    }
+
+
+def _entry_is_actionable(entry: Mapping[str, Any]) -> bool:
+    """Return whether a plan entry requests a body or label operation."""
+    return not entry.get("skip_reason") and (
+        bool(entry.get("body_patch", {}).get("proposed")) or bool(entry.get("label_plan"))
+    )
+
+
+def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-closed batch state machine
     audit: Mapping[str, Any],
     plan: Mapping[str, Any],
     *,
     mutation_ceiling: int,
     batch_id: str,
     dry_run: bool,
-    body_writer: Any,
+    body_writer: Callable[[int, str], object],
+    issue_reader: Callable[[int], Mapping[str, Any]] | None = None,
+    label_catalog: set[str] | None = None,
+    label_writer: Callable[[int, str, str], Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Apply the reviewed plan bodies with CAS guards.
+    """Apply a reviewed body/label batch with fail-closed label CAS guards.
 
-    ``body_writer`` is an injectable ``(issue_number, body) -> None`` for
-    offline tests; the live path uses the REST helper.
+    ``body_writer``, ``issue_reader``, and ``label_writer`` are injectable so
+    the complete mutation protocol can be tested offline.  The live path uses
+    the shared REST transport and :mod:`gh_pr_label_rest`.
     """
-    audit_digest = plan.get("audit_digest", "")
-    operations: list[dict[str, Any]] = []
-    applied = 0
-    for entry in plan.get("entries", []):
-        if applied >= mutation_ceiling:
-            break
+    entries = [entry for entry in plan.get("entries", []) if isinstance(entry, Mapping)]
+    issues = [int(entry["issue"]) for entry in entries if str(entry.get("issue", "")).isdigit()]
+    receipt = _base_receipt(
+        audit=audit,
+        plan=plan,
+        mutation_ceiling=mutation_ceiling,
+        batch_id=batch_id,
+        dry_run=dry_run,
+        issues=issues,
+    )
+    operations: list[dict[str, Any]] = receipt["operations"]
+
+    def add_operation(operation: dict[str, Any]) -> None:
+        """Append an operation and update the stable status counters."""
+        operations.append(operation)
+        status = operation.get("operation")
+        if status == "written":
+            receipt["written"] += 1
+        elif status == "would_write":
+            receipt["would_write"] += 1
+        elif status == "idempotent":
+            receipt["idempotent"] += 1
+        elif status in {"skip", "skipped"}:
+            receipt["skipped"] += 1
+        elif status == "drifted":
+            receipt["drifted"] += 1
+        elif status == "failed":
+            receipt["failed"] += 1
+
+    if len(issues) != len(set(issues)):
+        receipt["aborted"] = True
+        receipt["abort_reason"] = "duplicate_issue_entries"
+        add_operation(
+            {
+                "kind": "batch",
+                "operation": "failed",
+                "reason": "plan contains duplicate issue entries",
+            }
+        )
+        return receipt
+    if mutation_ceiling < 0 or mutation_ceiling > HARD_BODY_CEILING:
+        receipt["aborted"] = True
+        receipt["abort_reason"] = "body_mutation_ceiling_out_of_range"
+        add_operation(
+            {
+                "kind": "batch",
+                "operation": "failed",
+                "reason": f"mutation ceiling must be between 0 and {HARD_BODY_CEILING}",
+            }
+        )
+        return receipt
+
+    planned_labels, label_errors = _validate_label_operations(
+        entries,
+        label_catalog=label_catalog,
+    )
+    receipt["label_operations_planned"] = planned_labels
+    if planned_labels and label_catalog is None:
+        receipt["aborted"] = True
+        receipt["abort_reason"] = "label_catalog_unavailable"
+        add_operation(
+            {
+                "kind": "batch",
+                "operation": "failed",
+                "reason": "label catalog is required for label mutations",
+            }
+        )
+        return receipt
+    if planned_labels > HARD_LABEL_CEILING:
+        receipt["aborted"] = True
+        receipt["abort_reason"] = "label_operation_ceiling_exceeded"
+        add_operation(
+            {
+                "kind": "batch",
+                "operation": "failed",
+                "reason": f"planned label operations exceed hard max {HARD_LABEL_CEILING}",
+                "planned": planned_labels,
+            }
+        )
+        return receipt
+    if label_errors:
+        receipt["aborted"] = True
+        receipt["abort_reason"] = "invalid_label_plan"
+        for error in label_errors:
+            add_operation(dict(error))
+        return receipt
+
+    actionable_entries = [
+        entry
+        for entry in entries
+        if not entry.get("skip_reason")
+        and (bool(entry.get("body_patch", {}).get("proposed")) or bool(entry.get("label_plan")))
+    ]
+
+    snapshots: dict[int, dict[str, Any]] = {}
+    if issue_reader is not None and not dry_run:
+        preflight_errors: list[dict[str, Any]] = []
+        for entry in actionable_entries:
+            issue = int(entry["issue"])
+            try:
+                raw_snapshot = issue_reader(issue)
+                if not isinstance(raw_snapshot, Mapping):
+                    raise ValueError("issue snapshot was not an object")
+                snapshot = _normalize_issue_snapshot(raw_snapshot, issue)
+                expected_labels = _normalize_label_names(entry.get("labels", []))
+                expected_assignees = _normalize_assignee_names(entry.get("assignees", []))
+                expected_state = str(entry.get("state") or "open").lower()
+                mismatches: dict[str, Any] = {}
+                if snapshot["state"] != expected_state:
+                    mismatches["state"] = {
+                        "expected": expected_state,
+                        "observed": snapshot["state"],
+                    }
+                if snapshot["labels"] != expected_labels:
+                    mismatches["labels"] = {
+                        "expected": expected_labels,
+                        "observed": snapshot["labels"],
+                    }
+                if snapshot["assignees"] != expected_assignees:
+                    mismatches["assignees"] = {
+                        "expected": expected_assignees,
+                        "observed": snapshot["assignees"],
+                    }
+                if mismatches:
+                    preflight_errors.append(
+                        {
+                            "issue": issue,
+                            "kind": "preflight",
+                            "operation": "drifted",
+                            "reason": "expected/current issue fields drifted",
+                            "mismatches": mismatches,
+                        }
+                    )
+                else:
+                    snapshots[issue] = snapshot
+            except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                preflight_errors.append(
+                    {
+                        "issue": issue,
+                        "kind": "preflight",
+                        "operation": "failed",
+                        "reason": str(exc),
+                    }
+                )
+        if preflight_errors:
+            receipt["aborted"] = True
+            receipt["abort_reason"] = "preflight_drift_or_unavailable"
+            for error in preflight_errors:
+                add_operation(error)
+            failed_issues = {error.get("issue") for error in preflight_errors}
+            for entry in entries:
+                issue = entry.get("issue")
+                if issue in failed_issues:
+                    continue
+                reason = (
+                    "preflight_aborted"
+                    if _entry_is_actionable(entry)
+                    else entry.get("skip_reason") or "no_mutations"
+                )
+                add_operation(
+                    {
+                        "issue": issue,
+                        "operation": "skip",
+                        "status": "skipped",
+                        "reason": reason,
+                    }
+                )
+            return receipt
+
+    body_count = 0
+    label_count = 0
+    aborted = False
+    abort_reason: str | None = None
+    for index, entry in enumerate(entries):
         issue = entry.get("issue")
         skip = entry.get("skip_reason")
+        label_plan = entry.get("label_plan", [])
+        body_proposed = bool(entry.get("body_patch", {}).get("proposed"))
         if skip:
-            operations.append({"issue": issue, "operation": "skip", "reason": skip})
+            add_operation(
+                {"issue": issue, "operation": "skip", "status": "skipped", "reason": skip}
+            )
             continue
-        if not entry.get("body_patch", {}).get("proposed"):
-            operations.append({"issue": issue, "operation": "skip", "reason": "no_body_patch"})
+        if not body_proposed and not label_plan:
+            add_operation(
+                {"issue": issue, "operation": "skip", "status": "skipped", "reason": "no_mutations"}
+            )
             continue
+        if aborted:
+            add_operation(
+                {
+                    "issue": issue,
+                    "operation": "skip",
+                    "status": "skipped",
+                    "reason": abort_reason or "aborted_after_failure",
+                }
+            )
+            continue
+
+        issue_number = int(issue)
         block = _render_marker_block(
             {
                 "number": issue,
@@ -411,44 +957,226 @@ def _apply_bodies(
                 "labels": entry.get("labels", []),
                 "body_sha256": entry.get("body_sha256"),
             },
-            audit_digest=audit_digest,
+            audit_digest=plan.get("audit_digest", ""),
             batch_id=batch_id,
         )
-        if dry_run:
-            operations.append(
-                {
-                    "issue": issue,
-                    "operation": "would_write",
-                    "marker": block,
-                    "expected_digest_before": entry.get("body_sha256"),
-                }
-            )
-            applied += 1
+        if body_proposed:
+            if body_count >= mutation_ceiling:
+                aborted = True
+                abort_reason = "body_mutation_ceiling_reached"
+                add_operation(
+                    {
+                        "issue": issue,
+                        "kind": "body",
+                        "operation": "skip",
+                        "status": "skipped",
+                        "reason": abort_reason,
+                    }
+                )
+            else:
+                body_count += 1
+                current_snapshot = snapshots.get(issue_number)
+                current_body = current_snapshot.get("body") if current_snapshot else None
+                if dry_run:
+                    add_operation(
+                        {
+                            "issue": issue,
+                            "kind": "body",
+                            "operation": "would_write",
+                            "marker": block,
+                            "expected_digest_before": entry.get("body_sha256"),
+                        }
+                    )
+                elif (
+                    current_body is not None and _compose_body(current_body, block) == current_body
+                ):
+                    add_operation(
+                        {
+                            "issue": issue,
+                            "kind": "body",
+                            "operation": "idempotent",
+                            "expected_digest_before": entry.get("body_sha256"),
+                            "observed_digest_after": _sha256_text(current_body),
+                        }
+                    )
+                else:
+                    try:
+                        body_result = body_writer(issue_number, block)
+                    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                        aborted = True
+                        abort_reason = "body_write_failed"
+                        add_operation(
+                            {
+                                "issue": issue,
+                                "kind": "body",
+                                "operation": "failed",
+                                "reason": str(exc),
+                            }
+                        )
+                    else:
+                        body_operation: dict[str, Any] = {
+                            "issue": issue,
+                            "kind": "body",
+                            "operation": "written",
+                            "expected_digest_before": entry.get("body_sha256"),
+                        }
+                        if isinstance(body_result, Mapping):
+                            body_operation["api_status"] = body_result.get("status")
+                            if body_result.get("body_sha256"):
+                                body_operation["observed_digest_after"] = body_result["body_sha256"]
+                        add_operation(body_operation)
+
+        if aborted:
+            if label_plan:
+                add_operation(
+                    {
+                        "issue": issue,
+                        "kind": "labels",
+                        "operation": "skip",
+                        "status": "skipped",
+                        "reason": abort_reason or "aborted_after_failure",
+                    }
+                )
             continue
-        try:
-            body_writer(issue, block)
-        except (OSError, RuntimeError) as exc:  # pragma: no cover - live REST error path
-            operations.append({"issue": issue, "operation": "failed", "reason": str(exc)})
-            # Fail closed: abort the whole batch on any write error.
+
+        if issue_number in snapshots:
+            local_labels = set(snapshots[issue_number]["labels"])
+        else:
+            local_labels = set(_normalize_label_names(entry.get("labels", [])))
+        for label_operation in label_plan:
+            label_count += 1
+            receipt["label_operations_attempted"] = label_count
+            action = str(label_operation["action"])
+            label = str(label_operation["label"]).strip()
+            target_labels = set(local_labels)
+            already_applied = (action == "add" and label in local_labels) or (
+                action == "remove" and label not in local_labels
+            )
+            if already_applied:
+                add_operation(
+                    {
+                        "issue": issue,
+                        "kind": "label",
+                        "action": action,
+                        "label": label,
+                        "operation": "idempotent",
+                        "expected_labels_before": sorted(local_labels),
+                        "observed_labels_after": sorted(local_labels),
+                    }
+                )
+                continue
+            if action == "add":
+                target_labels.add(label)
+            else:
+                target_labels.discard(label)
+            if dry_run:
+                add_operation(
+                    {
+                        "issue": issue,
+                        "kind": "label",
+                        "action": action,
+                        "label": label,
+                        "operation": "would_write",
+                        "expected_labels_before": sorted(local_labels),
+                        "expected_labels_after": sorted(target_labels),
+                    }
+                )
+                local_labels = target_labels
+                continue
+            try:
+                if issue_reader is not None:
+                    live_before = _normalize_issue_snapshot(
+                        issue_reader(issue_number), issue_number
+                    )
+                    if set(live_before["labels"]) != local_labels:
+                        aborted = True
+                        abort_reason = "label_prewrite_drift"
+                        add_operation(
+                            {
+                                "issue": issue,
+                                "kind": "label",
+                                "action": action,
+                                "label": label,
+                                "operation": "drifted",
+                                "expected_labels_before": sorted(local_labels),
+                                "observed_labels_before": live_before["labels"],
+                            }
+                        )
+                        break
+                if label_writer is None:
+                    raise RuntimeError("label writer is unavailable")
+                label_result = label_writer(issue_number, action, label)
+                if issue_reader is not None:
+                    live_after = _normalize_issue_snapshot(issue_reader(issue_number), issue_number)
+                    if set(live_after["labels"]) != target_labels:
+                        aborted = True
+                        abort_reason = "label_readback_mismatch"
+                        add_operation(
+                            {
+                                "issue": issue,
+                                "kind": "label",
+                                "action": action,
+                                "label": label,
+                                "operation": "drifted",
+                                "expected_labels_after": sorted(target_labels),
+                                "observed_labels_after": live_after["labels"],
+                            }
+                        )
+                        break
+            except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                aborted = True
+                abort_reason = "label_write_failed"
+                add_operation(
+                    {
+                        "issue": issue,
+                        "kind": "label",
+                        "action": action,
+                        "label": label,
+                        "operation": "failed",
+                        "reason": str(exc),
+                    }
+                )
+                break
+            else:
+                label_operation_result: dict[str, Any] = {
+                    "issue": issue,
+                    "kind": "label",
+                    "action": action,
+                    "label": label,
+                    "operation": "written",
+                    "expected_labels_before": sorted(local_labels),
+                    "observed_labels_after": sorted(target_labels),
+                }
+                if isinstance(label_result, Mapping):
+                    label_operation_result["api_status"] = label_result.get("status")
+                add_operation(label_operation_result)
+                local_labels = target_labels
+        if aborted:
+            # The remaining entries are summarized below as skipped operations.
+            for remaining in entries[index + 1 :]:
+                add_operation(
+                    {
+                        "issue": remaining.get("issue"),
+                        "operation": "skip",
+                        "status": "skipped",
+                        "reason": abort_reason or "aborted_after_failure",
+                    }
+                )
             break
-        operations.append(
-            {
-                "issue": issue,
-                "operation": "written",
-                "expected_digest_before": entry.get("body_sha256"),
-            }
-        )
-        applied += 1
-    return {
-        "schema": RECEIPT_SCHEMA,
-        "batch_id": batch_id,
-        "mutation_ceiling": mutation_ceiling,
-        "dry_run": dry_run,
-        "operations": operations,
-        "written": sum(1 for op in operations if op["operation"] == "written"),
-        "would_write": sum(1 for op in operations if op["operation"] == "would_write"),
-        "skipped": sum(1 for op in operations if op["operation"] == "skip"),
-    }
+        if body_count >= mutation_ceiling >= 0:
+            # Stop before starting the next body/label item once the body budget is consumed.
+            aborted = True
+            abort_reason = "body_mutation_ceiling_reached"
+        if label_count >= HARD_LABEL_CEILING:
+            aborted = True
+            abort_reason = "label_operation_ceiling_reached"
+
+    receipt["aborted"] = aborted
+    receipt["abort_reason"] = abort_reason
+    receipt["partial_failure"] = bool(receipt["failed"] or receipt["drifted"]) and bool(
+        receipt["written"]
+    )
+    return receipt
 
 
 def _select_entries(plan: Mapping[str, Any], numbers: Sequence[int]) -> list[dict[str, Any]]:
@@ -458,7 +1186,39 @@ def _select_entries(plan: Mapping[str, Any], numbers: Sequence[int]) -> list[dic
     return [e for e in plan.get("entries", []) if int(e.get("issue", -1)) in wanted]
 
 
-def main(argv: list[str] | None = None) -> int:
+def _restrict_plan(plan: Mapping[str, Any], numbers: Sequence[int]) -> dict[str, Any]:
+    """Return a digestable plan containing exactly the requested entries."""
+    entries = _select_entries(plan, numbers)
+    counts = Counter(str(entry.get("classification_before") or "error") for entry in entries)
+    admission_reasons = Counter(
+        str(entry.get("admission_reason") or "unknown") for entry in entries
+    )
+    route_counts = Counter(str(entry.get("worker_route") or "none") for entry in entries)
+    restricted = {
+        **plan,
+        "item_count": len(entries),
+        "entries": entries,
+        "summary": {
+            "by_classification_before": dict(counts),
+            "admission_reason_histogram": dict(sorted(admission_reasons.items())),
+            "not_admitted": dict(
+                sorted(
+                    (reason, count)
+                    for reason, count in admission_reasons.items()
+                    if reason != "claimable"
+                )
+            ),
+            "by_worker_route": dict(route_counts),
+            "ready_items": sum(1 for e in entries if e["classification_before"] == "ready"),
+            "dispatch_eligible": sum(1 for e in entries if e["dispatch_eligible"]),
+            "label_operations": sum(len(e["label_plan"]) for e in entries),
+        },
+    }
+    restricted["content_sha256"] = _content_digest(restricted)
+    return restricted
+
+
+def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912 - explicit CLI gate branches
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -471,6 +1231,11 @@ def main(argv: list[str] | None = None) -> int:
         "--plan-markdown", default=None, help="Path to write a compact plan markdown summary"
     )
     parser.add_argument("--batch-id", default="local", help="Stable batch identifier")
+    parser.add_argument(
+        "--repo",
+        default=DEFAULT_REPOSITORY,
+        help="GitHub owner/repository for apply mode",
+    )
     parser.add_argument(
         "--issues",
         nargs="*",
@@ -489,6 +1254,11 @@ def main(argv: list[str] | None = None) -> int:
         "--apply",
         action="store_true",
         help="Enable mutation mode (plan/render/verify remain report-only)",
+    )
+    parser.add_argument(
+        "--reviewed-plan-digest",
+        default=None,
+        help="Exact content_sha256 of the reviewed plan required for real apply",
     )
     parser.add_argument(
         "--mutation-ceiling",
@@ -514,7 +1284,43 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if args.issues:
-        plan = {**plan, "entries": _select_entries(plan, args.issues)}
+        if len(args.issues) != len(set(args.issues)):
+            print("ERROR: --issues must not contain duplicate issue numbers", file=sys.stderr)
+            return 2
+        selected = _select_entries(plan, args.issues)
+        selected_numbers = {int(entry.get("issue", -1)) for entry in selected}
+        unknown = sorted(set(args.issues) - selected_numbers)
+        if unknown:
+            print(f"ERROR: issue(s) not present in audit plan: {unknown}", file=sys.stderr)
+            return 2
+        plan = _restrict_plan(plan, args.issues)
+
+    real_apply = args.mode == "apply" and args.apply and not args.dry_run
+    if real_apply:
+        if not args.issues:
+            print("ERROR: real apply requires an explicit --issues list", file=sys.stderr)
+            return 2
+        if args.repo != plan.get("repository", DEFAULT_REPOSITORY):
+            print(
+                "ERROR: --repo does not match the repository frozen in the reviewed plan",
+                file=sys.stderr,
+            )
+            return 2
+        audit_errors = audit.get("errors", [])
+        truncation_errors = audit.get("truncation_or_errors", [])
+        if audit.get("complete") is not True or audit_errors or truncation_errors:
+            print("ERROR: real apply requires a complete audit with no errors", file=sys.stderr)
+            return 2
+        reviewed_digest = args.reviewed_plan_digest
+        if not reviewed_digest:
+            print("ERROR: real apply requires --reviewed-plan-digest", file=sys.stderr)
+            return 2
+        if reviewed_digest != plan.get("content_sha256"):
+            print(
+                "ERROR: reviewed plan digest does not match the selected plan",
+                file=sys.stderr,
+            )
+            return 2
 
     if args.plan_json:
         Path(args.plan_json).write_text(_stable_json(plan) + "\n", encoding="utf-8")
@@ -534,6 +1340,7 @@ def main(argv: list[str] | None = None) -> int:
             mutation_ceiling=args.mutation_ceiling,
             batch_id=args.batch_id,
             dry_run=args.dry_run,
+            repo=args.repo,
         )
 
     # Plan mode output
@@ -581,11 +1388,17 @@ def _verify_mode(plan: Mapping[str, Any], *, bodies_json: str | None) -> int:
     return 1 if bad else 0
 
 
-def _live_body_writer(issue: int, block: str) -> None:
-    """Write one issue body through the canonical REST helper (CAS re-read)."""
+def _live_body_writer(  # noqa: C901, PLR0912 - read/write/readback guard branches
+    issue: int,
+    block: str,
+    *,
+    expected_labels: Sequence[str] | None = None,
+    repo: str = DEFAULT_REPOSITORY,
+) -> dict[str, Any]:
+    """Write one issue body through REST with an immediate label-state guard."""
     from scripts.dev import _gh_rest
 
-    endpoint = f"repos/ll7/robot_sf_ll7/issues/{issue}"
+    endpoint = f"repos/{repo}/issues/{issue}"
     current_result = _gh_rest.run_gh_api(endpoint)
     if current_result.returncode != 0:
         detail = (
@@ -596,15 +1409,30 @@ def _live_body_writer(issue: int, block: str) -> None:
         current_payload = json.loads(current_result.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"issue {issue} body read was not valid JSON") from exc
-    current = current_payload.get("body") if isinstance(current_payload, dict) else None
+    if not isinstance(current_payload, dict):
+        raise RuntimeError(f"issue {issue} body read was not an object")
+    current = current_payload.get("body")
     if not isinstance(current, str):
         raise RuntimeError(f"issue {issue} body read was not a string")
-    if _MARKER_BLOCK_RE.search(current):
-        body = _MARKER_BLOCK_RE.sub(block.rstrip("\n"), current)
-    elif current.endswith("\n"):
-        body = current + "\n" + block.rstrip("\n")
-    else:
-        body = current + block.rstrip("\n")
+    expected: list[str] | None = None
+    observed_labels: list[str] | None = None
+    if expected_labels is not None:
+        try:
+            expected = _normalize_label_names(list(expected_labels))
+            observed_labels = _normalize_label_names(current_payload.get("labels", []))
+        except ValueError as exc:
+            raise RuntimeError(f"issue {issue} labels were malformed: {exc}") from exc
+        if observed_labels != expected:
+            raise RuntimeError(
+                f"issue {issue} labels drifted: expected {expected}, observed {observed_labels}"
+            )
+    body = _compose_body(current, block)
+    if body == current:
+        return {
+            "status": "idempotent",
+            "body_sha256": _sha256_text(current),
+            "labels": observed_labels,
+        }
     write_result = _gh_rest.run_gh_api(endpoint, {"body": body}, method="PATCH")
     if write_result.returncode != 0:
         detail = write_result.stderr.strip() or write_result.stdout.strip() or "REST write failed"
@@ -621,9 +1449,45 @@ def _live_body_writer(issue: int, block: str) -> None:
         readback_payload = json.loads(readback_result.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError(f"issue {issue} body readback was not valid JSON") from exc
-    readback = readback_payload.get("body") if isinstance(readback_payload, dict) else None
+    if not isinstance(readback_payload, dict):
+        raise RuntimeError(f"issue {issue} body readback was not an object")
+    readback = readback_payload.get("body")
     if readback != body:
         raise RuntimeError(f"issue {issue} body readback mismatch")
+    readback_labels: list[str] | None = None
+    if expected is not None:
+        try:
+            readback_labels = _normalize_label_names(readback_payload.get("labels", []))
+        except ValueError as exc:
+            raise RuntimeError(f"issue {issue} body readback labels were malformed: {exc}") from exc
+        if readback_labels != expected:
+            raise RuntimeError(
+                f"issue {issue} body readback changed labels: expected {expected}, "
+                f"observed {readback_labels}"
+            )
+    return {
+        "status": "written",
+        "body_sha256": _sha256_text(body),
+        "labels": readback_labels,
+    }
+
+
+def _live_label_writer(issue: int, action: str, label: str, *, repo: str) -> dict[str, Any]:
+    """Apply one reviewed label operation through the shared REST label helper."""
+    from scripts.dev import gh_pr_label_rest
+
+    if action == "add":
+        result = gh_pr_label_rest.add_label(issue, label, repo=repo)
+    elif action == "remove":
+        result = gh_pr_label_rest.remove_label(issue, label, repo=repo)
+    else:
+        raise RuntimeError(f"unsupported label action: {action}")
+    if result.get("status") != "ok":
+        raise RuntimeError(
+            f"issue {issue} label {action} {label!r} failed: "
+            f"{result.get('error', 'unknown REST label error')}"
+        )
+    return result
 
 
 def _apply_mode(
@@ -633,24 +1497,65 @@ def _apply_mode(
     mutation_ceiling: int,
     batch_id: str,
     dry_run: bool,
+    repo: str = DEFAULT_REPOSITORY,
 ) -> int:
-    """Apply mode: bounded, CAS-guarded body writes with a receipt."""
-    if mutation_ceiling > HARD_BODY_CEILING:
+    """Apply mode: bounded, CAS-guarded body and label writes with a receipt."""
+    if mutation_ceiling < 0 or mutation_ceiling > HARD_BODY_CEILING:
         print(
-            f"ERROR: mutation ceiling {mutation_ceiling} exceeds hard max {HARD_BODY_CEILING}",
+            f"ERROR: mutation ceiling must be between 0 and {HARD_BODY_CEILING}",
             file=sys.stderr,
         )
         return 2
+    entries = [entry for entry in plan.get("entries", []) if isinstance(entry, Mapping)]
+    has_label_operations = any(entry.get("label_plan") for entry in entries)
+    label_catalog: set[str] | None = None
+    if has_label_operations:
+        try:
+            label_catalog = _live_repository_label_names(repo=repo)
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            receipt = _base_receipt(
+                audit={**audit, "repository": repo},
+                plan=plan,
+                mutation_ceiling=mutation_ceiling,
+                batch_id=batch_id,
+                dry_run=dry_run,
+                issues=[int(entry["issue"]) for entry in entries],
+            )
+            receipt["aborted"] = True
+            receipt["abort_reason"] = "label_catalog_unavailable"
+            receipt["failed"] = 1
+            receipt["operations"].append(
+                {"kind": "batch", "operation": "failed", "reason": str(exc)}
+            )
+            print(_stable_json(receipt))
+            return 1
+
+    entries_by_issue = {int(entry["issue"]): entry for entry in entries}
+
+    def body_writer(issue: int, block: str) -> Mapping[str, Any]:
+        entry = entries_by_issue[issue]
+        return _live_body_writer(
+            issue,
+            block,
+            expected_labels=_normalize_label_names(entry.get("labels", [])),
+            repo=repo,
+        )
+
     receipt = _apply_bodies(
         audit,
         plan,
         mutation_ceiling=mutation_ceiling,
         batch_id=batch_id,
         dry_run=dry_run,
-        body_writer=_live_body_writer,
+        body_writer=body_writer,
+        issue_reader=None if dry_run else lambda issue: _live_issue_reader(issue, repo=repo),
+        label_catalog=label_catalog,
+        label_writer=None
+        if dry_run
+        else lambda issue, action, label: _live_label_writer(issue, action, label, repo=repo),
     )
     print(_stable_json(receipt))
-    return 0 if not any(op["operation"] == "failed" for op in receipt["operations"]) else 1
+    return 0 if not receipt["failed"] and not receipt["drifted"] else 1
 
 
 if __name__ == "__main__":

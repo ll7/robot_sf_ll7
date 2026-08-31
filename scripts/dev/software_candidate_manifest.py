@@ -2917,10 +2917,7 @@ def _candidate_receipt_identity(
         rf"([1-9][0-9]*)\Z"
     )
     candidate_name_match = candidate_name_pattern.fullmatch(candidate_artifact_name)
-    if (
-        candidate_name_match is None
-        or candidate_name_match.group(1) != str(candidate_run_attempt)
-    ):
+    if candidate_name_match is None or candidate_name_match.group(1) != str(candidate_run_attempt):
         raise CandidateError("candidate artifact name is not bound to source and workflow identity")
     members = manifest["members"]
     members_by_kind = {member["kind"]: member for member in members}

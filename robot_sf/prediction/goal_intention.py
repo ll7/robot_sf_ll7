@@ -366,7 +366,8 @@ def update_goal_posterior(
     velocity_unit = (velocity[0] / speed, velocity[1] / speed)
     alignments: dict[str, float] = {}
     for goal in goals:
-        assert goal.position is not None
+        if goal.position is None:
+            raise ValueError("candidate goal position must be available")
         to_goal = (goal.position[0] - position[0], goal.position[1] - position[1])
         distance = math.hypot(*to_goal)
         if distance == 0.0:
@@ -658,7 +659,8 @@ def _actor_heading_posterior(
     velocity_unit = (velocity[0] / speed, velocity[1] / speed)
     log_weights: dict[str, float] = {}
     for candidate in candidates:
-        assert candidate.position is not None
+        if candidate.position is None:
+            raise ValueError("candidate position must be available for heading inference")
         to_candidate = (
             candidate.position[0] - position[0],
             candidate.position[1] - position[1],

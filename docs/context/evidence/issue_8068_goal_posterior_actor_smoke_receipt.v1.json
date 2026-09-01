@@ -27,7 +27,7 @@
   },
   "config": {
     "path": "configs/benchmarks/issue_8068_goal_posterior_actor_smoke.yaml",
-    "sha256": "e1f0a82a91f02695d978773fc19dcd4936eec800baefb4ee1355ad0577411bd6",
+    "config_file_digest": "e1f0a82a91f02695d978773fc19dcd4936eec800baefb4ee1355ad0577411bd6",
     "config_hash": "a044b5d44490ad9125d04f2a40743929cd534c197b67caf39f946831d2350fe8"
   },
   "actor_contract": {
@@ -45,7 +45,6 @@
   },
   "fixture": {
     "report_schema": "issue_8068_goal_posterior_actor_smoke.v1",
-    "report_sha256": "e3ac7f1a3273e6184f874d6d1c5f138820bac08e9b49ab11af32cbaeb0177064",
     "deterministic_replay": "passed: two report emissions have identical SHA-256",
     "rotated_cases": "passed: five base/rotated pairs have ID-equivalent probability vectors",
     "cases": [

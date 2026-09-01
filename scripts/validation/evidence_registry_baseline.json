@@ -361,9 +361,6 @@
     },
     "docs/context/evidence/issue_7322_ch7_evidence_package_v2/review/source_verification.json": {
       "hash_without_artifact_path": 1
-    },
-    "docs/context/evidence/issue_8068_goal_posterior_actor_smoke_receipt.v1.json": {
-      "hash_without_artifact_path": 1
     }
   },
   "generated_at": "2026-09-01T13:48:20Z",
@@ -375,14 +372,14 @@
       "config_missing_at_commit": 6,
       "dangling_commit": 20,
       "duplicate_campaign_id": 7,
-      "hash_without_artifact_path": 102,
+      "hash_without_artifact_path": 101,
       "invalid_sha256": 1,
       "missing_commit": 27,
       "missing_config_path": 49,
       "missing_config_sha256": 53,
       "uncommitted_artifact_missing_location": 150
     },
-    "files_with_findings": 96,
-    "total_findings": 430
+    "files_with_findings": 95,
+    "total_findings": 429
   }
 }

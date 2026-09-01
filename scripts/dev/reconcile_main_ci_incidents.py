@@ -616,7 +616,7 @@ def reconcile_batch(
         }
     try:
         runs = (run_fetcher or fetch_runs)(repo, workflow, run_limit)
-    except Exception as exc:
+    except (RuntimeError, json.JSONDecodeError) as exc:
         raise ReconciliationError(f"main-CI run fetch failed: {exc}") from exc
     if not isinstance(runs, list):
         raise ReconciliationError("main-CI run fetch returned a non-list payload")

@@ -76,7 +76,31 @@ def test_gate_issue_adds_and_verifies_readiness_on_pass() -> None:
         remote="origin",
         source_ref="origin/main",
         check_only=True,
+        prospective_ready=True,
     )
+
+
+def test_gate_issue_does_not_synthesize_readiness_for_existing_state_labels() -> None:
+    """Existing state labels remain governed by the normal admission classification."""
+    issue = _issue(8108, labels=["state:working"])
+    with (
+        patch.object(issue_readiness_gate.gh_issue_rest, "fetch_issue", return_value=issue),
+        patch.object(issue_readiness_gate.goal_issue_admission, "admit_issue") as admit,
+        patch.object(issue_readiness_gate.gh_pr_label_rest, "add_label") as add_label,
+    ):
+        admit.return_value = _not_ready_admission(8108, "working")
+        payload = issue_readiness_gate.gate_issue(8108, repo="ll7/robot_sf_ll7")
+
+    assert payload["outcome"] == "working"
+    admit.assert_called_once_with(
+        8108,
+        repo="ll7/robot_sf_ll7",
+        remote="origin",
+        source_ref="origin/main",
+        check_only=True,
+        prospective_ready=False,
+    )
+    add_label.assert_not_called()
 
 
 def test_gate_issue_never_labels_when_admission_fails() -> None:

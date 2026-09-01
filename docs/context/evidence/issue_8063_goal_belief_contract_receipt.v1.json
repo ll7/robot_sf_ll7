@@ -151,19 +151,19 @@
   },
   "validation": [
     {
-      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/prediction/test_goal_belief_contract.py tests/sim/test_pedestrian_goal_transition_timing.py tests/benchmark/test_goal_belief_force_trace_contract.py -q",
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/prediction/test_goal_belief_contract.py tests/sim/test_pedestrian_goal_transition_timing.py tests/prediction/test_oracle_transition_trace_contract.py -q",
       "result": "20 passed"
     },
     {
-      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/prediction tests/sim/test_pedestrian_goal_transition_timing.py tests/sim/test_simulator_action_count.py tests/sim/test_residual_adversary_wiring.py tests/benchmark/test_goal_belief_force_trace_contract.py -q",
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/prediction tests/sim/test_pedestrian_goal_transition_timing.py tests/sim/test_simulator_action_count.py tests/sim/test_residual_adversary_wiring.py tests/prediction/test_oracle_transition_trace_contract.py -q",
       "result": "63 passed"
     },
     {
-      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check robot_sf/prediction tests/prediction/test_goal_belief_contract.py tests/benchmark/test_goal_belief_force_trace_contract.py tests/sim/test_pedestrian_goal_transition_timing.py",
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check robot_sf/prediction tests/prediction/test_goal_belief_contract.py tests/prediction/test_oracle_transition_trace_contract.py tests/sim/test_pedestrian_goal_transition_timing.py",
       "result": "All checks passed"
     },
     {
-      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run ruff format --check robot_sf/prediction tests/prediction/test_goal_belief_contract.py tests/benchmark/test_goal_belief_force_trace_contract.py tests/sim/test_pedestrian_goal_transition_timing.py",
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run ruff format --check robot_sf/prediction tests/prediction/test_goal_belief_contract.py tests/prediction/test_oracle_transition_trace_contract.py tests/sim/test_pedestrian_goal_transition_timing.py",
       "result": "8 files already formatted"
     },
     {

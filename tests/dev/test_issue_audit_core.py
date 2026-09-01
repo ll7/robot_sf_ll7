@@ -161,6 +161,57 @@ def test_terminal_review_status_replaces_stale_dispatch_state() -> None:
     }
 
 
+def test_canonical_ruling_supersedes_older_terminal_review_status() -> None:
+    """A reviewed result does not return to the decision queue after its ruling."""
+    issue = _issue(6095, body="Owner decision required: classify the completed report.")
+    issue["comments"] = [
+        {
+            "body": "Report status: diagnostic_ready_for_domain_review",
+            "created_at": "2026-08-15T10:00:00Z",
+        },
+        {
+            "body": "ll7/robot_sf_ll7#6095: approve-bounded-diagnostic",
+            "created_at": "2026-08-16T10:00:00Z",
+        },
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:review", "decision-required"},
+    )
+
+    assert classification.terminal_review_evidence == ()
+    assert classification.decision_required is False
+    assert classification.mutations == ()
+
+
+def test_new_terminal_review_status_after_ruling_reopens_review_gate() -> None:
+    """A later completed run still returns to review after an older ruling."""
+    issue = _issue(6095)
+    issue["comments"] = [
+        {
+            "body": "ll7/robot_sf_ll7#6095: approve-bounded-diagnostic",
+            "created_at": "2026-08-16T10:00:00Z",
+        },
+        {
+            "body": "Report status: diagnostic_ready_for_domain_review",
+            "created_at": "2026-08-17T10:00:00Z",
+        },
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:review", "decision-required"},
+    )
+
+    assert classification.terminal_review_evidence
+    assert classification.decision_required is True
+    assert {mutation["value"] for mutation in classification.mutations} == {
+        "state:review",
+        "decision-required",
+    }
+
+
 def test_terminal_review_status_does_not_hide_active_execution() -> None:
     """A visible active job keeps terminal-status evidence fail-closed."""
     issue = _issue(125, labels=["state:ready"])
@@ -423,6 +474,31 @@ def test_canonical_same_issue_ruling_suppresses_older_decision_prompt() -> None:
 
     assert classification.decision_required is False
     assert classification.mutations == ()
+
+
+def test_conditional_reopen_clause_after_ruling_does_not_reopen_gate() -> None:
+    """A ruling's revival condition is not itself a fresh maintainer request."""
+    issue = _issue(6155, body="Owner decision required: authorize publication.")
+    issue["comments"] = [
+        {
+            "body": (
+                "ll7/robot_sf_ll7#6155: approve-exact-publication\n\n"
+                "Any byte, manifest, rights, or target-SHA drift reopens the release decision."
+            ),
+            "created_at": "2026-08-31T12:00:00Z",
+        }
+    ]
+
+    classification = classify_issue(
+        issue,
+        available_labels={"state:blocked", "decision-required"},
+    )
+
+    assert classification.decision_required is False
+    assert not any(
+        mutation["operation"] == "add_label" and mutation["value"] == "decision-required"
+        for mutation in classification.mutations
+    )
 
 
 def test_decision_request_after_canonical_ruling_reopens_gate() -> None:

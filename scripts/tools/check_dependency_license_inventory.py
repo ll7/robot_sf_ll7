@@ -48,6 +48,12 @@ SCHEMA_VERSION = "robot-sf.dependency-license-inventory.v1"
 # invalidating otherwise compatible inventory fields.
 SUMMARY_CONTRACT_VERSION = "robot-sf.dependency-license-inventory-summary.v2"
 _LEGACY_SUMMARY_CONTRACT_VERSION = "robot-sf.dependency-license-inventory-summary.v1"
+_DEPENDENCY_RECEIPT_SCHEMA_VERSION = "robot-sf.issue-8163-dependency-license-batch.receipt.v1"
+_DEPENDENCY_RECEIPT_SCHEMA_VERSION_V2 = "robot-sf.issue-8163-dependency-license-batch.receipt.v2"
+_DEPENDENCY_RECEIPT_SCHEMA_VERSIONS = {
+    _DEPENDENCY_RECEIPT_SCHEMA_VERSION,
+    _DEPENDENCY_RECEIPT_SCHEMA_VERSION_V2,
+}
 CANONICAL_PROFILE_MANIFEST = "scripts/validation/dependency_license_profiles.v1.json"
 CANONICAL_POLICY = "scripts/validation/dependency_license_policy.v1.json"
 CANONICAL_GENERATOR = "scripts/tools/check_dependency_license_inventory.py"
@@ -320,6 +326,7 @@ def _strict_report_summary_contract_issues(  # noqa: C901 - fail-closed summary 
     *,
     receipt_status: Any,
     expected_policy_count: int,
+    contract_version: str | None = None,
 ) -> list[str]:
     """Validate receipt summary accounting, including the v2 split counts.
 
@@ -327,8 +334,9 @@ def _strict_report_summary_contract_issues(  # noqa: C901 - fail-closed summary 
     unresolved finding messages to equal the number of effective pending
     package rows. Contract v2 binds those independent counts and records
     structural findings, which are included in ``unresolved_count`` but kept
-    separately for diagnostics. Receipts without the marker retain the old
-    equality check for backwards compatibility and fail closed on ambiguity.
+    separately for diagnostics. Legacy v1 receipts without the marker retain
+    the old equality check for backwards compatibility and fail closed on
+    ambiguity; v2 receipt schemas select the new contract explicitly.
     """
     issues: list[str] = []
     if summary.get("policy_exact_disposition_count") != expected_policy_count:
@@ -344,7 +352,9 @@ def _strict_report_summary_contract_issues(  # noqa: C901 - fail-closed summary 
     if not isinstance(unresolved, int) or isinstance(unresolved, bool) or unresolved < 0:
         issues.append("dependency receipt strict_report unresolved count is invalid")
 
-    contract = summary.get("summary_contract_version", _LEGACY_SUMMARY_CONTRACT_VERSION)
+    contract = summary.get("summary_contract_version", contract_version)
+    if contract is None:
+        contract = _LEGACY_SUMMARY_CONTRACT_VERSION
     if contract not in (_LEGACY_SUMMARY_CONTRACT_VERSION, SUMMARY_CONTRACT_VERSION):
         issues.append("dependency receipt strict_report summary contract is unsupported")
     elif contract == _LEGACY_SUMMARY_CONTRACT_VERSION:
@@ -3038,6 +3048,8 @@ def _receipt_contract_issues(  # noqa: C901, PLR0912, PLR0915
     policy: dict[str, Any],
     policy_binding: dict[str, Any],
     repo_root: Path,
+    *,
+    receipt_schema_version: str,
 ) -> list[str]:
     """Validate receipt summaries against the immutable policy and bound files."""
     issues: list[str] = []
@@ -3314,6 +3326,11 @@ def _receipt_contract_issues(  # noqa: C901, PLR0912, PLR0915
                     summary,
                     receipt_status=receipt.get("status"),
                     expected_policy_count=len(policy.get("package_dispositions", [])),
+                    contract_version=(
+                        SUMMARY_CONTRACT_VERSION
+                        if receipt_schema_version == _DEPENDENCY_RECEIPT_SCHEMA_VERSION_V2
+                        else None
+                    ),
                 )
             )
             expected_exit = 2 if summary.get("status") == "blocked" else 0
@@ -3437,7 +3454,8 @@ def validate_dependency_license_receipt(  # noqa: C901, PLR0912, PLR0915
         receipt = _read_json(receipt_path)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         return [f"dependency receipt could not be read: {exc}"]
-    if receipt.get("schema_version") != "robot-sf.issue-8163-dependency-license-batch.receipt.v1":
+    receipt_schema_version = receipt.get("schema_version")
+    if receipt_schema_version not in _DEPENDENCY_RECEIPT_SCHEMA_VERSIONS:
         issues.append("dependency receipt has an unsupported schema_version")
 
     policy_path = repo_root / CANONICAL_POLICY
@@ -3448,7 +3466,16 @@ def validate_dependency_license_receipt(  # noqa: C901, PLR0912, PLR0915
         return [f"dependency receipt policy binding could not be computed: {exc}"]
     issues.extend(policy_issues)
     try:
-        issues.extend(_receipt_contract_issues(receipt, policy, policy_binding, repo_root))
+        if isinstance(receipt_schema_version, str):
+            issues.extend(
+                _receipt_contract_issues(
+                    receipt,
+                    policy,
+                    policy_binding,
+                    repo_root,
+                    receipt_schema_version=receipt_schema_version,
+                )
+            )
     except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as exc:
         issues.append(f"dependency receipt contract could not be checked: {exc}")
     binding = receipt.get("review_binding")

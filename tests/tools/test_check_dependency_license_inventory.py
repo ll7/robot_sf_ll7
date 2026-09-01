@@ -841,6 +841,7 @@ def test_v2_receipt_summary_separates_findings_and_pending_rows() -> None:
             summary,
             receipt_status="blocked",
             expected_policy_count=37,
+            contract_version=SUMMARY_CONTRACT_VERSION,
         )
         == []
     )

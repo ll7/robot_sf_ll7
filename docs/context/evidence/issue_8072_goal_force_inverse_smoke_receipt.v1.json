@@ -42,7 +42,7 @@
       "covariance_coverage_95": null,
       "saturation_status": "clear",
       "censoring_state": "unknown",
-      "runtime_ms": 0.8090350311249495,
+      "runtime_ms": 0.5073228385299444,
       "estimate_digest": "7e8367bd85128674c4fcd82b5b660aa7cfb14be2e53a45291109ed558060f391"
     },
     "h2_observation_reconstructed": {
@@ -56,7 +56,7 @@
       "covariance_coverage_95": true,
       "saturation_status": "clear",
       "censoring_state": "none",
-      "runtime_ms": 1.0164661798626184,
+      "runtime_ms": 0.6411841604858637,
       "estimate_digest": "963ec9cd71d5aaff637ce261415f93ee1442845ed1cb9514e24681a81f17d951"
     },
     "h3_observation_reconstructed": {
@@ -70,7 +70,7 @@
       "covariance_coverage_95": true,
       "saturation_status": "clear",
       "censoring_state": "none",
-      "runtime_ms": 1.0223269928246737,
+      "runtime_ms": 0.6678139325231314,
       "estimate_digest": "b9cdfb6ee0bd74602bbc10fb98b8e4f2d5e8cb3f0d0b63bd362bf9e312953c06"
     },
     "oracle_component_upper_bound": {
@@ -84,11 +84,11 @@
       "covariance_coverage_95": true,
       "saturation_status": "clear",
       "censoring_state": "none",
-      "runtime_ms": 0.3716731444001198,
+      "runtime_ms": 0.2510820049792528,
       "estimate_digest": "df4716c7dc82f82285087492cc07b0d67211d06f76a19b6ab72b5ecc7d55ffee"
     }
   },
-  "full_report_digest": "ba388f611f1045a524df69b191ffd26a256ddd49d76f7a614158a4611ad96441",
+  "full_report_digest": "48734748a6113dce7d46a1ca675a5498498305a40d08399a8872d417fe0c1649",
   "full_report_pointer": "output/validation/goal_force_inverse_smoke.json",
   "full_report_status": "ignored_worktree_local",
   "limitations": [

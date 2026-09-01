@@ -129,7 +129,8 @@ from a trusted checkout of the same helper/schema revision:
 python scripts/dev/software_candidate_manifest.py verify \
   --bundle-dir /path/to/downloaded/bundle \
   --expected-source-sha <exact-40-hex-source-sha> \
-  --expected-workflow-run-id <exact-decimal-run-id>
+  --expected-workflow-run-id <exact-decimal-run-id> \
+  --expected-workflow-run-attempt <positive-attempt-number>
 ```
 
 `verify` has no build-tool or network dependency. It fails on missing, additional, duplicated,

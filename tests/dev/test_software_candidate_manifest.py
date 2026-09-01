@@ -916,6 +916,8 @@ def test_verify_rejects_missing_unclassified_or_hash_drifted_bundle_members(
         source_sha,
         "--expected-workflow-run-id",
         "123456",
+        "--expected-workflow-run-attempt",
+        "1",
         check=False,
     )
 
@@ -941,6 +943,8 @@ def test_verify_rejects_duplicate_manifest_filenames(tmp_path: Path) -> None:
         source_sha,
         "--expected-workflow-run-id",
         "123456",
+        "--expected-workflow-run-attempt",
+        "1",
         check=False,
     )
 
@@ -966,6 +970,8 @@ def test_verify_rejects_nonfinite_candidate_manifest_without_mutating_bundle(
         source_sha,
         "--expected-workflow-run-id",
         "123456",
+        "--expected-workflow-run-attempt",
+        "1",
         check=False,
     )
 
@@ -1006,6 +1012,8 @@ def test_verify_rejects_nonfinite_normalised_sbom_without_mutating_bundle(
         source_sha,
         "--expected-workflow-run-id",
         "123456",
+        "--expected-workflow-run-attempt",
+        "1",
         check=False,
     )
 
@@ -1039,6 +1047,8 @@ def test_verify_rejects_nonfinite_provenance_without_mutating_bundle(
         source_sha,
         "--expected-workflow-run-id",
         "123456",
+        "--expected-workflow-run-attempt",
+        "1",
         check=False,
     )
 
@@ -1057,6 +1067,8 @@ def test_verify_rejects_source_and_workflow_run_drift(tmp_path: Path) -> None:
         "f" * 40,
         "--expected-workflow-run-id",
         "123456",
+        "--expected-workflow-run-attempt",
+        "1",
         check=False,
     )
     run_drift = _run(
@@ -1067,6 +1079,8 @@ def test_verify_rejects_source_and_workflow_run_drift(tmp_path: Path) -> None:
         source_sha,
         "--expected-workflow-run-id",
         "999999",
+        "--expected-workflow-run-attempt",
+        "1",
         check=False,
     )
     attempt_drift = _run(
@@ -1108,6 +1122,8 @@ def test_schema_accepts_emitted_manifest_and_invalid_schema_fails_closed(tmp_pat
         source_sha,
         "--expected-workflow-run-id",
         "123456",
+        "--expected-workflow-run-attempt",
+        "1",
         "--schema",
         str(invalid_schema),
         check=False,
@@ -1133,6 +1149,8 @@ def test_schema_rejects_nonfinite_json_before_contract_validation(tmp_path: Path
         source_sha,
         "--expected-workflow-run-id",
         "123456",
+        "--expected-workflow-run-attempt",
+        "1",
         "--schema",
         str(poisoned_path),
         check=False,
@@ -1158,6 +1176,8 @@ def test_verify_rejects_syntactically_valid_weakened_schema(tmp_path: Path) -> N
         source_sha,
         "--expected-workflow-run-id",
         "123456",
+        "--expected-workflow-run-attempt",
+        "1",
         "--schema",
         str(poisoned_path),
         check=False,
@@ -1178,6 +1198,8 @@ def test_verify_is_offline_and_has_no_build_tool_dependency(tmp_path: Path) -> N
         source_sha,
         "--expected-workflow-run-id",
         "123456",
+        "--expected-workflow-run-attempt",
+        "1",
         env={**os.environ, "PATH": ""},
     )
 

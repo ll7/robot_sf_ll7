@@ -60,10 +60,7 @@ def test_workflow_is_manual_and_least_privilege_by_default() -> None:
         for step in verify_steps
         if step.get("name") == "Require the protected main-branch workflow"
     )
-    assert (
-        "Require the protected main-branch workflow"
-        in protected_step["name"]
-    )
+    assert "Require the protected main-branch workflow" in protected_step["name"]
     assert '"refs/heads/main"' in protected_step["run"]
     checkout_steps = [
         step

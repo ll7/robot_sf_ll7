@@ -406,9 +406,7 @@ def _mutate_dependency_report(bundle: Path, mutation: Callable[[dict[str, Any]],
     receipt["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
         report_path.read_bytes()
     ).hexdigest()
-    receipt_path.write_text(
-        json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def test_candidate_verification_rejects_wrong_artifact_identity(tmp_path: Path) -> None:

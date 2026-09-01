@@ -273,7 +273,7 @@ def _candidate(
                 "summary": {
                     "candidate_bound": True,
                     "selected_package_count": 155,
-                    "policy_pending_package_count": 154,
+                    "policy_pending_package_count": 118,
                     "structural_issue_count": 0,
                     "status": "complete",
                     "unresolved_count": 0,

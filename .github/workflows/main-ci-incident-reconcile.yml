@@ -1,0 +1,53 @@
+name: Main CI incident reconciliation
+
+# Reconcile only stale, canonical main-red incidents. The script is
+# report-only by default; this scheduled entry point is the explicit apply lane
+# and keeps active or pending incidents untouched.
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+concurrency:
+  group: main-ci-incident-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+        with:
+          migrate-artifacts: "false"
+
+      - name: Reconcile stale main-CI incidents
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          uv run python scripts/dev/reconcile_main_ci_incidents.py
+          --repo "${{ github.repository }}"
+          --workflow CI
+          --apply
+          --json
+          --output output/main-ci-incidents/report.json
+
+      - name: Upload reconciliation report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: main-ci-incident-reconciliation
+          path: output/main-ci-incidents/report.json
+          retention-days: 30
+          if-no-files-found: error

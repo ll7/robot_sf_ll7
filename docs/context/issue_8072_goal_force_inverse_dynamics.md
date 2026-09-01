@@ -47,7 +47,10 @@ scripts/dev/run_worktree_shared_venv.sh -- python \
 The smoke reports separate H=1, H=2, H=3, and oracle arms, candidate-provider/config/source
 digests, force error, angular error, covariance coverage, component availability, cap/censoring
 state, runtime, and the oracle-goal randomization canary. The compact tracked receipt is
-[`evidence/issue_8072_goal_force_inverse_smoke_receipt.v1.json`](evidence/issue_8072_goal_force_inverse_smoke_receipt.v1.json).
+[`evidence/issue_8072_goal_force_inverse_smoke_receipt.v1.json`](evidence/issue_8072_goal_force_inverse_smoke_receipt.v1.json),
+with its exact-byte review provenance in the adjacent
+[`evidence/issue_8072_goal_force_inverse_smoke_receipt.v1.json.review.json`](evidence/issue_8072_goal_force_inverse_smoke_receipt.v1.json.review.json)
+sidecar.
 
 Observed on the deterministic synthetic fixture: H=2 and H=3 recovered the configured force to
 floating-point tolerance, the oracle arm recovered its exact configured component, and the

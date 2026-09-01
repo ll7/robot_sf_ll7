@@ -1376,19 +1376,6 @@ def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-clos
                 local_labels.add("state:ready")
                 if issue_number in snapshots:
                     snapshots[issue_number]["labels"] = sorted(local_labels)
-                add_operation(
-                    {
-                        "issue": issue,
-                        "kind": "readiness_gate",
-                        "action": _READINESS_GATE_ACTION,
-                        "operation": "written" if outcome == "ready" else "idempotent",
-                        "outcome": outcome,
-                        "verified": True,
-                        "expected_body_sha256": gate_operation.get("expected_body_sha256"),
-                        "expected_labels": sorted(expected_labels),
-                        "observed_labels_after": sorted(local_labels),
-                    }
-                )
                 if issue_reader is not None:
                     try:
                         gate_after = _normalize_issue_snapshot(
@@ -1429,6 +1416,19 @@ def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-clos
                         break
                     snapshots[issue_number] = gate_after
                     local_labels = set(gate_after["labels"])
+                add_operation(
+                    {
+                        "issue": issue,
+                        "kind": "readiness_gate",
+                        "action": _READINESS_GATE_ACTION,
+                        "operation": "written" if outcome == "ready" else "idempotent",
+                        "outcome": outcome,
+                        "verified": True,
+                        "expected_body_sha256": expected_body_sha256,
+                        "expected_labels": sorted(expected_labels),
+                        "observed_labels_after": sorted(local_labels),
+                    }
+                )
 
         if aborted:
             if body_proposed:

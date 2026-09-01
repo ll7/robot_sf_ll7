@@ -3619,7 +3619,9 @@ def _exact_policy_coverage_failures(
         }
         if selected_profile_ids is not None:
             actual_profiles &= selected_profile_ids
-        actual_profiles = _effective_profile_coverage(actual_profiles, expected_profiles)
+        is_full_context = selected_profile_ids is None or selected_profile_ids == profile_ids
+        if is_full_context:
+            actual_profiles = _effective_profile_coverage(actual_profiles, expected_profiles)
         if not matches:
             failures.append(f"package disposition {policy_id} has no matching lock row")
         elif actual_profiles != expected_profiles:

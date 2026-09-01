@@ -440,7 +440,6 @@ _FAST_FILES = {
     # Tracker-to-goal-belief adapter tests are deterministic observation-contract
     # coverage; keep them in fast PR shards for the exact-head changed-coverage gate.
     "test_tracker_goal_belief_adapter.py",
-
     # One-frame heading posterior and actor/oracle boundary tests are deterministic
     # contract coverage for the observation-only research baseline (issue #8068).
     "test_goal_intention.py",

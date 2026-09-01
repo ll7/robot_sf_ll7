@@ -21,6 +21,7 @@ from scripts.dev.software_promotion import PromotionError, _distribution_extras
 from scripts.tools.check_dependency_license_inventory import (
     _report_content_digest,
     build_inventory,
+    selected_policy_pending_package_count,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -280,11 +281,8 @@ def _candidate(
         "summary": {
             "candidate_bound": True,
             "selected_package_count": CANONICAL_INVENTORY["summary"]["selected_package_count"],
-            "policy_pending_package_count": sum(
-                1
-                for package in CANONICAL_INVENTORY["packages"]
-                if package.get("selected_profiles")
-                and package.get("policy_disposition") == "review_required"
+            "policy_pending_package_count": selected_policy_pending_package_count(
+                CANONICAL_INVENTORY["packages"]
             ),
             "structural_issue_count": 0,
             "status": "complete",

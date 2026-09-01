@@ -87,3 +87,39 @@ def test_global_frame_translation_is_applied_only_to_positions() -> None:
     velocity = transform_velocity_to_global_xy(np.array([[1.0, 2.0]]), "global_xy", pose)
     np.testing.assert_allclose(point, [[1.0, 2.0]])
     np.testing.assert_allclose(velocity, [[1.0, 2.0]])
+
+
+@pytest.mark.parametrize(
+    "transform",
+    [transform_history_to_global_xy, transform_history_from_global_xy],
+)
+def test_empty_history_still_validates_shape_and_frame(transform) -> None:
+    """Empty history batches retain the same fail-closed shape and frame checks as non-empty ones."""
+    with pytest.raises(ValueError, match="final shape dimension 2"):
+        transform(np.empty((0, 3)), "global_xy", ())
+    with pytest.raises(ValueError, match="coordinate_frame"):
+        transform(np.empty((0, 2)), "camera", ())
+
+    result = transform(np.empty((0, 2)), "global_xy", ())
+    assert result.shape == (0, 2)
+
+
+def test_empty_covariance_history_rejects_malformed_shape() -> None:
+    """An empty covariance history cannot bypass its final matrix-shape contract."""
+    with pytest.raises(ValueError, match=r"final shape \(2, 2\)"):
+        transform_history_to_global_xy(
+            np.empty((0, 2, 3)),
+            "global_xy",
+            (),
+            value_kind="covariance",
+        )
+
+
+def test_covariance_roundoff_is_projected_to_positive_semidefinite() -> None:
+    """Tiny numerical negative eigenvalues are clamped without accepting an indefinite input."""
+    covariance = np.array([[[1.0, 1.0], [1.0, 1.0 - 5e-8]]])
+    normalized = transform_covariance_to_global_xy(
+        covariance, "global_xy", RobotPoseGlobal(np.zeros(2), 0.0)
+    )
+
+    assert np.min(np.linalg.eigvalsh(normalized)) >= -1e-12

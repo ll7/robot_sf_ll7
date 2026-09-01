@@ -2193,6 +2193,7 @@ def test_gh_comment_current_resolves_pr_via_rest(tmp_path: Path) -> None:
     env = os.environ.copy()
     env["PATH"] = f"{fake_bin}:{env['PATH']}"
     env["GH_COMMENT_CALLS"] = str(calls)
+    env["GITHUB_HEAD_REF"] = "test-current-branch"
 
     result = subprocess.run(
         [
@@ -2232,7 +2233,7 @@ def test_gh_comment_current_resolves_pr_via_rest(tmp_path: Path) -> None:
     )
     tracked_branch = local_branch
     if not tracked_branch:
-        tracked_branch = os.environ.get("GITHUB_HEAD_REF") or os.environ.get("GITHUB_REF_NAME", "")
+        tracked_branch = env.get("GITHUB_HEAD_REF") or env.get("GITHUB_REF_NAME", "")
     if upstream.returncode == 0 and "/" in upstream.stdout.strip():
         tracked_branch = upstream.stdout.strip().split("/", maxsplit=1)[1]
     assert len(call_lines) == 3

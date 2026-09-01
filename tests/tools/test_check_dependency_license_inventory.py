@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from scripts.tools.check_dependency_license_inventory import (
+    SUMMARY_CONTRACT_VERSION,
     SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS,
     _archive_audit_semantic_issues,
     _archive_notice_paths,
@@ -32,6 +33,7 @@ from scripts.tools.check_dependency_license_inventory import (
     _policy_records,
     _policy_source_matches,
     _report_content_digest,
+    _strict_report_summary_contract_issues,
     _upstream_tags_semantic_issues,
     build_inventory,
     check_report_freshness,
@@ -796,6 +798,70 @@ def test_policy_pending_package_count_counts_rows_not_failure_messages() -> None
     assert expected == 119
     assert inventory["summary"]["policy_pending_package_count"] == expected
     assert inventory["summary"]["policy_pending_package_count"] != 155
+
+
+def test_policy_pending_count_excludes_pending_external_policy_rows() -> None:
+    """Pending review status does not turn an external disposition into review-required."""
+    root = Path(__file__).resolve().parents[2]
+    policy = json.loads(
+        (root / "scripts/validation/dependency_license_policy.v1.json").read_text(encoding="utf-8")
+    )
+    pending_exact = [
+        row for row in policy["package_dispositions"] if row.get("status") == "pending_review"
+    ]
+    assert len(pending_exact) == 36
+    assert all(
+        row.get("disposition") == "external_dependency_not_redistributed" for row in pending_exact
+    )
+
+    inventory = build_inventory(root, distributions=[], selected_profile_ids=["all"])
+    selected_rows = [row for row in inventory["packages"] if row.get("selected_profiles")]
+    assert (
+        sum(
+            row.get("policy_disposition") == "external_dependency_not_redistributed"
+            for row in selected_rows
+        )
+        == 37
+    )
+    assert selected_policy_pending_package_count(selected_rows) == 119
+
+
+def test_v2_receipt_summary_separates_findings_and_pending_rows() -> None:
+    """Multiple findings and structural diagnostics do not collapse into one count."""
+    summary = {
+        "policy_exact_disposition_count": 37,
+        "policy_pending_package_count": 119,
+        "unresolved_count": 255,
+        "structural_issue_count": 2,
+        "summary_contract_version": SUMMARY_CONTRACT_VERSION,
+        "status": "blocked",
+    }
+    assert (
+        _strict_report_summary_contract_issues(
+            summary,
+            receipt_status="blocked",
+            expected_policy_count=37,
+        )
+        == []
+    )
+
+    legacy = copy.deepcopy(summary)
+    legacy.pop("summary_contract_version")
+    issues = _strict_report_summary_contract_issues(
+        legacy,
+        receipt_status="blocked",
+        expected_policy_count=37,
+    )
+    assert any("unresolved count differs from pending count" in issue for issue in issues)
+
+    forged = copy.deepcopy(summary)
+    forged["structural_issue_count"] = 256
+    issues = _strict_report_summary_contract_issues(
+        forged,
+        receipt_status="blocked",
+        expected_policy_count=37,
+    )
+    assert any("structural count exceeds unresolved count" in issue for issue in issues)
 
 
 def test_freshness_fails_when_a_locked_input_changes(tmp_path: Path) -> None:

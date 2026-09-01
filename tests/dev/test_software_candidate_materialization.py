@@ -301,6 +301,7 @@ def test_real_materialized_candidate_build_has_only_supported_extras(tmp_path: P
     rights_selection = rights_policy["source_selection"]
     assert rights_selection["allow_globs"].count("scripts/__init__.py") == 1
     assert rights_selection["required_paths"].count("scripts/__init__.py") == 1
+    assert "scripts/**" not in rights_selection["allow_globs"]
     report_payload = json.loads(report.read_text(encoding="utf-8"))
     source_marker = source / "scripts/__init__.py"
     candidate_marker = candidate / "scripts/__init__.py"

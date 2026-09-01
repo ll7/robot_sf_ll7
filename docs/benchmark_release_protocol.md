@@ -117,18 +117,35 @@ The release claim boundary must also state:
 A future `benchmark-data` v0.2 release must not try to record the SHA of the
 commit containing its own tracked manifest. Instead, review and commit a stable
 template, then generate the release identity from that exact clean commit after
-the publication coordinates are available. The tracked template:
+the publication coordinates are available. Use these tracked files:
+
+- `configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml`
+  is the reusable release-identity template;
+- `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml`
+  is its identity-slot campaign template; and
+- `configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.template.json`
+  is the matching benchmark-only Zenodo metadata template.
+
+The resolver derives `latest_main_base_commit` (and the optional
+`planning_base_sha`) from the exact first parent of the selected source commit.
+For a normal squash/merge candidate this is the mainline commit immediately
+before the release change. This avoids following a moving `origin/main` and
+keeps the base identity reproducible in a cold checkout.
+
+The tracked template:
 
 - declares
   `identity_resolution.schema_version: benchmark-release-identity-template.v1`
 - omits `source_sha`
 - uses `{{release_tag}}` for both `release_id` and `release_tag`
+- uses `{{latest_main_base_commit}}` for `latest_main_base_commit` and
+  `planning_base_sha`
 - uses `{{concept_doi}}` and `{{version_doi}}` in the publication block and
   `{{version_doi}}` for `provenance.doi`
 - hashes a campaign template whose `release_tag` and `doi` fields use
   `{{release_tag}}` and `{{version_doi}}`
-- hashes a tracked Zenodo JSON template containing all four identity slots,
-  including `{{source_sha}}`
+- hashes a tracked Zenodo JSON template containing all five identity slots,
+  including `{{source_sha}}` and `{{latest_main_base_commit}}`
 - satisfies the existing open-dataset Zenodo metadata and source-tag contract
 - retains every reviewed scientific input path and SHA-256
 

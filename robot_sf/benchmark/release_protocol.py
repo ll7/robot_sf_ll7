@@ -55,6 +55,7 @@ _ZENODO_DOI_RE = re.compile(r"^10\.5281/zenodo\.[1-9][0-9]*$")
 _RELEASE_IDENTITY_TOKENS = {
     "{{release_tag}}": "release_tag",
     "{{source_sha}}": "source_sha",
+    "{{latest_main_base_commit}}": "latest_main_base_commit",
     "{{concept_doi}}": "concept_doi",
     "{{version_doi}}": "version_doi",
 }
@@ -293,6 +294,39 @@ def _require_source_derived_release_tag(
             raise ValueError("release tag already exists and is not a commit identity")
 
 
+def _source_first_parent(repository_root: Path, source_commit: str) -> str:
+    """Return the exact first parent used as the release's mainline base.
+
+    A future release identity is generated from a candidate commit that is
+    already present in a clean checkout.  The first parent is the stable
+    mainline parent for a normal merge/squash-merge candidate; deriving it
+    from the selected source avoids freezing a moving ``origin/main`` or
+    asking a tracked template to predict its own commit.
+
+    Returns:
+        The full, lowercase first-parent SHA.
+    """
+    raw = (
+        _git_stdout(
+            repository_root,
+            "rev-list",
+            "--parents",
+            "-n",
+            "1",
+            source_commit,
+            label="source commit parent",
+        )
+        .decode("ascii", errors="strict")
+        .strip()
+        .split()
+    )
+    if len(raw) < 2 or _GIT_SHA_RE.fullmatch(raw[1]) is None:
+        raise ValueError(
+            "source_commit must have an exact first parent to derive latest_main_base_commit"
+        )
+    return raw[1].lower()
+
+
 def _require_publication_coordinates(concept_doi: Any, version_doi: Any) -> tuple[str, str]:
     """Validate exact, distinct Zenodo coordinates supplied after source freeze.
 
@@ -309,7 +343,7 @@ def _require_publication_coordinates(concept_doi: Any, version_doi: Any) -> tupl
 
 
 def _replace_identity_tokens(value: Any, replacements: Mapping[str, str]) -> Any:
-    """Recursively replace the four explicit release-template tokens.
+    """Recursively replace the explicit release-template identity tokens.
 
     Returns:
         Copy-safe structure with all identity tokens resolved.
@@ -2389,6 +2423,7 @@ def build_resolved_release_manifest(
         "release_id": manifest.release_id,
         "release_tag": manifest.release_tag,
         "maturity": manifest.maturity,
+        "latest_main_base_commit": manifest.latest_main_base_commit,
         "canonical_campaign_config": _repo_relative(manifest.canonical_campaign_config_path),
         "canonical_campaign_config_sha256": manifest.campaign_config_sha256,
         "canonical_campaign_name": cfg.name,
@@ -2481,6 +2516,7 @@ def build_resolved_release_manifest(
         payload["provenance"]["source_sha"] = source_sha
         payload["provenance"]["source_commit"] = source_sha
     if manifest.planning_base_sha is not None:
+        payload["planning_base_sha"] = manifest.planning_base_sha
         payload["provenance"]["planning_base_sha"] = manifest.planning_base_sha
     if is_diagnostic_stress_smoke(manifest):
         payload["provenance"]["stress_smoke_contract"] = {
@@ -2552,7 +2588,7 @@ def build_resolved_release_manifest(
     return payload
 
 
-def _identity_template_payload(  # noqa: C901
+def _identity_template_payload(  # noqa: C901, PLR0912
     template_path: Path,
     *,
     repository_root: Path,
@@ -2580,6 +2616,7 @@ def _identity_template_payload(  # noqa: C901
     required_slots = {
         "release_id": "{{release_tag}}",
         "release_tag": "{{release_tag}}",
+        "latest_main_base_commit": "{{latest_main_base_commit}}",
     }
     for field, expected in required_slots.items():
         if payload.get(field) != expected:
@@ -2607,6 +2644,10 @@ def _identity_template_payload(  # noqa: C901
         raise ValueError("release template version DOI must use {{version_doi}}")
     if provenance.get("doi") != "{{version_doi}}":
         raise ValueError("release template provenance DOI must use {{version_doi}}")
+    if "planning_base_sha" in payload and payload.get("planning_base_sha") != (
+        "{{latest_main_base_commit}}"
+    ):
+        raise ValueError("release template planning_base_sha must use {{latest_main_base_commit}}")
 
     metadata_template = _resolve_required_file(
         template_path,
@@ -2656,6 +2697,7 @@ def _materialize_release_template_payload(  # noqa: PLR0913
     metadata_path: Path,
     metadata_sha256: str,
     source_commit: str,
+    latest_main_base_commit: str,
     release_tag: str,
     concept_doi: str,
     version_doi: str,
@@ -2669,6 +2711,7 @@ def _materialize_release_template_payload(  # noqa: PLR0913
     replacements = {
         "release_tag": release_tag,
         "source_sha": source_commit,
+        "latest_main_base_commit": latest_main_base_commit,
         "concept_doi": concept_doi,
         "version_doi": version_doi,
     }
@@ -2677,6 +2720,9 @@ def _materialize_release_template_payload(  # noqa: PLR0913
     payload["release_id"] = release_tag
     payload["release_tag"] = release_tag
     payload["source_sha"] = source_commit
+    payload["latest_main_base_commit"] = latest_main_base_commit
+    if "planning_base_sha" in template_payload:
+        payload["planning_base_sha"] = latest_main_base_commit
 
     payload["canonical_campaign_config"] = _absolute_template_file(
         template_path,
@@ -2766,6 +2812,7 @@ def _build_resolved_release_identity(
     replacements = {
         "release_tag": release_tag,
         "source_sha": source_commit,
+        "latest_main_base_commit": _source_first_parent(repository_root, source_commit),
         "concept_doi": concept_doi,
         "version_doi": version_doi,
     }
@@ -2800,6 +2847,7 @@ def _build_resolved_release_identity(
             metadata_path=scratch_metadata,
             metadata_sha256=metadata_sha256,
             source_commit=source_commit,
+            latest_main_base_commit=replacements["latest_main_base_commit"],
             release_tag=release_tag,
             concept_doi=concept_doi,
             version_doi=version_doi,

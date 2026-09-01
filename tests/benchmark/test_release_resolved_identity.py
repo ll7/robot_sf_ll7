@@ -8,7 +8,8 @@ import json
 import shutil
 import subprocess
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
@@ -25,9 +26,6 @@ from robot_sf.benchmark.release_tag_identity import derive_sha_tag
 from robot_sf.benchmark.zenodo_publisher import build_release_binding
 from scripts.tools import resolve_benchmark_release_identity as identity_cli
 from scripts.tools import run_benchmark_release
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _sha256(path: Path) -> str:
@@ -61,6 +59,87 @@ def _write_canonical_json(path: Path, payload: object) -> None:
         + "\n",
         encoding="utf-8",
     )
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PUBLIC_RELEASE_TEMPLATE = REPO_ROOT / (
+    "configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml"
+)
+CAMPAIGN_TEMPLATE = REPO_ROOT / (
+    "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml"
+)
+ZENODO_METADATA_TEMPLATE = REPO_ROOT / (
+    "configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.template.json"
+)
+HISTORICAL_RELEASE_IDENTITIES = (
+    "cd831d7582c117ac9529065e7d1c60386933c92d",
+    "paper-matrix-v2-h600-s30-2026-08-cd831d7582c1",
+    "b1d5ab6de708385c0828c99501a9d1c29727ec11",
+    "10.5281/zenodo.19482025",
+    "10.5281/zenodo.19563812",
+    "10.5281/zenodo.22077447",
+    "10.5281/zenodo.22077448",
+)
+
+
+def test_checked_in_future_benchmark_templates_pin_contract_without_historical_identity() -> None:
+    """The reusable templates carry exact science pins and only runtime identities."""
+    manifest_text = PUBLIC_RELEASE_TEMPLATE.read_text(encoding="utf-8")
+    campaign_text = CAMPAIGN_TEMPLATE.read_text(encoding="utf-8")
+    metadata_text = ZENODO_METADATA_TEMPLATE.read_text(encoding="utf-8")
+    manifest = yaml.safe_load(manifest_text)
+    campaign = yaml.safe_load(campaign_text)
+    metadata = json.loads(metadata_text)
+
+    assert manifest["schema_version"] == "benchmark-release-manifest.v0.2"
+    assert manifest["release_kind"] == "benchmark-data"
+    assert manifest["identity_resolution"]["schema_version"] == (
+        RELEASE_IDENTITY_TEMPLATE_SCHEMA_VERSION
+    )
+    assert "source_sha" not in manifest
+    assert manifest["release_id"] == manifest["release_tag"] == "{{release_tag}}"
+    assert manifest["latest_main_base_commit"] == "{{latest_main_base_commit}}"
+    assert manifest["planning_base_sha"] == "{{latest_main_base_commit}}"
+    assert manifest["publication"]["concept_doi"] == "{{concept_doi}}"
+    assert manifest["publication"]["version_doi"] == "{{version_doi}}"
+    assert manifest["provenance"]["doi"] == "{{version_doi}}"
+    assert campaign["release_tag"] == "{{release_tag}}"
+    assert campaign["doi"] == "{{version_doi}}"
+    assert len(campaign["planners"]) == 14
+    assert campaign["horizon"] == 600
+    assert campaign["dt"] == 0.1
+    assert campaign["kinematics_matrix"] == ["differential_drive"]
+    assert metadata["metadata"]["upload_type"] == "dataset"
+    assert metadata["metadata"]["access_right"] == "open"
+    assert metadata["metadata"]["license"] == "GPL-3.0-only"
+    assert "advisory" in metadata["metadata"]["description"].casefold()
+    assert "ranking" in metadata["metadata"]["description"].casefold()
+    assert all(token in metadata_text for token in release_protocol._RELEASE_IDENTITY_TOKENS)
+    assert all(identity not in manifest_text for identity in HISTORICAL_RELEASE_IDENTITIES)
+    assert all(identity not in campaign_text for identity in HISTORICAL_RELEASE_IDENTITIES)
+    assert all(identity not in metadata_text for identity in HISTORICAL_RELEASE_IDENTITIES)
+
+    assert manifest["campaign_config_sha256"] == _sha256(CAMPAIGN_TEMPLATE)
+    assert manifest["publication"]["metadata_sha256"] == _sha256(ZENODO_METADATA_TEMPLATE)
+    assert manifest["matrix"] == {
+        "planner_arms": 14,
+        "scenarios": 48,
+        "seeds": 30,
+        "expected_episode_cells": 20160,
+        "horizon_steps": 600,
+        "dt": 0.1,
+    }
+    assert manifest["scenario"]["matrix_sha256"] == _sha256(
+        REPO_ROOT / "configs/scenarios/classic_interactions_francis2023.yaml"
+    )
+    assert manifest["seed_policy"]["resolved_seeds"] == list(range(111, 141))
+    loaded_template, metadata_path, metadata_bytes = release_protocol._identity_template_payload(
+        PUBLIC_RELEASE_TEMPLATE,
+        repository_root=REPO_ROOT,
+    )
+    assert loaded_template == manifest
+    assert metadata_path == ZENODO_METADATA_TEMPLATE
+    assert metadata_bytes == ZENODO_METADATA_TEMPLATE.read_bytes()
 
 
 def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
@@ -134,7 +213,7 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
                     "description": (
                         "SNQI is advisory and supplies no ranking claim. "
                         "source={{source_sha}} concept={{concept_doi}} "
-                        "version={{version_doi}}"
+                        "version={{version_doi}} base={{latest_main_base_commit}}"
                     ),
                     "related_identifiers": [
                         {
@@ -171,7 +250,8 @@ def _release_template_repository(tmp_path: Path) -> tuple[Path, Path, str]:
             "release_tag": "{{release_tag}}",
             "maturity": "pre-1.0",
             "release_kind": "benchmark-data",
-            "latest_main_base_commit": "a" * 40,
+            "latest_main_base_commit": "{{latest_main_base_commit}}",
+            "planning_base_sha": "{{latest_main_base_commit}}",
             "canonical_campaign_config": "campaign.yaml",
             "campaign_config_sha256": _sha256(campaign),
             "expected_paper_profile_version": "paper-matrix-v1",
@@ -254,8 +334,11 @@ def test_clean_candidate_generates_and_verifies_byte_identical_resolved_identity
     loaded = load_release_manifest(output, repository_root=repo)
     campaign = load_release_campaign_config(loaded, repository_root=repo)
     publication_binding = build_release_binding(loaded)
+    expected_main_parent = _git(repo, "rev-parse", f"{source_commit}^")
     assert verified.source_sha == source_commit
     assert loaded.source_sha == source_commit
+    assert loaded.latest_main_base_commit == expected_main_parent
+    assert loaded.planning_base_sha == expected_main_parent
     assert loaded.release_tag == release_tag
     assert campaign.release_tag == release_tag
     assert campaign.doi == "10.5281/zenodo.99000002"
@@ -339,6 +422,58 @@ def test_generation_rejects_dirty_tree_and_wrong_commit(tmp_path: Path) -> None:
     inputs["release_tag"] = derive_sha_tag("paper-matrix-v2-h600-s30", "f" * 40)
     with pytest.raises(ValueError, match="not reachable"):
         write_resolved_release_identity(output_path=output, **inputs)
+
+
+def test_source_parent_derivation_rejects_a_root_commit(tmp_path: Path) -> None:
+    """A release source must have a reproducible mainline parent."""
+    repo = tmp_path / "root"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.name", "Release Fixture")
+    _git(repo, "config", "user.email", "release-fixture@example.invalid")
+    (repo / "README").write_text("fixture\n", encoding="utf-8")
+    _git(repo, "add", "README")
+    _git(repo, "commit", "-qm", "fixture: root")
+    root_commit = _git(repo, "rev-parse", "HEAD")
+
+    with pytest.raises(ValueError, match="exact first parent"):
+        release_protocol._source_first_parent(repo, root_commit)
+
+
+def test_source_parent_derivation_uses_first_parent_of_a_merge_commit(tmp_path: Path) -> None:
+    """A merge candidate binds the mainline parent, not the second parent."""
+    repo, _template, source_commit = _release_template_repository(tmp_path)
+    _git(repo, "branch", "side", source_commit)
+    _git(repo, "switch", "-c", "candidate", source_commit)
+    (repo / "candidate.txt").write_text("candidate\n", encoding="utf-8")
+    _git(repo, "add", "candidate.txt")
+    _git(repo, "commit", "-qm", "fixture: candidate mainline change")
+    candidate_parent = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "switch", "side")
+    (repo / "side.txt").write_text("side\n", encoding="utf-8")
+    _git(repo, "add", "side.txt")
+    _git(repo, "commit", "-qm", "fixture: side change")
+    side_commit = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "switch", "candidate")
+    _git(repo, "merge", "--no-ff", "-qm", "fixture: merge candidate", "side")
+    merge_commit = _git(repo, "rev-parse", "HEAD")
+
+    assert candidate_parent != side_commit
+    assert _git(repo, "rev-parse", f"{merge_commit}^1") == candidate_parent
+    assert _git(repo, "rev-parse", f"{merge_commit}^2") == side_commit
+    assert release_protocol._source_first_parent(repo, merge_commit) == candidate_parent
+
+
+@pytest.mark.parametrize("field", ["latest_main_base_commit", "planning_base_sha"])
+def test_template_rejects_a_fixed_mainline_base(tmp_path: Path, field: str) -> None:
+    """Tracked templates must derive the base from the selected source commit."""
+    repo, template, _ = _release_template_repository(tmp_path)
+    payload = yaml.safe_load(template.read_text(encoding="utf-8"))
+    payload[field] = "a" * 40
+    _write_yaml(template, payload)
+
+    with pytest.raises(ValueError, match=f"{field}.*(?:explicit|use)"):
+        release_protocol._identity_template_payload(template, repository_root=repo)
 
 
 @pytest.mark.parametrize(
@@ -642,6 +777,7 @@ def test_generate_and_verify_command_reports_exact_artifact_digests(
     generated = json.loads(capsys.readouterr().out)
     assert generated["status"] == "generated"
     assert generated["identity_sha256"] == _sha256(output)
+    assert generated["latest_main_base_commit"] == _git(repo, "rev-parse", f"{source_commit}^")
 
     assert (
         identity_cli.main(
@@ -658,6 +794,7 @@ def test_generate_and_verify_command_reports_exact_artifact_digests(
     verified = json.loads(capsys.readouterr().out)
     assert verified["status"] == "verified"
     assert verified["source_commit"] == source_commit
+    assert verified["latest_main_base_commit"] == _git(repo, "rev-parse", f"{source_commit}^")
 
 
 def test_public_runner_preflight_consumes_the_verified_resolved_identity(

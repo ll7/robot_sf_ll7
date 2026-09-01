@@ -719,7 +719,9 @@ before the queue auto-merges a PR:
   metadata evidence fails closed. The gate also requires no unresolved actionable review threads and no outstanding explicitly requested
   reviewers. The current source-head CI rollup
   must also remain green; superseded check runs are discarded with the same helper used by the
-  guarded merger preflight, and the gate excludes its own in-progress source-head check to avoid
+  guarded merger preflight. Under the REST quota fallback, check runs are enriched with their
+  authoritative Actions workflow identity before that classifier runs; missing identity remains
+  independently fail-closed. The gate excludes its own in-progress source-head check to avoid
   waiting on itself. The exact-head trailer binds that CI and review evidence to the source head,
   while the merge queue independently runs its required checks on the synthetic queue head. The
   live queue must use GitHub's `ALLGREEN`

@@ -2190,7 +2190,7 @@ def _set_simulation_override_attr(
             enable_attr,
             replace(getattr(config.sim_config, enable_attr), enabled=True),
         )
-    elif attr == "pedestrian_uncertainty_envelope_enabled":
+    elif attr in {"pedestrian_uncertainty_envelope_enabled", "oracle_force_trace_enabled"}:
         setattr(
             config.sim_config,
             attr,
@@ -2304,6 +2304,7 @@ def _apply_simulation_overrides(
         "action_latency_steps",
         "action_latency_ms",
         "pedestrian_integration_scheme",
+        "oracle_force_trace_enabled",
         "ped_radius",
         "pedestrian_uncertainty_envelope_enabled",
         "pedestrian_uncertainty_alpha_mps",

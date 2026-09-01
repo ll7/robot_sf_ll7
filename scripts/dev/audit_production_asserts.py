@@ -249,6 +249,60 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         ownership_status="completed_historical_review",
         ownership_references=_PR_6529_REFS,
     ),
+    (
+        "robot_sf/prediction/oracle_transition_trace.py",
+        "OracleTransitionTraceV1.__post_init__",
+        "pre_index is not None",
+    ): _review(
+        "The route-index completeness branch narrows all waypoint boundary indices before validating the one-step advance invariant.",
+        ownership_status="unowned_residual",
+        ownership_references=_NEW_RESIDUAL_REFS,
+    ),
+    (
+        "robot_sf/prediction/oracle_transition_trace.py",
+        "OracleTransitionTraceV1.__post_init__",
+        "post_behavior_index is not None",
+    ): _review(
+        "The route-index completeness branch narrows all waypoint boundary indices before validating the one-step advance invariant.",
+        ownership_status="unowned_residual",
+        ownership_references=_NEW_RESIDUAL_REFS,
+    ),
+    (
+        "robot_sf/prediction/oracle_transition_trace.py",
+        "OracleTransitionTraceV1.__post_init__",
+        "post_integration_index is not None",
+    ): _review(
+        "The route-index completeness branch narrows all waypoint boundary indices before validating the one-step advance invariant.",
+        ownership_status="unowned_residual",
+        ownership_references=_NEW_RESIDUAL_REFS,
+    ),
+    (
+        "robot_sf/prediction/oracle_transition_trace.py",
+        "_fold_force_stage",
+        "stage.delta_force_xy is not None",
+    ): _review(
+        "The force-stage constructor requires additive deltas before this internal fold narrows the optional field for arithmetic.",
+        ownership_status="unowned_residual",
+        ownership_references=_NEW_RESIDUAL_REFS,
+    ),
+    (
+        "robot_sf/prediction/oracle_transition_trace.py",
+        "_fold_force_stage",
+        "stage.operation_kind in {ForceOperationKind.REPLACEMENT, ForceOperationKind.TRANSFORMED}",
+    ): _review(
+        "The preceding operation dispatch exhausts the known force-stage kinds; this assertion protects the replacement/transform branch from future enum drift.",
+        ownership_status="unowned_residual",
+        ownership_references=_NEW_RESIDUAL_REFS,
+    ),
+    (
+        "robot_sf/prediction/oracle_transition_trace.py",
+        "_fold_force_stage",
+        "stage.result_force_xy is not None",
+    ): _review(
+        "The force-stage constructor requires a recorded result for replacement and transformed stages before this internal fold returns it.",
+        ownership_status="unowned_residual",
+        ownership_references=_NEW_RESIDUAL_REFS,
+    ),
 }
 
 

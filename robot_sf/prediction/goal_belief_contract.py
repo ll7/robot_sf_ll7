@@ -196,6 +196,7 @@ def _validate_actor_values(  # noqa: C901, PLR0912, PLR0913
     timestamp_s: float,
     step_index: int,
     track_id: str,
+    tracking_epoch_id: str,
     coordinate_frame: CoordinateFrame,
     history_steps: Sequence[ActorObservationStep],
     force_estimate: ForceEstimate2D | None,
@@ -222,6 +223,7 @@ def _validate_actor_values(  # noqa: C901, PLR0912, PLR0913
     step = require_step_index(step_index, "step_index")
     del timestamp, step
     require_text(track_id, "track_id")
+    require_text(tracking_epoch_id, "tracking_epoch_id")
     if not isinstance(coordinate_frame, CoordinateFrame):
         raise TypeError("coordinate_frame must be CoordinateFrame")
     if coordinate_frame is not CoordinateFrame.GLOBAL_XY:
@@ -428,6 +430,7 @@ class GoalBeliefObservation:
     """Narrow actor observation/history input accepted by ``GoalBeliefV1``."""
 
     track_id: str
+    tracking_epoch_id: str
     timestamp_s: float
     step_index: int
     config_hash: str
@@ -453,6 +456,7 @@ class GoalBeliefObservation:
             timestamp_s=self.timestamp_s,
             step_index=self.step_index,
             track_id=self.track_id,
+            tracking_epoch_id=self.tracking_epoch_id,
             coordinate_frame=self.coordinate_frame,
             history_steps=self.history_steps,
             force_estimate=self.force_estimate,
@@ -473,6 +477,9 @@ class GoalBeliefObservation:
         object.__setattr__(self, "timestamp_s", require_finite(self.timestamp_s, "timestamp_s"))
         object.__setattr__(self, "step_index", require_step_index(self.step_index, "step_index"))
         object.__setattr__(self, "track_id", require_text(self.track_id, "track_id"))
+        object.__setattr__(
+            self, "tracking_epoch_id", require_text(self.tracking_epoch_id, "tracking_epoch_id")
+        )
         object.__setattr__(self, "config_hash", require_digest(self.config_hash, "config_hash"))
         object.__setattr__(self, "history_steps", history)
         object.__setattr__(self, "candidate_probabilities", candidates)
@@ -492,6 +499,7 @@ class GoalBeliefV1:
     timestamp_s: float
     step_index: int
     track_id: str
+    tracking_epoch_id: str
     source: GoalBeliefSource
     coordinate_frame: CoordinateFrame
     history_steps: tuple[ActorObservationStep, ...]
@@ -519,6 +527,7 @@ class GoalBeliefV1:
             timestamp_s=self.timestamp_s,
             step_index=self.step_index,
             track_id=self.track_id,
+            tracking_epoch_id=self.tracking_epoch_id,
             coordinate_frame=self.coordinate_frame,
             history_steps=self.history_steps,
             force_estimate=self.force_estimate,
@@ -541,6 +550,9 @@ class GoalBeliefV1:
         object.__setattr__(self, "timestamp_s", require_finite(self.timestamp_s, "timestamp_s"))
         object.__setattr__(self, "step_index", require_step_index(self.step_index, "step_index"))
         object.__setattr__(self, "track_id", require_text(self.track_id, "track_id"))
+        object.__setattr__(
+            self, "tracking_epoch_id", require_text(self.tracking_epoch_id, "tracking_epoch_id")
+        )
         object.__setattr__(self, "history_steps", history)
         object.__setattr__(self, "candidate_probabilities", candidates)
         object.__setattr__(self, "blockers", blockers)
@@ -590,6 +602,7 @@ class GoalBeliefV1:
             timestamp_s=observation.timestamp_s,
             step_index=observation.step_index,
             track_id=observation.track_id,
+            tracking_epoch_id=observation.tracking_epoch_id,
             source=GoalBeliefSource.OBSERVATION_ONLY,
             coordinate_frame=observation.coordinate_frame,
             history_steps=observation.history_steps,
@@ -616,6 +629,7 @@ class GoalBeliefV1:
             "timestamp_s": self.timestamp_s,
             "step_index": self.step_index,
             "track_id": self.track_id,
+            "tracking_epoch_id": self.tracking_epoch_id,
             "source": self.source.value,
             "coordinate_frame": self.coordinate_frame.value,
             "units": dict(ACTOR_UNITS),
@@ -641,13 +655,16 @@ class GoalBeliefV1:
             "config_hash": self.config_hash,
         }
 
-    def to_model_features(self) -> dict[str, Any]:
-        """Return actor features without provenance fields that could expose oracle state."""
+    def to_actor_model_features(self) -> dict[str, Any]:
+        """Return model features only when the belief is observation-derived."""
+        if self.source is not GoalBeliefSource.OBSERVATION_ONLY:
+            raise ValueError("actor model features require source=observation_only")
         payload = self.to_dict()
         return {
             key: payload[key]
             for key in (
                 "track_id",
+                "tracking_epoch_id",
                 "coordinate_frame",
                 "units",
                 "history_order",
@@ -665,6 +682,10 @@ class GoalBeliefV1:
                 "speed_cap_status",
             )
         }
+
+    def to_model_features(self) -> dict[str, Any]:
+        """Return observation-only features through the legacy method name."""
+        return self.to_actor_model_features()
 
     def to_json(self) -> str:
         """Return RFC 8785 canonical actor JSON."""
@@ -687,6 +708,7 @@ class GoalBeliefV1:
             "timestamp_s",
             "step_index",
             "track_id",
+            "tracking_epoch_id",
             "source",
             "coordinate_frame",
             "units",
@@ -742,6 +764,7 @@ class GoalBeliefV1:
             timestamp_s=value["timestamp_s"],
             step_index=value["step_index"],
             track_id=value["track_id"],
+            tracking_epoch_id=value["tracking_epoch_id"],
             source=_parse_enum(GoalBeliefSource, value["source"], "source"),
             coordinate_frame=_parse_enum(
                 CoordinateFrame, value["coordinate_frame"], "coordinate_frame"

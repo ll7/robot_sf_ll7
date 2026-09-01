@@ -436,6 +436,7 @@ _FAST_FILES = {
     # the changed actor-observation producer; keep them in fast PR shards
     # (issue #8063).
     "test_goal_belief_contract.py",
+    "test_oracle_transition_trace_contract.py",
     # Topology-guided local-policy tests are deterministic planner-contract
     # coverage for the changed adapter; keep them in fast PR shards for the
     # exact-head changed-coverage gate.

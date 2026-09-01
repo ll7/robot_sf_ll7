@@ -58,6 +58,18 @@ instead of writing its own final commit SHA into tracked bytes. After the exact
 clean source commit and already-reserved concept/version DOI coordinates are
 known, generate and verify the ignored resolved identity:
 
+- Manifest template:
+  `configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml`
+- Campaign template:
+  `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml`
+- Zenodo metadata template:
+  `configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.template.json`
+
+The resolver derives `latest_main_base_commit` from the exact first parent of
+the selected source commit (and applies the same value to the optional
+`planning_base_sha`). This records the immutable mainline base without tracking
+the moving `origin/main` or creating a self-referential manifest.
+
 ```bash
 SOURCE_COMMIT="$(git rev-parse --verify HEAD^{commit})"
 RELEASE_TAG="${RELEASE_PREFIX:?set the reviewed release prefix}-${SOURCE_COMMIT}"

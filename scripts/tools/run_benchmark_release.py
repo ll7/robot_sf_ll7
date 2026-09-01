@@ -48,6 +48,7 @@ from robot_sf.benchmark.release_protocol import (
     build_release_provenance,
     build_resolved_release_manifest,
     is_diagnostic_stress_smoke,
+    load_release_campaign_config,
     load_release_manifest,
     parse_release_args,
     resolve_campaign_artifact_path,
@@ -843,7 +844,11 @@ def _run_release_rehearsal(args: Any) -> int:  # noqa: C901, PLR0912, PLR0915
         )
 
     try:
-        cfg = load_campaign_config(manifest.canonical_campaign_config_path)
+        cfg = (
+            load_release_campaign_config(manifest)
+            if getattr(manifest, "resolved_identity_path", None) is not None
+            else load_campaign_config(manifest.canonical_campaign_config_path)
+        )
         source_commit = _current_source_commit()
         worktree_clean = _current_worktree_clean()
     except (
@@ -1127,7 +1132,11 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
     invoked_command = shlex.join([sys.executable, str(Path(__file__)), *raw_argv])
 
     manifest = load_release_manifest(args.manifest)
-    cfg = load_campaign_config(manifest.canonical_campaign_config_path)
+    cfg = (
+        load_release_campaign_config(manifest)
+        if getattr(manifest, "resolved_identity_path", None) is not None
+        else load_campaign_config(manifest.canonical_campaign_config_path)
+    )
     stress_smoke = is_diagnostic_stress_smoke(manifest)
     runtime_source_commit: str | None = None
     runtime_source_admission: dict[str, Any] = {

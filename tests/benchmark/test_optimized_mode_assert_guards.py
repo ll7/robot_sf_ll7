@@ -103,7 +103,8 @@ def test_converted_guards_survive_python_optimized_mode(
         """
     )
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(REPO_ROOT)
+    # Keep the vendored fast-pysf package ahead of any unrelated site-package install.
+    env["PYTHONPATH"] = os.pathsep.join((str(REPO_ROOT), str(REPO_ROOT / "fast-pysf")))
     env["DISPLAY"] = ""
     env["MPLBACKEND"] = "Agg"
     env["SDL_VIDEODRIVER"] = "dummy"

@@ -10,6 +10,7 @@ network-free; the staged download path is monkeypatched so no real fetch happens
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -44,12 +45,10 @@ WORKTREE_ROOT = Path(__file__).resolve().parents[2]
 
 def _subprocess_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     """Build a subprocess env that pins this worktree's source via PYTHONPATH."""
-    import os
-
     env = {
         "PATH": os.environ["PATH"],
-        # Pin the worktree's robot_sf/ package ahead of the shared venv's editable install.
-        "PYTHONPATH": str(WORKTREE_ROOT),
+        # Pin both the worktree packages and vendored fast-pysf ahead of site packages.
+        "PYTHONPATH": os.pathsep.join((str(WORKTREE_ROOT), str(WORKTREE_ROOT / "fast-pysf"))),
         "UV_NO_SYNC": "1",
     }
     if extra:

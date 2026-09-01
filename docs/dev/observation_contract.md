@@ -94,7 +94,9 @@ The tracker normalizes positions, velocities, and covariances into `global_xy`. 
 be in `global_xy` or `robot_ego_xy`; ego-frame positions use the robot pose for rotation and
 translation, while ego-frame velocities use rotation only. History arrays are
 `oldest_to_newest`, and the transform helpers require a pose for each historical row so a later
-robot pose cannot rewrite earlier observations.
+robot pose cannot rewrite earlier observations. Malformed empty histories, non-finite values, and
+materially indefinite covariance inputs fail closed; accepted covariance round-off is projected to
+the positive-semidefinite boundary.
 
 `PedestrianTracker` assigns monotonic episode-local IDs using constant-velocity prediction,
 gated Hungarian association, deterministic tie handling, and explicit tentative/confirmed/

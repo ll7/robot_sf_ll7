@@ -45,6 +45,23 @@ def _run(
     )
 
 
+def test_direct_entrypoint_resolves_local_package_without_pythonpath(tmp_path: Path) -> None:
+    """The workflow's direct helper invocation works outside the repository cwd."""
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    result = subprocess.run(
+        [sys.executable, str(HELPER), "--help"],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "usage:" in result.stdout
+
+
 def _source_repo(path: Path) -> tuple[Path, str]:
     path.mkdir()
     subprocess.run(["git", "init", "-q", path], check=True)

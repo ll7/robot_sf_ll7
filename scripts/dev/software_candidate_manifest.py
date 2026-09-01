@@ -28,6 +28,12 @@ from email.policy import default as email_policy
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
+# ``python scripts/dev/software_candidate_manifest.py`` places ``scripts/dev``
+# on ``sys.path`` rather than the source-tree root.  Keep the direct workflow
+# entrypoint import-safe while resolving helpers from the same source tree.
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from scripts.tools.check_distribution_licenses import (
     DistributionLicenseError,
     check_distribution,

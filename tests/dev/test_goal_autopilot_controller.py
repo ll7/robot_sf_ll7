@@ -42,6 +42,10 @@ def _snapshot() -> dict:
             "formalizable_count": 0,
             "blocker_reconciliation_count": 0,
             "blocker_reconciliation_complete": True,
+            "decision_count": 0,
+            "blocker_count": 0,
+            "decomposition_count": 0,
+            "active_handoff_count": 0,
         },
         "discovery": {
             "lane": "documentation_and_ci_contract_drift",
@@ -134,7 +138,24 @@ def test_true_terminal_case_emits_head_bound_zero_work_proof() -> None:
     assert proof["implementation"]["claimable_count"] == 0
     assert proof["pull_requests"]["open_count"] == 0
     assert proof["preparation"]["blocker_reconciliation_count"] == 0
+    assert proof["preparation"]["active_handoff_count"] == 0
     assert proof["discovery"]["status"] == "saturated"
+
+
+def test_zero_work_proof_validation_rejects_inconsistent_histogram() -> None:
+    """Standalone receipt validation must enforce the histogram/count relation too."""
+    snapshot = _snapshot()
+    proof = deepcopy(controller.arbitrate_controller(snapshot)["zero_work_proof"])
+    proof["implementation"]["admission_reason_histogram"] = {"claimable": 1}
+
+    validation = controller.validate_zero_work_proof(
+        proof,
+        origin_main_sha=ORIGIN,
+        freshness=FRESHNESS,
+    )
+
+    assert validation["valid"] is False
+    assert "proof_claimable_histogram_mismatch" in validation["reasons"]
 
 
 def test_malformed_admission_histogram_cannot_produce_zero_work() -> None:
@@ -150,6 +171,34 @@ def test_malformed_admission_histogram_cannot_produce_zero_work() -> None:
         "implementation_admission_reason_histogram_value_must_be_non_negative_integer"
         in result["reasons"]
     )
+
+
+def test_inconsistent_claimable_histogram_cannot_produce_zero_work() -> None:
+    """The admission histogram must agree with the claimed implementation count."""
+    snapshot = _snapshot()
+    snapshot["implementation"]["admission_reason_histogram"] = {"claimable": 1}
+
+    result = controller.arbitrate_controller(snapshot)
+
+    assert result["global_zero_work"] is False
+    assert result["next_action"] == "refresh_controller_evidence"
+    assert "implementation_claimable_histogram_mismatch" in result["reasons"]
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["decision_count", "blocker_count", "decomposition_count", "active_handoff_count"],
+)
+def test_missing_preparation_count_cannot_produce_zero_work(field: str) -> None:
+    """Missing preparation lane counters are unknown, not empty."""
+    snapshot = _snapshot()
+    snapshot["preparation"].pop(field)
+
+    result = controller.arbitrate_controller(snapshot)
+
+    assert result["global_zero_work"] is False
+    assert result["next_action"] == "refresh_controller_evidence"
+    assert f"preparation.{field}_missing" in result["reasons"]
 
 
 def test_stale_zero_work_proof_fails_closed_for_all_freshness_inputs() -> None:

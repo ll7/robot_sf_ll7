@@ -56,6 +56,12 @@ FRESHNESS_FIELDS = (
     "preparation_audit_digest",
     "discovery_relevant_paths_digest",
 )
+PREPARATION_COUNT_FIELDS = (
+    "decision_count",
+    "blocker_count",
+    "decomposition_count",
+    "active_handoff_count",
+)
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -179,7 +185,7 @@ def _readiness_outcomes_complete(discovery: Mapping[str, Any]) -> bool:
     )
 
 
-def _terminal_evidence(  # noqa: C901, PLR0912 - explicit fail-closed evidence normalization
+def _terminal_evidence(  # noqa: C901, PLR0912, PLR0915 - explicit fail-closed evidence normalization
     snapshot: Mapping[str, Any],
 ) -> tuple[dict[str, Any], list[str], dict[str, Any]]:
     """Collect normalized lane evidence and terminal-condition failures."""
@@ -226,8 +232,12 @@ def _terminal_evidence(  # noqa: C901, PLR0912 - explicit fail-closed evidence n
     )
 
     optional_counts: dict[str, int | None] = {}
-    for field in ("decision_count", "blocker_count", "decomposition_count", "active_handoff_count"):
-        value = preparation.get(field, 0)
+    for field in PREPARATION_COUNT_FIELDS:
+        if field not in preparation:
+            errors.append(f"preparation.{field}_missing")
+            optional_counts[field] = None
+            continue
+        value = preparation[field]
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             errors.append(f"preparation.{field}_must_be_non_negative_integer")
             optional_counts[field] = None
@@ -253,6 +263,15 @@ def _terminal_evidence(  # noqa: C901, PLR0912 - explicit fail-closed evidence n
                 errors.append(
                     "implementation_admission_reason_histogram_value_must_be_non_negative_integer"
                 )
+        claimable_histogram_count = admission_histogram.get("claimable", 0)
+        if (
+            isinstance(claimable_count, int)
+            and not isinstance(claimable_count, bool)
+            and isinstance(claimable_histogram_count, int)
+            and not isinstance(claimable_histogram_count, bool)
+            and claimable_histogram_count != claimable_count
+        ):
+            errors.append("implementation_claimable_histogram_mismatch")
 
     discovery_status = _status(discovery.get("status"), field="discovery.status", errors=errors)
     relevant_head_sha: str | None = None
@@ -358,6 +377,7 @@ def _build_zero_work_proof(normalized: Mapping[str, Any]) -> dict[str, Any]:
             "formalizable_count": normalized["counts"]["formalizable_count"],
             "blocker_reconciliation_count": normalized["counts"]["blocker_reconciliation_count"],
             "blocker_reconciliation_complete": True,
+            **{field: normalized["counts"][field] for field in PREPARATION_COUNT_FIELDS},
         },
         "discovery": {
             "lane": discovery.get("lane"),
@@ -610,6 +630,10 @@ def validate_zero_work_proof(  # noqa: C901, PLR0912, PLR0915 - validate every p
             for value in histogram.values()
         ):
             reasons.append("proof_admission_reason_histogram_invalid")
+        else:
+            claimable_histogram_count = histogram.get("claimable", 0)
+            if claimable_histogram_count != implementation.get("claimable_count"):
+                reasons.append("proof_claimable_histogram_mismatch")
     if isinstance(pull_requests, Mapping):
         for field in (
             "open_count",
@@ -620,7 +644,12 @@ def validate_zero_work_proof(  # noqa: C901, PLR0912, PLR0915 - validate every p
             if pull_requests.get(field) != 0:
                 reasons.append(f"proof_{field}_nonzero")
     if isinstance(preparation, Mapping):
-        for field in ("promotable_count", "formalizable_count", "blocker_reconciliation_count"):
+        for field in (
+            "promotable_count",
+            "formalizable_count",
+            "blocker_reconciliation_count",
+            *PREPARATION_COUNT_FIELDS,
+        ):
             if preparation.get(field) != 0:
                 reasons.append(f"proof_{field}_nonzero")
         if preparation.get("blocker_reconciliation_complete") is not True:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import os
 import subprocess
 import sys
 import tarfile
@@ -148,12 +149,15 @@ def test_valid_wheel_and_sdist_pass(tmp_path: Path) -> None:
     assert len(result.sdists) == 1
 
 
-def test_direct_script_invocation_is_importable() -> None:
+def test_direct_script_invocation_is_importable(tmp_path: Path) -> None:
     """The CI's no-project direct-script invocation must import repository helpers."""
+    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
     result = subprocess.run(
         [sys.executable, str(REPO_ROOT / "scripts/tools/check_distribution_licenses.py"), "--help"],
+        cwd=tmp_path,
         capture_output=True,
         text=True,
+        env=env,
         check=False,
     )
 

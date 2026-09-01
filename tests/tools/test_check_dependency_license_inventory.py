@@ -846,6 +846,16 @@ def test_v2_receipt_summary_separates_findings_and_pending_rows() -> None:
         == []
     )
 
+    downgraded = copy.deepcopy(summary)
+    downgraded["summary_contract_version"] = "robot-sf.dependency-license-inventory-summary.v1"
+    issues = _strict_report_summary_contract_issues(
+        downgraded,
+        receipt_status="blocked",
+        expected_policy_count=37,
+        contract_version=SUMMARY_CONTRACT_VERSION,
+    )
+    assert any("does not match receipt schema" in issue for issue in issues)
+
     legacy = copy.deepcopy(summary)
     legacy.pop("summary_contract_version")
     issues = _strict_report_summary_contract_issues(

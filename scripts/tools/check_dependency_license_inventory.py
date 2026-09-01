@@ -352,9 +352,15 @@ def _strict_report_summary_contract_issues(  # noqa: C901 - fail-closed summary 
     if not isinstance(unresolved, int) or isinstance(unresolved, bool) or unresolved < 0:
         issues.append("dependency receipt strict_report unresolved count is invalid")
 
-    contract = summary.get("summary_contract_version", contract_version)
-    if contract is None:
-        contract = _LEGACY_SUMMARY_CONTRACT_VERSION
+    declared_contract = summary.get("summary_contract_version")
+    if contract_version is not None:
+        if declared_contract != contract_version:
+            issues.append(
+                "dependency receipt strict_report summary contract does not match receipt schema"
+            )
+        contract = contract_version
+    else:
+        contract = declared_contract or _LEGACY_SUMMARY_CONTRACT_VERSION
     if contract not in (_LEGACY_SUMMARY_CONTRACT_VERSION, SUMMARY_CONTRACT_VERSION):
         issues.append("dependency receipt strict_report summary contract is unsupported")
     elif contract == _LEGACY_SUMMARY_CONTRACT_VERSION:

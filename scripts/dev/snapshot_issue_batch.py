@@ -538,6 +538,24 @@ def _admission_reason(admission: dict[str, Any]) -> str:
     }.get(str(classification), str(classification or "unknown"))
 
 
+def _admission_result_is_complete(admission: object) -> bool:
+    """Return whether an admission result has the fields needed for queue truth."""
+    if not isinstance(admission, dict):
+        return False
+    outcome = admission.get("outcome")
+    classification = admission.get("classification")
+    if (
+        not isinstance(outcome, str)
+        or not outcome.strip()
+        or outcome.strip().lower() == "error"
+        or not isinstance(classification, str)
+        or not classification.strip()
+        or classification.strip().lower() == "error"
+    ):
+        return False
+    return admission.get("claim_outcome") in {"unclaimed", "already_claimed"}
+
+
 def _is_external_admission(admission: dict[str, Any]) -> bool:
     """Return whether an admission row is blocked by an external input."""
     return _admission_reason(admission) == "external_input_missing"
@@ -1182,11 +1200,7 @@ def snapshot_claimable_issues(
         and issue.get("dispatch_allowed", True) is not False
     ]
     admission_results_complete = all(
-        isinstance(issue.get("admission"), dict)
-        and issue["admission"].get("outcome") != "error"
-        and issue["admission"].get("classification") != "error"
-        and issue["admission"].get("claim_outcome") in {"unclaimed", "already_claimed"}
-        for issue in snapshots
+        _admission_result_is_complete(issue.get("admission")) for issue in snapshots
     )
     if not admission_results_complete:
         queue_completeness = "unavailable"

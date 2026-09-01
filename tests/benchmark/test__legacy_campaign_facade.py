@@ -125,6 +125,7 @@ def test_prepare_campaign_preflight_delegates_with_injected_callables(
         checkpoint_preflight_mode,
         checkpoint_cache_dir,
         checkpoint_registry_path,
+        authoritative_checkpoint_admission,
     ):
         captured["cfg"] = cfg
         captured["output_root"] = output_root
@@ -136,6 +137,7 @@ def test_prepare_campaign_preflight_delegates_with_injected_callables(
         captured["checkpoint_preflight_mode"] = checkpoint_preflight_mode
         captured["checkpoint_cache_dir"] = checkpoint_cache_dir
         captured["checkpoint_registry_path"] = checkpoint_registry_path
+        captured["authoritative_checkpoint_admission"] = authoritative_checkpoint_admission
         return {"preflight": "delegate-sentinel"}
 
     monkeypatch.setattr(camera_ready_legacy_facade, "_prepare_campaign_preflight_impl", _fake_impl)
@@ -162,6 +164,7 @@ def test_prepare_campaign_preflight_delegates_with_injected_callables(
     assert captured["checkpoint_preflight_mode"] == "enforced_staged"
     assert captured["checkpoint_cache_dir"] == cache_dir
     assert captured["checkpoint_registry_path"] == registry_path
+    assert captured["authoritative_checkpoint_admission"] is False
     # Injected callables are the facade's own bindings, not freshly imported copies.
     assert (
         captured["validate_campaign_config"] is camera_ready_legacy_facade._validate_campaign_config

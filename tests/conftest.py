@@ -591,6 +591,10 @@ _FAST_FILES = {
     # for changed environment plumbing; keep it in PR fast shards so changed
     # coverage proves the info-only branch.
     "test_oracle_force_trace_channel.py",
+    # Release preflight and camera-ready checkpoint tests are deterministic
+    # admission-contract coverage for changed release producers.
+    "test__legacy_campaign_facade.py",
+    "test_campaign_checkpoint_preflight.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

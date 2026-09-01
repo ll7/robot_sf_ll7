@@ -86,7 +86,7 @@
           "package": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
           "version": {"type": "string", "minLength": 1},
           "license_expression": {"type": "string", "minLength": 1},
-          "python_requires": {"type": "string", "minLength": 1},
+          "python_requires": {"type": ["string", "null"], "minLength": 1},
           "target": {
             "type": "object",
             "required": ["os", "architecture", "python"],
@@ -108,7 +108,10 @@
           "source": {
             "type": "object",
             "required": ["registry"],
-            "properties": {"registry": {"type": "string", "format": "uri"}},
+            "properties": {
+              "registry": {"type": "string", "format": "uri"},
+              "metadata_url": {"type": "string", "format": "uri"}
+            },
             "additionalProperties": false
           },
           "artifacts": {
@@ -137,6 +140,14 @@
                 "type": "array",
                 "minItems": 2,
                 "items": {"type": "string", "format": "uri"}
+              },
+              "archive_notice_paths": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1}
+              },
+              "archive_notice_absences": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1}
               }
             },
             "additionalProperties": false
@@ -183,6 +194,8 @@
             }
           },
           "status": {"enum": ["pending_review", "reviewed", "excluded"]},
+          "reviewer": {"type": ["string", "null"]},
+          "reviewed_at": {"type": ["string", "null"]},
           "disposition": {"type": "string", "minLength": 1},
           "ruling": {"type": "string", "minLength": 1},
           "rationale": {"type": "string", "minLength": 1},

@@ -1815,12 +1815,30 @@ def _policy_records(  # noqa: C901, PLR0912, PLR0915
             "disposition",
         )
         for field in required_strings:
-            if not isinstance(package.get(field), str) or not package[field].strip():
+            value = package.get(field)
+            if field == "python_requires" and value is None:
+                if field not in package:
+                    issues.append(f"package disposition {package_id} has no {field}")
+                continue
+            if not isinstance(value, str) or not value.strip():
                 issues.append(f"package disposition {package_id} has no {field}")
         source = package.get("source")
         if not isinstance(source, dict) or not source:
             issues.append(f"package disposition {package_id} has no source")
             source = {}
+        metadata_url = source.get("metadata_url")
+        if "metadata_url" in source and (
+            not isinstance(metadata_url, str) or not metadata_url.strip()
+        ):
+            issues.append(f"package disposition {package_id} has an invalid metadata_url")
+        if "metadata_url" in source and isinstance(package_name, str):
+            expected_metadata_url = (
+                f"https://pypi.org/pypi/{package_name}/{package.get('version')}/json"
+            )
+            if metadata_url != expected_metadata_url:
+                issues.append(
+                    f"package disposition {package_id} metadata_url does not match package identity"
+                )
         target = package.get("target")
         if not isinstance(target, dict) or not target:
             issues.append(f"package disposition {package_id} has no target")
@@ -1836,6 +1854,26 @@ def _policy_records(  # noqa: C901, PLR0912, PLR0915
             or not all(isinstance(value, str) and value for value in notice_paths)
         ):
             issues.append(f"package disposition {package_id} has incomplete notice references")
+        if "metadata_url" in source:
+            for field in ("archive_notice_paths", "archive_notice_absences"):
+                values = upstream.get(field)
+                if not isinstance(values, list) or not all(
+                    isinstance(value, str) and value for value in values
+                ):
+                    issues.append(f"package disposition {package_id} has invalid {field}")
+            if not upstream.get("archive_notice_paths") and not upstream.get(
+                "archive_notice_absences"
+            ):
+                issues.append(
+                    f"package disposition {package_id} has no archive notice presence/absence evidence"
+                )
+            if package.get("status") == "reviewed":
+                for field in ("reviewer", "reviewed_at"):
+                    value = package.get(field)
+                    if not isinstance(value, str) or not value.strip():
+                        issues.append(
+                            f"package disposition {package_id} reviewed status requires {field}"
+                        )
         artifacts = package.get("artifacts")
         if not isinstance(artifacts, list) or not artifacts:
             issues.append(f"package disposition {package_id} has no artifacts")
@@ -1921,6 +1959,8 @@ def _policy_records(  # noqa: C901, PLR0912, PLR0915
             "blocked_distribution_modes": sorted(set(blocked_modes)),
             "blocked_surface_conditions": sorted(set(blocked_conditions)),
             "status": package.get("status"),
+            "reviewer": package.get("reviewer"),
+            "reviewed_at": package.get("reviewed_at"),
             "disposition": package.get("disposition"),
             "ruling": package.get("ruling"),
             "rationale": package.get("rationale"),
@@ -1939,6 +1979,21 @@ def _policy_records(  # noqa: C901, PLR0912, PLR0915
         sorted(package_out, key=lambda item: item["id"]),
         issues,
     )
+
+
+def _policy_source_matches(
+    package_source: dict[str, Any],
+    policy_source: dict[str, Any],
+) -> bool:
+    """Compare lock source identity while retaining policy metadata provenance.
+
+    The frozen lock records the package index, whereas the policy additionally
+    retains the exact PyPI version-response URL used for archive and metadata
+    review.  The response URL is evidence about the registry row, not a second
+    lock source field, so it must not make an otherwise exact source mismatch.
+    """
+    lock_source = {key: value for key, value in policy_source.items() if key != "metadata_url"}
+    return _normalise_json(package_source) == _normalise_json(lock_source)
 
 
 def _exact_artifact_failures(
@@ -1991,7 +2046,7 @@ def _match_package_disposition(
             f"lock version {package.get('version')} does not match exact policy "
             f"{policy.get('version')}"
         )
-    if package.get("source") != policy.get("source"):
+    if not _policy_source_matches(package.get("source", {}), policy.get("source", {})):
         failures.append("lock source/index does not match exact policy")
     expected_target = policy.get("target")
     if isinstance(expected_target, dict) and _normalise_json(expected_target) != _normalise_json(
@@ -2050,7 +2105,7 @@ def _exact_policy_coverage_failures(
             for record in package_records
             if record.get("normalized_name") == _canonicalize_name(policy["package"])
             and record.get("version") == policy.get("version")
-            and record.get("source") == policy.get("source")
+            and _policy_source_matches(record.get("source", {}), policy.get("source", {}))
         ]
         actual_profiles = {profile for record in matches for profile in record.get("profiles", [])}
         if not matches:

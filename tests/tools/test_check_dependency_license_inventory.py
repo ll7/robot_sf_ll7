@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from scripts.tools.check_dependency_license_inventory import (
+    _policy_records,
+    _policy_source_matches,
     build_inventory,
     check_report_freshness,
     main,
@@ -783,6 +785,83 @@ def test_current_llvmlite_disposition_matches_both_frozen_lock_profiles() -> Non
     assert all(row["policy_disposition"] == "external_dependency_not_redistributed" for row in rows)
     assert not any("llvmlite" in failure for failure in inventory["failures"])
     assert inventory["summary"]["policy_exact_match_count"] == 2
+
+
+def test_issue_8163_policy_records_retain_metadata_and_archive_evidence() -> None:
+    """Exact batch provenance survives checker normalization without source drift."""
+    root = Path(__file__).resolve().parents[2]
+    policy = json.loads(
+        (root / "scripts/validation/dependency_license_policy.v1.json").read_text(encoding="utf-8")
+    )
+
+    _rules, _components, by_name, _records, issues = _policy_records(policy, root)
+
+    assert issues == []
+    for name in (
+        "absl-py",
+        "alembic",
+        "attrs",
+        "click",
+        "cma",
+        "cyclopts",
+        "fsspec",
+        "geopandas",
+        "idna",
+        "imageio",
+        "joblib",
+        "jsonschema",
+        "jsonschema-specifications",
+        "lazy-loader",
+        "markdown",
+        "narwhals",
+        "networkx",
+        "opentelemetry-api",
+        "opt-einsum",
+        "osmnx",
+        "platformdirs",
+        "pooch",
+        "proglog",
+        "pydantic",
+        "pyparsing",
+        "python-dotenv",
+        "pyvista",
+        "referencing",
+        "rich-rst",
+        "scooby",
+        "setuptools",
+        "termcolor",
+        "typing-inspection",
+        "urllib3",
+        "werkzeug",
+        "wheel",
+    ):
+        record = by_name[name][0]
+        assert record["source"]["metadata_url"] == (
+            f"https://pypi.org/pypi/{name}/{record['version']}/json"
+        )
+        assert record["status"] == "pending_review"
+        assert record["reviewer"] is None
+        assert record["reviewed_at"] is None
+        assert record["upstream"]["archive_notice_paths"]
+        assert record["upstream"]["archive_notice_absences"] == []
+
+
+def test_policy_metadata_url_does_not_change_exact_lock_source_matching() -> None:
+    """The retained PyPI response URL is provenance, not a second lock source."""
+    assert _policy_source_matches(
+        {"registry": "https://pypi.org/simple"},
+        {
+            "registry": "https://pypi.org/simple",
+            "metadata_url": "https://pypi.org/pypi/demo-package/1.0.0/json",
+        },
+    )
+    assert not _policy_source_matches(
+        {"registry": "https://example.invalid/simple"},
+        {
+            "registry": "https://pypi.org/simple",
+            "metadata_url": "https://pypi.org/pypi/demo-package/1.0.0/json",
+        },
+    )
 
 
 def test_exact_llvmlite_policy_rejects_another_with_expression(tmp_path: Path) -> None:

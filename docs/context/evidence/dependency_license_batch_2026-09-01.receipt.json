@@ -1,0 +1,126 @@
+{
+  "schema_version": "robot-sf.issue-8163-dependency-license-batch.receipt.v1",
+  "issue": 8163,
+  "status": "blocked_diagnostic_only",
+  "claim_boundary": "This receipt records reproducible package/archive and candidate-binding evidence. It is not a legal opinion, redistribution authorization, release approval, or independent review marker.",
+  "artifact_location": "Operator-local candidate bundle and archive-audit files are retained at the explicit paths recorded below; large generated artifacts are intentionally not committed.",
+  "scope": {
+    "package_count": 36,
+    "artifact_count": 72,
+    "profile_ids": [
+      "all"
+    ],
+    "target": {
+      "os": "linux",
+      "architecture": "x86_64",
+      "python": {
+        "implementation": "CPython",
+        "version": "3.13"
+      }
+    }
+  },
+  "source": {
+    "base_ref": "origin/main",
+    "source_sha": "c7cc6ec331790b8bc61a4d47d75240f0b3d50453",
+    "uv_lock_sha256": "de2b22de6327164a9abda93f9d0a1fdb38316471f17ab6428ebc52ed7da603c6",
+    "policy_audit_commit": "c5254f5f243b2fa489b28910b332bc77ab893dcd"
+  },
+  "archive_audit": {
+    "path": "operator-local:/tmp/issue8163-archive-audit/archive-audit.json",
+    "sha256": "3bb2e3cba161be5f27427f42d2a72b12b4b581beed09aab0db3ffeae8c4f0447",
+    "schema_version": "robot-sf.issue-8163-archive-audit.v1",
+    "package_count": 36,
+    "artifact_count": 72,
+    "failures": [],
+    "upstream_tags_path": "operator-local:/tmp/issue8163-archive-audit/upstream-tags.json",
+    "upstream_tags_sha256": "8de0debdebc5664995a846fbfe4166a84c8a981370688ab3c88cfa4736a489c8"
+  },
+  "candidate_binding": {
+    "status": "bound",
+    "repository": "ll7/robot_sf_ll7",
+    "source_sha": "c7cc6ec331790b8bc61a4d47d75240f0b3d50453",
+    "workflow": {
+      "run_attempt": 1,
+      "run_id": "1"
+    },
+    "package": {
+      "name": "robot_sf",
+      "version": "0.0.6"
+    },
+    "profile_ids": [
+      "all"
+    ],
+    "expected_component_count": 145,
+    "manifest_sha256": "6f5d5aa704f5cd6da8955e8a0ac5de40f997db9d89cdaf20d76a4337bfb9ef37",
+    "materialization": {
+      "candidate_commit_sha": "22243d72a95bb02f2364f846b171373749210996",
+      "candidate_inventory_path": "scripts/validation/software_candidate_asset_rights.v1.json",
+      "candidate_metadata_path": "SOFTWARE_CANDIDATE.json",
+      "candidate_tree_sha": "bba5ffe74a010907ddb9e5346017d707ded7c299",
+      "policy_path": "scripts/validation/software_candidate_policy.v1.json",
+      "policy_sha256": "8e02808a9e342e7c50aff6aa1a038de4b00f9e60a875b0f0b2ddd5d036888d6d",
+      "source_inventory_path": "scripts/validation/asset_rights_inventory.v1.yaml",
+      "source_inventory_sha256": "4360f56472a72fbbd97d46621fff7322331ff4764be4e13cd0fae175151083d8"
+    },
+    "sbom": {
+      "component_count": 145,
+      "component_set_sha256": "aa6c94073eb332e09a4fab6433f308f1c41b46e87b08704cadb1dfef6a9ad186",
+      "filename": "robot_sf-0.0.6.cyclonedx.json",
+      "sha256": "8602d598f32f4264e2a8a32088d0a41d9dd07bc19ffcd55780dd1e26531b5ce8"
+    },
+    "members": [
+      {
+        "filename": "candidate-provenance.json",
+        "kind": "provenance",
+        "sha256": "a7b94aa8600e4814aa58cae7c4bfc8c51c1128692c3d71f1d4274047020552a8",
+        "size": 2579
+      },
+      {
+        "filename": "robot_sf-0.0.6.cyclonedx.json",
+        "kind": "sbom",
+        "sha256": "8602d598f32f4264e2a8a32088d0a41d9dd07bc19ffcd55780dd1e26531b5ce8",
+        "size": 44210
+      },
+      {
+        "filename": "robot_sf-0.0.6.tar.gz",
+        "kind": "sdist",
+        "sha256": "4a5b4f40f8b514ddacd7f2b87420c6d5b02af5950f0f618dcbc3041516f65c3d",
+        "size": 4415309
+      },
+      {
+        "filename": "robot_sf-0.0.6-py3-none-any.whl",
+        "kind": "wheel",
+        "sha256": "a4c76b446c3f55643265730ea746328c8493d09ef0c5674caed9da38abb385fe",
+        "size": 5022380
+      }
+    ]
+  },
+  "strict_report": {
+    "path": "operator-local:/tmp/issue8163-current-candidate.sKwJGN/inventory-final-policy.json",
+    "exit_code": 2,
+    "candidate_bound": true,
+    "surface_profile_ids": [
+      "all"
+    ],
+    "summary": {
+      "selected_package_count": 146,
+      "policy_exact_disposition_count": 37,
+      "policy_pending_package_count": 181,
+      "unresolved_count": 181,
+      "status": "blocked"
+    }
+  },
+  "review": {
+    "status": "pending_independent_maintainer_review",
+    "reviewer": null,
+    "reviewed_at": null,
+    "legal_or_redistribution_approval": false
+  },
+  "notes": [
+    "The candidate CycloneDX SBOM was exported for the supported extras and normalized to the selected profile-all lock closure before bundle assembly. The raw export contained ten target-inactive/unselected universal-lock identities; they were excluded, and the bound report proves 145 selected component identities with no selected component omitted.",
+    "The candidate bundle binds the Robot SF wheel, sdist, source commit/tree, provenance, SBOM, and manifest. Dependency archive bytes remain the exact frozen uv.lock/PyPI artifacts recorded per policy row; this receipt does not claim they are embedded in the Robot SF candidate.",
+    "All 36 archive audits passed exact lock size/SHA checks and found at least one LICENSE/NOTICE or bundled third-party notice path in each archive. archive_notice_absences is empty for every row.",
+    "The upstream tag probe recorded one non-fatal GitHub tag-page pagination 404 while resolving attrs; the exact attrs 25.4.0 tag and notice blobs were separately verified and retained.",
+    "The strict report remains expectedly nonzero because the other selected packages and unresolved surfaces remain fail-closed."
+  ]
+}

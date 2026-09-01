@@ -101,6 +101,7 @@ def _report(identity: dict[str, object]) -> dict[str, object]:
                 "id": "all",
                 "extras": list(SUPPORTED_DEPENDENCY_EXTRA_IDS),
                 "excluded_extras": ["rllib"],
+                "package_ids": ["reviewed-package@1.0.0#fixture"],
             }
         ],
         "repository_inputs": [
@@ -112,6 +113,9 @@ def _report(identity: dict[str, object]) -> dict[str, object]:
         "structural_issues": [],
         "packages": [
             {
+                "package_id": "reviewed-package@1.0.0#fixture",
+                "normalized_name": "reviewed-package",
+                "version": "1.0.0",
                 "name": "reviewed-package",
                 "selected_profiles": ["all"],
                 "policy_disposition": "external_dependency_not_redistributed",
@@ -206,6 +210,56 @@ def test_supported_dependency_report_rejects_forged_complete_summary(tmp_path: P
     report_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
 
     with pytest.raises(CandidateError, match="summary.policy_pending_package_count"):
+        _validate_supported_dependency_report(
+            report_path,
+            identity=identity,
+            source_sha=identity["source_sha"],
+            tree_sha256="e" * 64,
+            workflow_run_attempt=identity["workflow_run_attempt"],
+            materialization=identity["materialization"],
+        )
+
+
+def test_supported_dependency_report_rejects_hidden_pending_surface_rows(tmp_path: Path) -> None:
+    """Empty selected profiles cannot hide 154 pending rows behind a zero summary."""
+    identity = _identity()
+    payload = _report(identity)
+    rows = []
+    package_ids = []
+    for index in range(154):
+        package_id = f"pending-{index}@1.0.0#fixture"
+        package_ids.append(package_id)
+        rows.append(
+            {
+                "package_id": package_id,
+                "normalized_name": f"pending-{index}",
+                "version": "1.0.0",
+                "name": f"pending-{index}",
+                "selected_profiles": [],
+                "policy_disposition": "review_required",
+            }
+        )
+    payload["profiles"] = [
+        {
+            "id": "all",
+            "extras": list(SUPPORTED_DEPENDENCY_EXTRA_IDS),
+            "excluded_extras": ["rllib"],
+            "package_ids": package_ids,
+        }
+    ]
+    payload["packages"] = rows
+    payload["summary"] = {
+        "candidate_bound": True,
+        "policy_pending_package_count": 0,
+        "selected_package_count": 0,
+        "status": "complete",
+        "structural_issue_count": 0,
+        "unresolved_count": 0,
+    }
+    report_path = tmp_path / SUPPORTED_DEPENDENCY_REPORT_NAME
+    report_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    with pytest.raises(CandidateError, match="selected-profile membership"):
         _validate_supported_dependency_report(
             report_path,
             identity=identity,

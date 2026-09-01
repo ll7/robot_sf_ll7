@@ -2326,6 +2326,37 @@ def _candidate_tree_sha1(repo_root: Path, commit_sha: str) -> str:
     return _candidate_git_output(result, operation="resolve source tree").decode("ascii").strip()
 
 
+def _validate_candidate_commit_identity(candidate_root: Path, report: dict[str, Any]) -> None:
+    """Require the materializer's root commit identity, not just its tree bytes."""
+    commit = report["candidate_commit_sha"]
+    metadata = _candidate_git_output(
+        _run_candidate_git(
+            "show",
+            "-s",
+            "--format=%H%n%P%n%T%n%an%n%ae%n%cn%n%ce%n%aI%n%cI%n%B",
+            commit,
+            cwd=candidate_root,
+        ),
+        operation="read candidate commit identity",
+    ).decode("utf-8")
+    lines = metadata.splitlines()
+    expected = [
+        commit,
+        "",
+        report["candidate_tree_sha"],
+        "Robot SF candidate",
+        "candidate@robot-sf.invalid",
+        "Robot SF candidate",
+        "candidate@robot-sf.invalid",
+        "2000-01-01T00:00:00+00:00",
+        "2000-01-01T00:00:00+00:00",
+        "Materialize Robot SF software candidate",
+        "",
+    ]
+    if lines != expected:
+        raise CandidateError("materialized candidate commit metadata or parent identity drifted")
+
+
 def _sanitized_manifest_from_report(  # noqa: C901 - closed manifest adapter
     report: dict[str, Any],
     *,
@@ -2780,6 +2811,7 @@ def _validate_materialized_candidate_tree(
     metadata_bytes: bytes,
 ) -> None:
     """Verify every candidate tree member against the recomputed materialization."""
+    _validate_candidate_commit_identity(candidate_root, report)
     candidate_entries = _candidate_source_tree(candidate_root, report["candidate_commit_sha"])
     expected_paths = set(selected_paths) | {
         policy["candidate_inventory_path"],
@@ -3131,6 +3163,7 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - clo
     tree_sha256: str,
     workflow_run_attempt: int,
     materialization: dict[str, Any] | None,
+    candidate_bundle: Path | None = None,
 ) -> dict[str, Any]:
     """Require a passed, candidate-bound supported-dependency inventory report."""
     if report_path.is_symlink() or not report_path.is_file():
@@ -3221,18 +3254,44 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - clo
     ):
         raise CandidateError("supported dependency report policy is unsupported")
     profiles = report.get("profiles")
-    all_profile = (
-        next(
-            (
-                profile
-                for profile in profiles
-                if isinstance(profile, dict) and profile.get("id") == "all"
-            ),
-            None,
-        )
+    all_profiles = (
+        [
+            profile
+            for profile in profiles
+            if isinstance(profile, dict) and profile.get("id") == "all"
+        ]
         if isinstance(profiles, list)
-        else None
+        else []
     )
+    if len(all_profiles) != 1:
+        raise CandidateError("supported dependency report has no unique canonical all profile")
+    all_package_ids = all_profiles[0].get("package_ids")
+    if (
+        not isinstance(all_package_ids, list)
+        or not all_package_ids
+        or any(not isinstance(package_id, str) or not package_id for package_id in all_package_ids)
+        or len(all_package_ids) != len(set(all_package_ids))
+    ):
+        raise CandidateError("supported dependency report all profile package closure is invalid")
+    rows_by_id: dict[str, dict[str, Any]] = {}
+    for row in packages:
+        package_id = row.get("package_id")
+        if not isinstance(package_id, str) or not package_id or package_id in rows_by_id:
+            raise CandidateError("supported dependency report package identity coverage is invalid")
+        rows_by_id[package_id] = row
+        expected_profiles = ["all"] if package_id in all_package_ids else []
+        if row.get("selected_profiles") != expected_profiles:
+            raise CandidateError(
+                "supported dependency report selected-profile membership differs from canonical all closure"
+            )
+    selected_package_ids = {
+        package_id for package_id, row in rows_by_id.items() if row.get("selected_profiles")
+    }
+    if selected_package_ids != set(all_package_ids):
+        raise CandidateError("supported dependency report selected package closure is incomplete")
+    if summary["selected_package_count"] != len(all_package_ids):
+        raise CandidateError("supported dependency report selected package count is not canonical")
+    all_profile = all_profiles[0]
     if (
         not isinstance(all_profile, dict)
         or all_profile.get("extras") != list(SUPPORTED_DEPENDENCY_EXTRA_IDS)
@@ -3276,6 +3335,48 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - clo
     sbom = binding.get("sbom")
     if not isinstance(sbom, dict) or sbom.get("sha256") != identity["sbom_sha256"]:
         raise CandidateError("supported dependency report SBOM binding differs from candidate")
+    if candidate_bundle is not None:
+        sbom_filename = sbom.get("filename")
+        if not isinstance(sbom_filename, str) or Path(sbom_filename).name != sbom_filename:
+            raise CandidateError("supported dependency candidate SBOM filename is invalid")
+        sbom_path = candidate_bundle / sbom_filename
+        if sbom_path.is_symlink() or not sbom_path.is_file():
+            raise CandidateError("supported dependency candidate SBOM is not a regular file")
+        if _sha256(sbom_path) != identity["sbom_sha256"]:
+            raise CandidateError("supported dependency candidate SBOM bytes differ from candidate")
+        sbom_payload = _load_json(sbom_path, label="supported dependency candidate SBOM")
+        components = sbom_payload.get("components")
+        if not isinstance(components, list):
+            raise CandidateError("supported dependency candidate SBOM components are invalid")
+        component_ids = set()
+        for component in components:
+            if not isinstance(component, dict):
+                raise CandidateError("supported dependency candidate SBOM component is invalid")
+            name, version = component.get("name"), component.get("version")
+            if not isinstance(name, str) or not isinstance(version, str):
+                raise CandidateError("supported dependency candidate SBOM identity is invalid")
+            component_ids.add((name.lower().replace("_", "-").replace(".", "-"), version))
+        expected_components = {
+            (row.get("normalized_name"), row.get("version"))
+            for package_id, row in rows_by_id.items()
+            if package_id in selected_package_ids and row.get("normalized_name") != "robot-sf"
+        }
+        if any(
+            not isinstance(name, str) or not isinstance(version, str)
+            for name, version in expected_components
+        ):
+            raise CandidateError("supported dependency report selected package identity is invalid")
+        inactive_components = {
+            tuple(value.split("@", 1))
+            for value in sbom.get("target_inactive_components", [])
+            if isinstance(value, str) and "@" in value
+        }
+        if component_ids != expected_components | inactive_components:
+            raise CandidateError(
+                "supported dependency candidate SBOM closure differs from all profile"
+            )
+        if sbom.get("component_count") != len(component_ids):
+            raise CandidateError("supported dependency candidate SBOM component count is invalid")
     policy_sha256 = _report_input_digest(
         report,
         SUPPORTED_DEPENDENCY_POLICY_PATH,
@@ -3527,6 +3628,7 @@ def _admit_rights(args: argparse.Namespace) -> None:  # noqa: C901, PLR0915 - cl
         tree_sha256=sanitized["tree_sha256"],
         workflow_run_attempt=manifest["workflow"]["run_attempt"],
         materialization=manifest.get("materialization"),
+        candidate_bundle=args.candidate_bundle,
     )
     sanitized_path = Path(os.path.abspath(args.sanitized_manifest))
     _require_external(sanitized_path, repo_root=repo_root, label="sanitized candidate manifest")

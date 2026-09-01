@@ -5,9 +5,12 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import io
 import json
+import subprocess
+import sys
 import tarfile
 import zipfile
 from email.message import Message
@@ -16,9 +19,15 @@ from typing import TYPE_CHECKING
 
 from scripts.tools.check_dependency_license_inventory import (
     SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS,
+    _effective_profile_coverage,
+    _exact_policy_coverage_failures,
+    _github_notice_reference,
+    _policy_records,
+    _policy_source_matches,
     build_inventory,
     check_report_freshness,
     main,
+    validate_dependency_license_receipt,
 )
 
 if TYPE_CHECKING:
@@ -686,6 +695,40 @@ def test_cli_resolves_candidate_bundle_relative_to_repo_root(tmp_path: Path) -> 
     )
 
 
+def test_direct_checkout_invocation_writes_marked_report_without_package_import(
+    tmp_path: Path,
+) -> None:
+    """The workflow's direct ``python scripts/tools/...`` invocation stays portable."""
+    _write_inputs(tmp_path)
+    report_path = tmp_path / "output" / "dependency-license-inventory.json"
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    repo_root = Path(__file__).resolve().parents[2]
+    script = repo_root / "scripts" / "tools" / "check_dependency_license_inventory.py"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--repo-root",
+            str(tmp_path),
+            "--profile",
+            "core",
+            "--output",
+            str(report_path),
+        ],
+        check=False,
+        cwd=checkout,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert report["surface"]["profile_ids"] == ["core"]
+
+
 def test_unrepresented_rows_require_reviewed_reason_or_remain_strictly_unresolved(
     tmp_path: Path,
 ) -> None:
@@ -863,6 +906,216 @@ def test_current_llvmlite_disposition_matches_both_frozen_lock_profiles() -> Non
     assert all(row["policy_disposition"] == "external_dependency_not_redistributed" for row in rows)
     assert not any("llvmlite" in failure for failure in inventory["failures"])
     assert inventory["summary"]["policy_exact_match_count"] == 2
+
+
+def test_issue_8163_policy_records_retain_metadata_and_archive_evidence() -> None:
+    """Exact batch provenance survives checker normalization without source drift."""
+    root = Path(__file__).resolve().parents[2]
+    policy = json.loads(
+        (root / "scripts/validation/dependency_license_policy.v1.json").read_text(encoding="utf-8")
+    )
+
+    _rules, _components, by_name, _records, issues = _policy_records(policy, root)
+
+    assert issues == []
+    for name in (
+        "absl-py",
+        "alembic",
+        "attrs",
+        "click",
+        "cma",
+        "cyclopts",
+        "fsspec",
+        "geopandas",
+        "idna",
+        "imageio",
+        "joblib",
+        "jsonschema",
+        "jsonschema-specifications",
+        "lazy-loader",
+        "markdown",
+        "narwhals",
+        "networkx",
+        "opentelemetry-api",
+        "opt-einsum",
+        "osmnx",
+        "platformdirs",
+        "pooch",
+        "proglog",
+        "pydantic",
+        "pyparsing",
+        "python-dotenv",
+        "pyvista",
+        "referencing",
+        "rich-rst",
+        "scooby",
+        "setuptools",
+        "termcolor",
+        "typing-inspection",
+        "urllib3",
+        "werkzeug",
+        "wheel",
+    ):
+        record = by_name[name][0]
+        assert record["source"]["metadata_url"] == (
+            f"https://pypi.org/pypi/{name}/{record['version']}/json"
+        )
+        assert record["status"] == "pending_review"
+        assert record["reviewer"] is None
+        assert record["reviewed_at"] is None
+        assert record["upstream"]["archive_notice_paths"]
+        assert record["upstream"]["archive_notice_absences"] == []
+
+
+def test_policy_metadata_url_does_not_change_exact_lock_source_matching() -> None:
+    """The retained PyPI response URL is provenance, not a second lock source."""
+    assert _policy_source_matches(
+        {"registry": "https://pypi.org/simple"},
+        {
+            "registry": "https://pypi.org/simple",
+            "metadata_url": "https://pypi.org/pypi/demo-package/1.0.0/json",
+        },
+    )
+    assert not _policy_source_matches(
+        {"registry": "https://example.invalid/simple"},
+        {
+            "registry": "https://pypi.org/simple",
+            "metadata_url": "https://pypi.org/pypi/demo-package/1.0.0/json",
+        },
+    )
+
+
+def test_all_profile_policy_ignores_transitive_membership_edges() -> None:
+    """An aggregate ``all`` row does not fail on its closure's profile edges."""
+    policy = {
+        "id": "demo-1-external-install",
+        "package": "demo",
+        "version": "1.0.0",
+        "source": {"registry": "https://pypi.org/simple"},
+        "profiles": ["all"],
+    }
+    record = {
+        "normalized_name": "demo",
+        "version": "1.0.0",
+        "source": {"registry": "https://pypi.org/simple"},
+        "profiles": ["all", "core", "viz"],
+        "selected_profiles": ["all", "core", "viz"],
+    }
+
+    assert _effective_profile_coverage({"all", "core", "viz"}, {"all"}) == {"all"}
+    assert (
+        _exact_policy_coverage_failures(
+            [policy],
+            [record],
+            {"all", "core", "viz"},
+            {"all", "core", "viz"},
+        )
+        == []
+    )
+
+
+def test_moving_notice_url_requires_a_pending_durable_blocker() -> None:
+    """Moving notice pointers cannot be laundered into reviewed evidence."""
+    root = Path(__file__).resolve().parents[2]
+    policy = json.loads(
+        (root / "scripts/validation/dependency_license_policy.v1.json").read_text(encoding="utf-8")
+    )
+    row = next(row for row in policy["package_dispositions"] if row["package"] == "python-dotenv")
+    moving = copy.deepcopy(policy)
+    moving_row = next(
+        row for row in moving["package_dispositions"] if row["package"] == "python-dotenv"
+    )
+    moving_row["upstream"]["notice_paths"][0] = (
+        "https://github.com/theskumar/python-dotenv/blob/v1.2.1/LICENSE"
+    )
+    moving_row.pop("evidence_blockers", None)
+    _rules, _components, _by_name, _records, issues = _policy_records(moving, root)
+    assert any("durable blocker for moving notice URLs" in issue for issue in issues)
+
+    pending = copy.deepcopy(moving)
+    pending_row = next(
+        row for row in pending["package_dispositions"] if row["package"] == "python-dotenv"
+    )
+    pending_row["evidence_blockers"] = [
+        "The tag URL is moving; immutable source pinning remains unresolved."
+    ]
+    _rules, _components, _by_name, _records, issues = _policy_records(pending, root)
+    assert not any("durable blocker for moving notice URLs" in issue for issue in issues)
+
+    reviewed = copy.deepcopy(pending)
+    reviewed_row = next(
+        row for row in reviewed["package_dispositions"] if row["package"] == "python-dotenv"
+    )
+    reviewed_row["status"] = "reviewed"
+    reviewed_row["reviewer"] = "independent-maintainer"
+    reviewed_row["reviewed_at"] = "2026-09-01"
+    _rules, _components, _by_name, _records, issues = _policy_records(reviewed, root)
+    assert any("reviewed evidence contains moving" in issue for issue in issues)
+    assert row["upstream"]["commit_sha"] == "eaf2a9129ccec6febda0f741eb3bb852c3f947bd"
+
+
+def test_issue_8163_receipt_binds_policy_license_and_strict_inputs(tmp_path: Path) -> None:
+    """The checked-in receipt is deterministic and tamper-evident."""
+    root = Path(__file__).resolve().parents[2]
+    receipt_path = root / "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+    assert validate_dependency_license_receipt(root, receipt_path) == []
+
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["review_binding"]["normalized_records_sha256"] = "0" * 64
+    tampered = tmp_path / "receipt-tampered.json"
+    tampered.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    issues = validate_dependency_license_receipt(root, tampered)
+    assert any("normalized_records_sha256 differs" in issue for issue in issues)
+    assert any(
+        "reviewed_head_sha differs" in issue
+        for issue in validate_dependency_license_receipt(
+            root,
+            receipt_path,
+            expected_reviewed_head="0" * 40,
+        )
+    )
+
+
+def test_github_notice_reference_requires_an_immutable_commit() -> None:
+    """The URL parser rejects tags, branches, queries, and missing blob paths."""
+    assert _github_notice_reference(
+        "https://github.com/theskumar/python-dotenv/blob/"
+        "eaf2a9129ccec6febda0f741eb3bb852c3f947bd/LICENSE"
+    ) == ("theskumar/python-dotenv", "eaf2a9129ccec6febda0f741eb3bb852c3f947bd", "blob")
+    for url in (
+        "https://github.com/theskumar/python-dotenv/blob/v1.2.1/LICENSE",
+        "https://github.com/theskumar/python-dotenv/tree/main",
+        "https://github.com/theskumar/python-dotenv/blob/"
+        "eaf2a9129ccec6febda0f741eb3bb852c3f947bd/LICENSE?raw=1",
+        "https://fontawesome.com/license/free",
+    ):
+        assert _github_notice_reference(url) is None
+
+
+def test_notice_commit_mismatch_and_missing_commit_fail_closed() -> None:
+    """A pinned-looking URL still must match the row's resolved source commit."""
+    root = Path(__file__).resolve().parents[2]
+    policy = json.loads(
+        (root / "scripts/validation/dependency_license_policy.v1.json").read_text(encoding="utf-8")
+    )
+    mismatch = copy.deepcopy(policy)
+    mismatch_row = next(
+        row for row in mismatch["package_dispositions"] if row["package"] == "python-dotenv"
+    )
+    mismatch_row["upstream"]["notice_paths"][0] = (
+        "https://github.com/theskumar/python-dotenv/blob/"
+        "0000000000000000000000000000000000000000/LICENSE"
+    )
+    _rules, _components, _by_name, _records, issues = _policy_records(mismatch, root)
+    assert any("does not match upstream commit_sha" in issue for issue in issues)
+
+    missing = copy.deepcopy(policy)
+    missing_row = next(
+        row for row in missing["package_dispositions"] if row["package"] == "python-dotenv"
+    )
+    del missing_row["upstream"]["commit_sha"]
+    _rules, _components, _by_name, _records, issues = _policy_records(missing, root)
+    assert any("must bind upstream provenance" in issue for issue in issues)
 
 
 def test_exact_llvmlite_policy_rejects_another_with_expression(tmp_path: Path) -> None:

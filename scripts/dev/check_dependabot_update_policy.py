@@ -32,6 +32,7 @@ import yaml
 
 from scripts.dev.check_dependency_coherence import (
     CoherenceError,
+    canonical_lock_value,
     compare_lock_resolution,
     load_manifest,
 )
@@ -377,7 +378,7 @@ def lock_package_rows(text: str) -> dict[str, list[str]]:
         if not isinstance(row, Mapping) or not isinstance(row.get("name"), str):
             raise PolicyError("uv.lock contains a package row without a name")
         name = normalize_package_name(row["name"])
-        canonical = json.dumps(row, sort_keys=True, separators=(",", ":"))
+        canonical = json.dumps(canonical_lock_value(row), sort_keys=True, separators=(",", ":"))
         grouped.setdefault(name, []).append(canonical)
     for values in grouped.values():
         values.sort()

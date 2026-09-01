@@ -2543,6 +2543,11 @@ def _receipt_contract_issues(  # noqa: C901, PLR0912, PLR0915
                             )
                             continue
                         resolved_member = Path(member_path.removeprefix("operator-local:"))
+                        if resolved_member.name != member.get("filename"):
+                            issues.append(
+                                "dependency receipt candidate member path does not match "
+                                f"filename {member.get('filename')}"
+                            )
                         if not resolved_member.is_absolute():
                             resolved_member = _resolve_path(repo_root, member_path)
                         if not resolved_member.is_file():

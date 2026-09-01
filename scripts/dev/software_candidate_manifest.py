@@ -225,6 +225,18 @@ class CandidateError(ValueError):
     """Raised when candidate admission or offline verification fails closed."""
 
 
+def _positive_run_attempt(value: Any, *, label: str) -> int:
+    """Require a real positive JSON integer for one workflow attempt field.
+
+    Python considers ``bool`` a subclass of ``int`` and considers integral
+    floats equal to integers.  Workflow provenance is serialized JSON, so
+    those equality aliases must not be accepted as an attempt identity.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise CandidateError(f"{label} must be a positive JSON integer")
+    return value
+
+
 def _trusted_git_environment() -> dict[str, str]:
     return {
         "GIT_ATTR_NOSYSTEM": "1",
@@ -2126,9 +2138,7 @@ def _validate_workflow_identity(workflow: Any) -> None:
     run_id = workflow["run_id"]
     if not isinstance(run_id, str) or not RUN_ID_PATTERN.fullmatch(run_id):
         raise CandidateError("candidate manifest workflow run_id is invalid")
-    attempt = workflow["run_attempt"]
-    if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
-        raise CandidateError("candidate manifest workflow run_attempt is invalid")
+    _positive_run_attempt(workflow["run_attempt"], label="candidate manifest workflow run_attempt")
 
 
 def _validate_package_identity(package: Any) -> str:
@@ -2775,6 +2785,16 @@ def _copy_diagnostic_tree(
     return copied
 
 
+DIAGNOSTIC_REASON_MAX_LENGTH = 1000
+
+
+def _diagnostic_parse_error(label: str, error: CandidateError) -> dict[str, str]:
+    """Classify malformed optional JSON without copying its contents into metadata."""
+    detail = str(error).strip() or "invalid JSON"
+    reason = f"{label} parse error: {detail}"
+    return {"status": "unverified", "reason": reason[:DIAGNOSTIC_REASON_MAX_LENGTH]}
+
+
 def _diagnostic_embedded_binding(
     path: Path | None,
     *,
@@ -2794,7 +2814,10 @@ def _diagnostic_embedded_binding(
     if path is None or not path.exists():
         return {"status": "not_present"}
     _diagnostic_source_file(path, label=label)
-    payload = _load_json(path, label=label)
+    try:
+        payload = _load_json(path, label=label)
+    except CandidateError as exc:
+        return _diagnostic_parse_error(label, exc)
     return _diagnostic_binding_payload(
         payload,
         label=label,
@@ -2815,6 +2838,9 @@ def _diagnostic_binding_payload(
     require_workflow: bool,
 ) -> dict[str, Any]:
     """Classify identity fields from an already-loaded report object."""
+    expected_attempt = _positive_run_attempt(
+        workflow_run_attempt, label="rejected diagnostic workflow run_attempt"
+    )
     if not isinstance(payload, dict):
         return {"status": "unverified", "reason": f"{label} is not a JSON object"}
     embedded_source = payload.get("source_sha")
@@ -2839,16 +2865,16 @@ def _diagnostic_binding_payload(
             "status": "unverified",
             "reason": f"{label} workflow binding is not an object",
         }
-    if (
-        embedded_workflow.get("run_id") != workflow_run_id
-        or embedded_workflow.get("run_attempt") != workflow_run_attempt
-    ):
+    embedded_attempt = _positive_run_attempt(
+        embedded_workflow.get("run_attempt"), label=f"{label} workflow run_attempt"
+    )
+    if embedded_workflow.get("run_id") != workflow_run_id or embedded_attempt != expected_attempt:
         raise CandidateError(
             f"{label} workflow identity does not match rejected diagnostic workflow"
         )
     result["workflow"] = {
         "run_id": workflow_run_id,
-        "run_attempt": workflow_run_attempt,
+        "run_attempt": expected_attempt,
     }
     result["status"] = "verified"
     return result
@@ -2865,7 +2891,11 @@ def _diagnostic_dependency_binding(
     if path is None or not path.exists():
         return {"status": "not_present"}
     _diagnostic_source_file(path, label="diagnostic dependency report")
-    payload = _load_json(path, label="diagnostic dependency report")
+    label = "diagnostic dependency report"
+    try:
+        payload = _load_json(path, label=label)
+    except CandidateError as exc:
+        return _diagnostic_parse_error(label, exc)
     if not isinstance(payload, dict):
         return {"status": "unverified", "reason": "dependency report is not a JSON object"}
     binding = payload.get("candidate_binding")
@@ -2960,8 +2990,9 @@ def _rejected_diagnostic(  # noqa: C901, PLR0912, PLR0915 - closed packet contra
         raise CandidateError("rejected diagnostic repository is invalid")
     if not RUN_ID_PATTERN.fullmatch(args.workflow_run_id):
         raise CandidateError("rejected diagnostic workflow run ID is invalid")
-    if args.workflow_run_attempt < 1:
-        raise CandidateError("rejected diagnostic workflow attempt must be positive")
+    _positive_run_attempt(
+        args.workflow_run_attempt, label="rejected diagnostic workflow run_attempt"
+    )
     if not VERSION_PATTERN.fullmatch(args.candidate_version):
         raise CandidateError("rejected diagnostic candidate version is invalid")
     artifact_name = (
@@ -3437,8 +3468,7 @@ def _assemble(args: argparse.Namespace) -> None:
         raise CandidateError("repository must be an exact owner/name identity")
     if not RUN_ID_PATTERN.fullmatch(args.workflow_run_id):
         raise CandidateError("workflow run ID must be a positive decimal identity")
-    if args.workflow_run_attempt < 1:
-        raise CandidateError("workflow run attempt must be positive")
+    _positive_run_attempt(args.workflow_run_attempt, label="workflow run_attempt")
 
     wheel_input, sdist_input, version = _distribution_inputs(args.dist_dir)
     materialization = _materialization_identity(
@@ -4121,8 +4151,7 @@ def _admit_rights(args: argparse.Namespace) -> None:  # noqa: C901, PLR0915 - cl
         raise CandidateError("rights admission source SHA is invalid")
     if not RUN_ID_PATTERN.fullmatch(args.workflow_run_id):
         raise CandidateError("rights admission workflow run ID is invalid")
-    if args.workflow_run_attempt < 1:
-        raise CandidateError("rights admission workflow attempt must be positive")
+    _positive_run_attempt(args.workflow_run_attempt, label="rights admission workflow run_attempt")
     _validate_source(repo_root, args.source_sha)
     policy_path = (args.policy if args.policy.is_absolute() else repo_root / args.policy).resolve()
     policy_raw, policy = _load_rights_policy(policy_path, repo_root=repo_root)
@@ -4262,8 +4291,10 @@ def _verify(args: argparse.Namespace) -> None:
         raise CandidateError("expected source SHA must be one exact lowercase 40-hex identity")
     if not RUN_ID_PATTERN.fullmatch(args.expected_workflow_run_id):
         raise CandidateError("expected workflow run ID must be a positive decimal identity")
-    if args.expected_workflow_run_attempt < 1:
-        raise CandidateError("expected workflow run attempt must be positive")
+    _positive_run_attempt(
+        args.expected_workflow_run_attempt,
+        label="expected workflow run_attempt",
+    )
     entries = _bundle_entries(args.bundle_dir)
     manifest = _validate_manifest(
         _load_json(args.bundle_dir / MANIFEST_NAME, label="candidate manifest")

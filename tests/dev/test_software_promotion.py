@@ -13,6 +13,8 @@ import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pytest
+
 if TYPE_CHECKING:
     from collections.abc import Callable
     from typing import Any
@@ -1419,6 +1421,57 @@ def test_artifact_attempt_is_bound_to_name_and_nested_run_metadata(tmp_path: Pat
     )
     assert rejected.returncode == 1
     assert "attempt" in rejected.stderr
+
+
+@pytest.mark.parametrize("invalid_attempt", (True, 1.0, "1", 0, -1))
+def test_artifact_metadata_rejects_type_confused_nested_run_attempt(
+    tmp_path: Path, invalid_attempt: object
+) -> None:
+    """Present artifact workflow attempts must be positive JSON integers."""
+    metadata = tmp_path / "artifact.json"
+    source_sha = "a" * 40
+    name = "robot-sf-software-candidate-" + source_sha + "-123456-1"
+    metadata.write_text(
+        json.dumps(
+            {
+                "id": 987654,
+                "name": name,
+                "digest": "sha256:" + "a" * 64,
+                "expired": False,
+                "archive_download_url": (
+                    "https://api.github.com/repos/ll7/robot_sf_ll7/actions/artifacts/987654/zip"
+                ),
+                "workflow_run": {
+                    "id": 123456,
+                    "head_sha": source_sha,
+                    "run_attempt": invalid_attempt,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    rejected = _run_helper(
+        "check-artifact",
+        "--metadata",
+        str(metadata),
+        "--artifact-id",
+        "987654",
+        "--artifact-name",
+        name,
+        "--artifact-digest",
+        "sha256:" + "a" * 64,
+        "--run-id",
+        "123456",
+        "--run-attempt",
+        "1",
+        "--kind",
+        "candidate",
+        "--source-sha",
+        source_sha,
+        check=False,
+    )
+    assert rejected.returncode == 1
+    assert "run_attempt" in rejected.stderr
 
 
 def test_receipts_never_include_credential_fields(tmp_path: Path) -> None:

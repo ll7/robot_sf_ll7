@@ -174,8 +174,13 @@ def test_bare_script_bootstrap_adds_repository_root_once(tmp_path: Path) -> None
             sys.executable,
             "-c",
             (
-                "import runpy, sys; runpy.run_path(sys.argv[1], run_name='bootstrap_probe'); "
-                "print(sys.path.count(sys.argv[2]))"
+                "import pathlib, runpy, sys; "
+                "root=str(pathlib.Path(sys.argv[2]).resolve()); "
+                "sys.path[:]=[entry for entry in sys.path if not entry or "
+                "str(pathlib.Path(entry).resolve()) != root]; "
+                "runpy.run_path(sys.argv[1], run_name='bootstrap_probe'); "
+                "print(sum(str(pathlib.Path(entry).resolve()) == root "
+                "for entry in sys.path if entry))"
             ),
             str(REPO_ROOT / "scripts/tools/check_distribution_licenses.py"),
             str(REPO_ROOT),

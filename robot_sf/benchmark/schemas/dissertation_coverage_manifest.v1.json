@@ -1,0 +1,432 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.dev/schemas/dissertation-coverage-manifest.v1.json",
+  "title": "Robot SF dissertation coverage manifest (v1)",
+  "description": "Source-preserving repository metadata relating completed evidence packages to a frozen dissertation anchor.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "review_marker",
+    "consumer_profile",
+    "source_packages",
+    "source_reconciliation",
+    "summary_counts",
+    "projection_policy",
+    "claim_boundary",
+    "capabilities"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "dissertation_coverage_manifest.v1"
+    },
+    "review_marker": {
+      "const": "AI-GENERATED NEEDS-REVIEW"
+    },
+    "consumer_profile": {
+      "$ref": "#/$defs/consumer_profile"
+    },
+    "source_packages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/source_package"
+      }
+    },
+    "source_reconciliation": {
+      "$ref": "#/$defs/source_reconciliation"
+    },
+    "summary_counts": {
+      "$ref": "#/$defs/summary_counts"
+    },
+    "projection_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "anchor_relation",
+        "implementation_status",
+        "evidence_status",
+        "strongest_permitted_wording"
+      ],
+      "properties": {
+        "status": {"type": "string", "minLength": 1},
+        "anchor_relation": {"type": "string", "minLength": 1},
+        "implementation_status": {"type": "string", "minLength": 1},
+        "evidence_status": {"type": "string", "minLength": 1},
+        "strongest_permitted_wording": {"type": "string", "minLength": 1}
+      }
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/capability"
+      }
+    }
+  },
+  "$defs": {
+    "consumer_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "consumer_id",
+        "repository",
+        "source_commit",
+        "release_tag",
+        "release_doi",
+        "campaign_id",
+        "planner_count",
+        "scenario_cell_count",
+        "seed_count",
+        "expected_episode_count"
+      ],
+      "properties": {
+        "consumer_id": {"const": "ll7-diss-submission-2026"},
+        "repository": {"const": "ll7/robot_sf_ll7"},
+        "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "release_tag": {"type": "string", "minLength": 1},
+        "release_doi": {"type": "string", "minLength": 1},
+        "campaign_id": {"type": "string", "minLength": 1},
+        "planner_count": {"const": 14},
+        "scenario_cell_count": {"const": 48},
+        "seed_count": {"const": 30},
+        "expected_episode_count": {"const": 20160}
+      }
+    },
+    "source_package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "path",
+        "sha256",
+        "schema",
+        "review_marker",
+        "record_field",
+        "record_count",
+        "producer_issue",
+        "producer_pr",
+        "producer_merge_commit"
+      ],
+      "properties": {
+        "source_id": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/digest"},
+        "schema": {"type": "string", "minLength": 1},
+        "review_marker": {"const": "AI-GENERATED NEEDS-REVIEW"},
+        "record_field": {"type": "string", "minLength": 1},
+        "record_count": {"type": "integer", "minimum": 1},
+        "producer_issue": {"type": "integer", "minimum": 1},
+        "producer_pr": {"type": "integer", "minimum": 1},
+        "producer_merge_commit": {"$ref": "#/$defs/commit_sha"}
+      }
+    },
+    "source_reconciliation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["planner_roster", "owner_paths"],
+      "properties": {
+        "planner_roster": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "source_snapshot",
+            "release_manifest",
+            "source_only",
+            "release_manifest_only"
+          ],
+          "properties": {
+            "status": {"enum": ["aligned", "conflict_explicitly_recorded"]},
+            "source_snapshot": {"$ref": "#/$defs/string_array"},
+            "release_manifest": {"$ref": "#/$defs/string_array"},
+            "source_only": {"$ref": "#/$defs/string_array"},
+            "release_manifest_only": {"$ref": "#/$defs/string_array"}
+          }
+        },
+        "owner_paths": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "stale_paths"],
+          "properties": {
+            "status": {"enum": ["all_resolvable", "known_stale_paths_explicitly_recorded"]},
+            "stale_paths": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/stale_path"}
+            }
+          }
+        }
+      }
+    },
+    "stale_path": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "capability_id", "path"],
+      "properties": {
+        "source_id": {"type": "string", "minLength": 1},
+        "capability_id": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1}
+      }
+    },
+    "summary_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilities",
+        "by_anchor_relation",
+        "by_evidence_status",
+        "by_dissertation_status"
+      ],
+      "properties": {
+        "capabilities": {"type": "integer", "minimum": 1},
+        "by_anchor_relation": {"$ref": "#/$defs/count_map"},
+        "by_evidence_status": {"$ref": "#/$defs/count_map"},
+        "by_dissertation_status": {"$ref": "#/$defs/count_map"}
+      }
+    },
+    "count_map": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"type": "integer", "minimum": 1}
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capability_id",
+        "title",
+        "category",
+        "owner_paths",
+        "owner_path_status",
+        "source_issues",
+        "first_known_commit",
+        "anchor_relation",
+        "source_anchor_relations",
+        "implementation_status",
+        "source_implementation_statuses",
+        "evidence_status",
+        "source_evidence_statuses",
+        "dissertation_relationship",
+        "dissertation_status",
+        "strongest_permitted_wording",
+        "claim_boundary_variants",
+        "missing_proof",
+        "source_missing_proof",
+        "recommended_downstream_action",
+        "source_recommended_actions",
+        "source_paths",
+        "source_digests",
+        "source_records"
+      ],
+      "properties": {
+        "capability_id": {"type": "string", "minLength": 1},
+        "title": {"type": "string", "minLength": 1},
+        "category": {"type": "string", "minLength": 1},
+        "owner_paths": {"$ref": "#/$defs/string_array"},
+        "owner_path_status": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/owner_path_status"}
+        },
+        "source_issues": {
+          "type": "array",
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "source_lineage": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/source_lineage"}
+        },
+        "first_known_commit": {"$ref": "#/$defs/first_commit"},
+        "anchor_relation": {
+          "enum": [
+            "present_at_anchor",
+            "predecessor_only",
+            "introduced_after_anchor",
+            "operational_only",
+            "unknown"
+          ]
+        },
+        "source_anchor_relations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/source_anchor_relation"}
+        },
+        "implementation_status": {
+          "enum": ["implemented", "partial", "prototype", "planned", "blocked", "retired", "unknown"]
+        },
+        "source_implementation_statuses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/source_status"}
+        },
+        "evidence_status": {"type": "string", "minLength": 1},
+        "source_evidence_statuses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/source_status"}
+        },
+        "dissertation_relationship": {"type": "string", "minLength": 1},
+        "dissertation_status": {
+          "enum": [
+            "evaluated_and_reported",
+            "described_not_evaluated",
+            "future_work_mentioned",
+            "absent",
+            "intentionally_out_of_scope",
+            "unknown"
+          ]
+        },
+        "strongest_permitted_wording": {"type": "string", "minLength": 1},
+        "claim_boundary_variants": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "missing_proof": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "source_missing_proof": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/source_missing_proof"}
+        },
+        "recommended_downstream_action": {
+          "enum": [
+            "none",
+            "planner_funnel_candidate",
+            "capability_status_table_candidate",
+            "outlook_status_candidate",
+            "repository_only"
+          ]
+        },
+        "source_recommended_actions": {"$ref": "#/$defs/string_array"},
+        "source_paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "source_digests": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/source_digest"}
+        },
+        "source_records": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/source_record"}
+        }
+      }
+    },
+    "owner_path_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "status", "source_ids"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "status": {"enum": ["present", "missing_expected_source_path"]},
+        "source_ids": {"$ref": "#/$defs/string_array"}
+      }
+    },
+    "first_commit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "availability", "source_id", "field"],
+      "properties": {
+        "value": {"type": ["string", "null"]},
+        "availability": {"enum": ["source_reported", "unavailable_in_source"]},
+        "source_id": {"type": ["string", "null"]},
+        "field": {"type": ["string", "null"]},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "source_anchor_relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "field", "value", "projected_value"],
+      "properties": {
+        "source_id": {"type": "string", "minLength": 1},
+        "field": {"type": "string", "minLength": 1},
+        "value": {"type": "string", "minLength": 1},
+        "projected_value": {"type": "string", "minLength": 1}
+      }
+    },
+    "source_status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "value"],
+      "properties": {
+        "source_id": {"type": "string", "minLength": 1},
+        "value": {"type": ["string", "null"]}
+      }
+    },
+    "source_missing_proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "record_key", "value", "effective_value"],
+      "properties": {
+        "source_id": {"type": "string", "minLength": 1},
+        "record_key": {"type": "string", "minLength": 1},
+        "value": {
+          "type": ["array", "null"],
+          "items": {"type": "string", "minLength": 1}
+        },
+        "effective_value": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "source_digest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "path", "sha256"],
+      "properties": {
+        "source_id": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "source_lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "issue", "pr", "merge_commit"],
+      "properties": {
+        "source_id": {"type": "string", "minLength": 1},
+        "issue": {"type": "integer", "minimum": 1},
+        "pr": {"type": "integer", "minimum": 1},
+        "merge_commit": {"$ref": "#/$defs/commit_sha"}
+      }
+    },
+    "source_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "path", "record_key", "fields"],
+      "properties": {
+        "source_id": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "record_key": {"type": "string", "minLength": 1},
+        "fields": {"type": "object"}
+      }
+    },
+    "string_array": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "commit_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    }
+  }
+}

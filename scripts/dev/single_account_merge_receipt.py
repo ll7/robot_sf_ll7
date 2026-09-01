@@ -1009,6 +1009,8 @@ def _ordinary_cas_reasons(  # noqa: C901, PLR0912 - dimensions fail closed indep
     receipt: Mapping[str, Any],
 ) -> list[str]:
     """Validate the exact-head ordinary-CAS proof that may qualify base staleness."""
+    from scripts.dev.base_sensitive_selector import SELECTOR_VERSION
+
     proof = receipt.get("ordinary_cas")
     if not isinstance(proof, Mapping):
         return ["ordinary_cas_proof_unavailable"]
@@ -1020,7 +1022,7 @@ def _ordinary_cas_reasons(  # noqa: C901, PLR0912 - dimensions fail closed indep
     selector = proof.get("selector") if isinstance(proof.get("selector"), Mapping) else {}
     if selector.get("status") != "ordinary":
         reasons.append("ordinary_cas_selector_not_ordinary")
-    if selector.get("selector") != "pytest-marker-files.v1":
+    if selector.get("selector") != SELECTOR_VERSION:
         reasons.append("ordinary_cas_selector_unknown")
     if selector.get("complete") is not True:
         reasons.append("ordinary_cas_selector_incomplete")

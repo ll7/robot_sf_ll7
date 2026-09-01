@@ -51,7 +51,7 @@ def _ordinary_cas_proof() -> dict[str, Any]:
             "current_main_sha": CURRENT_BASE_SHA,
             "current_main_ref_verified": True,
             "status": "ordinary",
-            "selector": "pytest-marker-files.v1",
+            "selector": "pytest-marker-files.v2",
             "changed_file_records": [
                 {
                     "filename": "scripts/dev/example.py",
@@ -290,6 +290,23 @@ def test_exact_head_ordinary_cas_proof_qualifies_only_stale_base_gate_reason() -
     assert receipt["status"] == "ready"
     assert receipt["reason_codes"] == []
     assert verify_receipt(receipt)["passed"] is True
+
+
+def test_ordinary_cas_proof_rejects_unknown_selector_version() -> None:
+    proof = _ordinary_cas_proof()
+    proof["selector"]["selector"] = "pytest-marker-files.v3"
+
+    blocked = _receipt(
+        gate_audit={
+            "schema": "merge_queue_gate.v1",
+            "passed": False,
+            "reasons": ["stale_merge_base"],
+        },
+        ordinary_cas=proof,
+    )
+
+    assert blocked["status"] == "blocked"
+    assert "ordinary_cas_selector_unknown" in blocked["reason_codes"]
 
 
 @pytest.mark.parametrize(

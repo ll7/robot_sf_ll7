@@ -2,6 +2,13 @@
 
 Autonomous implementation must use the repository label state and a complete issue contract. A Project field, title, priority, open state, or absence of a blocker is not sufficient.
 
+The post-create readiness transition is a narrow exception to the observed-label requirement:
+`scripts/dev/issue_readiness_gate.py` may evaluate a private prospective `state:ready` label set
+for a fresh issue that has no `state:*` label. It still performs the complete canonical admission
+check, writes no transient label, re-reads for drift, and verifies the final label readback. This
+does not authorize a claim or bypass an existing state, blocker, parent, assignment, or dependency
+gate.
+
 ## Admission rule
 
 An implementation worker may acquire `agent-claims/issue-<number>` only when the issue:

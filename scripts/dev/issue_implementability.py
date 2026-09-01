@@ -815,15 +815,26 @@ def live_issue_report(
     remote: str,
     repo_root: Path | str | None = None,
     route_preflight: Mapping[str, Any] | None = None,
+    prospective_ready: bool = False,
 ) -> dict[str, Any]:
-    """Read one live issue and gate claimability on any explicit dependency packet."""
+    """Read one live issue and gate claimability on any explicit dependency packet.
+
+    When ``prospective_ready`` is true, evaluate a private copy of the issue as if
+    ``state:ready`` had already been added. This supports the post-create readiness
+    gate without writing a transient label before the complete admission check passes.
+    """
     issue = fetch_live_issue(number, repo=repo)
     claim = issue_claim.status_issue(number, remote=remote)
     dependency_evaluation = _resolve_issue_dependency_packet(
         issue, repo=repo, repo_root=repo_root or Path.cwd()
     )
+    issue_for_evaluation = issue
+    labels = issue.get("labels")
+    if prospective_ready and isinstance(labels, list) and READY_LABEL not in labels:
+        issue_for_evaluation = dict(issue)
+        issue_for_evaluation["labels"] = [*labels, READY_LABEL]
     return evaluate_issue(
-        issue,
+        issue_for_evaluation,
         claim,
         dependency_evaluation=dependency_evaluation,
         repository=repo,

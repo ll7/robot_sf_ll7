@@ -124,11 +124,14 @@ def admit_issue(
     source_ref: str,
     check_only: bool,
     route_preflight: Mapping[str, Any] | None = None,
+    prospective_ready: bool = False,
 ) -> dict[str, Any]:
     """Evaluate one live issue and create its atomic claim only after a pass."""
     preflight_kwargs: dict[str, Any] = {}
     if route_preflight is not None:
         preflight_kwargs["route_preflight"] = route_preflight
+    if prospective_ready:
+        preflight_kwargs["prospective_ready"] = True
     preflight = issue_implementability.live_issue_report(
         issue_number,
         repo=repo,

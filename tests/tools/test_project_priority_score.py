@@ -22,6 +22,7 @@ from scripts.tools.project_priority_score import (
     ProjectQuotaBlockedError,
     ScoreInputs,
     SyncOptions,
+    _numeric_field_literal,
     build_previews,
     compute_priority_score,
     field_keys,
@@ -520,6 +521,8 @@ def test_only_empty_builds_live_eligibility_plan_and_writes_ready_issue() -> Non
         "status": "applied",
         "counts": {"eligible": 1, "skipped": 0, "blocked": 0},
         "writes_performed": True,
+        "attempted_rows": [{"issue_number": 701, "item_id": "item-701", "written": True}],
+        "writes_performed_count": 1,
         "items": [
             {
                 "issue_number": 701,
@@ -1297,3 +1300,98 @@ def test_gh_project_client_does_not_retry_unknown_owner_with_at_me(
 
     assert len(calls) == 1
     assert calls[0][calls[0].index("--owner") + 1] == "octocat"
+
+
+def test_terminal_project_row_never_receives_an_item_edit() -> None:
+    """A row the plan skips as terminal must never produce an item-edit (#8152)."""
+    client = FakeGhProjectClient(
+        fields=[_field(name) for name in (EFFORT_FIELD, *REQUIRED_NUMBER_FIELDS)],
+        items=[
+            _item(8021, status="Done"),
+            _item(701),
+        ],
+    )
+    previews = sync_scores(
+        client,
+        SyncOptions(
+            owner="ll7",
+            project_number=5,
+            ensure_fields=False,
+            limit=100,
+            alpha=DEFAULT_ALPHA,
+            round_digits=6,
+            issue_number=None,
+            dry_run=False,
+            skip_statuses=set(),
+            only_empty=True,
+        ),
+    )
+
+    # The terminal row is excluded from the eligible write set entirely.
+    assert sorted(preview.issue_number for preview in previews) == [701]
+    written_items = [item_id for item_id, _f, _p, _n in client.updated_numbers]
+    assert written_items == ["item-701"]
+    assert client.last_eligibility_plan is not None
+    assert client.last_eligibility_plan["counts"]["skipped"] == 1
+    assert client.last_eligibility_plan["writes_performed"] is True
+
+
+def test_numeric_field_literal_stays_plain_and_within_eight_decimals() -> None:
+    """Written literals are plain decimals with at most 8 decimal places."""
+    assert _numeric_field_literal(0.055072) == "0.055072"
+    assert _numeric_field_literal(0.000012345) == "0.00001234"
+    assert _numeric_field_literal(12.055072123) == "12.05507212"
+    assert _numeric_field_literal(3.5) == "3.5"
+    assert "e" not in _numeric_field_literal(0.00001)
+    with pytest.raises(ValueError, match="8-decimal limit"):
+        _numeric_field_literal(float("nan"))
+
+
+class _RejectingGhProjectClient(FakeGhProjectClient):
+    """Fake client whose numeric writes are rejected like a live gh failure."""
+
+    def update_number_field(self, **_: object) -> None:
+        """Raise the gh error shape observed on numeric-shape rejection."""
+
+        raise RuntimeError("gh: Number values cannot exceed 8 decimal places")
+
+
+def test_apply_failure_writes_structured_summary_and_never_raises(tmp_path: Path) -> None:
+    """A rejected write is recorded with attempted rows and retryability (#8152)."""
+    client = _RejectingGhProjectClient(
+        fields=[_field(name) for name in (EFFORT_FIELD, *REQUIRED_NUMBER_FIELDS)],
+        items=[_item(701)],
+    )
+    previews = sync_scores(
+        client,
+        SyncOptions(
+            owner="ll7",
+            project_number=5,
+            ensure_fields=False,
+            limit=100,
+            alpha=DEFAULT_ALPHA,
+            round_digits=6,
+            issue_number=None,
+            dry_run=False,
+            skip_statuses=set(),
+            only_empty=True,
+        ),
+    )
+
+    assert previews == []
+    plan = client.last_eligibility_plan
+    assert plan is not None
+    assert plan["status"] == "apply_failed"
+    failure = plan["failure"]
+    assert failure["retryable"] is True
+    assert failure["writes_performed"] == 0
+    assert failure["attempted_rows"] == [
+        {"issue_number": 701, "item_id": "item-701", "written": False}
+    ]
+    assert "Number values cannot exceed 8 decimal places" in failure["error"]
+
+    summary_path = tmp_path / "summary.json"
+    write_summary(summary_path, previews, plan)
+    persisted = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert persisted["eligibility_plan"]["status"] == "apply_failed"
+    assert persisted["eligibility_plan"]["failure"]["retryable"] is True

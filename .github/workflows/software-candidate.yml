@@ -25,6 +25,8 @@ jobs:
         robot-sf-software-candidate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
       RIGHTS_ARTIFACT_NAME: >-
         robot-sf-software-rights-admission-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+      REJECTED_DIAGNOSTIC_ARTIFACT_NAME: >-
+        robot-sf-software-candidate-rejected-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - name: Checkout exact source without credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,6 +83,13 @@ jobs:
             printf 'DEPENDENCY_REPORT=%s/dependency-license-inventory.json\n' "${candidate_root}"
             printf 'RIGHTS_MANIFEST=%s/sanitized-candidate.json\n' "${candidate_root}"
             printf 'RIGHTS_DIR=%s/rights-admission\n' "${candidate_root}"
+            printf 'DIAGNOSTIC_ROOT=%s/rejected-diagnostic\n' "${candidate_root}"
+            printf 'STRICT_RIGHTS_LOG=%s/strict-distribution-rights.log\n' "${candidate_root}"
+            printf 'DEPENDENCY_LOG=%s/strict-supported-dependency-surface.log\n' "${candidate_root}"
+            printf 'RIGHTS_ADMISSION_LOG=%s/rights-admission.log\n' "${candidate_root}"
+            printf 'STRICT_RIGHTS_EXIT=not-run\n'
+            printf 'DEPENDENCY_EXIT=not-run\n'
+            printf 'RIGHTS_ADMISSION_EXIT=not-run\n'
           } >> "${GITHUB_ENV}"
           {
             printf 'artifact-name=%s\n' "${ARTIFACT_NAME}"
@@ -160,13 +169,22 @@ jobs:
           twine check --strict "${DIST_DIR}"/*.whl "${DIST_DIR}"/*.tar.gz
 
       - name: Validate candidate archive members and strict rights
+        id: strict-rights
         run: |
-          cd "${BUILD_SOURCE}"
-          "${SOFTWARE_CANDIDATE_PYTHON}" scripts/tools/check_distribution_licenses.py "${DIST_DIR}" \
-            --strict-asset-rights \
-            --repo-root "${BUILD_SOURCE}" \
-            --inventory "${BUILD_SOURCE}/scripts/validation/software_candidate_asset_rights.v1.json" \
-            --source-tree-ref HEAD
+          set +e
+          (
+            cd "${BUILD_SOURCE}" &&
+            "${SOFTWARE_CANDIDATE_PYTHON}" scripts/tools/check_distribution_licenses.py "${DIST_DIR}" \
+              --strict-asset-rights \
+              --repo-root "${BUILD_SOURCE}" \
+              --inventory "${BUILD_SOURCE}/scripts/validation/software_candidate_asset_rights.v1.json" \
+              --source-tree-ref HEAD
+          ) > "${STRICT_RIGHTS_LOG}" 2>&1
+          status=$?
+          set -e
+          printf 'STRICT_RIGHTS_EXIT=%s\n' "${status}" >> "${GITHUB_ENV}"
+          cat "${STRICT_RIGHTS_LOG}"
+          exit "${status}"
 
       - name: Validate clean install and every entry point
         env:
@@ -215,14 +233,21 @@ jobs:
           --expected-workflow-run-attempt "${GITHUB_RUN_ATTEMPT}"
 
       - name: Generate strict supported dependency inventory from finalized candidate
-        run: >-
-          "${SOFTWARE_CANDIDATE_PYTHON}"
-          "${BUILD_SOURCE}/scripts/tools/check_dependency_license_inventory.py"
-          --repo-root "${BUILD_SOURCE}"
-          --output "${DEPENDENCY_REPORT}"
-          --candidate-bundle "${BUNDLE_DIR}"
-          --profile all
-          --fail-on-unresolved
+        id: strict-dependency
+        run: |
+          set +e
+          "${SOFTWARE_CANDIDATE_PYTHON}" \
+            "${BUILD_SOURCE}/scripts/tools/check_dependency_license_inventory.py" \
+            --repo-root "${BUILD_SOURCE}" \
+            --output "${DEPENDENCY_REPORT}" \
+            --candidate-bundle "${BUNDLE_DIR}" \
+            --profile all \
+            --fail-on-unresolved > "${DEPENDENCY_LOG}" 2>&1
+          status=$?
+          set -e
+          printf 'DEPENDENCY_EXIT=%s\n' "${status}" >> "${GITHUB_ENV}"
+          cat "${DEPENDENCY_LOG}"
+          exit "${status}"
 
       - name: Upload checked candidate bundle once
         id: upload
@@ -237,23 +262,31 @@ jobs:
           retention-days: 30
 
       - name: Admit rights and dependency evidence into a separate receipt
-        run: >-
-          "${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/software_candidate_manifest.py rights-admission
-          --repo-root "${GITHUB_WORKSPACE}"
-          --candidate-root "${CANDIDATE_SOURCE}"
-          --materialization-report "${MATERIALIZATION_REPORT}"
-          --sanitized-manifest "${RIGHTS_MANIFEST}"
-          --candidate-bundle "${BUNDLE_DIR}"
-          --dependency-report "${DEPENDENCY_REPORT}"
-          --output-dir "${RIGHTS_DIR}"
-          --source-sha "${GITHUB_SHA}"
-          --candidate-version "${CANDIDATE_VERSION}"
-          --workflow-run-id "${GITHUB_RUN_ID}"
-          --workflow-run-attempt "${GITHUB_RUN_ATTEMPT}"
-          --candidate-artifact-id "${{ steps.upload.outputs.artifact-id }}"
-          --candidate-artifact-name "${ARTIFACT_NAME}"
-          --candidate-artifact-digest "${{ steps.upload.outputs.artifact-digest }}"
-          --policy "${GITHUB_WORKSPACE}/scripts/validation/software_release_rights_policy.v1.json"
+        id: rights-admission
+        run: |
+          set +e
+          "${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/software_candidate_manifest.py rights-admission \
+            --repo-root "${GITHUB_WORKSPACE}" \
+            --candidate-root "${CANDIDATE_SOURCE}" \
+            --materialization-report "${MATERIALIZATION_REPORT}" \
+            --sanitized-manifest "${RIGHTS_MANIFEST}" \
+            --candidate-bundle "${BUNDLE_DIR}" \
+            --dependency-report "${DEPENDENCY_REPORT}" \
+            --output-dir "${RIGHTS_DIR}" \
+            --source-sha "${GITHUB_SHA}" \
+            --candidate-version "${CANDIDATE_VERSION}" \
+            --workflow-run-id "${GITHUB_RUN_ID}" \
+            --workflow-run-attempt "${GITHUB_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${{ steps.upload.outputs.artifact-id }}" \
+            --candidate-artifact-name "${ARTIFACT_NAME}" \
+            --candidate-artifact-digest "${{ steps.upload.outputs.artifact-digest }}" \
+            --policy "${GITHUB_WORKSPACE}/scripts/validation/software_release_rights_policy.v1.json" \
+          > "${RIGHTS_ADMISSION_LOG}" 2>&1
+          status=$?
+          set -e
+          printf 'RIGHTS_ADMISSION_EXIT=%s\n' "${status}" >> "${GITHUB_ENV}"
+          cat "${RIGHTS_ADMISSION_LOG}"
+          exit "${status}"
 
       - name: Upload rights-admission receipt separately
         id: upload-rights
@@ -261,6 +294,50 @@ jobs:
         with:
           name: ${{ env.RIGHTS_ARTIFACT_NAME }}
           path: ${{ runner.temp }}/robot-sf-software-candidate/rights-admission/
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+          retention-days: 30
+
+      - name: Assemble rejected diagnostic evidence
+        if: >-
+          ${{ always() &&
+          (env.STRICT_RIGHTS_EXIT != '0' && env.STRICT_RIGHTS_EXIT != 'not-run' ||
+           env.DEPENDENCY_EXIT != '0' && env.DEPENDENCY_EXIT != 'not-run' ||
+           env.RIGHTS_ADMISSION_EXIT != '0' && env.RIGHTS_ADMISSION_EXIT != 'not-run') }}
+        run: >-
+          "${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/software_candidate_manifest.py rejected-diagnostic
+          --repo-root "${GITHUB_WORKSPACE}"
+          --output-dir "${DIAGNOSTIC_ROOT}"
+          --source-sha "${GITHUB_SHA}"
+          --repository "${GITHUB_REPOSITORY}"
+          --workflow-run-id "${GITHUB_RUN_ID}"
+          --workflow-run-attempt "${GITHUB_RUN_ATTEMPT}"
+          --candidate-version "${CANDIDATE_VERSION:-unknown}"
+          --candidate-bundle "${BUNDLE_DIR}"
+          --dist-dir "${DIST_DIR}"
+          --dependency-report "${DEPENDENCY_REPORT}"
+          --materialization-report "${MATERIALIZATION_REPORT}"
+          --strict-rights-log "${STRICT_RIGHTS_LOG}"
+          --dependency-log "${DEPENDENCY_LOG}"
+          --rights-admission-log "${RIGHTS_ADMISSION_LOG}"
+          --wheel-install-report "${CANDIDATE_ROOT}/wheel-install-smoke.json"
+          --strict-rights-exit "${STRICT_RIGHTS_EXIT}"
+          --dependency-exit "${DEPENDENCY_EXIT}"
+          --rights-admission-exit "${RIGHTS_ADMISSION_EXIT}"
+
+      - name: Upload rejected diagnostic evidence
+        id: upload-rejected
+        if: >-
+          ${{ always() &&
+          (env.STRICT_RIGHTS_EXIT != '0' && env.STRICT_RIGHTS_EXIT != 'not-run' ||
+           env.DEPENDENCY_EXIT != '0' && env.DEPENDENCY_EXIT != 'not-run' ||
+           env.RIGHTS_ADMISSION_EXIT != '0' && env.RIGHTS_ADMISSION_EXIT != 'not-run') }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.REJECTED_DIAGNOSTIC_ARTIFACT_NAME }}
+          path: ${{ runner.temp }}/robot-sf-software-candidate/rejected-diagnostic/
           if-no-files-found: error
           compression-level: 0
           overwrite: false

@@ -50,15 +50,24 @@ explicit `resolution-markers` are proven false from the manifest target. Any
 remaining row is emitted as `unresolved_membership` and keeps strict mode
 blocked until a maintainer reviews its context.
 
-For release checks, narrow the command to the exact declared profile or profile union instead of
-using the whole development matrix:
+For release checks, select the exact reviewed profile or profile union instead of using the whole
+development matrix. The v0.0.6 software candidate uses the checked-in `all` closure, which covers
+the twelve public extras and excludes standalone `rllib`:
 
 ```bash
 python scripts/tools/check_dependency_license_inventory.py \
-  --profile core \
-  --profile viz \
   --fail-on-unresolved
 ```
+
+The development checkout still declares `rllib` for local use. The rights-clean candidate
+materializer removes only that stanza from its copied `pyproject.toml`, preserving the `all`
+aggregator and the twelve supported extras. Its wheel and source distribution therefore must
+advertise exactly thirteen `Provides-Extra` values (`all` plus those twelve); the source checkout
+is never modified.
+
+The candidate Git repository is a deterministic standalone root; it does not pretend to have the
+source commit as a Git parent. The separate source SHA remains the provenance binding, reflected by
+the rights policy's `commit_parent: root_commit` contract.
 
 The selected profile closure is recorded under `surface.profile_ids`. Other declared profiles,
 lock rows, and installed distributions remain visible in the report with an explicit
@@ -68,12 +77,11 @@ rows sharing a lockfile do not silently become release members. On the full decl
 unexplained rows retain an `unresolved_membership` marker and continue to block strict mode.
 
 When the immutable software-candidate bundle has already been admitted, bind its exact wheel,
-source distribution, provenance, and CycloneDX software bill of materials (SBOM) to the selected
-frozen closure:
+source distribution, provenance, and CycloneDX software bill of materials (SBOM) to the reviewed
+v0.0.6 supported closure:
 
 ```bash
 python scripts/tools/check_dependency_license_inventory.py \
-  --profile core \
   --candidate-bundle output/validation/software-candidate \
   --output output/validation/dependency-license-inventory.json \
   --fail-on-unresolved
@@ -88,6 +96,10 @@ identity, materialization commit/tree and policy/inventory identities, member di
 component digest needed for candidate-bundle admission. A producer that omits the optional
 materialization envelope remains compatible; when present, it is validated and must match the
 provenance record exactly.
+A candidate invocation without `--profile` selects `all`; it never silently narrows to `core`. The
+separate rights-admission consumer rejects a report whose surface is not exactly `["all"]`; the
+report's `all` profile must carry the twelve supported extra IDs. It does not invent license facts:
+a reviewed exact policy disposition is still required for each dependency.
 
 The committed profile matrix covers the root environment, every declared supported extra,
 the explicit `all` closure, standalone `fast-pysf`, and SocNavBench.

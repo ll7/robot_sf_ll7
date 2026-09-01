@@ -429,6 +429,12 @@ def _check_socnavbench_provenance(archive: Path, members: dict[str, str]) -> lis
         return errors
 
     errors.extend(_check_socnav_identity(archive, manifest, upstream_text))
+    # A rights-clean software candidate retains only SocNavBench's legal
+    # notices and provenance record. In that external-source-checkout mode
+    # there are no vendored source files whose upstream/local partition or
+    # per-file override evidence can be checked in the archive.
+    if not _socnav_source_files(members):
+        return errors
     classified, classification_errors = _socnav_classifications(archive, manifest)
     errors.extend(classification_errors)
     if classification_errors:

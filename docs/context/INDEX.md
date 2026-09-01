@@ -5,6 +5,12 @@ path-tangent/open-ray/unknown semantics, coverage-only evaluation, and the next 
 directions. Current receipts are smoke evidence only:
 [pedestrian_goal_force_prediction_research.md](pedestrian_goal_force_prediction_research.md).
 
+Issue #8072 observation-only inverse goal-force estimator: causal H=1/H=2/H=3 estimates,
+actor-visible force reconstruction, covariance/censoring diagnostics, #8073 candidate-provider
+integration, reset-scoped tracking history, and a separate oracle upper bound. The deterministic
+fixture is implementation-integrity smoke only:
+[issue_8072_goal_force_inverse_dynamics.md](issue_8072_goal_force_inverse_dynamics.md).
+
 Issue #8205 observation-derived tracker goal-belief adapter: a default-off, actor-safe bridge
 from `PedestrianTrackingResult` to `GoalBeliefV1`, with stable track ordering, global-frame
 timing, explicit visibility/history masks, reset provenance, and smoke-only evidence. It does not

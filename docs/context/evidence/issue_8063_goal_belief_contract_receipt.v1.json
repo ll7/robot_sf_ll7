@@ -3,7 +3,7 @@
   "schema": "goal_belief_contract_receipt.v1",
   "issue": 8063,
   "status": "verified",
-  "source_commit": "4788f1ab76d5663dfec8b059fe5a77000c54936c",
+  "source_commit": "c75d4ee00cb216ad5fe169abe0d33c0fcda5bf2e",
   "source_tree_scope": "implementation and tests through the substantive review-fix commit",
   "claim_boundary": "implementation-integrity / smoke only",
   "research_claim": "none",

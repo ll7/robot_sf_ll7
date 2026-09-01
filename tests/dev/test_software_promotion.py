@@ -11,6 +11,11 @@ import sys
 import tarfile
 import zipfile
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Any
 
 from scripts.dev.software_promotion import PromotionError, _distribution_extras
 from scripts.tools.check_dependency_license_inventory import build_inventory
@@ -21,6 +26,9 @@ DEPENDENCY_POLICY_SHA256 = hashlib.sha256(
 ).hexdigest()
 DEPENDENCY_PROFILE_SHA256 = hashlib.sha256(
     (REPO_ROOT / "scripts/validation/dependency_license_profiles.v1.json").read_bytes()
+).hexdigest()
+RIGHTS_POLICY_SHA256 = hashlib.sha256(
+    (REPO_ROOT / "scripts/validation/software_release_rights_policy.v1.json").read_bytes()
 ).hexdigest()
 CANDIDATE_HELPER = REPO_ROOT / "scripts" / "dev" / "software_candidate_manifest.py"
 PROMOTION_HELPER = REPO_ROOT / "scripts" / "dev" / "software_promotion.py"
@@ -264,6 +272,9 @@ def _candidate(
                 "structural_issues": [],
                 "summary": {
                     "candidate_bound": True,
+                    "selected_package_count": 155,
+                    "policy_pending_package_count": 118,
+                    "structural_issue_count": 0,
                     "status": "complete",
                     "unresolved_count": 0,
                 },
@@ -292,7 +303,7 @@ def _candidate(
                 "sanitized": {
                     "policy_id": "robot_sf.software_release_rights_policy.v1",
                     "policy_path": "scripts/validation/software_release_rights_policy.v1.json",
-                    "policy_sha256": "b" * 64,
+                    "policy_sha256": RIGHTS_POLICY_SHA256,
                     "schema_version": "robot_sf.software_sanitized_candidate.v1",
                     "source_sha": source_sha,
                     "tree_sha256": "c" * 64,
@@ -307,7 +318,7 @@ def _candidate(
                     ),
                     "findings": 0,
                     "id": "strict-distribution-rights",
-                    "policy_sha256": "b" * 64,
+                    "policy_sha256": RIGHTS_POLICY_SHA256,
                     "source_sha": source_sha,
                     "status": "passed",
                 },
@@ -382,6 +393,20 @@ def _write_upload_receipt(tmp_path: Path, source_sha: str, bundle: Path) -> Path
     )
     assert result.returncode == 0, result.stderr
     return receipt
+
+
+def _mutate_dependency_report(bundle: Path, mutation: Callable[[dict[str, Any]], None]) -> None:
+    rights_dir = bundle.parent / "rights-admission-artifact"
+    report_path = rights_dir / "dependency-license-inventory.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    mutation(report)
+    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    receipt_path = rights_dir / "rights-admission.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
+        report_path.read_bytes()
+    ).hexdigest()
+    receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def test_candidate_verification_rejects_wrong_artifact_identity(tmp_path: Path) -> None:
@@ -465,6 +490,55 @@ def test_candidate_verification_rejects_missing_or_unresolved_rights_admission(
     rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
     assert rejected.returncode == 1
     assert "unresolved findings" in rejected.stderr
+
+
+def test_candidate_verification_rejects_untrusted_rights_policy_digest(tmp_path: Path) -> None:
+    _source, source_sha, bundle = _candidate(tmp_path)
+    receipt = bundle.parent / "rights-admission-artifact" / "rights-admission.json"
+    payload = json.loads(receipt.read_text(encoding="utf-8"))
+    payload["sanitized"]["policy_sha256"] = "0" * 64
+    payload["strict_gate"]["policy_sha256"] = "0" * 64
+    receipt.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
+    assert rejected.returncode == 1
+    assert "trusted source checkout" in rejected.stderr
+
+
+def test_candidate_verification_rejects_selected_package_count_mutation(tmp_path: Path) -> None:
+    _source, source_sha, bundle = _candidate(tmp_path)
+    _mutate_dependency_report(
+        bundle,
+        lambda report: report["summary"].update(selected_package_count=0),
+    )
+
+    rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
+    assert rejected.returncode == 1
+    assert "summary.selected_package_count" in rejected.stderr
+
+
+def test_candidate_verification_rejects_duplicate_dependency_package_rows(tmp_path: Path) -> None:
+    _source, source_sha, bundle = _candidate(tmp_path)
+    _mutate_dependency_report(
+        bundle,
+        lambda report: report["packages"].append(dict(report["packages"][0])),
+    )
+
+    rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
+    assert rejected.returncode == 1
+    assert "duplicate package" in rejected.stderr
+
+
+def test_candidate_verification_rejects_duplicate_dependency_profile_rows(tmp_path: Path) -> None:
+    _source, source_sha, bundle = _candidate(tmp_path)
+    _mutate_dependency_report(
+        bundle,
+        lambda report: report["profiles"].append(dict(report["profiles"][0])),
+    )
+
+    rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
+    assert rejected.returncode == 1
+    assert "duplicate profile" in rejected.stderr
 
 
 def test_candidate_verification_rejects_forged_rights_binding(tmp_path: Path) -> None:

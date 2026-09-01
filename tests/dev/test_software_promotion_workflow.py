@@ -33,7 +33,7 @@ def _trigger(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_workflow_is_manual_and_least_privilege_by_default() -> None:
-    _text, workflow = _workflow()
+    text, workflow = _workflow()
     trigger = _trigger(workflow)
     assert set(trigger) == {"workflow_dispatch"}
     inputs = trigger["workflow_dispatch"]["inputs"]
@@ -54,11 +54,26 @@ def test_workflow_is_manual_and_least_privilege_by_default() -> None:
         assert inputs[name]["required"] is True
     assert workflow["permissions"] == {"actions": "read", "contents": "read"}
     assert "id-token" not in workflow["permissions"]
-    assert (
-        "Require the protected main-branch workflow"
-        in workflow["jobs"]["verify-candidate"]["steps"][1]["name"]
+    verify_steps = workflow["jobs"]["verify-candidate"]["steps"]
+    protected_step = next(
+        step
+        for step in verify_steps
+        if step.get("name") == "Require the protected main-branch workflow"
     )
-    assert '"refs/heads/main"' in workflow["jobs"]["verify-candidate"]["steps"][1]["run"]
+    assert "Require the protected main-branch workflow" in protected_step["name"]
+    assert '"refs/heads/main"' in protected_step["run"]
+    checkout_steps = [
+        step
+        for job in workflow["jobs"].values()
+        for step in job["steps"]
+        if str(step.get("uses", "")).startswith("actions/checkout@")
+    ]
+    assert len(checkout_steps) == 5
+    assert all(step["with"].get("ref") == "${{ inputs.source_sha }}" for step in checkout_steps)
+    assert text.count("Verify exact candidate-source checkout") == 5
+    assert text.count('checked_out_sha="$(git rev-parse HEAD)"') == 5
+    assert text.count("WORKFLOW_SHA: ${{ github.sha }}") == 5
+    assert text.count('"${WORKFLOW_SHA}" != "${SOURCE_SHA}"') == 5
 
 
 def test_only_upload_jobs_receive_oidc_permission_and_each_has_a_protected_environment() -> None:

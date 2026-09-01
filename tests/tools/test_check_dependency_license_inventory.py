@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from scripts.tools.check_dependency_license_inventory import (
+    SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS,
     _effective_profile_coverage,
     _exact_policy_coverage_failures,
     _github_notice_reference,
@@ -218,7 +219,7 @@ def _resolved_distributions(*fields: tuple[str, str, dict[str, str]]) -> list[_D
     return [_Distribution(name, version, **metadata) for name, version, metadata in fields]
 
 
-def _write_candidate_bundle(root: Path) -> Path:
+def _write_candidate_bundle(root: Path, *, extras: Iterable[str] = ()) -> Path:
     """Write an exact candidate bundle for the fixture's core profile."""
     bundle = root / "candidate-bundle"
     bundle.mkdir()
@@ -264,7 +265,8 @@ def _write_candidate_bundle(root: Path) -> Path:
         "Name: robot_sf\n"
         f"Version: {version}\n"
         "Requires-Dist: demo-package>=1\n"
-        "\n"
+        + "".join(f"Provides-Extra: {extra}\n" for extra in extras)
+        + "\n"
     ).encode()
     wheel = bundle / f"robot_sf-{version}-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
@@ -419,6 +421,50 @@ def test_explicit_profile_selection_keeps_other_lock_context_visible(tmp_path: P
     assert not any("fast-pysf/uv.lock" in failure for failure in inventory["failures"])
 
 
+def test_profile_follows_lock_dependency_extras_into_optional_dependencies(tmp_path: Path) -> None:
+    """A locked dependency extra must include its optional dependency closure."""
+    _write_inputs(tmp_path)
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        pyproject.read_text(encoding="utf-8").replace(
+            'dependencies = ["demo-package>=1"]',
+            'dependencies = ["demo-package[plug]>=1"]',
+        ),
+        encoding="utf-8",
+    )
+    lockfile = tmp_path / "uv.lock"
+    lockfile.write_text(
+        lockfile.read_text(encoding="utf-8")
+        .replace(
+            'dependencies = [{ name = "demo-package" }]',
+            'dependencies = [{ name = "demo-package", extras = ["plug"] }]',
+        )
+        .replace(
+            'sdist = { url = "https://files.example/demo-package-1.0.0.tar.gz", '
+            'hash = "sha256:abc123", size = 12 }',
+            'sdist = { url = "https://files.example/demo-package-1.0.0.tar.gz", '
+            'hash = "sha256:abc123", size = 12 }\n'
+            "[package.optional-dependencies]\n"
+            'plug = [{ name = "nested-package" }]\n',
+        )
+        + "\n[[package]]\n"
+        'name = "nested-package"\n'
+        'version = "1.0.0"\n'
+        'source = { registry = "https://pypi.org/simple" }\n',
+        encoding="utf-8",
+    )
+
+    inventory = build_inventory(tmp_path, distributions=[], selected_profile_ids=["core"])
+
+    assert inventory["summary"]["selected_package_count"] == 3
+    core = next(profile for profile in inventory["profiles"] if profile["id"] == "core")
+    assert {row.split("@", maxsplit=1)[0] for row in core["package_ids"]} == {
+        "robot-sf",
+        "demo-package",
+        "nested-package",
+    }
+
+
 def test_unknown_profile_selection_fails_closed(tmp_path: Path) -> None:
     """A typo cannot silently produce an empty release surface."""
     _write_inputs(tmp_path)
@@ -461,6 +507,40 @@ def test_candidate_bundle_binds_archives_and_sbom_to_selected_lock_closure(
     assert not any(
         "candidate bundle binding failed" in failure for failure in inventory["failures"]
     )
+
+
+def test_candidate_bound_all_rejects_rllib_distribution_metadata(tmp_path: Path) -> None:
+    """The supported all-surface binding rejects the development-only RLlib extra."""
+    _write_inputs(tmp_path)
+    bundle = _write_candidate_bundle(
+        tmp_path,
+        extras=[*SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS, "foo", "rllib"],
+    )
+
+    inventory = build_inventory(
+        tmp_path,
+        distributions=_resolved_distributions(
+            ("robot_sf", "0.0.1", {"License_Expression": "GPL-3.0-only"}),
+            ("demo-package", "1.0.0", {"License_Expression": "MIT"}),
+        ),
+        selected_profile_ids=["all"],
+        candidate_bundle_path=bundle,
+    )
+
+    assert inventory["summary"]["candidate_bound"] is False
+    assert any(
+        "closed v0.0.6 supported extra roster" in failure for failure in inventory["failures"]
+    )
+
+
+def test_sanitized_project_can_retain_explicit_rllib_exclusion(tmp_path: Path) -> None:
+    """A candidate project may omit rllib when its profile exclusion remains explicit."""
+    _write_inputs(tmp_path, all_excluded=["rllib"])
+
+    inventory = build_inventory(tmp_path, distributions=[], selected_profile_ids=["all"])
+
+    assert inventory["structural_issues"] == []
+    assert inventory["surface"]["profile_ids"] == ["all"]
 
 
 def test_candidate_bundle_drift_fails_closed(tmp_path: Path) -> None:

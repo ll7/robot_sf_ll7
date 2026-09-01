@@ -38,11 +38,10 @@ def _steps(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return jobs["build-candidate"]["steps"]
 
 
-def test_workflow_is_reusable_single_job_and_least_privilege() -> None:
+def test_workflow_is_directly_dispatchable_single_job_and_least_privilege() -> None:
     text, workflow = _workflow()
 
-    assert set(_trigger(workflow)) == {"workflow_call"}
-    assert "workflow_dispatch" not in text
+    assert set(_trigger(workflow)) == {"workflow_dispatch"}
     assert workflow["permissions"] == {"contents": "read"}
     assert len(workflow["jobs"]) == 1
     job = workflow["jobs"]["build-candidate"]
@@ -60,6 +59,9 @@ def test_workflow_is_reusable_single_job_and_least_privilege() -> None:
         "DIST_DIR",
         "RAW_SBOM",
         "BUNDLE_DIR",
+        "DEPENDENCY_REPORT",
+        "RIGHTS_MANIFEST",
+        "RIGHTS_DIR",
     ):
         assert name in identity_run
     assert "secrets" not in text.lower()
@@ -147,6 +149,7 @@ def test_workflow_builds_once_then_only_validates_and_admits_same_dist_bytes() -
         "uv export",
         "software_candidate_manifest.py assemble",
         "software_candidate_manifest.py verify",
+        "check_dependency_license_inventory.py",
     )
     positions = []
     for command in required_after_build:
@@ -179,6 +182,30 @@ def test_workflow_builds_once_then_only_validates_and_admits_same_dist_bytes() -
     ):
         assert f"--validated {validator}" in assemble_run
     assert assemble_run.count("--validated") == 4
+
+    dependency_index, dependency_run = next(
+        (index, run) for index, run in run_steps if "check_dependency_license_inventory.py" in run
+    )
+    assert '--repo-root "${BUILD_SOURCE}"' in dependency_run
+    assert '--candidate-bundle "${BUNDLE_DIR}"' in dependency_run
+    assert '--output "${DEPENDENCY_REPORT}"' in dependency_run
+    assert "--profile all" in dependency_run
+    assert "--fail-on-unresolved" in dependency_run
+    assert dependency_index == positions[-1]
+    assert "--profile core" not in dependency_run
+
+    upload_index = next(index for index, step in enumerate(steps) if step.get("id") == "upload")
+    rights_index, rights_run = next(
+        (index, run)
+        for index, run in run_steps
+        if "software_candidate_manifest.py rights-admission" in run
+    )
+    assert dependency_index < upload_index < rights_index
+    assert '--dependency-report "${DEPENDENCY_REPORT}"' in rights_run
+    assert '--candidate-artifact-id "${{ steps.upload.outputs.artifact-id }}"' in rights_run
+
+    sbom_run = next(run for _index, run in run_steps if "uv export" in run)
+    assert "--extra all" in sbom_run
 
 
 def test_workflow_checks_hermetic_source_identity_around_the_only_build() -> None:
@@ -214,26 +241,21 @@ def test_workflow_uploads_checked_bundle_once_and_exposes_artifact_identity() ->
     upload_steps = [
         step for step in steps if str(step.get("uses", "")).startswith("actions/upload-artifact@")
     ]
-    assert len(upload_steps) == 1
-    upload = upload_steps[0]
+    assert len(upload_steps) == 2
+    upload = next(step for step in upload_steps if step.get("id") == "upload")
     assert upload["id"] == "upload"
     assert upload["with"]["path"].endswith("/bundle/")
     assert upload["with"]["if-no-files-found"] == "error"
     assert upload["with"]["compression-level"] == 0
     assert upload["with"]["overwrite"] is False
+    rights_upload = next(step for step in upload_steps if step.get("id") == "upload-rights")
+    assert rights_upload["with"]["path"].endswith("/rights-admission/")
+    assert rights_upload["with"]["if-no-files-found"] == "error"
+    assert rights_upload["with"]["compression-level"] == 0
+    assert rights_upload["with"]["overwrite"] is False
 
-    outputs = workflow["jobs"]["build-candidate"]["outputs"]
-    assert "steps.upload.outputs.artifact-id" in outputs["artifact-id"]
-    assert "steps.upload.outputs.artifact-digest" in outputs["artifact-digest"]
-    call_outputs = _trigger(workflow)["workflow_call"]["outputs"]
-    assert set(call_outputs) == {
-        "artifact-id",
-        "artifact-digest",
-        "artifact-name",
-        "source-sha",
-        "candidate-source-sha",
-        "candidate-tree-sha",
-    }
+    assert "workflow_call" not in _trigger(workflow)
+    assert "outputs" not in workflow["jobs"]["build-candidate"]
 
 
 def test_workflow_pins_actions_and_contains_no_publication_or_promotion_surface() -> None:
@@ -241,7 +263,7 @@ def test_workflow_pins_actions_and_contains_no_publication_or_promotion_surface(
     steps = _steps(workflow)
     uses = [str(step["uses"]) for step in steps if "uses" in step]
 
-    assert len(uses) == len(ACTION_PINS)
+    assert len(uses) == len(ACTION_PINS) + 1
     for use in uses:
         owner, digest = use.split("@", maxsplit=1)
         assert re.fullmatch(r"[0-9a-f]{40}", digest)
@@ -261,7 +283,6 @@ def test_workflow_pins_actions_and_contains_no_publication_or_promotion_surface(
         "github release",
         "zenodo",
         "id-token",
-        "workflow_dispatch",
         "download-artifact",
         "continue-on-error",
         "|| true",

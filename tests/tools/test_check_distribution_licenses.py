@@ -200,6 +200,32 @@ def test_socnavbench_apache_override_of_an_upstream_file_is_accepted(tmp_path: P
     assert len(result.sdists) == 1
 
 
+def test_socnavbench_external_checkout_notices_without_source_are_accepted(
+    tmp_path: Path,
+) -> None:
+    """A sanitized candidate may retain SocNavBench notices without its source checkout."""
+    payloads = dict(PAYLOADS)
+    payloads["third_party/socnavbench/LICENSING.yaml"] = (
+        payloads["third_party/socnavbench/LICENSING.yaml"]
+        .replace(
+            "upstream_files: []",
+            "upstream_files:\n  - mp_env/map_utils.py",
+        )
+        .replace(
+            "license_overrides: []",
+            "license_overrides:\n"
+            "  - license_spdx: Apache-2.0\n"
+            "    files:\n"
+            "      - mp_env/map_utils.py\n",
+        )
+    )
+    _write_robot_sf_archives(tmp_path, payloads)
+
+    result = check_distribution(tmp_path)
+
+    assert len(result.sdists) == 1
+
+
 def test_socnavbench_override_outside_upstream_files_fails_closed(tmp_path: Path) -> None:
     """An override entry that is not declared upstream leaves the manifest ambiguous."""
     payloads = dict(PAYLOADS)

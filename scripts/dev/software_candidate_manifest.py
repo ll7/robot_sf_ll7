@@ -20,12 +20,18 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import tomllib
 import zipfile
 from contextlib import contextmanager
 from email.parser import BytesParser
 from email.policy import default as email_policy
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
+
+from scripts.tools.check_distribution_licenses import (
+    DistributionLicenseError,
+    check_distribution,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -46,6 +52,49 @@ MATERIALIZATION_POLICY_SCHEMA_VERSION = "robot_sf.software_candidate_policy.v1"
 MATERIALIZATION_INVENTORY_SCHEMA_VERSION = "robot_sf.asset_rights_inventory.v1"
 MATERIALIZATION_METADATA_NAME = "SOFTWARE_CANDIDATE.json"
 DEFAULT_MATERIALIZATION_INVENTORY = "scripts/validation/software_candidate_asset_rights.v1.json"
+RIGHTS_POLICY_ID = "robot_sf.software_release_rights_policy.v1"
+RIGHTS_POLICY_PATH = "scripts/validation/software_release_rights_policy.v1.json"
+RIGHTS_POLICY_SCHEMA_PATH = "scripts/validation/software_release_rights_policy.v1.schema.json"
+SANITIZED_CANDIDATE_SCHEMA = "robot_sf.software_sanitized_candidate.v1"
+SANITIZED_MANIFEST_NAME = "sanitized-candidate.json"
+RIGHTS_ADMISSION_SCHEMA = "robot_sf.software_rights_admission.v1"
+RIGHTS_ADMISSION_NAME = "rights-admission.json"
+RIGHTS_ADMISSION_SCHEMA_PATH = "scripts/validation/software_rights_admission.v1.schema.json"
+RIGHTS_GATE_ID = "strict-distribution-rights"
+RIGHTS_GATE_COMMAND = (
+    "python scripts/tools/check_distribution_licenses.py $DIST_DIR "
+    "--strict-asset-rights --repo-root $BUILD_SOURCE --source-tree-ref $SOURCE_SHA"
+)
+SUPPORTED_DEPENDENCY_SCHEMA_VERSION = "robot-sf.dependency-license-inventory.v1"
+SUPPORTED_DEPENDENCY_POLICY_SCHEMA_VERSION = "robot-sf.dependency-license-policy.v1"
+SUPPORTED_DEPENDENCY_PROFILE_SCHEMA_VERSION = "robot-sf.dependency-license-profiles.v1"
+SUPPORTED_DEPENDENCY_GATE_ID = "strict-supported-dependency-surface"
+SUPPORTED_DEPENDENCY_REPORT_NAME = "dependency-license-inventory.json"
+SUPPORTED_DEPENDENCY_POLICY_PATH = "scripts/validation/dependency_license_policy.v1.json"
+SUPPORTED_DEPENDENCY_PROFILE_PATH = "scripts/validation/dependency_license_profiles.v1.json"
+# The profile manifest's reviewed ``all`` closure is the v0.0.6 public surface.
+# Keep the explicit extra roster in the receipt so a core-only report cannot be
+# mistaken for admission of the wheel's supported optional dependencies.
+SUPPORTED_DEPENDENCY_PROFILE_IDS = ("all",)
+SUPPORTED_DEPENDENCY_EXTRA_IDS = (
+    "viz",
+    "maps",
+    "benchmark",
+    "training",
+    "gpu",
+    "recurrent",
+    "progress",
+    "analytics",
+    "browser",
+    "sacadrl",
+    "socnav",
+    "criticality",
+)
+SUPPORTED_DEPENDENCY_GATE_COMMAND = (
+    "python scripts/tools/check_dependency_license_inventory.py "
+    "--repo-root $BUILD_SOURCE --output $DEPENDENCY_REPORT "
+    "--candidate-bundle $CANDIDATE_BUNDLE --fail-on-unresolved"
+)
 UV_OUT_DIR_MARKER_NAME = ".gitignore"
 UV_OUT_DIR_MARKER_BYTES = b"*"
 SDIST_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz", ".zip")
@@ -106,6 +155,30 @@ MATERIALIZATION_ASSET_PATH_HINTS = frozenset(
 )
 MATERIALIZATION_NON_ASSET_SUFFIXES = frozenset(
     {".md", ".py", ".pyi", ".rst", ".sh", ".toml", ".txt"}
+)
+# The development checkout keeps the standalone RLlib integration available,
+# but it is not part of the rights-clean software surface.  The candidate
+# materializer removes only that optional-dependency stanza from the copied
+# ``pyproject.toml``.  The public ``all`` aggregator and its twelve reviewed
+# members remain unchanged in the candidate package metadata.
+CANDIDATE_PYPROJECT_PATH = "pyproject.toml"
+SUPPORTED_CANDIDATE_EXTRA_IDS = (
+    "viz",
+    "maps",
+    "benchmark",
+    "training",
+    "gpu",
+    "recurrent",
+    "progress",
+    "analytics",
+    "browser",
+    "sacadrl",
+    "socnav",
+    "criticality",
+)
+SUPPORTED_CANDIDATE_DISTRIBUTION_EXTRA_IDS = (
+    *SUPPORTED_CANDIDATE_EXTRA_IDS,
+    "all",
 )
 MATERIALIZATION_PAYLOAD_FIELDS = (
     "candidate_commit_sha",
@@ -1284,6 +1357,93 @@ def _candidate_blob(repo_root: Path, object_id: str) -> bytes:
     return _candidate_git_output(result, operation=f"read source blob {object_id}")
 
 
+def _sanitized_candidate_source_bytes(  # noqa: C901, PLR0912 - closed metadata transform
+    path: str, content: bytes
+) -> bytes:
+    """Remove the non-release RLlib extra from the candidate packaging metadata.
+
+    The source checkout intentionally retains ``rllib`` for normal development.
+    A rights-clean candidate is a separate, deterministic Git materialization,
+    so its copied ``pyproject.toml`` may remove that one optional dependency
+    before the candidate commit is built.  This keeps the development checkout
+    untouched while making the wheel and sdist metadata match the admitted
+    twelve-extra plus ``all`` surface.
+    """
+    if path != CANDIDATE_PYPROJECT_PATH:
+        return content
+    try:
+        source_text = content.decode("utf-8")
+        source_document = tomllib.loads(source_text)
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        raise CandidateError("candidate pyproject.toml is not valid UTF-8 TOML") from exc
+
+    project = source_document.get("project")
+    optional = project.get("optional-dependencies") if isinstance(project, dict) else None
+    if not isinstance(optional, dict):
+        raise CandidateError("candidate pyproject.toml has no optional-dependencies table")
+    expected_source_extras = {
+        *SUPPORTED_CANDIDATE_DISTRIBUTION_EXTRA_IDS,
+        "rllib",
+    }
+    if set(optional) != expected_source_extras:
+        raise CandidateError(
+            "candidate pyproject.toml optional extras do not match the reviewed development "
+            f"surface: expected {sorted(expected_source_extras)}, found {sorted(optional)}"
+        )
+    if "rllib" not in optional:
+        raise CandidateError("candidate pyproject.toml has no standalone rllib extra to exclude")
+
+    lines = source_text.splitlines(keepends=True)
+    optional_section = None
+    for index, line in enumerate(lines):
+        if line.strip() == "[project.optional-dependencies]":
+            optional_section = index
+            break
+    if optional_section is None:
+        raise CandidateError("candidate pyproject.toml optional-dependencies section is missing")
+
+    rllib_start = None
+    section_end = len(lines)
+    for index in range(optional_section + 1, len(lines)):
+        stripped = lines[index].strip()
+        if stripped.startswith("[") and stripped.endswith("]"):
+            section_end = index
+            break
+        if re.fullmatch(r"rllib\s*=\s*\[\s*", stripped):
+            rllib_start = index
+            break
+    if rllib_start is None:
+        raise CandidateError(
+            "candidate pyproject.toml rllib extra is not a deterministic multiline array"
+        )
+    rllib_end = None
+    for index in range(rllib_start + 1, section_end):
+        if lines[index].strip() == "]":
+            rllib_end = index
+            break
+    if rllib_end is None:
+        raise CandidateError("candidate pyproject.toml rllib extra has no closing array")
+
+    sanitized_text = "".join(lines[:rllib_start] + lines[rllib_end + 1 :])
+    try:
+        sanitized_document = tomllib.loads(sanitized_text)
+    except tomllib.TOMLDecodeError as exc:
+        raise CandidateError("sanitized candidate pyproject.toml is not valid TOML") from exc
+    sanitized_project = sanitized_document.get("project")
+    sanitized_optional = (
+        sanitized_project.get("optional-dependencies")
+        if isinstance(sanitized_project, dict)
+        else None
+    )
+    if not isinstance(sanitized_optional, dict) or set(sanitized_optional) != set(
+        SUPPORTED_CANDIDATE_DISTRIBUTION_EXTRA_IDS
+    ):
+        raise CandidateError(
+            "sanitized candidate pyproject.toml does not have the exact supported extra roster"
+        )
+    return sanitized_text.encode("utf-8")
+
+
 def _materialization_is_asset_like(path: str) -> bool:
     """Use the inventory's conservative asset heuristic for selected source paths."""
     suffix = PurePosixPath(path).suffix.lower()
@@ -1519,7 +1679,10 @@ def _materialization_members(
     members: list[dict[str, Any]] = []
     for path in selected_paths:
         mode, _object_type, object_id = selected[path]
-        content = _candidate_blob(source_root, object_id)
+        content = _sanitized_candidate_source_bytes(
+            path,
+            _candidate_blob(source_root, object_id),
+        )
         member_bytes[path] = content
         members.append(
             {
@@ -2017,6 +2180,407 @@ def _validate_materialization_report(payload: Any) -> dict[str, Any]:
     return payload
 
 
+def _load_rights_policy(  # noqa: C901, PLR0912 - closed policy contract
+    policy_path: Path, *, repo_root: Path
+) -> tuple[bytes, dict[str, Any]]:
+    """Load the tracked rights-admission policy with a closed, stable identity."""
+    try:
+        policy_rel = policy_path.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError as exc:
+        raise CandidateError(
+            f"rights admission policy is outside the source repository: {policy_path}"
+        ) from exc
+    if policy_rel != RIGHTS_POLICY_PATH:
+        raise CandidateError(f"rights admission policy must be {RIGHTS_POLICY_PATH}")
+    if policy_path.is_symlink() or not policy_path.is_file():
+        raise CandidateError(f"rights admission policy is not a regular file: {policy_path}")
+    raw = policy_path.read_bytes()
+    payload = _load_json(policy_path, label="software release rights policy")
+    expected_keys = {
+        "$schema",
+        "schema_version",
+        "policy_id",
+        "candidate_schema_version",
+        "claim_boundary",
+        "supported_dependency_surface",
+        "source_selection",
+        "exclusion_reasons",
+        "external_only",
+        "materialization",
+    }
+    if not isinstance(payload, dict) or set(payload) != expected_keys:
+        raise CandidateError("software release rights policy has missing or unclassified fields")
+    if (
+        payload["$schema"]
+        != "https://robot-sf.dev/schema/software_release_rights_policy.v1.schema.json"
+        or payload["schema_version"] != RIGHTS_POLICY_ID
+        or payload["policy_id"] != RIGHTS_POLICY_ID
+        or payload["candidate_schema_version"] != SANITIZED_CANDIDATE_SCHEMA
+    ):
+        raise CandidateError("software release rights policy identity is unsupported")
+    if not isinstance(payload["claim_boundary"], str) or not payload["claim_boundary"].strip():
+        raise CandidateError("software release rights policy claim boundary is empty")
+    supported_surface = payload["supported_dependency_surface"]
+    if not isinstance(supported_surface, dict) or set(supported_surface) != {
+        "profile_manifest_path",
+        "profile_ids",
+        "extra_ids",
+        "excluded_extra_ids",
+    }:
+        raise CandidateError(
+            "software release rights policy supported dependency surface is malformed"
+        )
+    if (
+        supported_surface["profile_manifest_path"] != SUPPORTED_DEPENDENCY_PROFILE_PATH
+        or supported_surface["profile_ids"] != list(SUPPORTED_DEPENDENCY_PROFILE_IDS)
+        or supported_surface["extra_ids"] != list(SUPPORTED_DEPENDENCY_EXTRA_IDS)
+        or supported_surface["excluded_extra_ids"] != ["rllib"]
+    ):
+        raise CandidateError(
+            "software release rights policy supported dependency roster is invalid"
+        )
+    selection = payload["source_selection"]
+    if not isinstance(selection, dict) or set(selection) != {
+        "allow_globs",
+        "exclude_globs",
+        "required_paths",
+    }:
+        raise CandidateError("software release rights policy source selection is malformed")
+    for field in ("allow_globs", "exclude_globs", "required_paths"):
+        values = selection[field]
+        if not isinstance(values, list) or any(
+            not isinstance(value, str) or not value for value in values
+        ):
+            raise CandidateError(f"software release rights policy {field} is malformed")
+        for index, value in enumerate(values):
+            _materialization_pattern(value, label=f"rights policy {field}[{index}]")
+        if len(values) != len(set(values)):
+            raise CandidateError(f"software release rights policy {field} is not unique")
+    if not selection["allow_globs"] or not selection["required_paths"]:
+        raise CandidateError("software release rights policy source selection is empty")
+    reasons = payload["exclusion_reasons"]
+    if not isinstance(reasons, list):
+        raise CandidateError("software release rights policy exclusion reasons are malformed")
+    for index, entry in enumerate(reasons):
+        if not isinstance(entry, dict) or set(entry) != {"glob", "reason"}:
+            raise CandidateError(
+                f"software release rights policy exclusion reason {index} is malformed"
+            )
+        _materialization_pattern(entry["glob"], label=f"rights policy exclusion reason {index}")
+        if not isinstance(entry["reason"], str) or not entry["reason"].strip():
+            raise CandidateError(
+                f"software release rights policy exclusion reason {index} is empty"
+            )
+    external_only = payload["external_only"]
+    if not isinstance(external_only, list) or not external_only:
+        raise CandidateError("software release rights policy external-only boundary is empty")
+    for index, entry in enumerate(external_only):
+        if not isinstance(entry, dict) or set(entry) != {"glob", "name", "reason"}:
+            raise CandidateError(
+                f"software release rights policy external-only entry {index} is malformed"
+            )
+        _materialization_pattern(entry["glob"], label=f"rights policy external-only {index}")
+        if any(
+            not isinstance(entry[key], str) or not entry[key].strip() for key in ("name", "reason")
+        ):
+            raise CandidateError(
+                f"software release rights policy external-only entry {index} is invalid"
+            )
+    materialization = payload["materialization"]
+    if not isinstance(materialization, dict) or set(materialization) != {
+        "commit_parent",
+        "commit_message",
+        "commit_timestamp",
+        "tree_digest",
+    }:
+        raise CandidateError("software release rights policy materialization contract is malformed")
+    if (
+        materialization["commit_parent"] != "root_commit"
+        or materialization["commit_message"] != ("Materialize Robot SF software candidate")
+        or materialization["commit_timestamp"] != "2000-01-01T00:00:00Z"
+    ):
+        raise CandidateError("software release rights policy materialization identity is invalid")
+    if (
+        not isinstance(materialization["tree_digest"], str)
+        or not materialization["tree_digest"].strip()
+    ):
+        raise CandidateError("software release rights policy tree digest description is empty")
+    return raw, payload
+
+
+def _rights_exclusion_reason(path: str, policy: dict[str, Any]) -> str:
+    """Explain an excluded path, including paths outside every named exclusion glob."""
+    matches = [
+        entry["reason"]
+        for entry in policy["exclusion_reasons"]
+        if _materialization_matches(path, entry["glob"])
+    ]
+    if matches:
+        return matches[0]
+    return "path is outside the reviewed rights-clean software allowlist"
+
+
+def _candidate_tree_sha1(repo_root: Path, commit_sha: str) -> str:
+    """Resolve one exact commit's Git tree identity through the trusted carrier."""
+    result = _run_candidate_git("rev-parse", "--verify", f"{commit_sha}^{{tree}}", cwd=repo_root)
+    return _candidate_git_output(result, operation="resolve source tree").decode("ascii").strip()
+
+
+def _validate_candidate_commit_identity(candidate_root: Path, report: dict[str, Any]) -> None:
+    """Require the materializer's root commit identity, not just its tree bytes."""
+    commit = report["candidate_commit_sha"]
+    metadata = _candidate_git_output(
+        _run_candidate_git(
+            "show",
+            "-s",
+            "--format=%H%n%P%n%T%n%an%n%ae%n%cn%n%ce%n%aI%n%cI%n%B",
+            commit,
+            cwd=candidate_root,
+        ),
+        operation="read candidate commit identity",
+    ).decode("utf-8")
+    lines = metadata.splitlines()
+    expected = [
+        commit,
+        "",
+        report["candidate_tree_sha"],
+        "Robot SF candidate",
+        "candidate@robot-sf.invalid",
+        "Robot SF candidate",
+        "candidate@robot-sf.invalid",
+        "2000-01-01T00:00:00+00:00",
+        "2000-01-01T00:00:00+00:00",
+        "Materialize Robot SF software candidate",
+        "",
+    ]
+    if lines != expected:
+        raise CandidateError("materialized candidate commit metadata or parent identity drifted")
+
+
+def _sanitized_manifest_from_report(  # noqa: C901 - closed manifest adapter
+    report: dict[str, Any],
+    *,
+    source_tree_sha1: str,
+    policy_raw: bytes,
+    policy: dict[str, Any],
+) -> dict[str, Any]:
+    """Translate the materializer's checked report into the shared sanitized schema."""
+    members: list[dict[str, Any]] = []
+    paths: set[str] = set()
+    for raw_member in report["members"]:
+        if not isinstance(raw_member, dict) or set(raw_member) != {
+            "mode",
+            "object_sha",
+            "path",
+            "sha256",
+            "size",
+        }:
+            raise CandidateError("materialization report member is malformed")
+        path = raw_member["path"]
+        if not isinstance(path, str) or _safe_workspace_path(path).as_posix() != path:
+            raise CandidateError(f"materialization report member path is unsafe: {path!r}")
+        mode = raw_member["mode"]
+        if mode not in {"100644", "100755"}:
+            raise CandidateError(
+                f"materialization report member mode is not a regular blob: {path}"
+            )
+        object_sha = raw_member["object_sha"]
+        if not isinstance(object_sha, str) or not SHA_PATTERN.fullmatch(object_sha):
+            raise CandidateError(f"materialization report member Git blob is invalid: {path}")
+        digest = raw_member["sha256"]
+        if not isinstance(digest, str) or not SHA256_PATTERN.fullmatch(digest):
+            raise CandidateError(f"materialization report member SHA-256 is invalid: {path}")
+        size = raw_member["size"]
+        if isinstance(size, bool) or not isinstance(size, int) or size < 0:
+            raise CandidateError(f"materialization report member size is invalid: {path}")
+        if path in paths:
+            raise CandidateError(f"materialization report contains duplicate member: {path}")
+        if not any(
+            _materialization_matches(path, glob)
+            for glob in policy["source_selection"]["allow_globs"]
+        ):
+            raise CandidateError(f"materialization report member is outside rights policy: {path}")
+        if any(
+            _materialization_matches(path, glob)
+            for glob in policy["source_selection"]["exclude_globs"]
+        ):
+            raise CandidateError(
+                f"materialization report member is excluded by rights policy: {path}"
+            )
+        paths.add(path)
+        members.append(
+            {
+                "git_blob_sha1": object_sha,
+                "mode": mode,
+                "path": path,
+                "sha256": digest,
+                "size": size,
+            }
+        )
+    members.sort(key=lambda member: member["path"])
+    excluded: list[dict[str, str]] = []
+    excluded_paths: set[str] = set()
+    for value in (*report["excluded_paths"], *report["excluded_non_regular_paths"]):
+        if not isinstance(value, str) or _safe_workspace_path(value).as_posix() != value:
+            raise CandidateError(f"materialization report excluded path is unsafe: {value!r}")
+        if value in paths or value in excluded_paths:
+            raise CandidateError(
+                f"materialization report repeats selected or excluded path: {value}"
+            )
+        excluded_paths.add(value)
+        is_non_regular = value in report["excluded_non_regular_paths"]
+        excluded.append(
+            {
+                "kind": "non-regular" if is_non_regular else "policy-excluded",
+                "path": value,
+                "reason": (
+                    "non-regular source member is excluded from software surfaces"
+                    if is_non_regular
+                    else _rights_exclusion_reason(value, policy)
+                ),
+            }
+        )
+    excluded.sort(key=lambda member: member["path"])
+    payload = {
+        "candidate_commit_sha": report["candidate_commit_sha"],
+        "candidate_tree_sha1": report["candidate_tree_sha"],
+        "excluded_members": excluded,
+        "members": members,
+        "policy_id": RIGHTS_POLICY_ID,
+        "policy_path": RIGHTS_POLICY_PATH,
+        "policy_sha256": hashlib.sha256(policy_raw).hexdigest(),
+        "schema_version": SANITIZED_CANDIDATE_SCHEMA,
+        "source_sha": report["source_sha"],
+        "source_tree_sha1": source_tree_sha1,
+        "tree_sha256": "",
+    }
+    tree_binding = {
+        "members": members,
+        "schema_version": SANITIZED_CANDIDATE_SCHEMA,
+        "source_sha": report["source_sha"],
+    }
+    payload["tree_sha256"] = hashlib.sha256(_json_bytes(tree_binding)).hexdigest()
+    _validate_sanitized_manifest(payload, policy_path=None, policy_raw=policy_raw)
+    return payload
+
+
+def _validate_sanitized_manifest(  # noqa: C901, PLR0912, PLR0915 - closed manifest gate
+    payload: Any,
+    *,
+    policy_path: Path | None,
+    policy_raw: bytes,
+) -> dict[str, Any]:
+    """Validate the generated sanitized source/member manifest and tree digest."""
+    expected_keys = {
+        "candidate_commit_sha",
+        "candidate_tree_sha1",
+        "excluded_members",
+        "members",
+        "policy_id",
+        "policy_path",
+        "policy_sha256",
+        "schema_version",
+        "source_sha",
+        "source_tree_sha1",
+        "tree_sha256",
+    }
+    if not isinstance(payload, dict) or set(payload) != expected_keys:
+        raise CandidateError("sanitized candidate manifest has missing or unclassified fields")
+    if (
+        payload["schema_version"] != SANITIZED_CANDIDATE_SCHEMA
+        or payload["policy_id"] != RIGHTS_POLICY_ID
+    ):
+        raise CandidateError(
+            "sanitized candidate manifest schema or policy identity is unsupported"
+        )
+    if payload["policy_path"] != RIGHTS_POLICY_PATH:
+        raise CandidateError("sanitized candidate manifest policy path is unsupported")
+    if policy_path is not None:
+        try:
+            actual_path = (
+                policy_path.resolve().relative_to(policy_path.resolve().parents[2]).as_posix()
+            )
+        except ValueError:
+            actual_path = payload["policy_path"]
+        if actual_path != payload["policy_path"]:
+            raise CandidateError(
+                "sanitized candidate manifest policy path is not repository-relative"
+            )
+    for field in ("source_sha", "source_tree_sha1", "candidate_commit_sha", "candidate_tree_sha1"):
+        if not isinstance(payload[field], str) or not SHA_PATTERN.fullmatch(payload[field]):
+            raise CandidateError(f"sanitized candidate manifest {field} is invalid")
+    if payload["candidate_commit_sha"] == payload["source_sha"]:
+        raise CandidateError("sanitized candidate commit must not self-reference the source commit")
+    if payload["policy_sha256"] != hashlib.sha256(policy_raw).hexdigest():
+        raise CandidateError(
+            "sanitized candidate manifest policy digest does not match policy bytes"
+        )
+    if not isinstance(payload["tree_sha256"], str) or not SHA256_PATTERN.fullmatch(
+        payload["tree_sha256"]
+    ):
+        raise CandidateError("sanitized candidate manifest tree digest is invalid")
+    members = payload["members"]
+    if not isinstance(members, list) or not members:
+        raise CandidateError("sanitized candidate manifest must contain admitted members")
+    paths: list[str] = []
+    for member in members:
+        if not isinstance(member, dict) or set(member) != {
+            "git_blob_sha1",
+            "mode",
+            "path",
+            "sha256",
+            "size",
+        }:
+            raise CandidateError("sanitized candidate member record is malformed")
+        path = member["path"]
+        if not isinstance(path, str) or _safe_workspace_path(path).as_posix() != path:
+            raise CandidateError(f"sanitized candidate member path is unsafe: {path!r}")
+        if member["mode"] not in {"100644", "100755"}:
+            raise CandidateError(f"sanitized candidate member mode is invalid: {path}")
+        if not isinstance(member["git_blob_sha1"], str) or not SHA_PATTERN.fullmatch(
+            member["git_blob_sha1"]
+        ):
+            raise CandidateError(f"sanitized candidate member Git blob is invalid: {path}")
+        if not isinstance(member["sha256"], str) or not SHA256_PATTERN.fullmatch(member["sha256"]):
+            raise CandidateError(f"sanitized candidate member SHA-256 is invalid: {path}")
+        if (
+            isinstance(member["size"], bool)
+            or not isinstance(member["size"], int)
+            or member["size"] < 0
+        ):
+            raise CandidateError(f"sanitized candidate member size is invalid: {path}")
+        paths.append(path)
+    if paths != sorted(paths) or len(paths) != len(set(paths)):
+        raise CandidateError("sanitized candidate members must be sorted and unique")
+    excluded = payload["excluded_members"]
+    if not isinstance(excluded, list):
+        raise CandidateError("sanitized candidate excluded-member manifest is malformed")
+    excluded_paths: list[str] = []
+    for member in excluded:
+        if not isinstance(member, dict) or set(member) != {"path", "kind", "reason"}:
+            raise CandidateError("sanitized candidate excluded-member record is malformed")
+        path = member["path"]
+        if not isinstance(path, str) or _safe_workspace_path(path).as_posix() != path:
+            raise CandidateError(f"sanitized candidate excluded path is unsafe: {path!r}")
+        if member["kind"] not in {"policy-excluded", "non-regular"}:
+            raise CandidateError(f"sanitized candidate excluded-member kind is invalid: {path}")
+        if not isinstance(member["reason"], str) or not member["reason"].strip():
+            raise CandidateError(f"sanitized candidate excluded-member reason is empty: {path}")
+        excluded_paths.append(path)
+    if excluded_paths != sorted(excluded_paths) or len(excluded_paths) != len(set(excluded_paths)):
+        raise CandidateError("sanitized candidate excluded members must be sorted and unique")
+    if set(paths).intersection(excluded_paths):
+        raise CandidateError("sanitized candidate member cannot also be excluded")
+    tree_binding = {
+        "members": members,
+        "schema_version": SANITIZED_CANDIDATE_SCHEMA,
+        "source_sha": payload["source_sha"],
+    }
+    if payload["tree_sha256"] != hashlib.sha256(_json_bytes(tree_binding)).hexdigest():
+        raise CandidateError("sanitized candidate tree digest does not match its member manifest")
+    return payload
+
+
 def _validated_member(member: Any) -> dict[str, Any]:
     if not isinstance(member, dict) or set(member) != {"filename", "kind", "sha256", "size"}:
         raise CandidateError("candidate manifest member record is invalid")
@@ -2247,6 +2811,7 @@ def _validate_materialized_candidate_tree(
     metadata_bytes: bytes,
 ) -> None:
     """Verify every candidate tree member against the recomputed materialization."""
+    _validate_candidate_commit_identity(candidate_root, report)
     candidate_entries = _candidate_source_tree(candidate_root, report["candidate_commit_sha"])
     expected_paths = set(selected_paths) | {
         policy["candidate_inventory_path"],
@@ -2468,6 +3033,687 @@ def _verify_provenance(bundle_dir: Path, manifest: dict[str, Any]) -> None:
         raise CandidateError("candidate provenance does not exactly bind the manifest subjects")
 
 
+def _candidate_receipt_identity(
+    bundle_dir: Path,
+    *,
+    source_sha: str,
+    candidate_run_id: str,
+    candidate_run_attempt: int,
+    candidate_artifact_id: str,
+    candidate_artifact_name: str,
+    candidate_artifact_digest: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Read a candidate bundle and construct the exact rights-receipt identity."""
+    _validate_schema_file(SCHEMA_PATH)
+    entries = _bundle_entries(bundle_dir)
+    manifest_path = bundle_dir / MANIFEST_NAME
+    manifest = _validate_manifest(_load_json(manifest_path, label="candidate manifest"))
+    if manifest["source_sha"] != source_sha:
+        raise CandidateError("candidate manifest source SHA differs from rights admission input")
+    if manifest["workflow"]["run_id"] != candidate_run_id:
+        raise CandidateError("candidate manifest workflow run differs from rights admission input")
+    if manifest["workflow"]["run_attempt"] != candidate_run_attempt:
+        raise CandidateError(
+            "candidate manifest workflow attempt differs from rights admission input"
+        )
+    _verify_bundle_membership(bundle_dir, entries, manifest)
+    _verify_archives_and_sbom(bundle_dir, manifest)
+    _verify_provenance(bundle_dir, manifest)
+    digest = candidate_artifact_digest.removeprefix("sha256:")
+    if not SHA256_PATTERN.fullmatch(digest):
+        raise CandidateError("candidate artifact digest must be sha256:<64 lowercase characters>")
+    if not RUN_ID_PATTERN.fullmatch(candidate_artifact_id):
+        raise CandidateError("candidate artifact ID must be a positive decimal identity")
+    candidate_name_pattern = re.compile(
+        rf"robot-sf-software-candidate-{re.escape(source_sha)}-{re.escape(candidate_run_id)}-"
+        rf"([1-9][0-9]*)\Z"
+    )
+    candidate_name_match = candidate_name_pattern.fullmatch(candidate_artifact_name)
+    if candidate_name_match is None or candidate_name_match.group(1) != str(candidate_run_attempt):
+        raise CandidateError("candidate artifact name is not bound to source and workflow identity")
+    members = manifest["members"]
+    members_by_kind = {member["kind"]: member for member in members}
+    return manifest, {
+        "artifact_digest": f"sha256:{digest}",
+        "artifact_id": candidate_artifact_id,
+        "artifact_name": candidate_artifact_name,
+        "manifest_sha256": _sha256(manifest_path),
+        "members": members,
+        "package": manifest["package"],
+        "provenance_sha256": members_by_kind["provenance"]["sha256"],
+        "sbom_sha256": members_by_kind["sbom"]["sha256"],
+        "source_sha": source_sha,
+        "workflow_run_id": candidate_run_id,
+    }
+
+
+def _strict_archive_gate(
+    bundle_dir: Path,
+    *,
+    candidate_root: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    """Re-run the canonical archive/tree gate over the exact candidate payload.
+
+    The candidate manifest already binds every archive byte.  This second check
+    deliberately runs against the materialized Git root rather than the source
+    checkout, so a rebound archive carrying a forbidden model or blocked member
+    cannot inherit the producer's earlier ``passed`` claim.
+    """
+    materialization = manifest.get("materialization")
+    if not isinstance(materialization, dict):
+        raise CandidateError("rights admission candidate has no materialization identity")
+    inventory_path = candidate_root / materialization["candidate_inventory_path"]
+    try:
+        result = check_distribution(
+            bundle_dir,
+            strict_asset_rights=True,
+            repo_root=candidate_root,
+            inventory_path=inventory_path,
+            source_tree_ref=materialization["candidate_commit_sha"],
+        )
+    except (DistributionLicenseError, OSError, ValueError) as exc:
+        raise CandidateError(f"strict candidate archive/tree gate failed: {exc}") from exc
+    expected = {
+        member["filename"]: member["sha256"]
+        for member in manifest["members"]
+        if member["kind"] in {"wheel", "sdist"}
+    }
+    actual = {archive.name: _sha256(archive) for archive in (*result.wheels, *result.sdists)}
+    if actual != expected:
+        raise CandidateError(
+            "strict candidate archive/tree gate did not cover the exact manifest archives"
+        )
+    # Keep the result canonical and hashable for focused callers/tests.  The
+    # receipt's existing closed schema binds this report through the exact
+    # archive member hashes and candidate manifest digest.
+    report = {
+        "archives": [{"filename": name, "sha256": actual[name]} for name in sorted(actual)],
+        "candidate_commit_sha": materialization["candidate_commit_sha"],
+        "candidate_tree_sha": materialization["candidate_tree_sha"],
+        "schema_version": "robot_sf.software_strict_archive_gate.v1",
+        "source_sha": manifest["source_sha"],
+        "status": "passed",
+    }
+    report["report_sha256"] = hashlib.sha256(_json_bytes(report)).hexdigest()
+    return report
+
+
+def _report_input_digest(report: dict[str, Any], path: str, *, label: str) -> str:
+    """Return one canonical repository-input digest from a dependency report."""
+    inputs = report.get("repository_inputs")
+    if not isinstance(inputs, list):
+        raise CandidateError("supported dependency report has no repository input digest list")
+    matches = [item for item in inputs if isinstance(item, dict) and item.get("path") == path]
+    if len(matches) != 1:
+        raise CandidateError(
+            f"supported dependency report must bind exactly one {label} input: {path}"
+        )
+    digest = matches[0].get("sha256")
+    if not isinstance(digest, str) or not SHA256_PATTERN.fullmatch(digest):
+        raise CandidateError(f"supported dependency report {label} digest is invalid")
+    return digest
+
+
+def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - closed dependency gate
+    report_path: Path,
+    *,
+    identity: dict[str, Any],
+    source_sha: str,
+    tree_sha256: str,
+    workflow_run_attempt: int,
+    materialization: dict[str, Any] | None,
+    candidate_bundle: Path | None = None,
+) -> dict[str, Any]:
+    """Require a passed, candidate-bound supported-dependency inventory report."""
+    if report_path.is_symlink() or not report_path.is_file():
+        raise CandidateError(f"supported dependency report is not a regular file: {report_path}")
+    if report_path.name != SUPPORTED_DEPENDENCY_REPORT_NAME:
+        raise CandidateError(
+            f"supported dependency report must be named {SUPPORTED_DEPENDENCY_REPORT_NAME}"
+        )
+    report = _load_json(report_path, label="supported dependency report")
+    if not isinstance(report, dict):
+        raise CandidateError("supported dependency report must be a JSON object")
+    if report.get("schema_version") != SUPPORTED_DEPENDENCY_SCHEMA_VERSION:
+        raise CandidateError("supported dependency report schema version is unsupported")
+    summary = report.get("summary")
+    if not isinstance(summary, dict):
+        raise CandidateError("supported dependency report has no summary")
+    packages = report.get("packages")
+    if not isinstance(packages, list) or not packages:
+        raise CandidateError("supported dependency report has no package rows")
+    selected_rows = []
+    for row in packages:
+        if not isinstance(row, dict):
+            raise CandidateError("supported dependency report package row is malformed")
+        selected_profiles = row.get("selected_profiles")
+        if selected_profiles is not None and (
+            not isinstance(selected_profiles, list)
+            or any(
+                not isinstance(profile_id, str) or not profile_id
+                for profile_id in selected_profiles
+            )
+        ):
+            raise CandidateError("supported dependency report package selection is malformed")
+        if selected_profiles:
+            selected_rows.append(row)
+    pending_rows = [
+        row for row in selected_rows if row.get("policy_disposition") == "review_required"
+    ]
+    failures = report.get("failures")
+    structural_issues = report.get("structural_issues")
+    if not isinstance(failures, list) or not isinstance(structural_issues, list):
+        raise CandidateError("supported dependency report findings are malformed")
+    expected_summary = {
+        "selected_package_count": len(selected_rows),
+        "policy_pending_package_count": len(pending_rows),
+        "unresolved_count": len(failures),
+        "structural_issue_count": len(structural_issues),
+    }
+    for field, expected in expected_summary.items():
+        value = summary.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value != expected:
+            raise CandidateError(
+                f"supported dependency report summary.{field} is inconsistent with rows"
+            )
+    if summary.get("status") != "complete" or summary.get("candidate_bound") is not True:
+        raise CandidateError("supported dependency report is not a complete candidate binding")
+    unresolved_count = summary.get("unresolved_count")
+    if (
+        isinstance(unresolved_count, bool)
+        or not isinstance(unresolved_count, int)
+        or unresolved_count != 0
+    ):
+        raise CandidateError("supported dependency report contains unresolved rows")
+    surface = report.get("surface")
+    profile_ids = surface.get("profile_ids") if isinstance(surface, dict) else None
+    if (
+        not isinstance(profile_ids, list)
+        or not profile_ids
+        or not all(isinstance(profile_id, str) and profile_id for profile_id in profile_ids)
+    ):
+        raise CandidateError("supported dependency report has no non-empty profile surface")
+    if profile_ids != list(SUPPORTED_DEPENDENCY_PROFILE_IDS):
+        raise CandidateError(
+            "supported dependency report profile surface does not match the closed v0.0.6 "
+            f"roster: expected {list(SUPPORTED_DEPENDENCY_PROFILE_IDS)}, found {profile_ids}"
+        )
+    profile_manifest = report.get("profile_manifest")
+    if (
+        not isinstance(profile_manifest, dict)
+        or profile_manifest.get("path") != SUPPORTED_DEPENDENCY_PROFILE_PATH
+        or profile_manifest.get("schema_version") != SUPPORTED_DEPENDENCY_PROFILE_SCHEMA_VERSION
+    ):
+        raise CandidateError("supported dependency report profile manifest is unsupported")
+    policy = report.get("policy")
+    if (
+        not isinstance(policy, dict)
+        or policy.get("path") != SUPPORTED_DEPENDENCY_POLICY_PATH
+        or policy.get("schema_version") != SUPPORTED_DEPENDENCY_POLICY_SCHEMA_VERSION
+    ):
+        raise CandidateError("supported dependency report policy is unsupported")
+    profiles = report.get("profiles")
+    all_profiles = (
+        [
+            profile
+            for profile in profiles
+            if isinstance(profile, dict) and profile.get("id") == "all"
+        ]
+        if isinstance(profiles, list)
+        else []
+    )
+    if len(all_profiles) != 1:
+        raise CandidateError("supported dependency report has no unique canonical all profile")
+    all_package_ids = all_profiles[0].get("package_ids")
+    if (
+        not isinstance(all_package_ids, list)
+        or not all_package_ids
+        or any(not isinstance(package_id, str) or not package_id for package_id in all_package_ids)
+        or len(all_package_ids) != len(set(all_package_ids))
+    ):
+        raise CandidateError("supported dependency report all profile package closure is invalid")
+    rows_by_id: dict[str, dict[str, Any]] = {}
+    for row in packages:
+        package_id = row.get("package_id")
+        if not isinstance(package_id, str) or not package_id or package_id in rows_by_id:
+            raise CandidateError("supported dependency report package identity coverage is invalid")
+        rows_by_id[package_id] = row
+        expected_profiles = ["all"] if package_id in all_package_ids else []
+        if row.get("selected_profiles") != expected_profiles:
+            raise CandidateError(
+                "supported dependency report selected-profile membership differs from canonical all closure"
+            )
+    selected_package_ids = {
+        package_id for package_id, row in rows_by_id.items() if row.get("selected_profiles")
+    }
+    if selected_package_ids != set(all_package_ids):
+        raise CandidateError("supported dependency report selected package closure is incomplete")
+    if summary["selected_package_count"] != len(all_package_ids):
+        raise CandidateError("supported dependency report selected package count is not canonical")
+    all_profile = all_profiles[0]
+    if (
+        not isinstance(all_profile, dict)
+        or all_profile.get("extras") != list(SUPPORTED_DEPENDENCY_EXTRA_IDS)
+        or all_profile.get("excluded_extras") != ["rllib"]
+    ):
+        raise CandidateError(
+            "supported dependency report all profile does not match the closed v0.0.6 extra roster"
+        )
+    if report.get("failures") != [] or report.get("structural_issues") != []:
+        raise CandidateError("supported dependency report contains failures")
+    binding = report.get("candidate_binding")
+    if not isinstance(binding, dict) or binding.get("status") != "bound":
+        raise CandidateError("supported dependency report candidate binding is not bound")
+    if binding.get("source_sha") != source_sha:
+        raise CandidateError("supported dependency report source SHA differs from candidate")
+    if binding.get("manifest_sha256") != identity["manifest_sha256"]:
+        raise CandidateError(
+            "supported dependency report is bound to a different candidate manifest"
+        )
+    if binding.get("package") != identity["package"]:
+        raise CandidateError("supported dependency report package identity differs from candidate")
+    workflow = binding.get("workflow")
+    if workflow != {
+        "run_id": identity["workflow_run_id"],
+        "run_attempt": workflow_run_attempt,
+    }:
+        raise CandidateError("supported dependency report workflow identity differs from candidate")
+    if binding.get("materialization") != materialization:
+        raise CandidateError(
+            "supported dependency report materialization identity differs from candidate"
+        )
+    report_members = binding.get("members")
+    if not isinstance(report_members, list):
+        raise CandidateError("supported dependency report has no candidate member binding")
+    report_members_by_kind = {
+        member.get("kind"): member for member in report_members if isinstance(member, dict)
+    }
+    identity_members_by_kind = {member["kind"]: member for member in identity["members"]}
+    if report_members_by_kind != identity_members_by_kind:
+        raise CandidateError("supported dependency report candidate members differ from bundle")
+    sbom = binding.get("sbom")
+    if not isinstance(sbom, dict) or sbom.get("sha256") != identity["sbom_sha256"]:
+        raise CandidateError("supported dependency report SBOM binding differs from candidate")
+    if candidate_bundle is not None:
+        sbom_filename = sbom.get("filename")
+        if not isinstance(sbom_filename, str) or Path(sbom_filename).name != sbom_filename:
+            raise CandidateError("supported dependency candidate SBOM filename is invalid")
+        sbom_path = candidate_bundle / sbom_filename
+        if sbom_path.is_symlink() or not sbom_path.is_file():
+            raise CandidateError("supported dependency candidate SBOM is not a regular file")
+        if _sha256(sbom_path) != identity["sbom_sha256"]:
+            raise CandidateError("supported dependency candidate SBOM bytes differ from candidate")
+        sbom_payload = _load_json(sbom_path, label="supported dependency candidate SBOM")
+        components = sbom_payload.get("components")
+        if not isinstance(components, list):
+            raise CandidateError("supported dependency candidate SBOM components are invalid")
+        component_ids = set()
+        for component in components:
+            if not isinstance(component, dict):
+                raise CandidateError("supported dependency candidate SBOM component is invalid")
+            name, version = component.get("name"), component.get("version")
+            if not isinstance(name, str) or not isinstance(version, str):
+                raise CandidateError("supported dependency candidate SBOM identity is invalid")
+            component_ids.add((name.lower().replace("_", "-").replace(".", "-"), version))
+        expected_components = {
+            (row.get("normalized_name"), row.get("version"))
+            for package_id, row in rows_by_id.items()
+            if package_id in selected_package_ids and row.get("normalized_name") != "robot-sf"
+        }
+        if any(
+            not isinstance(name, str) or not isinstance(version, str)
+            for name, version in expected_components
+        ):
+            raise CandidateError("supported dependency report selected package identity is invalid")
+        inactive_components = {
+            tuple(value.split("@", 1))
+            for value in sbom.get("target_inactive_components", [])
+            if isinstance(value, str) and "@" in value
+        }
+        allowed_inactive_components = {
+            (row.get("normalized_name"), row.get("version"))
+            for package_id, row in rows_by_id.items()
+            if package_id not in selected_package_ids
+        }
+        if not inactive_components <= allowed_inactive_components:
+            raise CandidateError(
+                "supported dependency candidate SBOM has an unbound inactive component"
+            )
+        if component_ids != expected_components | inactive_components:
+            raise CandidateError(
+                "supported dependency candidate SBOM closure differs from all profile"
+            )
+        if sbom.get("component_count") != len(component_ids):
+            raise CandidateError("supported dependency candidate SBOM component count is invalid")
+    policy_sha256 = _report_input_digest(
+        report,
+        SUPPORTED_DEPENDENCY_POLICY_PATH,
+        label="policy",
+    )
+    profile_manifest_sha256 = _report_input_digest(
+        report,
+        SUPPORTED_DEPENDENCY_PROFILE_PATH,
+        label="profile manifest",
+    )
+    return {
+        "candidate_manifest_sha256": identity["manifest_sha256"],
+        "candidate_tree_sha256": tree_sha256,
+        "command": SUPPORTED_DEPENDENCY_GATE_COMMAND,
+        "id": SUPPORTED_DEPENDENCY_GATE_ID,
+        "policy_path": SUPPORTED_DEPENDENCY_POLICY_PATH,
+        "policy_sha256": policy_sha256,
+        "profile_manifest_path": SUPPORTED_DEPENDENCY_PROFILE_PATH,
+        "profile_manifest_sha256": profile_manifest_sha256,
+        "report_filename": SUPPORTED_DEPENDENCY_REPORT_NAME,
+        "report_sha256": _sha256(report_path),
+        "schema_version": SUPPORTED_DEPENDENCY_SCHEMA_VERSION,
+        "source_sha": source_sha,
+        "status": "passed",
+        "unresolved_count": 0,
+    }
+
+
+def _fresh_external_directory(path: Path, *, repo_root: Path, label: str) -> None:
+    """Require an empty, non-symlink directory outside the source checkout."""
+    _require_external(path, repo_root=repo_root, label=label)
+    if path.is_symlink() or (path.exists() and not path.is_dir()):
+        raise CandidateError(f"{label} is not a real directory: {path}")
+    if path.exists() and any(path.iterdir()):
+        raise CandidateError(f"{label} must be empty: {path}")
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise CandidateError(f"cannot create {label}: {path}: {exc}") from exc
+
+
+def _validate_rights_receipt(receipt: Any) -> dict[str, Any]:  # noqa: C901 - closed receipt gate
+    """Validate the exact rights receipt contract shared with the trusted publisher."""
+    if not isinstance(receipt, dict) or set(receipt) != {
+        "candidate",
+        "sanitized",
+        "strict_gate",
+        "status",
+        "schema_version",
+        "supported_dependency_gate",
+    }:
+        raise CandidateError("rights admission receipt has missing or unclassified fields")
+    if receipt["schema_version"] != RIGHTS_ADMISSION_SCHEMA or receipt["status"] != "accepted":
+        raise CandidateError("rights admission receipt status or schema is invalid")
+    candidate = receipt["candidate"]
+    expected_candidate_keys = {
+        "artifact_digest",
+        "artifact_id",
+        "artifact_name",
+        "manifest_sha256",
+        "members",
+        "package",
+        "provenance_sha256",
+        "sbom_sha256",
+        "source_sha",
+        "workflow_run_id",
+    }
+    if not isinstance(candidate, dict) or set(candidate) != expected_candidate_keys:
+        raise CandidateError("rights admission candidate binding is incomplete")
+    if (
+        not isinstance(candidate["artifact_digest"], str)
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", candidate["artifact_digest"])
+        or not isinstance(candidate["artifact_id"], str)
+        or not RUN_ID_PATTERN.fullmatch(candidate["artifact_id"])
+        or not isinstance(candidate["artifact_name"], str)
+        or not re.fullmatch(
+            r"robot-sf-software-candidate-[0-9a-f]{40}-[1-9][0-9]*-[1-9][0-9]*",
+            candidate["artifact_name"],
+        )
+        or not isinstance(candidate["manifest_sha256"], str)
+        or not SHA256_PATTERN.fullmatch(candidate["manifest_sha256"])
+        or not isinstance(candidate["provenance_sha256"], str)
+        or not SHA256_PATTERN.fullmatch(candidate["provenance_sha256"])
+        or not isinstance(candidate["sbom_sha256"], str)
+        or not SHA256_PATTERN.fullmatch(candidate["sbom_sha256"])
+        or not isinstance(candidate["source_sha"], str)
+        or not SHA_PATTERN.fullmatch(candidate["source_sha"])
+        or not isinstance(candidate["workflow_run_id"], str)
+        or not RUN_ID_PATTERN.fullmatch(candidate["workflow_run_id"])
+    ):
+        raise CandidateError("rights admission candidate binding is invalid")
+    package = candidate["package"]
+    if (
+        not isinstance(package, dict)
+        or set(package) != {"name", "version"}
+        or package.get("name") != "robot_sf"
+        or not isinstance(package.get("version"), str)
+        or not VERSION_PATTERN.fullmatch(package["version"])
+    ):
+        raise CandidateError("rights admission candidate package identity is invalid")
+    _validate_members(candidate["members"], version=package["version"])
+    sanitized = receipt["sanitized"]
+    if not isinstance(sanitized, dict) or set(sanitized) != {
+        "policy_id",
+        "policy_path",
+        "policy_sha256",
+        "schema_version",
+        "source_sha",
+        "tree_sha256",
+    }:
+        raise CandidateError("rights admission sanitized binding is incomplete")
+    if (
+        sanitized["policy_id"] != RIGHTS_POLICY_ID
+        or sanitized["policy_path"] != RIGHTS_POLICY_PATH
+        or sanitized["schema_version"] != SANITIZED_CANDIDATE_SCHEMA
+        or not isinstance(sanitized["source_sha"], str)
+        or not SHA_PATTERN.fullmatch(sanitized["source_sha"])
+        or not isinstance(sanitized["policy_sha256"], str)
+        or not SHA256_PATTERN.fullmatch(sanitized["policy_sha256"])
+        or not isinstance(sanitized["tree_sha256"], str)
+        or not SHA256_PATTERN.fullmatch(sanitized["tree_sha256"])
+    ):
+        raise CandidateError("rights admission sanitized binding is invalid")
+    strict_gate = receipt["strict_gate"]
+    if not isinstance(strict_gate, dict) or set(strict_gate) != {
+        "command",
+        "findings",
+        "id",
+        "policy_sha256",
+        "source_sha",
+        "status",
+    }:
+        raise CandidateError("rights admission strict-gate binding is incomplete")
+    if (
+        strict_gate["command"] != RIGHTS_GATE_COMMAND
+        or strict_gate["findings"] != 0
+        or strict_gate["id"] != RIGHTS_GATE_ID
+        or strict_gate["policy_sha256"] != sanitized["policy_sha256"]
+        or strict_gate["source_sha"] != sanitized["source_sha"]
+        or strict_gate["status"] != "passed"
+    ):
+        raise CandidateError("rights admission strict-gate binding is invalid")
+    dependency_gate = receipt["supported_dependency_gate"]
+    expected_dependency_keys = {
+        "candidate_manifest_sha256",
+        "candidate_tree_sha256",
+        "command",
+        "id",
+        "policy_path",
+        "policy_sha256",
+        "profile_manifest_path",
+        "profile_manifest_sha256",
+        "report_filename",
+        "report_sha256",
+        "schema_version",
+        "source_sha",
+        "status",
+        "unresolved_count",
+    }
+    if not isinstance(dependency_gate, dict) or set(dependency_gate) != expected_dependency_keys:
+        raise CandidateError(
+            "rights admission supported-dependency gate is missing or unclassified"
+        )
+    if (
+        dependency_gate["schema_version"] != SUPPORTED_DEPENDENCY_SCHEMA_VERSION
+        or dependency_gate["id"] != SUPPORTED_DEPENDENCY_GATE_ID
+        or dependency_gate["command"] != SUPPORTED_DEPENDENCY_GATE_COMMAND
+        or dependency_gate["policy_path"] != SUPPORTED_DEPENDENCY_POLICY_PATH
+        or dependency_gate["profile_manifest_path"] != SUPPORTED_DEPENDENCY_PROFILE_PATH
+        or dependency_gate["report_filename"] != SUPPORTED_DEPENDENCY_REPORT_NAME
+        or dependency_gate["status"] != "passed"
+        or dependency_gate["source_sha"] != sanitized["source_sha"]
+        or dependency_gate["candidate_manifest_sha256"] != candidate["manifest_sha256"]
+        or dependency_gate["candidate_tree_sha256"] != sanitized["tree_sha256"]
+        or isinstance(dependency_gate["unresolved_count"], bool)
+        or dependency_gate["unresolved_count"] != 0
+        or any(
+            not isinstance(dependency_gate[field], str)
+            or not SHA256_PATTERN.fullmatch(dependency_gate[field])
+            for field in ("policy_sha256", "profile_manifest_sha256", "report_sha256")
+        )
+    ):
+        raise CandidateError("rights admission supported-dependency gate is invalid")
+    return receipt
+
+
+def _admit_rights(args: argparse.Namespace) -> None:  # noqa: C901, PLR0915 - closed receipt workflow
+    """Create the separately downloadable exact rights-admission receipt."""
+    repo_root = args.repo_root.resolve()
+    if not SHA_PATTERN.fullmatch(args.source_sha):
+        raise CandidateError("rights admission source SHA is invalid")
+    if not RUN_ID_PATTERN.fullmatch(args.workflow_run_id):
+        raise CandidateError("rights admission workflow run ID is invalid")
+    if args.workflow_run_attempt < 1:
+        raise CandidateError("rights admission workflow attempt must be positive")
+    _validate_source(repo_root, args.source_sha)
+    policy_path = (args.policy if args.policy.is_absolute() else repo_root / args.policy).resolve()
+    policy_raw, policy = _load_rights_policy(policy_path, repo_root=repo_root)
+
+    materialization_report_path = Path(os.path.abspath(args.materialization_report))
+    candidate_root = Path(os.path.abspath(args.candidate_root))
+    materialization_args = argparse.Namespace(
+        candidate_source_root=candidate_root,
+        materialization_report=materialization_report_path,
+        policy=repo_root
+        / _load_json(materialization_report_path, label="materialization report")["policy_path"],
+        source_sha=args.source_sha,
+    )
+    loaded = _load_assembly_materialization_report(materialization_args, repo_root)
+    if loaded is None:  # pragma: no cover - both arguments are required by argparse.
+        raise CandidateError("rights admission requires a materialization report")
+    _materialization_identity(
+        materialization_args,
+        repo_root,
+        expected_version=args.candidate_version,
+    )
+    _candidate_root, report = loaded
+    source_tree_sha1 = _candidate_tree_sha1(repo_root, args.source_sha)
+    sanitized = _sanitized_manifest_from_report(
+        report,
+        source_tree_sha1=source_tree_sha1,
+        policy_raw=policy_raw,
+        policy=policy,
+    )
+    manifest, identity = _candidate_receipt_identity(
+        args.candidate_bundle,
+        source_sha=args.source_sha,
+        candidate_run_id=args.workflow_run_id,
+        candidate_run_attempt=args.workflow_run_attempt,
+        candidate_artifact_id=args.candidate_artifact_id,
+        candidate_artifact_name=args.candidate_artifact_name,
+        candidate_artifact_digest=args.candidate_artifact_digest,
+    )
+    _strict_archive_gate(
+        args.candidate_bundle,
+        candidate_root=_candidate_root,
+        manifest=manifest,
+    )
+    if (
+        manifest["package"]["name"] != "robot_sf"
+        or manifest["package"]["version"] != args.candidate_version
+    ):
+        raise CandidateError("rights admission candidate package differs from requested version")
+    dependency_report_path = args.dependency_report.resolve()
+    supported_dependency_gate = _validate_supported_dependency_report(
+        dependency_report_path,
+        identity=identity,
+        source_sha=args.source_sha,
+        tree_sha256=sanitized["tree_sha256"],
+        workflow_run_attempt=manifest["workflow"]["run_attempt"],
+        materialization=manifest.get("materialization"),
+        candidate_bundle=args.candidate_bundle,
+    )
+    sanitized_path = Path(os.path.abspath(args.sanitized_manifest))
+    _require_external(sanitized_path, repo_root=repo_root, label="sanitized candidate manifest")
+    if sanitized_path.resolve(strict=False).is_relative_to(candidate_root):
+        raise CandidateError("sanitized candidate manifest must be outside candidate source")
+    try:
+        if sanitized_path.exists() or sanitized_path.is_symlink():
+            raise CandidateError(
+                f"sanitized candidate manifest must not already exist: {sanitized_path}"
+            )
+        sanitized_path.parent.mkdir(parents=True, exist_ok=True)
+        sanitized_path.write_bytes(_json_bytes(sanitized))
+    except CandidateError:
+        raise
+    except OSError as exc:
+        raise CandidateError(
+            f"cannot write sanitized candidate manifest: {sanitized_path}: {exc}"
+        ) from exc
+
+    output_dir = Path(os.path.abspath(args.output_dir))
+    _fresh_external_directory(
+        output_dir,
+        repo_root=repo_root,
+        label="rights admission artifact directory",
+    )
+    dependency_report_copy = output_dir / SUPPORTED_DEPENDENCY_REPORT_NAME
+    try:
+        shutil.copyfile(dependency_report_path, dependency_report_copy)
+    except OSError as exc:
+        raise CandidateError(
+            "cannot copy supported dependency report into rights admission artifact: "
+            f"{dependency_report_copy}: {exc}"
+        ) from exc
+    if _sha256(dependency_report_copy) != supported_dependency_gate["report_sha256"]:
+        raise CandidateError("copied supported dependency report bytes differ from validated input")
+    receipt = {
+        "candidate": identity,
+        "sanitized": {
+            "policy_id": RIGHTS_POLICY_ID,
+            "policy_path": RIGHTS_POLICY_PATH,
+            "policy_sha256": sanitized["policy_sha256"],
+            "schema_version": SANITIZED_CANDIDATE_SCHEMA,
+            "source_sha": args.source_sha,
+            "tree_sha256": sanitized["tree_sha256"],
+        },
+        "strict_gate": {
+            "command": RIGHTS_GATE_COMMAND,
+            "findings": 0,
+            "id": RIGHTS_GATE_ID,
+            "policy_sha256": sanitized["policy_sha256"],
+            "source_sha": args.source_sha,
+            "status": "passed",
+        },
+        "status": "accepted",
+        "schema_version": RIGHTS_ADMISSION_SCHEMA,
+        "supported_dependency_gate": supported_dependency_gate,
+    }
+    _validate_rights_receipt(receipt)
+    receipt_path = output_dir / RIGHTS_ADMISSION_NAME
+    try:
+        with receipt_path.open("xb") as stream:
+            stream.write(_json_bytes(receipt))
+    except FileExistsError as exc:
+        raise CandidateError(
+            f"refusing to overwrite rights admission receipt: {receipt_path}"
+        ) from exc
+    except OSError as exc:
+        raise CandidateError(
+            f"cannot write rights admission receipt: {receipt_path}: {exc}"
+        ) from exc
+    print(
+        f"PASS: accepted rights-clean candidate {args.source_sha}; "
+        f"receipt={receipt_path} tree_sha256={sanitized['tree_sha256']}"
+    )
+
+
 def _verify(args: argparse.Namespace) -> None:
     _validate_schema_file(args.schema)
     if not SHA_PATTERN.fullmatch(args.expected_source_sha):
@@ -2523,6 +3769,26 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     materialize.add_argument("--policy", type=Path, default=None)
     materialize.add_argument("--report", type=Path, default=None)
 
+    admit = subparsers.add_parser(
+        "rights-admission",
+        help="create a separate rights receipt after strict rights and dependency gates pass",
+    )
+    admit.add_argument("--repo-root", type=Path, required=True)
+    admit.add_argument("--candidate-root", type=Path, required=True)
+    admit.add_argument("--materialization-report", type=Path, required=True)
+    admit.add_argument("--sanitized-manifest", type=Path, required=True)
+    admit.add_argument("--candidate-bundle", type=Path, required=True)
+    admit.add_argument("--dependency-report", type=Path, required=True)
+    admit.add_argument("--output-dir", type=Path, required=True)
+    admit.add_argument("--source-sha", required=True)
+    admit.add_argument("--candidate-version", required=True)
+    admit.add_argument("--workflow-run-id", required=True)
+    admit.add_argument("--workflow-run-attempt", type=int, required=True)
+    admit.add_argument("--candidate-artifact-id", required=True)
+    admit.add_argument("--candidate-artifact-name", required=True)
+    admit.add_argument("--candidate-artifact-digest", required=True)
+    admit.add_argument("--policy", type=Path, default=Path(RIGHTS_POLICY_PATH))
+
     assemble = subparsers.add_parser("assemble", help="admit already-built candidate bytes")
     assemble.add_argument("--repo-root", type=Path, required=True)
     assemble.add_argument("--dist-dir", type=Path, required=True)
@@ -2556,6 +3822,8 @@ def main(argv: list[str] | None = None) -> int:
             _stage_build_source(args)
         elif args.command == "materialize-source":
             _materialize_source(args)
+        elif args.command == "rights-admission":
+            _admit_rights(args)
         elif args.command == "assemble":
             _assemble(args)
         elif args.command == "verify":

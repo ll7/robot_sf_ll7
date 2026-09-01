@@ -255,6 +255,13 @@ class SimulationSettings:
     pedestrian_integration_scheme: str = "semi_implicit_euler"
     """Pedestrian position-update scheme; defaults to the historical semi-implicit update."""
 
+    oracle_force_trace_enabled: bool = False
+    """Capture privileged per-force and speed-cap diagnostics when explicitly enabled.
+
+    This implementation-integrity surface is disabled by default and never enters
+    actor observations or planner inputs.
+    """
+
     peds_speed_mult: float = 1.3
     """Pedestrian speed multiplier"""
 
@@ -451,6 +458,8 @@ class SimulationSettings:
         if self.time_per_step_in_secs <= 0:
             raise ValueError("Step time mustn't be negative or zero!")
         self._validate_action_latency_config()
+        if type(self.oracle_force_trace_enabled) is not bool:
+            raise TypeError("oracle_force_trace_enabled must be bool")
         self.pedestrian_integration_scheme = normalize_integration_scheme(
             self.pedestrian_integration_scheme
         )

@@ -75,6 +75,16 @@ def test_make_ped_forces_binds_robot_specific_callbacks(monkeypatch) -> None:
     assert [force.getter() for force in apf_forces] == [robot.pose for robot in robots]
     assert [force.kind for force in prf_forces] == ["prf", "prf"]
     assert [force.kind for force in apf_forces] == ["apf", "apf"]
+    assert [force.component_id for force in prf_forces] == [
+        "ped_robot:robot_0",
+        "ped_robot:robot_1",
+    ]
+    assert [force.component_id for force in apf_forces] == [
+        "adversarial:robot_0",
+        "adversarial:robot_1",
+    ]
+    assert [force.source_entity for force in prf_forces] == ["robot:0", "robot:1"]
+    assert [force.source_entity for force in apf_forces] == ["robot:0", "robot:1"]
     assert [force.config.robot_radius for force in prf_forces] == [0.5, 0.8]
     assert [force.config.robot_radius for force in apf_forces] == [0.5, 0.8]
     assert prf_config.robot_radius == 9.0

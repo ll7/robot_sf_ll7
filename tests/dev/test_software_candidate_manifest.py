@@ -1211,3 +1211,20 @@ def test_json_output_serialization_rejects_nonfinite_values() -> None:
 
     with pytest.raises(helper["CandidateError"], match="non-finite JSON value"):
         helper["_json_bytes"]({"poison_non_json_number": float("nan")})
+
+
+def test_helper_runs_as_bare_script_without_pythonpath(tmp_path: Path) -> None:
+    """Hermetic workflow steps invoke the helper with bare ``python`` and no
+    project install: the ``scripts`` package must resolve from the helper's
+    own location, not from the caller's environment (issue #8145)."""
+    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+    result = subprocess.run(
+        [sys.executable, str(HELPER), "--help"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "No module named 'scripts'" not in result.stderr

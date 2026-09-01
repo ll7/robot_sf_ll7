@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import os
 import subprocess
 import sys
 import tarfile
@@ -148,18 +149,51 @@ def test_valid_wheel_and_sdist_pass(tmp_path: Path) -> None:
     assert len(result.sdists) == 1
 
 
-def test_direct_script_invocation_is_importable() -> None:
-    """The CI's no-project direct-script invocation must import repository helpers."""
+def test_direct_script_invocation_is_importable(tmp_path: Path) -> None:
+    """A bare script resolves repository helpers from a foreign working directory."""
+    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
     result = subprocess.run(
         [sys.executable, str(REPO_ROOT / "scripts/tools/check_distribution_licenses.py"), "--help"],
+        cwd=tmp_path,
         capture_output=True,
         text=True,
+        env=env,
         check=False,
     )
 
     assert result.returncode == 0
     assert "--strict-asset-rights" in result.stdout
     assert "ModuleNotFoundError" not in result.stderr
+
+
+def test_bare_script_bootstrap_adds_repository_root_once(tmp_path: Path) -> None:
+    """Bare execution adds the repository root no more than once."""
+    env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+    probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import pathlib, runpy, sys; "
+                "root=str(pathlib.Path(sys.argv[2]).resolve()); "
+                "sys.path[:]=[entry for entry in sys.path if not entry or "
+                "str(pathlib.Path(entry).resolve()) != root]; "
+                "runpy.run_path(sys.argv[1], run_name='bootstrap_probe'); "
+                "print(sum(str(pathlib.Path(entry).resolve()) == root "
+                "for entry in sys.path if entry))"
+            ),
+            str(REPO_ROOT / "scripts/tools/check_distribution_licenses.py"),
+            str(REPO_ROOT),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+
+    assert probe.returncode == 0, probe.stderr
+    assert probe.stdout.strip() == "1"
 
 
 def test_socnavbench_file_partition_is_checked_semantically(tmp_path: Path) -> None:

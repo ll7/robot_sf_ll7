@@ -45,6 +45,9 @@ VERSION_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9.+!_-]*\Z")
 ARTIFACT_NAME_PATTERN = re.compile(
     r"robot-sf-software-candidate-[0-9a-f]{40}-[1-9][0-9]*-[1-9][0-9]*\Z"
 )
+REJECTED_DIAGNOSTIC_ARTIFACT_NAME_PATTERN = re.compile(
+    r"robot-sf-software-candidate-rejected-[0-9a-f]{40}-[1-9][0-9]*-[1-9][0-9]*\Z"
+)
 RECEIPT_ARTIFACT_NAME_PATTERN = re.compile(
     r"robot-sf-(?:testpypi|pypi)-(?:receipt|cold-install)-[1-9][0-9]*-[1-9][0-9]*\Z"
 )
@@ -77,6 +80,7 @@ PUBLISHED_MEMBER_KINDS = ("wheel", "sdist")
 MANIFEST_NAME = "candidate-manifest.json"
 PROVENANCE_NAME = "candidate-provenance.json"
 RIGHTS_RECEIPT_NAME = "rights-admission.json"
+REJECTED_DIAGNOSTIC_NAME = "rejected-diagnostic.json"
 RIGHTS_POLICY_ID = "robot_sf.software_release_rights_policy.v1"
 RIGHTS_POLICY_PATH = "scripts/validation/software_release_rights_policy.v1.json"
 SANITIZED_CANDIDATE_SCHEMA = "robot_sf.software_sanitized_candidate.v1"
@@ -263,6 +267,12 @@ def _artifact_digest(value: str) -> str:
 
 
 def _artifact_name(value: str, *, kind: str) -> str:
+    if (
+        kind == "candidate"
+        and isinstance(value, str)
+        and REJECTED_DIAGNOSTIC_ARTIFACT_NAME_PATTERN.fullmatch(value)
+    ):
+        raise PromotionError("rejected diagnostic artifact is never eligible for promotion")
     pattern = {
         "candidate": ARTIFACT_NAME_PATTERN,
         "receipt": RECEIPT_ARTIFACT_NAME_PATTERN,
@@ -568,6 +578,9 @@ def _load_candidate(
     """Load a candidate and return ``(manifest, identity)`` after byte checks."""
 
     _require_real_dir(bundle_dir, label="candidate bundle")
+    rejected_marker = bundle_dir / REJECTED_DIAGNOSTIC_NAME
+    if rejected_marker.is_symlink() or rejected_marker.is_file():
+        raise PromotionError("rejected diagnostic bundle is never eligible for promotion")
     entries = sorted(bundle_dir.iterdir(), key=lambda path: path.name)
     if any(path.is_symlink() or not path.is_file() for path in entries):
         raise PromotionError("candidate bundle contains a non-regular member")

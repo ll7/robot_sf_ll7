@@ -3586,13 +3586,22 @@ def _exact_policy_coverage_failures(
     failures: list[str] = []
     for policy in package_dispositions:
         policy_id = policy["id"]
-        expected_profiles = set(policy.get("profiles", []))
-        unknown_profiles = expected_profiles - profile_ids
+        reviewed_profiles = set(policy.get("profiles", []))
+        unknown_profiles = reviewed_profiles - profile_ids
         if unknown_profiles:
             failures.append(
                 f"package disposition {policy_id} references unknown profiles: "
                 f"{sorted(unknown_profiles)}"
             )
+        # A report for a selected surface must be checked against the portion
+        # of the reviewed row that is in that surface.  The policy row stays
+        # explicit (and is still checked against the complete profile set
+        # above); selection is a projection, never an implicit wildcard.
+        expected_profiles = (
+            reviewed_profiles
+            if selected_profile_ids is None
+            else reviewed_profiles & selected_profile_ids
+        )
         matches = [
             record
             for record in package_records
@@ -3610,7 +3619,9 @@ def _exact_policy_coverage_failures(
         }
         if selected_profile_ids is not None:
             actual_profiles &= selected_profile_ids
-        actual_profiles = _effective_profile_coverage(actual_profiles, expected_profiles)
+        is_full_context = selected_profile_ids is None or selected_profile_ids == profile_ids
+        if is_full_context:
+            actual_profiles = _effective_profile_coverage(actual_profiles, expected_profiles)
         if not matches:
             failures.append(f"package disposition {policy_id} has no matching lock row")
         elif actual_profiles != expected_profiles:

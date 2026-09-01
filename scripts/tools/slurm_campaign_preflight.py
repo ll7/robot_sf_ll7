@@ -330,6 +330,7 @@ def preflight(
     actual_public_commit: str = "",
     public_repo: Path | None = None,
     output_root: Path | None = None,
+    repository_root: Path | None = None,
 ) -> dict[str, Any]:
     """Validate a campaign manifest and return a no-submit admission report."""
     blockers = _placeholder_blockers(manifest)
@@ -343,6 +344,23 @@ def preflight(
         public_repo=public_repo,
         blockers=blockers,
     )
+    if manifest.get("schema_version") == "robot-sf-slurm-launch-manifest.v1":
+        try:
+            from robot_sf.benchmark.slurm_launch_manifest import (
+                validate_launch_manifest,
+            )
+
+            launch_root = (repository_root or public_repo or Path.cwd()).resolve()
+            blockers.extend(
+                validate_launch_manifest(
+                    manifest,
+                    manifest_path=manifest_path,
+                    repository_root=launch_root,
+                    actual_public_commit=actual,
+                )
+            )
+        except (OSError, ValueError, ImportError) as exc:
+            blockers.append(f"launch manifest validation failed: {exc}")
     config_value, config, packet_hash = _packet_identity(
         manifest, manifest_path=manifest_path, blockers=blockers
     )
@@ -415,6 +433,11 @@ def _parser() -> argparse.ArgumentParser:
         help="bind actual_public_commit to git HEAD in this local repository",
     )
     parser.add_argument("--output-root", type=Path)
+    parser.add_argument(
+        "--repository-root",
+        type=Path,
+        help="repository root used for launch-manifest source and input binding",
+    )
     parser.add_argument("--json", action="store_true")
     return parser
 
@@ -432,6 +455,7 @@ def main(argv: list[str] | None = None) -> int:
             actual_public_commit=args.actual_public_commit,
             public_repo=args.public_repo,
             output_root=args.output_root,
+            repository_root=args.repository_root,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         report = {

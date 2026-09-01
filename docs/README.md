@@ -31,6 +31,10 @@ own index so you never fall straight into issue-specific context notes.
 > Internal context notes and issue-specific working files live under `docs/context/` and are linked
 > from the Research/Developer layers only — they are kept out of the user path.
 
+Current research-contract entry points include the [issue #8068 observation-only goal-posterior
+baseline](./context/issue_8068_goal_posterior_actor_baseline.md), which is a transparent
+one-frame smoke baseline rather than calibrated or benchmark evidence.
+
 ## Static Docs Site
 
 This repository includes a lightweight Sphinx site over the existing Markdown docs. Build it from
@@ -178,6 +182,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Issue #1163 Manual-Control Recording Format Decision](./context/issue_1163_manual_control_recording_format.md)** - No-change decision for compact manual-control recording formats, with JSONL size/throughput thresholds and provenance requirements for any future derived artifact
 * **[Issue #1154 Web-Game Data Collection Path](./context/issue_1154_web_game_data_collection_path.md)** - Deferred web-game data collection follow-up; rationale for keeping schema parity with the local recorder and sequenced implementation order
 * **[Observation Contract](./dev/observation_contract.md)** - Observation schemas, shapes, and normalization conventions
+* **[Observation-Derived Tracker Goal-Belief Adapter](./context/issue_8205_tracker_adapter_smoke.md)** - Default-off bridge from stable pedestrian tracks to the canonical observation-only goal-belief contract; smoke-only evidence boundary
 * **[Holonomic Action Contract](./dev/holonomic_action_contract.md)** - Exact holonomic action-space semantics, heading behavior, and benchmark bridge rules
 * **[Helper Catalog](./dev/helper_catalog.md)** - Reusable environment, policy, episode, rendering, and docs helpers extracted from examples and benchmark scripts
 * **[GitHub Helper Transport Policy](./dev/github_transport_policy.md)** - Canonical REST/native routing, fail-closed markers, helper registration, and audit command

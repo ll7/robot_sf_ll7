@@ -1,5 +1,23 @@
 # Context Retrieval Index
 
+Public pedestrian goal and force prediction research: observation-only candidate generation,
+path-tangent/open-ray/unknown semantics, coverage-only evaluation, and the next held-out research
+directions. Current receipts are smoke evidence only:
+[pedestrian_goal_force_prediction_research.md](pedestrian_goal_force_prediction_research.md).
+
+Issue #8205 observation-derived tracker goal-belief adapter: a default-off, actor-safe bridge
+from `PedestrianTrackingResult` to `GoalBeliefV1`, with stable track ordering, global-frame
+timing, explicit visibility/history masks, reset provenance, and smoke-only evidence. It does not
+claim tracking or prediction quality and does not accept simulator identity or true goals:
+[issue_8205_tracker_adapter_smoke.md](issue_8205_tracker_adapter_smoke.md).
+
+Issue #8068 observation-only one-frame goal-posterior baseline: strict public
+candidate sets, explicit unknown mass and entropy, stationary/ambiguous handling,
+and an oracle-labelled compatibility boundary. The deterministic fixture is
+implementation-integrity smoke only; it is not calibrated intention or planner
+benchmark evidence:
+[issue_8068_goal_posterior_actor_baseline.md](issue_8068_goal_posterior_actor_baseline.md).
+
 Issue #7889 force-coupled potential-field comparator: an opt-in experimental local planner with
 strict observation and occupancy-grid validation, bounded command-rate behavior, deterministic
 analytic smoke, and explicit implementation-only evidence boundaries. It does not establish

@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from scripts.dev import check_pr_ci_status as ci_status
 from scripts.dev import merge_queue_gate as merge_queue_gate_module
 from scripts.dev.merge_queue_gate import (
     CI_PATHS_IGNORE_PATTERNS,
@@ -368,6 +369,50 @@ def test_rest_check_rollup_paginates_and_includes_legacy_statuses() -> None:
     assert any(item["name"] == "legacy-gate" and item["conclusion"] == "FAILURE" for item in rollup)
     assert "page=2" in mock_gh.call_args_list[1].args[0][-1]
     assert mock_gh.call_args_list[2].args[0][-1].endswith("/statuses?per_page=100&page=1")
+
+
+def test_rest_check_rollup_enriches_workflow_identity_for_superseded_runs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """REST fallback must project Actions identity before deduplicating reruns."""
+    predecessor = {
+        "name": "pr-body-contracts",
+        "head_sha": FULL_SHA,
+        "status": "completed",
+        "conclusion": "cancelled",
+        "started_at": "2026-08-21T13:46:14Z",
+        "completed_at": "2026-08-21T13:46:20Z",
+        "details_url": "https://github.com/ll7/robot_sf_ll7/actions/runs/101/job/1001",
+    }
+    replacement = {
+        **predecessor,
+        "conclusion": "success",
+        "started_at": "2026-08-21T13:46:30Z",
+        "completed_at": "2026-08-21T13:46:36Z",
+        "details_url": "https://github.com/ll7/robot_sf_ll7/actions/runs/102/job/1002",
+    }
+
+    monkeypatch.setattr(
+        merge_queue_gate_module,
+        "_rest_check_runs",
+        lambda **_: ([predecessor, replacement], None),
+    )
+    monkeypatch.setattr(merge_queue_gate_module, "_rest_commit_statuses", lambda **_: ([], None))
+    monkeypatch.setattr(ci_status, "_WORKFLOW_ID_BY_RUN_ID", {})
+
+    def _fake_rest(path: str) -> dict[str, int] | None:
+        return {"workflow_id": 9001} if path in {"actions/runs/101", "actions/runs/102"} else None
+
+    monkeypatch.setattr(ci_status, "_rest_api_get", _fake_rest)
+
+    rollup, error = _rest_check_rollup(owner="owner", name="repo", head_sha=FULL_SHA)
+
+    assert error is None
+    assert [item["workflowId"] for item in rollup] == ["9001", "9001"]
+    effective, superseded = merge_queue_gate_module._latest_check_runs(rollup)
+    assert superseded == 1
+    assert len(effective) == 1
+    assert effective[0]["conclusion"] == "success"
 
 
 def test_rest_check_rollup_rejects_incomplete_total_count() -> None:

@@ -18,7 +18,10 @@ if TYPE_CHECKING:
     from typing import Any
 
 from scripts.dev.software_promotion import PromotionError, _distribution_extras
-from scripts.tools.check_dependency_license_inventory import build_inventory
+from scripts.tools.check_dependency_license_inventory import (
+    _report_content_digest,
+    build_inventory,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEPENDENCY_POLICY_SHA256 = hashlib.sha256(
@@ -58,6 +61,12 @@ CANONICAL_INVENTORY = build_inventory(
     distributions=[],
     selected_profile_ids=["all"],
 )
+
+
+def _write_dependency_report(path: Path, report: dict[str, Any]) -> None:
+    """Write a synthetic dependency report with its canonical content digest."""
+    report["report_content_sha256"] = _report_content_digest(report)
+    path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _run_helper(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -219,70 +228,65 @@ def _candidate(
     rights_dir = bundle.parent / "rights-admission-artifact"
     rights_dir.mkdir()
     dependency_report = rights_dir / "dependency-license-inventory.json"
-    dependency_report.write_text(
-        json.dumps(
+    dependency_report_payload = {
+        "candidate_binding": candidate_binding,
+        "failures": [],
+        "policy": {
+            "path": "scripts/validation/dependency_license_policy.v1.json",
+            "schema_version": "robot-sf.dependency-license-policy.v1",
+        },
+        "profile_manifest": {
+            "path": "scripts/validation/dependency_license_profiles.v1.json",
+            "profile_ids": [
+                "core",
+                "viz",
+                "maps",
+                "benchmark",
+                "gpu",
+                "training",
+                "recurrent",
+                "rllib",
+                "progress",
+                "analytics",
+                "browser",
+                "sacadrl",
+                "socnav",
+                "criticality",
+                "all",
+                "fast-pysf",
+                "socnavbench",
+            ],
+            "schema_version": "robot-sf.dependency-license-profiles.v1",
+        },
+        "repository_inputs": [
             {
-                "candidate_binding": candidate_binding,
-                "failures": [],
-                "policy": {
-                    "path": "scripts/validation/dependency_license_policy.v1.json",
-                    "schema_version": "robot-sf.dependency-license-policy.v1",
-                },
-                "profile_manifest": {
-                    "path": "scripts/validation/dependency_license_profiles.v1.json",
-                    "profile_ids": [
-                        "core",
-                        "viz",
-                        "maps",
-                        "benchmark",
-                        "gpu",
-                        "training",
-                        "recurrent",
-                        "rllib",
-                        "progress",
-                        "analytics",
-                        "browser",
-                        "sacadrl",
-                        "socnav",
-                        "criticality",
-                        "all",
-                        "fast-pysf",
-                        "socnavbench",
-                    ],
-                    "schema_version": "robot-sf.dependency-license-profiles.v1",
-                },
-                "repository_inputs": [
-                    {
-                        "path": "scripts/validation/dependency_license_policy.v1.json",
-                        "sha256": DEPENDENCY_POLICY_SHA256,
-                    },
-                    {
-                        "path": "scripts/validation/dependency_license_profiles.v1.json",
-                        "sha256": DEPENDENCY_PROFILE_SHA256,
-                    },
-                ],
-                "profiles": CANONICAL_INVENTORY["profiles"],
-                "packages": CANONICAL_INVENTORY["packages"],
-                "schema_version": "robot-sf.dependency-license-inventory.v1",
-                "surface": {
-                    "profile_ids": ["all"],
-                    "selection": "explicit_profile_selection",
-                    "selected_lockfiles": ["uv.lock"],
-                },
-                "structural_issues": [],
-                "summary": {
-                    "candidate_bound": True,
-                    "selected_package_count": 155,
-                    "policy_pending_package_count": 118,
-                    "structural_issue_count": 0,
-                    "status": "complete",
-                    "unresolved_count": 0,
-                },
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+                "path": "scripts/validation/dependency_license_policy.v1.json",
+                "sha256": DEPENDENCY_POLICY_SHA256,
+            },
+            {
+                "path": "scripts/validation/dependency_license_profiles.v1.json",
+                "sha256": DEPENDENCY_PROFILE_SHA256,
+            },
+        ],
+        "profiles": CANONICAL_INVENTORY["profiles"],
+        "packages": CANONICAL_INVENTORY["packages"],
+        "schema_version": "robot-sf.dependency-license-inventory.v1",
+        "surface": {
+            "profile_ids": ["all"],
+            "selection": "explicit_profile_selection",
+            "selected_lockfiles": ["uv.lock"],
+        },
+        "structural_issues": [],
+        "summary": {
+            "candidate_bound": True,
+            "selected_package_count": 155,
+            "policy_pending_package_count": 118,
+            "structural_issue_count": 0,
+            "status": "complete",
+            "unresolved_count": 0,
+        },
+    }
+    _write_dependency_report(dependency_report, dependency_report_payload)
     dependency_report_sha256 = hashlib.sha256(dependency_report.read_bytes()).hexdigest()
     rights_receipt = rights_dir / "rights-admission.json"
     rights_receipt.write_text(
@@ -400,7 +404,7 @@ def _mutate_dependency_report(bundle: Path, mutation: Callable[[dict[str, Any]],
     report_path = rights_dir / "dependency-license-inventory.json"
     report = json.loads(report_path.read_text(encoding="utf-8"))
     mutation(report)
-    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _write_dependency_report(report_path, report)
     receipt_path = rights_dir / "rights-admission.json"
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     receipt["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
@@ -558,7 +562,7 @@ def test_candidate_verification_rejects_core_only_dependency_roster(tmp_path: Pa
     report = rights_dir / "dependency-license-inventory.json"
     report_payload = json.loads(report.read_text(encoding="utf-8"))
     report_payload["surface"]["profile_ids"] = ["core"]
-    report.write_text(json.dumps(report_payload) + "\n", encoding="utf-8")
+    _write_dependency_report(report, report_payload)
     receipt = rights_dir / "rights-admission.json"
     receipt_payload = json.loads(receipt.read_text(encoding="utf-8"))
     receipt_payload["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
@@ -643,7 +647,7 @@ def test_candidate_verification_rejects_rebound_manifest_attempt_drift(tmp_path:
     report_path = rights_dir / "dependency-license-inventory.json"
     report = json.loads(report_path.read_text(encoding="utf-8"))
     report["candidate_binding"]["manifest_sha256"] = manifest_sha256
-    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _write_dependency_report(report_path, report)
     receipt_path = rights_dir / "rights-admission.json"
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     receipt["candidate"]["manifest_sha256"] = manifest_sha256
@@ -672,7 +676,7 @@ def test_candidate_verification_rejects_rebound_embedded_profile_roster(tmp_path
         "socnavbench",
         "orca",
     ]
-    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _write_dependency_report(report_path, report)
     receipt_path = rights_dir / "rights-admission.json"
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     receipt["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
@@ -692,7 +696,7 @@ def test_candidate_verification_rejects_stale_dependency_input_digest(tmp_path: 
     report_path = rights_dir / "dependency-license-inventory.json"
     report = json.loads(report_path.read_text(encoding="utf-8"))
     report["repository_inputs"][0]["sha256"] = "0" * 64
-    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _write_dependency_report(report_path, report)
     receipt_path = rights_dir / "rights-admission.json"
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     receipt["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
@@ -713,7 +717,7 @@ def test_candidate_verification_rejects_rebound_dependency_package(tmp_path: Pat
     report_path = rights_dir / "dependency-license-inventory.json"
     report = json.loads(report_path.read_text(encoding="utf-8"))
     report["packages"][0]["version"] = "0.0.0-rebound"
-    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _write_dependency_report(report_path, report)
     receipt_path = rights_dir / "rights-admission.json"
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     receipt["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
@@ -753,7 +757,7 @@ def test_candidate_validation_roster_allows_strict_rights_upgrade(tmp_path: Path
     )
     dependency_payload = json.loads(dependency_report.read_text(encoding="utf-8"))
     dependency_payload["candidate_binding"]["manifest_sha256"] = manifest_sha256
-    dependency_report.write_text(json.dumps(dependency_payload) + "\n", encoding="utf-8")
+    _write_dependency_report(dependency_report, dependency_payload)
     rights["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
         dependency_report.read_bytes()
     ).hexdigest()

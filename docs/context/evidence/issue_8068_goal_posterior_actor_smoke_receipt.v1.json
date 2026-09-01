@@ -1,0 +1,166 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema": "issue_8068_goal_posterior_actor_smoke_receipt.v1",
+  "issue": 8068,
+  "status": "verified",
+  "source_commit": "97d8cf47d36a0fa7b03b374eb99ea01c8a983867",
+  "source_tree_scope": "observation-only heading baseline, explicit oracle boundary, tests, and smoke fixture",
+  "claim_boundary": "implementation-integrity / smoke only",
+  "research_claim": "none",
+  "benchmark_outcomes": "none",
+  "schemas": [
+    {
+      "name": "goal_belief",
+      "version": "goal_belief.v1"
+    },
+    {
+      "name": "issue_8068_goal_posterior_actor_smoke",
+      "version": "v1"
+    }
+  ],
+  "algorithms": {
+    "likelihood": "exp(heading_kappa * circular_heading_alignment)",
+    "normalization": "stable log-sum-exp over point candidates plus unknown hypothesis",
+    "canonicalization": "RFC 8785 canonical JSON",
+    "config_hash": "SHA-256 over RFC 8785 canonical configuration JSON",
+    "content_digest": "SHA-256 over RFC 8785 canonical belief payload JSON"
+  },
+  "config": {
+    "path": "configs/benchmarks/issue_8068_goal_posterior_actor_smoke.yaml",
+    "sha256": "e1f0a82a91f02695d978773fc19dcd4936eec800baefb4ee1355ad0577411bd6",
+    "config_hash": "a044b5d44490ad9125d04f2a40743929cd534c197b67caf39f946831d2350fe8"
+  },
+  "actor_contract": {
+    "source": "observation_only",
+    "coordinate_frame": "global_xy",
+    "history": "one current observed position/velocity row",
+    "forbidden_inputs": [
+      "simulator goal columns",
+      "route truth",
+      "force or acceleration",
+      "hidden goal identity"
+    ],
+    "unknown_semantics": "configured prior and likelihood; unsupported or unavailable hypotheses remain unknown",
+    "stationary_policy": "preserve_prior"
+  },
+  "fixture": {
+    "report_schema": "issue_8068_goal_posterior_actor_smoke.v1",
+    "report_sha256": "e3ac7f1a3273e6184f874d6d1c5f138820bac08e9b49ab11af32cbaeb0177064",
+    "deterministic_replay": "passed: two report emissions have identical SHA-256",
+    "rotated_cases": "passed: five base/rotated pairs have ID-equivalent probability vectors",
+    "cases": [
+      {
+        "case_id": "aligned_axes",
+        "candidate_set_digest": "86385140b40b55543ebc0a75168bf217fb2a99e82b5b40aa199c5ea7f7efa9c4",
+        "probabilities": {
+          "east": 0.9568398036710949,
+          "north": 0.01752513231840708,
+          "south": 0.01752513231840708,
+          "west": 0.000320983995021229
+        },
+        "entropy": 0.2243603101600352,
+        "unknown_candidate_probability": 0.0077889476970698125,
+        "source": "observation_only",
+        "mode": "censored"
+      },
+      {
+        "case_id": "same_ray_near_far",
+        "candidate_set_digest": "d5c5ab88b847973aee294edda94da4bf9ab7a2fa24c86ba29e0982669d24489c",
+        "probabilities": {
+          "far": 0.498984531057565,
+          "near": 0.498984531057565
+        },
+        "entropy": 0.7063586229021332,
+        "unknown_candidate_probability": 0.00203093788486994,
+        "source": "observation_only",
+        "mode": "censored"
+      },
+      {
+        "case_id": "stationary_prior",
+        "candidate_set_digest": "295c093dfb5c058c42798d5fc0533c9a028c7d6e49267ea3665eaa786d3f5678",
+        "probabilities": {
+          "east": 0.5850000000000001,
+          "north": 0.225,
+          "west": 0.09000000000000001
+        },
+        "entropy": 1.0962398689269734,
+        "unknown_candidate_probability": 0.1,
+        "source": "observation_only",
+        "mode": "censored",
+        "blockers": [
+          "stationary_below_velocity_min_mps"
+        ]
+      },
+      {
+        "case_id": "candidate_misspecification",
+        "candidate_set_digest": "60ad259828f34cfa420d0d8c3d7bd9850fe6de14ab4e2899552cc30c9ac27b9a",
+        "probabilities": {
+          "east": 0.14151355024178602
+        },
+        "entropy": 0.4077015327436353,
+        "unknown_candidate_probability": 0.8584864497582141,
+        "source": "observation_only",
+        "mode": "censored",
+        "blockers": [
+          "unknown_hypothesis_dominant"
+        ]
+      },
+      {
+        "case_id": "no_public_candidates",
+        "candidate_set_digest": "6f6dda764ff74a0abf954c8a3609ac080eb6a94c3fa9f43aec211952f18eeae1",
+        "probabilities": {},
+        "entropy": 0.0,
+        "unknown_candidate_probability": 1.0,
+        "source": "observation_only",
+        "mode": "unavailable",
+        "blockers": [
+          "no_point_candidates"
+        ]
+      }
+    ]
+  },
+  "boundary_canaries": {
+    "actor_api_goal_argument": "not representable: update_heading_goal_posterior has no goals parameter",
+    "non_candidate_provider": "passed: simulator/PySocialForce-shaped array rejected",
+    "randomized_hidden_goal": "passed: actor output is unchanged because hidden goal identity is not an input",
+    "oracle_helper": "passed: planner_oracle_goal_posterior_channel_from_state emits source=simulator_upper_bound and oracle_only=true",
+    "typed_actor_adapter": "passed: oracle GoalBeliefV1 rejected when actor_only=true",
+    "planner_actor_only_guard": "passed: oracle channel rejected before action selection",
+    "robot_env_true_goal_fallback": "passed: enabled environment reports candidate_provider_not_configured and does not read states[:, 4:6]",
+    "default_disabled": "passed: disabled channel remains {enabled: false, pedestrian_goal_posteriors: {}}"
+  },
+  "validation": [
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/prediction/test_goal_intention.py tests/prediction/test_goal_posterior_actor_oracle_boundary.py tests/prediction/test_goal_posterior_planner_input.py tests/benchmark/test_goal_posterior_actor_smoke_issue_8068.py tests/benchmark/test_goal_posterior_planner_input_smoke_issue_4164.py tests/planner/test_hybrid_rule_local_planner.py -k 'goal_posterior or goal_intention' -q",
+      "result": "32 passed, 59 deselected"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- python scripts/benchmark/run_goal_posterior_actor_smoke_issue_8068.py --config configs/benchmarks/issue_8068_goal_posterior_actor_smoke.yaml --output <worktree-local-scratch-report>",
+      "result": "passed; report emitted"
+    },
+    {
+      "command": "uv run mypy robot_sf/prediction",
+      "result": "Success: no issues found in 5 source files"
+    },
+    {
+      "command": "uv run ruff check robot_sf/prediction robot_sf/gym_env/robot_env.py robot_sf/planner/hybrid_rule_local_planner.py scripts/benchmark/run_goal_posterior_actor_smoke_issue_8068.py tests/prediction/test_goal_posterior_actor_oracle_boundary.py tests/benchmark/test_goal_posterior_actor_smoke_issue_8068.py tests/conftest.py",
+      "result": "All checks passed"
+    },
+    {
+      "command": "uv run ruff format --check robot_sf/prediction robot_sf/gym_env/robot_env.py robot_sf/planner/hybrid_rule_local_planner.py scripts/benchmark/run_goal_posterior_actor_smoke_issue_8068.py tests/prediction/test_goal_posterior_actor_oracle_boundary.py tests/benchmark/test_goal_posterior_actor_smoke_issue_8068.py tests/conftest.py",
+      "result": "9 files already formatted"
+    },
+    {
+      "command": "uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras",
+      "result": "missing_optional: 26 imports; environment/setup evidence, not changed-code failure"
+    }
+  ],
+  "limitations": [
+    "The fixture is synthetic and contains no measured tracking or prediction-quality outcome.",
+    "Candidate generation from maps/routes/open rays remains a separate research direction.",
+    "The environment actor channel is explicitly unavailable until a public candidate provider is configured.",
+    "The historical issue #4164 planner smoke remains an explicitly labelled simulator upper-bound compatibility smoke.",
+    "No calibration, planner-performance, benchmark, paper, or dissertation claim is admitted."
+  ],
+  "artifact_provenance": "tracked-compact-evidence; raw smoke report is not tracked"
+}

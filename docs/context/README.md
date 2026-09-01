@@ -7,6 +7,10 @@ For broad context lookup, start with [INDEX.md](INDEX.md). It is the retrieval-f
 current entry points, status rules, and curated context-pack scopes. This README remains the note
 maintenance workflow and full discoverability surface.
 
+The issue #8068 observation-only goal-posterior baseline is documented in
+[issue_8068_goal_posterior_actor_baseline.md](issue_8068_goal_posterior_actor_baseline.md); its
+tracked smoke receipt is implementation-integrity evidence only.
+
 The route-side and homotopy observability contract is documented in
 [issue_7890_route_choice_observability.md](issue_7890_route_choice_observability.md); it is an
 analysis-only diagnostic for planner-route observability, not evidence of human preference or

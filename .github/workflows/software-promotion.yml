@@ -1,0 +1,1277 @@
+name: Promote Immutable Software Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: "Build workflow run ID that produced the candidate"
+        required: true
+        type: string
+      candidate_run_attempt:
+        description: Exact attempt number of the candidate workflow run
+        required: true
+        type: string
+      candidate_artifact_id:
+        description: "Exact GitHub artifact ID from the build workflow"
+        required: true
+        type: string
+      candidate_artifact_name:
+        description: "Exact GitHub artifact name from the build workflow"
+        required: true
+        type: string
+      candidate_artifact_digest:
+        description: "Exact GitHub artifact digest (sha256:<64 hex>)"
+        required: true
+        type: string
+      source_sha:
+        description: "Exact 40-hex source commit recorded in candidate-manifest.json"
+        required: true
+        type: string
+      package_version:
+        description: "Package version recorded in candidate-manifest.json"
+        required: true
+        type: string
+      rights_admission_run_id:
+        description: "#8165 workflow run ID that produced the rights-clean admission receipt"
+        required: true
+        type: string
+      rights_admission_run_attempt:
+        description: Exact attempt number of the rights-admission workflow run
+        required: true
+        type: string
+      rights_admission_artifact_id:
+        description: "Exact GitHub artifact ID for the #8165 rights-clean admission receipt"
+        required: true
+        type: string
+      rights_admission_artifact_name:
+        description: "Exact rights-admission artifact name"
+        required: true
+        type: string
+      rights_admission_artifact_digest:
+        description: "Exact GitHub rights-admission artifact digest (sha256:<64 hex>)"
+        required: true
+        type: string
+      resume_testpypi_run_id:
+        description: "Optional prior promotion run containing an accepted TestPyPI receipt"
+        required: false
+        default: ""
+        type: string
+      resume_testpypi_receipt_artifact_id:
+        description: "Optional prior TestPyPI receipt artifact ID; skips a duplicate upload"
+        required: false
+        default: ""
+        type: string
+      resume_testpypi_receipt_artifact_name:
+        description: "Optional prior TestPyPI receipt artifact name"
+        required: false
+        default: ""
+        type: string
+      resume_testpypi_receipt_artifact_digest:
+        description: "Optional prior TestPyPI receipt artifact digest"
+        required: false
+        default: ""
+        type: string
+      resume_testpypi_run_attempt:
+        description: Exact attempt number of the prior promotion run
+        required: false
+        default: ""
+        type: string
+      resume_production_run_id:
+        description: "Optional prior promotion run containing an accepted PyPI receipt"
+        required: false
+        default: ""
+        type: string
+      resume_production_receipt_artifact_id:
+        description: "Optional prior PyPI receipt artifact ID; skips a duplicate upload"
+        required: false
+        default: ""
+        type: string
+      resume_production_receipt_artifact_name:
+        description: "Optional prior PyPI receipt artifact name"
+        required: false
+        default: ""
+        type: string
+      resume_production_receipt_artifact_digest:
+        description: "Optional prior PyPI receipt artifact digest"
+        required: false
+        default: ""
+        type: string
+      resume_production_run_attempt:
+        description: Exact attempt number of the prior promotion run
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: robot-sf-software-promotion-${{ inputs.package_version }}
+  cancel-in-progress: false
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONUNBUFFERED: "1"
+  SDL_VIDEODRIVER: dummy
+  MPLBACKEND: Agg
+  PYGAME_HIDE_SUPPORT_PROMPT: "1"
+  CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+  CANDIDATE_RUN_ATTEMPT: ${{ inputs.candidate_run_attempt }}
+  CANDIDATE_ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+  CANDIDATE_ARTIFACT_NAME: ${{ inputs.candidate_artifact_name }}
+  CANDIDATE_ARTIFACT_DIGEST: ${{ inputs.candidate_artifact_digest }}
+  SOURCE_SHA: ${{ inputs.source_sha }}
+  PACKAGE_VERSION: ${{ inputs.package_version }}
+  RIGHTS_RUN_ID: ${{ inputs.rights_admission_run_id }}
+  RIGHTS_RUN_ATTEMPT: ${{ inputs.rights_admission_run_attempt }}
+  RIGHTS_ARTIFACT_ID: ${{ inputs.rights_admission_artifact_id }}
+  RIGHTS_ARTIFACT_NAME: ${{ inputs.rights_admission_artifact_name }}
+  RIGHTS_ARTIFACT_DIGEST: ${{ inputs.rights_admission_artifact_digest }}
+  TEST_RESUME_RUN_ID: ${{ inputs.resume_testpypi_run_id }}
+  TEST_RESUME_RUN_ATTEMPT: ${{ inputs.resume_testpypi_run_attempt }}
+  TEST_RESUME_ARTIFACT_ID: ${{ inputs.resume_testpypi_receipt_artifact_id }}
+  PRODUCTION_RESUME_RUN_ID: ${{ inputs.resume_production_run_id }}
+  PRODUCTION_RESUME_RUN_ATTEMPT: ${{ inputs.resume_production_run_attempt }}
+  PRODUCTION_RESUME_ARTIFACT_ID: ${{ inputs.resume_production_receipt_artifact_id }}
+
+jobs:
+  verify-candidate:
+    name: Verify immutable candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      candidate-version: ${{ steps.verify.outputs.version }}
+    steps:
+      - name: Checkout promotion verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Require the protected main-branch workflow
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != "refs/heads/main" ]]; then
+            echo "software promotion must run from the protected main branch." >&2
+            exit 1
+          fi
+
+      - name: Validate numeric dispatch identities before API use
+        run: |
+          set -euo pipefail
+          for value in "${CANDIDATE_RUN_ID}" "${CANDIDATE_RUN_ATTEMPT}" "${CANDIDATE_ARTIFACT_ID}" "${RIGHTS_RUN_ID}" "${RIGHTS_RUN_ATTEMPT}" "${RIGHTS_ARTIFACT_ID}"; do
+            if [[ ! "${value}" =~ ^[1-9][0-9]*$ ]]; then
+              echo "dispatch identity must be a positive decimal" >&2
+              exit 1
+            fi
+          done
+          if [[ "${CANDIDATE_RUN_ID}" != "${RIGHTS_RUN_ID}" || "${CANDIDATE_RUN_ATTEMPT}" != "${RIGHTS_RUN_ATTEMPT}" ]]; then
+            echo "candidate and rights artifacts must come from the same producer run attempt" >&2
+            exit 1
+          fi
+          for value in "${TEST_RESUME_RUN_ID}" "${TEST_RESUME_RUN_ATTEMPT}" "${TEST_RESUME_ARTIFACT_ID}" "${PRODUCTION_RESUME_RUN_ID}" "${PRODUCTION_RESUME_RUN_ATTEMPT}" "${PRODUCTION_RESUME_ARTIFACT_ID}"; do
+            if [[ -n "${value}" && ! "${value}" =~ ^[1-9][0-9]*$ ]]; then
+              echo "resume identity must be empty or a positive decimal" >&2
+              exit 1
+            fi
+          done
+
+      - name: Require complete resume identities
+        env:
+          TEST_RESUME_RUN_ID: ${{ inputs.resume_testpypi_run_id }}
+          TEST_RESUME_RUN_ATTEMPT: ${{ inputs.resume_testpypi_run_attempt }}
+          TEST_RESUME_ARTIFACT_ID: ${{ inputs.resume_testpypi_receipt_artifact_id }}
+          TEST_RESUME_ARTIFACT_NAME: ${{ inputs.resume_testpypi_receipt_artifact_name }}
+          TEST_RESUME_ARTIFACT_DIGEST: ${{ inputs.resume_testpypi_receipt_artifact_digest }}
+          PRODUCTION_RESUME_RUN_ID: ${{ inputs.resume_production_run_id }}
+          PRODUCTION_RESUME_RUN_ATTEMPT: ${{ inputs.resume_production_run_attempt }}
+          PRODUCTION_RESUME_ARTIFACT_ID: ${{ inputs.resume_production_receipt_artifact_id }}
+          PRODUCTION_RESUME_ARTIFACT_NAME: ${{ inputs.resume_production_receipt_artifact_name }}
+          PRODUCTION_RESUME_ARTIFACT_DIGEST: ${{ inputs.resume_production_receipt_artifact_digest }}
+        run: |
+          set -euo pipefail
+          check_resume_tuple() {
+            local label="$1"
+            shift
+            local present=0
+            local value
+            for value in "$@"; do
+              if [[ -n "${value}" ]]; then
+                present=$((present + 1))
+              fi
+            done
+            if [[ "${present}" -ne 0 && "${present}" -ne 5 ]]; then
+              echo "${label} resume identity must provide run, attempt, artifact ID, name, and digest together." >&2
+              exit 1
+            fi
+          }
+          check_resume_tuple testpypi \
+            "${TEST_RESUME_RUN_ID}" "${TEST_RESUME_RUN_ATTEMPT}" "${TEST_RESUME_ARTIFACT_ID}" \
+            "${TEST_RESUME_ARTIFACT_NAME}" "${TEST_RESUME_ARTIFACT_DIGEST}"
+          check_resume_tuple pypi \
+            "${PRODUCTION_RESUME_RUN_ID}" "${PRODUCTION_RESUME_RUN_ATTEMPT}" "${PRODUCTION_RESUME_ARTIFACT_ID}" \
+            "${PRODUCTION_RESUME_ARTIFACT_NAME}" "${PRODUCTION_RESUME_ARTIFACT_DIGEST}"
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Read candidate artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/candidate-metadata"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+            > "${RUNNER_TEMP}/candidate-metadata/artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" \
+            > "${RUNNER_TEMP}/candidate-metadata/workflow-run.json"
+
+      - name: Read rights-admission artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ inputs.rights_admission_artifact_id }}
+          RUN_ID: ${{ inputs.rights_admission_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/rights-metadata"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+            > "${RUNNER_TEMP}/rights-metadata/artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" \
+            > "${RUNNER_TEMP}/rights-metadata/workflow-run.json"
+
+      - name: Download exact candidate artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.candidate_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          path: ${{ runner.temp }}/software-candidate
+
+      - name: Download exact rights admission from its producer run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.rights_admission_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.rights_admission_run_id }}
+          path: ${{ runner.temp }}/rights-admission
+
+      - name: Verify artifact identity and candidate bytes
+        id: verify
+        env:
+          METADATA: ${{ runner.temp }}/candidate-metadata/artifact.json
+          CANDIDATE_DIR: ${{ runner.temp }}/software-candidate
+          ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          ARTIFACT_NAME: ${{ inputs.candidate_artifact_name }}
+          ARTIFACT_DIGEST: ${{ inputs.candidate_artifact_digest }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.package_version }}
+          RIGHTS_METADATA: ${{ runner.temp }}/rights-metadata/artifact.json
+          RIGHTS_RUN_METADATA: ${{ runner.temp }}/rights-metadata/workflow-run.json
+          CANDIDATE_RUN_METADATA: ${{ runner.temp }}/candidate-metadata/workflow-run.json
+          RIGHTS_DIR: ${{ runner.temp }}/rights-admission
+          RIGHTS_ID: ${{ inputs.rights_admission_artifact_id }}
+          RIGHTS_NAME: ${{ inputs.rights_admission_artifact_name }}
+          RIGHTS_DIGEST: ${{ inputs.rights_admission_artifact_digest }}
+          RIGHTS_RUN_ID: ${{ inputs.rights_admission_run_id }}
+        run: |
+          set -euo pipefail
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${METADATA}" \
+            --artifact-id "${ARTIFACT_ID}" \
+            --artifact-name "${ARTIFACT_NAME}" \
+            --artifact-digest "${ARTIFACT_DIGEST}" \
+            --run-id "${RUN_ID}" \
+            --run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --kind candidate --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${RIGHTS_METADATA}" \
+            --artifact-id "${RIGHTS_ID}" \
+            --artifact-name "${RIGHTS_NAME}" \
+            --artifact-digest "${RIGHTS_DIGEST}" \
+            --run-id "${RIGHTS_RUN_ID}" \
+            --run-attempt "${RIGHTS_RUN_ATTEMPT}" \
+            --kind rights --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-workflow-run \
+            --metadata "${CANDIDATE_RUN_METADATA}" --run-id "${CANDIDATE_RUN_ID}" \
+            --run-attempt "${CANDIDATE_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind candidate
+          python scripts/dev/software_promotion.py check-workflow-run \
+            --metadata "${RIGHTS_RUN_METADATA}" --run-id "${RIGHTS_RUN_ID}" \
+            --run-attempt "${RIGHTS_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind rights
+          python scripts/dev/software_promotion.py verify-candidate \
+            --candidate-dir "${CANDIDATE_DIR}" \
+            --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
+            --source-sha "${SOURCE_SHA}" \
+            --candidate-run-id "${RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${ARTIFACT_ID}" \
+            --candidate-artifact-name "${ARTIFACT_NAME}" \
+            --candidate-artifact-digest "${ARTIFACT_DIGEST}" \
+            --version "${VERSION}"
+          python scripts/dev/software_candidate_manifest.py verify \
+            --bundle-dir "${CANDIDATE_DIR}" \
+            --expected-source-sha "${SOURCE_SHA}" \
+            --expected-workflow-run-id "${RUN_ID}" \
+            --expected-workflow-run-attempt "${CANDIDATE_RUN_ATTEMPT}"
+          printf 'version=%s\n' "${VERSION}" >> "${GITHUB_OUTPUT}"
+
+  testpypi-upload:
+    name: Publish exact bytes to TestPyPI
+    needs: verify-candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: testpypi
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    outputs:
+      receipt-artifact-id: ${{ steps.upload-receipt.outputs.artifact-id }}
+      receipt-artifact-digest: ${{ steps.upload-receipt.outputs.artifact-digest }}
+      receipt-artifact-name: ${{ steps.receipt-name.outputs.name }}
+    steps:
+      - name: Checkout promotion verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Validate numeric dispatch identities before API use
+        run: |
+          set -euo pipefail
+          for value in "${CANDIDATE_RUN_ID}" "${CANDIDATE_RUN_ATTEMPT}" "${CANDIDATE_ARTIFACT_ID}" "${RIGHTS_RUN_ID}" "${RIGHTS_RUN_ATTEMPT}" "${RIGHTS_ARTIFACT_ID}"; do
+            [[ "${value}" =~ ^[1-9][0-9]*$ ]] || { echo "dispatch identity must be a positive decimal" >&2; exit 1; }
+          done
+          for value in "${TEST_RESUME_RUN_ID}" "${TEST_RESUME_RUN_ATTEMPT}" "${TEST_RESUME_ARTIFACT_ID}"; do
+            [[ -z "${value}" || "${value}" =~ ^[1-9][0-9]*$ ]] || { echo "resume identity must be empty or a positive decimal" >&2; exit 1; }
+          done
+
+      - name: Read candidate artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/candidate-metadata"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+            > "${RUNNER_TEMP}/candidate-metadata/artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" \
+            > "${RUNNER_TEMP}/candidate-metadata/workflow-run.json"
+
+      - name: Read rights-admission artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ inputs.rights_admission_artifact_id }}
+          RUN_ID: ${{ inputs.rights_admission_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/rights-metadata"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+            > "${RUNNER_TEMP}/rights-metadata/artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" \
+            > "${RUNNER_TEMP}/rights-metadata/workflow-run.json"
+
+      - name: Download and verify candidate before upload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.candidate_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          path: ${{ runner.temp }}/software-candidate
+
+      - name: Download exact rights admission before upload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.rights_admission_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.rights_admission_run_id }}
+          path: ${{ runner.temp }}/rights-admission
+
+      - name: Verify candidate admission
+        env:
+          METADATA: ${{ runner.temp }}/candidate-metadata/artifact.json
+          CANDIDATE_DIR: ${{ runner.temp }}/software-candidate
+          ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          ARTIFACT_NAME: ${{ inputs.candidate_artifact_name }}
+          ARTIFACT_DIGEST: ${{ inputs.candidate_artifact_digest }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.package_version }}
+          RIGHTS_METADATA: ${{ runner.temp }}/rights-metadata/artifact.json
+          RIGHTS_RUN_METADATA: ${{ runner.temp }}/rights-metadata/workflow-run.json
+          CANDIDATE_RUN_METADATA: ${{ runner.temp }}/candidate-metadata/workflow-run.json
+          RIGHTS_DIR: ${{ runner.temp }}/rights-admission
+          RIGHTS_ID: ${{ inputs.rights_admission_artifact_id }}
+          RIGHTS_NAME: ${{ inputs.rights_admission_artifact_name }}
+          RIGHTS_DIGEST: ${{ inputs.rights_admission_artifact_digest }}
+          RIGHTS_RUN_ID: ${{ inputs.rights_admission_run_id }}
+        run: |
+          set -euo pipefail
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${METADATA}" --artifact-id "${ARTIFACT_ID}" \
+            --artifact-name "${ARTIFACT_NAME}" --artifact-digest "${ARTIFACT_DIGEST}" \
+            --run-id "${RUN_ID}" --run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --kind candidate --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${RIGHTS_METADATA}" --artifact-id "${RIGHTS_ID}" \
+            --artifact-name "${RIGHTS_NAME}" --artifact-digest "${RIGHTS_DIGEST}" \
+            --run-id "${RIGHTS_RUN_ID}" --run-attempt "${RIGHTS_RUN_ATTEMPT}" \
+            --kind rights --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-workflow-run \
+            --metadata "${CANDIDATE_RUN_METADATA}" --run-id "${CANDIDATE_RUN_ID}" \
+            --run-attempt "${CANDIDATE_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind candidate
+          python scripts/dev/software_promotion.py check-workflow-run \
+            --metadata "${RIGHTS_RUN_METADATA}" --run-id "${RIGHTS_RUN_ID}" \
+            --run-attempt "${RIGHTS_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind rights
+          python scripts/dev/software_promotion.py verify-candidate \
+            --candidate-dir "${CANDIDATE_DIR}" \
+            --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
+            --source-sha "${SOURCE_SHA}" \
+            --candidate-run-id "${RUN_ID}" --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${ARTIFACT_ID}" \
+            --candidate-artifact-name "${ARTIFACT_NAME}" \
+            --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}"
+          python scripts/dev/software_candidate_manifest.py verify \
+            --bundle-dir "${CANDIDATE_DIR}" --expected-source-sha "${SOURCE_SHA}" \
+            --expected-workflow-run-id "${RUN_ID}" \
+            --expected-workflow-run-attempt "${CANDIDATE_RUN_ATTEMPT}"
+
+      - name: Stage exact wheel and sdist without rebuilding
+        env:
+          CANDIDATE_DIR: ${{ runner.temp }}/software-candidate
+          RIGHTS_RECEIPT: ${{ runner.temp }}/rights-admission/rights-admission.json
+          PACKAGE_DIR: ${{ runner.temp }}/software-packages
+          ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          ARTIFACT_NAME: ${{ inputs.candidate_artifact_name }}
+          ARTIFACT_DIGEST: ${{ inputs.candidate_artifact_digest }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.package_version }}
+        run: |
+          set -euo pipefail
+          python scripts/dev/software_promotion.py stage-packages \
+            --candidate-dir "${CANDIDATE_DIR}" --output-dir "${PACKAGE_DIR}" \
+            --rights-receipt "${RIGHTS_RECEIPT}" \
+            --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
+            --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}"
+
+      - name: Read prior TestPyPI receipt for safe resume
+        if: ${{ inputs.resume_testpypi_receipt_artifact_id != '' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.resume_testpypi_receipt_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.resume_testpypi_run_id }}
+          path: ${{ runner.temp }}/prior-testpypi-receipt
+
+      - name: Verify prior TestPyPI receipt for safe resume
+        if: ${{ inputs.resume_testpypi_receipt_artifact_id != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRIOR_RUN_ID: ${{ inputs.resume_testpypi_run_id }}
+          PRIOR_RUN_ATTEMPT: ${{ inputs.resume_testpypi_run_attempt }}
+          PRIOR_ARTIFACT_ID: ${{ inputs.resume_testpypi_receipt_artifact_id }}
+          PRIOR_ARTIFACT_NAME: ${{ inputs.resume_testpypi_receipt_artifact_name }}
+          PRIOR_ARTIFACT_DIGEST: ${{ inputs.resume_testpypi_receipt_artifact_digest }}
+          CANDIDATE_DIR: ${{ runner.temp }}/software-candidate
+          RIGHTS_RECEIPT: ${{ runner.temp }}/rights-admission/rights-admission.json
+          RESUME_DIR: ${{ runner.temp }}/prior-testpypi-receipt
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.package_version }}
+          ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          ARTIFACT_NAME: ${{ inputs.candidate_artifact_name }}
+          ARTIFACT_DIGEST: ${{ inputs.candidate_artifact_digest }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          set -euo pipefail
+          metadata="${RUNNER_TEMP}/prior-testpypi-receipt-metadata.json"
+          prior_workflow="${RUNNER_TEMP}/prior-testpypi-workflow-run.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PRIOR_ARTIFACT_ID}" > "${metadata}"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${PRIOR_RUN_ID}" > "${prior_workflow}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${metadata}" --artifact-id "${PRIOR_ARTIFACT_ID}" \
+            --artifact-name "${PRIOR_ARTIFACT_NAME}" --artifact-digest "${PRIOR_ARTIFACT_DIGEST}" \
+            --run-id "${PRIOR_RUN_ID}" --run-attempt "${TEST_RESUME_RUN_ATTEMPT}" --kind receipt
+          python scripts/dev/software_promotion.py check-workflow-run \
+            --metadata "${prior_workflow}" --run-id "${PRIOR_RUN_ID}" \
+            --run-attempt "${PRIOR_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind promotion
+          python scripts/dev/software_promotion.py verify-receipt \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_RECEIPT}" \
+            --receipt "${RESUME_DIR}/testpypi-upload-receipt.json" \
+            --channel testpypi --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
+            --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}" \
+            --promotion-run-id "${PRIOR_RUN_ID}" --promotion-run-attempt "${PRIOR_RUN_ATTEMPT}"
+
+      - name: Publish to TestPyPI through trusted publisher
+        if: ${{ inputs.resume_testpypi_receipt_artifact_id == '' }}
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: ${{ runner.temp }}/software-packages
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: false
+
+      - name: Bind TestPyPI receipt to the exact candidate
+        env:
+          CANDIDATE_DIR: ${{ runner.temp }}/software-candidate
+          RIGHTS_RECEIPT: ${{ runner.temp }}/rights-admission/rights-admission.json
+          RECEIPT_DIR: ${{ runner.temp }}/testpypi-receipt
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.package_version }}
+          ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          ARTIFACT_NAME: ${{ inputs.candidate_artifact_name }}
+          ARTIFACT_DIGEST: ${{ inputs.candidate_artifact_digest }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+          RESUME_ID: ${{ inputs.resume_testpypi_receipt_artifact_id }}
+          RESUME_DIR: ${{ runner.temp }}/prior-testpypi-receipt
+        run: |
+          set -euo pipefail
+          mkdir -p "${RECEIPT_DIR}"
+          # A resumed publication is already checked above; emit a fresh
+          # receipt for this run so its artifact metadata and receipt identity
+          # remain one exact, auditable binding.
+          python scripts/dev/software_promotion.py write-receipt \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_RECEIPT}" \
+            --channel testpypi \
+            --receipt "${RECEIPT_DIR}/testpypi-upload-receipt.json" \
+            --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
+            --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}" \
+            --promotion-run-id "${GITHUB_RUN_ID}" --promotion-run-attempt "${GITHUB_RUN_ATTEMPT}"
+
+      - name: Set receipt artifact name
+        id: receipt-name
+        run: printf 'name=robot-sf-testpypi-receipt-%s-%s\n' "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload TestPyPI receipt
+        id: upload-receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: robot-sf-testpypi-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/testpypi-receipt/
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+
+      - name: Report receipt artifact identity
+        env:
+          RECEIPT_ARTIFACT_ID: ${{ steps.upload-receipt.outputs.artifact-id }}
+          RECEIPT_ARTIFACT_DIGEST: ${{ steps.upload-receipt.outputs.artifact-digest }}
+        run: printf 'TestPyPI receipt artifact id=%s digest=%s\n' "${RECEIPT_ARTIFACT_ID}" "${RECEIPT_ARTIFACT_DIGEST}"
+
+  testpypi-cold-install:
+    name: Verify TestPyPI public-index install
+    needs: testpypi-upload
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      artifact-id: ${{ steps.upload-cold-receipt.outputs.artifact-id }}
+      artifact-digest: ${{ steps.upload-cold-receipt.outputs.artifact-digest }}
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout promotion verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Validate numeric dispatch identities before API use
+        run: |
+          set -euo pipefail
+          for value in "${CANDIDATE_RUN_ID}" "${CANDIDATE_RUN_ATTEMPT}" "${CANDIDATE_ARTIFACT_ID}" "${RIGHTS_RUN_ID}" "${RIGHTS_RUN_ATTEMPT}" "${RIGHTS_ARTIFACT_ID}"; do
+            [[ "${value}" =~ ^[1-9][0-9]*$ ]] || { echo "dispatch identity must be a positive decimal" >&2; exit 1; }
+          done
+
+      - name: Install pinned uv for the clean-install probe
+        env:
+          UV_VERSION: "0.11.21"
+          UV_INSTALL_MAX_ATTEMPTS: "3"
+          UV_INSTALL_BACKOFF_BASE: "5"
+          UV_INSTALL_BACKOFF_CAP: "30"
+        run: bash scripts/dev/ci_install_uv_retry.sh "${UV_VERSION}"
+
+      - name: Read candidate artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/candidate-metadata"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+            > "${RUNNER_TEMP}/candidate-metadata/artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" \
+            > "${RUNNER_TEMP}/candidate-metadata/workflow-run.json"
+
+      - name: Read rights-admission artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ inputs.rights_admission_artifact_id }}
+          RUN_ID: ${{ inputs.rights_admission_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/rights-metadata"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+            > "${RUNNER_TEMP}/rights-metadata/artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" \
+            > "${RUNNER_TEMP}/rights-metadata/workflow-run.json"
+
+      - name: Download exact candidate from its build run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.candidate_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          path: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+
+      - name: Download TestPyPI receipt from this promotion run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.testpypi-upload.outputs.receipt-artifact-id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          path: ${{ runner.temp }}/promotion-inputs/robot-sf-testpypi-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Download exact rights admission from its producer run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.rights_admission_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.rights_admission_run_id }}
+          path: ${{ runner.temp }}/promotion-inputs/rights-admission
+
+      - name: Verify candidate, receipt, and receipt artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+          CANDIDATE_RUN_METADATA: ${{ runner.temp }}/candidate-metadata/workflow-run.json
+          RECEIPT_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-testpypi-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.package_version }}
+          CANDIDATE_ID: ${{ inputs.candidate_artifact_id }}
+          CANDIDATE_NAME: ${{ inputs.candidate_artifact_name }}
+          CANDIDATE_DIGEST: ${{ inputs.candidate_artifact_digest }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          RECEIPT_ID: ${{ needs.testpypi-upload.outputs.receipt-artifact-id }}
+          RECEIPT_DIGEST: ${{ needs.testpypi-upload.outputs.receipt-artifact-digest }}
+          RECEIPT_NAME: ${{ needs.testpypi-upload.outputs.receipt-artifact-name }}
+          RIGHTS_METADATA: ${{ runner.temp }}/rights-metadata/artifact.json
+          RIGHTS_RUN_METADATA: ${{ runner.temp }}/rights-metadata/workflow-run.json
+          RIGHTS_DIR: ${{ runner.temp }}/promotion-inputs/rights-admission
+          RIGHTS_ID: ${{ inputs.rights_admission_artifact_id }}
+          RIGHTS_NAME: ${{ inputs.rights_admission_artifact_name }}
+          RIGHTS_DIGEST: ${{ inputs.rights_admission_artifact_digest }}
+          RIGHTS_RUN_ID: ${{ inputs.rights_admission_run_id }}
+        run: |
+          set -euo pipefail
+          receipt_metadata="${RUNNER_TEMP}/testpypi-receipt-metadata.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${RECEIPT_ID}" > "${receipt_metadata}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${RUNNER_TEMP}/candidate-metadata/artifact.json" \
+            --artifact-id "${CANDIDATE_ID}" --artifact-name "${CANDIDATE_NAME}" \
+            --artifact-digest "${CANDIDATE_DIGEST}" --run-id "${CANDIDATE_RUN_ID}" \
+            --run-attempt "${CANDIDATE_RUN_ATTEMPT}" --kind candidate --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${RIGHTS_METADATA}" --artifact-id "${RIGHTS_ID}" \
+            --artifact-name "${RIGHTS_NAME}" --artifact-digest "${RIGHTS_DIGEST}" \
+            --run-id "${RIGHTS_RUN_ID}" --run-attempt "${RIGHTS_RUN_ATTEMPT}" \
+            --kind rights --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-workflow-run \
+            --metadata "${CANDIDATE_RUN_METADATA}" --run-id "${CANDIDATE_RUN_ID}" \
+            --run-attempt "${CANDIDATE_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind candidate
+          python scripts/dev/software_promotion.py check-workflow-run \
+            --metadata "${RIGHTS_RUN_METADATA}" --run-id "${RIGHTS_RUN_ID}" \
+            --run-attempt "${RIGHTS_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind rights
+          python scripts/dev/software_candidate_manifest.py verify \
+            --bundle-dir "${CANDIDATE_DIR}" --expected-source-sha "${SOURCE_SHA}" \
+            --expected-workflow-run-id "${CANDIDATE_RUN_ID}" \
+            --expected-workflow-run-attempt "${CANDIDATE_RUN_ATTEMPT}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${receipt_metadata}" --artifact-id "${RECEIPT_ID}" \
+            --artifact-name "${RECEIPT_NAME}" --artifact-digest "${RECEIPT_DIGEST}" \
+            --run-id "${GITHUB_RUN_ID}" --run-attempt "${GITHUB_RUN_ATTEMPT}" --kind receipt
+          python scripts/dev/software_promotion.py verify-receipt \
+            --candidate-dir "${CANDIDATE_DIR}" \
+            --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
+            --receipt "${RECEIPT_DIR}/testpypi-upload-receipt.json" --channel testpypi \
+            --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${CANDIDATE_ID}" --candidate-artifact-name "${CANDIDATE_NAME}" \
+            --candidate-artifact-digest "${CANDIDATE_DIGEST}" --version "${VERSION}"
+
+      - name: Download both package formats from TestPyPI
+        env:
+          VERSION: ${{ inputs.package_version }}
+          INDEX_ROOT: ${{ runner.temp }}/testpypi-index
+        run: |
+          set -euo pipefail
+          mkdir -p "${INDEX_ROOT}"
+          python -m pip download --disable-pip-version-check --no-cache-dir --no-deps \
+            --only-binary=:all: --index-url https://test.pypi.org/simple \
+            --dest "${INDEX_ROOT}" "robot-sf==${VERSION}"
+          python -m pip download --disable-pip-version-check --no-cache-dir --no-deps \
+            --no-binary=:all: --index-url https://test.pypi.org/simple \
+            --dest "${INDEX_ROOT}" "robot-sf==${VERSION}"
+
+      - name: Verify public-index package bytes
+        env:
+          CANDIDATE_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+          RIGHTS_DIR: ${{ runner.temp }}/promotion-inputs/rights-admission
+          INDEX_ROOT: ${{ runner.temp }}/testpypi-index
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.package_version }}
+          CANDIDATE_ID: ${{ inputs.candidate_artifact_id }}
+          CANDIDATE_NAME: ${{ inputs.candidate_artifact_name }}
+          CANDIDATE_DIGEST: ${{ inputs.candidate_artifact_digest }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          set -euo pipefail
+          python scripts/dev/software_promotion.py verify-index-artifacts \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
+            --download-dir "${INDEX_ROOT}" \
+            --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${CANDIDATE_ID}" --candidate-artifact-name "${CANDIDATE_NAME}" \
+            --candidate-artifact-digest "${CANDIDATE_DIGEST}" --version "${VERSION}"
+
+      - name: Run clean exact-wheel install and console-script probes
+        env:
+          ROBOT_SF_WHEEL_INSTALL_SMOKE_EXTRAS: ""
+          ROBOT_SF_WHEEL_INSTALL_SMOKE_REPORT: ${{ runner.temp }}/testpypi-cold-install/wheel-install-smoke.json
+          INDEX_ROOT: ${{ runner.temp }}/testpypi-index
+        run: |
+          set -euo pipefail
+          wheel="$(find "${INDEX_ROOT}" -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          [[ -n "${wheel}" ]]
+          bash scripts/validation/wheel_install_smoke.sh "${wheel}"
+
+      - name: Bind cold-install receipt to TestPyPI and candidate
+        env:
+          CANDIDATE_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+          RIGHTS_DIR: ${{ runner.temp }}/promotion-inputs/rights-admission
+          TEST_RECEIPT: ${{ runner.temp }}/promotion-inputs/robot-sf-testpypi-receipt-${{ github.run_id }}-${{ github.run_attempt }}/testpypi-upload-receipt.json
+          INDEX_ROOT: ${{ runner.temp }}/testpypi-index
+          REPORT: ${{ runner.temp }}/testpypi-cold-install/wheel-install-smoke.json
+          RECEIPT: ${{ runner.temp }}/testpypi-cold-install/testpypi-cold-install-receipt.json
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.package_version }}
+          CANDIDATE_ID: ${{ inputs.candidate_artifact_id }}
+          CANDIDATE_NAME: ${{ inputs.candidate_artifact_name }}
+          CANDIDATE_DIGEST: ${{ inputs.candidate_artifact_digest }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "${RECEIPT}")"
+          wheel="$(find "${INDEX_ROOT}" -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          python scripts/dev/software_promotion.py write-cold-install-receipt \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
+            --test-receipt "${TEST_RECEIPT}" \
+            --downloaded-wheel "${wheel}" --index-url https://test.pypi.org/simple \
+            --report "${REPORT}" --receipt "${RECEIPT}" \
+            --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${CANDIDATE_ID}" --candidate-artifact-name "${CANDIDATE_NAME}" \
+            --candidate-artifact-digest "${CANDIDATE_DIGEST}" --version "${VERSION}"
+
+      - name: Upload TestPyPI cold-install evidence
+        id: upload-cold-receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: robot-sf-testpypi-cold-install-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/testpypi-cold-install/
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+
+  pypi-upload:
+    name: Publish exact bytes to PyPI
+    needs: [verify-candidate, testpypi-upload, testpypi-cold-install]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: pypi
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    outputs:
+      receipt-artifact-id: ${{ steps.upload-receipt.outputs.artifact-id }}
+      receipt-artifact-digest: ${{ steps.upload-receipt.outputs.artifact-digest }}
+      receipt-artifact-name: ${{ steps.receipt-name.outputs.name }}
+    steps:
+      - name: Checkout promotion verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Validate numeric dispatch identities before API use
+        run: |
+          set -euo pipefail
+          for value in "${CANDIDATE_RUN_ID}" "${CANDIDATE_RUN_ATTEMPT}" "${CANDIDATE_ARTIFACT_ID}" "${RIGHTS_RUN_ID}" "${RIGHTS_RUN_ATTEMPT}" "${RIGHTS_ARTIFACT_ID}"; do
+            [[ "${value}" =~ ^[1-9][0-9]*$ ]] || { echo "dispatch identity must be a positive decimal" >&2; exit 1; }
+          done
+          for value in "${PRODUCTION_RESUME_RUN_ID}" "${PRODUCTION_RESUME_ARTIFACT_ID}"; do
+            [[ -z "${value}" || "${value}" =~ ^[1-9][0-9]*$ ]] || { echo "resume identity must be empty or a positive decimal" >&2; exit 1; }
+          done
+
+      - name: Read candidate artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/candidate-metadata"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+            > "${RUNNER_TEMP}/candidate-metadata/artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" \
+            > "${RUNNER_TEMP}/candidate-metadata/workflow-run.json"
+
+      - name: Read rights-admission artifact metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ inputs.rights_admission_artifact_id }}
+          RUN_ID: ${{ inputs.rights_admission_run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/rights-metadata"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${ARTIFACT_ID}" \
+            > "${RUNNER_TEMP}/rights-metadata/artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" \
+            > "${RUNNER_TEMP}/rights-metadata/workflow-run.json"
+
+      - name: Download exact candidate from its build run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.candidate_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          path: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+
+      - name: Download exact rights admission from its producer run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.rights_admission_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.rights_admission_run_id }}
+          path: ${{ runner.temp }}/promotion-inputs/rights-admission
+
+      - name: Download TestPyPI receipt and cold-install evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.testpypi-upload.outputs.receipt-artifact-id }},${{ needs.testpypi-cold-install.outputs.artifact-id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          path: ${{ runner.temp }}/promotion-inputs
+
+      - name: Verify all pre-production bindings
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+          CANDIDATE_RUN_METADATA: ${{ runner.temp }}/candidate-metadata/workflow-run.json
+          PROMOTION_RUN_METADATA: ${{ runner.temp }}/promotion-run.json
+          RIGHTS_METADATA: ${{ runner.temp }}/rights-metadata/artifact.json
+          RIGHTS_RUN_METADATA: ${{ runner.temp }}/rights-metadata/workflow-run.json
+          RIGHTS_DIR: ${{ runner.temp }}/promotion-inputs/rights-admission
+          TEST_RECEIPT_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-testpypi-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          COLD_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-testpypi-cold-install-${{ github.run_id }}-${{ github.run_attempt }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.package_version }}
+          CANDIDATE_ID: ${{ inputs.candidate_artifact_id }}
+          CANDIDATE_NAME: ${{ inputs.candidate_artifact_name }}
+          CANDIDATE_DIGEST: ${{ inputs.candidate_artifact_digest }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          TEST_ID: ${{ needs.testpypi-upload.outputs.receipt-artifact-id }}
+          TEST_DIGEST: ${{ needs.testpypi-upload.outputs.receipt-artifact-digest }}
+          TEST_NAME: ${{ needs.testpypi-upload.outputs.receipt-artifact-name }}
+          COLD_ID: ${{ needs.testpypi-cold-install.outputs.artifact-id }}
+          COLD_DIGEST: ${{ needs.testpypi-cold-install.outputs.artifact-digest }}
+          RIGHTS_ID: ${{ inputs.rights_admission_artifact_id }}
+          RIGHTS_NAME: ${{ inputs.rights_admission_artifact_name }}
+          RIGHTS_DIGEST: ${{ inputs.rights_admission_artifact_digest }}
+          RIGHTS_RUN_ID: ${{ inputs.rights_admission_run_id }}
+        run: |
+          set -euo pipefail
+          candidate_metadata="${RUNNER_TEMP}/candidate-metadata/artifact.json"
+          test_metadata="${RUNNER_TEMP}/testpypi-receipt-metadata.json"
+          cold_metadata="${RUNNER_TEMP}/cold-install-metadata.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            > "${RUNNER_TEMP}/promotion-run.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${TEST_ID}" > "${test_metadata}"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${COLD_ID}" > "${cold_metadata}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${candidate_metadata}" --artifact-id "${CANDIDATE_ID}" \
+            --artifact-name "${CANDIDATE_NAME}" --artifact-digest "${CANDIDATE_DIGEST}" \
+            --run-id "${CANDIDATE_RUN_ID}" --run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --kind candidate --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${RIGHTS_METADATA}" --artifact-id "${RIGHTS_ID}" \
+            --artifact-name "${RIGHTS_NAME}" --artifact-digest "${RIGHTS_DIGEST}" \
+            --run-id "${RIGHTS_RUN_ID}" --run-attempt "${RIGHTS_RUN_ATTEMPT}" \
+            --kind rights --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-workflow-run \
+            --metadata "${CANDIDATE_RUN_METADATA}" --run-id "${CANDIDATE_RUN_ID}" \
+            --run-attempt "${CANDIDATE_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind candidate
+          python scripts/dev/software_promotion.py check-workflow-run \
+            --metadata "${RIGHTS_RUN_METADATA}" --run-id "${RIGHTS_RUN_ID}" \
+            --run-attempt "${RIGHTS_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind rights
+          python scripts/dev/software_promotion.py check-workflow-run \
+            --metadata "${PROMOTION_RUN_METADATA}" --run-id "${GITHUB_RUN_ID}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind promotion
+          python scripts/dev/software_candidate_manifest.py verify \
+            --bundle-dir "${CANDIDATE_DIR}" --expected-source-sha "${SOURCE_SHA}" \
+            --expected-workflow-run-id "${CANDIDATE_RUN_ID}" \
+            --expected-workflow-run-attempt "${CANDIDATE_RUN_ATTEMPT}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${test_metadata}" --artifact-id "${TEST_ID}" \
+            --artifact-name "${TEST_NAME}" --artifact-digest "${TEST_DIGEST}" \
+            --run-id "${GITHUB_RUN_ID}" --run-attempt "${GITHUB_RUN_ATTEMPT}" --kind receipt
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${cold_metadata}" --artifact-id "${COLD_ID}" \
+            --artifact-name "robot-sf-testpypi-cold-install-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --artifact-digest "${COLD_DIGEST}" --run-id "${GITHUB_RUN_ID}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}" --kind receipt
+          python scripts/dev/software_promotion.py verify-receipt \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
+            --receipt "${TEST_RECEIPT_DIR}/testpypi-upload-receipt.json" \
+            --channel testpypi --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${CANDIDATE_ID}" --candidate-artifact-name "${CANDIDATE_NAME}" \
+            --candidate-artifact-digest "${CANDIDATE_DIGEST}" --version "${VERSION}"
+          python scripts/dev/software_promotion.py verify-cold-install \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
+            --test-receipt "${TEST_RECEIPT_DIR}/testpypi-upload-receipt.json" \
+            --receipt "${COLD_DIR}/testpypi-cold-install-receipt.json" \
+            --report "${COLD_DIR}/wheel-install-smoke.json" \
+            --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${CANDIDATE_ID}" --candidate-artifact-name "${CANDIDATE_NAME}" \
+            --candidate-artifact-digest "${CANDIDATE_DIGEST}" --version "${VERSION}"
+
+      - name: Stage exact wheel and sdist without rebuilding
+        env:
+          CANDIDATE_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+          RIGHTS_RECEIPT: ${{ runner.temp }}/promotion-inputs/rights-admission/rights-admission.json
+          PACKAGE_DIR: ${{ runner.temp }}/software-packages
+          ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          ARTIFACT_NAME: ${{ inputs.candidate_artifact_name }}
+          ARTIFACT_DIGEST: ${{ inputs.candidate_artifact_digest }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.package_version }}
+        run: |
+          set -euo pipefail
+          python scripts/dev/software_promotion.py stage-packages \
+            --candidate-dir "${CANDIDATE_DIR}" --output-dir "${PACKAGE_DIR}" \
+            --rights-receipt "${RIGHTS_RECEIPT}" \
+            --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
+            --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}"
+
+      - name: Read prior PyPI receipt for safe resume
+        if: ${{ inputs.resume_production_receipt_artifact_id != '' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.resume_production_receipt_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.resume_production_run_id }}
+          path: ${{ runner.temp }}/prior-pypi-receipt
+
+      - name: Verify prior PyPI receipt for safe resume
+        if: ${{ inputs.resume_production_receipt_artifact_id != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRIOR_RUN_ID: ${{ inputs.resume_production_run_id }}
+          PRIOR_RUN_ATTEMPT: ${{ inputs.resume_production_run_attempt }}
+          PRIOR_ARTIFACT_ID: ${{ inputs.resume_production_receipt_artifact_id }}
+          PRIOR_ARTIFACT_NAME: ${{ inputs.resume_production_receipt_artifact_name }}
+          PRIOR_ARTIFACT_DIGEST: ${{ inputs.resume_production_receipt_artifact_digest }}
+          CANDIDATE_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+          RIGHTS_RECEIPT: ${{ runner.temp }}/promotion-inputs/rights-admission/rights-admission.json
+          RESUME_DIR: ${{ runner.temp }}/prior-pypi-receipt
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.package_version }}
+          ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          ARTIFACT_NAME: ${{ inputs.candidate_artifact_name }}
+          ARTIFACT_DIGEST: ${{ inputs.candidate_artifact_digest }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          set -euo pipefail
+          metadata="${RUNNER_TEMP}/prior-pypi-receipt-metadata.json"
+          prior_workflow="${RUNNER_TEMP}/prior-pypi-workflow-run.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${PRIOR_ARTIFACT_ID}" > "${metadata}"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${PRIOR_RUN_ID}" > "${prior_workflow}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${metadata}" --artifact-id "${PRIOR_ARTIFACT_ID}" \
+            --artifact-name "${PRIOR_ARTIFACT_NAME}" --artifact-digest "${PRIOR_ARTIFACT_DIGEST}" \
+            --run-id "${PRIOR_RUN_ID}" --run-attempt "${PRIOR_RUN_ATTEMPT}" --kind receipt
+          python scripts/dev/software_promotion.py check-workflow-run \
+            --metadata "${prior_workflow}" --run-id "${PRIOR_RUN_ID}" \
+            --run-attempt "${PRIOR_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind promotion
+          python scripts/dev/software_promotion.py verify-receipt \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_RECEIPT}" \
+            --receipt "${RESUME_DIR}/pypi-upload-receipt.json" \
+            --channel pypi --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
+            --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}" \
+            --promotion-run-id "${PRIOR_RUN_ID}" --promotion-run-attempt "${PRIOR_RUN_ATTEMPT}"
+
+      - name: Publish to PyPI through trusted publisher
+        if: ${{ inputs.resume_production_receipt_artifact_id == '' }}
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: ${{ runner.temp }}/software-packages
+          repository-url: https://upload.pypi.org/legacy/
+          skip-existing: false
+
+      - name: Bind PyPI receipt to the exact candidate
+        env:
+          CANDIDATE_DIR: ${{ runner.temp }}/promotion-inputs/robot-sf-software-candidate
+          RIGHTS_RECEIPT: ${{ runner.temp }}/promotion-inputs/rights-admission/rights-admission.json
+          RECEIPT_DIR: ${{ runner.temp }}/pypi-receipt
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.package_version }}
+          ARTIFACT_ID: ${{ inputs.candidate_artifact_id }}
+          ARTIFACT_NAME: ${{ inputs.candidate_artifact_name }}
+          ARTIFACT_DIGEST: ${{ inputs.candidate_artifact_digest }}
+          RUN_ID: ${{ inputs.candidate_run_id }}
+          RESUME_ID: ${{ inputs.resume_production_receipt_artifact_id }}
+          RESUME_DIR: ${{ runner.temp }}/prior-pypi-receipt
+        run: |
+          set -euo pipefail
+          mkdir -p "${RECEIPT_DIR}"
+          # A resumed publication is already checked above; emit a fresh
+          # receipt for this run so its artifact metadata and receipt identity
+          # remain one exact, auditable binding.
+          python scripts/dev/software_promotion.py write-receipt \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_RECEIPT}" \
+            --channel pypi \
+            --receipt "${RECEIPT_DIR}/pypi-upload-receipt.json" \
+            --source-sha "${SOURCE_SHA}" --candidate-run-id "${RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${ARTIFACT_ID}" --candidate-artifact-name "${ARTIFACT_NAME}" \
+            --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}" \
+            --promotion-run-id "${GITHUB_RUN_ID}" --promotion-run-attempt "${GITHUB_RUN_ATTEMPT}"
+
+      - name: Set receipt artifact name
+        id: receipt-name
+        run: printf 'name=robot-sf-pypi-receipt-%s-%s\n' "${GITHUB_RUN_ID}" "${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload PyPI receipt
+        id: upload-receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: robot-sf-pypi-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pypi-receipt/
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
+
+      - name: Report receipt artifact identity
+        env:
+          RECEIPT_ARTIFACT_ID: ${{ steps.upload-receipt.outputs.artifact-id }}
+          RECEIPT_ARTIFACT_DIGEST: ${{ steps.upload-receipt.outputs.artifact-digest }}
+        run: printf 'PyPI receipt artifact id=%s digest=%s\n' "${RECEIPT_ARTIFACT_ID}" "${RECEIPT_ARTIFACT_DIGEST}"
+
+  pypi-cold-verify:
+    name: Verify PyPI public-index bytes
+    needs: [verify-candidate, testpypi-upload, testpypi-cold-install, pypi-upload]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      artifact-id: ${{ steps.upload-cold-receipt.outputs.artifact-id }}
+      artifact-digest: ${{ steps.upload-cold-receipt.outputs.artifact-digest }}
+    steps:
+      - name: Checkout promotion verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Validate numeric dispatch identities before API use
+        run: |
+          set -euo pipefail
+          for value in "${CANDIDATE_RUN_ID}" "${CANDIDATE_RUN_ATTEMPT}" "${CANDIDATE_ARTIFACT_ID}" "${RIGHTS_RUN_ID}" "${RIGHTS_RUN_ATTEMPT}" "${RIGHTS_ARTIFACT_ID}"; do
+            [[ "${value}" =~ ^[1-9][0-9]*$ ]] || { echo "dispatch identity must be a positive decimal" >&2; exit 1; }
+          done
+
+      - name: Read producer and receipt metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/candidate-metadata" "${RUNNER_TEMP}/rights-metadata"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${CANDIDATE_ARTIFACT_ID}" > "${RUNNER_TEMP}/candidate-metadata/artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}" > "${RUNNER_TEMP}/candidate-metadata/workflow-run.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${RIGHTS_ARTIFACT_ID}" > "${RUNNER_TEMP}/rights-metadata/artifact.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RIGHTS_RUN_ID}" > "${RUNNER_TEMP}/rights-metadata/workflow-run.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" > "${RUNNER_TEMP}/promotion-run.json"
+
+      - name: Download production receipt from this promotion run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.pypi-upload.outputs.receipt-artifact-id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.run_id }}
+          path: ${{ runner.temp }}/promotion-inputs
+
+      - name: Download candidate and rights artifacts from producer runs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.candidate_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          path: ${{ runner.temp }}/producer-inputs
+
+      - name: Download rights receipt from its producer run
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ inputs.rights_admission_artifact_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.rights_admission_run_id }}
+          path: ${{ runner.temp }}/rights-admission
+
+      - name: Download both package formats from PyPI
+        env:
+          VERSION: ${{ inputs.package_version }}
+          INDEX_ROOT: ${{ runner.temp }}/pypi-index
+        run: |
+          set -euo pipefail
+          mkdir -p "${INDEX_ROOT}"
+          python -m pip download --disable-pip-version-check --no-cache-dir --no-deps \
+            --only-binary=:all: --index-url https://pypi.org/simple \
+            --dest "${INDEX_ROOT}" "robot-sf==${VERSION}"
+          python -m pip download --disable-pip-version-check --no-cache-dir --no-deps \
+            --no-binary=:all: --index-url https://pypi.org/simple \
+            --dest "${INDEX_ROOT}" "robot-sf==${VERSION}"
+
+      - name: Verify PyPI bytes and write cold verification receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_DIR: ${{ runner.temp }}/producer-inputs
+          RIGHTS_DIR: ${{ runner.temp }}/rights-admission
+          PRODUCTION_RECEIPT: ${{ runner.temp }}/promotion-inputs/pypi-upload-receipt.json
+          INDEX_ROOT: ${{ runner.temp }}/pypi-index
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          VERSION: ${{ inputs.package_version }}
+          RECEIPT_ID: ${{ needs.pypi-upload.outputs.receipt-artifact-id }}
+          RECEIPT_DIGEST: ${{ needs.pypi-upload.outputs.receipt-artifact-digest }}
+          RECEIPT_NAME: ${{ needs.pypi-upload.outputs.receipt-artifact-name }}
+          COLD_RECEIPT: ${{ runner.temp }}/pypi-cold-verification/pypi-cold-verification-receipt.json
+        run: |
+          set -euo pipefail
+          receipt_metadata="${RUNNER_TEMP}/pypi-receipt-metadata.json"
+          gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts/${RECEIPT_ID}" > "${receipt_metadata}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${RUNNER_TEMP}/candidate-metadata/artifact.json" \
+            --artifact-id "${CANDIDATE_ARTIFACT_ID}" --artifact-name "${CANDIDATE_ARTIFACT_NAME}" \
+            --artifact-digest "${CANDIDATE_ARTIFACT_DIGEST}" --run-id "${CANDIDATE_RUN_ID}" \
+            --run-attempt "${CANDIDATE_RUN_ATTEMPT}" --kind candidate --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${RUNNER_TEMP}/rights-metadata/artifact.json" \
+            --artifact-id "${RIGHTS_ARTIFACT_ID}" --artifact-name "${RIGHTS_ARTIFACT_NAME}" \
+            --artifact-digest "${RIGHTS_ARTIFACT_DIGEST}" --run-id "${RIGHTS_RUN_ID}" \
+            --run-attempt "${RIGHTS_RUN_ATTEMPT}" --kind rights --source-sha "${SOURCE_SHA}"
+          python scripts/dev/software_promotion.py check-workflow-run \
+            --metadata "${RUNNER_TEMP}/candidate-metadata/workflow-run.json" \
+            --run-id "${CANDIDATE_RUN_ID}" --run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --source-sha "${SOURCE_SHA}" --kind candidate
+          python scripts/dev/software_promotion.py check-workflow-run \
+            --metadata "${RUNNER_TEMP}/rights-metadata/workflow-run.json" \
+            --run-id "${RIGHTS_RUN_ID}" --run-attempt "${RIGHTS_RUN_ATTEMPT}" \
+            --source-sha "${SOURCE_SHA}" --kind rights
+          python scripts/dev/software_promotion.py check-workflow-run \
+            --metadata "${RUNNER_TEMP}/promotion-run.json" --run-id "${GITHUB_RUN_ID}" \
+            --run-attempt "${GITHUB_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind promotion
+          python scripts/dev/software_promotion.py check-artifact \
+            --metadata "${receipt_metadata}" --artifact-id "${RECEIPT_ID}" \
+            --artifact-name "${RECEIPT_NAME}" --artifact-digest "${RECEIPT_DIGEST}" \
+            --run-id "${GITHUB_RUN_ID}" --run-attempt "${GITHUB_RUN_ATTEMPT}" --kind receipt
+          python scripts/dev/software_promotion.py verify-receipt \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
+            --receipt "${PRODUCTION_RECEIPT}" --channel pypi --source-sha "${SOURCE_SHA}" \
+            --candidate-run-id "${CANDIDATE_RUN_ID}" --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${CANDIDATE_ARTIFACT_ID}" \
+            --candidate-artifact-name "${CANDIDATE_ARTIFACT_NAME}" \
+            --candidate-artifact-digest "${CANDIDATE_ARTIFACT_DIGEST}" --version "${VERSION}" \
+            --promotion-run-id "${GITHUB_RUN_ID}" --promotion-run-attempt "${GITHUB_RUN_ATTEMPT}"
+          python scripts/dev/software_promotion.py write-index-verification-receipt \
+            --candidate-dir "${CANDIDATE_DIR}" --rights-receipt "${RIGHTS_DIR}/rights-admission.json" \
+            --production-receipt "${PRODUCTION_RECEIPT}" --production-run-id "${GITHUB_RUN_ID}" \
+            --production-run-attempt "${GITHUB_RUN_ATTEMPT}" --channel pypi \
+            --download-dir "${INDEX_ROOT}" --receipt "${COLD_RECEIPT}" \
+            --source-sha "${SOURCE_SHA}" --candidate-run-id "${CANDIDATE_RUN_ID}" \
+            --candidate-run-attempt "${CANDIDATE_RUN_ATTEMPT}" \
+            --candidate-artifact-id "${CANDIDATE_ARTIFACT_ID}" --candidate-artifact-name "${CANDIDATE_ARTIFACT_NAME}" \
+            --candidate-artifact-digest "${CANDIDATE_ARTIFACT_DIGEST}" --version "${VERSION}"
+
+      - name: Upload PyPI cold verification evidence
+        id: upload-cold-receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: robot-sf-pypi-cold-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pypi-cold-verification/
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false

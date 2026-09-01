@@ -36,6 +36,7 @@ from scripts.tools.check_dependency_license_inventory import (
     build_inventory,
     check_report_freshness,
     main,
+    selected_policy_pending_package_count,
     validate_dependency_license_receipt,
 )
 
@@ -783,6 +784,18 @@ def test_inventory_keeps_unknown_proprietary_and_conflicting_metadata_blocked(
     assert demo["license_status"] == "metadata_conflict"
     assert demo["raw_license_metadata"]["License-Expression"].startswith("LicenseRef-")
     assert inventory["summary"]["unresolved_count"] > 0
+
+
+def test_policy_pending_package_count_counts_rows_not_failure_messages() -> None:
+    """The summary counts each selected review-required package once."""
+    root = Path(__file__).resolve().parents[2]
+    inventory = build_inventory(root, distributions=[], selected_profile_ids=["all"])
+    selected_rows = [row for row in inventory["packages"] if row.get("selected_profiles")]
+    expected = selected_policy_pending_package_count(selected_rows)
+
+    assert expected == 119
+    assert inventory["summary"]["policy_pending_package_count"] == expected
+    assert inventory["summary"]["policy_pending_package_count"] != 155
 
 
 def test_freshness_fails_when_a_locked_input_changes(tmp_path: Path) -> None:

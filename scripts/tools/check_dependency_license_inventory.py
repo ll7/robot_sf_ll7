@@ -287,6 +287,26 @@ def _effective_profile_coverage(actual: set[str], expected: set[str]) -> set[str
     return {"all"} | (actual & explicit)
 
 
+def selected_policy_pending_package_count(
+    package_records: Iterable[dict[str, Any]],
+) -> int:
+    """Count selected package rows that still require a reviewed disposition.
+
+    ``policy_pending_package_count`` is a row-level summary field.  It must
+    not be derived from the failure-message list: one package can contribute
+    several independent fail-closed findings (for example, a metadata and an
+    exact-policy mismatch), while the admission contract counts that package
+    once.  Keep this counter shared by the generator and its release
+    admission validators so the serialized report has one unambiguous
+    meaning.
+    """
+    return sum(
+        1
+        for record in package_records
+        if record.get("selected_profiles") and record.get("policy_disposition") == "review_required"
+    )
+
+
 def _requirement_record(requirement: str) -> dict[str, Any]:
     """Extract a requirement name and optional-extra references."""
     match = _REQUIREMENT_RE.match(requirement)
@@ -4156,7 +4176,7 @@ def build_inventory(  # noqa: C901, PLR0912, PLR0915
                 }
             ),
             "license_status_counts": dict(sorted(status_counts.items())),
-            "policy_pending_package_count": len(policy_failures),
+            "policy_pending_package_count": selected_policy_pending_package_count(package_records),
             "policy_pending_component_count": len(component_failures),
             "policy_exact_disposition_count": len(package_dispositions),
             "policy_exact_match_count": exact_policy_match_count,

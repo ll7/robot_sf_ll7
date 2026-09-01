@@ -528,6 +528,50 @@ def test_apply_readiness_gate_uses_canonical_gate_and_verifies_body_labels() -> 
     )
 
 
+def test_apply_readiness_gate_aborts_on_gate_readback_drift() -> None:
+    """A gate that cannot preserve the reviewed body/labels fails closed."""
+    audit, plan = _label_plan_fixture()
+    issue = 1001
+    snapshots = {
+        issue: {
+            "number": issue,
+            "state": "open",
+            "body": f"body-{issue}",
+            "labels": ["priority:1"],
+            "assignees": [],
+        }
+    }
+    body_calls: list[int] = []
+
+    def read_issue(number: int) -> dict:
+        snapshot = snapshots[number]
+        return {**snapshot, "labels": list(snapshot["labels"])}
+
+    def write_body(number: int, block: str) -> None:
+        body_calls.append(number)
+
+    def gate(number: int) -> dict:
+        snapshots[number]["body"] = "changed-during-gate"
+        snapshots[number]["labels"].append("state:ready")
+        return {"outcome": "ready", "ready_added": True, "verified": True}
+
+    receipt = prep._apply_bodies(
+        audit,
+        plan,
+        mutation_ceiling=10,
+        batch_id="b1",
+        dry_run=False,
+        body_writer=write_body,
+        issue_reader=read_issue,
+        readiness_gater=gate,
+    )
+
+    assert receipt["aborted"] is True
+    assert receipt["abort_reason"] == "readiness_gate_readback_drift"
+    assert receipt["drifted"] == 1
+    assert body_calls == []
+
+
 def test_apply_aborts_before_writes_on_label_drift() -> None:
     """Any expected-label drift aborts the whole batch before mutation."""
     audit, plan = _label_plan_fixture()

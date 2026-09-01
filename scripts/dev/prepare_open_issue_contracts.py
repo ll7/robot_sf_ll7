@@ -1266,6 +1266,46 @@ def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-clos
             label_count += 1
             receipt["label_operations_attempted"] = label_count
             expected_labels = set(_normalize_label_names(gate_operation.get("expected_labels")))
+            expected_body_sha256 = gate_operation.get("expected_body_sha256")
+            if issue_reader is not None and not dry_run:
+                try:
+                    gate_before = _normalize_issue_snapshot(
+                        issue_reader(issue_number), issue_number
+                    )
+                except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                    aborted = True
+                    abort_reason = "readiness_gate_prewrite_read_failed"
+                    add_operation(
+                        {
+                            "issue": issue,
+                            "kind": "readiness_gate",
+                            "action": _READINESS_GATE_ACTION,
+                            "operation": "failed",
+                            "reason": str(exc),
+                        }
+                    )
+                    break
+                if (
+                    gate_before["body_sha256"] != expected_body_sha256
+                    or set(gate_before["labels"]) != expected_labels
+                ):
+                    aborted = True
+                    abort_reason = "readiness_gate_prewrite_drift"
+                    add_operation(
+                        {
+                            "issue": issue,
+                            "kind": "readiness_gate",
+                            "action": _READINESS_GATE_ACTION,
+                            "operation": "drifted",
+                            "expected_body_sha256": expected_body_sha256,
+                            "observed_body_sha256": gate_before["body_sha256"],
+                            "expected_labels": sorted(expected_labels),
+                            "observed_labels": gate_before["labels"],
+                        }
+                    )
+                    break
+                snapshots[issue_number] = gate_before
+                local_labels = set(gate_before["labels"])
             if local_labels != expected_labels:
                 aborted = True
                 abort_reason = "readiness_gate_prewrite_drift"
@@ -1349,6 +1389,46 @@ def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-clos
                         "observed_labels_after": sorted(local_labels),
                     }
                 )
+                if issue_reader is not None:
+                    try:
+                        gate_after = _normalize_issue_snapshot(
+                            issue_reader(issue_number), issue_number
+                        )
+                    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                        aborted = True
+                        abort_reason = "readiness_gate_readback_failed"
+                        add_operation(
+                            {
+                                "issue": issue,
+                                "kind": "readiness_gate",
+                                "action": _READINESS_GATE_ACTION,
+                                "operation": "failed",
+                                "reason": str(exc),
+                            }
+                        )
+                        break
+                    expected_labels_after = expected_labels | {"state:ready"}
+                    if (
+                        gate_after["body_sha256"] != expected_body_sha256
+                        or set(gate_after["labels"]) != expected_labels_after
+                    ):
+                        aborted = True
+                        abort_reason = "readiness_gate_readback_drift"
+                        add_operation(
+                            {
+                                "issue": issue,
+                                "kind": "readiness_gate",
+                                "action": _READINESS_GATE_ACTION,
+                                "operation": "drifted",
+                                "expected_body_sha256": expected_body_sha256,
+                                "observed_body_sha256": gate_after["body_sha256"],
+                                "expected_labels": sorted(expected_labels_after),
+                                "observed_labels": gate_after["labels"],
+                            }
+                        )
+                        break
+                    snapshots[issue_number] = gate_after
+                    local_labels = set(gate_after["labels"])
 
         if aborted:
             if body_proposed:

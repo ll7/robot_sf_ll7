@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, SchemaError, ValidationError
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PROFILE = Path("configs/publication/dissertation_coverage_v1.yaml")
@@ -1082,7 +1082,7 @@ def _validate_payload(payload: dict[str, Any], schema_path: Path) -> None:
     try:
         Draft202012Validator.check_schema(schema)
         Draft202012Validator(schema).validate(payload)
-    except Exception as exc:  # jsonschema exposes several concrete exception types.
+    except (SchemaError, ValidationError) as exc:
         raise CoverageContractError(f"manifest schema validation failed: {exc}") from exc
 
 

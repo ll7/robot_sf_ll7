@@ -1489,7 +1489,16 @@ def _kalman_update(
 
 def _squared_distance(residual: np.ndarray, covariance: np.ndarray) -> float:
     """Return a finite covariance-normalized squared distance."""
+    covariance = _symmetrize_covariance(covariance, "distance covariance")
     inverse = np.linalg.pinv(covariance, rcond=1e-12)
+    # ``pinv`` deliberately maps zero-variance directions to zero.  That is
+    # only a valid Mahalanobis distance when the residual also has no
+    # component in those directions; otherwise a singular gate would accept
+    # an impossible innovation instead of rejecting it.
+    projected_residual = covariance @ inverse @ residual
+    null_residual = residual - projected_residual
+    if np.linalg.norm(null_residual) > 1e-9 * max(1.0, np.linalg.norm(residual)):
+        return math.inf
     value = float(residual @ inverse @ residual)
     if not math.isfinite(value):
         return math.inf

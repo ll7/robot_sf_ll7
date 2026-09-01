@@ -22,6 +22,7 @@ from scripts.tools.check_dependency_license_inventory import (
     _effective_profile_coverage,
     _exact_policy_coverage_failures,
     _github_notice_reference,
+    _match_package_disposition,
     _policy_records,
     _policy_source_matches,
     build_inventory,
@@ -796,6 +797,63 @@ def test_freshness_fails_when_a_locked_input_changes(tmp_path: Path) -> None:
     assert any("uv.lock" in issue for issue in issues)
 
 
+def test_freshness_rejects_summary_failure_and_package_mutations(tmp_path: Path) -> None:
+    """Retained input digests cannot hide edits to report content."""
+    _write_inputs(tmp_path)
+    report = build_inventory(tmp_path, distributions=[])
+    report_path = tmp_path / "report.json"
+    for field, mutate in (
+        ("summary", lambda value: value.update({"status": "complete"})),
+        ("failures", lambda value: value.append("injected failure")),
+        ("packages", lambda value: value[0].update({"name": "shadowed-package"})),
+    ):
+        mutated = copy.deepcopy(report)
+        mutate(mutated[field])
+        report_path.write_text(json.dumps(mutated, indent=2) + "\n", encoding="utf-8")
+        assert any(
+            "content digest differs" in issue
+            for issue in check_report_freshness(tmp_path, report_path)
+        )
+
+
+def test_duplicate_package_identity_cannot_be_masked_by_another_row(tmp_path: Path) -> None:
+    """A duplicate name/version/source disposition fails closed regardless of row order."""
+    root = Path(__file__).resolve().parents[2]
+    policy = json.loads(
+        (root / "scripts/validation/dependency_license_policy.v1.json").read_text(encoding="utf-8")
+    )
+    duplicate = copy.deepcopy(policy["package_dispositions"][0])
+    duplicate["id"] = "shadow-duplicate-package-identity"
+    duplicate["status"] = "pending_review"
+    duplicate["reviewer"] = None
+    duplicate["reviewed_at"] = None
+    policy["package_dispositions"].append(duplicate)
+    policy_path = tmp_path / "policy.json"
+    policy_path.write_text(json.dumps(policy, indent=2) + "\n", encoding="utf-8")
+
+    inventory = build_inventory(root, distributions=[], policy_path=policy_path)
+
+    assert any(
+        "duplicate package disposition identity" in issue
+        for issue in inventory["structural_issues"]
+    )
+    _rules, _components, by_name, _records, _issues = _policy_records(policy, root)
+    clean_inventory = build_inventory(root, distributions=[])
+    package = next(
+        row for row in clean_inventory["packages"] if row["normalized_name"] == "llvmlite"
+    )
+    matched, match_issues = _match_package_disposition(
+        package,
+        {"license_expression": package.get("license_expression")},
+        "user_installed",
+        {"core"},
+        clean_inventory["target"],
+        by_name,
+    )
+    assert matched is None
+    assert any("exact policy identity is ambiguous" in issue for issue in match_issues)
+
+
 def test_current_profile_matrix_is_explicit_and_all_exclusion_is_visible() -> None:
     """The checked-in matrix covers every declared extra without hiding rllib."""
     root = Path(__file__).resolve().parents[2]
@@ -1074,6 +1132,51 @@ def test_issue_8163_receipt_binds_policy_license_and_strict_inputs(tmp_path: Pat
             expected_reviewed_head="0" * 40,
         )
     )
+
+
+def test_issue_8163_receipt_summaries_are_bound_fail_closed(tmp_path: Path) -> None:
+    """Receipt status, scope, archive, strict, and candidate claims cannot drift."""
+    root = Path(__file__).resolve().parents[2]
+    receipt_path = root / "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    mutations = (
+        ("status", lambda value: value.__setitem__("status", "complete"), "receipt status"),
+        (
+            "scope",
+            lambda value: value.__setitem__("package_count", 1),
+            "scope package_count",
+        ),
+        (
+            "archive",
+            lambda value: value.__setitem__("artifact_count", 1),
+            "archive_audit artifact_count",
+        ),
+        (
+            "strict",
+            lambda value: value["summary"].__setitem__("unresolved_count", 1),
+            "strict_report unresolved count",
+        ),
+        (
+            "candidate",
+            lambda value: value.__setitem__("status", "blocked"),
+            "candidate_binding",
+        ),
+    )
+    for name, mutate, expected in mutations:
+        tampered = copy.deepcopy(receipt)
+        target = {
+            "status": tampered,
+            "scope": tampered["scope"],
+            "archive": tampered["archive_audit"],
+            "strict": tampered["strict_report"],
+            "candidate": tampered["candidate_binding"],
+        }[name]
+        mutate(target)
+        tampered_path = tmp_path / f"receipt-{name}.json"
+        tampered_path.write_text(json.dumps(tampered, indent=2) + "\n", encoding="utf-8")
+        assert any(
+            expected in issue for issue in validate_dependency_license_receipt(root, tampered_path)
+        )
 
 
 def test_github_notice_reference_requires_an_immutable_commit() -> None:

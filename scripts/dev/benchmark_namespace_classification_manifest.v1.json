@@ -276,6 +276,7 @@
     "signal_metrics.py",
     "simulator_counterfactual_adapter.py",
     "simulator_dependence_validity_boundary.py",
+    "slurm_launch_manifest.py",
     "snqi",
     "snqi_scalarization_sensitivity.py",
     "social_compliance.py",

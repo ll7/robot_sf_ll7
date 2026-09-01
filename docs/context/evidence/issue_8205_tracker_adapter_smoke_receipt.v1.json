@@ -3,7 +3,7 @@
   "schema": "tracker_goal_belief_adapter_smoke_receipt.v1",
   "issue": 8205,
   "status": "verified",
-  "source_commit": "08283b4c432771afed4a0aedf444154ce5e78500",
+  "source_commit": "9868109df543d34cfeb426036e7a792cc1e19634",
   "source_tree_scope": "adapter, tests, and documentation before the receipt commit",
   "claim_boundary": "implementation-integrity / smoke only",
   "research_claim": "none",
@@ -53,10 +53,12 @@
     "ids": [
       "single_observation",
       "row_reorder",
-      "brief_occlusion",
-      "reacquisition",
+      "brief_occlusion_channels",
+      "reacquisition_channels",
       "reset",
-      "robot_ego_velocity"
+      "robot_ego_velocity",
+      "recovered_velocity",
+      "textual_track_id_ordering"
     ],
     "config_hash": "52eeb128182485d2616fab2843419c31c72dfeefe1a22be35ef027340be536ec",
     "track_ids_by_step": [
@@ -66,19 +68,24 @@
       ["track-1", "track-2"]
     ],
     "channel_digests": [
-      "6f8fa96905351fed47d47358c06023b288eeca5d8651775fc39d81885cb686c5",
-      "6943df8da1a0b5939e4bf85456bb4fdd2c28bd21225242184a48d6d7ec26aad2",
-      "becc70f209a7d3c11ba4825cd768232f250e7fa040009b286e20c8a37468671e",
-      "c74337c14c1da3859b8b832ac5c5b8c348f618e61e015f6a7b49fe52db492522"
+      "ed5747fd8450a9f783741a52fe05e6236f97ef90492fdd1bde7e398a509bcc41",
+      "106237a5b130fe2c6c6f1254ca413f79064f19f5f1c22a940096694652ec263e",
+      "833c25720c7ebc554ea3197c0ee730c68dc7e1c6ad6c3af63a97f20cab8fe6dc",
+      "2a76fb5a1e2538205a2fc7fe107b0bd97fa64927c39610cf3dfc1fc50dc587b2"
     ],
     "transform_error_l2": 6.123233995736766e-17,
-    "occlusion_masks": ["observed", "observed", "invisible"],
-    "reacquisition_masks": ["observed", "observed", "invisible", "observed"],
+    "current_row_masks_by_decision_point": [
+      {"step_index": 0, "track_ids": ["track-1", "track-2"], "masks": ["observed", "observed"]},
+      {"step_index": 1, "track_ids": ["track-1", "track-2"], "masks": ["observed", "observed"]},
+      {"step_index": 2, "track_ids": ["track-1", "track-2"], "masks": ["invisible", "invisible"]},
+      {"step_index": 3, "track_ids": ["track-1", "track-2"], "masks": ["observed", "observed"]}
+    ],
+    "history_lengths_by_step": [[1, 1], [1, 1], [1, 1], [1, 1]],
     "history_projection_counts_by_step": [
-      {"full_contiguous_history": 2},
-      {"full_contiguous_history": 2},
-      {"full_contiguous_history": 2},
-      {"full_contiguous_history": 2}
+      {"current_row_only_tracker_v1_velocity_provenance_unavailable": 2},
+      {"current_row_only_tracker_v1_velocity_provenance_unavailable": 2},
+      {"current_row_only_tracker_v1_velocity_provenance_unavailable": 2},
+      {"current_row_only_tracker_v1_velocity_provenance_unavailable": 2}
     ]
   },
   "checks": {
@@ -86,9 +93,12 @@
     "disabled_timing_absent": "passed",
     "stable_row_reorder": "passed",
     "same_step_robot_frame_velocity_normalization": "passed",
-    "brief_occlusion_and_reacquisition": "passed",
+    "brief_occlusion_and_reacquisition_across_channels": "passed",
     "reset_isolation": "passed",
-    "missing_velocity_not_promoted": "passed",
+    "tracking_epoch_propagation": "passed",
+    "current_missing_velocity_not_promoted": "passed",
+    "historical_missing_velocity_after_recovery": "passed",
+    "serialized_track_id_lexical_order": "passed",
     "malformed_input_rejection": "passed",
     "decision_point_alignment_rejection": "passed",
     "deterministic_serialization_and_digest": "passed"
@@ -96,6 +106,10 @@
   "reset_check": {
     "prior_epoch": 0,
     "new_epoch": 1,
+    "prior_belief_epoch": "0",
+    "new_belief_epoch": "1",
+    "reused_track_id": "track-1",
+    "belief_pair_changed": true,
     "prior_provenance": null,
     "new_provenance": "receipt-episode-2",
     "new_track_ids": ["track-1"]
@@ -111,12 +125,16 @@
     "external_data": false,
     "model_or_checkpoint": false,
     "gpu_or_slurm": false,
-    "observed_runtime_ms": 9.826
+    "observed_runtime_ms": 16.175
   },
   "validation": [
     {
       "command": "uv run pytest tests/prediction/test_tracker_goal_belief_adapter.py -q",
-      "result": "9 passed"
+      "result": "11 passed"
+    },
+    {
+      "command": "uv run pytest -q tests/prediction tests/sensor/test_pedestrian_tracking.py tests/sensor/test_coordinate_frame_normalization.py",
+      "result": "81 passed"
     },
     {
       "command": "uv run ruff check robot_sf/prediction tests/prediction/test_tracker_goal_belief_adapter.py",
@@ -129,6 +147,14 @@
     {
       "command": "uv run mypy robot_sf/prediction",
       "result": "Success: no issues found in 6 source files"
+    },
+    {
+      "command": "uv run python scripts/dev/evidence_registry_ratchet.py --check",
+      "result": "findings=429; baseline=429; passed"
+    },
+    {
+      "command": "uv run python scripts/dev/check_docs_evidence_integrity.py --base-ref origin/main",
+      "result": "10 changed file(s) passed"
     }
   ],
   "limitations": [

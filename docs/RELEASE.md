@@ -98,6 +98,27 @@ Verify:
   H600, and differential-drive kinematics
 - smoke output is labeled `runtime-smoke`; it is not full benchmark evidence
 
+To admit checkpoints that were staged by the canonical staging workflow, pass
+the fresh receipt during preflight as well:
+
+```bash
+uv run python scripts/tools/run_benchmark_release.py \
+  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml \
+  --mode preflight \
+  --checkpoint-receipt output/release/checkpoints/runtime_smoke_staging_receipt.json
+```
+
+Preflight validates the receipt against the manifest's canonical campaign
+config. A valid receipt is reported under
+`checkpoint_admission.staged_checkpoint_admission` with `status: admitted` and
+`submit_safe: true`. The separate metadata-only check remains visible as
+`metadata_resolvable` and `metadata_submit_safe`; a metadata-only
+`submit_safe: false` result is diagnostic when the staged receipt is admitted,
+not a contradictory release decision. A supplied missing, stale, mismatched,
+or otherwise invalid receipt fails closed with
+`status: checkpoint_receipt_rejected` before campaign setup and is not
+benchmark evidence.
+
 ## Runtime-Smoke Run Mode
 
 Produce the required `release/release_result.json` with the canonical run-mode

@@ -126,7 +126,7 @@ After obtaining a bundle by exact artifact ID and checking GitHub's artifact dig
 from a trusted checkout of the same helper/schema revision:
 
 ```bash
-python scripts/dev/software_candidate_manifest.py verify \
+python -m scripts.dev.software_candidate_manifest verify \
   --bundle-dir /path/to/downloaded/bundle \
   --expected-source-sha <exact-40-hex-source-sha> \
   --expected-workflow-run-id <exact-decimal-run-id> \

@@ -67,14 +67,14 @@ jobs:
 
       - name: Require hermetic exact source identity before build
         run: >-
-          python scripts/dev/software_candidate_manifest.py check-source
+          python -m scripts.dev.software_candidate_manifest check-source
           --repo-root "${GITHUB_WORKSPACE}"
           --source-sha "${GITHUB_SHA}"
 
       - name: Materialize the rights-scoped source candidate
         id: materialize
         run: |
-          python scripts/dev/software_candidate_manifest.py materialize-source \
+          python -m scripts.dev.software_candidate_manifest materialize-source \
             --repo-root "${GITHUB_WORKSPACE}" \
             --candidate-root "${CANDIDATE_SOURCE}" \
             --source-sha "${GITHUB_SHA}" \
@@ -104,14 +104,14 @@ jobs:
 
       - name: Stage exact rights-scoped candidate in disposable build root
         run: >-
-          python scripts/dev/software_candidate_manifest.py stage-build-source
+          python -m scripts.dev.software_candidate_manifest stage-build-source
           --repo-root "${CANDIDATE_SOURCE}"
           --build-root "${BUILD_SOURCE}"
           --source-sha "${CANDIDATE_SOURCE_SHA}"
 
       - name: Prove disposable build source is the exact commit
         run: >-
-          python scripts/dev/software_candidate_manifest.py check-source
+          python -m scripts.dev.software_candidate_manifest check-source
           --repo-root "${BUILD_SOURCE}"
           --source-sha "${CANDIDATE_SOURCE_SHA}"
 
@@ -123,7 +123,7 @@ jobs:
 
       - name: Reject any source workspace mutation by the build
         run: >-
-          python scripts/dev/software_candidate_manifest.py check-source
+          python -m scripts.dev.software_candidate_manifest check-source
           --repo-root "${GITHUB_WORKSPACE}"
           --source-sha "${GITHUB_SHA}"
 
@@ -169,7 +169,7 @@ jobs:
 
       - name: Assemble deterministic candidate manifest and provenance
         run: >-
-          python scripts/dev/software_candidate_manifest.py assemble
+          python -m scripts.dev.software_candidate_manifest assemble
           --repo-root "${GITHUB_WORKSPACE}"
           --dist-dir "${DIST_DIR}"
           --raw-sbom "${RAW_SBOM}"
@@ -187,7 +187,7 @@ jobs:
 
       - name: Revalidate admitted bytes offline
         run: >-
-          python scripts/dev/software_candidate_manifest.py verify
+          python -m scripts.dev.software_candidate_manifest verify
           --bundle-dir "${BUNDLE_DIR}"
           --expected-source-sha "${GITHUB_SHA}"
           --expected-workflow-run-id "${GITHUB_RUN_ID}"
@@ -216,7 +216,7 @@ jobs:
 
       - name: Admit rights and dependency evidence into a separate receipt
         run: >-
-          python scripts/dev/software_candidate_manifest.py rights-admission
+          python -m scripts.dev.software_candidate_manifest rights-admission
           --repo-root "${GITHUB_WORKSPACE}"
           --candidate-root "${CANDIDATE_SOURCE}"
           --materialization-report "${MATERIALIZATION_REPORT}"

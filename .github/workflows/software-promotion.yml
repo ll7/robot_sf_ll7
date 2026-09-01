@@ -331,7 +331,7 @@ jobs:
             --candidate-artifact-name "${ARTIFACT_NAME}" \
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" \
             --version "${VERSION}"
-          python scripts/dev/software_candidate_manifest.py verify \
+          python -m scripts.dev.software_candidate_manifest verify \
             --bundle-dir "${CANDIDATE_DIR}" \
             --expected-source-sha "${SOURCE_SHA}" \
             --expected-workflow-run-id "${RUN_ID}" \
@@ -476,7 +476,7 @@ jobs:
             --candidate-artifact-id "${ARTIFACT_ID}" \
             --candidate-artifact-name "${ARTIFACT_NAME}" \
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}"
-          python scripts/dev/software_candidate_manifest.py verify \
+          python -m scripts.dev.software_candidate_manifest verify \
             --bundle-dir "${CANDIDATE_DIR}" --expected-source-sha "${SOURCE_SHA}" \
             --expected-workflow-run-id "${RUN_ID}" \
             --expected-workflow-run-attempt "${CANDIDATE_RUN_ATTEMPT}"
@@ -756,7 +756,7 @@ jobs:
           python scripts/dev/software_promotion.py check-workflow-run \
             --metadata "${RIGHTS_RUN_METADATA}" --run-id "${RIGHTS_RUN_ID}" \
             --run-attempt "${RIGHTS_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind rights
-          python scripts/dev/software_candidate_manifest.py verify \
+          python -m scripts.dev.software_candidate_manifest verify \
             --bundle-dir "${CANDIDATE_DIR}" --expected-source-sha "${SOURCE_SHA}" \
             --expected-workflow-run-id "${CANDIDATE_RUN_ID}" \
             --expected-workflow-run-attempt "${CANDIDATE_RUN_ATTEMPT}"
@@ -1015,7 +1015,7 @@ jobs:
           python scripts/dev/software_promotion.py check-workflow-run \
             --metadata "${PROMOTION_RUN_METADATA}" --run-id "${GITHUB_RUN_ID}" \
             --run-attempt "${GITHUB_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind promotion
-          python scripts/dev/software_candidate_manifest.py verify \
+          python -m scripts.dev.software_candidate_manifest verify \
             --bundle-dir "${CANDIDATE_DIR}" --expected-source-sha "${SOURCE_SHA}" \
             --expected-workflow-run-id "${CANDIDATE_RUN_ID}" \
             --expected-workflow-run-attempt "${CANDIDATE_RUN_ATTEMPT}"

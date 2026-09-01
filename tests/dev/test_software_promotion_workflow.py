@@ -227,7 +227,8 @@ def test_receipt_resume_inputs_and_exact_hash_checks_are_wired() -> None:
             assert f"{prefix}_{suffix}" in inputs
     assert text.count("check-artifact") >= 6
     assert text.count("verify-receipt") >= 4
-    assert text.count("software_candidate_manifest.py verify") == 4
+    assert text.count("python -m scripts.dev.software_candidate_manifest verify") == 4
+    assert "python scripts/dev/software_candidate_manifest.py verify" not in text
     assert "verify-index-artifacts" in text
     assert "write-cold-install-receipt" in text
     assert "skip-existing: false" in text

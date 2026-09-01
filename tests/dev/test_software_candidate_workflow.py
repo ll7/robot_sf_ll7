@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +14,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "software-candidate.yml"
 WHEEL_INSTALL_SMOKE = REPO_ROOT / "scripts" / "validation" / "wheel_install_smoke.sh"
+MANIFEST_MODULE = "scripts.dev.software_candidate_manifest"
 ACTION_PINS = {
     "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
     "actions/setup-python": "5fda3b95a4ea91299a34e894583c3862153e4b97",
@@ -36,6 +40,41 @@ def _steps(payload: dict[str, Any]) -> list[dict[str, Any]]:
     jobs = payload["jobs"]
     assert list(jobs) == ["build-candidate"]
     return jobs["build-candidate"]["steps"]
+
+
+def test_manifest_workflow_invocations_use_the_repo_root_module_form() -> None:
+    """Keep every candidate helper call import-safe on a clean runner."""
+    _text, workflow = _workflow()
+    invocations = [
+        str(step["run"])
+        for step in _steps(workflow)
+        if "software_candidate_manifest" in str(step.get("run", ""))
+    ]
+
+    assert len(invocations) == 8
+    assert all(f"python -m {MANIFEST_MODULE}" in run for run in invocations)
+    assert all(
+        "python scripts/dev/software_candidate_manifest.py" not in run for run in invocations
+    )
+
+
+def test_manifest_module_entrypoint_is_discoverable_without_pythonpath() -> None:
+    """The workflow's module form must work from a clean checkout interpreter."""
+    clean_env = os.environ.copy()
+    clean_env.pop("PYTHONPATH", None)
+    clean_env["PYTHONNOUSERSITE"] = "1"
+    result = subprocess.run(
+        [sys.executable, "-m", MANIFEST_MODULE, "--help"],
+        cwd=REPO_ROOT,
+        env=clean_env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "usage:" in result.stdout
+    assert "ModuleNotFoundError: No module named 'scripts'" not in result.stderr
 
 
 def test_workflow_is_directly_dispatchable_single_job_and_least_privilege() -> None:
@@ -81,7 +120,7 @@ def test_workflow_builds_only_from_staged_external_exact_commit() -> None:
     stage_index, stage_run = next(
         (index, step["run"])
         for index, step in enumerate(steps)
-        if "software_candidate_manifest.py stage-build-source" in step.get("run", "")
+        if "scripts.dev.software_candidate_manifest stage-build-source" in step.get("run", "")
     )
     build_index, build_run = next(
         (index, step["run"])
@@ -111,14 +150,14 @@ def test_workflow_confines_wheel_smoke_side_effects_to_disposable_source() -> No
     assemble_index = next(
         index
         for index, step in enumerate(steps)
-        if "software_candidate_manifest.py assemble" in step.get("run", "")
+        if "scripts.dev.software_candidate_manifest assemble" in step.get("run", "")
     )
 
     assert 'VALIDATION_DIR="${REPO_ROOT}/output/validation"' in wrapper_text
     assert 'mkdir -p "${VALIDATION_DIR}"' in wrapper_text
     assert "programmatic-core-map" in wrapper_text
     materialize = next(step["run"] for step in steps if step.get("id") == "materialize")
-    assert "software_candidate_manifest.py materialize-source" in materialize
+    assert "scripts.dev.software_candidate_manifest materialize-source" in materialize
     assert '--candidate-root "${CANDIDATE_SOURCE}"' in materialize
     assert '--report "${MATERIALIZATION_REPORT}"' in materialize
     assert 'bash "${BUILD_SOURCE}/scripts/validation/wheel_install_smoke.sh"' in smoke_run
@@ -147,8 +186,8 @@ def test_workflow_builds_once_then_only_validates_and_admits_same_dist_bytes() -
         "check_distribution_licenses.py",
         "wheel_install_smoke.sh",
         "uv export",
-        "software_candidate_manifest.py assemble",
-        "software_candidate_manifest.py verify",
+        "scripts.dev.software_candidate_manifest assemble",
+        "scripts.dev.software_candidate_manifest verify",
         "check_dependency_license_inventory.py",
     )
     positions = []
@@ -198,7 +237,7 @@ def test_workflow_builds_once_then_only_validates_and_admits_same_dist_bytes() -
     rights_index, rights_run = next(
         (index, run)
         for index, run in run_steps
-        if "software_candidate_manifest.py rights-admission" in run
+        if "scripts.dev.software_candidate_manifest rights-admission" in run
     )
     assert dependency_index < upload_index < rights_index
     assert '--dependency-report "${DEPENDENCY_REPORT}"' in rights_run
@@ -214,7 +253,7 @@ def test_workflow_checks_hermetic_source_identity_around_the_only_build() -> Non
     source_checks = [
         (index, step)
         for index, step in enumerate(steps)
-        if "software_candidate_manifest.py check-source" in step.get("run", "")
+        if "scripts.dev.software_candidate_manifest check-source" in step.get("run", "")
     ]
     assert [step["name"] for _index, step in source_checks] == [
         "Require hermetic exact source identity before build",

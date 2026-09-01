@@ -1433,7 +1433,8 @@ class GoalForceInverseEstimator:
             covariance_xy=require_covariance(force_covariance, "force_covariance"),
         )
         transition_start_velocity = selected[-2].velocity_xy
-        assert transition_start_velocity is not None
+        if transition_start_velocity is None:
+            raise ValueError("validated history lost the transition-start velocity")
         desired_velocity_raw = _vector_add(
             transition_start_velocity,
             _vector_scale(goal_force, tau / factor),
@@ -1681,7 +1682,8 @@ class GoalForceInverseEstimator:
                 reconstruction=None,
                 config_hash=self.config.config_hash,
             )
-        assert goal_force is not None
+        if goal_force is None:
+            raise RuntimeError("eligible oracle trace did not provide goal force")
         acceleration = _vector_scale(
             _vector_subtract(post.velocity_xy, pre_force.velocity_xy),
             1.0 / dt,
@@ -1812,7 +1814,8 @@ class GoalForceInverseEstimator:
         if len(history) == 2:
             previous, current = history[-2:]
             dt = current.timestamp_s - previous.timestamp_s
-            assert previous.velocity_xy is not None and current.velocity_xy is not None
+            if previous.velocity_xy is None or current.velocity_xy is None:
+                raise ValueError("validated history lost an H2 velocity")
             acceleration = _vector_scale(
                 _vector_subtract(current.velocity_xy, previous.velocity_xy),
                 1.0 / dt,
@@ -1828,11 +1831,12 @@ class GoalForceInverseEstimator:
             return acceleration, covariance, "h2_finite_difference", _zero_covariance()
         if self.config.acceleration_estimator == "finite_difference":
             previous, middle, current = history[-3:]
-            assert (
-                previous.velocity_xy is not None
-                and middle.velocity_xy is not None
-                and current.velocity_xy is not None
-            )
+            if (
+                previous.velocity_xy is None
+                or middle.velocity_xy is None
+                or current.velocity_xy is None
+            ):
+                raise ValueError("validated history lost an H3 velocity")
             first_dt = middle.timestamp_s - previous.timestamp_s
             second_dt = current.timestamp_s - middle.timestamp_s
             first = _vector_scale(
@@ -1954,7 +1958,8 @@ class GoalForceInverseEstimator:
         """Classify residual goal-force deceleration without treating it as reversal."""
 
         current = history[-1].velocity_xy
-        assert current is not None
+        if current is None:
+            raise ValueError("validated history lost the current velocity")
         speed = _vector_norm(current)
         if speed < self.config.speed_min_mps:
             return 0.0, _bounded_probability(
@@ -1969,7 +1974,8 @@ class GoalForceInverseEstimator:
         )
         if len(history) >= 2:
             previous = history[-2].velocity_xy
-            assert previous is not None
+            if previous is None:
+                raise ValueError("validated history lost the previous velocity")
             if _vector_norm(current) < _vector_norm(previous):
                 score = max(score, 0.5)
         arrival = score * max(

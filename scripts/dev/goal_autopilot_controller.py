@@ -179,7 +179,7 @@ def _readiness_outcomes_complete(discovery: Mapping[str, Any]) -> bool:
     )
 
 
-def _terminal_evidence(  # noqa: C901 - explicit fail-closed evidence normalization
+def _terminal_evidence(  # noqa: C901, PLR0912 - explicit fail-closed evidence normalization
     snapshot: Mapping[str, Any],
 ) -> tuple[dict[str, Any], list[str], dict[str, Any]]:
     """Collect normalized lane evidence and terminal-condition failures."""
@@ -245,6 +245,14 @@ def _terminal_evidence(  # noqa: C901 - explicit fail-closed evidence normalizat
     admission_histogram = implementation.get("admission_reason_histogram")
     if not isinstance(admission_histogram, Mapping):
         errors.append("implementation_admission_reason_histogram_missing_or_not_object")
+    else:
+        for reason, value in admission_histogram.items():
+            if not isinstance(reason, str) or not reason.strip():
+                errors.append("implementation_admission_reason_histogram_key_invalid")
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                errors.append(
+                    "implementation_admission_reason_histogram_value_must_be_non_negative_integer"
+                )
 
     discovery_status = _status(discovery.get("status"), field="discovery.status", errors=errors)
     relevant_head_sha: str | None = None

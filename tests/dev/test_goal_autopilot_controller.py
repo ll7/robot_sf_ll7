@@ -137,6 +137,21 @@ def test_true_terminal_case_emits_head_bound_zero_work_proof() -> None:
     assert proof["discovery"]["status"] == "saturated"
 
 
+def test_malformed_admission_histogram_cannot_produce_zero_work() -> None:
+    """Terminal evidence rejects malformed admission counts instead of trusting them."""
+    snapshot = _snapshot()
+    snapshot["implementation"]["admission_reason_histogram"] = {"claimable": True}
+
+    result = controller.arbitrate_controller(snapshot)
+
+    assert result["global_zero_work"] is False
+    assert result["next_action"] == "refresh_controller_evidence"
+    assert (
+        "implementation_admission_reason_histogram_value_must_be_non_negative_integer"
+        in result["reasons"]
+    )
+
+
 def test_stale_zero_work_proof_fails_closed_for_all_freshness_inputs() -> None:
     """Head, issue, claim, PR, audit, and discovery drift invalidate a receipt."""
     snapshot = _snapshot()

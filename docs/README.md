@@ -31,6 +31,10 @@ own index so you never fall straight into issue-specific context notes.
 > Internal context notes and issue-specific working files live under `docs/context/` and are linked
 > from the Research/Developer layers only — they are kept out of the user path.
 
+Current research-contract entry points include the [issue #8068 observation-only goal-posterior
+baseline](./context/issue_8068_goal_posterior_actor_baseline.md), which is a transparent
+one-frame smoke baseline rather than calibrated or benchmark evidence.
+
 ## Static Docs Site
 
 This repository includes a lightweight Sphinx site over the existing Markdown docs. Build it from

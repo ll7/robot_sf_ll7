@@ -2369,6 +2369,39 @@ def _archive_notice_paths(package: dict[str, Any]) -> set[str]:
     return paths
 
 
+def _policy_archive_notice_mapping(
+    policy_row: dict[str, Any],
+) -> set[tuple[str, str, str, str]]:
+    """Derive exact archive-kind/upstream-URL mappings from one policy row."""
+    immutable_urls = [
+        (url, _upstream_notice_path(url))
+        for url in policy_row.get("upstream", {}).get("notice_paths", [])
+        if isinstance(url, str) and _upstream_notice_path(url) is not None
+    ]
+    mappings: set[tuple[str, str, str, str]] = set()
+    package_root = (
+        f"{_canonicalize_name(policy_row.get('package', ''))}-{policy_row.get('version', '')}/"
+    )
+    for archive_path in policy_row.get("upstream", {}).get("archive_notice_paths", []):
+        if not isinstance(archive_path, str):
+            continue
+        kind = "sdist" if archive_path.startswith(package_root) else "wheel"
+        matching_urls = [
+            (url, upstream_path)
+            for url, upstream_path in immutable_urls
+            if archive_path.endswith(f"/{upstream_path}") or archive_path.endswith(upstream_path)
+        ]
+        if matching_urls:
+            # A broad ``LICENSE`` URL must not also claim a nested vendored notice.
+            longest_path = max(len(upstream_path) for _url, upstream_path in matching_urls)
+            mappings.update(
+                (archive_path, kind, upstream_path, url)
+                for url, upstream_path in matching_urls
+                if len(upstream_path) == longest_path
+            )
+    return mappings
+
+
 def _archive_artifact_issues(
     package: dict[str, Any],
     policy_row: dict[str, Any],
@@ -2380,7 +2413,21 @@ def _archive_artifact_issues(
     expected_artifacts = policy_row.get("artifacts", [])
     if not isinstance(artifacts, list):
         return [f"dependency archive audit artifacts are missing for {identity[0]}"]
-    allowed_keys = {"kind", "filename", "sha256", "size", "platform_tags", "notice_paths"}
+    allowed_keys = {
+        "kind",
+        "filename",
+        "url",
+        "sha256",
+        "size",
+        "platform_tags",
+        "archive_path",
+        "member_count",
+        "notice_paths",
+        "metadata_path",
+        "metadata_license",
+        "metadata_project_urls",
+        "metadata_fields",
+    }
     authoritative = ("kind", "filename", "sha256", "size", "platform_tags")
     actual_ids: set[tuple[str, str, str, int]] = set()
     for index, artifact in enumerate(artifacts):
@@ -2409,10 +2456,23 @@ def _archive_artifact_issues(
     }
     if actual_ids != expected_ids or len(actual_ids) != len(artifacts):
         issues.append(f"dependency archive audit artifact identities differ for {identity[0]}")
+    actual_mappings = {
+        (path, str(artifact.get("kind")))
+        for artifact in artifacts
+        if isinstance(artifact, dict)
+        for path in artifact.get("notice_paths", [])
+        if isinstance(path, str)
+    }
+    expected_mappings = {
+        (path, kind)
+        for path, kind, _upstream_path, _url in _policy_archive_notice_mapping(policy_row)
+    }
+    if actual_mappings != expected_mappings:
+        issues.append(f"dependency archive audit notice mappings differ for {identity[0]}")
     return issues
 
 
-def _archive_audit_semantic_issues(  # noqa: C901, PLR0912
+def _archive_audit_semantic_issues(  # noqa: C901, PLR0912, PLR0915
     archive_file: dict[str, Any],
     batch_rows: list[dict[str, Any]],
 ) -> list[str]:
@@ -2449,12 +2509,12 @@ def _archive_audit_semantic_issues(  # noqa: C901, PLR0912
             "pypi_metadata_url",
             "pypi_info",
             "artifacts",
-            "archive_notice_paths",
-            "archive_notice_absences",
         }
         if set(package) != expected_package_keys:
             issues.append(f"dependency archive audit package {identity[0]} has unclassified fields")
-        if package.get("name") != policy_row.get("package"):
+        if not isinstance(package.get("name"), str) or _canonicalize_name(
+            package["name"]
+        ) != _canonicalize_name(policy_row.get("package")):
             issues.append(f"dependency archive audit package name differs for {identity[0]}")
         if package.get("expected_expression") != policy_row.get("license_expression"):
             issues.append(f"dependency archive audit license expression differs for {identity[0]}")
@@ -2472,10 +2532,69 @@ def _archive_audit_semantic_issues(  # noqa: C901, PLR0912
         if package.get("pypi_metadata_url") != expected_url:
             issues.append(f"dependency archive audit metadata URL differs for {identity[0]}")
         pypi_info = package.get("pypi_info")
-        if not isinstance(pypi_info, dict) or pypi_info.get("name") != policy_row.get("package"):
+        expected_pypi_keys = {
+            "name",
+            "version",
+            "requires_python",
+            "license",
+            "classifiers",
+            "home_page",
+            "project_urls",
+        }
+        if not isinstance(pypi_info, dict) or set(pypi_info) != expected_pypi_keys:
+            issues.append(
+                f"dependency archive audit PyPI metadata schema is invalid for {identity[0]}"
+            )
+        if (
+            not isinstance(pypi_info, dict)
+            or not isinstance(pypi_info.get("name"), str)
+            or _canonicalize_name(pypi_info["name"])
+            != _canonicalize_name(policy_row.get("package"))
+        ):
             issues.append(f"dependency archive audit PyPI identity is invalid for {identity[0]}")
         if not isinstance(pypi_info, dict) or pypi_info.get("version") != policy_row.get("version"):
             issues.append(f"dependency archive audit PyPI version is invalid for {identity[0]}")
+        if isinstance(pypi_info, dict):
+            if not isinstance(pypi_info.get("name"), str) or not isinstance(
+                pypi_info.get("version"), str
+            ):
+                issues.append(
+                    f"dependency archive audit PyPI identity types are invalid for {identity[0]}"
+                )
+            requires_python = pypi_info.get("requires_python")
+            if requires_python != policy_row.get("python_requires"):
+                issues.append(
+                    f"dependency archive audit PyPI requires_python differs for {identity[0]}"
+                )
+            if requires_python is not None and not isinstance(requires_python, str):
+                issues.append(
+                    f"dependency archive audit PyPI requires_python type is invalid for {identity[0]}"
+                )
+            if pypi_info.get("license") is not None and not isinstance(
+                pypi_info.get("license"), str
+            ):
+                issues.append(
+                    f"dependency archive audit PyPI license type is invalid for {identity[0]}"
+                )
+            if not isinstance(pypi_info.get("classifiers"), list) or not all(
+                isinstance(item, str) for item in pypi_info["classifiers"]
+            ):
+                issues.append(
+                    f"dependency archive audit PyPI classifiers are invalid for {identity[0]}"
+                )
+            if pypi_info.get("home_page") is not None and not isinstance(
+                pypi_info.get("home_page"), str
+            ):
+                issues.append(
+                    f"dependency archive audit PyPI home_page type is invalid for {identity[0]}"
+                )
+            if not isinstance(pypi_info.get("project_urls"), dict) or not all(
+                isinstance(key, str) and isinstance(value, str)
+                for key, value in pypi_info["project_urls"].items()
+            ):
+                issues.append(
+                    f"dependency archive audit PyPI project_urls are invalid for {identity[0]}"
+                )
         issues.extend(_archive_artifact_issues(package, policy_row, identity))
         expected_notice_paths = {
             path
@@ -2484,16 +2603,11 @@ def _archive_audit_semantic_issues(  # noqa: C901, PLR0912
         }
         if _archive_notice_paths(package) != expected_notice_paths:
             issues.append(f"dependency archive audit notice paths differ for {identity[0]}")
-        expected_absences = {
-            path
-            for path in policy_row.get("upstream", {}).get("archive_notice_absences", [])
-            if isinstance(path, str)
-        }
-        actual_absences = {
-            path for path in package.get("archive_notice_absences", []) if isinstance(path, str)
-        }
-        if actual_absences != expected_absences:
-            issues.append(f"dependency archive audit notice absences differ for {identity[0]}")
+        expected_absences = policy_row.get("upstream", {}).get("archive_notice_absences", [])
+        if expected_absences:
+            issues.append(
+                f"dependency archive audit notice absences are not supported for {identity[0]}"
+            )
     if observed_identities != set(expected_by_identity):
         issues.append("dependency archive audit identities are not an exact policy set")
     return issues
@@ -2538,6 +2652,7 @@ def _upstream_tags_semantic_issues(  # noqa: C901, PLR0912, PLR0915
             "name",
             "version",
             "repository",
+            "tags",
             "tag",
             "matching_tags",
             "errors",
@@ -2565,7 +2680,18 @@ def _upstream_tags_semantic_issues(  # noqa: C901, PLR0912, PLR0915
             continue
         if entry.get("repository") != expected_repo:
             issues.append(f"dependency upstream repository differs for {identity[0]}")
-        if entry.get("tag") != expected_tag or entry.get("matching_tags") != [expected_tag]:
+        tags = entry.get("tags")
+        matching_tags = entry.get("matching_tags")
+        if (
+            entry.get("tag") != expected_tag
+            or not isinstance(tags, list)
+            or not all(isinstance(value, str) for value in tags)
+            or len(tags) != len(set(tags))
+            or expected_tag not in tags
+            or not isinstance(matching_tags, list)
+            or not all(isinstance(value, str) for value in matching_tags)
+            or not set(matching_tags).issubset(tags)
+        ):
             issues.append(f"dependency upstream tag identity differs for {identity[0]}")
         if entry.get("errors") != [] or entry.get("source_url_key") != "Source":
             issues.append(f"dependency upstream tag result is not clean for {identity[0]}")
@@ -2577,9 +2703,10 @@ def _upstream_tags_semantic_issues(  # noqa: C901, PLR0912, PLR0915
             for path in (_upstream_notice_path(url) for url in upstream.get("notice_paths", []))
             if path is not None
         }
+        expected_mappings = _policy_archive_notice_mapping(policy_row)
         actual_archive_paths: set[str] = set()
         actual_upstream_paths: set[str] = set()
-        actual_pairs: set[tuple[Any, str, str]] = set()
+        actual_mappings: set[tuple[Any, str, str, str]] = set()
         if not isinstance(checks, list):
             issues.append(f"dependency upstream notice checks are missing for {identity[0]}")
             continue
@@ -2621,14 +2748,12 @@ def _upstream_tags_semantic_issues(  # noqa: C901, PLR0912, PLR0915
                 issues.append(
                     f"dependency upstream notice URL path differs from policy for {identity[0]}"
                 )
-            if isinstance(archive_path, str) and isinstance(upstream_path, str):
-                actual_pairs.add((archive_kind, archive_path, upstream_path))
-            if (
-                check.get("status") != "present"
-                or reference is None
-                or reference[0] != expected_repo.removeprefix("https://github.com/")
-                or reference[1] != expected_commit
+            if all(
+                isinstance(value, str)
+                for value in (archive_path, archive_kind, upstream_path, review_url)
             ):
+                actual_mappings.add((archive_path, archive_kind, upstream_path, review_url))
+            if check.get("status") != "present" or reference is None:
                 issues.append(
                     f"dependency upstream notice check is not immutably bound for {identity[0]}"
                 )
@@ -2636,7 +2761,9 @@ def _upstream_tags_semantic_issues(  # noqa: C901, PLR0912, PLR0915
             issues.append(f"dependency upstream archive notice paths differ for {identity[0]}")
         if actual_upstream_paths != expected_upstream_paths:
             issues.append(f"dependency upstream notice paths differ for {identity[0]}")
-        if len(actual_pairs) != len(checks):
+        if actual_mappings != expected_mappings:
+            issues.append(f"dependency upstream notice mappings differ for {identity[0]}")
+        if len(actual_mappings) != len(checks):
             issues.append(f"dependency upstream notice checks contain duplicates for {identity[0]}")
     if observed != set(expected_by_identity):
         issues.append("dependency upstream tags identities are not an exact policy set")

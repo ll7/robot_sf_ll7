@@ -20,15 +20,17 @@ from typing import TYPE_CHECKING
 
 from scripts.tools.check_dependency_license_inventory import (
     SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS,
+    _archive_audit_semantic_issues,
     _candidate_receipt_semantic_issues,
     _effective_profile_coverage,
     _exact_policy_coverage_failures,
     _github_notice_reference,
     _match_package_disposition,
+    _policy_archive_notice_mapping,
     _policy_records,
     _policy_source_matches,
     _report_content_digest,
-    _upstream_notice_path,
+    _upstream_tags_semantic_issues,
     build_inventory,
     check_report_freshness,
     main,
@@ -1233,10 +1235,35 @@ def test_issue_8163_rehashed_audit_mutations_still_fail_semantically(  # noqa: P
                     key: value for key, value in row["source"].items() if key != "metadata_url"
                 },
                 "pypi_metadata_url": row["source"]["metadata_url"],
-                "pypi_info": {"name": row["package"], "version": row["version"]},
-                "artifacts": row["artifacts"],
-                "archive_notice_paths": row["upstream"]["archive_notice_paths"],
-                "archive_notice_absences": row["upstream"]["archive_notice_absences"],
+                "pypi_info": {
+                    "name": row["package"],
+                    "version": row["version"],
+                    "requires_python": row["python_requires"],
+                    "license": None,
+                    "classifiers": [],
+                    "home_page": None,
+                    "project_urls": {},
+                },
+                "artifacts": [
+                    {
+                        **artifact,
+                        "url": "https://files.example/" + artifact["filename"],
+                        "archive_path": "",
+                        "member_count": 1,
+                        "notice_paths": [
+                            path
+                            for path, kind, _upstream_path, _url in _policy_archive_notice_mapping(
+                                row
+                            )
+                            if kind == artifact["kind"]
+                        ],
+                        "metadata_path": "",
+                        "metadata_license": None,
+                        "metadata_project_urls": {},
+                        "metadata_fields": {},
+                    }
+                    for artifact in row["artifacts"]
+                ],
             }
             for row in rows
         ],
@@ -1245,25 +1272,25 @@ def test_issue_8163_rehashed_audit_mutations_still_fail_semantically(  # noqa: P
     tags = []
     for row in rows:
         checks = []
-        for notice_url in row["upstream"]["notice_paths"]:
-            reference = _github_notice_reference(notice_url)
-            notice_path = _upstream_notice_path(notice_url)
-            if reference is not None and notice_path is not None:
-                checks.append(
-                    {
-                        "archive_kind": row["artifacts"][0]["kind"],
-                        "archive_path": row["upstream"]["archive_notice_paths"][0],
-                        "review_url": notice_url,
-                        "status": "present",
-                        "upstream_path": notice_path,
-                    }
-                )
+        for archive_path, archive_kind, notice_path, notice_url in _policy_archive_notice_mapping(
+            row
+        ):
+            checks.append(
+                {
+                    "archive_kind": archive_kind,
+                    "archive_path": archive_path,
+                    "review_url": notice_url,
+                    "status": "present",
+                    "upstream_path": notice_path,
+                }
+            )
         tags.append(
             {
                 "name": row["package"],
                 "version": row["version"],
                 "repository": row["upstream"]["repository"],
                 "tag": row["upstream"]["tag"],
+                "tags": [row["upstream"]["tag"]],
                 "matching_tags": [row["upstream"]["tag"]],
                 "errors": [],
                 "source_url_key": "Source",
@@ -1316,6 +1343,16 @@ def test_issue_8163_rehashed_audit_mutations_still_fail_semantically(  # noqa: P
             "archive-extra",
             lambda value: value["packages"][0].__setitem__("forged", True),
             "archive audit package",
+        ),
+        (
+            "pypi-extra",
+            lambda value: value["packages"][0]["pypi_info"].__setitem__("forged", True),
+            "PyPI metadata schema",
+        ),
+        (
+            "pypi-requires-python",
+            lambda value: value["packages"][0]["pypi_info"].__setitem__("requires_python", ">=0"),
+            "PyPI requires_python differs",
         ),
         (
             "artifact-platform",
@@ -1397,6 +1434,102 @@ def test_issue_8163_receipt_paths_reject_traversal_and_symlinks(tmp_path: Path) 
         "archive audit is missing" in issue
         for issue in validate_dependency_license_receipt(root, linked_path)
     )
+
+
+def test_issue_8163_cross_repository_notice_mapping_is_exact() -> None:
+    """A vendored notice may use its own immutable repository, but never a swapped tuple."""
+    root = Path(__file__).resolve().parents[2]
+    policy = json.loads(
+        (root / "scripts/validation/dependency_license_policy.v1.json").read_text(encoding="utf-8")
+    )
+    row = next(
+        item
+        for item in policy["package_dispositions"]
+        if item["package"] == "alembic"
+        and "docs/context/evidence/dependency_license_batch_2026-09-01.md"
+        in item.get("evidence_paths", [])
+    )
+    mappings = sorted(_policy_archive_notice_mapping(row))
+    archive = {
+        "schema_version": "robot-sf.issue-8163-archive-audit.v1",
+        "packages": [
+            {
+                "name": row["package"],
+                "version": row["version"],
+                "expected_expression": row["license_expression"],
+                "source": {
+                    key: value for key, value in row["source"].items() if key != "metadata_url"
+                },
+                "pypi_metadata_url": row["source"]["metadata_url"],
+                "pypi_info": {
+                    "name": row["package"],
+                    "version": row["version"],
+                    "requires_python": row["python_requires"],
+                    "license": None,
+                    "classifiers": [],
+                    "home_page": None,
+                    "project_urls": {},
+                },
+                "artifacts": [
+                    {
+                        **artifact,
+                        "url": "https://files.example/" + artifact["filename"],
+                        "archive_path": "",
+                        "member_count": 1,
+                        "notice_paths": [
+                            path for path, kind, _path, _url in mappings if kind == artifact["kind"]
+                        ],
+                        "metadata_path": "",
+                        "metadata_license": None,
+                        "metadata_project_urls": {},
+                        "metadata_fields": {},
+                    }
+                    for artifact in row["artifacts"]
+                ],
+            }
+        ],
+        "failures": [],
+    }
+    tags = [
+        {
+            "name": row["package"],
+            "version": row["version"],
+            "source_url_key": "Source",
+            "repository": row["upstream"]["repository"],
+            "tags": [row["upstream"]["tag"]],
+            "matching_tags": [row["upstream"]["tag"]],
+            "errors": [],
+            "tag": row["upstream"]["tag"],
+            "notice_checks": [
+                {
+                    "archive_kind": kind,
+                    "archive_path": archive_path,
+                    "upstream_path": upstream_path,
+                    "status": "present",
+                    "review_url": review_url,
+                }
+                for archive_path, kind, upstream_path, review_url in mappings
+            ],
+        }
+    ]
+    assert _archive_audit_semantic_issues(archive, [row]) == []
+    assert _upstream_tags_semantic_issues(tags, [row], archive) == []
+
+    forged = copy.deepcopy(tags)
+    forged[0]["notice_checks"][1]["review_url"] = (
+        "https://github.com/FortAwesome/Font-Awesome/blob/" + "0" * 40 + "/LICENSE.txt"
+    )
+    assert _upstream_tags_semantic_issues(forged, [row], archive)
+
+    swapped = copy.deepcopy(tags)
+    (
+        swapped[0]["notice_checks"][0]["archive_path"],
+        swapped[0]["notice_checks"][1]["archive_path"],
+    ) = (
+        swapped[0]["notice_checks"][1]["archive_path"],
+        swapped[0]["notice_checks"][0]["archive_path"],
+    )
+    assert _upstream_tags_semantic_issues(swapped, [row], archive)
 
 
 def test_issue_8163_rehashed_strict_report_rejects_extra_semantics(tmp_path: Path) -> None:

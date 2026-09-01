@@ -16,7 +16,7 @@ compute/evidence gate.
 ## Selector contract
 
 `scripts/dev/base_sensitive_selector.py` defines selector
-`pytest-marker-files.v1`: a pull request is `base_sensitive` when its changed
+`pytest-marker-files.v2`: a pull request is `base_sensitive` when its changed
 file inventory intersects a test file containing the repository's registered
 `@pytest.mark.base_sensitive` contract. A complete inventory with no
 intersection is `ordinary`. Missing or malformed inventory is `unknown` and

@@ -21,7 +21,7 @@
   },
   "source": {
     "base_ref": "origin/main",
-    "source_sha": "c7cc6ec331790b8bc61a4d47d75240f0b3d50453",
+    "source_sha": "7a487e04a953e3441ffabba8b118cc7b0f089f8a",
     "uv_lock_sha256": "de2b22de6327164a9abda93f9d0a1fdb38316471f17ab6428ebc52ed7da603c6",
     "policy_audit_commit": "c5254f5f243b2fa489b28910b332bc77ab893dcd"
   },
@@ -38,7 +38,7 @@
   "candidate_binding": {
     "status": "bound",
     "repository": "ll7/robot_sf_ll7",
-    "source_sha": "c7cc6ec331790b8bc61a4d47d75240f0b3d50453",
+    "source_sha": "7a487e04a953e3441ffabba8b118cc7b0f089f8a",
     "workflow": {
       "run_attempt": 1,
       "run_id": "1"
@@ -51,12 +51,12 @@
       "all"
     ],
     "expected_component_count": 145,
-    "manifest_sha256": "6f5d5aa704f5cd6da8955e8a0ac5de40f997db9d89cdaf20d76a4337bfb9ef37",
+    "manifest_sha256": "bf2f0488b8e17d5e933ad6a67f8b1aa0ef692fe42c73435fcb84cdfed68cca52",
     "materialization": {
-      "candidate_commit_sha": "22243d72a95bb02f2364f846b171373749210996",
+      "candidate_commit_sha": "a97fa60fe66bf21d964f36db5a3ebdd40978c256",
       "candidate_inventory_path": "scripts/validation/software_candidate_asset_rights.v1.json",
       "candidate_metadata_path": "SOFTWARE_CANDIDATE.json",
-      "candidate_tree_sha": "bba5ffe74a010907ddb9e5346017d707ded7c299",
+      "candidate_tree_sha": "be97e70469b0f6c223b47e67765813b67a5a6c2c",
       "policy_path": "scripts/validation/software_candidate_policy.v1.json",
       "policy_sha256": "8e02808a9e342e7c50aff6aa1a038de4b00f9e60a875b0f0b2ddd5d036888d6d",
       "source_inventory_path": "scripts/validation/asset_rights_inventory.v1.yaml",
@@ -72,7 +72,7 @@
       {
         "filename": "candidate-provenance.json",
         "kind": "provenance",
-        "sha256": "a7b94aa8600e4814aa58cae7c4bfc8c51c1128692c3d71f1d4274047020552a8",
+        "sha256": "426c3cc05321b60ed44a1203b92ee8d925538476bb1714e231208cb43eeede47",
         "size": 2579
       },
       {
@@ -96,7 +96,7 @@
     ]
   },
   "strict_report": {
-    "path": "operator-local:/tmp/issue8163-current-candidate.sKwJGN/inventory-final-policy.json",
+    "path": "operator-local:/tmp/issue8163-current-head.4MoU3S/inventory-final-strict-all.json",
     "exit_code": 2,
     "candidate_bound": true,
     "surface_profile_ids": [

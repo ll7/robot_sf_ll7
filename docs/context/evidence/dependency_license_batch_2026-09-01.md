@@ -15,7 +15,7 @@ This note preserves the bounded evidence for the first 36 exact dependency rows 
 
 ## Reproducibility inputs
 
-- Base/source commit: `c7cc6ec331790b8bc61a4d47d75240f0b3d50453` (`origin/main` at preparation).
+- Base ref: `origin/main` at `b7216532e26081879f42b76e8cf268b460e8715d`; candidate source commit: `7a487e04a953e3441ffabba8b118cc7b0f089f8a` (merged current base plus this evidence change).
 - `uv.lock` SHA-256: `de2b22de6327164a9abda93f9d0a1fdb38316471f17ab6428ebc52ed7da603c6`.
 - Exact archive audit: operator-local `/tmp/issue8163-archive-audit/archive-audit.json`, SHA-256 `3bb2e3cba161be5f27427f42d2a72b12b4b581beed09aab0db3ffeae8c4f0447`, schema `robot-sf.issue-8163-archive-audit.v1`, 36 packages / 72 artifacts / zero audit failures.
 - Exact upstream tag checks: operator-local `/tmp/issue8163-archive-audit/upstream-tags.json`, SHA-256 `8de0debdebc5664995a846fbfe4166a84c8a981370688ab3c88cfa4736a489c8`.
@@ -23,13 +23,13 @@ This note preserves the bounded evidence for the first 36 exact dependency rows 
 
 ## Candidate binding receipt
 
-- Bound status: `bound`; repository `ll7/robot_sf_ll7`; source SHA `c7cc6ec331790b8bc61a4d47d75240f0b3d50453`; workflow run `1` attempt `1`.
+- Bound status: `bound`; repository `ll7/robot_sf_ll7`; source SHA `7a487e04a953e3441ffabba8b118cc7b0f089f8a`; workflow run `1` attempt `1`.
 - Candidate package: `robot_sf` `0.0.6`; selected profile IDs `['all']`; selected SBOM component count `145`.
-- Candidate manifest SHA-256: `6f5d5aa704f5cd6da8955e8a0ac5de40f997db9d89cdaf20d76a4337bfb9ef37`; SBOM `robot_sf-0.0.6.cyclonedx.json` SHA-256 `8602d598f32f4264e2a8a32088d0a41d9dd07bc19ffcd55780dd1e26531b5ce8`; component-set SHA-256 `aa6c94073eb332e09a4fab6433f308f1c41b46e87b08704cadb1dfef6a9ad186`.
-- Candidate materialization: commit `22243d72a95bb02f2364f846b171373749210996`, tree `bba5ffe74a010907ddb9e5346017d707ded7c299`, policy `scripts/validation/software_candidate_policy.v1.json` SHA-256 `8e02808a9e342e7c50aff6aa1a038de4b00f9e60a875b0f0b2ddd5d036888d6d`.
+- Candidate manifest SHA-256: `bf2f0488b8e17d5e933ad6a67f8b1aa0ef692fe42c73435fcb84cdfed68cca52`; SBOM `robot_sf-0.0.6.cyclonedx.json` SHA-256 `8602d598f32f4264e2a8a32088d0a41d9dd07bc19ffcd55780dd1e26531b5ce8`; component-set SHA-256 `aa6c94073eb332e09a4fab6433f308f1c41b46e87b08704cadb1dfef6a9ad186`.
+- Candidate materialization: commit `a97fa60fe66bf21d964f36db5a3ebdd40978c256`, tree `be97e70469b0f6c223b47e67765813b67a5a6c2c`, policy `scripts/validation/software_candidate_policy.v1.json` SHA-256 `8e02808a9e342e7c50aff6aa1a038de4b00f9e60a875b0f0b2ddd5d036888d6d`.
 - Candidate members (all hashes are retained in the receipt): `robot_sf-0.0.6-py3-none-any.whl`, `robot_sf-0.0.6.tar.gz`, CycloneDX SBOM, and provenance record.
 - The SBOM was exported with the supported extras and normalized to the selected profile-all lock closure before assembly. The raw export contained ten target-inactive/unselected universal-lock identities; those were excluded, with no selected component omitted. This is diagnostic candidate evidence, not a release pass; the receipt records the exact transformation and report digest.
-- Strict report: operator-local `/tmp/issue8163-current-candidate.sKwJGN/inventory-final-policy.json`, exit code `2`, `candidate_bound=true`, `surface.profile_ids=["all"]`, unresolved count `181`; the final report digest is recorded in the PR handoff because embedding it here would make the freshness input self-referential.
+- Strict report: operator-local `/tmp/issue8163-current-head.4MoU3S/inventory-final-strict-all.json`, exit code `2`, `candidate_bound=true`, `surface.profile_ids=["all"]`, unresolved count `181`; the final report digest is recorded in the PR handoff because embedding it here would make the freshness input self-referential.
 
 ## Exact metadata and frozen artifacts
 

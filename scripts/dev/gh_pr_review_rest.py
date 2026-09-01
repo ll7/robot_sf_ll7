@@ -11,9 +11,11 @@ from typing import Any
 
 from scripts.dev._gh_rest import gh_api_review_post as _gh_api_post
 from scripts.dev._gh_rest import parse_json as _parse_json
+from scripts.dev.github_transport_policy import get_transport_contract
 from scripts.dev.pr_write_guard import DEFAULT_REPO, guard_pr_write, pr_write_lock
 
 REVIEW_EVENTS = ("COMMENT", "APPROVE", "REQUEST_CHANGES")
+TRANSPORT_CONTRACT = get_transport_contract("gh_pr_review_rest.py")
 
 
 def _read_body_file(body_file: Path) -> tuple[str | None, str | None]:

@@ -49,6 +49,12 @@ done
 
 [[ -n "$NUMBER" ]] || usage
 
+if ! python3 "$SCRIPT_DIR/github_transport_policy.py" check \
+  --helper "$SCRIPT_DIR/gh_issue_view.sh" --root "$SCRIPT_DIR/../.." --json >/dev/null; then
+  echo "Error: gh_issue_view.sh is not admitted by the GitHub transport policy." >&2
+  exit 2
+fi
+
 ARGS=()
 if [[ -n "$REPO" ]]; then
   ARGS+=("--repo" "$REPO")

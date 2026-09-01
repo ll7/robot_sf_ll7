@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+HELPER = REPO_ROOT / "scripts" / "dev" / "software_candidate_manifest.py"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "software-candidate.yml"
 WHEEL_INSTALL_SMOKE = REPO_ROOT / "scripts" / "validation" / "wheel_install_smoke.sh"
 ACTION_PINS = {
@@ -20,6 +25,15 @@ ACTION_PINS = {
 
 def _workflow() -> tuple[str, dict[str, Any]]:
     text = WORKFLOW.read_text(encoding="utf-8")
+    payload = yaml.safe_load(text)
+    assert isinstance(payload, dict)
+    return text, payload
+
+
+def _workflow_at(repo_root: Path) -> tuple[str, dict[str, Any]]:
+    """Load the candidate workflow from a specific checkout."""
+    workflow_path = repo_root / ".github" / "workflows" / "software-candidate.yml"
+    text = workflow_path.read_text(encoding="utf-8")
     payload = yaml.safe_load(text)
     assert isinstance(payload, dict)
     return text, payload
@@ -72,6 +86,179 @@ def test_workflow_keeps_python_bytecode_outside_the_frozen_source() -> None:
     _text, workflow = _workflow()
 
     assert workflow["env"]["PYTHONDONTWRITEBYTECODE"] == "1"
+
+
+def test_workflow_bootstraps_one_isolated_pinned_helper_environment() -> None:
+    """Every candidate helper uses one clean, reviewed dependency surface."""
+    text, workflow = _workflow()
+    assert workflow["env"]["PYTHONPATH"] == ""
+    steps = _steps(workflow)
+    bootstrap_index, bootstrap = next(
+        (index, step)
+        for index, step in enumerate(steps)
+        if step.get("name") == "Bootstrap isolated software-candidate helper environment"
+    )
+    bootstrap_run = bootstrap["run"]
+    assert bootstrap["env"]["HELPER_ENV"] == "${{ runner.temp }}/robot-sf-software-candidate-helper"
+    assert 'uv venv --python "${python_bin}" "${HELPER_ENV}"' in bootstrap_run
+    assert 'uv pip install --python "${HELPER_ENV}/bin/python"' in bootstrap_run
+    assert '"packaging==26.0"' in bootstrap_run
+    assert '"pyyaml==6.0.3"' in bootstrap_run
+    assert bootstrap_run.count('"packaging==26.0"') == 1
+    assert bootstrap_run.count('"pyyaml==6.0.3"') == 1
+    assert "SOFTWARE_CANDIDATE_PYTHON=%s/bin/python" in bootstrap_run
+
+    helper_runs = [
+        (index, step["run"])
+        for index, step in enumerate(steps)
+        if "software_candidate_manifest.py" in step.get("run", "")
+    ]
+    assert len(helper_runs) == 8
+    assert all(
+        '"${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/software_candidate_manifest.py' in run
+        for _index, run in helper_runs
+    )
+    assert bootstrap_index < min(index for index, _run in helper_runs)
+    assert "python scripts/dev/software_candidate_manifest.py" not in text
+
+    version_run = next(
+        step["run"] for step in steps if step.get("name") == "Validate version alignment"
+    )
+    assert '"${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/check_version_alignment.py' in version_run
+    license_run = next(
+        step["run"]
+        for step in steps
+        if step.get("name") == "Validate candidate archive members and strict rights"
+    )
+    assert (
+        '"${SOFTWARE_CANDIDATE_PYTHON}" scripts/tools/check_distribution_licenses.py' in license_run
+    )
+    assert "uv run --no-project --with" not in license_run
+
+
+def test_clean_runner_bootstraps_and_checks_the_cloned_helper_offline(tmp_path: Path) -> None:
+    """The real bootstrap reaches semantic validation from an offline source clone."""
+    uv = shutil.which("uv")
+    if uv is None:
+        pytest.fail("uv is required to exercise the clean-runner bootstrap contract")
+    clean_repo = tmp_path / "clean-source"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--no-hardlinks", str(REPO_ROOT), str(clean_repo)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    source_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=clean_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    workflow_text, workflow = _workflow_at(clean_repo)
+    bootstrap = next(
+        step
+        for step in _steps(workflow)
+        if step.get("name") == "Bootstrap isolated software-candidate helper environment"
+    )
+    bootstrap_run = bootstrap["run"]
+    assert "uv run" not in bootstrap_run
+    clone_helper = clean_repo / "scripts" / "dev" / "software_candidate_manifest.py"
+    assert clone_helper.is_file()
+    assert clone_helper != HELPER
+    assert "software_candidate_manifest.py" in workflow_text
+
+    python312 = shutil.which("python3.12")
+    if python312 is None:
+        pytest.fail("python3.12 is required to match the GitHub Actions bootstrap runtime")
+    cache_dir = subprocess.run(
+        [uv, "cache", "dir"],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={
+            key: value
+            for key, value in os.environ.items()
+            if key != "XDG_CACHE_HOME" and not key.startswith("UV_") and key != "UV"
+        },
+    ).stdout.strip()
+    assert cache_dir
+    tool_bin = tmp_path / "tool-bin"
+    tool_bin.mkdir()
+    (tool_bin / "python").symlink_to(python312)
+    (tool_bin / "uv").symlink_to(uv)
+
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key
+        not in {
+            "PYTHONHOME",
+            "PYTHONPATH",
+            "PYTHONUSERBASE",
+            "UV_PROJECT_ENVIRONMENT",
+            "VIRTUAL_ENV",
+        }
+        and not key.startswith("UV_")
+        and key != "UV"
+    }
+    env.update(
+        {
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONNOUSERSITE": "1",
+            "PYTHONPATH": "",
+            "UV_NO_CONFIG": "1",
+            "UV_OFFLINE": "1",
+            "UV_CACHE_DIR": cache_dir,
+            "HELPER_ENV": str(tmp_path / "helper-env"),
+            "GITHUB_ENV": str(tmp_path / "github-env"),
+            "PATH": f"{tool_bin}{os.pathsep}{os.environ['PATH']}",
+        }
+    )
+    bootstrap_result = subprocess.run(
+        ["bash", "--noprofile", "--norc", "-euo", "pipefail", "-c", bootstrap_run],
+        cwd=tmp_path,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert bootstrap_result.returncode == 0, (
+        f"bootstrap failed with exit code {bootstrap_result.returncode}:\n"
+        f"stdout:\n{bootstrap_result.stdout}\n"
+        f"stderr:\n{bootstrap_result.stderr}"
+    )
+    github_env = dict(
+        line.split("=", maxsplit=1)
+        for line in Path(env["GITHUB_ENV"]).read_text(encoding="utf-8").splitlines()
+        if "=" in line
+    )
+    helper_python = Path(github_env["SOFTWARE_CANDIDATE_PYTHON"])
+    assert helper_python == Path(env["HELPER_ENV"]) / "bin" / "python"
+    assert helper_python.is_file()
+
+    helper_command = [
+        str(helper_python),
+        str(clone_helper),
+        "check-source",
+        "--repo-root",
+        str(clean_repo),
+        "--source-sha",
+        source_sha,
+    ]
+    assert helper_command[1] == str(clone_helper)
+    assert helper_command[1] != str(HELPER)
+    result = subprocess.run(
+        helper_command,
+        cwd=tmp_path,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert f"PASS: source identity is clean and exact at {source_sha}" in result.stdout
+    assert "No module named 'yaml'" not in result.stderr
 
 
 def test_workflow_builds_only_from_staged_external_exact_commit() -> None:
@@ -185,6 +372,12 @@ def test_workflow_builds_once_then_only_validates_and_admits_same_dist_bytes() -
 
     dependency_index, dependency_run = next(
         (index, run) for index, run in run_steps if "check_dependency_license_inventory.py" in run
+    )
+    assert dependency_run.startswith(
+        '"${SOFTWARE_CANDIDATE_PYTHON}" "${BUILD_SOURCE}/scripts/tools/'
+    )
+    assert 'python "${BUILD_SOURCE}/scripts/tools/check_dependency_license_inventory.py"' not in (
+        dependency_run
     )
     assert '--repo-root "${BUILD_SOURCE}"' in dependency_run
     assert '--candidate-bundle "${BUNDLE_DIR}"' in dependency_run

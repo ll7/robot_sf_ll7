@@ -1042,7 +1042,7 @@ class GhProjectClient:
     ) -> None:
         """Write a numeric field value back to the project item."""
 
-        number_literal = format(number, ".8g")
+        number_literal = _numeric_field_literal(number)
         self.run(
             "project",
             "item-edit",
@@ -1055,6 +1055,29 @@ class GhProjectClient:
             "--number",
             number_literal,
         )
+
+
+#: GitHub Projects numeric fields reject values with more than 8 decimal
+#: places, and ``Format.General`` style floats can produce scientific
+#: notation. Every written literal is quantized to at most 8 decimal places
+#: and validated against this shape before the ``item-edit`` call.
+_NUMERIC_FIELD_LITERAL_RE = re.compile(r"-?\d+(\.\d{1,8})?")
+
+
+def _numeric_field_literal(number: float) -> str:
+    """Return a plain decimal literal with at most 8 decimal places.
+
+    Raises:
+        ValueError: When the quantized value would not match GitHub's
+            documented numeric shape (never scientific notation).
+    """
+    literal = f"{number:.8f}".rstrip("0").rstrip(".")
+    if not literal or not _NUMERIC_FIELD_LITERAL_RE.fullmatch(literal):
+        raise ValueError(
+            "numeric project value exceeds the documented 8-decimal limit: "
+            f"{literal!r} (from {number!r})"
+        )
+    return literal
 
 
 def field_map(fields: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -1564,13 +1587,41 @@ def _apply_score_updates(
             expected_graphql_requests=len(updates),
             min_graphql_remaining=options.min_graphql_remaining,
         )
-    for preview, item in updates:
-        client.update_number_field(
-            item_id=str(item["id"]),
-            field_id=score_field_id,
-            project_id=project_id,
-            number=preview.new_score,
-        )
+    plan = client.last_eligibility_plan
+    attempted_rows: list[dict[str, Any]] = []
+    writes_performed = 0
+    try:
+        for preview, item in updates:
+            row = {
+                "issue_number": preview.issue_number,
+                "item_id": str(item.get("id")),
+                "written": False,
+            }
+            attempted_rows.append(row)
+            client.update_number_field(
+                item_id=str(item["id"]),
+                field_id=score_field_id,
+                project_id=project_id,
+                number=preview.new_score,
+            )
+            row["written"] = True
+            writes_performed += 1
+    except (RuntimeError, ValueError, TypeError) as exc:
+        # A rejected write (for example GitHub's numeric-shape enforcement) must
+        # not crash the run before the structured summary is written: record the
+        # attempted rows, the writes that landed, and the retryability verdict.
+        if plan is not None:
+            plan["status"] = "apply_failed"
+            plan["failure"] = {
+                "error": str(exc),
+                "attempted_rows": attempted_rows,
+                "writes_performed": writes_performed,
+                "retryable": True,
+            }
+        return False
+    if plan is not None:
+        plan["attempted_rows"] = attempted_rows
+        plan["writes_performed_count"] = writes_performed
     return True
 
 
@@ -1622,19 +1673,27 @@ def sync_scores(
     )
     items_by_issue = _index_issue_items(items)
 
+    score_field_id = str(fields[PRIORITY_SCORE_FIELD]["id"])
+    # The guarded write set joins to the eligibility plan's eligible rows only:
+    # a row the plan skipped (for example a terminal Project status) must never
+    # produce an item-edit, even when its preview carries a computed score.
+    score_previews = previews
     issue_snapshots: dict[int, dict[str, Any]] = {}
     if options.only_empty:
-        previews, issue_snapshots = _build_eligibility_plan(
+        eligible_previews, issue_snapshots = _build_eligibility_plan(
             client,
             options,
             previews,
             items_by_issue,
             items,
         )
+        eligible_numbers = {preview.issue_number for preview in eligible_previews}
+        score_previews = [
+            preview for preview in previews if preview.issue_number in eligible_numbers
+        ]
 
-    score_field_id = str(fields[PRIORITY_SCORE_FIELD]["id"])
     updates = _pending_score_updates(
-        previews,
+        score_previews,
         items_by_issue,
         dry_run=options.dry_run,
         round_digits=options.round_digits,
@@ -1651,7 +1710,7 @@ def sync_scores(
         return []
     _finalize_eligibility_plan(client, options, updates=updates)
 
-    return previews
+    return score_previews
 
 
 def _build_parser() -> argparse.ArgumentParser:

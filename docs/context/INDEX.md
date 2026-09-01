@@ -1,5 +1,11 @@
 # Context Retrieval Index
 
+Issue #8205 observation-derived tracker goal-belief adapter: a default-off, actor-safe bridge
+from `PedestrianTrackingResult` to `GoalBeliefV1`, with stable track ordering, global-frame
+timing, explicit visibility/history masks, reset provenance, and smoke-only evidence. It does not
+claim tracking or prediction quality and does not accept simulator identity or true goals:
+[issue_8205_tracker_adapter_smoke.md](issue_8205_tracker_adapter_smoke.md).
+
 Issue #7889 force-coupled potential-field comparator: an opt-in experimental local planner with
 strict observation and occupancy-grid validation, bounded command-rate behavior, deterministic
 analytic smoke, and explicit implementation-only evidence boundaries. It does not establish

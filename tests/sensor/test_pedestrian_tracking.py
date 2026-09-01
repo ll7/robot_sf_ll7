@@ -135,7 +135,6 @@ def test_singular_covariance_gate_rejects_residual_in_zero_variance_direction() 
     assert result.track(1).status is TrackStatus.LOST
     assert result.track(2).status is TrackStatus.TENTATIVE
 
-
 def test_static_reorder_keeps_track_identity_and_source_slot_is_diagnostic() -> None:
     """Nearest-first row reorder cannot exchange histories."""
     tracker = _tracker()
@@ -384,7 +383,6 @@ def test_oracle_identity_permutation_cannot_change_actor_tracking() -> None:
         )
         for association in result_b.associations
     ]
-
 
 def test_oracle_assignment_accuracy_stays_bounded_across_frames() -> None:
     """Cumulative assignment accuracy uses associations, not unique track count."""

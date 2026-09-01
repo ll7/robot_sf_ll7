@@ -51,9 +51,11 @@ def test_detect_worktrees_filters_by_issue_slug_and_reports_total(
     tmp_path: Path,
 ) -> None:
     """Filtering should avoid dumping every linked worktree into parent context."""
-    main = tmp_path / "main"
-    issue = tmp_path / "issue-2715-compact-ci-worktree-snapshots"
-    other = tmp_path / "other"
+    parent_with_filter_token = tmp_path / "parent-2715"
+    parent_with_filter_token.mkdir()
+    main = parent_with_filter_token / "main"
+    issue = parent_with_filter_token / "issue-2715-compact-ci-worktree-snapshots"
+    other = parent_with_filter_token / "other"
     main.mkdir()
     issue.mkdir()
     other.mkdir()
@@ -97,6 +99,17 @@ def test_detect_worktrees_filters_by_issue_slug_and_reports_total(
     assert worktrees[0].is_current is True
     assert worktrees[0].is_fresh is True
     assert worktrees[0].bootstrap_required is True
+
+
+def test_filter_uses_explicit_path_substrings_without_parent_path_false_matches() -> None:
+    """Path matching remains available when the filter explicitly contains a separator."""
+    row = {
+        "path": "/repo/issue-2715-compact-ci-worktree-snapshots",
+        "branch": "issue-2715-compact-ci-worktree-snapshots",
+    }
+
+    assert snapshot._matches_filters(row, ["/repo/issue-2715"])
+    assert not snapshot._matches_filters(row, ["/tmp/2715"])
 
 
 def test_include_all_worktrees_does_not_slice_to_zero(monkeypatch, tmp_path: Path) -> None:

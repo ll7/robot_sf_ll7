@@ -130,9 +130,14 @@ TRANSPORT_CONTRACTS: dict[str, TransportContract] = {
     ),
     "gh_pr_merge.sh": TransportContract(
         helper="gh_pr_merge.sh",
-        purpose="perform an exact-head native merge with a worktree-conflict REST fallback",
+        purpose=(
+            "perform an exact-head native merge with worktree-conflict or "
+            "GraphQL-quota REST fallback"
+        ),
         allowed_transports=("native_gh", "rest_fallback"),
-        fallback_markers=("already used by worktree",),
+        # This is a transport-level marker.  gh_pr_merge.sh applies the
+        # narrower rate-limit/quota predicate before entering this fallback.
+        fallback_markers=("already used by worktree", "graphql:"),
         fail_closed_markers=FAIL_CLOSED_ERROR_MARKERS,
         smoke_test="tests/test_ci_script_contract.py",
     ),

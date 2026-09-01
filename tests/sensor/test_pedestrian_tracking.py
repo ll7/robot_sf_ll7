@@ -294,6 +294,43 @@ def test_failed_update_does_not_advance_temporal_cursor(monkeypatch) -> None:
     assert retried.track(1).status is TrackStatus.CONFIRMED
 
 
+def test_failed_update_rolls_back_partial_track_mutations(monkeypatch) -> None:
+    """A failed update cannot consume a track retirement before the same snapshot is retried."""
+    tracker = _tracker(max_missed_seconds=0.5)
+    tracker.update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]]))
+
+    def fail_build_cost_matrix(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise RuntimeError("synthetic cost-matrix failure")
+
+    monkeypatch.setattr(tracker, "_build_cost_matrix", fail_build_cost_matrix)
+    with pytest.raises(RuntimeError, match="cost-matrix"):
+        tracker.update(
+            _snapshot(
+                1.0,
+                1,
+                [[float("nan"), float("nan")]],
+                [[float("nan"), float("nan")]],
+                visible=[False],
+            )
+        )
+
+    assert tracker.tracks[0].status is TrackStatus.TENTATIVE
+    assert tracker.tracks[0].timestamp_s == 0.0
+
+    monkeypatch.undo()
+    retried = tracker.update(
+        _snapshot(
+            1.0,
+            1,
+            [[float("nan"), float("nan")]],
+            [[float("nan"), float("nan")]],
+            visible=[False],
+        )
+    )
+    assert retried.track(1).status is TrackStatus.RETIRED
+
+
 def test_timestamp_gap_grows_lost_covariance() -> None:
     """Constant-velocity process covariance scales with elapsed seconds."""
     tracker = _tracker(process_noise=1.0, max_missed_seconds=10.0)

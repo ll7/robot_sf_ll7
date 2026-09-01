@@ -1426,6 +1426,31 @@ class _TrackState:
     history_valid_mask: np.ndarray
 
 
+def _clone_track_state(state: _TrackState) -> _TrackState:
+    """Return an independent snapshot of mutable tracker state for rollback."""
+    return _TrackState(
+        track_id=state.track_id,
+        position=np.array(state.position, dtype=float, copy=True),
+        velocity=np.array(state.velocity, dtype=float, copy=True),
+        position_covariance=np.array(state.position_covariance, dtype=float, copy=True),
+        velocity_covariance=np.array(state.velocity_covariance, dtype=float, copy=True),
+        timestamp_s=state.timestamp_s,
+        step_index=state.step_index,
+        age_steps=state.age_steps,
+        visible_age_steps=state.visible_age_steps,
+        missed_steps=state.missed_steps,
+        missed_seconds=state.missed_seconds,
+        status=state.status,
+        association_confidence=state.association_confidence,
+        last_observation_slot=state.last_observation_slot,
+        blockers=tuple(state.blockers),
+        position_history=np.array(state.position_history, dtype=float, copy=True),
+        velocity_history=np.array(state.velocity_history, dtype=float, copy=True),
+        timestamp_history=np.array(state.timestamp_history, dtype=float, copy=True),
+        history_valid_mask=np.array(state.history_valid_mask, dtype=bool, copy=True),
+    )
+
+
 def _isotropic_covariance(value: float) -> np.ndarray:
     """Return an isotropic 2x2 covariance."""
     return np.eye(2, dtype=float) * float(value)
@@ -1580,7 +1605,32 @@ class PedestrianTracker:
         self._last_timestamp_s = None
         self._last_step_index = None
 
-    def update(  # noqa: C901, PLR0912, PLR0915
+    def update(self, snapshot: PedestrianObservationSnapshot) -> PedestrianTrackingResult:
+        """Consume one snapshot atomically and return deterministic tracking output.
+
+        A failed update must not consume a temporal cursor, track ID, or partial
+        mutable track transition. This keeps the same snapshot retryable after
+        an internal estimator or result-construction failure.
+
+        Returns:
+            An immutable tracking result for the snapshot timestamp.
+        """
+        state_snapshot = {
+            track_id: _clone_track_state(state) for track_id, state in self._tracks.items()
+        }
+        next_track_id = self._next_track_id
+        last_timestamp_s = self._last_timestamp_s
+        last_step_index = self._last_step_index
+        try:
+            return self._update(snapshot)
+        except Exception:
+            self._tracks = state_snapshot
+            self._next_track_id = next_track_id
+            self._last_timestamp_s = last_timestamp_s
+            self._last_step_index = last_step_index
+            raise
+
+    def _update(  # noqa: C901, PLR0912, PLR0915
         self, snapshot: PedestrianObservationSnapshot
     ) -> PedestrianTrackingResult:
         """Consume one snapshot and return deterministic tracks plus diagnostics.

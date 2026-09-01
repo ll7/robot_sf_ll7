@@ -1025,12 +1025,69 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - clo
     summary = report.get("summary")
     if not isinstance(summary, dict):
         raise PromotionError("supported dependency report has no summary")
+    packages = report.get("packages")
+    if not isinstance(packages, list) or not packages:
+        raise PromotionError("supported dependency report has no package rows")
+    selected_rows: list[dict[str, Any]] = []
+    package_ids: set[str] = set()
+    for row in packages:
+        if not isinstance(row, dict):
+            raise PromotionError("supported dependency report package row is malformed")
+        package_id = row.get("package_id")
+        if not isinstance(package_id, str) or not package_id:
+            raise PromotionError("supported dependency report package identity is invalid")
+        if package_id in package_ids:
+            raise PromotionError("supported dependency report contains duplicate package rows")
+        package_ids.add(package_id)
+        selected_profiles = row.get("selected_profiles")
+        if selected_profiles is not None and (
+            not isinstance(selected_profiles, list)
+            or any(
+                not isinstance(profile_id, str) or not profile_id
+                for profile_id in selected_profiles
+            )
+        ):
+            raise PromotionError("supported dependency report package selection is malformed")
+        if selected_profiles:
+            selected_rows.append(row)
+    profiles = report.get("profiles")
+    if not isinstance(profiles, list) or not profiles:
+        raise PromotionError("supported dependency report has no profile rows")
+    profile_ids: set[str] = set()
+    for profile in profiles:
+        if not isinstance(profile, dict) or not isinstance(profile.get("id"), str):
+            raise PromotionError("supported dependency report profile row is malformed")
+        profile_id = profile["id"]
+        if not profile_id:
+            raise PromotionError("supported dependency report profile identity is invalid")
+        if profile_id in profile_ids:
+            raise PromotionError("supported dependency report contains duplicate profile rows")
+        profile_ids.add(profile_id)
+    failures = report.get("failures")
+    structural_issues = report.get("structural_issues")
+    if not isinstance(failures, list) or not isinstance(structural_issues, list):
+        raise PromotionError("supported dependency report findings are malformed")
+    pending_rows = [
+        row for row in selected_rows if row.get("policy_disposition") == "review_required"
+    ]
+    expected_summary = {
+        "selected_package_count": len(selected_rows),
+        "policy_pending_package_count": len(pending_rows),
+        "unresolved_count": len(failures),
+        "structural_issue_count": len(structural_issues),
+    }
+    for field, expected in expected_summary.items():
+        value = summary.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value != expected:
+            raise PromotionError(
+                f"supported dependency report summary.{field} is inconsistent with rows"
+            )
     if summary.get("status") != "complete" or summary.get("candidate_bound") is not True:
         raise PromotionError("supported dependency report is not a complete candidate binding")
     unresolved = summary.get("unresolved_count")
     if isinstance(unresolved, bool) or not isinstance(unresolved, int) or unresolved != 0:
         raise PromotionError("supported dependency report contains unresolved rows")
-    if report.get("failures") != [] or report.get("structural_issues") != []:
+    if failures != [] or structural_issues != []:
         raise PromotionError("supported dependency report contains failures")
     _validate_canonical_dependency_inputs(report, path, repo_root=repo_root)
 
@@ -1209,6 +1266,12 @@ def _validate_rights_admission(  # noqa: C901, PLR0912, PLR0915 - closed rights 
     policy_sha256 = sanitized.get("policy_sha256")
     if not isinstance(policy_sha256, str) or not SHA256_PATTERN.fullmatch(policy_sha256):
         raise PromotionError("rights admission policy digest is invalid")
+    policy_path = repo_root / RIGHTS_POLICY_PATH
+    _require_real_file(policy_path, label="trusted rights admission policy")
+    if _sha256(policy_path) != policy_sha256:
+        raise PromotionError(
+            "rights admission policy digest differs from the trusted source checkout"
+        )
     tree_sha256 = sanitized.get("tree_sha256")
     if not isinstance(tree_sha256, str) or not SHA256_PATTERN.fullmatch(tree_sha256):
         raise PromotionError("rights admission sanitized tree digest is invalid")

@@ -291,13 +291,10 @@ def test_adapter_orders_serialized_track_ids_lexically() -> None:
     assert len(set(expected)) == 3
 
 
-def test_adapter_rejects_track_decision_point_mismatch() -> None:
+def test_result_rejects_track_decision_point_mismatch() -> None:
     """A track from another decision point cannot be silently joined to a result batch."""
     result = _tracking_result()
     mismatched_track = replace(result.tracks[0], step_index=1)
-    mismatched_result = replace(result, tracks=(mismatched_track,))
 
-    with pytest.raises(ValueError, match="track step_index"):
-        TrackerGoalBeliefAdapter(TrackerGoalBeliefAdapterConfig(enabled=True)).adapt(
-            mismatched_result
-        )
+    with pytest.raises(ValueError, match="tracks must match"):
+        replace(result, tracks=(mismatched_track,))

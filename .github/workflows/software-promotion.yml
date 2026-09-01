@@ -149,8 +149,21 @@ jobs:
       - name: Checkout promotion verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.source_sha }}
           persist-credentials: false
           fetch-depth: 1
+
+      - name: Verify exact candidate-source checkout
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          checked_out_sha="$(git rev-parse HEAD)"
+          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ || "${checked_out_sha}" != "${SOURCE_SHA}" || "${WORKFLOW_SHA}" != "${SOURCE_SHA}" ]]; then
+            echo "promotion verifier checkout is not the exact candidate source SHA" >&2
+            exit 1
+          fi
 
       - name: Require the protected main-branch workflow
         run: |
@@ -344,8 +357,21 @@ jobs:
       - name: Checkout promotion verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.source_sha }}
           persist-credentials: false
           fetch-depth: 1
+
+      - name: Verify exact candidate-source checkout
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          checked_out_sha="$(git rev-parse HEAD)"
+          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ || "${checked_out_sha}" != "${SOURCE_SHA}" || "${WORKFLOW_SHA}" != "${SOURCE_SHA}" ]]; then
+            echo "promotion verifier checkout is not the exact candidate source SHA" >&2
+            exit 1
+          fi
 
       - name: Set up Python 3.12
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -599,8 +625,21 @@ jobs:
       - name: Checkout promotion verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.source_sha }}
           persist-credentials: false
           fetch-depth: 1
+
+      - name: Verify exact candidate-source checkout
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          checked_out_sha="$(git rev-parse HEAD)"
+          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ || "${checked_out_sha}" != "${SOURCE_SHA}" || "${WORKFLOW_SHA}" != "${SOURCE_SHA}" ]]; then
+            echo "promotion verifier checkout is not the exact candidate source SHA" >&2
+            exit 1
+          fi
 
       - name: Set up Python 3.12
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -838,8 +877,21 @@ jobs:
       - name: Checkout promotion verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.source_sha }}
           persist-credentials: false
           fetch-depth: 1
+
+      - name: Verify exact candidate-source checkout
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          checked_out_sha="$(git rev-parse HEAD)"
+          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ || "${checked_out_sha}" != "${SOURCE_SHA}" || "${WORKFLOW_SHA}" != "${SOURCE_SHA}" ]]; then
+            echo "promotion verifier checkout is not the exact candidate source SHA" >&2
+            exit 1
+          fi
 
       - name: Set up Python 3.12
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -1137,8 +1189,21 @@ jobs:
       - name: Checkout promotion verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.source_sha }}
           persist-credentials: false
           fetch-depth: 1
+
+      - name: Verify exact candidate-source checkout
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          checked_out_sha="$(git rev-parse HEAD)"
+          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ || "${checked_out_sha}" != "${SOURCE_SHA}" || "${WORKFLOW_SHA}" != "${SOURCE_SHA}" ]]; then
+            echo "promotion verifier checkout is not the exact candidate source SHA" >&2
+            exit 1
+          fi
 
       - name: Set up Python 3.12
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0

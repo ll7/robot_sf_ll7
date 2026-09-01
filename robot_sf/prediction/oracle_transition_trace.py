@@ -896,7 +896,8 @@ class OracleTransitionTraceV1:
         if self.reset_provenance is not None:
             require_text(self.reset_provenance, "reset_provenance")
         mutations = self.post_behavior_pre_force.mutation_flags
-        assert mutations is not None
+        if mutations is None:
+            raise ValueError("post_behavior_pre_force requires mutation flags")
         required_reasons = set()
         if mutations.hold_velocity_reset:
             required_reasons.add(ExactInverseReason.HOLD_VELOCITY_RESET)

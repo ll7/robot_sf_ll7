@@ -14,13 +14,13 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
-latest_reconciliation_issue: 7634
-latest_reviewed_date: 2026-08-21
+latest_reconciliation_issue: 8237
+latest_reviewed_date: 2026-09-01
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 430
-refreshed_baseline_files_with_findings: 96
+refreshed_baseline_total_findings: 429
+refreshed_baseline_files_with_findings: 95
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -124,6 +124,11 @@ decision_summary: >-
   byte-stable and the recorded artifact hash matches; the generic linter resolves an embedded
   verifier hash against the current source after a later builder refresh. Restore the explicit
   baseline disposition without rewriting the frozen receipt or promoting any evidence claim.
+#8237 disposition: remediate. The E_release_checklist digest in the
+#4683 assurance-case example was recomputed against the exact final-head
+# docs/RELEASE.md bytes and is already current at this head. No
+# artifact_hash_mismatch was admitted to the machine baseline; the six
+# pre-existing hash_without_artifact_path findings remain unchanged.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -385,4 +390,3 @@ reviewed_baseline_increases:
       ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
       this checkout-dependent historical provenance finding explicitly; do not rewrite the
       artifact or producer SHA in this baseline reconciliation.
-

@@ -28,6 +28,8 @@ name: Evidence-registry ratchet
 on:
   pull_request:
     paths:
+      - "docs/RELEASE.md"
+      - "CITATION.cff"
       - "docs/context/evidence/**"
       - "scripts/dev/evidence_registry_ratchet.py"
       - "scripts/tools/lint_evidence_registry.py"

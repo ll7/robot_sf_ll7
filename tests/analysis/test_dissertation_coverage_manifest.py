@@ -1,5 +1,7 @@
 """Focused contract tests for the dissertation-coverage aggregate."""
 
+# evidence-writer-exempt: these tests write only pytest tmp_path fixtures to exercise fail-closed source drift and duplicate-ID handling; no repository evidence is written.
+
 from __future__ import annotations
 
 import copy

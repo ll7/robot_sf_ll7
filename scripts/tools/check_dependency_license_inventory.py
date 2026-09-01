@@ -3335,7 +3335,7 @@ def _receipt_contract_issues(  # noqa: C901, PLR0912, PLR0915
                     contract_version=(
                         SUMMARY_CONTRACT_VERSION
                         if receipt_schema_version == _DEPENDENCY_RECEIPT_SCHEMA_VERSION_V2
-                        else None
+                        else _LEGACY_SUMMARY_CONTRACT_VERSION
                     ),
                 )
             )

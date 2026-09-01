@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from scripts.tools.check_dependency_license_inventory import (
+    _LEGACY_SUMMARY_CONTRACT_VERSION,
     SUMMARY_CONTRACT_VERSION,
     SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS,
     _archive_audit_semantic_issues,
@@ -873,6 +874,26 @@ def test_v2_receipt_summary_separates_findings_and_pending_rows() -> None:
         expected_policy_count=37,
     )
     assert any("structural count exceeds unresolved count" in issue for issue in issues)
+
+
+def test_v1_receipt_cannot_select_v2_summary_semantics() -> None:
+    """A legacy top-level receipt cannot smuggle in the v2 count interpretation."""
+    summary = {
+        "policy_exact_disposition_count": 37,
+        "policy_pending_package_count": 119,
+        "unresolved_count": 255,
+        "structural_issue_count": 2,
+        "summary_contract_version": SUMMARY_CONTRACT_VERSION,
+        "status": "blocked",
+    }
+    issues = _strict_report_summary_contract_issues(
+        summary,
+        receipt_status="blocked",
+        expected_policy_count=37,
+        contract_version=_LEGACY_SUMMARY_CONTRACT_VERSION,
+    )
+    assert any("does not match receipt schema" in issue for issue in issues)
+    assert any("unresolved count differs from pending count" in issue for issue in issues)
 
 
 def test_freshness_fails_when_a_locked_input_changes(tmp_path: Path) -> None:

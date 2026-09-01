@@ -274,7 +274,6 @@
     "seed_flip_mining.py",
     "seed_variance.py",
     "signal_metrics.py",
-    "slurm_launch_manifest.py",
     "simulator_counterfactual_adapter.py",
     "simulator_dependence_validity_boundary.py",
     "slurm_launch_manifest.py",

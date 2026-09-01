@@ -279,8 +279,13 @@ def _candidate(
         "structural_issues": [],
         "summary": {
             "candidate_bound": True,
-            "selected_package_count": 155,
-            "policy_pending_package_count": 118,
+            "selected_package_count": CANONICAL_INVENTORY["summary"]["selected_package_count"],
+            "policy_pending_package_count": sum(
+                1
+                for package in CANONICAL_INVENTORY["packages"]
+                if package.get("selected_profiles")
+                and package.get("policy_disposition") == "review_required"
+            ),
             "structural_issue_count": 0,
             "status": "complete",
             "unresolved_count": 0,

@@ -1,0 +1,132 @@
+{
+  "schema_version": "goal_candidate_provider_smoke_receipt.v1",
+  "issue": 8073,
+  "comparison_base": "08d1815a51ada4909c6475b70a99804670264ea1",
+  "claim_boundary": "implementation_integrity_and_candidate_coverage_only",
+  "evidence_status": "smoke evidence",
+  "config_hash": "fdde86f16f453a2755c2afac3b6311cf8af07f27557ab2766aab7b86def621cd",
+  "command": "scripts/dev/run_worktree_shared_venv.sh --profile all-extras -- uv run python scripts/research/run_goal_candidate_provider_smoke.py --output-json output/issue-8073-goal-candidate-smoke.json",
+  "candidate_row_format": "candidate_id|role|source|parent_destination_id_or_dash",
+  "candidate_rows": {
+    "blocked_destination": [
+      "goal-candidate-1c1e04a2c0cf381369f2|unknown|unknown|-",
+      "goal-candidate-49e50e67ec00337f1382|open_ray|open_ray|-",
+      "goal-candidate-52ad486f6c35785bb657|open_ray|open_ray|-",
+      "goal-candidate-9309a098605c6aa7352d|open_ray|open_ray|-",
+      "goal-candidate-b843fb49d6e15b606fe1|open_ray|open_ray|-"
+    ],
+    "crossing": [
+      "goal-candidate-12c6d89518c658ad6184|final_destination|crossing_entry_exit|-",
+      "goal-candidate-1854d3b14fb9b56aa069|active_waypoint|feasible_path_waypoint|goal-candidate-84da542e784fe0df2be6",
+      "goal-candidate-1c1e04a2c0cf381369f2|unknown|unknown|-",
+      "goal-candidate-21a6602fee3733452f56|final_destination|crossing_entry_exit|-",
+      "goal-candidate-62bc13668f0e6b767425|final_destination|crossing_entry_exit|-",
+      "goal-candidate-84da542e784fe0df2be6|final_destination|crossing_entry_exit|-",
+      "goal-candidate-a001568fff2fb7c1be4a|active_waypoint|feasible_path_waypoint|goal-candidate-12c6d89518c658ad6184",
+      "goal-candidate-a08c94ebd4713703cb64|active_waypoint|feasible_path_waypoint|goal-candidate-21a6602fee3733452f56",
+      "goal-candidate-d909ff037b1e2f365aed|active_waypoint|feasible_path_waypoint|goal-candidate-62bc13668f0e6b767425"
+    ],
+    "doorway": [
+      "goal-candidate-1c1e04a2c0cf381369f2|unknown|unknown|-",
+      "goal-candidate-9766fb7f54d534692635|active_waypoint|feasible_path_waypoint|goal-candidate-cf9680814059e5ba118c",
+      "goal-candidate-cf9680814059e5ba118c|final_destination|door_or_exit|-",
+      "goal-candidate-f291905347ed79b203e3|active_waypoint|feasible_path_waypoint|goal-candidate-ffb70697376028d9a01f",
+      "goal-candidate-ffb70697376028d9a01f|final_destination|door_or_exit|-"
+    ],
+    "multiple_homotopies": [
+      "goal-candidate-026109fda0dcdd987ddb|active_waypoint|feasible_path_waypoint|goal-candidate-70fb4d6d927882955716",
+      "goal-candidate-1c1e04a2c0cf381369f2|unknown|unknown|-",
+      "goal-candidate-70fb4d6d927882955716|final_destination|pedestrian_route_terminal|-",
+      "goal-candidate-b71216ad647d8b85c75c|active_waypoint|feasible_path_waypoint|goal-candidate-cd0f9a5e3c717e893d75",
+      "goal-candidate-cd0f9a5e3c717e893d75|final_destination|pedestrian_route_terminal|-"
+    ],
+    "open_room": [
+      "goal-candidate-1c1e04a2c0cf381369f2|unknown|unknown|-",
+      "goal-candidate-49e50e67ec00337f1382|open_ray|open_ray|-",
+      "goal-candidate-52ad486f6c35785bb657|open_ray|open_ray|-",
+      "goal-candidate-9309a098605c6aa7352d|open_ray|open_ray|-",
+      "goal-candidate-b843fb49d6e15b606fe1|open_ray|open_ray|-"
+    ],
+    "straight_corridor": [
+      "goal-candidate-12c6d89518c658ad6184|final_destination|corridor_endpoint|-",
+      "goal-candidate-1854d3b14fb9b56aa069|active_waypoint|feasible_path_waypoint|goal-candidate-84da542e784fe0df2be6",
+      "goal-candidate-1c1e04a2c0cf381369f2|unknown|unknown|-",
+      "goal-candidate-84da542e784fe0df2be6|final_destination|corridor_endpoint|-",
+      "goal-candidate-a001568fff2fb7c1be4a|active_waypoint|feasible_path_waypoint|goal-candidate-12c6d89518c658ad6184"
+    ],
+    "true_goal_absent": [
+      "goal-candidate-12c6d89518c658ad6184|final_destination|map_destination_zone|-",
+      "goal-candidate-1c1e04a2c0cf381369f2|unknown|unknown|-",
+      "goal-candidate-a001568fff2fb7c1be4a|active_waypoint|feasible_path_waypoint|goal-candidate-12c6d89518c658ad6184"
+    ]
+  },
+  "scenarios": {
+    "blocked_destination": {
+      "candidate_count": 5,
+      "rejected_count": 1,
+      "rejection_reasons": ["path_intersects_declared_obstacle"],
+      "runtime_ms_observed": 1.324118,
+      "candidate_set_digest": "cf58032989a28d879fdf528bd165ee57fc49cf8fb355a336439aba0b8eebb5be",
+      "map_digest": "00414e037ba0c4db16d6b659f037fb512877249910a5e2718e0a0c392548c568"
+    },
+    "crossing": {
+      "candidate_count": 9,
+      "rejected_count": 0,
+      "runtime_ms_observed": 2.160864,
+      "candidate_set_digest": "9d552fa539fe9fc596bc4dcec7991ca126c84876f272bafa35966519e69258e5",
+      "map_digest": "2631f0dd98cece09ddf219f7f6c27b46383b3f361d538d3e7aaf7e57c00e7d70"
+    },
+    "doorway": {
+      "candidate_count": 5,
+      "rejected_count": 0,
+      "runtime_ms_observed": 1.769151,
+      "candidate_set_digest": "448c1ccac9c66834a576faf8a34052796bfac69dfdaf4e1acf638923d40c1627",
+      "map_digest": "2ce126646cf863a5c3574ed12d997b00cad6fb735536e763ce58e8bff97c125b",
+      "coverage": {
+        "final_position_covered": true,
+        "direction_covered": false,
+        "route_signature_covered": true,
+        "unknown_needed": false,
+        "unknown_present": true,
+        "path_tangent_vs_direct_line_angle_rad": 0.380506
+      }
+    },
+    "multiple_homotopies": {
+      "candidate_count": 5,
+      "rejected_count": 1,
+      "rejection_reasons": ["homotopy_cap"],
+      "runtime_ms_observed": 1.423179,
+      "candidate_set_digest": "b3b264926f443abc67f516a92d02b5835c7cef2e61935d1d50e5a44ae24facb1",
+      "map_digest": "97a939b3d1857394721a1f999641fd20f676131a0f0455c75289fec353afde1a"
+    },
+    "open_room": {
+      "candidate_count": 5,
+      "rejected_count": 0,
+      "runtime_ms_observed": 1.422769,
+      "candidate_set_digest": "cf58032989a28d879fdf528bd165ee57fc49cf8fb355a336439aba0b8eebb5be",
+      "map_digest": "d870f3ef516b473560dd7e74db2fa7f9133e7d7a2ef2a0cdf79c48fc1811e5a4"
+    },
+    "straight_corridor": {
+      "candidate_count": 5,
+      "rejected_count": 0,
+      "runtime_ms_observed": 1.376789,
+      "candidate_set_digest": "4622fc2b045802e70b7e17f267ff8a349fe39a90cf7030613a9e66cfdc282f05",
+      "map_digest": "faa76e02bee72813d538e87c04ee442a009eda8cf7bb5b5df1bffd49bc208ca6"
+    },
+    "true_goal_absent": {
+      "candidate_count": 3,
+      "rejected_count": 0,
+      "runtime_ms_observed": 0.773735,
+      "candidate_set_digest": "8c89614ef1f55f01f35817bac4bb719f80f359097401e0bbe62cd9089145acd5",
+      "map_digest": "1e9dc073cffb3abd61e274ceec5a325053aa5d5d25f86adba9fc9b44d09e2e21",
+      "coverage": {
+        "final_position_covered": false,
+        "direction_covered": false,
+        "route_signature_covered": false,
+        "unknown_needed": true,
+        "unknown_present": true,
+        "path_tangent_vs_direct_line_angle_rad": null
+      }
+    }
+  }
+}

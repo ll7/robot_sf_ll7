@@ -447,6 +447,12 @@ _FAST_FILES = {
     "test_goal_posterior_planner_input.py",
     "test_goal_posterior_actor_smoke_issue_8068.py",
     "test_goal_posterior_planner_input_smoke_issue_4164.py",
+    # Public goal-candidate generation and candidate-coverage tests are
+    # deterministic schema/lineage contracts for the research provider;
+    # keep them in fast PR shards for the exact-head changed-coverage gate
+    # (issue #8073).
+    "test_goal_candidate_provider.py",
+    "test_goal_candidate_coverage.py",
     # Topology-guided local-policy tests are deterministic planner-contract
     # coverage for the changed adapter; keep them in fast PR shards for the
     # exact-head changed-coverage gate.

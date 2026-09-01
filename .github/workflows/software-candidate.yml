@@ -191,6 +191,7 @@ jobs:
           --bundle-dir "${BUNDLE_DIR}"
           --expected-source-sha "${GITHUB_SHA}"
           --expected-workflow-run-id "${GITHUB_RUN_ID}"
+          --expected-workflow-run-attempt "${GITHUB_RUN_ATTEMPT}"
 
       - name: Generate strict supported dependency inventory from finalized candidate
         run: >-

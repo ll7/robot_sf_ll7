@@ -399,6 +399,8 @@ def test_assemble_and_verify_bind_materialization_identity(tmp_path: Path) -> No
         source_sha,
         "--expected-workflow-run-id",
         "123456",
+        "--expected-workflow-run-attempt",
+        "1",
     )
 
 

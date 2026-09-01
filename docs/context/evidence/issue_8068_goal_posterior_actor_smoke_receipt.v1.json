@@ -3,7 +3,7 @@
   "schema": "issue_8068_goal_posterior_actor_smoke_receipt.v1",
   "issue": 8068,
   "status": "verified",
-  "source_commit": "97d8cf47d36a0fa7b03b374eb99ea01c8a983867",
+  "source_commit": "e081cffa6c2df1fd5d8ec2608bc8aa46b8da8911",
   "source_tree_scope": "observation-only heading baseline, explicit oracle boundary, tests, and smoke fixture",
   "claim_boundary": "implementation-integrity / smoke only",
   "research_claim": "none",
@@ -131,7 +131,7 @@
   "validation": [
     {
       "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/prediction/test_goal_intention.py tests/prediction/test_goal_posterior_actor_oracle_boundary.py tests/prediction/test_goal_posterior_planner_input.py tests/prediction/test_goal_posterior_actor_smoke_issue_8068.py tests/benchmark/test_goal_posterior_planner_input_smoke_issue_4164.py -q",
-      "result": "31 passed"
+      "result": "30 passed"
     },
     {
       "command": "scripts/dev/run_worktree_shared_venv.sh -- python scripts/benchmark/run_goal_posterior_actor_smoke_issue_8068.py --config configs/benchmarks/issue_8068_goal_posterior_actor_smoke.yaml --output <worktree-local-scratch-report>",

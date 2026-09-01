@@ -13,6 +13,10 @@ The normal command emits blocked evidence and exits successfully so CI can
 publish the report. Release preflight must add ``--fail-on-unresolved``.
 """
 
+# evidence-writer-exempt: this standalone CLI writes only local/CI output outside
+# docs/context/evidence and must preserve its existing byte-stable report contract;
+# durable checked-in evidence uses the shared writer and review sidecar.
+
 from __future__ import annotations
 
 import argparse
@@ -33,8 +37,6 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote, urlsplit
 
-from robot_sf.evidence.writers import write_json
-
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
@@ -47,6 +49,7 @@ PROFILE_SCHEMA_VERSION = "robot-sf.dependency-license-profiles.v1"
 UNREPRESENTED_POLICY_SCHEMA_VERSION = "robot-sf.dependency-license-unrepresented.v1"
 POLICY_SCHEMA_VERSION = "robot-sf.dependency-license-policy.v1"
 _UNKNOWN_VALUES = frozenset({"", "unknown", "unknown license", "none", "null"})
+_REVIEW_MARKER_JSON = "AI-GENERATED NEEDS-REVIEW"
 _REVIEW_MARKERS = (
     "licenseref-",
     "proprietary",
@@ -3281,10 +3284,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"FAIL: dependency license inventory could not be built: {exc}", file=sys.stderr)
         return 1
 
-    rendered = json.dumps(inventory, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    # Keep the report marker additive while retaining standalone invocation.  This
+    # CLI is also run by the dependency-review workflow as ``python
+    # scripts/tools/check_dependency_license_inventory.py``; importing the package
+    # writer here would fail in that invocation because Python puts only the script
+    # directory on ``sys.path``.  Durable checked-in evidence uses the shared writer
+    # and review sidecar; this output is a local/CI artifact outside that tree.
+    marked_inventory = {"review_marker": _REVIEW_MARKER_JSON, **inventory}
+    rendered = json.dumps(marked_inventory, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        write_json(args.output, inventory)
+        args.output.write_text(rendered, encoding="utf-8")
         print(f"wrote {args.output}")
     else:
         print(rendered, end="")

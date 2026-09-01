@@ -9,6 +9,8 @@ import copy
 import hashlib
 import io
 import json
+import subprocess
+import sys
 import tarfile
 import zipfile
 from email.message import Message
@@ -677,7 +679,6 @@ def test_cli_resolves_candidate_bundle_relative_to_repo_root(tmp_path: Path) -> 
         == 2
     )
     report = json.loads(report_path.read_text(encoding="utf-8"))
-    assert report["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
     assert report["summary"]["candidate_bound"] is True
     assert (
         main(
@@ -692,6 +693,40 @@ def test_cli_resolves_candidate_bundle_relative_to_repo_root(tmp_path: Path) -> 
         )
         == 0
     )
+
+
+def test_direct_checkout_invocation_writes_marked_report_without_package_import(
+    tmp_path: Path,
+) -> None:
+    """The workflow's direct ``python scripts/tools/...`` invocation stays portable."""
+    _write_inputs(tmp_path)
+    report_path = tmp_path / "output" / "dependency-license-inventory.json"
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    repo_root = Path(__file__).resolve().parents[2]
+    script = repo_root / "scripts" / "tools" / "check_dependency_license_inventory.py"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--repo-root",
+            str(tmp_path),
+            "--profile",
+            "core",
+            "--output",
+            str(report_path),
+        ],
+        check=False,
+        cwd=checkout,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert report["surface"]["profile_ids"] == ["core"]
 
 
 def test_unrepresented_rows_require_reviewed_reason_or_remain_strictly_unresolved(

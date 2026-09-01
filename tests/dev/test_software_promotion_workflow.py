@@ -72,7 +72,7 @@ def test_workflow_is_manual_and_least_privilege_by_default() -> None:
     assert all(step["with"].get("ref") == "${{ inputs.source_sha }}" for step in checkout_steps)
     assert text.count("Verify exact candidate-source checkout") == 5
     assert text.count('checked_out_sha="$(git rev-parse HEAD)"') == 5
-    assert text.count('WORKFLOW_SHA: ${{ github.sha }}') == 5
+    assert text.count("WORKFLOW_SHA: ${{ github.sha }}") == 5
     assert text.count('"${WORKFLOW_SHA}" != "${SOURCE_SHA}"') == 5
 
 

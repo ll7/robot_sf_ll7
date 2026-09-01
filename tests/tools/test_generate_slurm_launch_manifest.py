@@ -333,6 +333,16 @@ def test_validator_reports_malformed_top_level_contract(tmp_path: Path) -> None:
     assert any("aggregate artifact contract" in blocker for blocker in blockers)
 
 
+def test_validator_rejects_unsupported_schema_version(tmp_path: Path) -> None:
+    blockers = validate_launch_manifest(
+        {"schema_version": "robot-sf-slurm-launch-manifest.v0"},
+        manifest_path=tmp_path / "manifest.json",
+        repository_root=tmp_path,
+    )
+
+    assert blockers == [f"schema_version must be {SCHEMA_VERSION!r}"]
+
+
 def test_validator_reports_malformed_cells_and_records(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

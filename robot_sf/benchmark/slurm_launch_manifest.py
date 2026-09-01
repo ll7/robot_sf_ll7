@@ -787,7 +787,7 @@ def validate_launch_manifest(  # noqa: C901, PLR0912
     path = Path(manifest_path).resolve()
     blockers: list[str] = []
     if manifest.get("schema_version") != SCHEMA_VERSION:
-        return blockers
+        return [f"schema_version must be {SCHEMA_VERSION!r}"]
     _validate_no_outcome_fields(manifest, prefix="manifest", blockers=blockers)
     required_literals = {
         "manifest_kind": "pre-submit-launch",

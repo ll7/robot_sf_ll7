@@ -120,7 +120,7 @@
     },
     {
       "path": "docs/context/dependency_license_inventory.md",
-      "sha256": "0c13151f9261c4f5838d80efbb71e62ae38bda0097e2ab8c37b750cb1a5fa38e"
+      "sha256": "2ce10f1e0d6009f73c4d83b9bbeb8519e88b7a8ce25bdcba1e44ecb9f7ef4d3d"
     },
     {
       "path": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/trace_failure_predicate_tables.json",

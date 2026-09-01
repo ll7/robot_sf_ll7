@@ -11,6 +11,10 @@ drift cannot silently re-break agent workflows:
    rejected instead of crashing.
 3. ``gh_comment.sh`` publishes through the REST issue-comments endpoint and
    never depends on the GraphQL-backed ``gh issue comment`` path.
+4. ``gh_pr_merge.sh`` retries GraphQL quota exhaustion only after REST checks
+   re-verify exact head, PR state, clean mergeability, and a complete bounded
+   ``merge-ready`` label inventory; auth, repository, and other non-quota
+   errors stay fail-closed.
 """
 
 from __future__ import annotations
@@ -168,3 +172,47 @@ def test_comment_wrapper_documents_the_transport_rule() -> None:
     source = _source("gh_comment.sh")
     assert "REST" in source
     assert "GraphQL" in source
+
+
+# --- gh_pr_merge.sh: quota-only guarded REST fallback ------------------------
+
+
+def test_merge_wrapper_quota_fallback_rechecks_rest_guard_snapshot() -> None:
+    source = _source("gh_pr_merge.sh")
+    assert 'gh api "repos/${repo}/pulls/${pr_number}"' in source
+    assert ".head.sha" in source
+    assert ".draft" in source
+    assert ".mergeable_state" in source
+    assert "git config --get remote.origin.url" in source
+    assert 'local expected_host="${GH_HOST:-github.com}"' in source
+    assert '[[ "$host" == "$expected_host" ]] || return 1' in source
+    assert "invalid owner/name for the REST merge fallback" in source
+    assert '-f sha="$expected_head_sha"' in source
+
+
+def test_merge_wrapper_uses_complete_bounded_rest_label_read() -> None:
+    source = _source("gh_pr_merge.sh")
+    assert "REST_LABEL_PAGE_SIZE=100" in source
+    assert "REST_LABEL_PAGE_CEILING=10" in source
+    assert "issues/${number}/labels?per_page=${REST_LABEL_PAGE_SIZE}&page=${page}" in source
+    assert 'any(.[]; .name == "merge-ready")' in source
+    assert "pagination exceeded the page ceiling" in source
+
+
+def test_merge_wrapper_quota_trigger_keeps_fail_closed_precedence() -> None:
+    source = _source("gh_pr_merge.sh").casefold()
+    assert 'elif is_graphql_quota_failure "$merge_error"; then' in source
+    assert '"graphql:"' in source
+    assert '"rate limit"' in source
+    assert '"quota"' in source
+    assert '"exhausted"' in source
+    assert '"exceeded"' in source
+    for marker in (
+        "bad credentials",
+        "http 401",
+        "requires authentication",
+        "resource not accessible",
+        "could not resolve to a repository",
+        "repository not found",
+    ):
+        assert marker in source

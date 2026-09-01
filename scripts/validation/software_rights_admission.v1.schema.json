@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.dev/schema/software_rights_admission.v1.schema.json",
+  "title": "Robot SF rights-clean software admission receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["candidate", "sanitized", "strict_gate", "status", "schema_version", "supported_dependency_gate"],
+  "properties": {
+    "schema_version": {"const": "robot_sf.software_rights_admission.v1"},
+    "status": {"const": "accepted"},
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_digest", "artifact_id", "artifact_name", "manifest_sha256", "members", "package", "provenance_sha256", "sbom_sha256", "source_sha", "workflow_run_id"],
+      "properties": {
+        "artifact_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "artifact_id": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+        "artifact_name": {"type": "string", "pattern": "^robot-sf-software-candidate-[0-9a-f]{40}-[1-9][0-9]*-[1-9][0-9]*$"},
+        "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "members": {
+          "type": "array",
+          "minItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["filename", "kind", "sha256", "size"],
+            "properties": {
+              "filename": {"type": "string", "minLength": 1},
+              "kind": {"enum": ["wheel", "sdist", "sbom", "provenance"]},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "size": {"type": "integer", "minimum": 1}
+            }
+          }
+        },
+        "package": {"type": "object", "additionalProperties": false, "required": ["name", "version"], "properties": {"name": {"const": "robot_sf"}, "version": {"type": "string", "minLength": 1}}},
+        "provenance_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "sbom_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "workflow_run_id": {"type": "string", "pattern": "^[1-9][0-9]*$"}
+      }
+    },
+    "sanitized": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_id", "policy_path", "policy_sha256", "schema_version", "source_sha", "tree_sha256"],
+      "properties": {
+        "policy_id": {"const": "robot_sf.software_release_rights_policy.v1"},
+        "policy_path": {"const": "scripts/validation/software_release_rights_policy.v1.json"},
+        "policy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "schema_version": {"const": "robot_sf.software_sanitized_candidate.v1"},
+        "source_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "tree_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "strict_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "findings", "id", "policy_sha256", "source_sha", "status"],
+      "properties": {
+        "command": {"type": "string", "minLength": 1},
+        "findings": {"const": 0},
+        "id": {"const": "strict-distribution-rights"},
+        "policy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "status": {"const": "passed"}
+      }
+    },
+    "supported_dependency_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_manifest_sha256", "candidate_tree_sha256", "command", "id", "policy_path", "policy_sha256", "profile_manifest_path", "profile_manifest_sha256", "report_filename", "report_sha256", "schema_version", "source_sha", "status", "unresolved_count"],
+      "properties": {
+        "candidate_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "candidate_tree_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "command": {"type": "string", "minLength": 1},
+        "id": {"const": "strict-supported-dependency-surface"},
+        "policy_path": {"const": "scripts/validation/dependency_license_policy.v1.json"},
+        "policy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "profile_manifest_path": {"const": "scripts/validation/dependency_license_profiles.v1.json"},
+        "profile_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "report_filename": {"const": "dependency-license-inventory.json"},
+        "report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "schema_version": {"const": "robot-sf.dependency-license-inventory.v1"},
+        "source_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "status": {"const": "passed"},
+        "unresolved_count": {"const": 0}
+      }
+    }
+  }
+}

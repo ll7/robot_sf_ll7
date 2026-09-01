@@ -70,6 +70,9 @@ def main(argv: list[str] | None = None) -> int:
                     "schema_version": "benchmark-release-identity-command.v1",
                     "status": "generated",
                     "source_commit": payload["source_commit"],
+                    "latest_main_base_commit": payload["resolved_manifest"][
+                        "latest_main_base_commit"
+                    ],
                     "release_tag": payload["release_tag"],
                     "identity_path": output.resolve().relative_to(repository_root).as_posix(),
                     "identity_sha256": _sha256(output),
@@ -86,6 +89,7 @@ def main(argv: list[str] | None = None) -> int:
                 "schema_version": "benchmark-release-identity-command.v1",
                 "status": "verified",
                 "source_commit": manifest.source_sha,
+                "latest_main_base_commit": manifest.latest_main_base_commit,
                 "release_tag": manifest.release_tag,
                 "identity_path": identity.resolve().relative_to(repository_root).as_posix(),
                 "identity_sha256": _sha256(identity),

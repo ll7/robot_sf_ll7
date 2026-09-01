@@ -216,7 +216,8 @@ jobs:
 
       - name: Generate strict supported dependency inventory from finalized candidate
         run: >-
-          python "${BUILD_SOURCE}/scripts/tools/check_dependency_license_inventory.py"
+          "${SOFTWARE_CANDIDATE_PYTHON}"
+          "${BUILD_SOURCE}/scripts/tools/check_dependency_license_inventory.py"
           --repo-root "${BUILD_SOURCE}"
           --output "${DEPENDENCY_REPORT}"
           --candidate-bundle "${BUNDLE_DIR}"

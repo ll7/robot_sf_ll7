@@ -98,6 +98,64 @@ def _readonly_array(value: Any, *, dtype: Any, field_name: str) -> np.ndarray:
     return array
 
 
+def _normalize_text_tuple(value: Any, field_name: str, *, unique: bool = False) -> tuple[str, ...]:
+    """Require a tuple-like collection of non-empty text values.
+
+    Returns:
+        A normalized immutable tuple of text values.
+    """
+    if isinstance(value, (str, bytes)):
+        raise TypeError(f"{field_name} must be an iterable of strings")
+    try:
+        values = tuple(value)
+    except TypeError as exc:
+        raise TypeError(f"{field_name} must be an iterable of strings") from exc
+    if any(not isinstance(item, str) for item in values):
+        raise TypeError(f"{field_name} must contain strings")
+    if any(not item for item in values):
+        raise ValueError(f"{field_name} must contain non-empty strings")
+    if unique and len(set(values)) != len(values):
+        raise ValueError(f"{field_name} must be unique")
+    return values
+
+
+def _normalize_confirmation_mapping(value: Any) -> dict[str, int]:
+    """Validate per-identity confirmation steps.
+
+    Returns:
+        A detached mapping with non-negative integer step counts.
+    """
+    if not isinstance(value, Mapping):
+        raise TypeError("time_to_confirmation must be a mapping")
+    normalized = dict(value)
+    for identity, steps in normalized.items():
+        if not isinstance(identity, str) or not identity:
+            raise TypeError("time_to_confirmation keys must be non-empty strings")
+        if type(steps) is not int or steps < 0:
+            raise ValueError("time_to_confirmation values must be non-negative integers")
+    return normalized
+
+
+def _normalize_error_mapping(value: Any) -> dict[str, float | None]:
+    """Validate per-visibility non-negative errors.
+
+    Returns:
+        A detached mapping with finite non-negative error values or ``None``.
+    """
+    if not isinstance(value, Mapping):
+        raise TypeError("error_by_visibility must be a mapping")
+    normalized = dict(value)
+    for visibility, error in normalized.items():
+        if not isinstance(visibility, str) or not visibility:
+            raise TypeError("error_by_visibility keys must be non-empty strings")
+        if error is not None:
+            normalized_error = _finite_scalar(error, f"error_by_visibility[{visibility}]")
+            if normalized_error < 0.0:
+                raise ValueError("error_by_visibility values must be non-negative")
+            normalized[visibility] = normalized_error
+    return normalized
+
+
 def _parse_frame(value: Any, field_name: str = "coordinate_frame") -> PedestrianCoordinateFrame:
     """Parse a supported frame name and reject implicit frame aliases.
 
@@ -160,7 +218,7 @@ def _require_last_axis_two(values: Any, field_name: str) -> np.ndarray:
 
 
 def _symmetrize_covariance(covariance: np.ndarray, field_name: str) -> np.ndarray:
-    """Validate a covariance tensor and return a symmetric float array.
+    """Validate a covariance tensor and return a symmetric PSD float array.
 
     Returns:
         A symmetric positive-semidefinite covariance tensor.
@@ -176,7 +234,18 @@ def _symmetrize_covariance(covariance: np.ndarray, field_name: str) -> np.ndarra
     eigenvalues = np.linalg.eigvalsh(symmetric)
     if np.any(eigenvalues < -1e-7):
         raise ValueError(f"{field_name} must be positive semidefinite")
-    return symmetric
+    if np.any(eigenvalues < 0.0):
+        # Small negative eigenvalues can be introduced by otherwise valid
+        # floating-point covariance arithmetic.  Clamp only those values
+        # already within the rejection tolerance; materially indefinite
+        # inputs were rejected above.
+        eigenvalues, eigenvectors = np.linalg.eigh(symmetric)
+        clipped = np.maximum(eigenvalues, 0.0)
+        symmetric = np.matmul(
+            eigenvectors * clipped[..., np.newaxis, :],
+            np.swapaxes(eigenvectors, -1, -2),
+        )
+    return (symmetric + np.swapaxes(symmetric, -1, -2)) / 2.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -381,23 +450,24 @@ def transform_history_to_global_xy(
     Returns:
         A transformed tensor retaining the input's oldest-to-newest order.
     """
-    array = np.asarray(values, dtype=float)
+    array = _validate_history_values(values, value_kind=value_kind)
+    frame = _parse_frame(coordinate_frame)
     poses = tuple(_as_pose(pose) for pose in robot_poses_global)
-    if array.ndim == 0 or array.shape[0] != len(poses):
+    if array.shape[0] != len(poses):
         raise ValueError("values first dimension must match robot_poses_global")
     if value_kind == "position":
         transformed = [
-            transform_position_to_global_xy(row, coordinate_frame, pose)
+            transform_position_to_global_xy(row, frame, pose)
             for row, pose in zip(array, poses, strict=True)
         ]
     elif value_kind == "velocity":
         transformed = [
-            transform_velocity_to_global_xy(row, coordinate_frame, pose)
+            transform_velocity_to_global_xy(row, frame, pose)
             for row, pose in zip(array, poses, strict=True)
         ]
     elif value_kind == "covariance":
         transformed = [
-            transform_covariance_to_global_xy(row, coordinate_frame, pose)
+            transform_covariance_to_global_xy(row, frame, pose)
             for row, pose in zip(array, poses, strict=True)
         ]
     else:
@@ -419,23 +489,24 @@ def transform_history_from_global_xy(
     Returns:
         A transformed tensor retaining the input's oldest-to-newest order.
     """
-    array = np.asarray(values, dtype=float)
+    array = _validate_history_values(values, value_kind=value_kind)
+    frame = _parse_frame(coordinate_frame)
     poses = tuple(_as_pose(pose) for pose in robot_poses_global)
-    if array.ndim == 0 or array.shape[0] != len(poses):
+    if array.shape[0] != len(poses):
         raise ValueError("values first dimension must match robot_poses_global")
     if value_kind == "position":
         transformed = [
-            transform_position_from_global_xy(row, coordinate_frame, pose)
+            transform_position_from_global_xy(row, frame, pose)
             for row, pose in zip(array, poses, strict=True)
         ]
     elif value_kind == "velocity":
         transformed = [
-            transform_velocity_from_global_xy(row, coordinate_frame, pose)
+            transform_velocity_from_global_xy(row, frame, pose)
             for row, pose in zip(array, poses, strict=True)
         ]
     elif value_kind == "covariance":
         transformed = [
-            transform_covariance_from_global_xy(row, coordinate_frame, pose)
+            transform_covariance_from_global_xy(row, frame, pose)
             for row, pose in zip(array, poses, strict=True)
         ]
     else:
@@ -443,6 +514,37 @@ def transform_history_from_global_xy(
     if not transformed:
         return np.array(array, dtype=float, copy=True)
     return np.stack(transformed, axis=0)
+
+
+def _validate_history_values(
+    values: np.ndarray,
+    *,
+    value_kind: Literal["position", "velocity", "covariance"],
+) -> np.ndarray:
+    """Validate history shape and finiteness, including an empty history.
+
+    Per-row transform helpers normally perform this validation while mapping
+    rows.  An empty history has no rows to visit, so validate the batch before
+    the transform loop to keep malformed empty inputs fail-closed as well.
+
+    Returns:
+        A finite floating-point history tensor.
+    """
+    try:
+        array = np.asarray(values, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise TypeError("history values must be an array-like floating-point tensor") from exc
+    if value_kind in {"position", "velocity"}:
+        if array.ndim < 2 or array.shape[-1] != 2:
+            raise ValueError(f"{value_kind} history must have final shape dimension 2")
+    elif value_kind == "covariance":
+        if array.ndim < 3 or array.shape[-2:] != (2, 2):
+            raise ValueError("covariance history must have final shape (2, 2)")
+    else:
+        raise ValueError("value_kind must be position, velocity, or covariance")
+    if not np.all(np.isfinite(array)):
+        raise ValueError("history values must contain finite values")
+    return array
 
 
 # Short names keep adapter call sites readable while retaining explicit frame semantics.
@@ -604,6 +706,8 @@ class PedestrianTrackingConfig:
                 continue
             if canonical not in fields:
                 raise ValueError(f"unknown pedestrian tracking config key: {key}")
+            if canonical in normalized:
+                raise ValueError(f"duplicate pedestrian tracking config key: {canonical}")
             normalized[canonical] = value
         return cls(**normalized)
 
@@ -1027,7 +1131,10 @@ class PedestrianTrack:
         """Validate and defensively freeze track state."""
         if type(self.track_id) is not int or self.track_id < 1:
             raise ValueError("track_id must be a positive integer")
-        object.__setattr__(self, "timestamp_s", _finite_scalar(self.timestamp_s, "timestamp_s"))
+        timestamp = _finite_scalar(self.timestamp_s, "timestamp_s")
+        if timestamp < 0.0:
+            raise ValueError("timestamp_s must be non-negative")
+        object.__setattr__(self, "timestamp_s", timestamp)
         if type(self.step_index) is not int or self.step_index < 0:
             raise ValueError("step_index must be a non-negative integer")
         for field_name in ("age_steps", "visible_age_steps", "missed_steps"):
@@ -1066,15 +1173,21 @@ class PedestrianTrack:
             or timestamps.shape != history_mask.shape
         ):
             raise ValueError("track history fields must use a common oldest-to-newest capacity")
+        if history_mask.shape[0] < 1:
+            raise ValueError("track history must contain at least one row")
         if (
             not np.all(np.isfinite(pos_history))
             or not np.all(np.isfinite(vel_history))
             or not np.all(np.isfinite(timestamps))
         ):
             raise ValueError("track history fields must be finite")
-        blockers = tuple(str(blocker) for blocker in self.blockers)
-        if len(self.config_hash) != 64 or any(
-            char not in "0123456789abcdef" for char in self.config_hash
+        if np.any(timestamps < 0.0):
+            raise ValueError("track history timestamps must be non-negative")
+        blockers = _normalize_text_tuple(self.blockers, "blockers", unique=True)
+        if (
+            not isinstance(self.config_hash, str)
+            or len(self.config_hash) != 64
+            or any(char not in "0123456789abcdef" for char in self.config_hash)
         ):
             raise ValueError("config_hash must be a lowercase SHA-256 digest")
         object.__setattr__(
@@ -1199,14 +1312,19 @@ class PedestrianTrackingDiagnostics:
             value = getattr(self, field_name)
             if type(value) is not int or value < 0:
                 raise ValueError(f"{field_name} must be a non-negative integer")
-        if len(self.cost_matrix_shape) != 2 or any(
-            type(value) is not int or value < 0 for value in self.cost_matrix_shape
+        try:
+            cost_matrix_shape = tuple(self.cost_matrix_shape)
+        except TypeError as exc:
+            raise TypeError("cost_matrix_shape must contain two non-negative integers") from exc
+        if len(cost_matrix_shape) != 2 or any(
+            type(value) is not int or value < 0 for value in cost_matrix_shape
         ):
             raise ValueError("cost_matrix_shape must contain two non-negative integers")
+        object.__setattr__(self, "cost_matrix_shape", cost_matrix_shape)
         object.__setattr__(
             self, "update_latency_ms", _non_negative(self.update_latency_ms, "update_latency_ms")
         )
-        object.__setattr__(self, "blockers", tuple(str(blocker) for blocker in self.blockers))
+        object.__setattr__(self, "blockers", _normalize_text_tuple(self.blockers, "blockers"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -1220,21 +1338,49 @@ class PedestrianTrackingResult:
     diagnostics: PedestrianTrackingDiagnostics
     history_order: str = HISTORY_ORDER
 
-    def __post_init__(self) -> None:
+    def __post_init__(self) -> None:  # noqa: C901
         """Validate deterministic output ordering."""
-        object.__setattr__(self, "timestamp_s", _finite_scalar(self.timestamp_s, "timestamp_s"))
+        timestamp = _finite_scalar(self.timestamp_s, "timestamp_s")
+        if timestamp < 0.0:
+            raise ValueError("timestamp_s must be non-negative")
+        object.__setattr__(self, "timestamp_s", timestamp)
         if type(self.step_index) is not int or self.step_index < 0:
             raise ValueError("step_index must be a non-negative integer")
         tracks = tuple(self.tracks)
         associations = tuple(self.associations)
+        if not isinstance(self.diagnostics, PedestrianTrackingDiagnostics):
+            raise TypeError("diagnostics must be PedestrianTrackingDiagnostics")
         if any(not isinstance(track, PedestrianTrack) for track in tracks):
             raise TypeError("tracks must contain PedestrianTrack values")
         if any(not isinstance(association, TrackAssociation) for association in associations):
             raise TypeError("associations must contain TrackAssociation values")
-        if tuple(track.track_id for track in tracks) != tuple(
-            sorted(track.track_id for track in tracks)
-        ):
+        track_ids = tuple(track.track_id for track in tracks)
+        if track_ids != tuple(sorted(track_ids)):
             raise ValueError("tracks must be sorted by track_id")
+        if len(set(track_ids)) != len(track_ids):
+            raise ValueError("tracks must have unique track_id values")
+        track_id_set = set(track_ids)
+        for track in tracks:
+            if track.step_index != self.step_index or not math.isclose(
+                track.timestamp_s, timestamp, rel_tol=0.0, abs_tol=1e-9
+            ):
+                raise ValueError("tracks must match the tracking result decision point")
+        association_track_ids = tuple(association.track_id for association in associations)
+        if association_track_ids != tuple(sorted(association_track_ids)):
+            raise ValueError("associations must be sorted by track_id")
+        if len(set(association_track_ids)) != len(association_track_ids):
+            raise ValueError("each track can have at most one association")
+        if any(track_id not in track_id_set for track_id in association_track_ids):
+            raise ValueError("associations must reference a result track")
+        observation_slots = tuple(association.observation_slot for association in associations)
+        if len(set(observation_slots)) != len(observation_slots):
+            raise ValueError("each observation slot can have at most one association")
+        tracks_by_id = {track.track_id: track for track in tracks}
+        if any(
+            tracks_by_id[association.track_id].last_observation_slot != association.observation_slot
+            for association in associations
+        ):
+            raise ValueError("associations must match each track's last_observation_slot")
         object.__setattr__(self, "tracks", tracks)
         object.__setattr__(self, "associations", associations)
         if self.history_order != HISTORY_ORDER:
@@ -1280,6 +1426,31 @@ class _TrackState:
     history_valid_mask: np.ndarray
 
 
+def _clone_track_state(state: _TrackState) -> _TrackState:
+    """Return an independent snapshot of mutable tracker state for rollback."""
+    return _TrackState(
+        track_id=state.track_id,
+        position=np.array(state.position, dtype=float, copy=True),
+        velocity=np.array(state.velocity, dtype=float, copy=True),
+        position_covariance=np.array(state.position_covariance, dtype=float, copy=True),
+        velocity_covariance=np.array(state.velocity_covariance, dtype=float, copy=True),
+        timestamp_s=state.timestamp_s,
+        step_index=state.step_index,
+        age_steps=state.age_steps,
+        visible_age_steps=state.visible_age_steps,
+        missed_steps=state.missed_steps,
+        missed_seconds=state.missed_seconds,
+        status=state.status,
+        association_confidence=state.association_confidence,
+        last_observation_slot=state.last_observation_slot,
+        blockers=tuple(state.blockers),
+        position_history=np.array(state.position_history, dtype=float, copy=True),
+        velocity_history=np.array(state.velocity_history, dtype=float, copy=True),
+        timestamp_history=np.array(state.timestamp_history, dtype=float, copy=True),
+        history_valid_mask=np.array(state.history_valid_mask, dtype=bool, copy=True),
+    )
+
+
 def _isotropic_covariance(value: float) -> np.ndarray:
     """Return an isotropic 2x2 covariance."""
     return np.eye(2, dtype=float) * float(value)
@@ -1323,18 +1494,36 @@ def _kalman_update(
         Updated mean and symmetric covariance.
     """
     innovation = measurement - mean
-    innovation_covariance = covariance + measurement_covariance
+    innovation_covariance = _symmetrize_covariance(
+        covariance + measurement_covariance, "innovation covariance"
+    )
     inverse = np.linalg.pinv(innovation_covariance, rcond=1e-12)
     gain = covariance @ inverse
     updated_mean = mean + gain @ innovation
     identity = np.eye(2, dtype=float)
-    updated_covariance = (identity - gain) @ covariance
+    residual_projection = identity - gain
+    # Joseph form keeps the update positive semidefinite under singular or
+    # nearly-singular measurement covariances, where the compact form can
+    # accumulate a small negative eigenvalue through cancellation.
+    updated_covariance = (
+        residual_projection @ covariance @ residual_projection.T
+        + gain @ measurement_covariance @ gain.T
+    )
     return updated_mean, _symmetrize_covariance(updated_covariance, "updated covariance")
 
 
 def _squared_distance(residual: np.ndarray, covariance: np.ndarray) -> float:
     """Return a finite covariance-normalized squared distance."""
+    covariance = _symmetrize_covariance(covariance, "distance covariance")
     inverse = np.linalg.pinv(covariance, rcond=1e-12)
+    # ``pinv`` deliberately maps zero-variance directions to zero.  That is
+    # only a valid Mahalanobis distance when the residual also has no
+    # component in those directions; otherwise a singular gate would accept
+    # an impossible innovation instead of rejecting it.
+    projected_residual = covariance @ inverse @ residual
+    null_residual = residual - projected_residual
+    if np.linalg.norm(null_residual) > 1e-9 * max(1.0, np.linalg.norm(residual)):
+        return math.inf
     value = float(residual @ inverse @ residual)
     if not math.isfinite(value):
         return math.inf
@@ -1416,7 +1605,32 @@ class PedestrianTracker:
         self._last_timestamp_s = None
         self._last_step_index = None
 
-    def update(  # noqa: C901, PLR0912, PLR0915
+    def update(self, snapshot: PedestrianObservationSnapshot) -> PedestrianTrackingResult:
+        """Consume one snapshot atomically and return deterministic tracking output.
+
+        A failed update must not consume a temporal cursor, track ID, or partial
+        mutable track transition. This keeps the same snapshot retryable after
+        an internal estimator or result-construction failure.
+
+        Returns:
+            An immutable tracking result for the snapshot timestamp.
+        """
+        state_snapshot = {
+            track_id: _clone_track_state(state) for track_id, state in self._tracks.items()
+        }
+        next_track_id = self._next_track_id
+        last_timestamp_s = self._last_timestamp_s
+        last_step_index = self._last_step_index
+        try:
+            return self._update(snapshot)
+        except Exception:
+            self._tracks = state_snapshot
+            self._next_track_id = next_track_id
+            self._last_timestamp_s = last_timestamp_s
+            self._last_step_index = last_step_index
+            raise
+
+    def _update(  # noqa: C901, PLR0912, PLR0915
         self, snapshot: PedestrianObservationSnapshot
     ) -> PedestrianTrackingResult:
         """Consume one snapshot and return deterministic tracks plus diagnostics.
@@ -1453,8 +1667,6 @@ class PedestrianTracker:
         timestamp_gap_s = (
             0.0 if self._last_timestamp_s is None else snapshot.timestamp_s - self._last_timestamp_s
         )
-        self._last_timestamp_s = snapshot.timestamp_s
-        self._last_step_index = snapshot.step_index
 
         retired_states: list[_TrackState] = []
         eligible_states: list[tuple[_TrackState, _PredictedState, int, float]] = []
@@ -1522,6 +1734,9 @@ class PedestrianTracker:
                     )
                 )
 
+        association_by_track_id = {
+            association.track_id: association for association in associations
+        }
         for row, (state, predicted, gap_steps, dt_s) in enumerate(eligible_states):
             observation_index = matched_states.get(state.track_id)
             if observation_index is None:
@@ -1544,11 +1759,7 @@ class PedestrianTracker:
                 normalized,
                 observation_index,
                 gap_steps=gap_steps,
-                association=next(
-                    association
-                    for association in associations
-                    if association.track_id == state.track_id
-                ),
+                association=association_by_track_id[state.track_id],
             )
 
         unmatched = [index for index in detection_indices if index not in matched_observations]
@@ -1576,13 +1787,16 @@ class PedestrianTracker:
             latency_ms=(time.perf_counter() - started) * 1000.0,
             blockers=tuple(status_blockers),
         )
-        return PedestrianTrackingResult(
+        result = PedestrianTrackingResult(
             timestamp_s=snapshot.timestamp_s,
             step_index=snapshot.step_index,
             tracks=output_tracks,
             associations=tuple(sorted(associations, key=lambda association: association.track_id)),
             diagnostics=diagnostics,
         )
+        self._last_timestamp_s = snapshot.timestamp_s
+        self._last_step_index = snapshot.step_index
+        return result
 
     def _build_cost_matrix(
         self,
@@ -1986,13 +2200,11 @@ class OracleTrackingMetrics:
         if not 0.0 <= coverage <= 1.0:
             raise ValueError("goal_inference_history_coverage must be between 0 and 1")
         object.__setattr__(self, "goal_inference_history_coverage", coverage)
-        object.__setattr__(
-            self, "time_to_confirmation", MappingProxyType(dict(self.time_to_confirmation))
-        )
-        object.__setattr__(
-            self, "error_by_visibility", MappingProxyType(dict(self.error_by_visibility))
-        )
-        object.__setattr__(self, "blockers", tuple(str(blocker) for blocker in self.blockers))
+        time_to_confirmation = _normalize_confirmation_mapping(self.time_to_confirmation)
+        error_by_visibility = _normalize_error_mapping(self.error_by_visibility)
+        object.__setattr__(self, "time_to_confirmation", MappingProxyType(time_to_confirmation))
+        object.__setattr__(self, "error_by_visibility", MappingProxyType(error_by_visibility))
+        object.__setattr__(self, "blockers", _normalize_text_tuple(self.blockers, "blockers"))
 
 
 class OracleTrackingEvaluator:
@@ -2023,7 +2235,7 @@ class OracleTrackingEvaluator:
         self._assignment_correct = 0
         self._frames = 0
 
-    def evaluate(  # noqa: C901
+    def evaluate(  # noqa: C901, PLR0912, PLR0915
         self,
         result: PedestrianTrackingResult,
         simulator_identity_by_observation_slot: Mapping[int, str],
@@ -2037,17 +2249,26 @@ class OracleTrackingEvaluator:
         """
         if not isinstance(result, PedestrianTrackingResult):
             raise TypeError("result must be PedestrianTrackingResult")
-        identity_by_slot = {
-            int(slot): str(identity)
-            for slot, identity in simulator_identity_by_observation_slot.items()
-        }
+        if not isinstance(simulator_identity_by_observation_slot, Mapping):
+            raise TypeError("simulator_identity_by_observation_slot must be a mapping")
+        identity_by_slot: dict[int, str] = {}
+        for slot, identity in simulator_identity_by_observation_slot.items():
+            if type(slot) is not int or slot < 0:
+                raise TypeError("simulator observation slots must be non-negative integers")
+            if not isinstance(identity, str) or not identity:
+                raise TypeError("simulator identities must be non-empty strings")
+            identity_by_slot[slot] = identity
         positions_by_identity: dict[str, np.ndarray] = {}
         if simulator_position_global_xy_by_identity is not None:
+            if not isinstance(simulator_position_global_xy_by_identity, Mapping):
+                raise TypeError("simulator_position_global_xy_by_identity must be a mapping")
             for identity, position in simulator_position_global_xy_by_identity.items():
+                if not isinstance(identity, str) or not identity:
+                    raise TypeError("simulator identities must be non-empty strings")
                 array = np.asarray(position, dtype=float)
                 if array.shape != (2,) or not np.all(np.isfinite(array)):
                     raise ValueError("simulator identity positions must be finite XY values")
-                positions_by_identity[str(identity)] = array
+                positions_by_identity[identity] = array
         matched_identity_by_track: dict[int, str] = {}
         correct = 0
         reacquisition_total = 0

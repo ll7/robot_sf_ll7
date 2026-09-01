@@ -26,6 +26,7 @@ from robot_sf.benchmark.checkpoint_staging_receipt import (
 from robot_sf.benchmark.release_acceptance import FULL_RELEASE_EXPECTED_EPISODE_CELLS
 from robot_sf.benchmark.release_protocol import (
     RELEASE_MANIFEST_SCHEMA_VERSION_V0_2,
+    load_release_campaign_config,
     load_release_manifest,
     validate_release_manifest,
 )
@@ -490,10 +491,16 @@ def _manifest_check(
     """
     try:
         manifest = load_release_manifest(manifest_path, repository_root=repository_root)
-        cfg = load_campaign_config(
-            manifest.canonical_campaign_config_path,
-            repository_root=repository_root,
-        )
+        if getattr(manifest, "resolved_identity_path", None) is not None:
+            cfg = load_release_campaign_config(
+                manifest,
+                repository_root=repository_root,
+            )
+        else:
+            cfg = load_campaign_config(
+                manifest.canonical_campaign_config_path,
+                repository_root=repository_root,
+            )
         validation = validate_release_manifest(
             manifest,
             campaign_config=cfg,

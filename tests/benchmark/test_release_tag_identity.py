@@ -6,6 +6,7 @@ import pytest
 
 from robot_sf.benchmark.release_tag_identity import (
     HISTORICAL_RELEASE_TAG,
+    check_canonical_source_tag,
     check_tag_source_consistency,
     derive_sha_tag,
     extract_tag_sha_component,
@@ -104,3 +105,23 @@ def test_planning_sha_never_satisfies_source_check() -> None:
     tag = f"paper-matrix-v2-h600-s30-{PLANNING_SHA}"
     problems = check_tag_source_consistency(tag, SOURCE_SHA)
     assert problems  # fails closed; the planning SHA is not the source SHA
+
+
+@pytest.mark.parametrize(
+    "tag",
+    [
+        "paper-matrix-v2-h600-s30-2026-09",
+        f"paper-matrix-v2-h600-s30-{SOURCE_SHA[:12]}",
+        f"paper-matrix-{SOURCE_SHA}-duplicate-{SOURCE_SHA}",
+        f"paper-matrix-{PLANNING_SHA}",
+        f" paper-matrix-v2-h600-s30-{SOURCE_SHA}",
+        f"paper-matrix-{'a' * 41}-{SOURCE_SHA}",
+    ],
+)
+def test_canonical_source_tag_rejects_ambiguous_or_nonfinal_representations(tag: str) -> None:
+    assert check_canonical_source_tag(tag, SOURCE_SHA)
+
+
+def test_canonical_source_tag_accepts_one_full_final_sha_suffix() -> None:
+    tag = derive_sha_tag("paper-matrix-v2-h600-s30", SOURCE_SHA)
+    assert check_canonical_source_tag(tag, SOURCE_SHA) == []

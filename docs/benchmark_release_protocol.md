@@ -112,6 +112,62 @@ The release claim boundary must also state:
 - Zenodo uses a fresh concept; `10.5281/zenodo.19482025` and
   `10.5281/zenodo.19563812` are historical records and must not be reused
 
+### Future tracked-template identity resolution
+
+A future `benchmark-data` v0.2 release must not try to record the SHA of the
+commit containing its own tracked manifest. Instead, review and commit a stable
+template, then generate the release identity from that exact clean commit after
+the publication coordinates are available. The tracked template:
+
+- declares
+  `identity_resolution.schema_version: benchmark-release-identity-template.v1`
+- omits `source_sha`
+- uses `{{release_tag}}` for both `release_id` and `release_tag`
+- uses `{{concept_doi}}` and `{{version_doi}}` in the publication block and
+  `{{version_doi}}` for `provenance.doi`
+- hashes a campaign template whose `release_tag` and `doi` fields use
+  `{{release_tag}}` and `{{version_doi}}`
+- hashes a tracked Zenodo JSON template containing all four identity slots,
+  including `{{source_sha}}`
+- satisfies the existing open-dataset Zenodo metadata and source-tag contract
+- retains every reviewed scientific input path and SHA-256
+
+The resolved `planners.config_identities` list records every configured arm,
+including the exact repository-relative `algo_config` path and SHA-256 (or
+explicit nulls for arms without an external config). Checkpoint files are
+runtime inputs and stay in the enforced staged-checkpoint receipt; the public
+runner binds that receipt and its per-arm checkpoint SHA-256 values alongside
+this resolved identity before execution.
+
+Generate only into a Git-ignored path. The tag must contain one exact full-SHA
+suffix derived from the selected commit; the DOI arguments below are already
+reserved coordinates, not a request to reserve or publish anything:
+
+```bash
+SOURCE_COMMIT="$(git rev-parse --verify HEAD^{commit})"
+RELEASE_TAG="${RELEASE_PREFIX:?set the reviewed release prefix}-${SOURCE_COMMIT}"
+test -z "$(git status --porcelain=v1 --untracked-files=normal)"
+uv run python scripts/tools/resolve_benchmark_release_identity.py generate \
+  --template "${TRACKED_RELEASE_TEMPLATE:?set the tracked template path}" \
+  --output output/release/release_identity.resolved.json \
+  --source-commit "$SOURCE_COMMIT" \
+  --release-tag "$RELEASE_TAG" \
+  --concept-doi "${RESERVED_BENCHMARK_CONCEPT_DOI:?set the reserved concept DOI}" \
+  --version-doi "${RESERVED_BENCHMARK_VERSION_DOI:?set the reserved version DOI}"
+uv run python scripts/tools/resolve_benchmark_release_identity.py verify \
+  --identity output/release/release_identity.resolved.json
+```
+
+Generation leaves tracked source untouched and emits canonical resolved
+identity and Zenodo metadata JSON. Verification reconstructs both byte for byte
+from the tracked template at the exact clean `HEAD`. It rejects an unreachable
+or different commit, dirty source, changed tracked inputs, non-canonical bytes,
+path or symlink escapes, stale metadata, malformed or colliding tag identity,
+and mismatched publication coordinates. Repeat `verify` in a disposable cold
+checkout of the same commit at the same repository-relative output path. Pass
+the verified resolved identity—not the tracked template—to the release runner,
+release doctor, and full-release acceptance path.
+
 ## Benchmark Claim Artifact
 
 The BenchmarkClaim artifact is the reviewable boundary for paper-facing

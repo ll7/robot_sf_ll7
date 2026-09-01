@@ -1185,6 +1185,36 @@ def test_selected_scope_does_not_treat_all_as_a_wildcard() -> None:
     ]
 
 
+def test_selected_all_union_rejects_unreviewed_independent_profile() -> None:
+    """A narrowed ``all`` union cannot hide an unreviewed standalone profile."""
+    policy = {
+        "id": "demo-reviewed-all-core",
+        "package": "demo",
+        "version": "1.0.0",
+        "source": {"registry": "https://pypi.org/simple"},
+        "profiles": ["all", "core"],
+    }
+    record = {
+        "normalized_name": "demo",
+        "version": "1.0.0",
+        "source": {"registry": "https://pypi.org/simple"},
+        "profiles": ["all", "core", "rllib"],
+        "selected_profiles": ["all", "rllib"],
+    }
+
+    failures = _exact_policy_coverage_failures(
+        [policy],
+        [record],
+        {"all", "core", "rllib"},
+        {"all", "rllib"},
+    )
+
+    assert failures == [
+        "package disposition demo-reviewed-all-core profile coverage differs: "
+        "expected=['all'] actual=['all', 'rllib']"
+    ]
+
+
 def test_moving_notice_url_requires_a_pending_durable_blocker() -> None:
     """Moving notice pointers cannot be laundered into reviewed evidence."""
     root = Path(__file__).resolve().parents[2]

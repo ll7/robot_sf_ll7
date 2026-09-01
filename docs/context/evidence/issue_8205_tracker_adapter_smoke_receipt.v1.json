@@ -1,0 +1,139 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema": "tracker_goal_belief_adapter_smoke_receipt.v1",
+  "issue": 8205,
+  "status": "verified",
+  "source_commit": "08283b4c432771afed4a0aedf444154ce5e78500",
+  "source_tree_scope": "adapter, tests, and documentation before the receipt commit",
+  "claim_boundary": "implementation-integrity / smoke only",
+  "research_claim": "none",
+  "benchmark_outcomes": "none",
+  "artifact_provenance": {
+    "classification": "tracked-compact-evidence",
+    "raw_output": "not retained; fixture is reproducible from tracked tests",
+    "path": "docs/context/evidence/issue_8205_tracker_adapter_smoke_receipt.v1.json"
+  },
+  "schemas": [
+    {
+      "name": "tracker_goal_belief_adapter",
+      "version": "tracker_goal_belief_adapter.v1"
+    },
+    {
+      "name": "goal_belief",
+      "version": "goal_belief.v1"
+    },
+    {
+      "name": "pedestrian_tracking",
+      "version": "pedestrian_tracking.v1"
+    }
+  ],
+  "algorithms": {
+    "canonicalization": "RFC 8785 canonical JSON",
+    "config_hash": "SHA-256 over RFC 8785 canonical configuration JSON",
+    "content_digest": "SHA-256 over RFC 8785 canonical channel JSON"
+  },
+  "actor_boundary": {
+    "input_type": "PedestrianTrackingResult",
+    "output_type": "GoalBeliefV1",
+    "source": "observation_only",
+    "candidate_policy": "not_configured",
+    "unknown_candidate_probability": 1.0,
+    "forbidden_oracle_fields": [
+      "goal_before_behavior",
+      "goal_after_behavior",
+      "route_truth",
+      "waypoint_truth",
+      "simulator_pedestrian_id",
+      "oracle_speed_cap_active",
+      "speed_cap_truth",
+      "uncapped_velocity_xy"
+    ]
+  },
+  "fixture": {
+    "ids": [
+      "single_observation",
+      "row_reorder",
+      "brief_occlusion",
+      "reacquisition",
+      "reset",
+      "robot_ego_velocity"
+    ],
+    "config_hash": "52eeb128182485d2616fab2843419c31c72dfeefe1a22be35ef027340be536ec",
+    "track_ids_by_step": [
+      ["track-1", "track-2"],
+      ["track-1", "track-2"],
+      ["track-1", "track-2"],
+      ["track-1", "track-2"]
+    ],
+    "channel_digests": [
+      "6f8fa96905351fed47d47358c06023b288eeca5d8651775fc39d81885cb686c5",
+      "6943df8da1a0b5939e4bf85456bb4fdd2c28bd21225242184a48d6d7ec26aad2",
+      "becc70f209a7d3c11ba4825cd768232f250e7fa040009b286e20c8a37468671e",
+      "c74337c14c1da3859b8b832ac5c5b8c348f618e61e015f6a7b49fe52db492522"
+    ],
+    "transform_error_l2": 6.123233995736766e-17,
+    "occlusion_masks": ["observed", "observed", "invisible"],
+    "reacquisition_masks": ["observed", "observed", "invisible", "observed"],
+    "history_projection_counts_by_step": [
+      {"full_contiguous_history": 2},
+      {"full_contiguous_history": 2},
+      {"full_contiguous_history": 2},
+      {"full_contiguous_history": 2}
+    ]
+  },
+  "checks": {
+    "default_off_empty_channel": "passed",
+    "disabled_timing_absent": "passed",
+    "stable_row_reorder": "passed",
+    "same_step_robot_frame_velocity_normalization": "passed",
+    "brief_occlusion_and_reacquisition": "passed",
+    "reset_isolation": "passed",
+    "missing_velocity_not_promoted": "passed",
+    "malformed_input_rejection": "passed",
+    "decision_point_alignment_rejection": "passed",
+    "deterministic_serialization_and_digest": "passed"
+  },
+  "reset_check": {
+    "prior_epoch": 0,
+    "new_epoch": 1,
+    "prior_provenance": null,
+    "new_provenance": "receipt-episode-2",
+    "new_track_ids": ["track-1"]
+  },
+  "oracle_boundary": {
+    "oracle_evaluator_invoked": false,
+    "simulator_identity_supplied_to_adapter": false,
+    "oracle_only_diagnostics": "not collected",
+    "tracking_quality": "not measured"
+  },
+  "runtime": {
+    "execution": "local CPU smoke fixture",
+    "external_data": false,
+    "model_or_checkpoint": false,
+    "gpu_or_slurm": false,
+    "observed_runtime_ms": 9.826
+  },
+  "validation": [
+    {
+      "command": "uv run pytest tests/prediction/test_tracker_goal_belief_adapter.py -q",
+      "result": "9 passed"
+    },
+    {
+      "command": "uv run ruff check robot_sf/prediction tests/prediction/test_tracker_goal_belief_adapter.py",
+      "result": "All checks passed"
+    },
+    {
+      "command": "uv run ruff format --check robot_sf/prediction tests/prediction/test_tracker_goal_belief_adapter.py",
+      "result": "7 files already formatted"
+    },
+    {
+      "command": "uv run mypy robot_sf/prediction",
+      "result": "Success: no issues found in 6 source files"
+    }
+  ],
+  "limitations": [
+    "No per-history-row velocity-validity mask exists in pedestrian_tracking.v1; the adapter uses a conservative current-row projection when current velocity is unavailable.",
+    "The adapter emits unavailable beliefs and does not implement candidate generation, force inversion, destination inference, planner promotion, or quality evaluation.",
+    "This receipt is not tracking-quality, prediction-quality, benchmark, safety, or paper-facing evidence."
+  ]
+}

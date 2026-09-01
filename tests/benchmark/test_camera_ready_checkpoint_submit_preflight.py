@@ -48,13 +48,38 @@ def _subprocess_env(extra: dict[str, str] | None = None) -> dict[str, str]:
 
     env = {
         "PATH": os.environ["PATH"],
-        # Pin the worktree's robot_sf/ package ahead of the shared venv's editable install.
-        "PYTHONPATH": str(WORKTREE_ROOT),
+        # Pin the worktree's robot_sf/ package and its vendored fast-pysf source
+        # ahead of the shared venv's editable install and any unrelated
+        # site-package implementation of the pysocialforce module.
+        "PYTHONPATH": os.pathsep.join([str(WORKTREE_ROOT), str(WORKTREE_ROOT / "fast-pysf")]),
         "UV_NO_SYNC": "1",
     }
     if extra:
         env.update(extra)
     return env
+
+
+def test_subprocess_env_resolves_vendored_pysocialforce() -> None:
+    """The pinned subprocess env must import the vendored fast-pysf, not site-packages."""
+    import subprocess
+
+    probe = (
+        "import json, pysocialforce.force_trace as ft;"
+        " print(json.dumps({'file': str(ft.__file__)}))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe],
+        cwd=WORKTREE_ROOT,
+        env=_subprocess_env(),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    resolved = Path(json.loads(result.stdout)["file"]).resolve()
+    assert resolved.is_relative_to((WORKTREE_ROOT / "fast-pysf").resolve()), (
+        f"pysocialforce.force_trace resolved outside the vendored source: {resolved}"
+    )
 
 
 def _write_registry(tmp_path: Path, models: list[dict]) -> Path:

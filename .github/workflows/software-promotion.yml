@@ -156,10 +156,11 @@ jobs:
       - name: Verify exact candidate-source checkout
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           checked_out_sha="$(git rev-parse HEAD)"
-          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ || "${checked_out_sha}" != "${SOURCE_SHA}" ]]; then
+          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ || "${checked_out_sha}" != "${SOURCE_SHA}" || "${WORKFLOW_SHA}" != "${SOURCE_SHA}" ]]; then
             echo "promotion verifier checkout is not the exact candidate source SHA" >&2
             exit 1
           fi
@@ -363,10 +364,11 @@ jobs:
       - name: Verify exact candidate-source checkout
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           checked_out_sha="$(git rev-parse HEAD)"
-          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ || "${checked_out_sha}" != "${SOURCE_SHA}" ]]; then
+          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ || "${checked_out_sha}" != "${SOURCE_SHA}" || "${WORKFLOW_SHA}" != "${SOURCE_SHA}" ]]; then
             echo "promotion verifier checkout is not the exact candidate source SHA" >&2
             exit 1
           fi
@@ -630,10 +632,11 @@ jobs:
       - name: Verify exact candidate-source checkout
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           checked_out_sha="$(git rev-parse HEAD)"
-          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ || "${checked_out_sha}" != "${SOURCE_SHA}" ]]; then
+          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ || "${checked_out_sha}" != "${SOURCE_SHA}" || "${WORKFLOW_SHA}" != "${SOURCE_SHA}" ]]; then
             echo "promotion verifier checkout is not the exact candidate source SHA" >&2
             exit 1
           fi
@@ -881,10 +884,11 @@ jobs:
       - name: Verify exact candidate-source checkout
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           checked_out_sha="$(git rev-parse HEAD)"
-          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ || "${checked_out_sha}" != "${SOURCE_SHA}" ]]; then
+          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ || "${checked_out_sha}" != "${SOURCE_SHA}" || "${WORKFLOW_SHA}" != "${SOURCE_SHA}" ]]; then
             echo "promotion verifier checkout is not the exact candidate source SHA" >&2
             exit 1
           fi
@@ -1192,10 +1196,11 @@ jobs:
       - name: Verify exact candidate-source checkout
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           checked_out_sha="$(git rev-parse HEAD)"
-          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ || "${checked_out_sha}" != "${SOURCE_SHA}" ]]; then
+          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ || "${checked_out_sha}" != "${SOURCE_SHA}" || "${WORKFLOW_SHA}" != "${SOURCE_SHA}" ]]; then
             echo "promotion verifier checkout is not the exact candidate source SHA" >&2
             exit 1
           fi

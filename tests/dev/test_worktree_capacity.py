@@ -34,6 +34,12 @@ def _unique_branch(tmp_path: Path, name: str) -> str:
     return f"test/{name}-{path_digest}-{os.getpid()}"
 
 
+def _worktree_target(tmp_path: Path, branch: str) -> Path:
+    """Give Git's shared worktree-admin directory a test-unique basename."""
+    basename_digest = hashlib.sha256(branch.encode("utf-8")).hexdigest()[:10]
+    return tmp_path / f"new-worktree-{basename_digest}"
+
+
 def _cleanup_owned_worktree(target: Path, branch: str) -> None:
     """Remove only the worktree, ref, and config entries owned by a fixture."""
     subprocess.run(
@@ -83,7 +89,7 @@ def _run_orphan_recovery_child() -> None:
     with tempfile.TemporaryDirectory(prefix="robot-sf-worktree-child-") as temp_dir:
         temp_root = Path(temp_dir)
         branch = _unique_branch(temp_root, "orphan-recover")
-        target = temp_root / "new-worktree"
+        target = _worktree_target(temp_root, branch)
         print(json.dumps({"branch": branch, "target": str(target)}), flush=True)
         try:
             _create_orphan_branch(branch)
@@ -298,8 +304,8 @@ def test_create_worktree_dry_run_does_not_invoke_git(tmp_path: Path) -> None:
 
 
 def test_create_worktree_executes_command_inside_new_worktree(tmp_path: Path) -> None:
-    target = tmp_path / "new-worktree"
     branch = _unique_branch(tmp_path, "exec-in-worktree")
+    target = _worktree_target(tmp_path, branch)
     try:
         result = subprocess.run(
             [
@@ -411,7 +417,7 @@ def test_create_worktree_recovers_orphan_branch_before_add(tmp_path: Path) -> No
         # origin/main remains the base commit and guarantees ancestor recovery.
         _create_orphan_branch(branch)
         _assert_no_branch_upstream(branch)
-        target = tmp_path / "new-worktree"
+        target = _worktree_target(tmp_path, branch)
         result = subprocess.run(
             [
                 str(CREATE_WORKTREE),
@@ -441,14 +447,14 @@ def test_create_worktree_recovers_orphan_branch_before_add(tmp_path: Path) -> No
             ).stdout
         )
     finally:
-        _cleanup_owned_worktree(tmp_path / "new-worktree", branch)
+        _cleanup_owned_worktree(_worktree_target(tmp_path, branch), branch)
 
 
 def test_create_worktree_lock_covers_orphan_recovery_and_add(tmp_path: Path) -> None:
     """The repository lock must cover branch cleanup through worktree registration."""
     fcntl = pytest.importorskip("fcntl")
     branch = _unique_branch(tmp_path, "locked-orphan-recover")
-    target = tmp_path / "new-worktree"
+    target = _worktree_target(tmp_path, branch)
     common_dir = Path(
         subprocess.run(
             ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
@@ -532,7 +538,7 @@ def test_create_worktree_hints_when_orphan_branch_diverged(tmp_path: Path) -> No
     assert branch_result.returncode == 0, branch_result.stderr
 
     try:
-        target = tmp_path / "new-worktree"
+        target = _worktree_target(tmp_path, branch)
         result = subprocess.run(
             [
                 str(CREATE_WORKTREE),

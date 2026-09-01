@@ -58,6 +58,7 @@ _REVIEW_MARKERS = (
     "non commercial",
     "no redistribution",
 )
+_REPORT_CONTENT_DIGEST_FIELD = "report_content_sha256"
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _CANDIDATE_MANIFEST_NAME = "candidate-manifest.json"
 _CANDIDATE_SCHEMA_VERSION = "robot_sf.software_candidate.v1"
@@ -201,6 +202,16 @@ def _sha256_file(path: Path) -> str:
 def _sha256_value(value: Any) -> str:
     """Hash a canonical JSON value."""
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
+
+
+def _report_content_digest(report: dict[str, Any]) -> str:
+    """Hash report content while excluding only the marker and this digest."""
+    content = {
+        key: value
+        for key, value in report.items()
+        if key not in {"review_marker", _REPORT_CONTENT_DIGEST_FIELD}
+    }
+    return _sha256_value(content)
 
 
 def _relative_path(repo_root: Path, path: Path) -> str:
@@ -1093,7 +1104,7 @@ def _candidate_bundle_binding(  # noqa: C901
         if "materialization" in manifest
         else None,
         "package": {"name": package["name"], "version": package["version"]},
-        "members": [bound_members[kind] for kind in sorted(bound_members)],
+        "members": [bound_members[kind] for kind in _CANDIDATE_MEMBER_KINDS],
         "archives": {"wheel": wheel_metadata, "sdist": sdist_metadata},
         "sbom": {
             "filename": bound_members["sbom"]["filename"],
@@ -1958,6 +1969,7 @@ def _policy_records(  # noqa: C901, PLR0912, PLR0915
     package_by_name: dict[str, list[dict[str, Any]]] = defaultdict(list)
     package_out: list[dict[str, Any]] = []
     package_ids: set[str] = set()
+    package_identity_keys: dict[tuple[str, str, str], str] = {}
     valid_modes = {"user_installed", "bundled_source", "built_companion", "not_distributed"}
     valid_conditions = {
         "mirrored",
@@ -2016,6 +2028,23 @@ def _policy_records(  # noqa: C901, PLR0912, PLR0915
                 issues.append(
                     f"package disposition {package_id} metadata_url does not match package identity"
                 )
+        identity_key = (
+            normalized_name,
+            str(package.get("version")),
+            _canonical_json(
+                _normalise_json(
+                    {key: value for key, value in source.items() if key != "metadata_url"}
+                )
+            ),
+        )
+        previous_id = package_identity_keys.get(identity_key)
+        if previous_id is not None:
+            issues.append(
+                "duplicate package disposition identity: "
+                f"{package_id} duplicates {previous_id} for {package_name}"
+            )
+        else:
+            package_identity_keys[identity_key] = package_id
         target = package.get("target")
         if not isinstance(target, dict) or not target:
             issues.append(f"package disposition {package_id} has no target")
@@ -2283,6 +2312,1040 @@ def _issue_8163_receipt_binding(
     return binding, policy_issues
 
 
+def _receipt_path(repo_root: Path, value: str) -> Path:
+    """Resolve a receipt path after removing its operator-local marker."""
+    raw = value.removeprefix("operator-local:")
+    path = Path(raw)
+    if any(part in {".", ".."} for part in path.parts):
+        raise ValueError(f"receipt path contains lexical traversal: {value}")
+    return path if path.is_absolute() else repo_root / path
+
+
+def _receipt_path_has_symlink(path: Path) -> bool:
+    """Return whether a receipt path or one of its existing parents is a symlink."""
+    return any(parent.is_symlink() for parent in (path, *path.parents) if parent.exists())
+
+
+def _audit_identity(name: Any, version: Any) -> tuple[str, Any]:
+    """Build a hashable audit identity even for malformed parseable JSON values."""
+    safe_name = _canonicalize_name(name) if isinstance(name, str) else "<invalid-name>"
+    try:
+        hash(version)
+    except TypeError:
+        version = repr(version)
+    return safe_name, version
+
+
+def _policy_batch_rows(policy: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the exact Issue #8163 policy rows represented by the receipt."""
+    return [
+        row
+        for row in policy.get("package_dispositions", [])
+        if isinstance(row, dict)
+        and isinstance(row.get("evidence_paths"), list)
+        and "docs/context/evidence/dependency_license_batch_2026-09-01.md"
+        in row.get("evidence_paths", [])
+    ]
+
+
+def _archive_identity(artifact: dict[str, Any]) -> tuple[str, str, str, int]:
+    """Return the immutable archive identity fields used by policy binding."""
+    return (
+        artifact.get("kind") if isinstance(artifact.get("kind"), str) else "<invalid-kind>",
+        artifact.get("filename")
+        if isinstance(artifact.get("filename"), str)
+        else "<invalid-filename>",
+        artifact.get("sha256") if isinstance(artifact.get("sha256"), str) else "<invalid-sha256>",
+        int(artifact.get("size", -1)) if isinstance(artifact.get("size"), int) else -1,
+    )
+
+
+def _archive_notice_paths(package: dict[str, Any]) -> set[str]:
+    """Collect package/archive notice paths from either supported audit layout."""
+    paths = {path for path in package.get("archive_notice_paths", []) if isinstance(path, str)}
+    for artifact in package.get("artifacts", []):
+        if isinstance(artifact, dict):
+            paths.update(path for path in artifact.get("notice_paths", []) if isinstance(path, str))
+    return paths
+
+
+def _policy_archive_notice_mapping(
+    policy_row: dict[str, Any],
+) -> set[tuple[str, str, str, str]]:
+    """Derive exact archive-kind/upstream-URL mappings from one policy row."""
+    immutable_urls = [
+        (url, _upstream_notice_path(url))
+        for url in policy_row.get("upstream", {}).get("notice_paths", [])
+        if isinstance(url, str) and _upstream_notice_path(url) is not None
+    ]
+    mappings: set[tuple[str, str, str, str]] = set()
+    sdist_stems = {
+        str(artifact.get("filename", "")).removesuffix(".tar.gz")
+        for artifact in policy_row.get("artifacts", [])
+        if isinstance(artifact, dict) and artifact.get("kind") == "sdist"
+    }
+    for archive_path in policy_row.get("upstream", {}).get("archive_notice_paths", []):
+        if not isinstance(archive_path, str):
+            continue
+        kind = (
+            "sdist" if any(archive_path.startswith(f"{stem}/") for stem in sdist_stems) else "wheel"
+        )
+        matching_urls = [
+            (url, upstream_path)
+            for url, upstream_path in immutable_urls
+            if archive_path.endswith(f"/{upstream_path}") or archive_path.endswith(upstream_path)
+        ]
+        if matching_urls:
+            # A broad ``LICENSE`` URL must not also claim a nested vendored notice.
+            longest_path = max(len(upstream_path) for _url, upstream_path in matching_urls)
+            mappings.update(
+                (archive_path, kind, upstream_path, url)
+                for url, upstream_path in matching_urls
+                if len(upstream_path) == longest_path
+            )
+    return mappings
+
+
+def _policy_archive_notice_kinds(policy_row: dict[str, Any]) -> set[tuple[str, str]]:
+    """Derive exact artifact-kind bindings for every declared archive notice."""
+    sdist_stems = {
+        str(artifact.get("filename", "")).removesuffix(".tar.gz")
+        for artifact in policy_row.get("artifacts", [])
+        if isinstance(artifact, dict) and artifact.get("kind") == "sdist"
+    }
+    return {
+        (
+            path,
+            "sdist" if any(path.startswith(f"{stem}/") for stem in sdist_stems) else "wheel",
+        )
+        for path in policy_row.get("upstream", {}).get("archive_notice_paths", [])
+        if isinstance(path, str)
+    }
+
+
+def _archive_artifact_issues(
+    package: dict[str, Any],
+    policy_row: dict[str, Any],
+    identity: tuple[str, Any],
+) -> list[str]:
+    """Validate nested archive artifact schemas and authoritative policy fields."""
+    issues: list[str] = []
+    artifacts = package.get("artifacts")
+    expected_artifacts = policy_row.get("artifacts", [])
+    if not isinstance(artifacts, list):
+        return [f"dependency archive audit artifacts are missing for {identity[0]}"]
+    allowed_keys = {
+        "kind",
+        "filename",
+        "url",
+        "sha256",
+        "size",
+        "platform_tags",
+        "archive_path",
+        "member_count",
+        "notice_paths",
+        "metadata_path",
+        "metadata_license",
+        "metadata_project_urls",
+        "metadata_fields",
+    }
+    authoritative = ("kind", "filename", "sha256", "size", "platform_tags")
+    actual_ids: set[tuple[str, str, str, int]] = set()
+    for index, artifact in enumerate(artifacts):
+        if not isinstance(artifact, dict):
+            issues.append(f"dependency archive audit artifact {index} is not an object")
+            continue
+        if set(artifact) - allowed_keys:
+            issues.append(f"dependency archive audit artifact {index} has unclassified fields")
+        for field in authoritative:
+            if artifact.get(field) != next(
+                (
+                    expected.get(field)
+                    for expected in expected_artifacts
+                    if isinstance(expected, dict)
+                    and expected.get("kind") == artifact.get("kind")
+                    and expected.get("filename") == artifact.get("filename")
+                ),
+                None,
+            ):
+                issues.append(
+                    f"dependency archive audit artifact {index} {field} differs from policy"
+                )
+        actual_ids.add(_archive_identity(artifact))
+    expected_ids = {
+        _archive_identity(item) for item in expected_artifacts if isinstance(item, dict)
+    }
+    if actual_ids != expected_ids or len(actual_ids) != len(artifacts):
+        issues.append(f"dependency archive audit artifact identities differ for {identity[0]}")
+    actual_mappings = {
+        (path, str(artifact.get("kind")))
+        for artifact in artifacts
+        if isinstance(artifact, dict)
+        for path in artifact.get("notice_paths", [])
+        if isinstance(path, str)
+    }
+    expected_mappings = _policy_archive_notice_kinds(policy_row)
+    if actual_mappings != expected_mappings:
+        issues.append(f"dependency archive audit notice mappings differ for {identity[0]}")
+    return issues
+
+
+def _archive_audit_semantic_issues(  # noqa: C901, PLR0912, PLR0915
+    archive_file: dict[str, Any],
+    batch_rows: list[dict[str, Any]],
+) -> list[str]:
+    """Bind archive-audit rows and artifact identities to the checked-in policy."""
+    issues: list[str] = []
+    if set(archive_file) != {"schema_version", "packages", "failures"}:
+        issues.append("dependency archive audit has missing or unclassified top-level fields")
+    packages = archive_file.get("packages")
+    if not isinstance(packages, list):
+        return [*issues, "dependency archive audit has no package rows"]
+    expected_by_identity = {
+        _audit_identity(row.get("package"), row.get("version")): row for row in batch_rows
+    }
+    observed_identities: set[tuple[str, Any]] = set()
+    if len(packages) != len(batch_rows):
+        issues.append("dependency archive audit package rows differ from the canonical policy")
+    for index, package in enumerate(packages):
+        if not isinstance(package, dict):
+            issues.append(f"dependency archive audit package row {index} is not an object")
+            continue
+        identity = _audit_identity(package.get("name"), package.get("version"))
+        if identity in observed_identities:
+            issues.append(f"dependency archive audit has duplicate package identity {identity}")
+        observed_identities.add(identity)
+        policy_row = expected_by_identity.get(identity)
+        if policy_row is None:
+            issues.append(f"dependency archive audit has unexpected package identity {identity}")
+            continue
+        expected_package_keys = {
+            "name",
+            "version",
+            "expected_expression",
+            "source",
+            "pypi_metadata_url",
+            "pypi_info",
+            "artifacts",
+        }
+        if set(package) != expected_package_keys:
+            issues.append(f"dependency archive audit package {identity[0]} has unclassified fields")
+        if not isinstance(package.get("name"), str) or _canonicalize_name(
+            package["name"]
+        ) != _canonicalize_name(policy_row.get("package")):
+            issues.append(f"dependency archive audit package name differs for {identity[0]}")
+        if package.get("expected_expression") != policy_row.get("license_expression"):
+            issues.append(f"dependency archive audit license expression differs for {identity[0]}")
+        expected_source = {
+            key: value
+            for key, value in policy_row.get("source", {}).items()
+            if key != "metadata_url"
+        }
+        if package.get("source") != expected_source:
+            issues.append(f"dependency archive audit source differs for {identity[0]}")
+        expected_url = (
+            policy_row.get("source", {}).get("metadata_url")
+            or f"https://pypi.org/pypi/{policy_row.get('package')}/{policy_row.get('version')}/json"
+        )
+        if package.get("pypi_metadata_url") != expected_url:
+            issues.append(f"dependency archive audit metadata URL differs for {identity[0]}")
+        pypi_info = package.get("pypi_info")
+        expected_pypi_keys = {
+            "name",
+            "version",
+            "requires_python",
+            "license",
+            "classifiers",
+            "home_page",
+            "project_urls",
+        }
+        if not isinstance(pypi_info, dict) or set(pypi_info) != expected_pypi_keys:
+            issues.append(
+                f"dependency archive audit PyPI metadata schema is invalid for {identity[0]}"
+            )
+        if (
+            not isinstance(pypi_info, dict)
+            or not isinstance(pypi_info.get("name"), str)
+            or _canonicalize_name(pypi_info["name"])
+            != _canonicalize_name(policy_row.get("package"))
+        ):
+            issues.append(f"dependency archive audit PyPI identity is invalid for {identity[0]}")
+        if not isinstance(pypi_info, dict) or pypi_info.get("version") != policy_row.get("version"):
+            issues.append(f"dependency archive audit PyPI version is invalid for {identity[0]}")
+        if isinstance(pypi_info, dict):
+            if not isinstance(pypi_info.get("name"), str) or not isinstance(
+                pypi_info.get("version"), str
+            ):
+                issues.append(
+                    f"dependency archive audit PyPI identity types are invalid for {identity[0]}"
+                )
+            requires_python = pypi_info.get("requires_python")
+            if requires_python != policy_row.get("python_requires"):
+                issues.append(
+                    f"dependency archive audit PyPI requires_python differs for {identity[0]}"
+                )
+            if requires_python is not None and not isinstance(requires_python, str):
+                issues.append(
+                    f"dependency archive audit PyPI requires_python type is invalid for {identity[0]}"
+                )
+            if pypi_info.get("license") is not None and not isinstance(
+                pypi_info.get("license"), str
+            ):
+                issues.append(
+                    f"dependency archive audit PyPI license type is invalid for {identity[0]}"
+                )
+            if not isinstance(pypi_info.get("classifiers"), list) or not all(
+                isinstance(item, str) for item in pypi_info["classifiers"]
+            ):
+                issues.append(
+                    f"dependency archive audit PyPI classifiers are invalid for {identity[0]}"
+                )
+            if pypi_info.get("home_page") is not None and not isinstance(
+                pypi_info.get("home_page"), str
+            ):
+                issues.append(
+                    f"dependency archive audit PyPI home_page type is invalid for {identity[0]}"
+                )
+            if not isinstance(pypi_info.get("project_urls"), dict) or not all(
+                isinstance(key, str) and isinstance(value, str)
+                for key, value in pypi_info["project_urls"].items()
+            ):
+                issues.append(
+                    f"dependency archive audit PyPI project_urls are invalid for {identity[0]}"
+                )
+        issues.extend(_archive_artifact_issues(package, policy_row, identity))
+        expected_notice_paths = {
+            path
+            for path in policy_row.get("upstream", {}).get("archive_notice_paths", [])
+            if isinstance(path, str)
+        }
+        if _archive_notice_paths(package) != expected_notice_paths:
+            issues.append(f"dependency archive audit notice paths differ for {identity[0]}")
+        expected_absences = policy_row.get("upstream", {}).get("archive_notice_absences", [])
+        if expected_absences:
+            issues.append(
+                f"dependency archive audit notice absences are not supported for {identity[0]}"
+            )
+    if observed_identities != set(expected_by_identity):
+        issues.append("dependency archive audit identities are not an exact policy set")
+    return issues
+
+
+def _upstream_notice_path(url: Any) -> str | None:
+    """Extract the immutable upstream path from a GitHub blob URL."""
+    if not isinstance(url, str):
+        return None
+    reference = _github_notice_reference(url)
+    if reference is None:
+        return None
+    parts = [unquote(part) for part in urlsplit(url).path.split("/") if part]
+    return "/".join(parts[4:]) if len(parts) > 4 else None
+
+
+def _upstream_tags_semantic_issues(  # noqa: C901, PLR0912, PLR0915
+    tags_file: Any,
+    batch_rows: list[dict[str, Any]],
+    archive_file: dict[str, Any] | None,
+) -> list[str]:
+    """Bind upstream tag and notice checks to policy commits and archive rows."""
+    issues: list[str] = []
+    if not isinstance(tags_file, list):
+        return ["dependency upstream tags evidence must be an array"]
+    expected_by_identity = {
+        _audit_identity(row.get("package"), row.get("version")): row for row in batch_rows
+    }
+    observed: set[tuple[str, Any]] = set()
+    archive_by_identity = {
+        _audit_identity(row.get("name"), row.get("version")): row
+        for row in (archive_file or {}).get("packages", [])
+        if isinstance(row, dict)
+    }
+    if len(tags_file) != len(batch_rows):
+        issues.append("dependency upstream tags rows differ from the canonical policy")
+    for index, entry in enumerate(tags_file):
+        if not isinstance(entry, dict):
+            issues.append(f"dependency upstream tags row {index} is not an object")
+            continue
+        expected_tag_keys = {
+            "name",
+            "version",
+            "repository",
+            "tags",
+            "tag",
+            "matching_tags",
+            "errors",
+            "source_url_key",
+            "notice_checks",
+        }
+        if set(entry) != expected_tag_keys:
+            issues.append(f"dependency upstream tags row {index} has unclassified fields")
+        identity = _audit_identity(entry.get("name"), entry.get("version"))
+        if identity in observed:
+            issues.append(f"dependency upstream tags has duplicate package identity {identity}")
+        observed.add(identity)
+        policy_row = expected_by_identity.get(identity)
+        if policy_row is None:
+            issues.append(f"dependency upstream tags has unexpected package identity {identity}")
+            continue
+        upstream = policy_row.get("upstream", {})
+        expected_repo = upstream.get("repository")
+        expected_tag = upstream.get("tag")
+        expected_commit = upstream.get("commit_sha")
+        if not all(
+            isinstance(value, str) for value in (expected_repo, expected_tag, expected_commit)
+        ):
+            issues.append(f"dependency upstream policy identity is invalid for {identity[0]}")
+            continue
+        if entry.get("repository") != expected_repo:
+            issues.append(f"dependency upstream repository differs for {identity[0]}")
+        tags = entry.get("tags")
+        matching_tags = entry.get("matching_tags")
+        if (
+            entry.get("tag") != expected_tag
+            or not isinstance(tags, list)
+            or not all(isinstance(value, str) for value in tags)
+            or len(tags) != len(set(tags))
+            or expected_tag not in tags
+            or not isinstance(matching_tags, list)
+            or not all(isinstance(value, str) for value in matching_tags)
+            or not set(matching_tags).issubset(tags)
+        ):
+            issues.append(f"dependency upstream tag identity differs for {identity[0]}")
+        if entry.get("errors") != [] or entry.get("source_url_key") != "Source":
+            issues.append(f"dependency upstream tag result is not clean for {identity[0]}")
+        checks = entry.get("notice_checks")
+        archive_row = archive_by_identity.get(identity, {})
+        expected_mappings = _policy_archive_notice_mapping(policy_row)
+        expected_archive_paths = {
+            archive_path for archive_path, _kind, _path, _url in expected_mappings
+        }
+        expected_upstream_paths = {
+            path
+            for path in (_upstream_notice_path(url) for url in upstream.get("notice_paths", []))
+            if path is not None
+        }
+        actual_archive_paths: set[str] = set()
+        actual_upstream_paths: set[str] = set()
+        actual_mappings: set[tuple[Any, str, str, str]] = set()
+        if not isinstance(checks, list):
+            issues.append(f"dependency upstream notice checks are missing for {identity[0]}")
+            continue
+        for check in checks:
+            if not isinstance(check, dict):
+                issues.append(f"dependency upstream notice check is invalid for {identity[0]}")
+                continue
+            if set(check) != {
+                "archive_kind",
+                "archive_path",
+                "review_url",
+                "status",
+                "upstream_path",
+            }:
+                issues.append(
+                    f"dependency upstream notice check has unclassified fields for {identity[0]}"
+                )
+            archive_kind = check.get("archive_kind")
+            archive_path = check.get("archive_path")
+            if isinstance(archive_path, str):
+                actual_archive_paths.add(archive_path)
+            upstream_path = check.get("upstream_path")
+            if isinstance(upstream_path, str):
+                actual_upstream_paths.add(upstream_path)
+            review_url = check.get("review_url")
+            reference = _github_notice_reference(review_url)
+            review_path = _upstream_notice_path(review_url)
+            if archive_kind not in {
+                artifact.get("kind")
+                for artifact in archive_row.get("artifacts", [])
+                if isinstance(artifact, dict)
+            }:
+                issues.append(f"dependency upstream archive kind is invalid for {identity[0]}")
+            if archive_path not in expected_archive_paths:
+                issues.append(
+                    f"dependency upstream archive path is not policy-bound for {identity[0]}"
+                )
+            if review_path != upstream_path or upstream_path not in expected_upstream_paths:
+                issues.append(
+                    f"dependency upstream notice URL path differs from policy for {identity[0]}"
+                )
+            if all(
+                isinstance(value, str)
+                for value in (archive_path, archive_kind, upstream_path, review_url)
+            ):
+                actual_mappings.add((archive_path, archive_kind, upstream_path, review_url))
+            if check.get("status") != "present" or reference is None:
+                issues.append(
+                    f"dependency upstream notice check is not immutably bound for {identity[0]}"
+                )
+        if actual_archive_paths != expected_archive_paths:
+            issues.append(f"dependency upstream archive notice paths differ for {identity[0]}")
+        if actual_upstream_paths != expected_upstream_paths:
+            issues.append(f"dependency upstream notice paths differ for {identity[0]}")
+        if actual_mappings != expected_mappings:
+            issues.append(f"dependency upstream notice mappings differ for {identity[0]}")
+        if len(actual_mappings) != len(checks):
+            issues.append(f"dependency upstream notice checks contain duplicates for {identity[0]}")
+    if observed != set(expected_by_identity):
+        issues.append("dependency upstream tags identities are not an exact policy set")
+    return issues
+
+
+def _candidate_receipt_semantic_issues(  # noqa: C901, PLR0912
+    candidate: dict[str, Any],
+    *,
+    repo_root: Path,
+    expected_profiles: list[str],
+) -> tuple[list[str], Path | None, dict[str, Any] | None]:
+    """Validate receipt candidate files with the complete canonical bundle contract."""
+    issues: list[str] = []
+    expected_candidate_keys = {
+        "expected_component_count",
+        "manifest_path",
+        "manifest_sha256",
+        "materialization",
+        "members",
+        "package",
+        "profile_ids",
+        "repository",
+        "sbom",
+        "source_sha",
+        "status",
+        "workflow",
+    }
+    if set(candidate) not in (expected_candidate_keys, expected_candidate_keys | {"archives"}):
+        issues.append("dependency receipt candidate has missing or unclassified fields")
+    manifest_path = candidate.get("manifest_path")
+    if not isinstance(manifest_path, str) or not manifest_path:
+        return ["dependency receipt candidate manifest_path is missing or unverifiable"], None, None
+    resolved_manifest = _receipt_path(repo_root, manifest_path)
+    if _receipt_path_has_symlink(resolved_manifest) or not resolved_manifest.is_file():
+        return [f"dependency receipt candidate manifest is missing: {manifest_path}"], None, None
+    bundle = resolved_manifest.parent
+    try:
+        manifest = _read_json(resolved_manifest)
+        package = _candidate_manifest_contract(manifest)
+        paths_by_kind, bound_members = _candidate_manifest_members(bundle, manifest)
+        _candidate_archive_contract(paths_by_kind, package)
+        _candidate_provenance_contract(paths_by_kind["provenance"], manifest)
+        actual_components = _candidate_sbom_components(paths_by_kind["sbom"], package)
+    except (OSError, ValueError, json.JSONDecodeError, tarfile.TarError, zipfile.BadZipFile) as exc:
+        return [f"dependency receipt candidate bundle is invalid: {exc}"], bundle, None
+    if candidate.get("manifest_sha256") != _sha256_file(resolved_manifest):
+        issues.append("dependency receipt candidate manifest SHA-256 differs from bound file")
+    expected_members = [bound_members[kind] for kind in _CANDIDATE_MEMBER_KINDS]
+    receipt_members = candidate.get("members")
+    if not isinstance(receipt_members, list):
+        issues.append("dependency receipt candidate members summary is missing")
+    else:
+        normalized_members = [
+            {key: member.get(key) for key in ("filename", "kind", "sha256", "size")}
+            for member in receipt_members
+            if isinstance(member, dict)
+        ]
+        if normalized_members != expected_members:
+            issues.append("dependency receipt candidate members differ from canonical bundle")
+        for member in receipt_members:
+            if not isinstance(member, dict):
+                issues.append("dependency receipt candidate member is incomplete")
+                continue
+            path_value = member.get("path")
+            if not isinstance(path_value, str) or not path_value:
+                issues.append("dependency receipt candidate member path is missing or unverifiable")
+                continue
+            resolved_member = _receipt_path(repo_root, path_value)
+            if resolved_member.parent != bundle or resolved_member.name != member.get("filename"):
+                issues.append(
+                    "dependency receipt candidate member path is outside its manifest bundle"
+                )
+            elif _receipt_path_has_symlink(resolved_member) or not resolved_member.is_file():
+                issues.append(f"dependency receipt candidate member is missing: {path_value}")
+    try:
+        inventory = build_inventory(
+            repo_root,
+            distributions=[],
+            selected_profile_ids=expected_profiles,
+            candidate_bundle_path=bundle,
+        )
+        canonical_binding = inventory.get("candidate_binding")
+    except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as exc:
+        issues.append(f"dependency receipt candidate canonical binding failed: {exc}")
+        canonical_binding = None
+    if not isinstance(canonical_binding, dict):
+        issues.append("dependency receipt candidate has no canonical bundle binding")
+    else:
+        for field in (
+            "status",
+            "repository",
+            "source_sha",
+            "workflow",
+            "materialization",
+            "package",
+            "sbom",
+            "profile_ids",
+            "expected_component_count",
+        ):
+            if candidate.get(field) != canonical_binding.get(field):
+                issues.append(f"dependency receipt candidate {field} differs from canonical bundle")
+        if candidate.get("members") and [
+            {key: member.get(key) for key in ("filename", "kind", "sha256", "size")}
+            for member in candidate["members"]
+            if isinstance(member, dict)
+        ] != canonical_binding.get("members"):
+            issues.append(
+                "dependency receipt candidate member identities differ from canonical bundle"
+            )
+        if "archives" in candidate and candidate.get("archives") != canonical_binding.get(
+            "archives"
+        ):
+            issues.append("dependency receipt candidate archives differ from canonical bundle")
+        if candidate.get("expected_component_count") != len(actual_components):
+            issues.append("dependency receipt candidate component count differs from SBOM")
+    return issues, bundle, canonical_binding
+
+
+def _strict_report_semantic_issues(
+    report: dict[str, Any],
+    *,
+    repo_root: Path,
+    candidate_bundle: Path | None,
+) -> list[str]:
+    """Rebuild and compare the strict report's complete canonical semantics."""
+    issues: list[str] = []
+    surface = report.get("surface")
+    profile_ids = surface.get("profile_ids") if isinstance(surface, dict) else None
+    if not isinstance(profile_ids, list) or not all(
+        isinstance(profile_id, str) for profile_id in profile_ids
+    ):
+        return ["dependency receipt strict report has no valid selected profile surface"]
+    try:
+        canonical = build_inventory(
+            repo_root,
+            selected_profile_ids=profile_ids,
+            candidate_bundle_path=candidate_bundle,
+        )
+    except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as exc:
+        return [f"dependency receipt strict report canonical rebuild failed: {exc}"]
+    for field in (
+        "environment",
+        "failures",
+        "installed_not_locked",
+        "packages",
+        "policy",
+        "profile_manifest",
+        "profiles",
+        "project",
+        "repository_inputs",
+        "structural_issues",
+        "summary",
+        "surface",
+        "target",
+        "unrepresented_lock_package_dispositions",
+        "unrepresented_lock_packages",
+        "candidate_binding",
+    ):
+        if report.get(field) != canonical.get(field):
+            issues.append(
+                f"dependency receipt strict report {field} differs from canonical inventory"
+            )
+    return issues
+
+
+def _receipt_contract_issues(  # noqa: C901, PLR0912, PLR0915
+    receipt: dict[str, Any],
+    policy: dict[str, Any],
+    policy_binding: dict[str, Any],
+    repo_root: Path,
+) -> list[str]:
+    """Validate receipt summaries against the immutable policy and bound files."""
+    issues: list[str] = []
+    expected_claim_boundary = (
+        "This receipt records reproducible package/archive and candidate-binding evidence. "
+        "It is not a legal opinion, redistribution authorization, release approval, or "
+        "independent review marker."
+    )
+    if receipt.get("claim_boundary") != expected_claim_boundary:
+        issues.append("dependency receipt claim_boundary is not the exact non-approval boundary")
+    review = receipt.get("review")
+    if not isinstance(review, dict):
+        issues.append("dependency receipt has no review status")
+    else:
+        if review.get("status") != "pending_independent_maintainer_review":
+            issues.append("dependency receipt review status must remain pending")
+        if review.get("reviewer") is not None or review.get("reviewed_at") is not None:
+            issues.append("dependency receipt review identity must remain null while pending")
+        if review.get("legal_or_redistribution_approval") is not False:
+            issues.append("dependency receipt cannot claim legal_or_redistribution_approval")
+    batch_rows = _policy_batch_rows(policy)
+    expected_profiles = sorted(
+        {
+            profile
+            for row in batch_rows
+            for profile in row.get("profiles", [])
+            if isinstance(profile, str)
+        }
+    )
+    manifest = _read_json(repo_root / CANONICAL_PROFILE_MANIFEST)
+    manifest_target = manifest.get("target", {})
+    expected_target = {
+        "os": manifest_target.get("os"),
+        "architecture": manifest_target.get("architecture"),
+        "python": {
+            "implementation": manifest_target.get("python", {}).get("implementation"),
+            "version": manifest_target.get("python", {}).get("version"),
+        },
+    }
+    expected_scope = {
+        "package_count": len(batch_rows),
+        "artifact_count": sum(len(row.get("artifacts", [])) for row in batch_rows),
+        "profile_ids": expected_profiles,
+        "target": expected_target,
+    }
+    expected_status = (
+        "blocked_diagnostic_only"
+        if any(row.get("status") != "reviewed" for row in batch_rows)
+        else "complete"
+    )
+    if receipt.get("status") != expected_status:
+        issues.append(
+            f"dependency receipt status does not match bound policy: expected {expected_status}"
+        )
+    scope = receipt.get("scope")
+    if not isinstance(scope, dict):
+        issues.append("dependency receipt has no scope summary")
+    else:
+        for field in ("package_count", "artifact_count", "profile_ids", "target"):
+            if _normalise_json(scope.get(field)) != _normalise_json(expected_scope[field]):
+                issues.append(f"dependency receipt scope {field} differs from bound policy")
+
+    archive = receipt.get("archive_audit")
+    if not isinstance(archive, dict):
+        issues.append("dependency receipt has no archive_audit summary")
+    else:
+        if archive.get("schema_version") != "robot-sf.issue-8163-archive-audit.v1":
+            issues.append("dependency receipt archive_audit has an unsupported schema_version")
+        for field in ("package_count", "artifact_count"):
+            if archive.get(field) != expected_scope[field]:
+                issues.append(f"dependency receipt archive_audit {field} differs from scope")
+        if archive.get("failures") != []:
+            issues.append("dependency receipt archive_audit failures must be empty")
+        for field in ("sha256", "upstream_tags_sha256"):
+            value = archive.get(field)
+            if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
+                issues.append(f"dependency receipt archive_audit {field} is not a valid SHA-256")
+        archive_file: dict[str, Any] | None = None
+        archive_path = archive.get("path")
+        if isinstance(archive_path, str) and archive_path:
+            resolved = _receipt_path(repo_root, archive_path)
+            if _receipt_path_has_symlink(resolved) or not resolved.is_file():
+                issues.append(f"dependency receipt archive audit is missing: {archive_path}")
+            else:
+                if archive.get("sha256") != _sha256_file(resolved):
+                    issues.append(
+                        "dependency receipt archive_audit SHA-256 differs from bound file"
+                    )
+                try:
+                    archive_file = _read_json(resolved)
+                except (OSError, ValueError, json.JSONDecodeError) as exc:
+                    issues.append(f"dependency receipt archive audit is invalid: {exc}")
+                else:
+                    issues.extend(_archive_audit_semantic_issues(archive_file, batch_rows))
+                    if archive_file.get("schema_version") != archive.get("schema_version"):
+                        issues.append(
+                            "dependency receipt archive_audit schema_version differs from bound file"
+                        )
+                    packages = archive_file.get("packages")
+                    if not isinstance(packages, list):
+                        issues.append("dependency receipt archive audit has no package rows")
+                    else:
+                        package_count = len(packages)
+                        artifact_count = sum(
+                            len(row.get("artifacts", []))
+                            for row in packages
+                            if isinstance(row, dict) and isinstance(row.get("artifacts"), list)
+                        )
+                        if package_count != archive.get("package_count"):
+                            issues.append(
+                                "dependency receipt archive_audit package_count differs from bound file"
+                            )
+                        if artifact_count != archive.get("artifact_count"):
+                            issues.append(
+                                "dependency receipt archive_audit artifact_count differs from bound file"
+                            )
+                    if archive_file.get("failures") != archive.get("failures"):
+                        issues.append(
+                            "dependency receipt archive_audit failures differ from bound file"
+                        )
+        else:
+            issues.append("dependency receipt archive_audit.path is missing or unverifiable")
+        tags_path = archive.get("upstream_tags_path")
+        if isinstance(tags_path, str) and tags_path:
+            resolved_tags = _receipt_path(repo_root, tags_path)
+            if _receipt_path_has_symlink(resolved_tags) or not resolved_tags.is_file():
+                issues.append(f"dependency receipt upstream tags file is missing: {tags_path}")
+            else:
+                if archive.get("upstream_tags_sha256") != _sha256_file(resolved_tags):
+                    issues.append(
+                        "dependency receipt upstream_tags SHA-256 differs from bound file"
+                    )
+                try:
+                    tags_file = json.loads(resolved_tags.read_text(encoding="utf-8"))
+                except (OSError, ValueError, json.JSONDecodeError) as exc:
+                    issues.append(f"dependency receipt upstream tags evidence is invalid: {exc}")
+                else:
+                    issues.extend(
+                        _upstream_tags_semantic_issues(tags_file, batch_rows, archive_file)
+                    )
+        else:
+            issues.append(
+                "dependency receipt archive_audit.upstream_tags_path is missing or unverifiable"
+            )
+
+    candidate = receipt.get("candidate_binding")
+    if not isinstance(candidate, dict):
+        issues.append("dependency receipt has no candidate_binding summary")
+    else:
+        if candidate.get("status") != "bound":
+            issues.append("dependency receipt candidate_binding must be bound")
+        if candidate.get("profile_ids") != expected_profiles:
+            issues.append("dependency receipt candidate profile_ids differ from scope")
+        package = candidate.get("package")
+        if not isinstance(package, dict) or not all(
+            isinstance(package.get(field), str) and package.get(field)
+            for field in ("name", "version")
+        ):
+            issues.append("dependency receipt candidate package identity is incomplete")
+        sbom = candidate.get("sbom")
+        expected_components = candidate.get("expected_component_count")
+        if not isinstance(expected_components, int) or expected_components <= 0:
+            issues.append("dependency receipt candidate expected_component_count is invalid")
+        if not isinstance(sbom, dict) or sbom.get("component_count") != expected_components:
+            issues.append("dependency receipt candidate SBOM count differs from candidate summary")
+        materialization = candidate.get("materialization")
+        if not isinstance(materialization, dict):
+            issues.append("dependency receipt candidate materialization summary is missing")
+        for field in ("manifest_sha256",):
+            value = candidate.get(field)
+            if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
+                issues.append(f"dependency receipt candidate {field} is not a valid SHA-256")
+        members = candidate.get("members")
+        if not isinstance(members, list) or not members:
+            issues.append("dependency receipt candidate members summary is missing")
+        elif len({member.get("filename") for member in members if isinstance(member, dict)}) != len(
+            members
+        ):
+            issues.append("dependency receipt candidate members contain duplicate filenames")
+        if isinstance(members, list):
+            for member in members:
+                if not isinstance(member, dict) or not isinstance(member.get("filename"), str):
+                    issues.append("dependency receipt candidate member is incomplete")
+                    continue
+                value = member.get("sha256")
+                if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
+                    issues.append(
+                        f"dependency receipt candidate member {member['filename']} has invalid SHA-256"
+                    )
+        manifest_path = candidate.get("manifest_path")
+        if not isinstance(manifest_path, str) or not manifest_path:
+            issues.append("dependency receipt candidate manifest_path is missing or unverifiable")
+        else:
+            resolved_manifest = Path(manifest_path.removeprefix("operator-local:"))
+            if not resolved_manifest.is_absolute():
+                resolved_manifest = _resolve_path(repo_root, manifest_path)
+            if not resolved_manifest.is_file():
+                issues.append(f"dependency receipt candidate manifest is missing: {manifest_path}")
+            else:
+                if candidate.get("manifest_sha256") != _sha256_file(resolved_manifest):
+                    issues.append(
+                        "dependency receipt candidate manifest SHA-256 differs from bound file"
+                    )
+                try:
+                    manifest_file = _read_json(resolved_manifest)
+                except (OSError, ValueError, json.JSONDecodeError) as exc:
+                    issues.append(f"dependency receipt candidate manifest is invalid: {exc}")
+                else:
+                    for field in ("repository", "source_sha", "package"):
+                        if manifest_file.get(field) != candidate.get(field):
+                            issues.append(
+                                f"dependency receipt candidate {field} differs from bound manifest"
+                            )
+                    if manifest_file.get("members") != [
+                        {key: member.get(key) for key in ("filename", "kind", "sha256", "size")}
+                        for member in members
+                        if isinstance(member, dict)
+                    ]:
+                        issues.append(
+                            "dependency receipt candidate members differ from bound manifest"
+                        )
+                    for member in members if isinstance(members, list) else []:
+                        member_path = member.get("path") if isinstance(member, dict) else None
+                        if not isinstance(member_path, str) or not member_path:
+                            issues.append(
+                                "dependency receipt candidate member path is missing or unverifiable"
+                            )
+                            continue
+                        resolved_member = Path(member_path.removeprefix("operator-local:"))
+                        if resolved_member.name != member.get("filename"):
+                            issues.append(
+                                "dependency receipt candidate member path does not match "
+                                f"filename {member.get('filename')}"
+                            )
+                        if not resolved_member.is_absolute():
+                            resolved_member = _resolve_path(repo_root, member_path)
+                        if not resolved_member.is_file():
+                            issues.append(
+                                f"dependency receipt candidate member is missing: {member_path}"
+                            )
+                        elif member.get("sha256") != _sha256_file(resolved_member):
+                            issues.append(
+                                f"dependency receipt candidate member {member.get('filename')} SHA-256 differs from bound file"
+                            )
+
+    candidate_bundle: Path | None = None
+    canonical_candidate: dict[str, Any] | None = None
+    if isinstance(candidate, dict):
+        candidate_issues, candidate_bundle, canonical_candidate = (
+            _candidate_receipt_semantic_issues(
+                candidate,
+                repo_root=repo_root,
+                expected_profiles=expected_profiles,
+            )
+        )
+        issues.extend(candidate_issues)
+
+    strict = receipt.get("strict_report")
+    if not isinstance(strict, dict):
+        issues.append("dependency receipt has no strict_report binding")
+    else:
+        if strict.get("candidate_bound") != (
+            isinstance(candidate, dict) and candidate.get("status") == "bound"
+        ):
+            issues.append("dependency receipt strict_report candidate_bound differs from candidate")
+        if strict.get("surface_profile_ids") != expected_profiles:
+            issues.append("dependency receipt strict_report surface differs from scope")
+        summary = strict.get("summary")
+        if not isinstance(summary, dict):
+            issues.append("dependency receipt strict_report has no summary")
+        else:
+            if summary.get("policy_exact_disposition_count") != len(
+                policy.get("package_dispositions", [])
+            ):
+                issues.append("dependency receipt strict_report policy count differs from policy")
+            if summary.get("status") != (
+                "blocked" if receipt.get("status") != "complete" else "complete"
+            ):
+                issues.append("dependency receipt strict_report status differs from receipt status")
+            pending = summary.get("policy_pending_package_count")
+            unresolved = summary.get("unresolved_count")
+            if not isinstance(pending, int) or pending < 0:
+                issues.append("dependency receipt strict_report pending count is invalid")
+            if not isinstance(unresolved, int) or unresolved < 0:
+                issues.append("dependency receipt strict_report unresolved count is invalid")
+            elif isinstance(pending, int) and unresolved != pending:
+                issues.append(
+                    "dependency receipt strict_report unresolved count differs from pending count"
+                )
+            expected_exit = 2 if summary.get("status") == "blocked" else 0
+            if strict.get("exit_code") != expected_exit:
+                issues.append("dependency receipt strict_report exit_code differs from status")
+        report_sha = strict.get("sha256")
+        if not isinstance(report_sha, str) or _SHA256_RE.fullmatch(report_sha) is None:
+            issues.append("dependency receipt strict_report.sha256 is not a valid SHA-256")
+        report_path = strict.get("path")
+        if isinstance(report_path, str) and report_path:
+            resolved = _receipt_path(repo_root, report_path)
+            if _receipt_path_has_symlink(resolved) or not resolved.is_file():
+                issues.append(
+                    "dependency receipt strict report SHA-256 cannot be verified because "
+                    f"the report is missing: {report_path}"
+                )
+            else:
+                if report_sha != _sha256_file(resolved):
+                    issues.append(
+                        "dependency receipt strict report SHA-256 differs from report bytes"
+                    )
+                try:
+                    report_file = _read_json(resolved)
+                except (OSError, ValueError, json.JSONDecodeError) as exc:
+                    issues.append(f"dependency receipt strict report is invalid: {exc}")
+                else:
+                    expected_report_keys = {
+                        "candidate_binding",
+                        "environment",
+                        "failures",
+                        "installed_not_locked",
+                        "packages",
+                        "policy",
+                        "profile_manifest",
+                        "profiles",
+                        "project",
+                        "repository_inputs",
+                        "schema_version",
+                        "structural_issues",
+                        "summary",
+                        "surface",
+                        "target",
+                        "unrepresented_lock_package_dispositions",
+                        "unrepresented_lock_packages",
+                        _REPORT_CONTENT_DIGEST_FIELD,
+                    }
+                    if set(report_file) - {"review_marker"} != expected_report_keys:
+                        issues.append(
+                            "dependency receipt strict report has missing or unclassified fields"
+                        )
+                    content_digest = report_file.get(_REPORT_CONTENT_DIGEST_FIELD)
+                    if not isinstance(content_digest, str) or not _SHA256_RE.fullmatch(
+                        content_digest
+                    ):
+                        issues.append(
+                            "dependency receipt strict report has no valid content digest"
+                        )
+                    elif content_digest != _report_content_digest(report_file):
+                        issues.append("dependency receipt strict report content digest differs")
+                    if candidate_bundle is not None:
+                        issues.extend(
+                            check_report_freshness(
+                                repo_root,
+                                resolved,
+                                candidate_bundle_path=candidate_bundle,
+                            )
+                        )
+                    issues.extend(
+                        _strict_report_semantic_issues(
+                            report_file,
+                            repo_root=repo_root,
+                            candidate_bundle=candidate_bundle,
+                        )
+                    )
+                    if (
+                        canonical_candidate is not None
+                        and report_file.get("candidate_binding") != canonical_candidate
+                    ):
+                        issues.append(
+                            "dependency receipt strict report candidate binding differs from canonical bundle"
+                        )
+                    report_summary = report_file.get("summary")
+                    if isinstance(report_summary, dict) and isinstance(summary, dict):
+                        for field in (
+                            "selected_package_count",
+                            "license_status_counts",
+                            "structural_issue_count",
+                            "policy_exact_match_count",
+                            "policy_exact_disposition_count",
+                            "policy_pending_package_count",
+                            "unresolved_count",
+                            "status",
+                        ):
+                            if report_summary.get(field) != summary.get(field):
+                                issues.append(
+                                    f"dependency receipt strict_report summary {field} differs from bound report"
+                                )
+                    else:
+                        issues.append("dependency receipt strict report has no summary object")
+        else:
+            issues.append("dependency receipt strict_report.path is missing or unverifiable")
+    return issues
+
+
 def validate_dependency_license_receipt(  # noqa: C901, PLR0912, PLR0915
     repo_root: Path,
     receipt_path: Path,
@@ -2291,11 +3354,9 @@ def validate_dependency_license_receipt(  # noqa: C901, PLR0912, PLR0915
 ) -> list[str]:
     """Validate a dependency-batch receipt's reproducible, non-approval bindings.
 
-    The checker validates hashes and identities but never upgrades a row to
-    ``reviewed``.  Operator-local strict reports are accepted as references
-    only when their declared digest is a well-formed SHA-256; a portable path
-    must exist and match when it is available in the repository or supplied
-    checkout.
+    The checker validates hashes, identities, summaries, and exact file contents
+    but never upgrades a row to ``reviewed``. Operator-local paths are not
+    trusted by label: they must resolve to the exact retained files.
     """
     issues: list[str] = []
     try:
@@ -2312,6 +3373,10 @@ def validate_dependency_license_receipt(  # noqa: C901, PLR0912, PLR0915
     except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as exc:
         return [f"dependency receipt policy binding could not be computed: {exc}"]
     issues.extend(policy_issues)
+    try:
+        issues.extend(_receipt_contract_issues(receipt, policy, policy_binding, repo_root))
+    except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as exc:
+        issues.append(f"dependency receipt contract could not be checked: {exc}")
     binding = receipt.get("review_binding")
     if not isinstance(binding, dict):
         issues.append("dependency receipt has no review_binding record")
@@ -2451,8 +3516,16 @@ def _match_package_disposition(
     rows = candidates.get(package["normalized_name"], [])
     if not rows:
         return None, []
-    policy = rows[0]
     failures: list[str] = []
+    matching_rows = [
+        row
+        for row in rows
+        if row.get("version") == package.get("version")
+        and _policy_source_matches(package.get("source", {}), row.get("source", {}))
+    ]
+    if len(matching_rows) != 1:
+        return None, [f"exact policy identity is ambiguous ({len(matching_rows)} matching rows)"]
+    policy = matching_rows[0]
     if package.get("version") != policy.get("version"):
         failures.append(
             f"lock version {package.get('version')} does not match exact policy "
@@ -2991,7 +4064,7 @@ def build_inventory(  # noqa: C901, PLR0912, PLR0915
             *unrepresented_failures,
         }
     )
-    return {
+    inventory = {
         "schema_version": SCHEMA_VERSION,
         "repository_inputs": inputs,
         "target": _normalise_json(manifest.get("target", {})),
@@ -3085,9 +4158,11 @@ def build_inventory(  # noqa: C901, PLR0912, PLR0915
             "status": "blocked" if failures else "complete",
         },
     }
+    inventory[_REPORT_CONTENT_DIGEST_FIELD] = _report_content_digest(inventory)
+    return inventory
 
 
-def check_report_freshness(  # noqa: C901
+def check_report_freshness(  # noqa: C901, PLR0912
     repo_root: Path,
     report_path: Path,
     *,
@@ -3102,6 +4177,13 @@ def check_report_freshness(  # noqa: C901
     """
     report = _read_json(report_path)
     issues: list[str] = []
+    recorded_content_digest = report.get(_REPORT_CONTENT_DIGEST_FIELD)
+    if not isinstance(recorded_content_digest, str) or not _SHA256_RE.fullmatch(
+        recorded_content_digest
+    ):
+        issues.append("report has no valid report_content_sha256")
+    elif recorded_content_digest != _report_content_digest(report):
+        issues.append("report content digest differs from recorded report")
     inputs = report.get("repository_inputs")
     if not isinstance(inputs, list) or not inputs:
         return ["report has no repository_inputs digest list"]

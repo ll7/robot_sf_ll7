@@ -100,6 +100,14 @@ def test_robot_env_goal_posterior_planner_input_is_opt_in_metadata() -> None:
     assert channel["pedestrian_goal_posteriors"] == {}
 
 
+def test_robot_env_goal_posterior_builder_is_empty_when_disabled() -> None:
+    """The direct builder preserves the exact disabled channel contract."""
+
+    channel = _build_goal_posterior_planner_input(EnvSettings(), object())
+
+    assert channel == {"enabled": False, "pedestrian_goal_posteriors": {}}
+
+
 def _enabled_config_and_sim() -> tuple[EnvSettings, _FakeSimulator]:
     config = EnvSettings(goal_posterior_planner_input_enabled=True)
     simulator = _FakeSimulator(np.array([[0.0, 0.0, 1.0, 0.0, 5.0, 0.0]], dtype=float))

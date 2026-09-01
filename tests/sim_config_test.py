@@ -82,6 +82,15 @@ def test_non_reactive_response_multiplier_default_and_validation():
         SimulationSettings(non_reactive_response_multiplier=float("inf"))
 
 
+def test_oracle_force_trace_enabled_requires_a_boolean() -> None:
+    """The evaluator-only trace flag must reject truthy non-boolean values."""
+    assert SimulationSettings().oracle_force_trace_enabled is False
+    assert SimulationSettings(oracle_force_trace_enabled=True).oracle_force_trace_enabled is True
+
+    with pytest.raises(TypeError, match="oracle_force_trace_enabled must be bool"):
+        SimulationSettings(oracle_force_trace_enabled=1)  # type: ignore[arg-type]
+
+
 def test_desired_speed_default_preserves_legacy_behavior():
     """Default SimulationSettings must not set a decoupled desired speed (issue #4972).
 

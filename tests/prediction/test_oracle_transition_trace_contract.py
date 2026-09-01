@@ -22,6 +22,8 @@ from robot_sf.prediction.oracle_transition_trace import (
     ControllerMutationFlags,
     DynamicsParameters,
     ExactInverseReason,
+    ForceComponentOperationKind,
+    ForceComponentRecord,
     ForceComponents,
     ForceOperationKind,
     ForceStageResult,
@@ -422,6 +424,55 @@ def test_force_stage_composition_uses_declared_residual_then_model_order() -> No
     )
 
     assert components.final_pre_cap_force_xy == (2.5, 3.5)
+
+
+def test_force_component_record_round_trip_and_legacy_empty_roster() -> None:
+    """Typed component provenance round-trips while old empty-roster payloads remain valid."""
+    record = ForceComponentRecord(
+        component_id="desired",
+        component_type="desired",
+        implementation_module="pysocialforce.forces",
+        implementation_class="DesiredForce",
+        source_entity=None,
+        force_xy=(0.1, 0.2),
+        enabled=True,
+        config_hash=CONFIG_HASH,
+        evaluation_order=0,
+        operation_kind=ForceComponentOperationKind.BASE_COMPONENT,
+        operation="base_component",
+        actor_observable=False,
+    )
+    components = ForceComponents(
+        registry_total_force_xy=(0.1, 0.2),
+        component_records=(record,),
+    )
+
+    payload = components.to_dict()
+    parsed = ForceComponents.from_dict(copy.deepcopy(payload))
+    assert parsed.component_records == (record,)
+
+    legacy_payload = copy.deepcopy(payload)
+    legacy_payload.pop("component_records")
+    assert ForceComponents.from_dict(legacy_payload).component_records == ()
+
+
+def test_controller_mutation_flags_accept_old_payloads_with_new_flags_defaulted() -> None:
+    """The v1 parser keeps existing records readable after adding conservative flags."""
+    old_payload = {
+        "goal_redirected": False,
+        "hold_velocity_reset": False,
+        "respawn_reposition": False,
+        "population_changed": False,
+        "controller_jump_modelled": False,
+    }
+
+    parsed = ControllerMutationFlags.from_dict(old_payload)
+
+    assert parsed.position_changed is False
+    assert parsed.velocity_changed is False
+    assert parsed.group_changed is False
+    assert parsed.hold_wait_active is False
+    assert parsed.role_changed is False
 
 
 def test_exact_inverse_rejects_an_incomplete_applied_stage_payload() -> None:

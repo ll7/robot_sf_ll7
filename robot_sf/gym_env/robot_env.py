@@ -1128,6 +1128,11 @@ class RobotEnv(BaseEnv):
         # (info["planner_goal_posterior_channel"]) rather than nesting under
         # info["meta"]; keeps it out of the reward-function payload.
         _attach_goal_posterior_planner_input(info, self.env_config, self.simulator)
+        oracle_trace = getattr(self.simulator, "oracle_force_trace_payload", None)
+        if oracle_trace is not None:
+            # This evaluator-only channel is attached after observation and
+            # reward construction, so it cannot enter actor/planner inputs.
+            info["oracle_transition_trace"] = oracle_trace
         return (
             obs,
             reward,

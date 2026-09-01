@@ -228,6 +228,13 @@ def _candidate(
     rights_dir = bundle.parent / "rights-admission-artifact"
     rights_dir.mkdir()
     dependency_report = rights_dir / "dependency-license-inventory.json"
+    canonical_packages = CANONICAL_INVENTORY["packages"]
+    selected_canonical_packages = [
+        row for row in canonical_packages if row.get("selected_profiles")
+    ]
+    canonical_pending_package_count = sum(
+        row["policy_disposition"] == "review_required" for row in selected_canonical_packages
+    )
     dependency_report_payload = {
         "candidate_binding": candidate_binding,
         "failures": [],
@@ -269,7 +276,7 @@ def _candidate(
             },
         ],
         "profiles": CANONICAL_INVENTORY["profiles"],
-        "packages": CANONICAL_INVENTORY["packages"],
+        "packages": canonical_packages,
         "schema_version": "robot-sf.dependency-license-inventory.v1",
         "surface": {
             "profile_ids": ["all"],
@@ -279,8 +286,8 @@ def _candidate(
         "structural_issues": [],
         "summary": {
             "candidate_bound": True,
-            "selected_package_count": 155,
-            "policy_pending_package_count": 118,
+            "selected_package_count": len(selected_canonical_packages),
+            "policy_pending_package_count": canonical_pending_package_count,
             "structural_issue_count": 0,
             "status": "complete",
             "unresolved_count": 0,

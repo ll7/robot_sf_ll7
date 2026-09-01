@@ -5,6 +5,10 @@ The contract is intentionally observation-only.  Oracle transition records live 
 This keeps later estimator work honest about which values were available at a decision point.
 """
 
+# The package supports Python 3.11, while the repository-wide Ruff target is
+# Python 3.12. Keep the TypeVar spelling below until the minimum is raised.
+# ruff: noqa: UP047
+
 from __future__ import annotations
 
 import math
@@ -12,7 +16,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from itertools import pairwise
-from typing import Any
+from typing import Any, TypeVar
 
 from robot_sf.prediction._contract_utils import (
     canonical_json,
@@ -46,8 +50,13 @@ ACTOR_FORBIDDEN_KEYS = frozenset(
         "route_truth",
         "waypoint_truth",
         "simulator_pedestrian_id",
+        "oracle_speed_cap_active",
+        "speed_cap_truth",
+        "uncapped_velocity_xy",
     }
 )
+
+EnumT = TypeVar("EnumT", bound=StrEnum)
 
 
 class GoalBeliefSource(StrEnum):
@@ -81,6 +90,14 @@ class CensoringState(StrEnum):
     UNKNOWN = "unknown"
 
 
+class ActorSpeedCapStatus(StrEnum):
+    """Actor-visible uncertainty about whether a hidden speed cap affected data."""
+
+    CLEAR = "clear"
+    POSSIBLE = "possible"
+    UNKNOWN = "unknown"
+
+
 class ObservationMask(StrEnum):
     """Availability of one history row; slot position is never identity."""
 
@@ -96,7 +113,7 @@ class GoalCandidateKind(StrEnum):
     FINAL_DESTINATION = "final_destination"
 
 
-def _parse_enum(enum_type: type[StrEnum], value: Any, field_name: str) -> StrEnum:
+def _parse_enum(enum_type: type[EnumT], value: Any, field_name: str) -> EnumT:
     """Parse an external enum value with a field-specific failure.
 
     Returns:
@@ -191,6 +208,7 @@ def _validate_actor_values(  # noqa: C901, PLR0912, PLR0913
     mode: GoalBeliefMode,
     track_confidence: float | None,
     censoring_state: CensoringState,
+    speed_cap_status: ActorSpeedCapStatus,
     blockers: Sequence[str],
     reset_provenance: str | None,
     config_hash: str,
@@ -230,6 +248,8 @@ def _validate_actor_values(  # noqa: C901, PLR0912, PLR0913
         require_probability(track_confidence, "track_confidence")
     if not isinstance(censoring_state, CensoringState):
         raise TypeError("censoring_state must be CensoringState")
+    if not isinstance(speed_cap_status, ActorSpeedCapStatus):
+        raise TypeError("speed_cap_status must be ActorSpeedCapStatus")
     blocker_values = tuple(require_text(blocker, "blockers[]") for blocker in blockers)
     if len(set(blocker_values)) != len(blocker_values):
         raise ValueError("blockers must be unique")
@@ -237,6 +257,8 @@ def _validate_actor_values(  # noqa: C901, PLR0912, PLR0913
     if reset_provenance is not None:
         require_text(reset_provenance, "reset_provenance")
     require_digest(config_hash, "config_hash")
+    if isinstance(blockers, (str, bytes)) or not isinstance(blockers, Sequence):
+        raise TypeError("blockers must be an array")
 
     if mode is GoalBeliefMode.UNAVAILABLE:
         if not blocker_values:
@@ -421,6 +443,7 @@ class GoalBeliefObservation:
     mode: GoalBeliefMode = GoalBeliefMode.NOMINAL
     track_confidence: float | None = None
     censoring_state: CensoringState = CensoringState.NONE
+    speed_cap_status: ActorSpeedCapStatus = ActorSpeedCapStatus.UNKNOWN
     blockers: tuple[str, ...] = ()
     reset_provenance: str | None = None
 
@@ -442,6 +465,7 @@ class GoalBeliefObservation:
             mode=self.mode,
             track_confidence=self.track_confidence,
             censoring_state=self.censoring_state,
+            speed_cap_status=self.speed_cap_status,
             blockers=self.blockers,
             reset_provenance=self.reset_provenance,
             config_hash=self.config_hash,
@@ -481,6 +505,7 @@ class GoalBeliefV1:
     mode: GoalBeliefMode
     track_confidence: float | None
     censoring_state: CensoringState
+    speed_cap_status: ActorSpeedCapStatus
     blockers: tuple[str, ...]
     reset_provenance: str | None
     config_hash: str
@@ -506,6 +531,7 @@ class GoalBeliefV1:
             mode=self.mode,
             track_confidence=self.track_confidence,
             censoring_state=self.censoring_state,
+            speed_cap_status=self.speed_cap_status,
             blockers=self.blockers,
             reset_provenance=self.reset_provenance,
             config_hash=self.config_hash,
@@ -577,6 +603,7 @@ class GoalBeliefV1:
             mode=observation.mode,
             track_confidence=observation.track_confidence,
             censoring_state=observation.censoring_state,
+            speed_cap_status=observation.speed_cap_status,
             blockers=observation.blockers,
             reset_provenance=observation.reset_provenance,
             config_hash=observation.config_hash,
@@ -608,6 +635,7 @@ class GoalBeliefV1:
             "mode": self.mode.value,
             "track_confidence": self.track_confidence,
             "censoring_state": self.censoring_state.value,
+            "speed_cap_status": self.speed_cap_status.value,
             "blockers": list(self.blockers),
             "reset_provenance": self.reset_provenance,
             "config_hash": self.config_hash,
@@ -634,6 +662,7 @@ class GoalBeliefV1:
                 "mode",
                 "track_confidence",
                 "censoring_state",
+                "speed_cap_status",
             )
         }
 
@@ -673,6 +702,7 @@ class GoalBeliefV1:
             "mode",
             "track_confidence",
             "censoring_state",
+            "speed_cap_status",
             "blockers",
             "reset_provenance",
             "config_hash",
@@ -690,6 +720,9 @@ class GoalBeliefV1:
             raise TypeError("goal_belief.history_steps must be an array")
         if not isinstance(candidates_raw, Sequence) or isinstance(candidates_raw, (str, bytes)):
             raise TypeError("goal_belief.candidate_probabilities must be an array")
+        blockers_raw = value["blockers"]
+        if not isinstance(blockers_raw, Sequence) or isinstance(blockers_raw, (str, bytes)):
+            raise TypeError("goal_belief.blockers must be an array")
         history = tuple(
             ActorObservationStep.from_dict(_mapping(item, "history_step")) for item in history_raw
         )
@@ -728,7 +761,10 @@ class GoalBeliefV1:
             censoring_state=_parse_enum(
                 CensoringState, value["censoring_state"], "censoring_state"
             ),
-            blockers=tuple(value["blockers"]),
+            speed_cap_status=_parse_enum(
+                ActorSpeedCapStatus, value["speed_cap_status"], "speed_cap_status"
+            ),
+            blockers=tuple(blockers_raw),
             reset_provenance=value["reset_provenance"],
             config_hash=value["config_hash"],
         )
@@ -740,6 +776,7 @@ __all__ = [
     "GOAL_BELIEF_SCHEMA_VERSION",
     "HISTORY_ORDER",
     "ActorObservationStep",
+    "ActorSpeedCapStatus",
     "CensoringState",
     "CoordinateFrame",
     "ForceEstimate2D",

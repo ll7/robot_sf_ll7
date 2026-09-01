@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import math
+from dataclasses import replace
 
 import pytest
 
 from robot_sf.prediction.goal_belief_contract import (
     ACTOR_FORBIDDEN_KEYS,
     ActorObservationStep,
+    ActorSpeedCapStatus,
     CensoringState,
     CoordinateFrame,
     ForceEstimate2D,
@@ -171,12 +173,40 @@ def test_actor_constructor_rejects_oracle_like_objects_and_future_data() -> None
         GoalBeliefV1.from_observation(_observation(), current_step_index=0)
 
 
+def test_invalid_mode_source_and_frame_fail_closed() -> None:
+    """Enum fields cannot silently accept values outside the versioned contract."""
+    with pytest.raises(TypeError, match="mode must be GoalBeliefMode"):
+        replace(_observation(), mode="nominal")  # type: ignore[arg-type]
+
+    payload = GoalBeliefV1.from_observation(_observation()).to_dict()
+    payload["source"] = "not-a-source"
+    with pytest.raises(ValueError, match="source must be one of"):
+        GoalBeliefV1.from_dict(payload)
+    payload["source"] = "oracle_upper_bound"
+    assert GoalBeliefV1.from_dict(payload).source.value == "oracle_upper_bound"
+    payload["coordinate_frame"] = "robot_relative"
+    with pytest.raises(ValueError, match="one of"):
+        GoalBeliefV1.from_dict(payload)
+
+
 def test_actor_payload_and_model_features_have_no_oracle_fields() -> None:
     """Actor JSON and model-ready features must not carry simulator goal or identity truth."""
     belief = GoalBeliefV1.from_observation(_observation())
 
     assert ACTOR_FORBIDDEN_KEYS.isdisjoint(belief.to_dict())
     assert ACTOR_FORBIDDEN_KEYS.isdisjoint(belief.to_model_features())
+
+
+def test_actor_cap_status_is_uncertainty_not_oracle_truth() -> None:
+    """Actor payloads expose only cap uncertainty and never an applied cap value."""
+    observation = _observation()
+    observation = replace(observation, speed_cap_status=ActorSpeedCapStatus.POSSIBLE)
+    belief = GoalBeliefV1.from_observation(observation)
+
+    assert belief.speed_cap_status is ActorSpeedCapStatus.POSSIBLE
+    assert belief.to_dict()["speed_cap_status"] == "possible"
+    assert "oracle_speed_cap_active" not in belief.to_dict()
+    assert "applied_speed_mps" not in belief.to_model_features()
 
 
 def test_invisible_and_padded_history_rows_cannot_smuggle_values() -> None:
@@ -199,6 +229,22 @@ def test_invisible_and_padded_history_rows_cannot_smuggle_values() -> None:
     )
     assert padded.to_dict()["position_xy"] is None
     assert CoordinateFrame.GLOBAL_XY.value == "global_xy"
+
+
+def test_track_id_mapping_is_independent_of_observation_slot_order() -> None:
+    """Reordering a batch cannot exchange state because slot index is absent from the payload."""
+    observations = (_observation(track_id="track-a"), _observation(track_id="track-b"))
+    forward = {
+        observation.track_id: GoalBeliefV1.from_observation(observation).to_json()
+        for observation in observations
+    }
+    reversed_slots = {
+        observation.track_id: GoalBeliefV1.from_observation(observation).to_json()
+        for observation in reversed(observations)
+    }
+
+    assert forward == reversed_slots
+    assert all("slot_index" not in payload for payload in forward.values())
 
 
 def test_unknown_external_actor_key_fails_closed() -> None:

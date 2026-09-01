@@ -11,8 +11,10 @@ from robot_sf.ped_npc.ped_behavior import SinglePedestrianBehavior
 from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 from robot_sf.prediction.oracle_transition_trace import (
     SIMULATOR_TIMING_ORDER,
+    ControllerMutationFlags,
     DynamicsParameters,
     ForceComponents,
+    ForceTimeRobotState,
     GoalChangeKind,
     OracleTransitionTraceV1,
     SpeedCap,
@@ -133,6 +135,8 @@ def test_real_simulator_step_uses_post_behavior_goal_for_force_transition() -> N
             (2.0, 0.0),
             route_waypoint_index=1,
             goal_threshold_reached=False,
+            force_time_robot_state=ForceTimeRobotState(),
+            mutation_flags=ControllerMutationFlags(goal_redirected=True),
         ),
         post_integration=TransitionBoundary(
             TransitionBoundaryKind.POST_INTEGRATION,
@@ -144,7 +148,12 @@ def test_real_simulator_step_uses_post_behavior_goal_for_force_transition() -> N
             route_waypoint_index=1,
             goal_threshold_reached=False,
         ),
-        force_components=ForceComponents(total_force_xy=(0.0, 0.0)),
+        force_components=ForceComponents(
+            registry_total_force_xy=(0.0, 0.0),
+            final_pre_cap_force_xy=(0.0, 0.0),
+            uncapped_velocity_xy=(1.0, 0.0),
+            applied_velocity_xy=(1.0, 0.0),
+        ),
         dynamics=DynamicsParameters(goal_threshold_m=0.2),
         speed_cap=SpeedCap(SpeedCapStatus.UNKNOWN),
         goal_change_kind=GoalChangeKind.WAYPOINT_ADVANCE,

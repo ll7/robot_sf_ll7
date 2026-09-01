@@ -124,14 +124,14 @@
     "randomized_hidden_goal": "passed: actor output is unchanged because hidden goal identity is not an input",
     "oracle_helper": "passed: planner_oracle_goal_posterior_channel_from_state emits source=simulator_upper_bound and oracle_only=true",
     "typed_actor_adapter": "passed: oracle GoalBeliefV1 rejected when actor_only=true",
-    "planner_actor_only_guard": "passed: oracle channel rejected before action selection",
+    "typed_actor_only_guard": "passed: oracle GoalBeliefV1 rejected before planner-channel adaptation",
     "robot_env_true_goal_fallback": "passed: enabled environment reports candidate_provider_not_configured and does not read states[:, 4:6]",
     "default_disabled": "passed: disabled channel remains {enabled: false, pedestrian_goal_posteriors: {}}"
   },
   "validation": [
     {
-      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/prediction/test_goal_intention.py tests/prediction/test_goal_posterior_actor_oracle_boundary.py tests/prediction/test_goal_posterior_planner_input.py tests/benchmark/test_goal_posterior_actor_smoke_issue_8068.py tests/benchmark/test_goal_posterior_planner_input_smoke_issue_4164.py tests/planner/test_hybrid_rule_local_planner.py -k 'goal_posterior or goal_intention' -q",
-      "result": "32 passed, 59 deselected"
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/prediction/test_goal_intention.py tests/prediction/test_goal_posterior_actor_oracle_boundary.py tests/prediction/test_goal_posterior_planner_input.py tests/prediction/test_goal_posterior_actor_smoke_issue_8068.py tests/benchmark/test_goal_posterior_planner_input_smoke_issue_4164.py -q",
+      "result": "31 passed"
     },
     {
       "command": "scripts/dev/run_worktree_shared_venv.sh -- python scripts/benchmark/run_goal_posterior_actor_smoke_issue_8068.py --config configs/benchmarks/issue_8068_goal_posterior_actor_smoke.yaml --output <worktree-local-scratch-report>",
@@ -151,7 +151,7 @@
     },
     {
       "command": "uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras",
-      "result": "missing_optional: 26 imports; environment/setup evidence, not changed-code failure"
+      "result": "missing_optional: 26 imports; optional lane not required by changed files after typed-adapter narrowing"
     }
   ],
   "limitations": [

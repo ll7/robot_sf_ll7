@@ -7,10 +7,6 @@ import math
 import numpy as np
 import pytest
 
-from robot_sf.planner.hybrid_rule_local_planner import (
-    HybridRuleLocalPlannerAdapter,
-    HybridRuleLocalPlannerConfig,
-)
 from robot_sf.prediction.goal_belief_contract import GoalBeliefMode
 from robot_sf.prediction.goal_intention import (
     GoalCandidate,
@@ -369,43 +365,3 @@ def test_legacy_state_helper_is_explicit_oracle_metadata() -> None:
     summary = channel["pedestrian_goal_posteriors"]["ped_0"]
     assert summary["source"] == "simulator_upper_bound"
     assert summary["candidate_source"] == "oracle_true_goal_identity"
-
-
-def test_planner_actor_only_mode_rejects_oracle_channel() -> None:
-    """A configured actor-only planner refuses the compatibility oracle channel."""
-
-    planner = HybridRuleLocalPlannerAdapter(
-        HybridRuleLocalPlannerConfig(
-            goal_posterior_avoidance_enabled=True,
-            goal_posterior_actor_only=True,
-        )
-    )
-    observation = {
-        "robot": {
-            "position": np.array([0.0, 0.0]),
-            "heading": np.array([0.0]),
-            "speed": np.array([0.5]),
-            "radius": np.array([0.3]),
-        },
-        "goal": {"current": np.array([4.0, 0.0]), "next": np.array([4.0, 0.0])},
-        "pedestrians": {
-            "positions": np.array([[1.0, 0.2]]),
-            "velocities": np.array([[0.0, 0.8]]),
-            "count": np.array([1.0]),
-            "radius": 0.25,
-        },
-        "sim": {"timestep": 0.2},
-        "info": {
-            "planner_goal_posterior_channel": planner_oracle_goal_posterior_channel_from_state(
-                enabled=True,
-                positions=[(1.0, 0.2)],
-                velocities=[(0.0, 0.8)],
-                goals=[(5.0, 0.0)],
-            )
-        },
-    }
-
-    planner.plan(observation)
-    assert planner.diagnostics()["last_decision"]["goal_posterior_avoidance"]["blocker"] == (
-        "oracle_source_rejected"
-    )

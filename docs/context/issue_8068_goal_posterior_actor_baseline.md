@@ -41,8 +41,9 @@ compatibility wrapper with the same labels.
 `RobotEnv` no longer constructs candidates from `states[:, 4:6]`. Because no public
 candidate provider is configured in `EnvSettings` yet, an enabled environment
 channel reports `candidate_provider_not_configured`; the default remains disabled
-and unchanged. The hybrid-rule planner has an opt-in `goal_posterior_actor_only`
-guard that rejects oracle channels before they can influence an actor evaluation.
+and unchanged. The typed `planner_goal_posterior_channel_from_beliefs` adapter has
+an actor-only default and rejects oracle sources before they can reach an actor
+evaluation channel.
 
 ## Reproducible smoke
 

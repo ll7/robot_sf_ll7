@@ -1227,17 +1227,5 @@ def test_helper_runs_as_bare_script_without_pythonpath(tmp_path: Path) -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
+    assert "usage:" in result.stdout
     assert "No module named 'scripts'" not in result.stderr
-
-
-def test_bare_script_bootstrap_is_present_in_hermetic_entrypoints() -> None:
-    """The workflow invokes these helpers with bare ``python`` and no project
-    install; each must self-resolve the repository-root ``scripts`` package
-    from its own file location so the executing source stays the imported one."""
-    for relative in (
-        "scripts/dev/software_candidate_manifest.py",
-        "scripts/tools/check_distribution_licenses.py",
-    ):
-        source = (REPO_ROOT / relative).read_text(encoding="utf-8")
-        assert '__package__ in (None, "")' in source, relative
-        assert "sys.path.insert(0, str(Path(__file__).resolve().parents[2]))" in source, relative

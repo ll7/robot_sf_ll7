@@ -3,7 +3,7 @@
   "schema": "issue_8068_goal_posterior_actor_smoke_receipt.v1",
   "issue": 8068,
   "status": "verified",
-  "source_commit": "b778b586adafc0c136b0dcd2df7ee80a2d3797d9",
+  "source_commit": "551d3c40a7a31c46f3e510de55788616cff1ea60",
   "source_tree_scope": "observation-only heading baseline, explicit oracle boundary, tests, and smoke fixture",
   "claim_boundary": "implementation-integrity / smoke only",
   "research_claim": "none",

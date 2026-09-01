@@ -2329,31 +2329,26 @@ def _candidate_tree_sha1(repo_root: Path, commit_sha: str) -> str:
 def _validate_candidate_commit_identity(candidate_root: Path, report: dict[str, Any]) -> None:
     """Require the materializer's root commit identity, not just its tree bytes."""
     commit = report["candidate_commit_sha"]
-    metadata = _candidate_git_output(
+    raw_commit = _candidate_git_output(
         _run_candidate_git(
-            "show",
-            "-s",
-            "--format=%H%n%P%n%T%n%an%n%ae%n%cn%n%ce%n%aI%n%cI%n%B",
+            "cat-file",
+            "commit",
             commit,
             cwd=candidate_root,
         ),
         operation="read candidate commit identity",
-    ).decode("utf-8")
-    lines = metadata.splitlines()
-    expected = [
-        commit,
-        "",
-        report["candidate_tree_sha"],
-        "Robot SF candidate",
-        "candidate@robot-sf.invalid",
-        "Robot SF candidate",
-        "candidate@robot-sf.invalid",
-        "2000-01-01T00:00:00+00:00",
-        "2000-01-01T00:00:00+00:00",
-        "Materialize Robot SF software candidate",
-        "",
-    ]
-    if lines != expected:
+    )
+    headers, separator, message = raw_commit.partition(b"\n\n")
+    expected_headers = b"\n".join(
+        part.encode("ascii")
+        for part in (
+            f"tree {report['candidate_tree_sha']}",
+            "author Robot SF candidate <candidate@robot-sf.invalid> 946684800 +0000",
+            "committer Robot SF candidate <candidate@robot-sf.invalid> 946684800 +0000",
+        )
+    )
+    expected_message = b"Materialize Robot SF software candidate\n"
+    if separator != b"\n\n" or headers != expected_headers or message != expected_message:
         raise CandidateError("materialized candidate commit metadata or parent identity drifted")
 
 

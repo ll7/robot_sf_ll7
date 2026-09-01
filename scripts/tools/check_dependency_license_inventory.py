@@ -354,7 +354,12 @@ def _strict_report_summary_contract_issues(  # noqa: C901 - fail-closed summary 
 
     declared_contract = summary.get("summary_contract_version")
     if contract_version is not None:
-        if declared_contract != contract_version:
+        accepted_declared_contracts = (
+            (None, _LEGACY_SUMMARY_CONTRACT_VERSION)
+            if contract_version == _LEGACY_SUMMARY_CONTRACT_VERSION
+            else (contract_version,)
+        )
+        if declared_contract not in accepted_declared_contracts:
             issues.append(
                 "dependency receipt strict_report summary contract does not match receipt schema"
             )

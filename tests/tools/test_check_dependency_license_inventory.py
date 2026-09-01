@@ -878,6 +878,22 @@ def test_v2_receipt_summary_separates_findings_and_pending_rows() -> None:
 
 def test_v1_receipt_cannot_select_v2_summary_semantics() -> None:
     """A legacy top-level receipt cannot smuggle in the v2 count interpretation."""
+    markerless_legacy = {
+        "policy_exact_disposition_count": 37,
+        "policy_pending_package_count": 4,
+        "unresolved_count": 4,
+        "status": "blocked",
+    }
+    assert (
+        _strict_report_summary_contract_issues(
+            markerless_legacy,
+            receipt_status="blocked",
+            expected_policy_count=37,
+            contract_version=_LEGACY_SUMMARY_CONTRACT_VERSION,
+        )
+        == []
+    )
+
     summary = {
         "policy_exact_disposition_count": 37,
         "policy_pending_package_count": 119,

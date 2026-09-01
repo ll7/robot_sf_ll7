@@ -1080,6 +1080,111 @@ def test_all_profile_policy_ignores_transitive_membership_edges() -> None:
     )
 
 
+def test_selected_all_projects_exact_llvmlite_review_scope() -> None:
+    """The exact llvmlite row projects its reviewed scope onto ``all``."""
+    root = Path(__file__).resolve().parents[2]
+    inventory = build_inventory(
+        root,
+        distributions=[
+            _Distribution(
+                "llvmlite",
+                "0.49.0",
+                License_Expression="BSD-2-Clause AND Apache-2.0 WITH LLVM-exception",
+            )
+        ],
+        selected_profile_ids=["all"],
+    )
+
+    llvmlite = [
+        row
+        for row in inventory["packages"]
+        if row["package_id"] == "llvmlite@0.49.0#402fd93edfed2799"
+    ]
+    assert len(llvmlite) == 1
+    assert llvmlite[0]["profiles"] == [
+        "all",
+        "analytics",
+        "benchmark",
+        "browser",
+        "core",
+        "criticality",
+        "gpu",
+        "maps",
+        "progress",
+        "recurrent",
+        "rllib",
+        "sacadrl",
+        "socnav",
+        "training",
+        "viz",
+    ]
+    assert llvmlite[0]["selected_profiles"] == ["all"]
+    assert llvmlite[0]["exact_policy_status"] == "accepted"
+    assert not any(
+        "llvmlite" in failure and "profile coverage differs" in failure
+        for failure in inventory["failures"]
+    )
+
+
+def test_selected_policy_scope_rejects_missing_explicit_profile() -> None:
+    """Selecting two reviewed profiles cannot hide a missing explicit row member."""
+    policy = {
+        "id": "llvmlite-0-49-0-external-install",
+        "package": "llvmlite",
+        "version": "0.49.0",
+        "source": {"registry": "https://pypi.org/simple"},
+        "profiles": ["all", "core"],
+    }
+    record = {
+        "normalized_name": "llvmlite",
+        "version": "0.49.0",
+        "source": {"registry": "https://pypi.org/simple"},
+        "profiles": ["all", "core"],
+        "selected_profiles": ["all"],
+    }
+
+    failures = _exact_policy_coverage_failures(
+        [policy],
+        [record],
+        {"all", "core"},
+        {"all", "core"},
+    )
+
+    assert failures == [
+        "package disposition llvmlite-0-49-0-external-install profile coverage differs: "
+        "expected=['all', 'core'] actual=['all']"
+    ]
+
+
+def test_selected_scope_does_not_treat_all_as_a_wildcard() -> None:
+    """An aggregate selection cannot authorize a policy row for another profile."""
+    policy = {
+        "id": "demo-1-core-only",
+        "package": "demo",
+        "version": "1.0.0",
+        "source": {"registry": "https://pypi.org/simple"},
+        "profiles": ["core"],
+    }
+    record = {
+        "normalized_name": "demo",
+        "version": "1.0.0",
+        "source": {"registry": "https://pypi.org/simple"},
+        "profiles": ["all"],
+        "selected_profiles": ["all"],
+    }
+
+    failures = _exact_policy_coverage_failures(
+        [policy],
+        [record],
+        {"all", "core"},
+        {"all"},
+    )
+
+    assert failures == [
+        "package disposition demo-1-core-only profile coverage differs: expected=[] actual=['all']"
+    ]
+
+
 def test_moving_notice_url_requires_a_pending_durable_blocker() -> None:
     """Moving notice pointers cannot be laundered into reviewed evidence."""
     root = Path(__file__).resolve().parents[2]

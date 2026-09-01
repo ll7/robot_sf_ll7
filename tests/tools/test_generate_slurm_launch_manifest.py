@@ -94,20 +94,30 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Pat
     identity_path = tmp_path / "release_identity.resolved.json"
     _write_json(identity_path, identity)
 
-    validate_config = tmp_path / "preflight" / "validate_config.json"
-    preview = tmp_path / "preflight" / "preview_scenarios.json"
-    matrix_summary = tmp_path / "reports" / "matrix_summary.json"
+    validate_config = campaign_root / "preflight" / "validate_config.json"
+    preview = campaign_root / "preflight" / "preview_scenarios.json"
+    matrix_summary = campaign_root / "reports" / "matrix_summary.json"
     _write_json(
         validate_config,
         {
             "campaign_id": "release-test",
+            "config_path": "configs/release.json",
+            "config_sha256": sha256_file(config),
+            "scenario_matrix": "inputs/scenario_matrix.json",
             "scenario_count": 48,
             "planner_count": 14,
             "horizon": 600,
             "seed_policy": {"resolved_seeds": resolved_seeds},
         },
     )
-    _write_json(preview, {"campaign_id": "release-test", "scenario_count": 48})
+    _write_json(
+        preview,
+        {
+            "campaign_id": "release-test",
+            "scenario_count": 48,
+            "scenario_matrix": "inputs/scenario_matrix.json",
+        },
+    )
     _write_json(
         matrix_summary,
         {
@@ -115,11 +125,16 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Pat
             "rows": [
                 {
                     "planner_key": key,
+                    "campaign_id": "release-test",
+                    "scenario_matrix": "inputs/scenario_matrix.json",
+                    "scenario_matrix_hash": "scenario-matrix-hash",
                     "scenario_count": 48,
                     "resolved_seeds": resolved_seeds,
                     "repeats": 30,
                     "horizon": 600,
                     "kinematics": "differential_drive",
+                    "config_hash": "config-hash",
+                    "git_commit": source_commit,
                 }
                 for key in planner_keys
             ],
@@ -343,6 +358,56 @@ def test_validator_rejects_unsupported_schema_version(tmp_path: Path) -> None:
     assert blockers == [f"schema_version must be {SCHEMA_VERSION!r}"]
 
 
+def test_validator_rejects_schema_extensions_and_outcome_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    identity_path, runner_path, _config, source_commit = _fixture(tmp_path, monkeypatch)
+    output_path = tmp_path / "slurm_launch_manifest.json"
+    payload = generate_slurm_launch_manifest(
+        resolved_identity_path=identity_path,
+        runner_preflight_path=runner_path,
+        output_path=output_path,
+        repository_root=tmp_path,
+    )
+    payload["future_field"] = "unexpected"
+    payload["cells"][0]["jobId"] = "scheduler-123"
+
+    blockers = validate_launch_manifest(
+        payload,
+        manifest_path=output_path,
+        repository_root=tmp_path,
+        actual_public_commit=source_commit,
+    )
+
+    assert any("unsupported field: manifest.future_field" in blocker for blocker in blockers)
+    assert any("unsupported field: manifest.cells[0].jobId" in blocker for blocker in blockers)
+    assert any("future outcome field" in blocker and "jobId" in blocker for blocker in blockers)
+
+
+@pytest.mark.parametrize("key", ["jobId", "job-id", "job_id", "job"])
+def test_validator_rejects_all_scheduler_key_spellings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, key: str
+) -> None:
+    identity_path, runner_path, _config, source_commit = _fixture(tmp_path, monkeypatch)
+    output_path = tmp_path / "slurm_launch_manifest.json"
+    payload = generate_slurm_launch_manifest(
+        resolved_identity_path=identity_path,
+        runner_preflight_path=runner_path,
+        output_path=output_path,
+        repository_root=tmp_path,
+    )
+    payload["cells"][0][key] = "scheduler-value"
+
+    blockers = validate_launch_manifest(
+        payload,
+        manifest_path=output_path,
+        repository_root=tmp_path,
+        actual_public_commit=source_commit,
+    )
+
+    assert any("future outcome field" in blocker and key in blocker for blocker in blockers)
+
+
 def test_validator_reports_malformed_cells_and_records(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -383,6 +448,38 @@ def test_validator_reports_malformed_cells_and_records(
     assert any("cells[0].output_root must be relative" in blocker for blocker in blockers)
     assert any("inputs[0] must be an object" in blocker for blocker in blockers)
     assert any("preflight artifact records are missing" in blocker for blocker in blockers)
+
+
+def test_generator_binds_runner_artifacts_to_identity_and_campaign_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    identity_path, runner_path, _config, _source_commit = _fixture(tmp_path, monkeypatch)
+    runner = json.loads(runner_path.read_text(encoding="utf-8"))
+    validate_config = json.loads(Path(runner["validate_config_path"]).read_text(encoding="utf-8"))
+    validate_config["scenario_matrix"] = "inputs/other_matrix.json"
+    Path(runner["validate_config_path"]).write_text(
+        json.dumps(validate_config) + "\n", encoding="utf-8"
+    )
+
+    with pytest.raises(ValueError, match="validate_config scenario_matrix does not match identity"):
+        generate_slurm_launch_manifest(
+            resolved_identity_path=identity_path,
+            runner_preflight_path=runner_path,
+            output_path=tmp_path / "slurm_launch_manifest.json",
+            repository_root=tmp_path,
+        )
+
+    outside = tmp_path / "outside.json"
+    _write_json(outside, {"campaign_id": "release-test"})
+    runner["validate_config_path"] = str(outside)
+    runner_path.write_text(json.dumps(runner) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="outside campaign_root"):
+        generate_slurm_launch_manifest(
+            resolved_identity_path=identity_path,
+            runner_preflight_path=runner_path,
+            output_path=tmp_path / "slurm_launch_manifest.json",
+            repository_root=tmp_path,
+        )
 
 
 @pytest.mark.parametrize(

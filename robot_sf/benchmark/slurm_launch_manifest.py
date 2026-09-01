@@ -28,7 +28,64 @@ EXPECTED_KINEMATICS = ("differential_drive",)
 FULL_COMMIT_RE = re.compile(r"[0-9a-fA-F]{40}")
 SHA256_RE = re.compile(r"[0-9a-fA-F]{64}")
 _SLUG_RE = re.compile(r"[^A-Za-z0-9_.-]+")
-_FORBIDDEN_KEY_RE = re.compile(r"(?:success|result|job(?:_|$))", re.IGNORECASE)
+_FORBIDDEN_KEY_RE = re.compile(r"(?:success|result|job)", re.IGNORECASE)
+
+_SCHEMA_TOP_LEVEL_KEYS = frozenset(
+    {
+        "schema_version",
+        "manifest_kind",
+        "status",
+        "no_submit",
+        "execution_status",
+        "submission_status",
+        "evidence_status",
+        "claim_boundary",
+        "campaign_id",
+        "expected_public_commit",
+        "release",
+        "source",
+        "packet",
+        "matrix",
+        "preflight",
+        "inputs",
+        "cells",
+        "aggregate",
+    }
+)
+_SCHEMA_RELEASE_KEYS = frozenset({"release_id", "release_tag"})
+_SCHEMA_SOURCE_KEYS = frozenset({"commit", "resolved_manifest_sha256", "resolved_identity"})
+_SCHEMA_PACKET_KEYS = frozenset({"config", "sha256"})
+_SCHEMA_MATRIX_KEYS = frozenset(
+    {
+        "planner_arms",
+        "planner_keys",
+        "scenarios",
+        "seeds",
+        "resolved_seeds",
+        "expected_episode_cells",
+        "horizon_steps",
+        "kinematics",
+    }
+)
+_SCHEMA_PREFLIGHT_KEYS = frozenset({"status", "runner_report", "artifacts"})
+_SCHEMA_ROLE_RECORD_KEYS = frozenset({"role", "path", "sha256"})
+_SCHEMA_CELL_KEYS = frozenset(
+    {
+        "key",
+        "planner_key",
+        "scenario_count",
+        "seed_count",
+        "kinematics",
+        "declared_rows",
+        "instantiated_rows",
+        "row_semantics",
+        "output_root",
+        "artifact_contract",
+        "status",
+        "execution_status",
+    }
+)
+_SCHEMA_AGGREGATE_KEYS = frozenset({"status", "execution_status", "artifact_contract"})
 
 
 class LaunchManifestError(ValueError):
@@ -165,6 +222,60 @@ def _require_mapping(value: object, label: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise LaunchManifestError(f"{label} must be an object")
     return value
+
+
+def _validate_schema_object_keys(  # noqa: C901
+    manifest: Mapping[str, Any], *, blockers: list[str]
+) -> None:
+    """Enforce the checked-in schema's ``additionalProperties: false`` rules.
+
+    The public validator intentionally has no ``jsonschema`` dependency.  Keep
+    the small structural portion of the schema here so a minimal operations
+    host cannot silently accept future or misspelled fields that a full schema
+    validator would reject.
+    """
+
+    def check_object(value: object, allowed: frozenset[str], prefix: str) -> None:
+        if not isinstance(value, Mapping):
+            return
+        for key in value:
+            if not isinstance(key, str) or key not in allowed:
+                blockers.append(f"unsupported field: {prefix}.{key}")
+
+    def check_record(value: object, prefix: str) -> None:
+        check_object(value, _SCHEMA_ROLE_RECORD_KEYS, prefix)
+
+    def check_records(value: object, prefix: str) -> None:
+        if not isinstance(value, list):
+            return
+        for index, record in enumerate(value):
+            check_record(record, f"{prefix}[{index}]")
+
+    check_object(manifest, _SCHEMA_TOP_LEVEL_KEYS, "manifest")
+    check_object(manifest.get("release"), _SCHEMA_RELEASE_KEYS, "manifest.release")
+
+    source = manifest.get("source")
+    check_object(source, _SCHEMA_SOURCE_KEYS, "manifest.source")
+    if isinstance(source, Mapping):
+        check_record(source.get("resolved_identity"), "manifest.source.resolved_identity")
+
+    check_object(manifest.get("packet"), _SCHEMA_PACKET_KEYS, "manifest.packet")
+    check_object(manifest.get("matrix"), _SCHEMA_MATRIX_KEYS, "manifest.matrix")
+
+    preflight = manifest.get("preflight")
+    check_object(preflight, _SCHEMA_PREFLIGHT_KEYS, "manifest.preflight")
+    if isinstance(preflight, Mapping):
+        check_record(preflight.get("runner_report"), "manifest.preflight.runner_report")
+        check_records(preflight.get("artifacts"), "manifest.preflight.artifacts")
+
+    check_records(manifest.get("inputs"), "manifest.inputs")
+
+    cells = manifest.get("cells")
+    if isinstance(cells, list):
+        for index, cell in enumerate(cells):
+            check_object(cell, _SCHEMA_CELL_KEYS, f"manifest.cells[{index}]")
+
+    check_object(manifest.get("aggregate"), _SCHEMA_AGGREGATE_KEYS, "manifest.aggregate")
 
 
 def _require_string(value: object, label: str) -> str:
@@ -788,6 +899,7 @@ def validate_launch_manifest(  # noqa: C901, PLR0912
     blockers: list[str] = []
     if manifest.get("schema_version") != SCHEMA_VERSION:
         return [f"schema_version must be {SCHEMA_VERSION!r}"]
+    _validate_schema_object_keys(manifest, blockers=blockers)
     _validate_no_outcome_fields(manifest, prefix="manifest", blockers=blockers)
     required_literals = {
         "manifest_kind": "pre-submit-launch",
@@ -875,6 +987,25 @@ def _planner_slug(planner_key: str) -> str:
     return slug
 
 
+def _normalize_repository_path(value: object, *, repository_root: Path, label: str) -> str:
+    """Normalize a path-bearing runner field to a repository-relative POSIX path.
+
+    Returns:
+        Normalized repository-relative POSIX path.
+    """
+    raw = _require_string(value, label)
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = repository_root / candidate
+    if _has_symlink_component(candidate):
+        raise LaunchManifestError(f"{label} contains a symlink: {raw}")
+    resolved = candidate.resolve(strict=False)
+    root = repository_root.resolve()
+    if not resolved.is_relative_to(root):
+        raise LaunchManifestError(f"{label} escapes repository: {raw}")
+    return resolved.relative_to(root).as_posix()
+
+
 def _validate_runner_preflight(  # noqa: C901, PLR0912, PLR0915
     runner: Mapping[str, Any],
     *,
@@ -899,11 +1030,29 @@ def _validate_runner_preflight(  # noqa: C901, PLR0912, PLR0915
     if not isinstance(identity_resolved, Mapping) or report_resolved != identity_resolved:
         raise LaunchManifestError("runner preflight resolved_manifest does not match identity")
     campaign_id = _require_string(runner.get("campaign_id"), "runner campaign_id")
-    _resolve_directory(
+    campaign_root = _resolve_directory(
         runner.get("campaign_root"),
         anchor=runner_path.parent,
         repository_root=repository_root,
         label="runner campaign_root",
+    )
+    expected_config_path = _normalize_repository_path(
+        identity_resolved.get("canonical_campaign_config"),
+        repository_root=repository_root,
+        label="identity canonical campaign config",
+    )
+    expected_config_hash = _require_sha(
+        identity_resolved.get("canonical_campaign_config_sha256"),
+        "identity canonical campaign config hash",
+    )
+    identity_scenario = _require_mapping(identity_resolved.get("scenario"), "identity scenario")
+    expected_scenario_path = _normalize_repository_path(
+        identity_scenario.get("matrix_path"),
+        repository_root=repository_root,
+        label="identity scenario matrix",
+    )
+    expected_source_commit = _require_commit(
+        identity_payload.get("source_commit"), "identity.source_commit"
     )
 
     required_artifact_fields = (
@@ -921,6 +1070,8 @@ def _validate_runner_preflight(  # noqa: C901, PLR0912, PLR0915
             repository_root=repository_root,
             label=f"runner {field}",
         )
+        if not path.is_relative_to(campaign_root):
+            raise LaunchManifestError(f"runner artifact {role} is outside campaign_root")
         artifact_paths.append(path)
 
         payload = _load_json_object(path)
@@ -933,6 +1084,31 @@ def _validate_runner_preflight(  # noqa: C901, PLR0912, PLR0915
                 raise LaunchManifestError("runner validate_config planner_count must be 14")
             if payload.get("horizon") != EXPECTED_HORIZON_STEPS:
                 raise LaunchManifestError("runner validate_config horizon must be 600")
+            config_path = _normalize_repository_path(
+                payload.get("config_path"),
+                repository_root=repository_root,
+                label="runner validate_config config_path",
+            )
+            if config_path != expected_config_path:
+                raise LaunchManifestError(
+                    "runner validate_config config_path does not match identity"
+                )
+            config_hash = _require_sha(
+                payload.get("config_sha256"), "runner validate_config config_sha256"
+            )
+            if config_hash != expected_config_hash:
+                raise LaunchManifestError(
+                    "runner validate_config config_sha256 does not match identity"
+                )
+            scenario_path = _normalize_repository_path(
+                payload.get("scenario_matrix"),
+                repository_root=repository_root,
+                label="runner validate_config scenario_matrix",
+            )
+            if scenario_path != expected_scenario_path:
+                raise LaunchManifestError(
+                    "runner validate_config scenario_matrix does not match identity"
+                )
             seed_policy = payload.get("seed_policy")
             seeds = seed_policy.get("resolved_seeds") if isinstance(seed_policy, Mapping) else None
             if seeds != expected_seeds:
@@ -940,6 +1116,13 @@ def _validate_runner_preflight(  # noqa: C901, PLR0912, PLR0915
         elif role == "preview_scenarios":
             if payload.get("scenario_count") != EXPECTED_SCENARIOS:
                 raise LaunchManifestError("runner preview scenario_count must be 48")
+            scenario_path = _normalize_repository_path(
+                payload.get("scenario_matrix"),
+                repository_root=repository_root,
+                label="runner preview scenario_matrix",
+            )
+            if scenario_path != expected_scenario_path:
+                raise LaunchManifestError("runner preview scenario_matrix does not match identity")
         else:
             rows = payload.get("rows")
             if not isinstance(rows, list) or len(rows) != EXPECTED_PLANNER_ARMS:
@@ -953,9 +1136,13 @@ def _validate_runner_preflight(  # noqa: C901, PLR0912, PLR0915
                 raise LaunchManifestError(
                     "runner matrix_summary planner keys do not match identity"
                 )
+            scenario_hashes: set[str] = set()
+            config_hashes: set[str] = set()
             for row in rows:
                 if not isinstance(row, Mapping):
                     raise LaunchManifestError("runner matrix_summary rows must be objects")
+                if row.get("campaign_id") != campaign_id:
+                    raise LaunchManifestError("runner matrix_summary campaign_id does not match")
                 if row.get("scenario_count") != EXPECTED_SCENARIOS:
                     raise LaunchManifestError("runner matrix_summary scenario_count must be 48")
                 if row.get("repeats") != EXPECTED_SEEDS:
@@ -970,17 +1157,49 @@ def _validate_runner_preflight(  # noqa: C901, PLR0912, PLR0915
                     raise LaunchManifestError(
                         "runner matrix_summary kinematics must be differential_drive"
                     )
+                scenario_path = _normalize_repository_path(
+                    row.get("scenario_matrix"),
+                    repository_root=repository_root,
+                    label="runner matrix_summary scenario_matrix",
+                )
+                if scenario_path != expected_scenario_path:
+                    raise LaunchManifestError(
+                        "runner matrix_summary scenario_matrix does not match identity"
+                    )
+                scenario_hashes.add(
+                    _require_string(
+                        row.get("scenario_matrix_hash"),
+                        "runner matrix_summary scenario_matrix_hash",
+                    )
+                )
+                config_hashes.add(
+                    _require_string(row.get("config_hash"), "runner matrix_summary config_hash")
+                )
+                row_commit = _require_commit(
+                    row.get("git_commit"), "runner matrix_summary git_commit"
+                )
+                if row_commit != expected_source_commit:
+                    raise LaunchManifestError(
+                        "runner matrix_summary git_commit does not match identity"
+                    )
+            if len(scenario_hashes) != 1:
+                raise LaunchManifestError(
+                    "runner matrix_summary scenario_matrix_hash is not uniform"
+                )
+            if len(config_hashes) != 1:
+                raise LaunchManifestError("runner matrix_summary config_hash is not uniform")
 
     optional_csv = runner.get("matrix_summary_csv")
     if optional_csv:
-        artifact_paths.append(
-            _resolve_file(
-                optional_csv,
-                anchor=runner_path.parent,
-                repository_root=repository_root,
-                label="runner matrix_summary_csv",
-            )
+        optional_csv_path = _resolve_file(
+            optional_csv,
+            anchor=runner_path.parent,
+            repository_root=repository_root,
+            label="runner matrix_summary_csv",
         )
+        if not optional_csv_path.is_relative_to(campaign_root):
+            raise LaunchManifestError("runner artifact matrix_summary_csv is outside campaign_root")
+        artifact_paths.append(optional_csv_path)
     return campaign_id, artifact_paths
 
 

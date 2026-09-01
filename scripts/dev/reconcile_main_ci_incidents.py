@@ -184,8 +184,15 @@ def list_open_incidents(
     max_pages: int,
     runner: Runner,
 ) -> list[dict[str, Any]]:
-    """Return all open, non-PR issues carrying the exact incident label."""
-    query = urlencode({"state": "open", "labels": INCIDENT_LABEL})
+    """Return all open, non-PR issues carrying the label or body marker.
+
+    The incident creator's body marker is the durable identity contract.  The
+    label is retained as a compatibility signal, but cannot be the inventory
+    filter: the live issue stream contains canonical incidents created without
+    that label.  Enumerating the bounded open-issue collection keeps those
+    incidents visible and lets malformed marker-only cases fail closed.
+    """
+    query = urlencode({"state": "open"})
     rows = _paginate_collection(
         f"repos/{quote(repo, safe='/')}/issues?{query}",
         runner=runner,
@@ -197,7 +204,9 @@ def list_open_incidents(
         if _is_pull_request(row):
             continue
         candidate = _issue_row(row)
-        if INCIDENT_LABEL in candidate["labels"]:
+        has_label = INCIDENT_LABEL in candidate["labels"]
+        has_marker = INCIDENT_MARKER_RE.search(candidate["body"]) is not None
+        if has_label or has_marker:
             incidents.append(candidate)
     return sorted(incidents, key=lambda issue: issue["number"])
 
@@ -433,8 +442,12 @@ def _close_issue(*, repo: str, issue: int, runner: Runner) -> None:
         method="PATCH",
         payload={"state": "closed", "state_reason": "completed"},
     )
-    if not isinstance(payload, dict) or str(payload.get("state") or "").lower() != "closed":
-        raise ReconciliationError(f"issue #{issue} close readback was not closed")
+    if (
+        not isinstance(payload, dict)
+        or str(payload.get("state") or "").lower() != "closed"
+        or str(payload.get("state_reason") or "").lower() != "completed"
+    ):
+        raise ReconciliationError(f"issue #{issue} close readback was not closed as completed")
 
 
 def _apply_candidate(

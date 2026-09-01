@@ -2563,12 +2563,14 @@ exit-code contract is unchanged.
 
 ### Scheduled main-CI incident reconciliation
 
-Open issues carrying the canonical `ll7-main-red-incident:v1` label are
-reconciled by `.github/workflows/main-ci-incident-reconcile.yml`. The workflow
-uses the existing `main_ci_incident_reconcile.py` signal and requires two newer
-consecutive decisive green runs before it posts an evidence comment and closes
-an incident as completed. Active, pending, malformed, or concurrent-change
-cases remain open.
+Open issues carrying the canonical `ll7-main-red-incident:v1` body marker (or
+the compatibility label of the same name) are reconciled by
+`.github/workflows/main-ci-incident-reconcile.yml`. The body marker is the
+inventory identity because older incident creators may omit the label. The
+workflow uses the existing `main_ci_incident_reconcile.py` signal and requires
+two newer consecutive decisive green runs before it posts an evidence comment
+and closes an incident as completed. Active, pending, malformed, or
+concurrent-change cases remain open.
 
 The helper is report-only unless `--apply` is supplied, so an offline or local
 inspection can use:

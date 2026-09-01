@@ -124,6 +124,17 @@ def test_parse_deciding_run_requires_one_canonical_field() -> None:
     assert duplicate is None and duplicate_error is not None
 
 
+def test_marker_only_incident_is_inventoried_without_optional_label() -> None:
+    """The body marker remains discoverable when the creator omitted the label."""
+    fake = FakeREST(_issue(run_id=300))
+    fake.issue["labels"] = []
+
+    incidents = reconciler.list_open_incidents(repo=REPO, max_pages=10, runner=fake)
+
+    assert [issue["number"] for issue in incidents] == [1]
+    assert "labels=" not in fake.calls[0][0]
+
+
 def test_report_only_marks_stale_only_after_two_newer_green_runs() -> None:
     """Report-only mode identifies a stale candidate without writing hosted state."""
     fake = FakeREST(_issue(run_id=300))

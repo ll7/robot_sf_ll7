@@ -1,0 +1,3692 @@
+{
+  "capabilities": [
+    {
+      "anchor_relation": "operational_only",
+      "capability_id": "actionlint_and_ci_workflow_ratchets",
+      "category": "operational_reproducibility",
+      "claim_boundary_variants": [
+        "Automated static validation of GitHub Action workflows and pagination bounds."
+      ],
+      "dissertation_relationship": "repository_only",
+      "dissertation_status": "intentionally_out_of_scope",
+      "evidence_status": "operational_only",
+      "first_known_commit": {
+        "availability": "source_reported",
+        "field": "first_commit",
+        "source_id": "post_anchor_capability_delta",
+        "value": "80410000"
+      },
+      "implementation_status": "implemented",
+      "missing_proof": [
+        "None (operational tooling)."
+      ],
+      "owner_path_status": [
+        {
+          "path": ".github/workflows/",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "tests/dev/test_actionlint_contract.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        }
+      ],
+      "owner_paths": [
+        ".github/workflows/",
+        "tests/dev/test_actionlint_contract.py"
+      ],
+      "recommended_downstream_action": "repository_only",
+      "source_anchor_relations": [
+        {
+          "field": "status",
+          "projected_value": "operational_only",
+          "source_id": "post_anchor_capability_delta",
+          "value": "introduced_after_anchor"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "sha256": "5941b37252a952b0a5201828b110f3112601de141494d6f304e4b35df5ce1e5d",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "operational_only"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "implemented_and_tested"
+        }
+      ],
+      "source_issues": [
+        8041,
+        8046,
+        8054
+      ],
+      "source_lineage": [
+        {
+          "issue": 8046,
+          "merge_commit": "31d40a3d0930f47fb65724d71638c81d2aaec446",
+          "pr": 8138,
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "None (operational tooling)."
+          ],
+          "record_key": "actionlint_and_ci_workflow_ratchets",
+          "source_id": "post_anchor_capability_delta",
+          "value": [
+            "None (operational tooling)."
+          ]
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/post_anchor_capability_delta.v1.json"
+      ],
+      "source_recommended_actions": [
+        "repository_only"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "dissertation_relationship": "repository_only",
+            "evidence_status": "operational_only",
+            "implementation_status": "implemented_and_tested",
+            "release_relationship": "operational_tooling",
+            "status": "introduced_after_anchor",
+            "strongest_permitted_statement": "Automated static validation of GitHub Action workflows and pagination bounds."
+          },
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "record_key": "actionlint_and_ci_workflow_ratchets",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "strongest_permitted_wording": "Automated static validation of GitHub Action workflows and pagination bounds.",
+      "title": "Repository-Owned Actionlint and CI Workflow Ratchets"
+    },
+    {
+      "anchor_relation": "present_at_anchor",
+      "capability_id": "amv_actuation_realism_bridge",
+      "category": "future_work_bridge",
+      "claim_boundary_variants": [
+        "Public longitudinal e-scooter evidence provides a bounded proxy-source basis, while platform-specific yaw, latency, dynamics, and physical calibration remain absent.",
+        "2D kinematic clipping and e-scooter acceleration proxy profiles active; physical platform hardware system identification absent."
+      ],
+      "dissertation_relationship": "future_work_bridge",
+      "dissertation_status": "future_work_mentioned",
+      "evidence_status": "unsupported_proxy",
+      "first_known_commit": {
+        "availability": "source_reported",
+        "field": "first_commit",
+        "source_id": "post_anchor_capability_delta",
+        "value": "22270000"
+      },
+      "implementation_status": "prototype",
+      "missing_proof": [
+        "Closed-loop sim-to-real trajectory tracking validation on a physical AMV.",
+        "Physical hardware dynamometer and trajectory tracking measurements.",
+        "Physical vehicle platform system identification (measured command-to-motion latency, motor response curves).",
+        "Rotational dynamics, tire slip, terrain-dependent friction, and non-holonomic yaw inertia."
+      ],
+      "owner_path_status": [
+        {
+          "path": "configs/algos/",
+          "source_ids": [
+            "future_work_card_amv_actuation_realism_bridge",
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "configs/training/",
+          "source_ids": [
+            "future_work_card_amv_actuation_realism_bridge"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "robot_sf/sim/",
+          "source_ids": [
+            "future_work_card_amv_actuation_realism_bridge",
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        }
+      ],
+      "owner_paths": [
+        "configs/algos/",
+        "configs/training/",
+        "robot_sf/sim/"
+      ],
+      "recommended_downstream_action": "capability_status_table_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_anchor",
+          "projected_value": "present_at_anchor",
+          "source_id": "future_work_card_amv_actuation_realism_bridge",
+          "value": "present_at_anchor"
+        },
+        {
+          "field": "status",
+          "projected_value": "present_at_anchor",
+          "source_id": "post_anchor_capability_delta",
+          "value": "present_at_anchor_unchanged"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/future_work_cards/amv_actuation_realism_bridge.v1.json",
+          "sha256": "1ae39ff43de5456a0418faeb2a897972dac37c33b53dd5390ce9b1d98b7f71b4",
+          "source_id": "future_work_card_amv_actuation_realism_bridge"
+        },
+        {
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "sha256": "5941b37252a952b0a5201828b110f3112601de141494d6f304e4b35df5ce1e5d",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "future_work_card_amv_actuation_realism_bridge",
+          "value": "unsupported_proxy"
+        },
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "unsupported_proxy"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "future_work_card_amv_actuation_realism_bridge",
+          "value": "proxy_baseline_only"
+        },
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "proxy_baseline_only"
+        }
+      ],
+      "source_issues": [
+        2227,
+        8046,
+        8048
+      ],
+      "source_lineage": [
+        {
+          "issue": 8048,
+          "merge_commit": "55e6f91491f470cf3c455f8267602971518c398d",
+          "pr": 8137,
+          "source_id": "future_work_card_amv_actuation_realism_bridge"
+        },
+        {
+          "issue": 8046,
+          "merge_commit": "31d40a3d0930f47fb65724d71638c81d2aaec446",
+          "pr": 8138,
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Physical vehicle platform system identification (measured command-to-motion latency, motor response curves).",
+            "Rotational dynamics, tire slip, terrain-dependent friction, and non-holonomic yaw inertia.",
+            "Closed-loop sim-to-real trajectory tracking validation on a physical AMV."
+          ],
+          "record_key": "amv_actuation_realism_bridge",
+          "source_id": "future_work_card_amv_actuation_realism_bridge",
+          "value": [
+            "Physical vehicle platform system identification (measured command-to-motion latency, motor response curves).",
+            "Rotational dynamics, tire slip, terrain-dependent friction, and non-holonomic yaw inertia.",
+            "Closed-loop sim-to-real trajectory tracking validation on a physical AMV."
+          ]
+        },
+        {
+          "effective_value": [
+            "Physical hardware dynamometer and trajectory tracking measurements."
+          ],
+          "record_key": "amv_actuation_realism_bridge",
+          "source_id": "post_anchor_capability_delta",
+          "value": [
+            "Physical hardware dynamometer and trajectory tracking measurements."
+          ]
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/future_work_cards/amv_actuation_realism_bridge.v1.json",
+        "docs/context/evidence/post_anchor_capability_delta.v1.json"
+      ],
+      "source_recommended_actions": [
+        "capability_status_table_candidate",
+        "outlook_status_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "unsupported_proxy",
+            "implementation_status": "proxy_baseline_only",
+            "relationship_to_anchor": "present_at_anchor",
+            "safe_sentence": "Public longitudinal e-scooter evidence provides a bounded proxy-source basis, while platform-specific yaw, latency, dynamics, and physical calibration remain absent."
+          },
+          "path": "docs/context/evidence/future_work_cards/amv_actuation_realism_bridge.v1.json",
+          "record_key": "amv_actuation_realism_bridge",
+          "source_id": "future_work_card_amv_actuation_realism_bridge"
+        },
+        {
+          "fields": {
+            "dissertation_relationship": "future_work_bridge",
+            "evidence_status": "unsupported_proxy",
+            "implementation_status": "proxy_baseline_only",
+            "release_relationship": "included_proxy",
+            "status": "present_at_anchor_unchanged",
+            "strongest_permitted_statement": "2D kinematic clipping and e-scooter acceleration proxy profiles active; physical platform hardware system identification absent."
+          },
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "record_key": "amv_actuation_realism_bridge",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "strongest_permitted_wording": "Public longitudinal e-scooter evidence provides a bounded proxy-source basis, while platform-specific yaw, latency, dynamics, and physical calibration remain absent.",
+      "title": "AMV Actuation Realism Bridge"
+    },
+    {
+      "anchor_relation": "introduced_after_anchor",
+      "capability_id": "anisotropic_gaussian_human_cost_planner",
+      "category": "planner_and_policy",
+      "claim_boundary_variants": [
+        "Anisotropic Gaussian human-cost planner core implemented and unit-tested; not evaluated against benchmark release suites.",
+        "Post-anchor development prototype; strictly excluded from dissertation release roster."
+      ],
+      "dissertation_relationship": "post_anchor_candidate",
+      "dissertation_status": "absent",
+      "evidence_status": "diagnostic_only",
+      "first_known_commit": {
+        "availability": "source_reported",
+        "field": "first_commit",
+        "source_id": "post_anchor_capability_delta",
+        "value": "76030000"
+      },
+      "implementation_status": "implemented",
+      "missing_proof": [
+        "Frozen model checkpoint registration and runtime profiling.",
+        "Not provided by this source package; consult the source before stronger wording.",
+        "Standardized benchmark comparison across all 4 benchmark tracks."
+      ],
+      "owner_path_status": [
+        {
+          "path": "robot_sf/planner/predictive_human_cost.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "tests/planner/test_anisotropic_gaussian_cost.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        }
+      ],
+      "owner_paths": [
+        "robot_sf/planner/predictive_human_cost.py",
+        "tests/planner/test_anisotropic_gaussian_cost.py"
+      ],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "introduced_after_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "post_anchor"
+        },
+        {
+          "field": "status",
+          "projected_value": "introduced_after_anchor",
+          "source_id": "post_anchor_capability_delta",
+          "value": "introduced_after_anchor"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        },
+        {
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "sha256": "5941b37252a952b0a5201828b110f3112601de141494d6f304e4b35df5ce1e5d",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "diagnostic_only"
+        },
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "diagnostic_only"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        },
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "implemented_and_tested"
+        }
+      ],
+      "source_issues": [
+        7603,
+        8045,
+        8046
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        },
+        {
+          "issue": 8046,
+          "merge_commit": "31d40a3d0930f47fb65724d71638c81d2aaec446",
+          "pr": 8138,
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Standardized benchmark comparison across all 4 benchmark tracks.",
+            "Frozen model checkpoint registration and runtime profiling."
+          ],
+          "record_key": "anisotropic_gaussian_human_cost_planner",
+          "source_id": "post_anchor_capability_delta",
+          "value": [
+            "Standardized benchmark comparison across all 4 benchmark tracks.",
+            "Frozen model checkpoint registration and runtime profiling."
+          ]
+        },
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "anisotropic_gaussian_human_cost_planner",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json",
+        "docs/context/evidence/post_anchor_capability_delta.v1.json"
+      ],
+      "source_recommended_actions": [
+        "capability_status_table_candidate",
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "diagnostic_only",
+            "relationship_to_release": "post_anchor",
+            "strongest_permitted_statement": "Post-anchor development prototype; strictly excluded from dissertation release roster."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "anisotropic_gaussian_human_cost_planner",
+          "source_id": "planner_development_funnel"
+        },
+        {
+          "fields": {
+            "dissertation_relationship": "post_anchor_candidate",
+            "evidence_status": "diagnostic_only",
+            "implementation_status": "implemented_and_tested",
+            "release_relationship": "unreleased_prototype",
+            "status": "introduced_after_anchor",
+            "strongest_permitted_statement": "Anisotropic Gaussian human-cost planner core implemented and unit-tested; not evaluated against benchmark release suites."
+          },
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "record_key": "anisotropic_gaussian_human_cost_planner",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "strongest_permitted_wording": "Anisotropic Gaussian human-cost planner core implemented and unit-tested; not evaluated against benchmark release suites.",
+      "title": "Anisotropic Gaussian Human-Cost Planner"
+    },
+    {
+      "anchor_relation": "introduced_after_anchor",
+      "capability_id": "carla_cross_simulator_bridge",
+      "category": "future_work_bridge",
+      "claim_boundary_variants": [
+        "A pinned CARLA live-replay prototype exists and has demonstrated client/server connection plus bounded replay handling; matched actor-complete replay, metric parity, and cross-simulator validation remain unestablished.",
+        "CARLA connector client/server prototype verified on diagnostic fixtures; cross-simulator policy transfer unestablished."
+      ],
+      "dissertation_relationship": "future_work_bridge",
+      "dissertation_status": "future_work_mentioned",
+      "evidence_status": "diagnostic_only",
+      "first_known_commit": {
+        "availability": "source_reported",
+        "field": "first_commit",
+        "source_id": "post_anchor_capability_delta",
+        "value": "57000000"
+      },
+      "implementation_status": "partial",
+      "missing_proof": [
+        "Actor-complete replay parity between CARLA and Robot SF.",
+        "Coordinate, temporal, and action mapping formal equivalence proof.",
+        "Cross-simulator metric semantic parity (TTC, comfort, SocialForce force distributions).",
+        "Matched actor-complete cross-simulator scenario replay between Robot SF and CARLA.",
+        "Metric semantic equivalence proof.",
+        "Paired failure mode comparisons under native vs fallback execution."
+      ],
+      "owner_path_status": [
+        {
+          "path": "docs/context/carla_replay_parity.md",
+          "source_ids": [
+            "future_work_card_carla_cross_simulator_bridge"
+          ],
+          "status": "missing_expected_source_path"
+        },
+        {
+          "path": "robot_sf_carla_bridge/",
+          "source_ids": [
+            "future_work_card_carla_cross_simulator_bridge",
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "scripts/carla/",
+          "source_ids": [
+            "future_work_card_carla_cross_simulator_bridge",
+            "post_anchor_capability_delta"
+          ],
+          "status": "missing_expected_source_path"
+        }
+      ],
+      "owner_paths": [
+        "docs/context/carla_replay_parity.md",
+        "robot_sf_carla_bridge/",
+        "scripts/carla/"
+      ],
+      "recommended_downstream_action": "capability_status_table_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_anchor",
+          "projected_value": "introduced_after_anchor",
+          "source_id": "future_work_card_carla_cross_simulator_bridge",
+          "value": "introduced_after_anchor"
+        },
+        {
+          "field": "status",
+          "projected_value": "introduced_after_anchor",
+          "source_id": "post_anchor_capability_delta",
+          "value": "introduced_after_anchor"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/future_work_cards/carla_cross_simulator_bridge.v1.json",
+          "sha256": "734e8382d47310d14517ce80187653a6e282014a6fe90b8df96e63fa85257b81",
+          "source_id": "future_work_card_carla_cross_simulator_bridge"
+        },
+        {
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "sha256": "5941b37252a952b0a5201828b110f3112601de141494d6f304e4b35df5ce1e5d",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "future_work_card_carla_cross_simulator_bridge",
+          "value": "diagnostic_only"
+        },
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "diagnostic_only"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "future_work_card_carla_cross_simulator_bridge",
+          "value": "partial_prototype"
+        },
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "partial_prototype"
+        }
+      ],
+      "source_issues": [
+        5700,
+        7000,
+        8046,
+        8048
+      ],
+      "source_lineage": [
+        {
+          "issue": 8048,
+          "merge_commit": "55e6f91491f470cf3c455f8267602971518c398d",
+          "pr": 8137,
+          "source_id": "future_work_card_carla_cross_simulator_bridge"
+        },
+        {
+          "issue": 8046,
+          "merge_commit": "31d40a3d0930f47fb65724d71638c81d2aaec446",
+          "pr": 8138,
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Matched actor-complete cross-simulator scenario replay between Robot SF and CARLA.",
+            "Coordinate, temporal, and action mapping formal equivalence proof.",
+            "Cross-simulator metric semantic parity (TTC, comfort, SocialForce force distributions).",
+            "Paired failure mode comparisons under native vs fallback execution."
+          ],
+          "record_key": "carla_cross_simulator_bridge",
+          "source_id": "future_work_card_carla_cross_simulator_bridge",
+          "value": [
+            "Matched actor-complete cross-simulator scenario replay between Robot SF and CARLA.",
+            "Coordinate, temporal, and action mapping formal equivalence proof.",
+            "Cross-simulator metric semantic parity (TTC, comfort, SocialForce force distributions).",
+            "Paired failure mode comparisons under native vs fallback execution."
+          ]
+        },
+        {
+          "effective_value": [
+            "Actor-complete replay parity between CARLA and Robot SF.",
+            "Metric semantic equivalence proof."
+          ],
+          "record_key": "carla_cross_simulator_bridge",
+          "source_id": "post_anchor_capability_delta",
+          "value": [
+            "Actor-complete replay parity between CARLA and Robot SF.",
+            "Metric semantic equivalence proof."
+          ]
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/future_work_cards/carla_cross_simulator_bridge.v1.json",
+        "docs/context/evidence/post_anchor_capability_delta.v1.json"
+      ],
+      "source_recommended_actions": [
+        "capability_status_table_candidate",
+        "outlook_status_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "diagnostic_only",
+            "implementation_status": "partial_prototype",
+            "relationship_to_anchor": "introduced_after_anchor",
+            "safe_sentence": "A pinned CARLA live-replay prototype exists and has demonstrated client/server connection plus bounded replay handling; matched actor-complete replay, metric parity, and cross-simulator validation remain unestablished."
+          },
+          "path": "docs/context/evidence/future_work_cards/carla_cross_simulator_bridge.v1.json",
+          "record_key": "carla_cross_simulator_bridge",
+          "source_id": "future_work_card_carla_cross_simulator_bridge"
+        },
+        {
+          "fields": {
+            "dissertation_relationship": "future_work_bridge",
+            "evidence_status": "diagnostic_only",
+            "implementation_status": "partial_prototype",
+            "release_relationship": "unreleased_prototype",
+            "status": "introduced_after_anchor",
+            "strongest_permitted_statement": "CARLA connector client/server prototype verified on diagnostic fixtures; cross-simulator policy transfer unestablished."
+          },
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "record_key": "carla_cross_simulator_bridge",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "strongest_permitted_wording": "A pinned CARLA live-replay prototype exists and has demonstrated client/server connection plus bounded replay handling; matched actor-complete replay, metric parity, and cross-simulator validation remain unestablished.",
+      "title": "CARLA Cross-Simulator Bridge"
+    },
+    {
+      "anchor_relation": "predecessor_only",
+      "capability_id": "chance_constrained_mpc_gmm",
+      "category": "predictive_mpc",
+      "claim_boundary_variants": [
+        "Diagnostic research candidate; latency bounds precluded release admission."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "diagnostic_only",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "predecessor_only",
+          "source_id": "planner_development_funnel",
+          "value": "diagnostic_only"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "diagnostic_only"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "chance_constrained_mpc_gmm",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "diagnostic_only",
+            "relationship_to_release": "diagnostic_only",
+            "strongest_permitted_statement": "Diagnostic research candidate; latency bounds precluded release admission."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "chance_constrained_mpc_gmm",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Diagnostic research candidate; latency bounds precluded release admission.",
+      "title": "Chance-Constrained MPC (GMM)"
+    },
+    {
+      "anchor_relation": "unknown",
+      "capability_id": "diffusion_policy_smoke",
+      "category": "generative_policy",
+      "claim_boundary_variants": [
+        "Implementation prototype; real-time inference unviable on CPU benchmark lanes."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "smoke_only",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "unknown",
+          "source_id": "planner_development_funnel",
+          "value": "blocked_or_unavailable"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "smoke_only"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "diffusion_policy_smoke",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "smoke_only",
+            "relationship_to_release": "blocked_or_unavailable",
+            "strongest_permitted_statement": "Implementation prototype; real-time inference unviable on CPU benchmark lanes."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "diffusion_policy_smoke",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Implementation prototype; real-time inference unviable on CPU benchmark lanes.",
+      "title": "Diffusion Policy Adapter"
+    },
+    {
+      "anchor_relation": "predecessor_only",
+      "capability_id": "dwa_classic",
+      "category": "dynamic_window",
+      "claim_boundary_variants": [
+        "Diagnostic exploratory baseline; not included in frozen 14-arm roster."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "diagnostic_only",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "predecessor_only",
+          "source_id": "planner_development_funnel",
+          "value": "family_represented_by_successor"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "diagnostic_only"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "dwa_classic",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "diagnostic_only",
+            "relationship_to_release": "family_represented_by_successor",
+            "strongest_permitted_statement": "Diagnostic exploratory baseline; not included in frozen 14-arm roster."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "dwa_classic",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Diagnostic exploratory baseline; not included in frozen 14-arm roster.",
+      "title": "Classic Dynamic Window Approach"
+    },
+    {
+      "anchor_relation": "introduced_after_anchor",
+      "capability_id": "force_coupled_potential_field",
+      "category": "planner_and_policy",
+      "claim_boundary_variants": [
+        "Force-coupled potential-field planner implemented as a local navigation comparator; benchmark-grade evaluation unestablished.",
+        "Post-anchor development prototype; strictly excluded from dissertation release roster."
+      ],
+      "dissertation_relationship": "post_anchor_candidate",
+      "dissertation_status": "absent",
+      "evidence_status": "diagnostic_only",
+      "first_known_commit": {
+        "availability": "source_reported",
+        "field": "first_commit",
+        "source_id": "post_anchor_capability_delta",
+        "value": "78890000"
+      },
+      "implementation_status": "implemented",
+      "missing_proof": [
+        "Convergence and oscillation proof in dense crowds.",
+        "Not provided by this source package; consult the source before stronger wording.",
+        "Paired closed-loop evaluations on benchmark splits."
+      ],
+      "owner_path_status": [
+        {
+          "path": "robot_sf/planner/force_coupled_potential_field.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "tests/planner/test_force_coupled_potential_field.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        }
+      ],
+      "owner_paths": [
+        "robot_sf/planner/force_coupled_potential_field.py",
+        "tests/planner/test_force_coupled_potential_field.py"
+      ],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "introduced_after_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "post_anchor"
+        },
+        {
+          "field": "status",
+          "projected_value": "introduced_after_anchor",
+          "source_id": "post_anchor_capability_delta",
+          "value": "introduced_after_anchor"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        },
+        {
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "sha256": "5941b37252a952b0a5201828b110f3112601de141494d6f304e4b35df5ce1e5d",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "diagnostic_only"
+        },
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "diagnostic_only"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        },
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "implemented_and_tested"
+        }
+      ],
+      "source_issues": [
+        7889,
+        8015,
+        8045,
+        8046
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        },
+        {
+          "issue": 8046,
+          "merge_commit": "31d40a3d0930f47fb65724d71638c81d2aaec446",
+          "pr": 8138,
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Paired closed-loop evaluations on benchmark splits.",
+            "Convergence and oscillation proof in dense crowds."
+          ],
+          "record_key": "force_coupled_potential_field",
+          "source_id": "post_anchor_capability_delta",
+          "value": [
+            "Paired closed-loop evaluations on benchmark splits.",
+            "Convergence and oscillation proof in dense crowds."
+          ]
+        },
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "force_coupled_potential_field",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json",
+        "docs/context/evidence/post_anchor_capability_delta.v1.json"
+      ],
+      "source_recommended_actions": [
+        "capability_status_table_candidate",
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "diagnostic_only",
+            "relationship_to_release": "post_anchor",
+            "strongest_permitted_statement": "Post-anchor development prototype; strictly excluded from dissertation release roster."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "force_coupled_potential_field",
+          "source_id": "planner_development_funnel"
+        },
+        {
+          "fields": {
+            "dissertation_relationship": "post_anchor_candidate",
+            "evidence_status": "diagnostic_only",
+            "implementation_status": "implemented_and_tested",
+            "release_relationship": "unreleased_prototype",
+            "status": "introduced_after_anchor",
+            "strongest_permitted_statement": "Force-coupled potential-field planner implemented as a local navigation comparator; benchmark-grade evaluation unestablished."
+          },
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "record_key": "force_coupled_potential_field",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "strongest_permitted_wording": "Force-coupled potential-field planner implemented as a local navigation comparator; benchmark-grade evaluation unestablished.",
+      "title": "Force-Coupled Potential-Field Core and Comparator"
+    },
+    {
+      "anchor_relation": "operational_only",
+      "capability_id": "function_length_and_complexity_audits",
+      "category": "operational_reproducibility",
+      "claim_boundary_variants": [
+        "Module-qualified identity and call attribution for static linters and config audits."
+      ],
+      "dissertation_relationship": "repository_only",
+      "dissertation_status": "intentionally_out_of_scope",
+      "evidence_status": "operational_only",
+      "first_known_commit": {
+        "availability": "source_reported",
+        "field": "first_commit",
+        "source_id": "post_anchor_capability_delta",
+        "value": "80550000"
+      },
+      "implementation_status": "implemented",
+      "missing_proof": [
+        "None (operational tooling)."
+      ],
+      "owner_path_status": [
+        {
+          "path": "scripts/dev/audit_config_families.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "scripts/dev/audit_function_lengths.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "scripts/dev/audit_validation_helpers.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        }
+      ],
+      "owner_paths": [
+        "scripts/dev/audit_config_families.py",
+        "scripts/dev/audit_function_lengths.py",
+        "scripts/dev/audit_validation_helpers.py"
+      ],
+      "recommended_downstream_action": "repository_only",
+      "source_anchor_relations": [
+        {
+          "field": "status",
+          "projected_value": "operational_only",
+          "source_id": "post_anchor_capability_delta",
+          "value": "introduced_after_anchor"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "sha256": "5941b37252a952b0a5201828b110f3112601de141494d6f304e4b35df5ce1e5d",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "operational_only"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "implemented_and_tested"
+        }
+      ],
+      "source_issues": [
+        8046,
+        8055,
+        8056,
+        8059
+      ],
+      "source_lineage": [
+        {
+          "issue": 8046,
+          "merge_commit": "31d40a3d0930f47fb65724d71638c81d2aaec446",
+          "pr": 8138,
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "None (operational tooling)."
+          ],
+          "record_key": "function_length_and_complexity_audits",
+          "source_id": "post_anchor_capability_delta",
+          "value": [
+            "None (operational tooling)."
+          ]
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/post_anchor_capability_delta.v1.json"
+      ],
+      "source_recommended_actions": [
+        "repository_only"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "dissertation_relationship": "repository_only",
+            "evidence_status": "operational_only",
+            "implementation_status": "implemented_and_tested",
+            "release_relationship": "operational_tooling",
+            "status": "introduced_after_anchor",
+            "strongest_permitted_statement": "Module-qualified identity and call attribution for static linters and config audits."
+          },
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "record_key": "function_length_and_complexity_audits",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "strongest_permitted_wording": "Module-qualified identity and call attribution for static linters and config audits.",
+      "title": "Function-Length and Helper Call Attribution Audits"
+    },
+    {
+      "anchor_relation": "present_at_anchor",
+      "capability_id": "goal",
+      "category": "baseline_kinematic",
+      "claim_boundary_variants": [
+        "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "release_evaluated",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "present_at_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "included_exact_key"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "release_evaluated"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "goal",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "release_evaluated",
+            "relationship_to_release": "included_exact_key",
+            "strongest_permitted_statement": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "goal",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign.",
+      "title": "Direct Goal Following"
+    },
+    {
+      "anchor_relation": "present_at_anchor",
+      "capability_id": "guarded_ppo",
+      "category": "hybrid_learning",
+      "claim_boundary_variants": [
+        "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "release_evaluated",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "present_at_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "included_exact_key"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "release_evaluated"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "guarded_ppo",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "release_evaluated",
+            "relationship_to_release": "included_exact_key",
+            "strongest_permitted_statement": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "guarded_ppo",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign.",
+      "title": "Guarded PPO Policy"
+    },
+    {
+      "anchor_relation": "present_at_anchor",
+      "capability_id": "hybrid_rule_v3_fast_progress_static_escape",
+      "category": "hybrid_rule",
+      "claim_boundary_variants": [
+        "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "release_evaluated",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "present_at_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "included_exact_key"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "release_evaluated"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "hybrid_rule_v3_fast_progress_static_escape",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "release_evaluated",
+            "relationship_to_release": "included_exact_key",
+            "strongest_permitted_statement": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "hybrid_rule_v3_fast_progress_static_escape",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign.",
+      "title": "Hybrid Rule v3 Fast Progress (Discrete)"
+    },
+    {
+      "anchor_relation": "present_at_anchor",
+      "capability_id": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "category": "hybrid_rule",
+      "claim_boundary_variants": [
+        "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "release_evaluated",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "present_at_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "included_exact_key"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "release_evaluated"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "release_evaluated",
+            "relationship_to_release": "included_exact_key",
+            "strongest_permitted_statement": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign.",
+      "title": "Hybrid Rule v3 Fast Progress (Continuous)"
+    },
+    {
+      "anchor_relation": "introduced_after_anchor",
+      "capability_id": "incident_to_scenario_provenance",
+      "category": "future_work_bridge",
+      "claim_boundary_variants": [
+        "A fail-closed provenance contract can distinguish source facts, extracted hypotheses, simulator assumptions, and replay identity for a synthetic incident fixture; real-report validity and representativeness remain future work.",
+        "Incident-to-scenario provenance contract validated on synthetic fixtures; real-world incident report ingestion remains future work."
+      ],
+      "dissertation_relationship": "post_anchor_candidate",
+      "dissertation_status": "absent",
+      "evidence_status": "synthetic_fixture",
+      "first_known_commit": {
+        "availability": "source_reported",
+        "field": "first_commit",
+        "source_id": "post_anchor_capability_delta",
+        "value": "78880000"
+      },
+      "implementation_status": "implemented",
+      "missing_proof": [
+        "Audited conversion accuracy from official reports to simulation maps.",
+        "Empirical validation that reconstructed scenarios faithfully represent real incidents.",
+        "Human-audited extraction accuracy and representativeness bounds.",
+        "Ingestion and validation of real-world public transportation or robot collision incident reports.",
+        "Ingestion of real public transit / robot collision records."
+      ],
+      "owner_path_status": [
+        {
+          "path": "docs/context/evidence/",
+          "source_ids": [
+            "future_work_card_incident_to_scenario_provenance"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "robot_sf/benchmark/collision/incident_scenario_provenance.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "robot_sf/provenance/",
+          "source_ids": [
+            "future_work_card_incident_to_scenario_provenance"
+          ],
+          "status": "missing_expected_source_path"
+        },
+        {
+          "path": "scripts/analysis/",
+          "source_ids": [
+            "future_work_card_incident_to_scenario_provenance"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "tests/benchmark/test_incident_scenario_provenance.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        }
+      ],
+      "owner_paths": [
+        "docs/context/evidence/",
+        "robot_sf/benchmark/collision/incident_scenario_provenance.py",
+        "robot_sf/provenance/",
+        "scripts/analysis/",
+        "tests/benchmark/test_incident_scenario_provenance.py"
+      ],
+      "recommended_downstream_action": "capability_status_table_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_anchor",
+          "projected_value": "introduced_after_anchor",
+          "source_id": "future_work_card_incident_to_scenario_provenance",
+          "value": "introduced_after_anchor"
+        },
+        {
+          "field": "status",
+          "projected_value": "introduced_after_anchor",
+          "source_id": "post_anchor_capability_delta",
+          "value": "introduced_after_anchor"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/future_work_cards/incident_to_scenario_provenance.v1.json",
+          "sha256": "2c02a7174b732fbe924a982abac11c177b750b73e9925861590dfba9263ec181",
+          "source_id": "future_work_card_incident_to_scenario_provenance"
+        },
+        {
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "sha256": "5941b37252a952b0a5201828b110f3112601de141494d6f304e4b35df5ce1e5d",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "future_work_card_incident_to_scenario_provenance",
+          "value": "synthetic_fixture"
+        },
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "synthetic_fixture"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "future_work_card_incident_to_scenario_provenance",
+          "value": "schema_and_tooling_only"
+        },
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "implemented_and_tested"
+        }
+      ],
+      "source_issues": [
+        7888,
+        7900,
+        8046,
+        8048
+      ],
+      "source_lineage": [
+        {
+          "issue": 8048,
+          "merge_commit": "55e6f91491f470cf3c455f8267602971518c398d",
+          "pr": 8137,
+          "source_id": "future_work_card_incident_to_scenario_provenance"
+        },
+        {
+          "issue": 8046,
+          "merge_commit": "31d40a3d0930f47fb65724d71638c81d2aaec446",
+          "pr": 8138,
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Ingestion and validation of real-world public transportation or robot collision incident reports.",
+            "Human-audited extraction accuracy and representativeness bounds.",
+            "Empirical validation that reconstructed scenarios faithfully represent real incidents."
+          ],
+          "record_key": "incident_to_scenario_provenance",
+          "source_id": "future_work_card_incident_to_scenario_provenance",
+          "value": [
+            "Ingestion and validation of real-world public transportation or robot collision incident reports.",
+            "Human-audited extraction accuracy and representativeness bounds.",
+            "Empirical validation that reconstructed scenarios faithfully represent real incidents."
+          ]
+        },
+        {
+          "effective_value": [
+            "Ingestion of real public transit / robot collision records.",
+            "Audited conversion accuracy from official reports to simulation maps."
+          ],
+          "record_key": "incident_to_scenario_provenance",
+          "source_id": "post_anchor_capability_delta",
+          "value": [
+            "Ingestion of real public transit / robot collision records.",
+            "Audited conversion accuracy from official reports to simulation maps."
+          ]
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/future_work_cards/incident_to_scenario_provenance.v1.json",
+        "docs/context/evidence/post_anchor_capability_delta.v1.json"
+      ],
+      "source_recommended_actions": [
+        "capability_status_table_candidate",
+        "outlook_status_candidate",
+        "repository_only"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "synthetic_fixture",
+            "implementation_status": "schema_and_tooling_only",
+            "relationship_to_anchor": "introduced_after_anchor",
+            "safe_sentence": "A fail-closed provenance contract can distinguish source facts, extracted hypotheses, simulator assumptions, and replay identity for a synthetic incident fixture; real-report validity and representativeness remain future work."
+          },
+          "path": "docs/context/evidence/future_work_cards/incident_to_scenario_provenance.v1.json",
+          "record_key": "incident_to_scenario_provenance",
+          "source_id": "future_work_card_incident_to_scenario_provenance"
+        },
+        {
+          "fields": {
+            "dissertation_relationship": "post_anchor_candidate",
+            "evidence_status": "synthetic_fixture",
+            "implementation_status": "implemented_and_tested",
+            "release_relationship": "unreleased_diagnostic",
+            "status": "introduced_after_anchor",
+            "strongest_permitted_statement": "Incident-to-scenario provenance contract validated on synthetic fixtures; real-world incident report ingestion remains future work."
+          },
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "record_key": "incident_to_scenario_provenance",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "strongest_permitted_wording": "A fail-closed provenance contract can distinguish source facts, extracted hypotheses, simulator assumptions, and replay identity for a synthetic incident fixture; real-report validity and representativeness remain future work.",
+      "title": "Incident-to-Scenario Provenance"
+    },
+    {
+      "anchor_relation": "operational_only",
+      "capability_id": "issue_claim_and_queue_automation",
+      "category": "operational_reproducibility",
+      "claim_boundary_variants": [
+        "Autonomous issue claim lifecycle and prepublication ancestry validation active."
+      ],
+      "dissertation_relationship": "repository_only",
+      "dissertation_status": "intentionally_out_of_scope",
+      "evidence_status": "operational_only",
+      "first_known_commit": {
+        "availability": "source_reported",
+        "field": "first_commit",
+        "source_id": "post_anchor_capability_delta",
+        "value": "81350000"
+      },
+      "implementation_status": "implemented",
+      "missing_proof": [
+        "None (operational tooling)."
+      ],
+      "owner_path_status": [
+        {
+          "path": "scripts/dev/goal_issue_admission.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "scripts/dev/issue_claim.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        }
+      ],
+      "owner_paths": [
+        "scripts/dev/goal_issue_admission.py",
+        "scripts/dev/issue_claim.py"
+      ],
+      "recommended_downstream_action": "repository_only",
+      "source_anchor_relations": [
+        {
+          "field": "status",
+          "projected_value": "operational_only",
+          "source_id": "post_anchor_capability_delta",
+          "value": "introduced_after_anchor"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "sha256": "5941b37252a952b0a5201828b110f3112601de141494d6f304e4b35df5ce1e5d",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "operational_only"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "implemented_and_tested"
+        }
+      ],
+      "source_issues": [
+        8046,
+        8135
+      ],
+      "source_lineage": [
+        {
+          "issue": 8046,
+          "merge_commit": "31d40a3d0930f47fb65724d71638c81d2aaec446",
+          "pr": 8138,
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "None (operational tooling)."
+          ],
+          "record_key": "issue_claim_and_queue_automation",
+          "source_id": "post_anchor_capability_delta",
+          "value": [
+            "None (operational tooling)."
+          ]
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/post_anchor_capability_delta.v1.json"
+      ],
+      "source_recommended_actions": [
+        "repository_only"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "dissertation_relationship": "repository_only",
+            "evidence_status": "operational_only",
+            "implementation_status": "implemented_and_tested",
+            "release_relationship": "operational_tooling",
+            "status": "introduced_after_anchor",
+            "strongest_permitted_statement": "Autonomous issue claim lifecycle and prepublication ancestry validation active."
+          },
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "record_key": "issue_claim_and_queue_automation",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "strongest_permitted_wording": "Autonomous issue claim lifecycle and prepublication ancestry validation active.",
+      "title": "Agent Issue Claim and Queue Admission Tooling"
+    },
+    {
+      "anchor_relation": "present_at_anchor",
+      "capability_id": "orca",
+      "category": "velocity_obstacle",
+      "claim_boundary_variants": [
+        "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "release_evaluated",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "present_at_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "included_exact_key"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "release_evaluated"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "orca",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "release_evaluated",
+            "relationship_to_release": "included_exact_key",
+            "strongest_permitted_statement": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "orca",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign.",
+      "title": "Optimal Reciprocal Collision Avoidance"
+    },
+    {
+      "anchor_relation": "present_at_anchor",
+      "capability_id": "ppo",
+      "category": "reinforcement_learning",
+      "claim_boundary_variants": [
+        "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "release_evaluated",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "present_at_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "included_exact_key"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "release_evaluated"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "ppo",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "release_evaluated",
+            "relationship_to_release": "included_exact_key",
+            "strongest_permitted_statement": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "ppo",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign.",
+      "title": "Feed-Forward PPO Policy"
+    },
+    {
+      "anchor_relation": "present_at_anchor",
+      "capability_id": "prediction_planner",
+      "category": "predictive_mpc",
+      "claim_boundary_variants": [
+        "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "release_evaluated",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "present_at_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "included_exact_key"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "release_evaluated"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "prediction_planner",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "release_evaluated",
+            "relationship_to_release": "included_exact_key",
+            "strongest_permitted_statement": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "prediction_planner",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign.",
+      "title": "Prediction MPC Planner"
+    },
+    {
+      "anchor_relation": "present_at_anchor",
+      "capability_id": "predictive_mppi",
+      "category": "sampling_based",
+      "claim_boundary_variants": [
+        "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "release_evaluated",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "present_at_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "included_exact_key"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "release_evaluated"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "predictive_mppi",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "release_evaluated",
+            "relationship_to_release": "included_exact_key",
+            "strongest_permitted_statement": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "predictive_mppi",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign.",
+      "title": "Predictive MPPI Controller"
+    },
+    {
+      "anchor_relation": "introduced_after_anchor",
+      "capability_id": "recurrent_ppo_stateful_adapter",
+      "category": "planner_and_policy",
+      "claim_boundary_variants": [
+        "RecurrentPPO stateful observation and hidden-state handling adapter implemented; full training campaign results unverified.",
+        "Post-anchor development prototype; strictly excluded from dissertation release roster."
+      ],
+      "dissertation_relationship": "post_anchor_candidate",
+      "dissertation_status": "absent",
+      "evidence_status": "diagnostic_only",
+      "first_known_commit": {
+        "availability": "source_reported",
+        "field": "first_commit",
+        "source_id": "post_anchor_capability_delta",
+        "value": "78450000"
+      },
+      "implementation_status": "implemented",
+      "missing_proof": [
+        "Comparative performance against standard feed-forward PPO baselines.",
+        "Not provided by this source package; consult the source before stronger wording.",
+        "Trained recurrent policy checkpoint with deterministic seed verification."
+      ],
+      "owner_path_status": [
+        {
+          "path": "robot_sf/planner/recurrent_ppo_learned_adapter.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "tests/planner/test_recurrent_ppo_learned_adapter.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        }
+      ],
+      "owner_paths": [
+        "robot_sf/planner/recurrent_ppo_learned_adapter.py",
+        "tests/planner/test_recurrent_ppo_learned_adapter.py"
+      ],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "introduced_after_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "post_anchor"
+        },
+        {
+          "field": "status",
+          "projected_value": "introduced_after_anchor",
+          "source_id": "post_anchor_capability_delta",
+          "value": "introduced_after_anchor"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        },
+        {
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "sha256": "5941b37252a952b0a5201828b110f3112601de141494d6f304e4b35df5ce1e5d",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "diagnostic_only"
+        },
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "diagnostic_only"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        },
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "implemented_and_tested"
+        }
+      ],
+      "source_issues": [
+        7845,
+        7848,
+        8045,
+        8046
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        },
+        {
+          "issue": 8046,
+          "merge_commit": "31d40a3d0930f47fb65724d71638c81d2aaec446",
+          "pr": 8138,
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Trained recurrent policy checkpoint with deterministic seed verification.",
+            "Comparative performance against standard feed-forward PPO baselines."
+          ],
+          "record_key": "recurrent_ppo_stateful_adapter",
+          "source_id": "post_anchor_capability_delta",
+          "value": [
+            "Trained recurrent policy checkpoint with deterministic seed verification.",
+            "Comparative performance against standard feed-forward PPO baselines."
+          ]
+        },
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "recurrent_ppo_stateful_adapter",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json",
+        "docs/context/evidence/post_anchor_capability_delta.v1.json"
+      ],
+      "source_recommended_actions": [
+        "capability_status_table_candidate",
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "diagnostic_only",
+            "relationship_to_release": "post_anchor",
+            "strongest_permitted_statement": "Post-anchor development prototype; strictly excluded from dissertation release roster."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "recurrent_ppo_stateful_adapter",
+          "source_id": "planner_development_funnel"
+        },
+        {
+          "fields": {
+            "dissertation_relationship": "post_anchor_candidate",
+            "evidence_status": "diagnostic_only",
+            "implementation_status": "implemented_and_tested",
+            "release_relationship": "unreleased_prototype",
+            "status": "introduced_after_anchor",
+            "strongest_permitted_statement": "RecurrentPPO stateful observation and hidden-state handling adapter implemented; full training campaign results unverified."
+          },
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "record_key": "recurrent_ppo_stateful_adapter",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "strongest_permitted_wording": "RecurrentPPO stateful observation and hidden-state handling adapter implemented; full training campaign results unverified.",
+      "title": "Stateful RecurrentPPO Planner Adapter"
+    },
+    {
+      "anchor_relation": "operational_only",
+      "capability_id": "release_candidate_builder_and_verification",
+      "category": "operational_reproducibility",
+      "claim_boundary_variants": [
+        "Hermetic candidate artifact build, extraction, and validation tooling active."
+      ],
+      "dissertation_relationship": "repository_only",
+      "dissertation_status": "intentionally_out_of_scope",
+      "evidence_status": "operational_only",
+      "first_known_commit": {
+        "availability": "source_reported",
+        "field": "first_commit",
+        "source_id": "post_anchor_capability_delta",
+        "value": "81090000"
+      },
+      "implementation_status": "implemented",
+      "missing_proof": [
+        "None (operational tooling)."
+      ],
+      "owner_path_status": [
+        {
+          "path": "scripts/dev/software_candidate_manifest.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "tests/dev/test_software_candidate_manifest.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        }
+      ],
+      "owner_paths": [
+        "scripts/dev/software_candidate_manifest.py",
+        "tests/dev/test_software_candidate_manifest.py"
+      ],
+      "recommended_downstream_action": "repository_only",
+      "source_anchor_relations": [
+        {
+          "field": "status",
+          "projected_value": "operational_only",
+          "source_id": "post_anchor_capability_delta",
+          "value": "introduced_after_anchor"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "sha256": "5941b37252a952b0a5201828b110f3112601de141494d6f304e4b35df5ce1e5d",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "operational_only"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "implemented_and_tested"
+        }
+      ],
+      "source_issues": [
+        8046,
+        8109
+      ],
+      "source_lineage": [
+        {
+          "issue": 8046,
+          "merge_commit": "31d40a3d0930f47fb65724d71638c81d2aaec446",
+          "pr": 8138,
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "None (operational tooling)."
+          ],
+          "record_key": "release_candidate_builder_and_verification",
+          "source_id": "post_anchor_capability_delta",
+          "value": [
+            "None (operational tooling)."
+          ]
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/post_anchor_capability_delta.v1.json"
+      ],
+      "source_recommended_actions": [
+        "repository_only"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "dissertation_relationship": "repository_only",
+            "evidence_status": "operational_only",
+            "implementation_status": "implemented_and_tested",
+            "release_relationship": "operational_tooling",
+            "status": "introduced_after_anchor",
+            "strongest_permitted_statement": "Hermetic candidate artifact build, extraction, and validation tooling active."
+          },
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "record_key": "release_candidate_builder_and_verification",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "strongest_permitted_wording": "Hermetic candidate artifact build, extraction, and validation tooling active.",
+      "title": "Immutable Software Candidate Release Builder"
+    },
+    {
+      "anchor_relation": "present_at_anchor",
+      "capability_id": "risk_dwa",
+      "category": "dynamic_window",
+      "claim_boundary_variants": [
+        "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "release_evaluated",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "present_at_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "included_exact_key"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "release_evaluated"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "risk_dwa",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "release_evaluated",
+            "relationship_to_release": "included_exact_key",
+            "strongest_permitted_statement": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "risk_dwa",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign.",
+      "title": "Risk-Aware Dynamic Window Approach"
+    },
+    {
+      "anchor_relation": "introduced_after_anchor",
+      "capability_id": "route_choice_homotopy_observability",
+      "category": "future_work_bridge",
+      "claim_boundary_variants": [
+        "The repository can deterministically classify route side and homotopy consistency on synthetic fixtures; whether those observables improve human predictability or social acceptance remains unevaluated."
+      ],
+      "dissertation_relationship": "future_work_bridge",
+      "dissertation_status": "future_work_mentioned",
+      "evidence_status": "synthetic_fixture",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "prototype",
+      "missing_proof": [
+        "Controlled user studies or real-world pedestrian interaction logs.",
+        "Empirical proof that visible topological features improve human trajectory prediction or perceived social comfort.",
+        "Human behavioral ground-truth or preference datasets validating route observability."
+      ],
+      "owner_path_status": [
+        {
+          "path": "robot_sf/nav/",
+          "source_ids": [
+            "future_work_card_route_choice_homotopy_observability"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "robot_sf/planner/",
+          "source_ids": [
+            "future_work_card_route_choice_homotopy_observability"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "scripts/tools/",
+          "source_ids": [
+            "future_work_card_route_choice_homotopy_observability"
+          ],
+          "status": "present"
+        }
+      ],
+      "owner_paths": [
+        "robot_sf/nav/",
+        "robot_sf/planner/",
+        "scripts/tools/"
+      ],
+      "recommended_downstream_action": "outlook_status_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_anchor",
+          "projected_value": "introduced_after_anchor",
+          "source_id": "future_work_card_route_choice_homotopy_observability",
+          "value": "introduced_after_anchor"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/future_work_cards/route_choice_homotopy_observability.v1.json",
+          "sha256": "42d377e43cd50a8b276880e38f07fab17e620e040685549a324fcd73dd30a54b",
+          "source_id": "future_work_card_route_choice_homotopy_observability"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "future_work_card_route_choice_homotopy_observability",
+          "value": "synthetic_fixture"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "future_work_card_route_choice_homotopy_observability",
+          "value": "synthetic_fixture_only"
+        }
+      ],
+      "source_issues": [
+        5308,
+        8048
+      ],
+      "source_lineage": [
+        {
+          "issue": 8048,
+          "merge_commit": "55e6f91491f470cf3c455f8267602971518c398d",
+          "pr": 8137,
+          "source_id": "future_work_card_route_choice_homotopy_observability"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Human behavioral ground-truth or preference datasets validating route observability.",
+            "Empirical proof that visible topological features improve human trajectory prediction or perceived social comfort.",
+            "Controlled user studies or real-world pedestrian interaction logs."
+          ],
+          "record_key": "route_choice_homotopy_observability",
+          "source_id": "future_work_card_route_choice_homotopy_observability",
+          "value": [
+            "Human behavioral ground-truth or preference datasets validating route observability.",
+            "Empirical proof that visible topological features improve human trajectory prediction or perceived social comfort.",
+            "Controlled user studies or real-world pedestrian interaction logs."
+          ]
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/future_work_cards/route_choice_homotopy_observability.v1.json"
+      ],
+      "source_recommended_actions": [
+        "outlook_status_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "synthetic_fixture",
+            "implementation_status": "synthetic_fixture_only",
+            "relationship_to_anchor": "introduced_after_anchor",
+            "safe_sentence": "The repository can deterministically classify route side and homotopy consistency on synthetic fixtures; whether those observables improve human predictability or social acceptance remains unevaluated."
+          },
+          "path": "docs/context/evidence/future_work_cards/route_choice_homotopy_observability.v1.json",
+          "record_key": "route_choice_homotopy_observability",
+          "source_id": "future_work_card_route_choice_homotopy_observability"
+        }
+      ],
+      "strongest_permitted_wording": "The repository can deterministically classify route side and homotopy consistency on synthetic fixtures; whether those observables improve human predictability or social acceptance remains unevaluated.",
+      "title": "Route Choice and Homotopy Observability"
+    },
+    {
+      "anchor_relation": "introduced_after_anchor",
+      "capability_id": "route_side_homotopy_observability",
+      "category": "diagnostic_method",
+      "claim_boundary_variants": [
+        "Deterministic route-side and topological homotopy classification verified on synthetic fixtures; human perceptual validation unevaluated."
+      ],
+      "dissertation_relationship": "post_anchor_candidate",
+      "dissertation_status": "absent",
+      "evidence_status": "synthetic_fixture",
+      "first_known_commit": {
+        "availability": "source_reported",
+        "field": "first_commit",
+        "source_id": "post_anchor_capability_delta",
+        "value": "78900000"
+      },
+      "implementation_status": "implemented",
+      "missing_proof": [
+        "Empirical human perceptual study data.",
+        "Ground-truth route preference distributions from real pedestrians."
+      ],
+      "owner_path_status": [
+        {
+          "path": "robot_sf/benchmark/route_choice_observability.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "tests/benchmark/test_route_choice_observability.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        }
+      ],
+      "owner_paths": [
+        "robot_sf/benchmark/route_choice_observability.py",
+        "tests/benchmark/test_route_choice_observability.py"
+      ],
+      "recommended_downstream_action": "capability_status_table_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "status",
+          "projected_value": "introduced_after_anchor",
+          "source_id": "post_anchor_capability_delta",
+          "value": "introduced_after_anchor"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "sha256": "5941b37252a952b0a5201828b110f3112601de141494d6f304e4b35df5ce1e5d",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "synthetic_fixture"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "implemented_and_tested"
+        }
+      ],
+      "source_issues": [
+        7890,
+        8033,
+        8046
+      ],
+      "source_lineage": [
+        {
+          "issue": 8046,
+          "merge_commit": "31d40a3d0930f47fb65724d71638c81d2aaec446",
+          "pr": 8138,
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Empirical human perceptual study data.",
+            "Ground-truth route preference distributions from real pedestrians."
+          ],
+          "record_key": "route_side_homotopy_observability",
+          "source_id": "post_anchor_capability_delta",
+          "value": [
+            "Empirical human perceptual study data.",
+            "Ground-truth route preference distributions from real pedestrians."
+          ]
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/post_anchor_capability_delta.v1.json"
+      ],
+      "source_recommended_actions": [
+        "capability_status_table_candidate",
+        "repository_only"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "dissertation_relationship": "post_anchor_candidate",
+            "evidence_status": "synthetic_fixture",
+            "implementation_status": "implemented_and_tested",
+            "release_relationship": "unreleased_diagnostic",
+            "status": "introduced_after_anchor",
+            "strongest_permitted_statement": "Deterministic route-side and topological homotopy classification verified on synthetic fixtures; human perceptual validation unevaluated."
+          },
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "record_key": "route_side_homotopy_observability",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "strongest_permitted_wording": "Deterministic route-side and topological homotopy classification verified on synthetic fixtures; human perceptual validation unevaluated.",
+      "title": "Route-Side and Homotopy Observability Diagnostics"
+    },
+    {
+      "anchor_relation": "present_at_anchor",
+      "capability_id": "sacadrl",
+      "category": "reinforcement_learning",
+      "claim_boundary_variants": [
+        "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "release_evaluated",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "present_at_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "included_exact_key"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "release_evaluated"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "sacadrl",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "release_evaluated",
+            "relationship_to_release": "included_exact_key",
+            "strongest_permitted_statement": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "sacadrl",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign.",
+      "title": "SA-CADRL Collision Avoidance"
+    },
+    {
+      "anchor_relation": "present_at_anchor",
+      "capability_id": "scenario_adaptive_hybrid_orca_v1",
+      "category": "hybrid_rule",
+      "claim_boundary_variants": [
+        "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "release_evaluated",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "present_at_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "included_exact_key"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "release_evaluated"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "scenario_adaptive_hybrid_orca_v1",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "release_evaluated",
+            "relationship_to_release": "included_exact_key",
+            "strongest_permitted_statement": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "scenario_adaptive_hybrid_orca_v1",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign.",
+      "title": "Scenario-Adaptive Hybrid ORCA v1"
+    },
+    {
+      "anchor_relation": "present_at_anchor",
+      "capability_id": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "category": "hybrid_rule",
+      "claim_boundary_variants": [
+        "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "release_evaluated",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "present_at_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "included_exact_key"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "release_evaluated"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "release_evaluated",
+            "relationship_to_release": "included_exact_key",
+            "strongest_permitted_statement": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign.",
+      "title": "Scenario-Adaptive Hybrid ORCA v2 (Collision Guard)"
+    },
+    {
+      "anchor_relation": "predecessor_only",
+      "capability_id": "scenario_search_feasibility_diagnostics",
+      "category": "diagnostic_method",
+      "claim_boundary_variants": [
+        "Scenario search feasibility pruning diagnostics materially extended; computational efficiency improved on synthetic envelopes."
+      ],
+      "dissertation_relationship": "post_anchor_candidate",
+      "dissertation_status": "absent",
+      "evidence_status": "diagnostic_only",
+      "first_known_commit": {
+        "availability": "source_reported",
+        "field": "first_commit",
+        "source_id": "post_anchor_capability_delta",
+        "value": "79000000"
+      },
+      "implementation_status": "implemented",
+      "missing_proof": [
+        "Full-scale search campaign across full scenario catalog."
+      ],
+      "owner_path_status": [
+        {
+          "path": "docs/feasibility_first_scenario_search.md",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        },
+        {
+          "path": "scripts/validation/run_feasibility_first_scenario_search.py",
+          "source_ids": [
+            "post_anchor_capability_delta"
+          ],
+          "status": "present"
+        }
+      ],
+      "owner_paths": [
+        "docs/feasibility_first_scenario_search.md",
+        "scripts/validation/run_feasibility_first_scenario_search.py"
+      ],
+      "recommended_downstream_action": "capability_status_table_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "status",
+          "projected_value": "predecessor_only",
+          "source_id": "post_anchor_capability_delta",
+          "value": "materially_extended_after_anchor"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "sha256": "5941b37252a952b0a5201828b110f3112601de141494d6f304e4b35df5ce1e5d",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "diagnostic_only"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "post_anchor_capability_delta",
+          "value": "implemented_and_tested"
+        }
+      ],
+      "source_issues": [
+        7900,
+        8046
+      ],
+      "source_lineage": [
+        {
+          "issue": 8046,
+          "merge_commit": "31d40a3d0930f47fb65724d71638c81d2aaec446",
+          "pr": 8138,
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Full-scale search campaign across full scenario catalog."
+          ],
+          "record_key": "scenario_search_feasibility_diagnostics",
+          "source_id": "post_anchor_capability_delta",
+          "value": [
+            "Full-scale search campaign across full scenario catalog."
+          ]
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/post_anchor_capability_delta.v1.json"
+      ],
+      "source_recommended_actions": [
+        "capability_status_table_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "dissertation_relationship": "post_anchor_candidate",
+            "evidence_status": "diagnostic_only",
+            "implementation_status": "implemented_and_tested",
+            "release_relationship": "unreleased_diagnostic",
+            "status": "materially_extended_after_anchor",
+            "strongest_permitted_statement": "Scenario search feasibility pruning diagnostics materially extended; computational efficiency improved on synthetic envelopes."
+          },
+          "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+          "record_key": "scenario_search_feasibility_diagnostics",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "strongest_permitted_wording": "Scenario search feasibility pruning diagnostics materially extended; computational efficiency improved on synthetic envelopes.",
+      "title": "Feasibility-First Scenario Search Diagnostics"
+    },
+    {
+      "anchor_relation": "present_at_anchor",
+      "capability_id": "social_force",
+      "category": "force_field",
+      "claim_boundary_variants": [
+        "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "release_evaluated",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "present_at_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "included_exact_key"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "release_evaluated"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "social_force",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "release_evaluated",
+            "relationship_to_release": "included_exact_key",
+            "strongest_permitted_statement": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "social_force",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign.",
+      "title": "Helbing-Molnar Social Force Model"
+    },
+    {
+      "anchor_relation": "present_at_anchor",
+      "capability_id": "socnav_sampling",
+      "category": "sampling_based",
+      "claim_boundary_variants": [
+        "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+      ],
+      "dissertation_relationship": "not_reported_by_source",
+      "dissertation_status": "unknown",
+      "evidence_status": "release_evaluated",
+      "first_known_commit": {
+        "availability": "unavailable_in_source",
+        "field": null,
+        "reason": "No first-known commit field is present in the named source packages.",
+        "source_id": null,
+        "value": null
+      },
+      "implementation_status": "unknown",
+      "missing_proof": [
+        "Not provided by this source package; consult the source before stronger wording."
+      ],
+      "owner_path_status": [],
+      "owner_paths": [],
+      "recommended_downstream_action": "planner_funnel_candidate",
+      "source_anchor_relations": [
+        {
+          "field": "relationship_to_release",
+          "projected_value": "present_at_anchor",
+          "source_id": "planner_development_funnel",
+          "value": "included_exact_key"
+        }
+      ],
+      "source_digests": [
+        {
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_evidence_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": "release_evaluated"
+        }
+      ],
+      "source_implementation_statuses": [
+        {
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_issues": [
+        8045
+      ],
+      "source_lineage": [
+        {
+          "issue": 8045,
+          "merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+          "pr": 8142,
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "source_missing_proof": [
+        {
+          "effective_value": [
+            "Not provided by this source package; consult the source before stronger wording."
+          ],
+          "record_key": "socnav_sampling",
+          "source_id": "planner_development_funnel",
+          "value": null
+        }
+      ],
+      "source_paths": [
+        "docs/context/evidence/planner_development_funnel.v1.json"
+      ],
+      "source_recommended_actions": [
+        "planner_funnel_candidate"
+      ],
+      "source_records": [
+        {
+          "fields": {
+            "evidence_status": "release_evaluated",
+            "relationship_to_release": "included_exact_key",
+            "strongest_permitted_statement": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign."
+          },
+          "path": "docs/context/evidence/planner_development_funnel.v1.json",
+          "record_key": "socnav_sampling",
+          "source_id": "planner_development_funnel"
+        }
+      ],
+      "strongest_permitted_wording": "Evaluated across 20,160 rows of the frozen 0.0.3.post1 release campaign.",
+      "title": "Social Navigation Sampling"
+    }
+  ],
+  "claim_boundary": "This is repository-side provenance metadata only. It does not establish new benchmark performance, planner superiority, physical transfer, dissertation coverage, or a manuscript claim.",
+  "consumer_profile": {
+    "campaign_id": "paper_matrix_v2_h600_s30_2026_08_cd831d7582c1",
+    "consumer_id": "ll7-diss-submission-2026",
+    "expected_episode_count": 20160,
+    "planner_count": 14,
+    "release_doi": "10.5281/zenodo.22077448",
+    "release_tag": "paper-matrix-v2-h600-s30-2026-08-cd831d7582c1",
+    "repository": "ll7/robot_sf_ll7",
+    "scenario_cell_count": 48,
+    "seed_count": 30,
+    "source_commit": "b1d5ab6de708385c0828c99501a9d1c29727ec11"
+  },
+  "projection_policy": {
+    "anchor_relation": "The aggregate maps source release/anchor fields to the parent relation vocabulary and retains every raw value in source_anchor_relations.",
+    "evidence_status": "Evidence status is copied from source packages; disagreements fail closed.",
+    "implementation_status": "The aggregate maps source implementation wording to the parent vocabulary and retains every raw value in source_implementation_statuses.",
+    "status": "source_values_preserved; projections_are_mechanical_and_non_promotional",
+    "strongest_permitted_wording": "The first wording follows detailed future-work card, post-anchor delta, then planner-funnel source priority; all variants remain listed."
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "dissertation_coverage_manifest.v1",
+  "source_packages": [
+    {
+      "path": "docs/context/evidence/future_work_cards/amv_actuation_realism_bridge.v1.json",
+      "producer_issue": 8048,
+      "producer_merge_commit": "55e6f91491f470cf3c455f8267602971518c398d",
+      "producer_pr": 8137,
+      "record_count": 1,
+      "record_field": "root",
+      "review_marker": "AI-GENERATED NEEDS-REVIEW",
+      "schema": "future_work_bridge_status_card.v1",
+      "sha256": "1ae39ff43de5456a0418faeb2a897972dac37c33b53dd5390ce9b1d98b7f71b4",
+      "source_id": "future_work_card_amv_actuation_realism_bridge"
+    },
+    {
+      "path": "docs/context/evidence/future_work_cards/carla_cross_simulator_bridge.v1.json",
+      "producer_issue": 8048,
+      "producer_merge_commit": "55e6f91491f470cf3c455f8267602971518c398d",
+      "producer_pr": 8137,
+      "record_count": 1,
+      "record_field": "root",
+      "review_marker": "AI-GENERATED NEEDS-REVIEW",
+      "schema": "future_work_bridge_status_card.v1",
+      "sha256": "734e8382d47310d14517ce80187653a6e282014a6fe90b8df96e63fa85257b81",
+      "source_id": "future_work_card_carla_cross_simulator_bridge"
+    },
+    {
+      "path": "docs/context/evidence/future_work_cards/incident_to_scenario_provenance.v1.json",
+      "producer_issue": 8048,
+      "producer_merge_commit": "55e6f91491f470cf3c455f8267602971518c398d",
+      "producer_pr": 8137,
+      "record_count": 1,
+      "record_field": "root",
+      "review_marker": "AI-GENERATED NEEDS-REVIEW",
+      "schema": "future_work_bridge_status_card.v1",
+      "sha256": "2c02a7174b732fbe924a982abac11c177b750b73e9925861590dfba9263ec181",
+      "source_id": "future_work_card_incident_to_scenario_provenance"
+    },
+    {
+      "path": "docs/context/evidence/future_work_cards/route_choice_homotopy_observability.v1.json",
+      "producer_issue": 8048,
+      "producer_merge_commit": "55e6f91491f470cf3c455f8267602971518c398d",
+      "producer_pr": 8137,
+      "record_count": 1,
+      "record_field": "root",
+      "review_marker": "AI-GENERATED NEEDS-REVIEW",
+      "schema": "future_work_bridge_status_card.v1",
+      "sha256": "42d377e43cd50a8b276880e38f07fab17e620e040685549a324fcd73dd30a54b",
+      "source_id": "future_work_card_route_choice_homotopy_observability"
+    },
+    {
+      "path": "docs/context/evidence/planner_development_funnel.v1.json",
+      "producer_issue": 8045,
+      "producer_merge_commit": "f5eb7af664691561280f9dddc755faeb5035c8c4",
+      "producer_pr": 8142,
+      "record_count": 20,
+      "record_field": "candidates",
+      "review_marker": "AI-GENERATED NEEDS-REVIEW",
+      "schema": "planner_development_funnel.v1",
+      "sha256": "c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad",
+      "source_id": "planner_development_funnel"
+    },
+    {
+      "path": "docs/context/evidence/post_anchor_capability_delta.v1.json",
+      "producer_issue": 8046,
+      "producer_merge_commit": "31d40a3d0930f47fb65724d71638c81d2aaec446",
+      "producer_pr": 8138,
+      "record_count": 12,
+      "record_field": "capabilities",
+      "review_marker": "AI-GENERATED NEEDS-REVIEW",
+      "schema": "post_anchor_capability_delta.v1",
+      "sha256": "5941b37252a952b0a5201828b110f3112601de141494d6f304e4b35df5ce1e5d",
+      "source_id": "post_anchor_capability_delta"
+    }
+  ],
+  "source_reconciliation": {
+    "owner_paths": {
+      "stale_paths": [
+        {
+          "capability_id": "carla_cross_simulator_bridge",
+          "path": "docs/context/carla_replay_parity.md",
+          "source_id": "future_work_card_carla_cross_simulator_bridge"
+        },
+        {
+          "capability_id": "carla_cross_simulator_bridge",
+          "path": "scripts/carla/",
+          "source_id": "future_work_card_carla_cross_simulator_bridge"
+        },
+        {
+          "capability_id": "incident_to_scenario_provenance",
+          "path": "robot_sf/provenance/",
+          "source_id": "future_work_card_incident_to_scenario_provenance"
+        },
+        {
+          "capability_id": "carla_cross_simulator_bridge",
+          "path": "scripts/carla/",
+          "source_id": "post_anchor_capability_delta"
+        }
+      ],
+      "status": "known_stale_paths_explicitly_recorded"
+    },
+    "planner_roster": {
+      "release_manifest": [
+        "prediction_planner",
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "socnav_sampling",
+        "sacadrl",
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "guarded_ppo",
+        "predictive_mppi",
+        "risk_dwa"
+      ],
+      "release_manifest_only": [
+        "scenario_adaptive_hybrid_orca_v2_bottleneck_yield"
+      ],
+      "source_only": [
+        "scenario_adaptive_hybrid_orca_v1"
+      ],
+      "source_snapshot": [
+        "prediction_planner",
+        "goal",
+        "social_force",
+        "orca",
+        "ppo",
+        "socnav_sampling",
+        "sacadrl",
+        "scenario_adaptive_hybrid_orca_v1",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "guarded_ppo",
+        "predictive_mppi",
+        "risk_dwa"
+      ],
+      "status": "conflict_explicitly_recorded"
+    }
+  },
+  "summary_counts": {
+    "by_anchor_relation": {
+      "introduced_after_anchor": 7,
+      "operational_only": 4,
+      "predecessor_only": 3,
+      "present_at_anchor": 15,
+      "unknown": 1
+    },
+    "by_dissertation_status": {
+      "absent": 6,
+      "future_work_mentioned": 3,
+      "intentionally_out_of_scope": 4,
+      "unknown": 17
+    },
+    "by_evidence_status": {
+      "diagnostic_only": 7,
+      "operational_only": 4,
+      "release_evaluated": 14,
+      "smoke_only": 1,
+      "synthetic_fixture": 3,
+      "unsupported_proxy": 1
+    },
+    "capabilities": 30
+  }
+}

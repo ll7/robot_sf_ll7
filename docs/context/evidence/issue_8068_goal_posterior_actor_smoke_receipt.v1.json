@@ -3,7 +3,7 @@
   "schema": "issue_8068_goal_posterior_actor_smoke_receipt.v1",
   "issue": 8068,
   "status": "verified",
-  "source_commit": "87b9debe4c9b7ce304d94c6d5f6293a02bd60b5f",
+  "source_commit": "37e4a2de7820f2b6f58fbd9e0678b9d913d9fbfe",
   "source_tree_scope": "observation-only heading baseline, explicit oracle boundary, tests, and smoke fixture",
   "claim_boundary": "implementation-integrity / smoke only",
   "research_claim": "none",
@@ -142,16 +142,16 @@
       "result": "Success: no issues found in 5 source files"
     },
     {
-      "command": "uv run ruff check robot_sf/prediction robot_sf/gym_env/robot_env.py robot_sf/planner/hybrid_rule_local_planner.py scripts/benchmark/run_goal_posterior_actor_smoke_issue_8068.py tests/prediction/test_goal_posterior_actor_oracle_boundary.py tests/benchmark/test_goal_posterior_actor_smoke_issue_8068.py tests/conftest.py",
+      "command": "uv run ruff check robot_sf/prediction robot_sf/gym_env/robot_env.py robot_sf/planner/hybrid_rule_local_planner.py scripts/benchmark/run_goal_posterior_actor_smoke_issue_8068.py tests/prediction/test_goal_posterior_actor_oracle_boundary.py tests/prediction/test_goal_posterior_actor_smoke_issue_8068.py tests/benchmark/test_goal_posterior_planner_input_smoke_issue_4164.py tests/conftest.py",
       "result": "All checks passed"
     },
     {
-      "command": "uv run ruff format --check robot_sf/prediction robot_sf/gym_env/robot_env.py robot_sf/planner/hybrid_rule_local_planner.py scripts/benchmark/run_goal_posterior_actor_smoke_issue_8068.py tests/prediction/test_goal_posterior_actor_oracle_boundary.py tests/benchmark/test_goal_posterior_actor_smoke_issue_8068.py tests/conftest.py",
-      "result": "9 files already formatted"
+      "command": "uv run ruff format --check robot_sf/prediction robot_sf/gym_env/robot_env.py robot_sf/planner/hybrid_rule_local_planner.py scripts/benchmark/run_goal_posterior_actor_smoke_issue_8068.py tests/prediction/test_goal_posterior_actor_oracle_boundary.py tests/prediction/test_goal_posterior_actor_smoke_issue_8068.py tests/benchmark/test_goal_posterior_planner_input_smoke_issue_4164.py tests/conftest.py",
+      "result": "12 files already formatted"
     },
     {
       "command": "uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras",
-      "result": "missing_optional: 26 imports; optional lane not required by changed files after typed-adapter narrowing"
+      "result": "all 31 imports available; optional lane not required by changed files after typed-adapter narrowing"
     }
   ],
   "limitations": [

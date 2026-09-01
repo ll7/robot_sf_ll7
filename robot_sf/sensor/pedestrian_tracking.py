@@ -524,7 +524,7 @@ class PedestrianTrackingConfig:
         if self.tie_break_policy != "track_id_then_observation":
             raise ValueError("tie_break_policy must be 'track_id_then_observation'")
         object.__setattr__(
-            self, "tie_break_epsilon", _non_negative(self.tie_break_epsilon, "tie_break_epsilon")
+            self, "tie_break_epsilon", _positive(self.tie_break_epsilon, "tie_break_epsilon")
         )
         if self.tie_break_epsilon >= 1e-3:
             raise ValueError("tie_break_epsilon must remain a tiny deterministic perturbation")
@@ -1333,9 +1333,27 @@ def _kalman_update(
 
 
 def _squared_distance(residual: np.ndarray, covariance: np.ndarray) -> float:
-    """Return a finite covariance-normalized squared distance."""
-    inverse = np.linalg.pinv(covariance, rcond=1e-12)
-    value = float(residual @ inverse @ residual)
+    """Return a finite covariance-normalized squared distance.
+
+    A pseudoinverse alone would assign zero distance to residuals in the null
+    space of a singular covariance.  Treating those residuals as compatible
+    would make an exact-covariance gate fail open, so they are rejected unless
+    they are within a small numerical tolerance.
+    """
+    matrix = np.asarray(covariance, dtype=float)
+    symmetric = (matrix + matrix.T) / 2.0
+    eigenvalues, eigenvectors = np.linalg.eigh(symmetric)
+    scale = max(1.0, float(np.max(np.abs(eigenvalues))))
+    rank_tolerance = scale * 1e-12
+    projected_residual = eigenvectors.T @ np.asarray(residual, dtype=float)
+    null_space = eigenvalues <= rank_tolerance
+    null_residual_tolerance = 1e-10 * max(1.0, math.sqrt(scale))
+    if np.any(np.abs(projected_residual[null_space]) > null_residual_tolerance):
+        return math.inf
+    positive = eigenvalues > rank_tolerance
+    if not np.any(positive):
+        return 0.0
+    value = float(np.sum(projected_residual[positive] ** 2 / eigenvalues[positive]))
     if not math.isfinite(value):
         return math.inf
     return max(0.0, value)
@@ -1493,8 +1511,12 @@ class PedestrianTracker:
             for row in range(row_count):
                 for column in range(column_count):
                     if math.isfinite(assignment_cost[row, column]):
+                        # A sum of independent row and column ranks is constant
+                        # across every full assignment, so it cannot resolve an
+                        # exact Hungarian tie.  The product couples the ranks
+                        # while remaining a tiny perturbation of the raw cost.
                         assignment_cost[row, column] += self.config.tie_break_epsilon * (
-                            row * (column_count + 1) + column
+                            (row + 1) * (column + 1)
                         )
                     else:
                         assignment_cost[row, column] = 1e30

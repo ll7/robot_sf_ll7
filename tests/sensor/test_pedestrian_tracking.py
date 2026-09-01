@@ -109,6 +109,7 @@ def test_config_is_strict_immutable_and_default_off() -> None:
         {"position_gate_threshold": 0.0},
         {"max_missed_seconds": 0.0},
         {"history_capacity": 0},
+        {"tie_break_epsilon": 0.0},
         {"gating_mode": "implicit_fallback"},
     ],
 )
@@ -116,6 +117,23 @@ def test_config_rejects_invalid_contract_values(kwargs: dict[str, object]) -> No
     """Negative noise, invalid gates, and invalid horizons fail closed."""
     with pytest.raises((TypeError, ValueError)):
         PedestrianTrackingConfig(**kwargs)
+
+
+def test_singular_covariance_gate_rejects_residual_in_zero_variance_direction() -> None:
+    """Exact-covariance inputs cannot silently accept an inconsistent match."""
+    tracker = _tracker(
+        process_noise=0.0,
+        initial_position_covariance=0.0,
+        initial_velocity_covariance=0.0,
+        measurement_position_covariance=0.0,
+        measurement_velocity_covariance=0.0,
+    )
+    tracker.update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]]))
+    result = tracker.update(_snapshot(1.0, 1, [[2.0, 0.0]], [[0.0, 0.0]]))
+    assert result.associations == ()
+    assert result.diagnostics.new_track_count == 1
+    assert result.track(1).status is TrackStatus.LOST
+    assert result.track(2).status is TrackStatus.TENTATIVE
 
 
 def test_static_reorder_keeps_track_identity_and_source_slot_is_diagnostic() -> None:
@@ -155,6 +173,13 @@ def test_symmetric_tie_is_deterministic_under_input_reorder() -> None:
     result_b = tracker_b.update(reversed_rows)
     for track_a, track_b in zip(result_a.tracks, result_b.tracks, strict=True):
         np.testing.assert_allclose(track_a.position_global_xy, track_b.position_global_xy)
+    # The raw position costs are exactly symmetric.  The coupled rank
+    # perturbation therefore chooses the same canonical observation content
+    # after the source rows are reversed.
+    assert result_a.track(1).position_global_xy[1] > 0.0
+    assert result_a.track(2).position_global_xy[1] < 0.0
+    assert result_b.track(1).position_global_xy[1] > 0.0
+    assert result_b.track(2).position_global_xy[1] < 0.0
     assert [association.track_id for association in result_a.associations] == [1, 2]
 
 
@@ -307,6 +332,58 @@ def test_public_arrays_are_read_only_and_oracle_is_post_tracking_only() -> None:
     assert metrics.assignment_accuracy == pytest.approx(1.0)
     assert metrics.identity_switches == 0
     assert metrics.error_by_visibility["occluded"] is None
+
+
+def test_oracle_identity_permutation_cannot_change_actor_tracking() -> None:
+    """Evaluator-only identity permutations leave actor IDs and associations unchanged."""
+    first = _snapshot(
+        0.0,
+        0,
+        [[1.0, 0.0], [3.0, 0.0]],
+        [[1.0, 0.0], [0.0, 0.0]],
+    )
+    second = _snapshot(
+        1.0,
+        1,
+        [[2.0, 0.0], [3.0, 0.0]],
+        [[1.0, 0.0], [0.0, 0.0]],
+    )
+    tracker_a = _tracker(confirmation_steps=1)
+    tracker_b = _tracker(confirmation_steps=1)
+    tracker_a.update(first)
+    tracker_b.update(first)
+    result_a = tracker_a.update(second)
+    result_b = tracker_b.update(second)
+
+    OracleTrackingEvaluator().evaluate(result_a, {0: "sim-ped-a", 1: "sim-ped-b"})
+    OracleTrackingEvaluator().evaluate(result_b, {0: "sim-ped-b", 1: "sim-ped-a"})
+
+    assert [track.to_dict() for track in result_a.tracks] == [
+        track.to_dict() for track in result_b.tracks
+    ]
+    assert [
+        (
+            association.track_id,
+            association.observation_slot,
+            association.cost,
+            association.position_distance,
+            association.velocity_distance,
+            association.used_velocity,
+            association.confidence,
+        )
+        for association in result_a.associations
+    ] == [
+        (
+            association.track_id,
+            association.observation_slot,
+            association.cost,
+            association.position_distance,
+            association.velocity_distance,
+            association.used_velocity,
+            association.confidence,
+        )
+        for association in result_b.associations
+    ]
 
 
 def test_oracle_assignment_accuracy_stays_bounded_across_frames() -> None:

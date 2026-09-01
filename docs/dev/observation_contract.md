@@ -81,6 +81,30 @@ and downstream tooling.
 When using StableBaselines3, nested dicts are flattened with underscore separators
 by `robot_sf/gym_env/robot_env.py`. Example: `robot.position` becomes `robot_position`.
 
+## Opt-in Observation-Derived Pedestrian Tracking
+
+`robot_sf/sensor/pedestrian_tracking.py` provides a default-off tracking side channel for
+prediction experiments. It does not change `DEFAULT_GYM` or `SOCNAV_STRUCT` observations.
+Callers provide a `PedestrianObservationSnapshot` containing only observed positions,
+optional velocities/covariances/radii, valid/visible masks, a causal timestamp and step index,
+and the same-step global robot pose. The snapshot contains no simulator object, route, goal,
+simulator identity, or PySocialForce state.
+
+The tracker normalizes positions, velocities, and covariances into `global_xy`. Input values may
+be in `global_xy` or `robot_ego_xy`; ego-frame positions use the robot pose for rotation and
+translation, while ego-frame velocities use rotation only. History arrays are
+`oldest_to_newest`, and the transform helpers require a pose for each historical row so a later
+robot pose cannot rewrite earlier observations.
+
+`PedestrianTracker` assigns monotonic episode-local IDs using constant-velocity prediction,
+gated Hungarian association, deterministic tie handling, and explicit tentative/confirmed/
+lost/retired lifecycle states. `OracleTrackingEvaluator` is a separate post-tracking diagnostic
+path: simulator identities may be supplied there for continuity checks, but never enter the
+actor-side tracker. The module's tests are implementation-integrity and smoke evidence only;
+they do not establish tracking quality, goal-force inference, calibration, forecast benefit, or
+benchmark performance. Runtime latency diagnostics are measured wall-clock values and are not
+part of deterministic identity/state comparisons.
+
 ## Occupancy Grid Augmentation
 
 When `use_occupancy_grid=True` and `include_grid_in_observation=True`, the observation

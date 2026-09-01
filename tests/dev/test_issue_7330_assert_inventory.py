@@ -20,11 +20,11 @@ def test_current_main_residuals_are_complete_and_internal() -> None:
 
     assert payload["schema"] == "production-assert-inventory.v1"
     assert isinstance(payload["source"]["clean"], bool)
-    assert payload["counts"]["assertion_count"] == 18
-    assert payload["counts"]["classification"] == {"genuine_internal_invariant": 18}
+    assert payload["counts"]["assertion_count"] == 25
+    assert payload["counts"]["classification"] == {"genuine_internal_invariant": 25}
     assert payload["counts"]["ownership"] == {
         "completed_historical_review": 14,
-        "unowned_residual": 4,
+        "unowned_residual": 11,
     }
     assert {
         (row["path"], row["scope"], row["expression"])
@@ -108,7 +108,7 @@ def test_cli_writes_both_issue_outputs(tmp_path: Path) -> None:
 
     assert result == 0
     payload = json.loads(json_path.read_text(encoding="utf-8"))
-    assert payload["counts"]["assertion_count"] == 18
+    assert payload["counts"]["assertion_count"] == 25
     assert "# Production assert inventory (issue #7330)" in markdown_path.read_text(
         encoding="utf-8"
     )

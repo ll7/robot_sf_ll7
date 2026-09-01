@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -284,6 +285,59 @@ def test_real_materialized_candidate_build_has_only_supported_extras(tmp_path: P
         "--report",
         str(report),
     )
+    policy = json.loads(
+        (source / "scripts/validation/software_candidate_policy.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert policy["include"].count("scripts/__init__.py") == 1
+    assert policy["required"].count("scripts/__init__.py") == 1
+    assert "scripts/**" not in policy["include"]
+    rights_policy = json.loads(
+        (source / "scripts/validation/software_release_rights_policy.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    rights_selection = rights_policy["source_selection"]
+    assert rights_selection["allow_globs"].count("scripts/__init__.py") == 1
+    assert rights_selection["required_paths"].count("scripts/__init__.py") == 1
+    report_payload = json.loads(report.read_text(encoding="utf-8"))
+    source_marker = source / "scripts/__init__.py"
+    candidate_marker = candidate / "scripts/__init__.py"
+    marker_bytes = source_marker.read_bytes()
+    assert candidate_marker.read_bytes() == marker_bytes
+    marker_member = next(
+        member for member in report_payload["members"] if member["path"] == "scripts/__init__.py"
+    )
+    assert marker_member["sha256"] == hashlib.sha256(marker_bytes).hexdigest()
+    assert [
+        member["path"]
+        for member in report_payload["members"]
+        if member["path"].startswith("scripts/")
+    ] == [
+        "scripts/__init__.py",
+        "scripts/carla_bridge/diagnose_replay_semantics.py",
+        "scripts/dev/check_version_alignment.py",
+        "scripts/dev/software_candidate_manifest.py",
+        "scripts/dev/software_candidate_manifest.v1.schema.json",
+        "scripts/tools/__init__.py",
+        "scripts/tools/check_asset_rights_inventory.py",
+        "scripts/tools/check_dependency_license_inventory.py",
+        "scripts/tools/check_distribution_licenses.py",
+        "scripts/tools/manage_external_data.py",
+        "scripts/tools/migrate_artifacts.py",
+        "scripts/validation/asset_rights_inventory.v1.yaml",
+        "scripts/validation/dependency_license_policy.v1.json",
+        "scripts/validation/dependency_license_policy.v1.schema.json",
+        "scripts/validation/dependency_license_profiles.v1.json",
+        "scripts/validation/dependency_license_profiles.v1.schema.json",
+        "scripts/validation/software_candidate_policy.v1.json",
+        "scripts/validation/software_release_rights_policy.v1.json",
+        "scripts/validation/software_release_rights_policy.v1.schema.json",
+        "scripts/validation/software_rights_admission.v1.schema.json",
+        "scripts/validation/software_sanitized_candidate.v1.schema.json",
+        "scripts/validation/wheel_install_smoke.sh",
+    ]
     source_pyproject = (source / "pyproject.toml").read_text(encoding="utf-8")
     candidate_pyproject = (candidate / "pyproject.toml").read_text(encoding="utf-8")
     assert "rllib = [" in source_pyproject
@@ -345,6 +399,100 @@ def test_real_materialized_candidate_build_has_only_supported_extras(tmp_path: P
     archives = [*dist.glob("*.whl"), *dist.glob("*.tar.gz")]
     assert len(archives) == 2
     assert all(_archive_extras(archive) == expected for archive in archives)
+
+
+def test_materialized_candidate_entrypoints_resist_hostile_regular_scripts_package(
+    tmp_path: Path,
+) -> None:
+    """Both helper entrypoints stay candidate-local when a regular package shadows ``scripts``."""
+    source = REPO_ROOT
+    source_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=source,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    candidate = tmp_path / "candidate"
+    report = tmp_path / "materialization.json"
+    _run(
+        "materialize-source",
+        "--repo-root",
+        str(source),
+        "--candidate-root",
+        str(candidate),
+        "--source-sha",
+        source_sha,
+        "--policy",
+        str(source / "scripts/validation/software_candidate_policy.v1.json"),
+        "--report",
+        str(report),
+    )
+
+    hostile = tmp_path / "hostile-site-packages"
+    hostile_scripts = hostile / "scripts"
+    hostile_tools = hostile_scripts / "tools"
+    hostile_tools.mkdir(parents=True)
+    scripts_sentinel = tmp_path / "hostile-scripts-imported"
+    helper_sentinel = tmp_path / "hostile-helper-imported"
+    (hostile_scripts / "__init__.py").write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "Path(os.environ['HOSTILE_SCRIPTS_SENTINEL']).write_text(__file__, encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    (hostile_tools / "__init__.py").write_text("\n", encoding="utf-8")
+    (hostile_tools / "check_distribution_licenses.py").write_text(
+        "import os\n"
+        "from pathlib import Path\n"
+        "Path(os.environ['HOSTILE_HELPER_SENTINEL']).write_text(__file__, encoding='utf-8')\n"
+        "raise RuntimeError('hostile distribution-rights helper imported')\n",
+        encoding="utf-8",
+    )
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(hostile)
+    environment["PYTHONNOUSERSITE"] = "1"
+    environment["HOSTILE_SCRIPTS_SENTINEL"] = str(scripts_sentinel)
+    environment["HOSTILE_HELPER_SENTINEL"] = str(helper_sentinel)
+
+    direct = subprocess.run(
+        [sys.executable, str(candidate / "scripts/dev/software_candidate_manifest.py"), "--help"],
+        cwd=tmp_path,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    module = subprocess.run(
+        [sys.executable, "-m", "scripts.dev.software_candidate_manifest", "--help"],
+        cwd=candidate,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert direct.returncode == 0, direct.stderr
+    assert module.returncode == 0, module.stderr
+    assert not scripts_sentinel.exists()
+    assert not helper_sentinel.exists()
+
+    path_probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import scripts.tools.check_distribution_licenses as helper; print(helper.__file__)",
+        ],
+        cwd=candidate,
+        env=environment,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert path_probe.returncode == 0, path_probe.stderr
+    assert Path(path_probe.stdout.strip()).resolve().is_relative_to(candidate.resolve())
+    assert not scripts_sentinel.exists()
+    assert not helper_sentinel.exists()
 
 
 def test_assemble_and_verify_bind_materialization_identity(tmp_path: Path) -> None:

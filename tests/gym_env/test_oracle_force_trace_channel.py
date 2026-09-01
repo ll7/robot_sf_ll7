@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
@@ -18,10 +19,13 @@ def _contains_key(value: object, key: str) -> bool:
     return False
 
 
-def test_oracle_force_trace_is_info_only_and_absent_from_actor_observation() -> None:
-    """Opt-in privileged truth is emitted after observation construction only."""
+@pytest.mark.parametrize("oracle_enabled", (False, True))
+def test_oracle_force_trace_is_info_only_and_absent_from_actor_observation(
+    oracle_enabled: bool,
+) -> None:
+    """Privileged truth is opt-in and emitted after observation construction only."""
     config = RobotSimulationConfig(
-        sim_config=SimulationSettings(oracle_force_trace_enabled=True),
+        sim_config=SimulationSettings(oracle_force_trace_enabled=oracle_enabled),
     )
     env = make_robot_env(config=config)
     try:
@@ -32,6 +36,9 @@ def test_oracle_force_trace_is_info_only_and_absent_from_actor_observation() -> 
     finally:
         env.close()
 
-    assert "oracle_transition_trace" in info
-    assert info["oracle_transition_trace"]["schema_version"] == "oracle_transition_trace.v1"
+    if oracle_enabled:
+        assert "oracle_transition_trace" in info
+        assert info["oracle_transition_trace"]["schema_version"] == "oracle_transition_trace.v1"
+    else:
+        assert "oracle_transition_trace" not in info
     assert not _contains_key(obs, "oracle_transition_trace")

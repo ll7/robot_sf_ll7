@@ -901,7 +901,7 @@ def _dependency_input_digest(report: dict[str, Any], path: str, *, label: str) -
     return digest
 
 
-def _validate_canonical_dependency_inputs(
+def _validate_canonical_dependency_inputs(  # noqa: C901 - each identity mismatch fails closed
     report: dict[str, Any],
     report_path: Path,
     *,
@@ -910,7 +910,10 @@ def _validate_canonical_dependency_inputs(
     """Bind report inputs and the full profile roster to the trusted checkout."""
 
     try:
-        from scripts.tools.check_dependency_license_inventory import check_report_freshness
+        from scripts.tools.check_dependency_license_inventory import (
+            build_inventory,
+            check_report_freshness,
+        )
 
         freshness_issues = check_report_freshness(repo_root, report_path)
     except (OSError, ValueError, ImportError) as exc:
@@ -937,6 +940,66 @@ def _validate_canonical_dependency_inputs(
     embedded = report.get("profile_manifest")
     if not isinstance(embedded, dict) or embedded.get("profile_ids") != canonical_ids:
         raise PromotionError("dependency report profile roster differs from trusted checkout")
+
+    try:
+        canonical_report = build_inventory(
+            repo_root,
+            distributions=[],
+            selected_profile_ids=["all"],
+        )
+    except (OSError, ValueError, ImportError) as exc:
+        raise PromotionError("canonical dependency package inventory could not be rebuilt") from exc
+    canonical_profiles = {
+        profile.get("id"): profile
+        for profile in canonical_report.get("profiles", [])
+        if isinstance(profile, dict)
+    }
+    reported_profiles = {
+        profile.get("id"): profile
+        for profile in report.get("profiles", [])
+        if isinstance(profile, dict)
+    }
+    if set(reported_profiles) != set(canonical_profiles):
+        raise PromotionError("dependency report profiles differ from trusted checkout")
+    for profile_id, expected in canonical_profiles.items():
+        observed = reported_profiles[profile_id]
+        for field in ("kind", "extra", "extras", "excluded_extras", "package_ids"):
+            if observed.get(field) != expected.get(field):
+                raise PromotionError(
+                    f"dependency report profile {profile_id!r} differs from trusted checkout"
+                )
+    canonical_packages = {
+        package.get("package_id"): package
+        for package in canonical_report.get("packages", [])
+        if isinstance(package, dict)
+    }
+    reported_packages = {
+        package.get("package_id"): package
+        for package in report.get("packages", [])
+        if isinstance(package, dict)
+    }
+    if set(reported_packages) != set(canonical_packages):
+        raise PromotionError("dependency report packages differ from trusted checkout")
+    package_fields = (
+        "lockfile",
+        "name",
+        "normalized_name",
+        "version",
+        "source_type",
+        "source",
+        "resolution_markers",
+        "artifacts",
+        "dependencies",
+        "identity_sha256",
+        "profiles",
+        "selected_profiles",
+    )
+    for package_id, expected in canonical_packages.items():
+        observed = reported_packages[package_id]
+        if any(observed.get(field) != expected.get(field) for field in package_fields):
+            raise PromotionError(
+                f"dependency report package {package_id!r} differs from trusted checkout"
+            )
 
 
 def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - closed report contract

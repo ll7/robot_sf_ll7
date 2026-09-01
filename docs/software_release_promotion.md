@@ -68,8 +68,10 @@ candidate manifest and sanitized source-tree digests, the canonical
 dependency policy/profile paths and their SHA-256 values, the report SHA-256,
 and `unresolved_count: 0` from the exact
 `check_dependency_license_inventory.py --fail-on-unresolved` command. The
-publisher parses and re-hashes that transported report independently; a
-receipt field containing only a claimed report digest is insufficient. A
+publisher parses and re-hashes that transported report independently, then
+rebuilds the canonical profile/package identity view from the trusted release
+checkout and compares it with the report; a receipt field containing only a
+claimed report digest is insufficient. A
 rights-only receipt without this zero-unresolved dependency admission is not
 a software release admission and is rejected. The publisher validates all
 bindings in every package-producing job; it never accepts a locally authored

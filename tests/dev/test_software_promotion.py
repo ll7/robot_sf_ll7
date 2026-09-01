@@ -13,6 +13,7 @@ import zipfile
 from pathlib import Path
 
 from scripts.dev.software_promotion import PromotionError, _distribution_extras
+from scripts.tools.check_dependency_license_inventory import build_inventory
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEPENDENCY_POLICY_SHA256 = hashlib.sha256(
@@ -44,6 +45,11 @@ SUPPORTED_EXTRAS = (
     "criticality",
 )
 SUPPORTED_DISTRIBUTION_EXTRAS = SUPPORTED_EXTRAS + ("all",)
+CANONICAL_INVENTORY = build_inventory(
+    REPO_ROOT,
+    distributions=[],
+    selected_profile_ids=["all"],
+)
 
 
 def _run_helper(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -247,6 +253,8 @@ def _candidate(
                         "sha256": DEPENDENCY_PROFILE_SHA256,
                     },
                 ],
+                "profiles": CANONICAL_INVENTORY["profiles"],
+                "packages": CANONICAL_INVENTORY["packages"],
                 "schema_version": "robot-sf.dependency-license-inventory.v1",
                 "surface": {
                     "profile_ids": ["all"],
@@ -621,6 +629,27 @@ def test_candidate_verification_rejects_stale_dependency_input_digest(tmp_path: 
     rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
     assert rejected.returncode == 1
     assert "canonical dependency report is stale" in rejected.stderr
+
+
+def test_candidate_verification_rejects_rebound_dependency_package(tmp_path: Path) -> None:
+    """Refreshing report and receipt hashes cannot relabel a trusted lock package."""
+
+    _source, source_sha, bundle = _candidate(tmp_path)
+    rights_dir = bundle.parent / "rights-admission-artifact"
+    report_path = rights_dir / "dependency-license-inventory.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["packages"][0]["version"] = "0.0.0-rebound"
+    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    receipt_path = rights_dir / "rights-admission.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
+        report_path.read_bytes()
+    ).hexdigest()
+    receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
+    assert rejected.returncode == 1
+    assert "package" in rejected.stderr
 
 
 def test_candidate_validation_roster_allows_strict_rights_upgrade(tmp_path: Path) -> None:

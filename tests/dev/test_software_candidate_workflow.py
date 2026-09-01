@@ -76,6 +76,13 @@ def test_workflow_is_directly_dispatchable_single_job_and_least_privilege() -> N
         "DEPENDENCY_REPORT",
         "RIGHTS_MANIFEST",
         "RIGHTS_DIR",
+        "DIAGNOSTIC_ROOT",
+        "STRICT_RIGHTS_LOG",
+        "DEPENDENCY_LOG",
+        "RIGHTS_ADMISSION_LOG",
+        "STRICT_RIGHTS_EXIT",
+        "DEPENDENCY_EXIT",
+        "RIGHTS_ADMISSION_EXIT",
     ):
         assert name in identity_run
     assert "secrets" not in text.lower()
@@ -113,7 +120,7 @@ def test_workflow_bootstraps_one_isolated_pinned_helper_environment() -> None:
         for index, step in enumerate(steps)
         if "software_candidate_manifest.py" in step.get("run", "")
     ]
-    assert len(helper_runs) == 8
+    assert len(helper_runs) == 9
     assert all(
         '"${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/software_candidate_manifest.py' in run
         for _index, run in helper_runs
@@ -373,9 +380,9 @@ def test_workflow_builds_once_then_only_validates_and_admits_same_dist_bytes() -
     dependency_index, dependency_run = next(
         (index, run) for index, run in run_steps if "check_dependency_license_inventory.py" in run
     )
-    assert dependency_run.startswith(
-        '"${SOFTWARE_CANDIDATE_PYTHON}" "${BUILD_SOURCE}/scripts/tools/'
-    )
+    assert dependency_run.startswith("set +e\n")
+    assert '"${SOFTWARE_CANDIDATE_PYTHON}" \\' in dependency_run
+    assert '"${BUILD_SOURCE}/scripts/tools/' in dependency_run
     assert 'python "${BUILD_SOURCE}/scripts/tools/check_dependency_license_inventory.py"' not in (
         dependency_run
     )
@@ -434,7 +441,7 @@ def test_workflow_uploads_checked_bundle_once_and_exposes_artifact_identity() ->
     upload_steps = [
         step for step in steps if str(step.get("uses", "")).startswith("actions/upload-artifact@")
     ]
-    assert len(upload_steps) == 2
+    assert len(upload_steps) == 3
     upload = next(step for step in upload_steps if step.get("id") == "upload")
     assert upload["id"] == "upload"
     assert upload["with"]["path"].endswith("/bundle/")
@@ -446,9 +453,58 @@ def test_workflow_uploads_checked_bundle_once_and_exposes_artifact_identity() ->
     assert rights_upload["with"]["if-no-files-found"] == "error"
     assert rights_upload["with"]["compression-level"] == 0
     assert rights_upload["with"]["overwrite"] is False
+    rejected_upload = next(step for step in upload_steps if step.get("id") == "upload-rejected")
+    assert rejected_upload["with"]["name"] == "${{ env.REJECTED_DIAGNOSTIC_ARTIFACT_NAME }}"
+    assert rejected_upload["with"]["path"].endswith("/rejected-diagnostic/")
+    assert rejected_upload["with"]["if-no-files-found"] == "error"
+    assert rejected_upload["with"]["compression-level"] == 0
+    assert rejected_upload["with"]["overwrite"] is False
+    assert "always()" in rejected_upload["if"]
 
     assert "workflow_call" not in _trigger(workflow)
     assert "outputs" not in workflow["jobs"]["build-candidate"]
+
+
+def test_workflow_captures_strict_gate_failures_for_rejected_diagnostics() -> None:
+    _text, workflow = _workflow()
+    steps = _steps(workflow)
+    by_id = {step["id"]: step for step in steps if "id" in step}
+
+    strict_rights = by_id["strict-rights"]["run"]
+    assert strict_rights.startswith("set +e\n")
+    assert '"${STRICT_RIGHTS_LOG}"' in strict_rights
+    assert "STRICT_RIGHTS_EXIT" in strict_rights
+    assert 'exit "${status}"' in strict_rights
+
+    strict_dependency = by_id["strict-dependency"]["run"]
+    assert strict_dependency.startswith("set +e\n")
+    assert '"${DEPENDENCY_LOG}"' in strict_dependency
+    assert "DEPENDENCY_EXIT" in strict_dependency
+    assert 'exit "${status}"' in strict_dependency
+
+    rights_admission = by_id["rights-admission"]["run"]
+    assert rights_admission.startswith("set +e\n")
+    assert '"${RIGHTS_ADMISSION_LOG}"' in rights_admission
+    assert "RIGHTS_ADMISSION_EXIT" in rights_admission
+    assert 'exit "${status}"' in rights_admission
+
+    diagnostic = next(
+        step for step in steps if step.get("name") == "Assemble rejected diagnostic evidence"
+    )
+    assert "always()" in diagnostic["if"]
+    assert "rejected-diagnostic" in diagnostic["run"]
+    assert '"${STRICT_RIGHTS_EXIT}"' in diagnostic["run"]
+    assert '"${DEPENDENCY_EXIT}"' in diagnostic["run"]
+    assert '"${RIGHTS_ADMISSION_EXIT}"' in diagnostic["run"]
+
+    # The accepted path still uploads the ordinary candidate and rights receipt;
+    # the diagnostic upload is conditional on a recorded strict-gate failure.
+    assert "if" not in by_id["upload"]
+    assert "if" not in by_id["upload-rights"]
+    rejected_upload = next(
+        step for step in steps if step.get("name") == "Upload rejected diagnostic evidence"
+    )
+    assert "always()" in rejected_upload["if"]
 
 
 def test_workflow_pins_actions_and_contains_no_publication_or_promotion_surface() -> None:
@@ -456,7 +512,7 @@ def test_workflow_pins_actions_and_contains_no_publication_or_promotion_surface(
     steps = _steps(workflow)
     uses = [str(step["uses"]) for step in steps if "uses" in step]
 
-    assert len(uses) == len(ACTION_PINS) + 1
+    assert len(uses) == len(ACTION_PINS) + 2
     for use in uses:
         owner, digest = use.split("@", maxsplit=1)
         assert re.fullmatch(r"[0-9a-f]{40}", digest)

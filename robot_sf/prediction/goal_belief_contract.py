@@ -696,6 +696,19 @@ class GoalBeliefV1:
         """Return the deterministic SHA-256 digest of the actor payload."""
         return stable_digest(self.to_dict())
 
+    @property
+    def entropy(self) -> float:
+        """Return Shannon entropy over candidates plus the explicit unknown mass.
+
+        Entropy is derived rather than serialized so the v1 wire payload remains
+        backward-compatible while planner and smoke reports can expose uncertainty.
+        """
+
+        masses = [candidate.probability for candidate in self.candidate_probabilities]
+        masses.append(self.unknown_candidate_probability)
+        entropy = -sum(mass * math.log(mass) for mass in masses if mass > 0.0)
+        return 0.0 if entropy == 0.0 else entropy
+
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> GoalBeliefV1:
         """Parse a strict actor payload and reject unknown versioned keys.

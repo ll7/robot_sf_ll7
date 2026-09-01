@@ -24,7 +24,7 @@ from robot_sf.planner.hybrid_rule_local_planner import (
 )
 from robot_sf.prediction.goal_intention import (
     GoalPosteriorConfig,
-    planner_goal_posterior_channel_from_state,
+    planner_oracle_goal_posterior_channel_from_state,
 )
 
 CLAIM_BOUNDARY = (
@@ -82,7 +82,7 @@ def _channel_for_scenario(
     velocities = _as_xy_rows(scenario["velocities"], field_name="velocities")
     goals = _as_xy_rows(scenario["goals"], field_name="goals")
     pedestrian_ids = scenario.get("pedestrian_ids")
-    return planner_goal_posterior_channel_from_state(
+    return planner_oracle_goal_posterior_channel_from_state(
         enabled=enabled,
         positions=positions.tolist(),
         velocities=velocities.tolist(),

@@ -1,0 +1,58 @@
+schema_version: issue_8068_goal_posterior_actor_smoke.v1
+description: >
+  Deterministic H=1 observation-only heading-posterior smoke. Candidate sets are
+  public annotations; no simulator goal identity is included.
+posterior_config:
+  heading_kappa: 4.0
+  velocity_min_mps: 0.05
+  prior_floor: 1.0e-6
+  unknown_prior_probability: 0.1
+  unknown_likelihood: 1.0
+  stationary_prior_policy: preserve_prior
+scenarios:
+  - id: aligned_axes
+    position: [0.0, 0.0]
+    velocity: [1.0, 0.0]
+    candidates:
+      - {id: east, position: [10.0, 0.0], role: final_destination}
+      - {id: west, position: [-10.0, 0.0], role: final_destination}
+      - {id: north, position: [0.0, 10.0], role: final_destination}
+      - {id: south, position: [0.0, -10.0], role: final_destination}
+    rotate:
+      angle_rad: 1.0471975511965976
+      offset: [20.0, -4.0]
+  - id: stationary_prior
+    position: [1.0, 2.0]
+    velocity: [0.0, 0.0]
+    prior: {east: 0.65, north: 0.25, west: 0.1}
+    candidates:
+      - {id: east, position: [11.0, 2.0], role: final_destination}
+      - {id: north, position: [1.0, 12.0], role: final_destination}
+      - {id: west, position: [-9.0, 2.0], role: final_destination}
+    rotate:
+      angle_rad: 1.0471975511965976
+      offset: [20.0, -4.0]
+  - id: same_ray_near_far
+    position: [0.0, 0.0]
+    velocity: [1.0, 0.0]
+    candidates:
+      - {id: near, position: [2.0, 0.0], role: final_destination}
+      - {id: far, position: [20.0, 0.0], role: final_destination}
+    rotate:
+      angle_rad: 1.0471975511965976
+      offset: [20.0, -4.0]
+  - id: candidate_misspecification
+    position: [0.0, 0.0]
+    velocity: [-1.0, 0.0]
+    candidates:
+      - {id: east, position: [10.0, 0.0], role: final_destination}
+    rotate:
+      angle_rad: 1.0471975511965976
+      offset: [20.0, -4.0]
+  - id: no_public_candidates
+    position: [0.0, 0.0]
+    velocity: [1.0, 0.0]
+    candidates: []
+    rotate:
+      angle_rad: 1.0471975511965976
+      offset: [20.0, -4.0]

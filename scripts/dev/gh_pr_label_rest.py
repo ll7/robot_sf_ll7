@@ -42,6 +42,7 @@ from scripts.dev._gh_rest import gh_api_delete as _gh_api_delete
 from scripts.dev._gh_rest import gh_api_label_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_post as _gh_api_post
 from scripts.dev._gh_rest import subprocess
+from scripts.dev.github_transport_policy import get_transport_contract
 from scripts.dev.pr_carrier_gate import check_merge_ready_carriers
 from scripts.dev.pr_write_guard import guard_pr_write, pr_write_lock
 
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 LABEL_PAGE_SIZE = 100
 LABEL_PAGE_CEILING = 10
+TRANSPORT_CONTRACT = get_transport_contract("gh_pr_label_rest.py")
 
 
 def _is_absent_label_delete(result: subprocess.CompletedProcess[str]) -> bool:

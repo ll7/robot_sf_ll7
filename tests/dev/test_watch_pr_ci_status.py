@@ -14,6 +14,7 @@ from scripts.dev.watch_pr_ci_status import (
     DEFAULT_MULTIPLIER,
     _duration_seconds,
     _parse_timestamp,
+    fetch_exact_commit_ci_status,
     fetch_recent_successful_ci_durations,
     main,
     wait_budget_seconds,
@@ -35,6 +36,133 @@ def _status(overall: str, *, head_sha: str = "abc123") -> dict[str, object]:
             "names": ["ci"],
         },
     }
+
+
+def test_fetch_exact_commit_ci_status_summarizes_matching_check_runs() -> None:
+    """The exact-commit helper should bind the result to the requested SHA."""
+    fetch_check_runs = MagicMock(
+        return_value={
+            "check_runs": [
+                {
+                    "name": "ci",
+                    "status": "completed",
+                    "conclusion": "success",
+                    "head_sha": "merge123",
+                }
+            ]
+        }
+    )
+
+    result = fetch_exact_commit_ci_status("merge123", fetch_check_runs=fetch_check_runs)
+
+    assert result["status"] == "ok"
+    assert result["head_sha"] == "merge123"
+    assert result["commit_sha"] == "merge123"
+    assert result["target_kind"] == "merge_commit"
+    assert result["checks"]["overall"] == "success"  # type: ignore[index]
+    fetch_check_runs.assert_called_once_with("merge123")
+
+
+def test_fetch_exact_commit_ci_status_rejects_mismatched_check_run_sha() -> None:
+    """A response containing another commit must never be treated as exact evidence."""
+    result = fetch_exact_commit_ci_status(
+        "merge123",
+        fetch_check_runs=MagicMock(
+            return_value={
+                "check_runs": [
+                    {
+                        "name": "ci",
+                        "status": "completed",
+                        "conclusion": "success",
+                        "head_sha": "other456",
+                    }
+                ]
+            }
+        ),
+    )
+
+    assert result["status"] == "error"
+    assert "SHA mismatch" in result["error"]
+
+
+def test_post_merge_success_ignores_terminal_pr_state() -> None:
+    """Opt-in post-merge mode should poll the exact commit instead of the PR rollup."""
+    fetch_status = MagicMock()
+    fetch_commit_status = MagicMock(
+        return_value={
+            **_status("success", head_sha="merge123"),
+            "state": "MERGED",
+        }
+    )
+
+    result = watch_pr_ci_status(
+        pr_number="42",
+        post_merge_commit_sha="merge123",
+        fetch_status=fetch_status,
+        fetch_commit_status=fetch_commit_status,
+    )
+
+    assert result.final_status == "success"
+    assert result.target_kind == "merge_commit"
+    assert result.target_sha == "merge123"
+    assert result.expected_head_sha == "merge123"
+    fetch_status.assert_not_called()
+    fetch_commit_status.assert_called_once_with("merge123")
+
+
+def test_post_merge_mismatched_sha_fails_closed() -> None:
+    """A post-merge response for another SHA must be an error, even if checks are pending."""
+    result = watch_pr_ci_status(
+        pr_number="42",
+        post_merge_commit_sha="merge123",
+        fetch_commit_status=MagicMock(
+            return_value={
+                **_status("pending", head_sha="other456"),
+                "state": "MERGED",
+            }
+        ),
+    )
+
+    assert result.final_status == "error"
+    assert "merge commit SHA" in result.error
+
+
+def test_post_merge_missing_observed_sha_fails_closed() -> None:
+    """A post-merge status without an observed SHA cannot establish exact identity."""
+    result = watch_pr_ci_status(
+        pr_number="42",
+        post_merge_commit_sha="merge123",
+        fetch_commit_status=MagicMock(
+            return_value={
+                "status": "ok",
+                "state": "MERGED",
+                "checks": {"overall": "success"},
+            }
+        ),
+    )
+
+    assert result.final_status == "error"
+    assert "merge commit SHA" in result.error
+
+
+def test_post_merge_pending_times_out_without_success() -> None:
+    """An exact commit with no completed checks remains pending and fail-closed."""
+    result = watch_pr_ci_status(
+        pr_number="42",
+        post_merge_commit_sha="merge123",
+        budget_override_seconds=0,
+        fetch_commit_status=MagicMock(
+            return_value={
+                **_status("pending", head_sha="merge123"),
+                "state": "MERGED",
+            }
+        ),
+        fetch_durations=MagicMock(return_value=[]),
+    )
+
+    assert result.final_status == "timeout"
+    assert result.target_kind == "merge_commit"
+    assert result.checks["overall"] == "pending"
 
 
 def test_default_wait_budget_uses_stable_baseline() -> None:
@@ -203,6 +331,22 @@ def test_main_once_pending_returns_timeout_exit_code(capsys: pytest.CaptureFixtu
     assert payload["final_status"] == "pending"
 
 
+def test_main_post_merge_success_returns_exact_target(capsys: pytest.CaptureFixture[str]) -> None:
+    """The CLI should expose the exact merge target in machine-readable output."""
+    with patch("scripts.dev.watch_pr_ci_status.fetch_exact_commit_ci_status") as fetch_status:
+        fetch_status.return_value = {
+            **_status("success", head_sha="merge123"),
+            "state": "MERGED",
+        }
+        rc = main(["42", "--post-merge-commit-sha", "merge123", "--json"])
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["final_status"] == "success"
+    assert payload["target_kind"] == "merge_commit"
+    assert payload["target_sha"] == "merge123"
+
+
 def test_parse_timestamp_accepts_any_and_returns_none_for_invalid() -> None:
     """_parse_timestamp should handle Any input gracefully."""
     assert _parse_timestamp(None) is None
@@ -337,6 +481,7 @@ def test_help_includes_expected_head_sha_example(capsys: pytest.CaptureFixture[s
     assert "uv run python scripts/dev/watch_pr_ci_status.py" in captured.out
     assert "--json" in captured.out
     assert "long-poll" in captured.out.lower() or "long poll" in captured.out.lower()
+    assert "--post-merge-commit-sha" in captured.out
 
 
 def test_repo_root_on_sys_path() -> None:

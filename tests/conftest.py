@@ -377,6 +377,9 @@ _FAST_FILES = {
     "map_test.py",
     "navigation_test.py",
     "ped_grouping_test.py",
+    "test_compare_coverage_cli.py",
+    "test_open_coverage_report.py",
+    "test_pytest_config_contract.py",
     # Algorithm metadata facade tests are deterministic contract coverage for
     # the changed benchmark producer; keep them in the exact-head fast lane.
     "test_algorithm_metadata.py",
@@ -423,6 +426,17 @@ _FAST_FILES = {
     # for the changed release identity module; keep them in fast shards for the
     # exact-head changed-coverage gate (issue #7938).
     "test_release_tag_identity.py",
+    # ORCA preflight tests are deterministic contract coverage for the changed
+    # benchmark preflight module; keep them in fast PR shards (issue #8021).
+    "test_orca_preflight.py",
+    # Predictive multimodal forecast types tests are deterministic pure-contract
+    # coverage for the changed predictive types module (issue #8049).
+    "test_predictive_types.py",
+    # Goal-belief contract tests are deterministic schema/lineage coverage for
+    # the changed actor-observation producer; keep them in fast PR shards
+    # (issue #8063).
+    "test_goal_belief_contract.py",
+    "test_oracle_transition_trace_contract.py",
     # Topology-guided local-policy tests are deterministic planner-contract
     # coverage for the changed adapter; keep them in fast PR shards for the
     # exact-head changed-coverage gate.
@@ -472,6 +486,9 @@ _FAST_FILES = {
     "test_release_doctor_edge_cases.py",
     "test_release_protocol.py",
     "test_release_protocol_edge_cases.py",
+    # Resolved release-identity tests are deterministic contract coverage for
+    # the source-freeze implementation; keep them in the changed-coverage lane.
+    "test_release_resolved_identity.py",
     "test_release_resume_admission.py",
     "test_runtime_smoke_admission.py",
     "test_predictive_mppi_planner.py",

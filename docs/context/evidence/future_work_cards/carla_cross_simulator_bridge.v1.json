@@ -1,0 +1,62 @@
+{
+  "admission_status": "diagnostic_only",
+  "bridge_id": "carla_cross_simulator_bridge",
+  "card_digest": "84d9f66c6abbb54a0b4a2802b29ed40d7b1fce69d3a4204890f7745684d93562",
+  "evidence_status": "diagnostic_only",
+  "forbidden_inferences": [
+    "Successful cross-simulator transfer.",
+    "Validated simulation-to-real or simulation-to-CARLA policy equivalence.",
+    "Benchmark-grade closed-loop evaluation on CARLA."
+  ],
+  "implementation_status": "partial_prototype",
+  "implemented_now": [
+    "Pinned CARLA client/server connector with versioned packaging.",
+    "Standalone headless CARLA runtime checks and replay harness entry points.",
+    "Diagnostic event logging and replay translation skeleton."
+  ],
+  "linked_issues": [
+    5700,
+    7000,
+    8048
+  ],
+  "missing_proof": [
+    "Matched actor-complete cross-simulator scenario replay between Robot SF and CARLA.",
+    "Coordinate, temporal, and action mapping formal equivalence proof.",
+    "Cross-simulator metric semantic parity (TTC, comfort, SocialForce force distributions).",
+    "Paired failure mode comparisons under native vs fallback execution."
+  ],
+  "next_decisive_experiment": {
+    "requirements": [
+      "One matched, immutable Robot SF/CARLA scenario family.",
+      "Actor-complete replay with declared coordinate/time/action mapping.",
+      "Identical planner input contract or explicit translation.",
+      "Metric semantic parity checks and native/fallback accounting.",
+      "Paired failure comparison with source and artifact custody."
+    ],
+    "title": "Paired Immutable Robot SF / CARLA Scenario Benchmark"
+  },
+  "owner_paths": [
+    "robot_sf_carla_bridge/",
+    "scripts/carla/",
+    "docs/context/carla_replay_parity.md"
+  ],
+  "relationship_to_anchor": "introduced_after_anchor",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "safe_sentence": "A pinned CARLA live-replay prototype exists and has demonstrated client/server connection plus bounded replay handling; matched actor-complete replay, metric parity, and cross-simulator validation remain unestablished.",
+  "schema": "future_work_bridge_status_card.v1",
+  "source_digest": "5ed40ff4744c43e2ec7fe4b4ed1675422188beb199adbef11534654a98d5a2fd",
+  "strongest_evidence_surface": "tests/carla_bridge/ and scripts/dev/check_carla_runtime.sh",
+  "title": "CARLA Cross-Simulator Bridge",
+  "verified_now": [
+    {
+      "item": "Client/server connection handshake passes on supported CARLA server instances.",
+      "status": "verified",
+      "tier": "Tier 1 (diagnostic)"
+    },
+    {
+      "item": "Bounded fixture replays translate basic waypoint and actor locations.",
+      "status": "verified",
+      "tier": "Tier 1 (diagnostic)"
+    }
+  ]
+}

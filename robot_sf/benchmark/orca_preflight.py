@@ -17,8 +17,8 @@ if TYPE_CHECKING:
     from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec
 from robot_sf.errors import RobotSfError
 
-_SYNC_COMMAND_EXTRA = "uv sync --extra orca"
-_SYNC_COMMAND_ALL = "uv sync --all-extras"
+_INSTALL_SOURCE_COMMAND = "pip install third_party/python-rvo2"
+_INSTALL_EXTERNAL_COMMAND = "pip install git+https://github.com/mit-acl/Python-RVO2"
 
 
 class OrcaRvo2PreflightError(RobotSfError, RuntimeError):
@@ -53,10 +53,11 @@ def _missing_rvo2_message(
         f"{planner_line}"
         "The required optional dependency 'rvo2' is not importable.\n"
         f"{error_line}"
-        "Install it with:\n"
-        f"  {_SYNC_COMMAND_EXTRA}\n"
-        "  or\n"
-        f"  {_SYNC_COMMAND_ALL}\n"
+        "ORCA is an external optional dependency excluded from supported release extras.\n"
+        "To build and install the local companion in a source checkout:\n"
+        f"  {_INSTALL_SOURCE_COMMAND}\n"
+        "or install pyrvo2 externally from source:\n"
+        f"  {_INSTALL_EXTERNAL_COMMAND}\n"
         "Aborting before starting the benchmark campaign."
     )
 

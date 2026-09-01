@@ -199,6 +199,59 @@ def _resolved_paths(mapping: dict[str, Any], prefix: tuple[str, ...] = ()) -> se
     return paths
 
 
+def _split_key_values(
+    k: str,
+    mappings: list[dict[str, Any]],
+    base: dict[str, Any],
+    leaf_overrides: list[dict[str, Any]],
+) -> None:
+    """Split a single key's values across member mappings into base and leaf overrides."""
+    if not all(k in m for m in mappings):
+        for idx, m in enumerate(mappings):
+            if k in m:
+                leaf_overrides[idx][k] = m[k]
+        return
+
+    values = [m[k] for m in mappings]
+    if all(isinstance(v, dict) for v in values):
+        sub_base, sub_leaves = _extract_common_and_overrides(values)
+        if sub_base:
+            base[k] = sub_base
+        for idx, sub_leaf in enumerate(sub_leaves):
+            if sub_leaf:
+                leaf_overrides[idx][k] = sub_leaf
+    elif all(v == values[0] and type(v) is type(values[0]) for v in values):
+        base[k] = values[0]
+    else:
+        for idx, m in enumerate(mappings):
+            leaf_overrides[idx][k] = m[k]
+
+
+def _extract_common_and_overrides(
+    mappings: list[dict[str, Any]],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Recursively split member mappings into a shared base and leaf overrides."""
+    if not mappings:
+        return {}, []
+
+    base: dict[str, Any] = {}
+    leaf_overrides: list[dict[str, Any]] = [{} for _ in mappings]
+
+    all_keys = sorted({k for m in mappings for k in m.keys()})
+    for k in all_keys:
+        _split_key_values(k, mappings, base, leaf_overrides)
+
+    return base, leaf_overrides
+
+
+def _yaml_line_count(payload: dict[str, Any]) -> int:
+    """Return the line count of a deterministically serialized YAML mapping."""
+    if not payload:
+        return 0
+    dumped = yaml.dump(payload, sort_keys=True, default_flow_style=False)
+    return len(dumped.strip().splitlines())
+
+
 def run_inventory(roots: list[Path]) -> dict[str, Any]:
     """Scan config roots and return the versioned family inventory."""
     files = sorted(
@@ -239,10 +292,13 @@ def run_inventory(roots: list[Path]) -> dict[str, Any]:
         common = _common_resolved_paths(members)
         common_count = len(common)
         before_lines = sum(member["line_count"] for member in members)
-        estimated_after_lines = max(
-            sum(1 for path in _resolved_paths(member["resolved"]) if path not in common)
-            for member in members
-        )
+
+        member_mappings = [m["resolved"] for m in members]
+        base_mapping, leaf_overrides = _extract_common_and_overrides(member_mappings)
+        estimated_base_lines = _yaml_line_count(base_mapping)
+        leaf_mappings = [{"base_config": "base.yaml", **overrides} for overrides in leaf_overrides]
+        estimated_leaf_lines = [_yaml_line_count(leaf) for leaf in leaf_mappings]
+        estimated_after_lines = estimated_base_lines + sum(estimated_leaf_lines)
         reduction = 1.0 - (estimated_after_lines / max(before_lines, 1))
         candidates.append(
             {
@@ -251,6 +307,8 @@ def run_inventory(roots: list[Path]) -> dict[str, Any]:
                 "member_count": len(members),
                 "common_resolved_path_count": common_count,
                 "before_lines": before_lines,
+                "estimated_base_lines": estimated_base_lines,
+                "estimated_leaf_lines": estimated_leaf_lines,
                 "estimated_after_lines": estimated_after_lines,
                 "estimated_reduction": round(reduction, 3),
                 "risk_flags": [],
@@ -318,6 +376,8 @@ def _markdown(report: dict[str, Any]) -> str:
         lines.append(
             f"- `{candidate['family']}`: {candidate['member_count']} members, "
             f"common={candidate['common_resolved_path_count']}, "
+            f"before={candidate['before_lines']}, base={candidate['estimated_base_lines']}, "
+            f"after={candidate['estimated_after_lines']}, "
             f"reduction={candidate['estimated_reduction']:.1%}"
         )
     return "\n".join(lines) + "\n"

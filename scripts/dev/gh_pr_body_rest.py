@@ -43,6 +43,7 @@ from typing import TYPE_CHECKING, Any
 from scripts.dev._gh_rest import gh_api_metadata_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_patch as _gh_api_patch
 from scripts.dev._gh_rest import subprocess
+from scripts.dev.github_transport_policy import get_transport_contract
 from scripts.dev.pr_loop_policy import (
     extract_sha_carriers,
     invalid_sha_carriers,
@@ -56,6 +57,7 @@ if TYPE_CHECKING:
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 _LOCK_DIR_ENV = "ROBOT_SF_PR_METADATA_LOCK_DIR"
+TRANSPORT_CONTRACT = get_transport_contract("gh_pr_body_rest.py")
 
 
 @contextmanager

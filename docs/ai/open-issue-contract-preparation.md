@@ -92,20 +92,34 @@ uv run python scripts/dev/prepare_open_issue_contracts.py \
   --mode apply --apply \
   --batch-id <stable-batch-id> \
   --mutation-ceiling 10 \
-  --issues <number>...
+  --issues <number>... \
+  --reviewed-plan-digest <selected-plan-content-sha256>
 ```
 
-Apply is exact-item and compare-and-swap guarded:
+Real apply requires an explicit issue list, a digest of that exact selected
+plan, and a complete error-free audit. Apply is exact-item and label-set
+compare-and-swap guarded:
 
 - default maximum 10 issue-body mutations per batch; hard ceiling 25 body
   mutations or 50 label operations, whichever occurs first;
-- each issue is re-read immediately before mutation; any drift in state,
-  labels, assignees, claim, body digest, or thread digest aborts the batch;
+- the reviewed `label_plan` is validated before any write: every operation
+  names its entry issue, uses only `add`/`remove`, refers to an existing
+  repository label, contains no duplicate operation, and never targets
+  `runner:luna`/`runner:max`;
+- every actionable issue is re-read before mutation; any drift in state,
+  labels, or assignees aborts the batch before its first write;
+- body markers are applied before labels, because GitHub REST writes are not
+  transactional; each label is checked immediately before and after its
+  write, and a partial receipt identifies the exact completed and skipped
+  operations;
+- this issue does not add a body compare-and-swap protocol: body writes retain
+  the existing marker-only composition and immediate body readback contract;
 - the batch aborts on unknown identity, active-owner drift, audit mismatch,
   rate limit, or REST error;
-- each write is immediately re-read and verified;
-- the credential-free receipt records expected/observed digests, API statuses,
-  and proof that no unauthorized mutation occurred.
+- body and label writes are immediately read back and verified;
+- the receipt records the selected plan and audit digests, expected/observed
+  body and label state, operation status, API-helper status, safe order,
+  partial failure, and proof that no unauthorized mutation occurred.
 
 Use `--dry-run` first to render the exact operations without writing.
 

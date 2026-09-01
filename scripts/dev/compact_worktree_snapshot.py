@@ -154,8 +154,18 @@ def _matches_filters(row: dict[str, str], filters: list[str]) -> bool:
     """Return whether a worktree row matches any issue/branch/slug filter."""
     if not filters:
         return True
-    haystack = " ".join((row.get("path", ""), row.get("branch", ""))).lower()
-    return any(filter_text.lower() in haystack for filter_text in filters)
+    branch = row.get("branch", "").lower()
+    path = row.get("path", "")
+    worktree_name = Path(path).name.lower()
+    for filter_text in filters:
+        normalized = filter_text.lower()
+        if normalized in branch or normalized in worktree_name:
+            return True
+        if "/" in normalized or "\\" in normalized:
+            normalized_path = path.replace("\\", "/").lower()
+            if normalized.replace("\\", "/") in normalized_path:
+                return True
+    return False
 
 
 def _detect_worktrees(
@@ -316,7 +326,10 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         dest="filters",
         action="append",
         default=[],
-        help="Issue number, branch substring, or slug to match against branch/path. May repeat.",
+        help=(
+            "Issue number, branch substring, or worktree-name slug; path substrings must include "
+            "a path separator. May repeat."
+        ),
     )
     return parser.parse_args(argv)
 

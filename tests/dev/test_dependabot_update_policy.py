@@ -160,6 +160,39 @@ marker = "python_version >= '3.11'"
     assert changed_lock_package_names(base, head) == {"numba"}
 
 
+def test_lock_row_list_order_only_changes_are_ignored() -> None:
+    """uv list reordering does not create a second dependency-risk lane."""
+    base = """
+version = 1
+
+[[package]]
+name = "gymnasium"
+version = "1.0.0"
+resolution-markers = ["python_version >= '3.11'", "python_version < '3.15'"]
+"""
+    head = base.replace(
+        "resolution-markers = [\"python_version >= '3.11'\", \"python_version < '3.15'\"]",
+        "resolution-markers = [\"python_version < '3.15'\", \"python_version >= '3.11'\"]",
+    )
+
+    assert changed_lock_package_names(base, head) == set()
+
+
+def test_lock_row_semantic_marker_changes_remain_visible() -> None:
+    """Marker value changes remain dependency evidence after order normalization."""
+    base = """
+version = 1
+
+[[package]]
+name = "gymnasium"
+version = "1.0.0"
+resolution-markers = ["python_version >= '3.11'"]
+"""
+    head = base.replace("python_version >= '3.11'", "python_version >= '3.12'")
+
+    assert changed_lock_package_names(base, head) == {"gymnasium"}
+
+
 def test_authoritative_changed_file_list_avoids_unneeded_base_lookup(tmp_path: Path) -> None:
     """Non-dependency PRs can use the collector output when base fetch is unavailable."""
     changed_file_list = tmp_path / "changed-files.txt"

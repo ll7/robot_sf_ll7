@@ -59,36 +59,22 @@ import subprocess
 import sys
 from typing import Any
 
+from scripts.dev import github_transport_policy as _transport_policy
 from scripts.dev._gh_rest import as_str as _as_str
 from scripts.dev._gh_rest import parse_json as _parse_json
 from scripts.dev._gh_rest import run_gh_api as _gh_api
+from scripts.dev.github_transport_policy import (
+    get_transport_contract,
+    is_fallback_eligible,
+)
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_MAX_COMMENT_PAGES = 10
 COMMENTS_PAGE_SIZE = 100
-PROJECT_CARDS_ERROR_MARKER = "repository.issue.projectCards"
-
-# Native-first reads can fail for reasons that are *not* a real auth/repo/connectivity
-# problem but just mean the GraphQL-backed ``gh issue view`` path is unavailable. These
-# markers classify that class of failure as REST-fallback-eligible (issue #5896):
-# GraphQL quota exhaustion and GraphQL deprecation notices. They must NOT cover
-# authentication, authorization, or repository-resolution failures, which stay fail-closed.
-FALLBACK_ELIGIBLE_MARKERS = (PROJECT_CARDS_ERROR_MARKER, "graphql:")
-
-# ``gh issue view`` reports authentication, authorization, and repository lookup
-# failures through its GraphQL client too. These errors must win over the generic
-# ``GraphQL:`` fallback marker so REST never masks a fail-closed failure.
-FAIL_CLOSED_ERROR_MARKERS = (
-    "bad credentials",
-    "requires authentication",
-    "authentication required",
-    "resource not accessible by integration",
-    "forbidden",
-    "permission denied",
-    "could not resolve to a repository",
-    "could not resolve to an issue",
-    "repository not found",
-)
+PROJECT_CARDS_ERROR_MARKER = _transport_policy.PROJECT_CARDS_ERROR_MARKER
+FALLBACK_ELIGIBLE_MARKERS = _transport_policy.FALLBACK_ELIGIBLE_MARKERS
+FAIL_CLOSED_ERROR_MARKERS = _transport_policy.FAIL_CLOSED_ERROR_MARKERS
+TRANSPORT_CONTRACT = get_transport_contract("gh_issue_rest.py")
 
 # Fields exposed in the normalized issue payload, in a stable order.
 ISSUE_FIELDS = (
@@ -377,10 +363,7 @@ def _is_fallback_eligible(native_error: str) -> bool:
     deliberately NOT fallback-eligible so they fail closed instead of masking a
     real problem behind an unrelated REST read.
     """
-    normalized_error = native_error.casefold()
-    if any(marker in normalized_error for marker in FAIL_CLOSED_ERROR_MARKERS):
-        return False
-    return any(marker.casefold() in normalized_error for marker in FALLBACK_ELIGIBLE_MARKERS)
+    return is_fallback_eligible(native_error, helper=TRANSPORT_CONTRACT.helper)
 
 
 def read_complete_issue_thread(

@@ -114,7 +114,10 @@ def test_snapshot_claimable_issues_excludes_dispatch_stop_labels_from_dispatch(
     assert row["reason"] == (
         "the issue is already in review"
         if dispatch_stop_label == "state:review"
-        else "exactly one state:* label is required; found none"
+        else (
+            "exactly one execution state label is required unless a known hold qualifier already "
+            "blocks dispatch; found none; state qualifiers are none"
+        )
     )
 
 
@@ -550,7 +553,10 @@ def test_snapshot_issues_reads_rest_when_graphql_quota_exhausted() -> None:
     assert issue["state"] == "OPEN"
     assert issue["labels"] == ["enhancement", "workflow"]
     assert issue["classification"] == "state_conflict"
-    assert issue["reason"] == "exactly one state:* label is required; found none"
+    assert issue["reason"] == (
+        "exactly one execution state label is required unless a known hold qualifier already "
+        "blocks dispatch; found none; state qualifiers are none"
+    )
     assert issue["body_excerpt"] == rest_issue["body"]
     assert issue["body_truncated"] is False
     # Explicit reads must go through the REST reader, not the GraphQL CLI.
@@ -1287,3 +1293,179 @@ def test_main_claimable_mode_can_be_called_without_issue_numbers() -> None:  # t
             rc = main(["--claimable", "--json", "--limit", "1"])
 
     assert rc == 0
+
+
+def test_snapshot_claimable_issues_filters_ready_label_before_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Claimable discovery must constrain listing to state:ready before the page limit."""
+    monkeypatch.setattr(
+        snapshot_issue_batch,
+        "_load_blocker_decisions",
+        lambda paths: ({}, []),
+    )
+    listing = snapshot_issue_batch._listing_result(
+        status="ok",
+        listed=[],
+        error="",
+        data_source="graphql",
+        rate_limit=RateLimitSnapshot(
+            status="ok",
+            graphql_remaining=4_000,
+            graphql_reset_at=1_800_000_000,
+            core_remaining=4_000,
+            core_reset_at=1_800_000_000,
+        ),
+        quota={},
+        resume_cursor=None,
+    )
+    with patch("scripts.dev.snapshot_issue_batch._list_open_issues") as list_issues:
+        list_issues.return_value = listing
+        payload = snapshot_issue_batch.snapshot_claimable_issues(
+            repo="ll7/robot_sf_ll7",
+            remote="origin",
+            body_limit=150,
+            limit=3,
+        )
+
+    assert payload["status"] == "ok"
+    assert payload["queue_completeness"] == "complete"
+    assert payload["claimable_count"] == 0
+    list_issues.assert_called_once_with(
+        repo="ll7/robot_sf_ll7",
+        limit=3,
+        min_graphql_remaining=snapshot_issue_batch.DEFAULT_GRAPHQL_SAFETY_THRESHOLD,
+        resume_page=1,
+        label=snapshot_issue_batch.issue_implementability.READY_LABEL,
+    )
+
+
+def test_list_open_issues_propagates_label_to_graphql_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The GraphQL discovery path must receive the ready-label candidate filter."""
+    seen: dict[str, object] = {}
+
+    def fake_graphql(*, repo: str, limit: int, label: str | None) -> dict[str, object]:
+        seen["label"] = label
+        return {"status": "ok", "listed": []}
+
+    monkeypatch.setattr(snapshot_issue_batch, "_graphql_open_issue_list", fake_graphql)
+    listing = snapshot_issue_batch._list_open_issues(
+        repo="ll7/robot_sf_ll7",
+        limit=5,
+        min_graphql_remaining=snapshot_issue_batch.DEFAULT_GRAPHQL_SAFETY_THRESHOLD,
+        label=snapshot_issue_batch.issue_implementability.READY_LABEL,
+    )
+
+    assert listing["status"] == "ok"
+    assert seen["label"] == snapshot_issue_batch.issue_implementability.READY_LABEL
+
+
+def test_list_open_issues_propagates_label_to_rest_resume_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The REST resume discovery path must receive the ready-label candidate filter."""
+    seen: dict[str, object] = {}
+
+    def fake_rest(*, repo: str, page: int, limit: int, label: str | None) -> dict[str, object]:
+        seen["label"] = label
+        seen["page"] = page
+        return {"status": "ok", "listed": [], "resume_cursor": None}
+
+    monkeypatch.setattr(snapshot_issue_batch, "_rest_open_issue_list", fake_rest)
+    listing = snapshot_issue_batch._list_open_issues(
+        repo="ll7/robot_sf_ll7",
+        limit=5,
+        min_graphql_remaining=snapshot_issue_batch.DEFAULT_GRAPHQL_SAFETY_THRESHOLD,
+        resume_page=2,
+        label=snapshot_issue_batch.issue_implementability.READY_LABEL,
+    )
+
+    assert listing["status"] == "ok"
+    assert listing["data_source"] == "rest"
+    assert seen["label"] == snapshot_issue_batch.issue_implementability.READY_LABEL
+    assert seen["page"] == 2
+
+
+def test_snapshot_claimable_issues_marks_truncated_scan_incomplete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A resumable ready-candidate page must forbid an authoritative zero-work verdict."""
+    monkeypatch.setattr(
+        snapshot_issue_batch,
+        "_rate_limit_snapshot",
+        lambda: RateLimitSnapshot(
+            status="ok",
+            graphql_remaining=50,
+            graphql_reset_at=1_800_000_123,
+            core_remaining=4_000,
+            core_reset_at=1_800_000_456,
+        ),
+    )
+    rows = [
+        {
+            "number": 2801 + offset,
+            "title": f"ready issue {offset}",
+            "state": "open",
+            "html_url": f"https://github.test/issues/{2801 + offset}",
+            "labels": [{"name": "state:ready"}],
+            "assignees": [],
+        }
+        for offset in range(2)
+    ]
+    with patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(rows), stderr="")
+        with patch("scripts.dev.snapshot_issue_batch._batch_claim_statuses") as claim:
+            claim.return_value = {
+                2801: _claim_status(2801),
+                2802: _claim_status(2802),
+            }
+            payload = snapshot_issue_batch.snapshot_claimable_issues(
+                repo="ll7/robot_sf_ll7",
+                remote="origin",
+                body_limit=150,
+                limit=2,
+            )
+
+    assert payload["resume_cursor"] == {"source": "rest", "page": 2, "limit": 2}
+    assert payload["queue_completeness"] == "incomplete"
+    assert payload["truncated"] is True
+
+
+def test_snapshot_claimable_issues_marks_failed_scan_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed or quota-blocked discovery must be unavailable, never zero-work evidence."""
+    monkeypatch.setattr(
+        snapshot_issue_batch,
+        "_load_blocker_decisions",
+        lambda paths: ({}, []),
+    )
+    listing = snapshot_issue_batch._listing_result(
+        status="quota_blocked",
+        listed=[],
+        error="rate limit exhausted",
+        data_source="none",
+        rate_limit=RateLimitSnapshot(
+            status="error",
+            graphql_remaining=0,
+            graphql_reset_at=1_800_000_000,
+            core_remaining=0,
+            core_reset_at=1_800_000_000,
+        ),
+        quota={"status": "quota_blocked"},
+        resume_cursor={"source": "rest", "page": 1, "limit": 3},
+    )
+    with patch("scripts.dev.snapshot_issue_batch._list_open_issues") as list_issues:
+        list_issues.return_value = listing
+        payload = snapshot_issue_batch.snapshot_claimable_issues(
+            repo="ll7/robot_sf_ll7",
+            remote="origin",
+            body_limit=150,
+            limit=3,
+        )
+
+    assert payload["status"] == "quota_blocked"
+    assert payload["queue_completeness"] == "unavailable"
+    assert payload["claimable_count"] == 0

@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-08-28
+updated_at: 2026-09-01
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -28,6 +28,18 @@ entries:
   status: current
   freshness: maintained
   area: planner
+- path: docs/context/issue_8015_force_coupled_comparator.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_8063_goal_belief_contract_receipt.v1.json
+  status: evidence
+  freshness: evidence
+  area: research_contract
+- path: docs/context/evidence/issue_8063_goal_belief_contract_receipt.v1.json.review.json
+  status: evidence
+  freshness: evidence
+  area: research_contract
 - path: docs/context/issue_7883_biased_route_generator.md
   status: current
   freshness: maintained
@@ -57,6 +69,14 @@ entries:
   freshness: evidence
   area: release_evidence
 - path: docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md.review.json
+  status: evidence
+  freshness: evidence
+  area: release_evidence
+- path: docs/context/evidence/dependency_license_batch_2026-09-01.md
+  status: evidence
+  freshness: evidence
+  area: release_evidence
+- path: docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json
   status: evidence
   freshness: evidence
   area: release_evidence
@@ -7431,3 +7451,31 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/future_work_cards
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/future_work_bridge_status.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/post_anchor_capability_delta.v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/post_anchor_capability_delta.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/planner_development_funnel.v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/planner_development_funnel.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json.review.json
+  status: evidence
+  freshness: evidence
+  area: release_evidence

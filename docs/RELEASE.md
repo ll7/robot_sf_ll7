@@ -6,6 +6,12 @@ benchmark-data tag identifies an immutable campaign contract, while the
 software tag identifies installable source. Do not infer a package version from
 the benchmark-data tag, or reuse a software-release DOI for benchmark data.
 
+For the software-package lane, first build the immutable candidate with
+[`software_release_candidate.md`](./software_release_candidate.md), then follow
+[`software_release_promotion.md`](./software_release_promotion.md) for the protected
+TestPyPI → PyPI promotion. That workflow is separate from this benchmark-data checklist and
+requires a passed public-index cold-install gate before production publication.
+
 The current campaign contract is the 14-arm, differential-drive matrix in
 `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`.
 Its publication-grade manifest is
@@ -46,6 +52,33 @@ The smoke is execution evidence only: the Social Navigation Quality Index
   ignored cache, while the manifest/config hashes and compact summary are the
   tracked provenance surface; record source commit, command, seed, and campaign
   root in the release evidence
+
+For a future v0.2 benchmark-data release, freeze a tracked identity template
+instead of writing its own final commit SHA into tracked bytes. After the exact
+clean source commit and already-reserved concept/version DOI coordinates are
+known, generate and verify the ignored resolved identity:
+
+```bash
+SOURCE_COMMIT="$(git rev-parse --verify HEAD^{commit})"
+RELEASE_TAG="${RELEASE_PREFIX:?set the reviewed release prefix}-${SOURCE_COMMIT}"
+uv run python scripts/tools/resolve_benchmark_release_identity.py generate \
+  --template "${TRACKED_RELEASE_TEMPLATE:?set the tracked template path}" \
+  --output output/release/release_identity.resolved.json \
+  --source-commit "$SOURCE_COMMIT" \
+  --release-tag "$RELEASE_TAG" \
+  --concept-doi "${RESERVED_BENCHMARK_CONCEPT_DOI:?set the reserved concept DOI}" \
+  --version-doi "${RESERVED_BENCHMARK_VERSION_DOI:?set the reserved version DOI}"
+uv run python scripts/tools/resolve_benchmark_release_identity.py verify \
+  --identity output/release/release_identity.resolved.json
+```
+
+Run the same verify command at the same repository-relative output path in a
+disposable cold checkout of `SOURCE_COMMIT`. The identity and sibling
+`zenodo_metadata.resolved.json` must be byte-identical to the first generation.
+Use the resolved identity as `--manifest` for future runner and doctor checks. See
+[`benchmark_release_protocol.md`](./benchmark_release_protocol.md#future-tracked-template-identity-resolution)
+for the template slots and fail-closed rules. These commands do not reserve a
+DOI, create a tag, publish a release, or submit a campaign.
 
 ## Preflight
 

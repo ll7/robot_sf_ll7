@@ -38,6 +38,16 @@ in agentic workflows.
 4. Apply Project #5 updates in a separate pass.
 5. Run `scripts/tools/project_priority_score.py sync` once at the end.
 
+### Post-create readiness transition
+
+The issue-creation gate intentionally creates a complete issue without `state:ready`. When the
+new issue has no `state:*` label, `scripts/dev/issue_readiness_gate.py` asks the canonical live
+admission checker to evaluate a private prospective `state:ready` label set. It writes that label
+only after the admission passes, re-reads the issue to detect drift, and verifies the post-write
+label set. Existing `state:*` labels remain authoritative, so ambiguous, blocked, parent,
+assigned, claimed, or incomplete issues still fail closed. The prospective evaluation is an
+in-memory transition check, not a readiness or claim bypass.
+
 ## API Selection
 
 Use the cheapest source of truth for the question:

@@ -108,6 +108,82 @@ def test_run_inventory_groups_family(tmp_path: Path) -> None:
     family = report["candidate_families"][0]
     assert family["family"] == "ppo"
     assert family["member_count"] >= MIN_FAMILY_SIZE
+    assert family["estimated_after_lines"] == family["estimated_base_lines"] + sum(
+        family["estimated_leaf_lines"]
+    )
+    assert len(family["estimated_leaf_lines"]) == 3
+
+
+def test_reduction_math_decomposition_and_regression(tmp_path: Path) -> None:
+    """Estimated after lines must equal base plus sum of all leaf lines."""
+    root = tmp_path / "configs"
+    _write(
+        root,
+        "ppo_run_seed1.yaml",
+        "gamma: 0.99\nlearning_rate: 0.001\nentropy_coef: 0.01\nclip_range: 0.2\nseed: 1\n",
+    )
+    _write(
+        root,
+        "ppo_run_seed2.yaml",
+        "gamma: 0.99\nlearning_rate: 0.001\nentropy_coef: 0.01\nclip_range: 0.2\nseed: 2\n",
+    )
+    _write(
+        root,
+        "ppo_run_seed3.yaml",
+        "gamma: 0.99\nlearning_rate: 0.001\nentropy_coef: 0.01\nclip_range: 0.2\nseed: 3\n",
+    )
+    report = run_inventory([root])
+    family = report["candidate_families"][0]
+    assert family["before_lines"] == 15
+    assert family["estimated_base_lines"] == 4  # gamma, lr, entropy, clip
+    # Each leaf has base_config (1 line) + seed (1 line) = 2 lines
+    assert family["estimated_leaf_lines"] == [2, 2, 2]
+    assert family["estimated_after_lines"] == 4 + (2 + 2 + 2)  # 10 lines
+    expected_reduction = round(1.0 - (10 / 15), 3)
+    assert family["estimated_reduction"] == expected_reduction
+    assert family["estimated_reduction"] == 0.333
+    assert len(report["ready_families"]) == 1
+
+
+def test_nested_common_and_differing_projection(tmp_path: Path) -> None:
+    """Nested mappings retain common values in base and differing values in leaves."""
+    root = tmp_path / "configs"
+    for i in range(3):
+        content = (
+            "algo:\n"
+            "  gamma: 0.99\n"
+            f"  learning_rate: 0.00{i}\n"
+            "  policy:\n"
+            "    net_arch: [64, 64]\n"
+            "env:\n"
+            "  num_agents: 5\n"
+        )
+        _write(root, f"ppo_nested_seed{i}.yaml", content)
+    report = run_inventory([root])
+    family = report["candidate_families"][0]
+    assert family["estimated_after_lines"] == family["estimated_base_lines"] + sum(
+        family["estimated_leaf_lines"]
+    )
+    assert family["estimated_base_lines"] > 0
+    assert all(leaf_cost > 0 for leaf_cost in family["estimated_leaf_lines"])
+
+
+def test_threshold_classification_boundary(tmp_path: Path) -> None:
+    """Families above and below 20% threshold are classified correctly."""
+    root = tmp_path / "configs"
+    # Low reduction family: only 1 common key out of 5, 3 members
+    # Before = 18 lines. Base = 1 line. Leaves = 5 lines each. After = 1 + 15 = 16 lines.
+    # Reduction = 1 - 16/18 = 11.1% (< 20%) -> not ready!
+    for i in range(3):
+        content = (
+            f"common_key: constant\nk1: {i}\nk2: {i * 2}\nk3: {i * 3}\nk4: {i * 4}\nk5: {i * 5}\n"
+        )
+        _write(root, f"low_family_seed{i}.yaml", content)
+    report = run_inventory([root])
+    assert len(report["candidate_families"]) == 1
+    assert report["candidate_families"][0]["estimated_reduction"] < 0.20
+    assert len(report["ready_families"]) == 0
+    assert report["disposition"] == "no_safe_family"
 
 
 def test_run_inventory_excludes_already_migrated_families(tmp_path: Path) -> None:

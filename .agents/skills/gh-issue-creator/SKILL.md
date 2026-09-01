@@ -46,10 +46,24 @@ execution.
    they carry unique technical state such as paths, checksums, missing-file
    specifics, asset identifiers, or per-step unblock conditions.
 6. Create issue:
+   - before any create request, run the deterministic zero-write body preflight:
+     `uv run python scripts/dev/issue_implementability.py --preflight-body <body.md>`
+     It rejects an incomplete body (missing objective, scope, inputs, acceptance, or
+     verification) with the exact missing field names and the body digest; repair the
+     local draft and re-run until it reports ready. Every supported body source
+     (canonical templates, rendered preparation packets, custom `--body-file`
+     content) must pass this same preflight.
    - use GitHub REST API or `gh` for deterministic issue creation:
      `gh issue create --title "<title>" --body-file <body.md> --label "<labels>"`
      (do not combine `--template` with `--body` or `--body-file`, as the GitHub CLI rejects combining them)
    - prefer existing labels; avoid inventing taxonomy
+   - never include `state:ready` in the initial label set; readiness is a verified
+     post-create result produced by `scripts/dev/issue_readiness_gate.py create ...`
+     (create without readiness -> exact REST read -> live
+     `goal_issue_admission.py --check-only` gate -> drift re-read -> conditional
+     verified label write). A failed, stale, or unavailable check leaves the issue
+     without `state:ready` and emits a stable JSON outcome for follow-up; retries
+     are idempotent and never remove labels.
 7. Project routing:
    - use `gh project item-add` when the CLI route is the active Project #5 write path
    - use `gh project item-edit` for explicit field updates when the CLI route is active

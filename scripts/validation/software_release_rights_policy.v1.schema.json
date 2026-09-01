@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.dev/schema/software_release_rights_policy.v1.schema.json",
+  "title": "Robot SF software release rights policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "policy_id",
+    "candidate_schema_version",
+    "claim_boundary",
+    "supported_dependency_surface",
+    "source_selection",
+    "exclusion_reasons",
+    "external_only",
+    "materialization"
+  ],
+  "properties": {
+    "$schema": {"type": "string", "const": "https://robot-sf.dev/schema/software_release_rights_policy.v1.schema.json"},
+    "schema_version": {"type": "string", "const": "robot_sf.software_release_rights_policy.v1"},
+    "policy_id": {"type": "string", "const": "robot_sf.software_release_rights_policy.v1"},
+    "candidate_schema_version": {"type": "string", "const": "robot_sf.software_sanitized_candidate.v1"},
+    "claim_boundary": {"type": "string", "minLength": 1},
+    "supported_dependency_surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile_manifest_path", "profile_ids", "extra_ids", "excluded_extra_ids"],
+      "properties": {
+        "profile_manifest_path": {"const": "scripts/validation/dependency_license_profiles.v1.json"},
+        "profile_ids": {"const": ["all"]},
+        "extra_ids": {
+          "type": "array",
+          "const": ["viz", "maps", "benchmark", "training", "gpu", "recurrent", "progress", "analytics", "browser", "sacadrl", "socnav", "criticality"]
+        },
+        "excluded_extra_ids": {"const": ["rllib"]}
+      }
+    },
+    "source_selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allow_globs", "exclude_globs", "required_paths"],
+      "properties": {
+        "allow_globs": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1, "uniqueItems": true},
+        "exclude_globs": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+        "required_paths": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1, "uniqueItems": true}
+      }
+    },
+    "exclusion_reasons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["glob", "reason"],
+        "properties": {"glob": {"type": "string", "minLength": 1}, "reason": {"type": "string", "minLength": 1}}
+      },
+      "uniqueItems": true
+    },
+    "external_only": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["glob", "name", "reason"],
+        "properties": {
+          "glob": {"type": "string", "minLength": 1},
+          "name": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "materialization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit_parent", "commit_message", "commit_timestamp", "tree_digest"],
+      "properties": {
+        "commit_parent": {"type": "string", "const": "root_commit"},
+        "commit_message": {"type": "string", "const": "Materialize Robot SF software candidate"},
+        "commit_timestamp": {"type": "string", "const": "2000-01-01T00:00:00Z"},
+        "tree_digest": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

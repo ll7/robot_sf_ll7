@@ -42,6 +42,19 @@ Treat substantive threads that need real work (for example a fail-closed contrac
 end-to-end assertion gap) as follow-up issues, not as items to resolve with a link. This sweep is
 bookkeeping: it does not change benchmark, metric, or schema semantics.
 
+### Exact Merge-Commit CI Readback
+
+After a guarded merge, the PR is terminal before its merge-commit checks necessarily finish. Use
+the watcher’s explicit commit mode to keep verification bound to the merge SHA:
+
+```bash
+uv run python scripts/dev/watch_pr_ci_status.py <pr-number> --post-merge-commit-sha <merge-sha> --json
+```
+
+This mode polls the exact commit check-runs and fails closed on a malformed or mismatched response.
+It proves workflow state only; it is not benchmark, research, release, or provenance evidence.
+Keep the merge receipt and exact commit SHA as the authoritative merge record.
+
 ## Intended Design Alignment
 
 Before treating CI or targeted tests as sufficient, compare the PR against the linked issue,

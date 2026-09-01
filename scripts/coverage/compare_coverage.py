@@ -9,7 +9,7 @@ minimum total coverage percentage.
 
 Usage:
     python scripts/coverage/compare_coverage.py \
-        --current coverage.json \
+        --current output/coverage/coverage.json \
         --absolute-only \
         --minimum-total 85.0 \
         --format github
@@ -47,8 +47,8 @@ def main() -> int:
     parser.add_argument(
         "--current",
         type=Path,
-        default=Path("coverage.json"),
-        help="Path to current coverage.json (default: coverage.json)",
+        default=Path("output/coverage/coverage.json"),
+        help="Path to current coverage.json (default: output/coverage/coverage.json)",
     )
     parser.add_argument(
         "--baseline",

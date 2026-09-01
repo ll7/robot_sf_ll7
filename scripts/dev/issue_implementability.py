@@ -16,12 +16,17 @@ from typing import Any
 import yaml
 
 from scripts.dev import gh_issue_rest, issue_claim, issue_dependency_packet
+from scripts.dev.issue_state_taxonomy import (
+    execution_state_labels,
+    state_labels,
+    state_qualifier_labels,
+    unknown_state_labels,
+)
 
 SCHEMA = "issue_implementability.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_REMOTE = "origin"
 READY_LABEL = "state:ready"
-STATE_LABEL_PREFIX = "state:"
 EXECUTION_HEADINGS = frozenset({"execution", "execution contract"})
 EXECUTION_FIELDS = frozenset({"owning_repo", "mutation_repos", "route_required", "external_inputs"})
 LOCAL_ROUTE = "local"
@@ -206,6 +211,32 @@ def inspect_contract(body: str) -> dict[str, Any]:
         "missing_fields": missing_fields,
         "complete": not missing_fields,
     }
+
+
+def preflight_body_text(body: str) -> dict[str, Any]:
+    """Run the deterministic zero-write preflight for one issue body.
+
+    Returns a stable JSON-ready verdict with ``ready``, the exact ``missing_fields``
+    (objective, scope, inputs, acceptance, verification), and the body digest so a
+    worker can repair the local draft before any GitHub create request. This guard
+    creates no labels, comments, projects, claims, or issues; the live
+    ``goal_issue_admission`` boundary remains responsible for state, claims,
+    blockers, and freshness.
+    """
+    contract = inspect_contract(body)
+    missing_fields = list(contract["missing_fields"])
+    return {
+        "schema": "issue_body_preflight.v1",
+        "ready": not missing_fields,
+        "missing_fields": missing_fields,
+        "body_sha256": contract["body_sha256"],
+    }
+
+
+def preflight_body_file(path: str | Path) -> dict[str, Any]:
+    """Read one issue-body file from disk and run the offline preflight."""
+    body = Path(path).read_text(encoding="utf-8")
+    return preflight_body_text(body)
 
 
 def _parse_route_timestamp(value: object) -> dt.datetime | None:
@@ -471,11 +502,6 @@ def _has_blocked_prefix(labels: set[str]) -> bool:
     return any(label.startswith("blocked:") for label in labels)
 
 
-def _state_labels(labels: set[str]) -> list[str]:
-    """Return all lifecycle labels in deterministic order."""
-    return sorted(label for label in labels if label.startswith(STATE_LABEL_PREFIX))
-
-
 def _pending_decision_heading(contract: dict[str, Any], labels: set[str]) -> bool:
     """Detect an unresolved decision heading unless a ruling label is present."""
     if "ruled" in labels or "domain-approved" in labels:
@@ -486,6 +512,18 @@ def _pending_decision_heading(contract: dict[str, Any], labels: set[str]) -> boo
         "required maintainer decision",
     }
     return bool(decision_headings & set(contract["headings"]))
+
+
+def _missing_execution_state_is_conflict(labels: set[str]) -> bool:
+    """Return whether absent execution state should stop before hold labels classify.
+
+    Historical hold labels such as ``state:working`` and ``state:review`` may appear
+    without ``state:ready``/``state:running`` and should remain working/review holds,
+    not become claimable issues. Unknown state labels still fail closed earlier.
+    """
+    if execution_state_labels(labels):
+        return False
+    return not bool(state_qualifier_labels(labels))
 
 
 def _classify_issue(
@@ -579,11 +617,23 @@ def _classify_issue(
             "assigned",
         ),
         (
-            len(_state_labels(labels)) != 1,
+            bool(unknown_state_labels(labels)),
             "state_conflict",
             (
-                "exactly one state:* label is required; found "
-                + (", ".join(_state_labels(labels)) or "none")
+                "unknown state:* label(s) must be classified before admission: "
+                + ", ".join(unknown_state_labels(labels))
+            ),
+            "state_label_conflict",
+        ),
+        (
+            len(execution_state_labels(labels)) > 1 or _missing_execution_state_is_conflict(labels),
+            "state_conflict",
+            (
+                "exactly one execution state label is required unless a known hold qualifier "
+                "already blocks dispatch; found "
+                + (", ".join(execution_state_labels(labels)) or "none")
+                + "; state qualifiers are "
+                + (", ".join(state_labels(labels)) or "none")
             ),
             "state_label_conflict",
         ),
@@ -765,15 +815,26 @@ def live_issue_report(
     remote: str,
     repo_root: Path | str | None = None,
     route_preflight: Mapping[str, Any] | None = None,
+    prospective_ready: bool = False,
 ) -> dict[str, Any]:
-    """Read one live issue and gate claimability on any explicit dependency packet."""
+    """Read one live issue and gate claimability on any explicit dependency packet.
+
+    When ``prospective_ready`` is true, evaluate a private copy of the issue as if
+    ``state:ready`` had already been added. This supports the post-create readiness
+    gate without writing a transient label before the complete admission check passes.
+    """
     issue = fetch_live_issue(number, repo=repo)
     claim = issue_claim.status_issue(number, remote=remote)
     dependency_evaluation = _resolve_issue_dependency_packet(
         issue, repo=repo, repo_root=repo_root or Path.cwd()
     )
+    issue_for_evaluation = issue
+    labels = issue.get("labels")
+    if prospective_ready and isinstance(labels, list) and READY_LABEL not in labels:
+        issue_for_evaluation = dict(issue)
+        issue_for_evaluation["labels"] = [*labels, READY_LABEL]
     return evaluate_issue(
-        issue,
+        issue_for_evaluation,
         claim,
         dependency_evaluation=dependency_evaluation,
         repository=repo,
@@ -797,10 +858,24 @@ def _parse_claimed(value: str) -> dict[str, Any]:
 def _build_parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("issue", type=int, help="Positive GitHub issue number.")
+    parser.add_argument(
+        "issue",
+        type=int,
+        nargs="?",
+        default=0,
+        help="Positive GitHub issue number (not required with --preflight-body).",
+    )
     parser.add_argument("--repo", default=DEFAULT_REPO, help="Repository as OWNER/REPO.")
     parser.add_argument(
         "--remote", default=DEFAULT_REMOTE, help="Git remote used for claim status."
+    )
+    parser.add_argument(
+        "--preflight-body",
+        type=Path,
+        help=(
+            "Offline zero-write mode: validate one issue-body file against the "
+            "canonical contract before any GitHub create request and exit."
+        ),
     )
     parser.add_argument("--body-file", help="Offline mode: read the issue body from this file.")
     parser.add_argument("--title", default="offline issue", help="Offline issue title.")
@@ -849,6 +924,21 @@ def _error_report(number: int, message: str) -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = _build_parser().parse_args(argv)
+    if args.preflight_body is not None:
+        try:
+            report = preflight_body_file(args.preflight_body)
+        except OSError as exc:
+            report = {
+                "schema": "issue_body_preflight.v1",
+                "ready": False,
+                "missing_fields": [],
+                "body_sha256": "",
+                "error": str(exc),
+            }
+        print(json.dumps(report, indent=2, sort_keys=True))
+        if report.get("ready") is True:
+            return 0
+        return 2
     try:
         if args.issue <= 0:
             raise ValueError("issue number must be positive")

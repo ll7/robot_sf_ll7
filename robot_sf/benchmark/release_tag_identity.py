@@ -149,3 +149,31 @@ def check_tag_source_consistency(
             "use derive_sha_tag() or an explicit semantic scheme"
         )
     return problems
+
+
+def check_canonical_source_tag(tag: str, source_sha: str) -> list[str]:
+    """Require one unambiguous ``<prefix>-<full source SHA>`` identity.
+
+    Semantic and abbreviated tags remain supported by the older prospective
+    compatibility checker.  Generated benchmark-data identities use this
+    stricter boundary so two SHA tokens, an embedded token, or a stale source
+    cannot acquire a second interpretation.
+
+    Returns:
+        Problem strings; empty only for one exact full-SHA suffix.
+    """
+    if not isinstance(source_sha, str) or re.fullmatch(r"[0-9a-f]{40}", source_sha) is None:
+        return ["source_sha must be a full 40-character lowercase hexadecimal SHA"]
+    normalized_tag = str(tag).strip()
+    if not isinstance(tag, str) or tag != normalized_tag:
+        return [
+            "release tag must have one canonical full-SHA suffix without surrounding whitespace"
+        ]
+    suffix = f"-{source_sha}"
+    prefix = normalized_tag[: -len(suffix)] if normalized_tag.endswith(suffix) else ""
+    sha_tokens = re.findall(r"[0-9A-Fa-f]{40,}", normalized_tag)
+    if not prefix or sha_tokens != [source_sha]:
+        return ["release tag must have one canonical full-SHA suffix derived from source_sha"]
+    if derive_sha_tag(prefix, source_sha) != normalized_tag:
+        return ["release tag must have one canonical full-SHA suffix derived from source_sha"]
+    return []

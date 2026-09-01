@@ -1055,10 +1055,20 @@ def snapshot_claimable_issues(
 ) -> dict[str, Any]:
     """Return a compact candidate/open issue snapshot with live claimable rows separated.
 
-    GraphQL discovery is used only when the quota preflight leaves the configured safety margin.
-    Otherwise the bounded REST page is used, and a ``resume_cursor`` is returned when another page
-    exists. If neither source is safe or available, the result is ``quota_blocked`` with no issue
-    rows, so a caller cannot mistake a partial discovery for a complete queue.
+    Claimable discovery constrains issue listing to ``state:ready`` candidates before the
+    bounded page size, so newer non-ready issues cannot evict older ready leaves from the
+    scanned window. GraphQL discovery is used only when the quota preflight leaves the
+    configured safety margin. Otherwise the bounded REST page is used, and a
+    ``resume_cursor`` is returned when another page exists.
+
+    ``queue_completeness`` makes zero-work claims explicit: ``complete`` means the
+    ready-candidate universe was scanned from page one and every live admission and
+    claim-state read succeeded; ``incomplete`` means the ready-candidate page was
+    truncated, resumable, or started after page one; and
+    ``unavailable`` means discovery failed, was quota-blocked, or candidate
+    evaluation was unavailable. A
+    ``claimable_count == 0`` result may only be treated as ``genuine_zero_work`` when
+    ``queue_completeness`` is ``complete``.
     """
     body_limit = body_limit if body_limit > 0 else BODY_EXCERPT_CHARS
     blocker_decisions, blocker_errors = _load_blocker_decisions(blocker_decision_paths or [])
@@ -1071,6 +1081,7 @@ def snapshot_claimable_issues(
             "legacy_mode": "claimable",
             "status": "error",
             "data_source": "none",
+            "queue_completeness": "unavailable",
             "blocker_decision_paths": blocker_decision_paths or [],
             "errors": blocker_errors,
             "issues": [{"status": "error", "error": error} for error in blocker_errors],
@@ -1084,6 +1095,7 @@ def snapshot_claimable_issues(
         limit=limit,
         min_graphql_remaining=min_graphql_remaining,
         resume_page=resume_page,
+        label=issue_implementability.READY_LABEL,
     )
     base = {
         "schema": "issue_batch_snapshot.v1",
@@ -1096,6 +1108,7 @@ def snapshot_claimable_issues(
         "rate_limit": listing["rate_limit"],
         "quota": listing["quota"],
         "resume_cursor": listing["resume_cursor"],
+        "queue_completeness": "unavailable",
         "blocker_decision_paths": blocker_decision_paths or [],
         "candidate_count": 0,
         "claimable_issues": [],
@@ -1154,32 +1167,46 @@ def snapshot_claimable_issues(
         )
     else:
         truncation_note = ""
+    claimable_issues = [
+        issue
+        for issue in issues
+        if isinstance(issue.get("admission"), dict)
+        and issue["admission"].get("ok") is True
+        and issue["admission"].get("outcome") == "ready_check_only"
+        and issue.get("dispatch_allowed", True) is not False
+    ]
+    admission_results_complete = all(
+        isinstance(issue.get("admission"), dict)
+        and issue["admission"].get("outcome") != "error"
+        and issue["admission"].get("classification") != "error"
+        and issue["admission"].get("claim_outcome") in {"unclaimed", "already_claimed"}
+        for issue in snapshots
+    )
+    if not admission_results_complete:
+        queue_completeness = "unavailable"
+    elif resume_page > 1 or truncated:
+        queue_completeness = "incomplete"
+    else:
+        queue_completeness = "complete"
     return {
         **base,
         "mode": "candidate_queue",
         "legacy_mode": "claimable",
+        "queue_completeness": queue_completeness,
         "truncated": truncated,
         "truncation_note": truncation_note,
         "include_blocked_external": include_blocked_external,
         "candidate_count": len(issues),
-        "claimable_issues": [
-            issue
-            for issue in issues
-            if isinstance(issue.get("admission"), dict)
-            and issue["admission"].get("ok") is True
-            and issue["admission"].get("outcome") == "ready_check_only"
-        ],
-        "claimable_count": sum(
-            1
-            for issue in issues
-            if isinstance(issue.get("admission"), dict)
-            and issue["admission"].get("ok") is True
-            and issue["admission"].get("outcome") == "ready_check_only"
-        ),
+        "claimable_issues": claimable_issues,
+        "claimable_count": len(claimable_issues),
         "admission_reason_histogram": dict(
             sorted(
                 Counter(
-                    _admission_reason(issue["admission"])
+                    (
+                        str(issue.get("classification") or "blocked")
+                        if issue.get("dispatch_allowed") is False
+                        else _admission_reason(issue["admission"])
+                    )
                     for issue in snapshots
                     if isinstance(issue.get("admission"), dict)
                 ).items()

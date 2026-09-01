@@ -120,7 +120,7 @@
     },
     {
       "path": "docs/context/dependency_license_inventory.md",
-      "sha256": "fec7e7385a1c574d4e7a2d8eb9c36311163012694f39144d9c789bcd9a3b9e63"
+      "sha256": "2ce10f1e0d6009f73c4d83b9bbeb8519e88b7a8ce25bdcba1e44ecb9f7ef4d3d"
     },
     {
       "path": "docs/context/evidence/issue_2667_trace_failure_predicate_tables_2026-06-12/trace_failure_predicate_tables.json",
@@ -136,7 +136,7 @@
     },
     {
       "path": "pyproject.toml",
-      "sha256": "84c4762109a02587c5206863a0b837b4873730c72186b4d7125b6e6a43c4278b"
+      "sha256": "c326519a1ac52ea98ac82309649c42b25a9468d245f44dd858bab0d8ad335c85"
     },
     {
       "path": "third_party/python-rvo2/LICENSE",

@@ -453,6 +453,9 @@ _FAST_FILES = {
     # (issue #8073).
     "test_goal_candidate_provider.py",
     "test_goal_candidate_coverage.py",
+    # The pre-submit launch-manifest tests cover deterministic release-input
+    # binding and the public Slurm preflight consumer contract.
+    "test_generate_slurm_launch_manifest.py",
     # Topology-guided local-policy tests are deterministic planner-contract
     # coverage for the changed adapter; keep them in fast PR shards for the
     # exact-head changed-coverage gate.

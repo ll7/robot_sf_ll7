@@ -1,0 +1,169 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema": "tracker_goal_belief_adapter_smoke_receipt.v1",
+  "issue": 8205,
+  "status": "verified",
+  "source_commit": "9868109df543d34cfeb426036e7a792cc1e19634",
+  "source_tree_scope": "adapter, tests, and documentation before the receipt commit",
+  "claim_boundary": "implementation-integrity / smoke only",
+  "research_claim": "none",
+  "benchmark_outcomes": "none",
+  "artifact_provenance": {
+    "classification": "tracked-compact-evidence",
+    "raw_output": "not retained; fixture is reproducible from tracked tests",
+    "path": "docs/context/evidence/issue_8205_tracker_adapter_smoke_receipt.v1.json"
+  },
+  "schemas": [
+    {
+      "name": "tracker_goal_belief_adapter",
+      "version": "tracker_goal_belief_adapter.v1"
+    },
+    {
+      "name": "goal_belief",
+      "version": "goal_belief.v1"
+    },
+    {
+      "name": "pedestrian_tracking",
+      "version": "pedestrian_tracking.v1"
+    }
+  ],
+  "algorithms": {
+    "canonicalization": "RFC 8785 canonical JSON",
+    "config_hash": "SHA-256 over RFC 8785 canonical configuration JSON",
+    "content_digest": "SHA-256 over RFC 8785 canonical channel JSON"
+  },
+  "actor_boundary": {
+    "input_type": "PedestrianTrackingResult",
+    "output_type": "GoalBeliefV1",
+    "source": "observation_only",
+    "candidate_policy": "not_configured",
+    "unknown_candidate_probability": 1.0,
+    "forbidden_oracle_fields": [
+      "goal_before_behavior",
+      "goal_after_behavior",
+      "route_truth",
+      "waypoint_truth",
+      "simulator_pedestrian_id",
+      "oracle_speed_cap_active",
+      "speed_cap_truth",
+      "uncapped_velocity_xy"
+    ]
+  },
+  "fixture": {
+    "ids": [
+      "single_observation",
+      "row_reorder",
+      "brief_occlusion_channels",
+      "reacquisition_channels",
+      "reset",
+      "robot_ego_velocity",
+      "recovered_velocity",
+      "textual_track_id_ordering"
+    ],
+    "config_hash": "52eeb128182485d2616fab2843419c31c72dfeefe1a22be35ef027340be536ec",
+    "track_ids_by_step": [
+      ["track-1", "track-2"],
+      ["track-1", "track-2"],
+      ["track-1", "track-2"],
+      ["track-1", "track-2"]
+    ],
+    "channel_digests": [
+      "ed5747fd8450a9f783741a52fe05e6236f97ef90492fdd1bde7e398a509bcc41",
+      "106237a5b130fe2c6c6f1254ca413f79064f19f5f1c22a940096694652ec263e",
+      "833c25720c7ebc554ea3197c0ee730c68dc7e1c6ad6c3af63a97f20cab8fe6dc",
+      "2a76fb5a1e2538205a2fc7fe107b0bd97fa64927c39610cf3dfc1fc50dc587b2"
+    ],
+    "transform_error_l2": 6.123233995736766e-17,
+    "current_row_masks_by_decision_point": [
+      {"step_index": 0, "track_ids": ["track-1", "track-2"], "masks": ["observed", "observed"]},
+      {"step_index": 1, "track_ids": ["track-1", "track-2"], "masks": ["observed", "observed"]},
+      {"step_index": 2, "track_ids": ["track-1", "track-2"], "masks": ["invisible", "invisible"]},
+      {"step_index": 3, "track_ids": ["track-1", "track-2"], "masks": ["observed", "observed"]}
+    ],
+    "history_lengths_by_step": [[1, 1], [1, 1], [1, 1], [1, 1]],
+    "history_projection_counts_by_step": [
+      {"current_row_only_tracker_v1_velocity_provenance_unavailable": 2},
+      {"current_row_only_tracker_v1_velocity_provenance_unavailable": 2},
+      {"current_row_only_tracker_v1_velocity_provenance_unavailable": 2},
+      {"current_row_only_tracker_v1_velocity_provenance_unavailable": 2}
+    ]
+  },
+  "checks": {
+    "default_off_empty_channel": "passed",
+    "disabled_timing_absent": "passed",
+    "stable_row_reorder": "passed",
+    "same_step_robot_frame_velocity_normalization": "passed",
+    "brief_occlusion_and_reacquisition_across_channels": "passed",
+    "reset_isolation": "passed",
+    "tracking_epoch_propagation": "passed",
+    "current_missing_velocity_not_promoted": "passed",
+    "historical_missing_velocity_after_recovery": "passed",
+    "serialized_track_id_lexical_order": "passed",
+    "malformed_input_rejection": "passed",
+    "decision_point_alignment_rejection": "passed",
+    "deterministic_serialization_and_digest": "passed"
+  },
+  "reset_check": {
+    "prior_epoch": 0,
+    "new_epoch": 1,
+    "prior_belief_epoch": "0",
+    "new_belief_epoch": "1",
+    "reused_track_id": "track-1",
+    "belief_pair_changed": true,
+    "prior_provenance": null,
+    "new_provenance": "receipt-episode-2",
+    "new_track_ids": ["track-1"]
+  },
+  "oracle_boundary": {
+    "oracle_evaluator_invoked": false,
+    "simulator_identity_supplied_to_adapter": false,
+    "oracle_only_diagnostics": "not collected",
+    "tracking_quality": "not measured"
+  },
+  "runtime": {
+    "execution": "local CPU smoke fixture",
+    "external_data": false,
+    "model_or_checkpoint": false,
+    "gpu_or_slurm": false,
+    "observed_runtime_ms": 16.175
+  },
+  "validation": [
+    {
+      "command": "uv run pytest tests/prediction/test_tracker_goal_belief_adapter.py -q",
+      "result": "11 passed"
+    },
+    {
+      "command": "uv run pytest -q tests/prediction tests/sensor/test_pedestrian_tracking.py tests/sensor/test_coordinate_frame_normalization.py",
+      "result": "81 passed"
+    },
+    {
+      "command": "uv run ruff check robot_sf/prediction tests/prediction/test_tracker_goal_belief_adapter.py",
+      "result": "All checks passed"
+    },
+    {
+      "command": "uv run ruff format --check robot_sf/prediction tests/prediction/test_tracker_goal_belief_adapter.py",
+      "result": "7 files already formatted"
+    },
+    {
+      "command": "uv run mypy robot_sf/prediction",
+      "result": "Success: no issues found in 6 source files"
+    },
+    {
+      "command": "uv run python scripts/dev/evidence_registry_ratchet.py --check",
+      "result": "findings=429; baseline=429; passed"
+    },
+    {
+      "command": "uv run python scripts/dev/check_docs_evidence_integrity.py --base-ref origin/main",
+      "result": "10 changed file(s) passed"
+    },
+    {
+      "command": "PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh",
+      "result": "passed; changed-file coverage warnings remained above the 80% minimum"
+    }
+  ],
+  "limitations": [
+    "No per-history-row velocity-validity mask exists in pedestrian_tracking.v1; the adapter uses a conservative current-row projection when current velocity is unavailable.",
+    "The adapter emits unavailable beliefs and does not implement candidate generation, force inversion, destination inference, planner promotion, or quality evaluation.",
+    "This receipt is not tracking-quality, prediction-quality, benchmark, safety, or paper-facing evidence."
+  ]
+}

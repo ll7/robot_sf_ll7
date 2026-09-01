@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tarfile
@@ -21,12 +22,21 @@ HELPER = REPO_ROOT / "scripts" / "dev" / "software_candidate_manifest.py"
 
 
 def _run(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, str(HELPER), *args],
-        check=check,
+    command = [sys.executable, str(HELPER), *args]
+    result = subprocess.run(
+        command,
+        check=False,
         capture_output=True,
         text=True,
     )
+    if check and result.returncode != 0:
+        raise AssertionError(
+            "candidate helper failed with exit code "
+            f"{result.returncode}: {shlex.join(command)}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+    return result
 
 
 def _fixture_source(path: Path, *, include_asset: bool = False) -> tuple[Path, str]:

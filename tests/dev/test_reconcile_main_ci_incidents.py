@@ -340,6 +340,25 @@ def test_malformed_run_window_fails_closed_before_any_issue_write() -> None:
     assert not [call for call in fake.calls if call[2] in {"POST", "PATCH"}]
 
 
+def test_malformed_non_decisive_run_is_rejected_before_report_rendering() -> None:
+    """Even a cancelled run needs an identity before it enters evidence output."""
+    fake = FakeREST(_issue(run_id=300))
+    with pytest.raises(reconciler.ReconciliationError, match="databaseId"):
+        reconciler.reconcile_batch(
+            repo=REPO,
+            runner=fake,
+            run_fetcher=_fetcher(
+                [
+                    {
+                        "status": "completed",
+                        "conclusion": "cancelled",
+                        "createdAt": "2026-09-01T02:00:00Z",
+                    }
+                ]
+            ),
+        )
+
+
 def test_scheduled_workflow_uses_explicit_apply_lane_and_narrow_permissions() -> None:
     """The hosted schedule invokes the report helper with only required rights."""
     root = Path(__file__).parents[2]

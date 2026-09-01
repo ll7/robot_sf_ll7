@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import tomllib
 from pathlib import Path
 
@@ -104,8 +105,17 @@ def test_issue_8163_policy_batch_has_exact_scope_and_fail_closed_surfaces() -> N
         assert row["status"] == "pending_review"
         assert row["reviewer"] is None
         assert row["reviewed_at"] is None
+        assert re.fullmatch(r"[0-9a-f]{40}", row["upstream"]["commit_sha"])
+        assert all(
+            re.search(r"/(?:blob|tree)/[0-9a-f]{40}(?:/|$)", url)
+            for url in row["upstream"]["notice_paths"]
+            if "/blob/" in url or "/tree/" in url
+        )
         assert row["upstream"]["archive_notice_paths"]
         assert row["upstream"]["archive_notice_absences"] == []
+    assert all(
+        rows[name].get("evidence_blockers") for name in ("alembic", "referencing", "rich-rst")
+    )
 
 
 def test_schema_validation_policy_covers_both_configured_test_roots() -> None:

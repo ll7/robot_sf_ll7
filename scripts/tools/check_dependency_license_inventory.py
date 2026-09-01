@@ -79,6 +79,7 @@ _CANDIDATE_MATERIALIZATION_SHA_FIELDS = {
 }
 _CANDIDATE_REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _CANDIDATE_SOURCE_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+_UPSTREAM_COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _CANDIDATE_RUN_ID_RE = re.compile(r"^[1-9][0-9]*$")
 _CANDIDATE_VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+!_-]*$")
 _CANDIDATE_VALIDATION_COMMANDS = (
@@ -198,6 +199,48 @@ def _normalise_json(value: Any) -> Any:
     if isinstance(value, list):
         return [_normalise_json(item) for item in value]
     return value
+
+
+def _github_notice_reference(url: str) -> tuple[str, str, str] | None:
+    """Return ``(repository, ref, path_kind)`` for a GitHub tree/blob URL.
+
+    Release evidence must point at an immutable commit rather than a branch or
+    tag which can be moved after the evidence was reviewed.  This parser is
+    intentionally narrow: only HTTPS github.com URLs using the public
+    ``blob/<commit>/<path>`` or ``tree/<commit>`` forms are accepted.
+    """
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc.lower() != "github.com"
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+    parts = [unquote(part) for part in parsed.path.split("/") if part]
+    if len(parts) < 4 or parts[2] not in {"blob", "tree"}:
+        return None
+    ref = parts[3]
+    if _UPSTREAM_COMMIT_SHA_RE.fullmatch(ref) is None:
+        return None
+    if parts[2] == "blob" and len(parts) < 5:
+        return None
+    return "/".join(parts[:2]), ref, parts[2]
+
+
+def _effective_profile_coverage(actual: set[str], expected: set[str]) -> set[str]:
+    """Collapse transitive memberships covered by an aggregate ``all`` row.
+
+    ``all`` represents one declared release profile, not every independent
+    lockfile profile.  When a policy row includes ``all``, memberships that are
+    not explicitly named by that policy are therefore treated as transitive
+    context.  Explicit standalone memberships (for example ``fast-pysf`` on
+    the existing llvmlite control row) remain visible and exact.
+    """
+    if "all" not in expected or "all" not in actual:
+        return set(actual)
+    explicit = expected - {"all"}
+    return {"all"} | (actual & explicit)
 
 
 def _requirement_record(requirement: str) -> dict[str, Any]:
@@ -1854,6 +1897,61 @@ def _policy_records(  # noqa: C901, PLR0912, PLR0915
             or not all(isinstance(value, str) and value for value in notice_paths)
         ):
             issues.append(f"package disposition {package_id} has incomplete notice references")
+            notice_paths = []
+        evidence_blockers = package.get("evidence_blockers", [])
+        if not isinstance(evidence_blockers, list) or not all(
+            isinstance(value, str) and value.strip() for value in evidence_blockers
+        ):
+            issues.append(f"package disposition {package_id} has invalid evidence_blockers")
+            evidence_blockers = []
+        commit_sha = upstream.get("commit_sha")
+        if not isinstance(commit_sha, str) or _UPSTREAM_COMMIT_SHA_RE.fullmatch(commit_sha) is None:
+            issues.append(
+                f"package disposition {package_id} must bind upstream provenance to a 40-digit commit_sha"
+            )
+            commit_sha = None
+        moving_notice_paths = [
+            value
+            for value in notice_paths
+            if isinstance(value, str) and _github_notice_reference(value) is None
+        ]
+        if moving_notice_paths:
+            if package.get("status") == "reviewed":
+                issues.append(
+                    f"package disposition {package_id} reviewed evidence contains moving or unversioned notice URLs"
+                )
+            elif not evidence_blockers or not any(
+                any(
+                    marker in blocker.lower()
+                    for marker in (
+                        "moving",
+                        "unversioned",
+                        "unpinned",
+                        "not immutable",
+                        "unresolved",
+                    )
+                )
+                for blocker in evidence_blockers
+            ):
+                issues.append(
+                    f"package disposition {package_id} must record a durable blocker for moving notice URLs"
+                )
+        if commit_sha is not None:
+            repository = upstream.get("repository")
+            repository_name = (
+                repository.removeprefix("https://github.com/")
+                if isinstance(repository, str)
+                else None
+            )
+            for notice_path in notice_paths:
+                reference = (
+                    _github_notice_reference(notice_path) if isinstance(notice_path, str) else None
+                )
+                if reference is not None and reference[0] == repository_name:
+                    if reference[1] != commit_sha:
+                        issues.append(
+                            f"package disposition {package_id} notice URL does not match upstream commit_sha"
+                        )
         if "metadata_url" in source:
             for field in ("archive_notice_paths", "archive_notice_absences"):
                 values = upstream.get(field)
@@ -1964,6 +2062,7 @@ def _policy_records(  # noqa: C901, PLR0912, PLR0915
             "disposition": package.get("disposition"),
             "ruling": package.get("ruling"),
             "rationale": package.get("rationale"),
+            "evidence_blockers": sorted(set(evidence_blockers)),
             "evidence_paths": sorted(set(evidence_paths)),
             "evidence": evidence_digests,
         }
@@ -1979,6 +2078,185 @@ def _policy_records(  # noqa: C901, PLR0912, PLR0915
         sorted(package_out, key=lambda item: item["id"]),
         issues,
     )
+
+
+def _policy_identity_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return the digest-safe normalized policy records.
+
+    ``evidence`` contains byte digests for the files named by
+    ``evidence_paths``.  The batch receipt is itself one of those evidence
+    paths, so including that self-referential digest would make a receipt
+    impossible to bind deterministically.  The normalized record identity
+    therefore retains the declared paths and excludes only their derived byte
+    digest map; the receipt binds the evidence bytes separately.
+    """
+    return [
+        {key: value for key, value in record.items() if key != "evidence"}
+        for record in sorted(records, key=lambda item: item.get("id", ""))
+    ]
+
+
+def _issue_8163_license_files(policy: dict[str, Any]) -> list[dict[str, str]]:
+    """Return the deterministic archive-license path manifest for the batch."""
+    rows = [
+        row
+        for row in policy.get("package_dispositions", [])
+        if isinstance(row, dict)
+        and "docs/context/evidence/dependency_license_batch_2026-09-01.md"
+        in row.get("evidence_paths", [])
+    ]
+    values = [
+        {
+            "package": row["package"],
+            "version": row["version"],
+            "archive_path": archive_path,
+        }
+        for row in rows
+        for archive_path in row.get("upstream", {}).get("archive_notice_paths", [])
+        if isinstance(archive_path, str)
+    ]
+    return sorted(values, key=lambda item: (item["package"], item["version"], item["archive_path"]))
+
+
+def _issue_8163_receipt_binding(
+    policy: dict[str, Any], repo_root: Path
+) -> tuple[dict[str, Any], list[str]]:
+    """Compute deterministic policy/license bindings used by the batch receipt."""
+    _rules, _components, _by_name, records, policy_issues = _policy_records(policy, repo_root)
+    batch_records = [
+        record
+        for record in records
+        if "docs/context/evidence/dependency_license_batch_2026-09-01.md"
+        in record.get("evidence_paths", [])
+    ]
+    license_files = _issue_8163_license_files(policy)
+    evidence_files = []
+    evidence_path = repo_root / "docs/context/evidence/dependency_license_batch_2026-09-01.md"
+    if evidence_path.is_file():
+        evidence_files.append(
+            {
+                "path": "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+                "sha256": _sha256_file(evidence_path),
+            }
+        )
+    binding = {
+        "normalized_records_sha256": _sha256_value(_policy_identity_records(batch_records)),
+        "normalized_record_count": len(batch_records),
+        "license_files": license_files,
+        "license_files_sha256": _sha256_value(license_files),
+        "evidence_files": evidence_files,
+    }
+    return binding, policy_issues
+
+
+def validate_dependency_license_receipt(  # noqa: C901, PLR0912, PLR0915
+    repo_root: Path,
+    receipt_path: Path,
+    *,
+    expected_reviewed_head: str | None = None,
+) -> list[str]:
+    """Validate a dependency-batch receipt's reproducible, non-approval bindings.
+
+    The checker validates hashes and identities but never upgrades a row to
+    ``reviewed``.  Operator-local strict reports are accepted as references
+    only when their declared digest is a well-formed SHA-256; a portable path
+    must exist and match when it is available in the repository or supplied
+    checkout.
+    """
+    issues: list[str] = []
+    try:
+        receipt = _read_json(receipt_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return [f"dependency receipt could not be read: {exc}"]
+    if receipt.get("schema_version") != "robot-sf.issue-8163-dependency-license-batch.receipt.v1":
+        issues.append("dependency receipt has an unsupported schema_version")
+
+    policy_path = repo_root / CANONICAL_POLICY
+    try:
+        policy = _read_json(policy_path)
+        policy_binding, policy_issues = _issue_8163_receipt_binding(policy, repo_root)
+    except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as exc:
+        return [f"dependency receipt policy binding could not be computed: {exc}"]
+    issues.extend(policy_issues)
+    binding = receipt.get("review_binding")
+    if not isinstance(binding, dict):
+        issues.append("dependency receipt has no review_binding record")
+        binding = {}
+    for field in ("normalized_records_sha256", "license_files_sha256"):
+        expected = policy_binding[field]
+        actual = binding.get(field)
+        if actual != expected:
+            issues.append(
+                f"dependency receipt {field} differs from the current normalized policy: "
+                f"receipt={actual!r} actual={expected!r}"
+            )
+    if binding.get("normalized_record_count") != policy_binding["normalized_record_count"]:
+        issues.append("dependency receipt normalized_record_count differs from the current policy")
+    if binding.get("license_files") != policy_binding["license_files"]:
+        issues.append("dependency receipt license_files manifest differs from the current policy")
+    if binding.get("evidence_files") != policy_binding["evidence_files"]:
+        issues.append("dependency receipt evidence_files binding differs from the current evidence")
+    for evidence_file in policy_binding["evidence_files"]:
+        if evidence_file["sha256"] != _sha256_file(repo_root / evidence_file["path"]):
+            issues.append(f"dependency receipt evidence file changed: {evidence_file['path']}")
+
+    source = receipt.get("source")
+    candidate = receipt.get("candidate_binding")
+    reviewed_head = binding.get("reviewed_head_sha")
+    if (
+        not isinstance(reviewed_head, str)
+        or _CANDIDATE_SOURCE_SHA_RE.fullmatch(reviewed_head) is None
+    ):
+        issues.append(
+            "dependency receipt review_binding.reviewed_head_sha is not a full commit SHA"
+        )
+    if expected_reviewed_head is not None and reviewed_head != expected_reviewed_head:
+        issues.append(
+            "dependency receipt reviewed_head_sha differs from the expected reviewed head"
+        )
+    if (
+        expected_reviewed_head is not None
+        and _CANDIDATE_SOURCE_SHA_RE.fullmatch(expected_reviewed_head) is None
+    ):
+        issues.append("expected reviewed head must be a full commit SHA")
+    if isinstance(source, dict) and source.get("source_sha") != reviewed_head:
+        issues.append("dependency receipt reviewed_head_sha is not bound to source.source_sha")
+    if isinstance(candidate, dict) and candidate.get("source_sha") != reviewed_head:
+        issues.append("dependency receipt reviewed_head_sha is not bound to candidate source_sha")
+
+    policy_file_binding = binding.get("policy")
+    if not isinstance(policy_file_binding, dict):
+        issues.append("dependency receipt review_binding has no policy file binding")
+    else:
+        if policy_file_binding.get("path") != CANONICAL_POLICY:
+            issues.append("dependency receipt policy binding does not name the canonical policy")
+        policy_sha = policy_file_binding.get("sha256")
+        if not isinstance(policy_sha, str) or _SHA256_RE.fullmatch(policy_sha) is None:
+            issues.append("dependency receipt policy binding has an invalid SHA-256")
+        elif policy_sha != _sha256_file(policy_path):
+            issues.append(
+                "dependency receipt policy binding SHA-256 differs from the current policy"
+            )
+
+    strict_report = receipt.get("strict_report")
+    if not isinstance(strict_report, dict):
+        issues.append("dependency receipt has no strict_report binding")
+    else:
+        report_sha = strict_report.get("sha256")
+        if not isinstance(report_sha, str) or _SHA256_RE.fullmatch(report_sha) is None:
+            issues.append("dependency receipt strict_report.sha256 is not a valid SHA-256")
+        report_path = strict_report.get("path")
+        if isinstance(report_path, str) and not report_path.startswith("operator-local:"):
+            resolved_report = _resolve_path(repo_root, report_path)
+            if not resolved_report.is_file():
+                issues.append(f"dependency receipt strict report is missing: {report_path}")
+            elif report_sha != _sha256_file(resolved_report):
+                issues.append(
+                    "dependency receipt strict report SHA-256 differs from the report bytes"
+                )
+        elif not isinstance(report_path, str) or not report_path:
+            issues.append("dependency receipt strict_report.path is missing")
+    return sorted(set(issues))
 
 
 def _policy_source_matches(
@@ -2075,10 +2353,11 @@ def _match_package_disposition(
     ) != policy.get("license_expression"):
         failures.append("observed license expression does not match exact policy")
     expected_profiles = set(policy.get("profiles", []))
-    if not profiles <= expected_profiles:
+    actual_profiles = _effective_profile_coverage(profiles, expected_profiles)
+    if not actual_profiles <= expected_profiles:
         failures.append(
             "package profile membership exceeds exact policy: "
-            f"{sorted(profiles - expected_profiles)}"
+            f"{sorted(actual_profiles - expected_profiles)}"
         )
     failures.extend(_exact_artifact_failures(package, policy.get("artifacts", [])))
     return policy, sorted(set(failures))
@@ -2088,8 +2367,15 @@ def _exact_policy_coverage_failures(
     package_dispositions: list[dict[str, Any]],
     package_records: list[dict[str, Any]],
     profile_ids: set[str],
+    selected_profile_ids: set[str] | None = None,
 ) -> list[str]:
-    """Ensure each exact disposition covers exactly its declared profile set."""
+    """Ensure exact rows cover their selected profile surface.
+
+    ``profiles`` on a lock record is the complete transitive membership graph;
+    it is not the policy surface selected for this invocation.  Prefer the
+    record's ``selected_profiles`` projection and collapse the aggregate
+    ``all`` profile so ``profiles: [all]`` remains an intentional exact row.
+    """
     failures: list[str] = []
     for policy in package_dispositions:
         policy_id = policy["id"]
@@ -2107,7 +2393,17 @@ def _exact_policy_coverage_failures(
             and record.get("version") == policy.get("version")
             and _policy_source_matches(record.get("source", {}), policy.get("source", {}))
         ]
-        actual_profiles = {profile for record in matches for profile in record.get("profiles", [])}
+        actual_profiles = {
+            profile
+            for record in matches
+            for profile in record.get(
+                "selected_profiles" if "selected_profiles" in record else "profiles",
+                [],
+            )
+        }
+        if selected_profile_ids is not None:
+            actual_profiles &= selected_profile_ids
+        actual_profiles = _effective_profile_coverage(actual_profiles, expected_profiles)
         if not matches:
             failures.append(f"package disposition {policy_id} has no matching lock row")
         elif actual_profiles != expected_profiles:
@@ -2484,6 +2780,7 @@ def build_inventory(  # noqa: C901, PLR0912, PLR0915
             package_dispositions,
             package_records,
             {profile["id"] for profile in profiles},
+            selected_ids,
         )
     )
 
@@ -2563,6 +2860,10 @@ def build_inventory(  # noqa: C901, PLR0912, PLR0915
             "rules": _normalise_json(policy.get("rules", [])),
             "components": components,
             "package_dispositions": package_dispositions,
+            "normalized_records_sha256": _sha256_value(
+                _policy_identity_records(package_dispositions)
+            ),
+            "normalized_record_count": len(package_dispositions),
         },
         "project": {
             "name": root_project.get("name"),
@@ -2749,6 +3050,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Check an existing report's recorded input digests and do not regenerate it.",
     )
     parser.add_argument(
+        "--check-receipt",
+        type=Path,
+        help="Check a dependency-batch receipt's exact policy, evidence, and report bindings.",
+    )
+    parser.add_argument(
+        "--expected-reviewed-head",
+        help="Require --check-receipt to name this exact reviewed source commit.",
+    )
+    parser.add_argument(
         "--fail-on-unresolved",
         action="store_true",
         help="Return exit code 2 when metadata, profile, provenance, or policy rows remain unresolved.",
@@ -2760,6 +3070,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     try:
+        if args.check_receipt:
+            receipt_path = _resolve_path(repo_root, args.check_receipt)
+            issues = validate_dependency_license_receipt(
+                repo_root,
+                receipt_path,
+                expected_reviewed_head=args.expected_reviewed_head,
+            )
+            print(
+                json.dumps(
+                    {
+                        "schema_version": "dependency_license_receipt_check.v1",
+                        "issues": issues,
+                        "status": "blocked" if issues else "complete",
+                    },
+                    indent=2,
+                )
+            )
+            return 1 if issues else 0
         if args.check_freshness:
             report_path = args.check_freshness.resolve()
             issues = check_report_freshness(

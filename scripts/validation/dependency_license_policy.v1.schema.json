@@ -132,10 +132,11 @@
           },
           "upstream": {
             "type": "object",
-            "required": ["repository", "tag", "notice_paths"],
+            "required": ["repository", "tag", "commit_sha", "notice_paths"],
             "properties": {
               "repository": {"type": "string", "format": "uri"},
               "tag": {"type": "string", "minLength": 1},
+              "commit_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
               "notice_paths": {
                 "type": "array",
                 "minItems": 2,
@@ -199,6 +200,10 @@
           "disposition": {"type": "string", "minLength": 1},
           "ruling": {"type": "string", "minLength": 1},
           "rationale": {"type": "string", "minLength": 1},
+          "evidence_blockers": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
           "evidence_paths": {
             "type": "array",
             "minItems": 1,

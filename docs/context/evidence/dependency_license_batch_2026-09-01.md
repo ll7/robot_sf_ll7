@@ -20,6 +20,7 @@ This note preserves the bounded evidence for the first 36 exact dependency rows 
 - Exact archive audit: operator-local `/tmp/issue8163-archive-audit/archive-audit.json`, SHA-256 `3bb2e3cba161be5f27427f42d2a72b12b4b581beed09aab0db3ffeae8c4f0447`, schema `robot-sf.issue-8163-archive-audit.v1`, 36 packages / 72 artifacts / zero audit failures.
 - Exact upstream tag checks: operator-local `/tmp/issue8163-archive-audit/upstream-tags.json`, SHA-256 `8de0debdebc5664995a846fbfe4166a84c8a981370688ab3c88cfa4736a489c8`.
 - The tag probe recorded one non-fatal GitHub tag-page pagination `404` while enumerating attrs; the exact `25.4.0` tag and notice blobs were separately verified and retained. This warning is not treated as license or release approval.
+- Every GitHub notice URL in the policy is now pinned to the resolved 40-character commit recorded as `upstream.commit_sha`; tag names remain only as human-readable release labels. The `python-dotenv` pointers resolve to commit `eaf2a9129ccec6febda0f741eb3bb852c3f947bd`, where both `LICENSE` and `docs/license.md` are present.
 
 ## Candidate binding receipt
 
@@ -29,48 +30,55 @@ This note preserves the bounded evidence for the first 36 exact dependency rows 
 - Candidate materialization: commit `5c7f7165e0ff844095625b5b91804fcc230d1cc1`, tree `6b2fa342920a7c4d7b733906eb26acc11cd16632`, policy `scripts/validation/software_candidate_policy.v1.json` SHA-256 `8e02808a9e342e7c50aff6aa1a038de4b00f9e60a875b0f0b2ddd5d036888d6d`.
 - Candidate members (all hashes are retained in the receipt): `robot_sf-0.0.6-py3-none-any.whl`, `robot_sf-0.0.6.tar.gz`, CycloneDX SBOM, and provenance record.
 - The SBOM was exported with the supported extras and normalized to the selected profile-all lock closure before assembly. The raw export contained ten target-inactive/unselected universal-lock identities; those were excluded, with no selected component omitted. This is diagnostic candidate evidence, not a release pass; the receipt records the exact transformation and strict-report path/summary.
-- Strict report: operator-local `/tmp/issue8163-final-candidate.IVUGJR/inventory-final-strict-all.json`, exit code `2`, `candidate_bound=true`, `surface.profile_ids=["all"]`, unresolved count `181`; the final report digest is recorded in the PR handoff because embedding it here would make the freshness input self-referential.
+- Strict report: operator-local `/tmp/issue8163-final-candidate.IVUGJR/inventory-final-strict-all.json`, exit code `2`, `candidate_bound=true`, `surface.profile_ids=["all"]`, unresolved count `181`; its SHA-256 and the normalized policy/license manifests are bound in the receipt's `strict_report` and `review_binding` records.
+- The receipt's deterministic `review_binding` binds reviewed source head `39c1840c16fb53d2b8a881bde8786922f54bc170`, the 36 normalized policy records (`231e3dc6151ce1793ca29fcf238e91ff680aa2219b56401686864cb5e6b0c794`), the 125 archive license paths (`1f9ea1d3d62bdfb4c9ea57da8667280b7037290f633d88715f8d6ddce2a4191b`), the policy file SHA-256, and this note's evidence digest. This is an exact source/candidate binding, not an independent legal or maintainer approval.
+
+## Immutable-pointer and source-mismatch boundary
+
+- `upstream.commit_sha` and commit-pinned GitHub `blob`/`tree` URLs prevent a later tag or branch move from changing the review target. The checker rejects a reviewed row containing a moving notice URL; a pending row may retain one only when a durable blocker explains why.
+- Alembic's source commit is `766b5ee98e0aeea85a18f272a1ac813712ee0697`. Its sdist contains generated Font Awesome 6.5.2 files that are absent from that source tree. The corresponding Font Awesome pointers use commit `c0f460dca7f7688761120415ff3c9cf7f73119be`; `js/all.min.js.LICENSE.txt` is absent there as well. The generated-file mapping therefore remains explicitly pending review.
+- `referencing` retains the sdist `suite/LICENSE` from an unpinned `referencing-suite` submodule, and `rich-rst` retains unversioned Docutils pages for its vendored subset. Both rows remain `pending_review` with durable blockers; no legal or redistribution conclusion is inferred.
 
 ## Exact metadata and frozen artifacts
 
 | Package | Version | Observed SPDX | `Requires-Python` | Exact PyPI JSON | Upstream tag |
 | --- | --- | --- | --- | --- | --- |
-| `absl-py` | `2.4.0` | `Apache-2.0` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/absl-py/2.4.0/json>) | [`v2.4.0`](<https://github.com/abseil/abseil-py/tree/v2.4.0>) |
-| `alembic` | `1.18.4` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/alembic/1.18.4/json>) | [`rel_1_18_4`](<https://github.com/sqlalchemy/alembic/tree/rel_1_18_4>) |
-| `attrs` | `25.4.0` | `MIT` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/attrs/25.4.0/json>) | [`25.4.0`](<https://github.com/python-attrs/attrs/tree/25.4.0>) |
-| `click` | `8.3.1` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/click/8.3.1/json>) | [`8.3.1`](<https://github.com/pallets/click/tree/8.3.1>) |
-| `cma` | `4.4.4` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | (not specified in exact metadata) | [`JSON`](<https://pypi.org/pypi/cma/4.4.4/json>) | [`r4.4.4`](<https://github.com/CMA-ES/pycma/tree/r4.4.4>) |
-| `cyclopts` | `4.18.0` | `Apache-2.0` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/cyclopts/4.18.0/json>) | [`v4.18.0`](<https://github.com/BrianPugh/cyclopts/tree/v4.18.0>) |
-| `fsspec` | `2026.2.0` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/fsspec/2026.2.0/json>) | [`2026.2.0`](<https://github.com/fsspec/filesystem_spec/tree/2026.2.0>) |
-| `geopandas` | `1.1.4` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/geopandas/1.1.4/json>) | [`v1.1.4`](<https://github.com/geopandas/geopandas/tree/v1.1.4>) |
-| `idna` | `3.11` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.8` | [`JSON`](<https://pypi.org/pypi/idna/3.11/json>) | [`v3.11`](<https://github.com/kjd/idna/tree/v3.11>) |
-| `imageio` | `2.37.2` | `BSD-2-Clause` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/imageio/2.37.2/json>) | [`v2.37.2`](<https://github.com/imageio/imageio/tree/v2.37.2>) |
-| `joblib` | `1.5.3` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/joblib/1.5.3/json>) | [`1.5.3`](<https://github.com/joblib/joblib/tree/1.5.3>) |
-| `jsonschema` | `4.26.0` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/jsonschema/4.26.0/json>) | [`v4.26.0`](<https://github.com/python-jsonschema/jsonschema/tree/v4.26.0>) |
-| `jsonschema-specifications` | `2025.9.1` | `MIT` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/jsonschema-specifications/2025.9.1/json>) | [`v2025.9.1`](<https://github.com/python-jsonschema/jsonschema-specifications/tree/v2025.9.1>) |
-| `lazy-loader` | `0.5` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/lazy-loader/0.5/json>) | [`v0.5`](<https://github.com/scientific-python/lazy-loader/tree/v0.5>) |
-| `markdown` | `3.10.2` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/markdown/3.10.2/json>) | [`3.10.2`](<https://github.com/Python-Markdown/markdown/tree/3.10.2>) |
-| `narwhals` | `2.22.1` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/narwhals/2.22.1/json>) | [`v2.22.1`](<https://github.com/narwhals-dev/narwhals/tree/v2.22.1>) |
-| `networkx` | `3.6.1` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `!=3.14.1,>=3.11` | [`JSON`](<https://pypi.org/pypi/networkx/3.6.1/json>) | [`networkx-3.6.1`](<https://github.com/networkx/networkx/tree/networkx-3.6.1>) |
-| `opentelemetry-api` | `1.44.0` | `Apache-2.0` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/opentelemetry-api/1.44.0/json>) | [`v1.44.0`](<https://github.com/open-telemetry/opentelemetry-python/tree/v1.44.0>) |
-| `opt-einsum` | `3.4.0` | `MIT` (sdist + wheel `License-Expression`) | `>=3.8` | [`JSON`](<https://pypi.org/pypi/opt-einsum/3.4.0/json>) | [`v3.4.0`](<https://github.com/dgasmith/opt_einsum/tree/v3.4.0>) |
-| `osmnx` | `2.1.1` | `MIT` (sdist + wheel `License-Expression`) | `>=3.11` | [`JSON`](<https://pypi.org/pypi/osmnx/2.1.1/json>) | [`v2.1.1`](<https://github.com/gboeing/osmnx/tree/v2.1.1>) |
-| `platformdirs` | `4.5.1` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/platformdirs/4.5.1/json>) | [`4.5.1`](<https://github.com/tox-dev/platformdirs/tree/4.5.1>) |
-| `pooch` | `1.9.0` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/pooch/1.9.0/json>) | [`v1.9.0`](<https://github.com/fatiando/pooch/tree/v1.9.0>) |
-| `proglog` | `0.1.12` | `MIT` (sdist + wheel `License-Expression`) | (not specified in exact metadata) | [`JSON`](<https://pypi.org/pypi/proglog/0.1.12/json>) | [`v0.1.12`](<https://github.com/Edinburgh-Genome-Foundry/proglog/tree/v0.1.12>) |
-| `pydantic` | `2.12.5` | `MIT` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/pydantic/2.12.5/json>) | [`v2.12.5`](<https://github.com/pydantic/pydantic/tree/v2.12.5>) |
-| `pyparsing` | `3.3.2` | `MIT` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/pyparsing/3.3.2/json>) | [`3.3.2`](<https://github.com/pyparsing/pyparsing/tree/3.3.2>) |
-| `python-dotenv` | `1.2.1` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/python-dotenv/1.2.1/json>) | [`v1.2.1`](<https://github.com/theskumar/python-dotenv/tree/v1.2.1>) |
-| `pyvista` | `0.48.4` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/pyvista/0.48.4/json>) | [`v0.48.4`](<https://github.com/pyvista/pyvista/tree/v0.48.4>) |
-| `referencing` | `0.37.0` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/referencing/0.37.0/json>) | [`v0.37.0`](<https://github.com/python-jsonschema/referencing/tree/v0.37.0>) |
-| `rich-rst` | `2.0.1` | `MIT` (sdist + wheel `License-Expression`) | (not specified in exact metadata) | [`JSON`](<https://pypi.org/pypi/rich-rst/2.0.1/json>) | [`v2.0.1`](<https://github.com/wasi-master/rich-rst/tree/v2.0.1>) |
-| `scooby` | `0.11.2` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/scooby/0.11.2/json>) | [`v0.11.2`](<https://github.com/banesullivan/scooby/tree/v0.11.2>) |
-| `setuptools` | `83.0.0` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/setuptools/83.0.0/json>) | [`v83.0.0`](<https://github.com/pypa/setuptools/tree/v83.0.0>) |
-| `termcolor` | `3.3.0` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/termcolor/3.3.0/json>) | [`3.3.0`](<https://github.com/termcolor/termcolor/tree/3.3.0>) |
-| `typing-inspection` | `0.4.2` | `MIT` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/typing-inspection/0.4.2/json>) | [`v0.4.2`](<https://github.com/pydantic/typing-inspection/tree/v0.4.2>) |
-| `urllib3` | `2.6.3` | `MIT` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/urllib3/2.6.3/json>) | [`2.6.3`](<https://github.com/urllib3/urllib3/tree/2.6.3>) |
-| `werkzeug` | `3.1.5` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/werkzeug/3.1.5/json>) | [`3.1.5`](<https://github.com/pallets/werkzeug/tree/3.1.5>) |
-| `wheel` | `0.46.3` | `MIT` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/wheel/0.46.3/json>) | [`0.46.3`](<https://github.com/pypa/wheel/tree/0.46.3>) |
+| `absl-py` | `2.4.0` | `Apache-2.0` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/absl-py/2.4.0/json>) | [`v2.4.0`](<https://github.com/abseil/abseil-py/tree/862e5d80cb61501745d0d345cf419d36495af493>) |
+| `alembic` | `1.18.4` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/alembic/1.18.4/json>) | [`rel_1_18_4`](<https://github.com/sqlalchemy/alembic/tree/766b5ee98e0aeea85a18f272a1ac813712ee0697>) |
+| `attrs` | `25.4.0` | `MIT` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/attrs/25.4.0/json>) | [`25.4.0`](<https://github.com/python-attrs/attrs/tree/9a98e00a7c078360add417c5d62db820d4645ab1>) |
+| `click` | `8.3.1` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/click/8.3.1/json>) | [`8.3.1`](<https://github.com/pallets/click/tree/1d038f270701498433cb432f54db89f95f07a845>) |
+| `cma` | `4.4.4` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | (not specified in exact metadata) | [`JSON`](<https://pypi.org/pypi/cma/4.4.4/json>) | [`r4.4.4`](<https://github.com/CMA-ES/pycma/tree/83089d1d681165b8cc849f4a05c9f1c1869d79a3>) |
+| `cyclopts` | `4.18.0` | `Apache-2.0` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/cyclopts/4.18.0/json>) | [`v4.18.0`](<https://github.com/BrianPugh/cyclopts/tree/039060a76468d98b64e31c22303bea2ce602e83b>) |
+| `fsspec` | `2026.2.0` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/fsspec/2026.2.0/json>) | [`2026.2.0`](<https://github.com/fsspec/filesystem_spec/tree/e6668a146cd07b9f50530c49ea3916d8ab13e169>) |
+| `geopandas` | `1.1.4` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/geopandas/1.1.4/json>) | [`v1.1.4`](<https://github.com/geopandas/geopandas/tree/91ec4af3c502be268ee147a3a832387534c0be3d>) |
+| `idna` | `3.11` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.8` | [`JSON`](<https://pypi.org/pypi/idna/3.11/json>) | [`v3.11`](<https://github.com/kjd/idna/tree/ad949ee3052c2265c66e3df2dd8871a5832ba327>) |
+| `imageio` | `2.37.2` | `BSD-2-Clause` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/imageio/2.37.2/json>) | [`v2.37.2`](<https://github.com/imageio/imageio/tree/761929cc6ae6503f93f2431e0b47d504837ba77a>) |
+| `joblib` | `1.5.3` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/joblib/1.5.3/json>) | [`1.5.3`](<https://github.com/joblib/joblib/tree/40cd002ae1765195dfc4738a6bc7f5534b420a21>) |
+| `jsonschema` | `4.26.0` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/jsonschema/4.26.0/json>) | [`v4.26.0`](<https://github.com/python-jsonschema/jsonschema/tree/a7277432b0f7bcd0551f6e589d30457017125df4>) |
+| `jsonschema-specifications` | `2025.9.1` | `MIT` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/jsonschema-specifications/2025.9.1/json>) | [`v2025.9.1`](<https://github.com/python-jsonschema/jsonschema-specifications/tree/3b846010c34ce254d8ced23023451d1d64de37f5>) |
+| `lazy-loader` | `0.5` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/lazy-loader/0.5/json>) | [`v0.5`](<https://github.com/scientific-python/lazy-loader/tree/2566bebe6a36ecd0bc5dc5a69e8767f7e68fb6d0>) |
+| `markdown` | `3.10.2` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/markdown/3.10.2/json>) | [`3.10.2`](<https://github.com/Python-Markdown/markdown/tree/e7a0efb3a7c36d6b8005403122705662bc17c904>) |
+| `narwhals` | `2.22.1` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/narwhals/2.22.1/json>) | [`v2.22.1`](<https://github.com/narwhals-dev/narwhals/tree/27bf8dbac2b44d048e26b5c9042fe35575878a4d>) |
+| `networkx` | `3.6.1` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `!=3.14.1,>=3.11` | [`JSON`](<https://pypi.org/pypi/networkx/3.6.1/json>) | [`networkx-3.6.1`](<https://github.com/networkx/networkx/tree/7530809bfa1ea7ed6fdf918a4d1431488953cb1f>) |
+| `opentelemetry-api` | `1.44.0` | `Apache-2.0` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/opentelemetry-api/1.44.0/json>) | [`v1.44.0`](<https://github.com/open-telemetry/opentelemetry-python/tree/53a5a40c9604583c501bcf13970a635f00e62df4>) |
+| `opt-einsum` | `3.4.0` | `MIT` (sdist + wheel `License-Expression`) | `>=3.8` | [`JSON`](<https://pypi.org/pypi/opt-einsum/3.4.0/json>) | [`v3.4.0`](<https://github.com/dgasmith/opt_einsum/tree/c15aec2c7dbbcaf5b9790b980f699bf295baa7d9>) |
+| `osmnx` | `2.1.1` | `MIT` (sdist + wheel `License-Expression`) | `>=3.11` | [`JSON`](<https://pypi.org/pypi/osmnx/2.1.1/json>) | [`v2.1.1`](<https://github.com/gboeing/osmnx/tree/2fc39cb2792ff869881b99f724a2d97f0e958667>) |
+| `platformdirs` | `4.5.1` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/platformdirs/4.5.1/json>) | [`4.5.1`](<https://github.com/tox-dev/platformdirs/tree/e4dbdb8c8ed8e448b7cdbbdce4a4ff5c54c5d685>) |
+| `pooch` | `1.9.0` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/pooch/1.9.0/json>) | [`v1.9.0`](<https://github.com/fatiando/pooch/tree/6aab6f90569774d335edb7197729005c9e99f7c1>) |
+| `proglog` | `0.1.12` | `MIT` (sdist + wheel `License-Expression`) | (not specified in exact metadata) | [`JSON`](<https://pypi.org/pypi/proglog/0.1.12/json>) | [`v0.1.12`](<https://github.com/Edinburgh-Genome-Foundry/proglog/tree/0e38f134beded47852e931fb25e5c853a23d7ab0>) |
+| `pydantic` | `2.12.5` | `MIT` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/pydantic/2.12.5/json>) | [`v2.12.5`](<https://github.com/pydantic/pydantic/tree/bd2d0dd0137dfa1a8fdff2529b9dfb1547980150>) |
+| `pyparsing` | `3.3.2` | `MIT` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/pyparsing/3.3.2/json>) | [`3.3.2`](<https://github.com/pyparsing/pyparsing/tree/fa24016d953353f8ba566abb5c8fc12e1d07556c>) |
+| `python-dotenv` | `1.2.1` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/python-dotenv/1.2.1/json>) | [`v1.2.1`](<https://github.com/theskumar/python-dotenv/tree/eaf2a9129ccec6febda0f741eb3bb852c3f947bd>) |
+| `pyvista` | `0.48.4` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/pyvista/0.48.4/json>) | [`v0.48.4`](<https://github.com/pyvista/pyvista/tree/d91b8b7b9d7b07874a3d95c73a9790b67f5e0f58>) |
+| `referencing` | `0.37.0` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/referencing/0.37.0/json>) | [`v0.37.0`](<https://github.com/python-jsonschema/referencing/tree/944ed5a20bc5125f2349156cbdc365daac0e67e6>) |
+| `rich-rst` | `2.0.1` | `MIT` (sdist + wheel `License-Expression`) | (not specified in exact metadata) | [`JSON`](<https://pypi.org/pypi/rich-rst/2.0.1/json>) | [`v2.0.1`](<https://github.com/wasi-master/rich-rst/tree/7a0e1ad49cdff41708831e50f81d016acd1fed1f>) |
+| `scooby` | `0.11.2` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/scooby/0.11.2/json>) | [`v0.11.2`](<https://github.com/banesullivan/scooby/tree/93816e93aeeea2e6ca5f694862386dc3882b4a8a>) |
+| `setuptools` | `83.0.0` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/setuptools/83.0.0/json>) | [`v83.0.0`](<https://github.com/pypa/setuptools/tree/6519f728c6f23c992df81a5691ef7655184a20eb>) |
+| `termcolor` | `3.3.0` | `MIT` (sdist + wheel `License-Expression`) | `>=3.10` | [`JSON`](<https://pypi.org/pypi/termcolor/3.3.0/json>) | [`3.3.0`](<https://github.com/termcolor/termcolor/tree/0980eb52aa867fc32f70859a61c0609501b73a99>) |
+| `typing-inspection` | `0.4.2` | `MIT` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/typing-inspection/0.4.2/json>) | [`v0.4.2`](<https://github.com/pydantic/typing-inspection/tree/8db011350942f33ac4b5d7db60d4d9ea83ab480f>) |
+| `urllib3` | `2.6.3` | `MIT` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/urllib3/2.6.3/json>) | [`2.6.3`](<https://github.com/urllib3/urllib3/tree/0248277dd7ac0239204889ca991353ad3e3a1ddc>) |
+| `werkzeug` | `3.1.5` | `BSD-3-Clause` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/werkzeug/3.1.5/json>) | [`3.1.5`](<https://github.com/pallets/werkzeug/tree/e3d06f4b1f7ff40a63eba78f81d9cda18f805d6d>) |
+| `wheel` | `0.46.3` | `MIT` (sdist + wheel `License-Expression`) | `>=3.9` | [`JSON`](<https://pypi.org/pypi/wheel/0.46.3/json>) | [`0.46.3`](<https://github.com/pypa/wheel/tree/8b6fa740a7101edacb42b0f8e83a1b659ff61033>) |
 
 The policy records `python_requires: null` only where the exact PyPI response does not specify `Requires-Python`; no wildcard or inferred range is substituted.
 
@@ -122,186 +130,186 @@ Both exact archives were inspected. The paths below are archive-member paths, in
 ### `absl-py` `2.4.0`
 - `sdist`: `absl_py-2.4.0/LICENSE`.
 - `wheel`: `absl_py-2.4.0.dist-info/licenses/AUTHORS`; `absl_py-2.4.0.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/abseil/abseil-py/blob/v2.4.0/LICENSE>), [`AUTHORS`](<https://github.com/abseil/abseil-py/blob/v2.4.0/AUTHORS>).
+- Present upstream review references: [`LICENSE`](<https://github.com/abseil/abseil-py/blob/862e5d80cb61501745d0d345cf419d36495af493/LICENSE>), [`AUTHORS`](<https://github.com/abseil/abseil-py/blob/862e5d80cb61501745d0d345cf419d36495af493/AUTHORS>).
 
 ### `alembic` `1.18.4`
 - `sdist`: `alembic-1.18.4/LICENSE`; `alembic-1.18.4/docs/_static/vendor/fontawesome/6.5.2/LICENSE.txt`; `alembic-1.18.4/docs/_static/vendor/fontawesome/6.5.2/css/all.min.css`; `alembic-1.18.4/docs/_static/vendor/fontawesome/6.5.2/js/all.min.js`; `alembic-1.18.4/docs/_static/vendor/fontawesome/6.5.2/js/all.min.js.LICENSE.txt`.
 - `wheel`: `alembic-1.18.4.dist-info/licenses/LICENSE`.
-- The sdist Font Awesome 6.5.2 files are generated/injected documentation assets and are not present in the Alembic tag tree; their exact upstream references are [Font Awesome license](<https://github.com/FortAwesome/Font-Awesome/blob/6.5.2/LICENSE.txt>), [CSS](<https://github.com/FortAwesome/Font-Awesome/blob/6.5.2/css/all.min.css>), [JavaScript](<https://github.com/FortAwesome/Font-Awesome/blob/6.5.2/js/all.min.js>), [embedded JS license](<https://github.com/FortAwesome/Font-Awesome/blob/6.5.2/js/all.min.js.LICENSE.txt>), and [Font Awesome free-license page](<https://fontawesome.com/license/free>).
-- Present upstream review references: [`LICENSE`](<https://github.com/sqlalchemy/alembic/blob/rel_1_18_4/LICENSE>).
+- The sdist Font Awesome 6.5.2 files are generated/injected documentation assets and are not present in the Alembic tag tree; their exact upstream references are [Font Awesome license](<https://github.com/FortAwesome/Font-Awesome/blob/c0f460dca7f7688761120415ff3c9cf7f73119be/LICENSE.txt>), [CSS](<https://github.com/FortAwesome/Font-Awesome/blob/c0f460dca7f7688761120415ff3c9cf7f73119be/css/all.min.css>), [JavaScript](<https://github.com/FortAwesome/Font-Awesome/blob/c0f460dca7f7688761120415ff3c9cf7f73119be/js/all.min.js>), [embedded JS license](<https://github.com/FortAwesome/Font-Awesome/blob/c0f460dca7f7688761120415ff3c9cf7f73119be/js/all.min.js.LICENSE.txt>), and [Font Awesome free-license page](<https://fontawesome.com/license/free>).
+- Present upstream review references: [`LICENSE`](<https://github.com/sqlalchemy/alembic/blob/766b5ee98e0aeea85a18f272a1ac813712ee0697/LICENSE>).
 
 ### `attrs` `25.4.0`
 - `sdist`: `attrs-25.4.0/LICENSE`; `attrs-25.4.0/docs/license.md`.
 - `wheel`: `attrs-25.4.0.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/python-attrs/attrs/blob/25.4.0/LICENSE>), [`license.md`](<https://github.com/python-attrs/attrs/blob/25.4.0/docs/license.md>).
+- Present upstream review references: [`LICENSE`](<https://github.com/python-attrs/attrs/blob/9a98e00a7c078360add417c5d62db820d4645ab1/LICENSE>), [`license.md`](<https://github.com/python-attrs/attrs/blob/9a98e00a7c078360add417c5d62db820d4645ab1/docs/license.md>).
 
 ### `click` `8.3.1`
 - `sdist`: `click-8.3.1/LICENSE.txt`; `click-8.3.1/docs/license.md`.
 - `wheel`: `click-8.3.1.dist-info/licenses/LICENSE.txt`.
-- Present upstream review references: [`LICENSE.txt`](<https://github.com/pallets/click/blob/8.3.1/LICENSE.txt>), [`license.md`](<https://github.com/pallets/click/blob/8.3.1/docs/license.md>).
+- Present upstream review references: [`LICENSE.txt`](<https://github.com/pallets/click/blob/1d038f270701498433cb432f54db89f95f07a845/LICENSE.txt>), [`license.md`](<https://github.com/pallets/click/blob/1d038f270701498433cb432f54db89f95f07a845/docs/license.md>).
 
 ### `cma` `4.4.4`
 - `sdist`: `cma-4.4.4/LICENSE`.
 - `wheel`: `cma-4.4.4.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/CMA-ES/pycma/blob/r4.4.4/LICENSE>).
+- Present upstream review references: [`LICENSE`](<https://github.com/CMA-ES/pycma/blob/83089d1d681165b8cc849f4a05c9f1c1869d79a3/LICENSE>).
 
 ### `cyclopts` `4.18.0`
 - `sdist`: `cyclopts-4.18.0/LICENSE`.
 - `wheel`: `cyclopts-4.18.0.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/BrianPugh/cyclopts/blob/v4.18.0/LICENSE>).
+- Present upstream review references: [`LICENSE`](<https://github.com/BrianPugh/cyclopts/blob/039060a76468d98b64e31c22303bea2ce602e83b/LICENSE>).
 
 ### `fsspec` `2026.2.0`
 - `sdist`: `fsspec-2026.2.0/LICENSE`; `fsspec-2026.2.0/docs/source/copying.rst`.
 - `wheel`: `fsspec-2026.2.0.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/fsspec/filesystem_spec/blob/2026.2.0/LICENSE>), [`copying.rst`](<https://github.com/fsspec/filesystem_spec/blob/2026.2.0/docs/source/copying.rst>).
+- Present upstream review references: [`LICENSE`](<https://github.com/fsspec/filesystem_spec/blob/e6668a146cd07b9f50530c49ea3916d8ab13e169/LICENSE>), [`copying.rst`](<https://github.com/fsspec/filesystem_spec/blob/e6668a146cd07b9f50530c49ea3916d8ab13e169/docs/source/copying.rst>).
 
 ### `geopandas` `1.1.4`
 - `sdist`: `geopandas-1.1.4/LICENSE.txt`.
 - `wheel`: `geopandas-1.1.4.dist-info/licenses/LICENSE.txt`.
-- Present upstream review references: [`LICENSE.txt`](<https://github.com/geopandas/geopandas/blob/v1.1.4/LICENSE.txt>).
+- Present upstream review references: [`LICENSE.txt`](<https://github.com/geopandas/geopandas/blob/91ec4af3c502be268ee147a3a832387534c0be3d/LICENSE.txt>).
 
 ### `idna` `3.11`
 - `sdist`: `idna-3.11/LICENSE.md`.
 - `wheel`: `idna-3.11.dist-info/licenses/LICENSE.md`.
-- Present upstream review references: [`LICENSE.md`](<https://github.com/kjd/idna/blob/v3.11/LICENSE.md>).
+- Present upstream review references: [`LICENSE.md`](<https://github.com/kjd/idna/blob/ad949ee3052c2265c66e3df2dd8871a5832ba327/LICENSE.md>).
 
 ### `imageio` `2.37.2`
 - `sdist`: `imageio-2.37.2/LICENSE`.
 - `wheel`: `imageio-2.37.2.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/imageio/imageio/blob/v2.37.2/LICENSE>).
+- Present upstream review references: [`LICENSE`](<https://github.com/imageio/imageio/blob/761929cc6ae6503f93f2431e0b47d504837ba77a/LICENSE>).
 
 ### `joblib` `1.5.3`
 - `sdist`: `joblib-1.5.3/LICENSE.txt`.
 - `wheel`: `joblib-1.5.3.dist-info/licenses/LICENSE.txt`.
-- Present upstream review references: [`LICENSE.txt`](<https://github.com/joblib/joblib/blob/1.5.3/LICENSE.txt>).
+- Present upstream review references: [`LICENSE.txt`](<https://github.com/joblib/joblib/blob/40cd002ae1765195dfc4738a6bc7f5534b420a21/LICENSE.txt>).
 
 ### `jsonschema` `4.26.0`
 - `sdist`: `jsonschema-4.26.0/COPYING`; `jsonschema-4.26.0/json/LICENSE`.
 - `wheel`: `jsonschema-4.26.0.dist-info/licenses/COPYING`.
-- Present upstream review references: [`COPYING`](<https://github.com/python-jsonschema/jsonschema/blob/v4.26.0/COPYING>), [`LICENSE`](<https://github.com/python-jsonschema/jsonschema/blob/v4.26.0/json/LICENSE>).
+- Present upstream review references: [`COPYING`](<https://github.com/python-jsonschema/jsonschema/blob/a7277432b0f7bcd0551f6e589d30457017125df4/COPYING>), [`LICENSE`](<https://github.com/python-jsonschema/jsonschema/blob/a7277432b0f7bcd0551f6e589d30457017125df4/json/LICENSE>).
 
 ### `jsonschema-specifications` `2025.9.1`
 - `sdist`: `jsonschema_specifications-2025.9.1/COPYING`.
 - `wheel`: `jsonschema_specifications-2025.9.1.dist-info/licenses/COPYING`.
-- Present upstream review references: [`COPYING`](<https://github.com/python-jsonschema/jsonschema-specifications/blob/v2025.9.1/COPYING>).
+- Present upstream review references: [`COPYING`](<https://github.com/python-jsonschema/jsonschema-specifications/blob/3b846010c34ce254d8ced23023451d1d64de37f5/COPYING>).
 
 ### `lazy-loader` `0.5`
 - `sdist`: `lazy_loader-0.5/LICENSE.md`.
 - `wheel`: `lazy_loader-0.5.dist-info/licenses/LICENSE.md`.
-- Present upstream review references: [`LICENSE.md`](<https://github.com/scientific-python/lazy-loader/blob/v0.5/LICENSE.md>).
+- Present upstream review references: [`LICENSE.md`](<https://github.com/scientific-python/lazy-loader/blob/2566bebe6a36ecd0bc5dc5a69e8767f7e68fb6d0/LICENSE.md>).
 
 ### `markdown` `3.10.2`
 - `sdist`: `markdown-3.10.2/LICENSE.md`.
 - `wheel`: `markdown-3.10.2.dist-info/licenses/LICENSE.md`.
-- Present upstream review references: [`LICENSE.md`](<https://github.com/Python-Markdown/markdown/blob/3.10.2/LICENSE.md>).
+- Present upstream review references: [`LICENSE.md`](<https://github.com/Python-Markdown/markdown/blob/e7a0efb3a7c36d6b8005403122705662bc17c904/LICENSE.md>).
 
 ### `narwhals` `2.22.1`
 - `sdist`: `narwhals-2.22.1/LICENSE.md`.
 - `wheel`: `narwhals-2.22.1.dist-info/licenses/LICENSE.md`.
-- Present upstream review references: [`LICENSE.md`](<https://github.com/narwhals-dev/narwhals/blob/v2.22.1/LICENSE.md>).
+- Present upstream review references: [`LICENSE.md`](<https://github.com/narwhals-dev/narwhals/blob/27bf8dbac2b44d048e26b5c9042fe35575878a4d/LICENSE.md>).
 
 ### `networkx` `3.6.1`
 - `sdist`: `networkx-3.6.1/LICENSE.txt`.
 - `wheel`: `networkx-3.6.1.dist-info/licenses/LICENSE.txt`.
-- Present upstream review references: [`LICENSE.txt`](<https://github.com/networkx/networkx/blob/networkx-3.6.1/LICENSE.txt>).
+- Present upstream review references: [`LICENSE.txt`](<https://github.com/networkx/networkx/blob/7530809bfa1ea7ed6fdf918a4d1431488953cb1f/LICENSE.txt>).
 
 ### `opentelemetry-api` `1.44.0`
 - `sdist`: `opentelemetry_api-1.44.0/LICENSE`.
 - `wheel`: `opentelemetry_api-1.44.0.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/open-telemetry/opentelemetry-python/blob/v1.44.0/LICENSE>).
+- Present upstream review references: [`LICENSE`](<https://github.com/open-telemetry/opentelemetry-python/blob/53a5a40c9604583c501bcf13970a635f00e62df4/LICENSE>).
 
 ### `opt-einsum` `3.4.0`
 - `sdist`: `opt_einsum-3.4.0/LICENSE`.
 - `wheel`: `opt_einsum-3.4.0.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/dgasmith/opt_einsum/blob/v3.4.0/LICENSE>).
+- Present upstream review references: [`LICENSE`](<https://github.com/dgasmith/opt_einsum/blob/c15aec2c7dbbcaf5b9790b980f699bf295baa7d9/LICENSE>).
 
 ### `osmnx` `2.1.1`
 - `sdist`: `osmnx-2.1.1/LICENSE.txt`.
 - `wheel`: `osmnx-2.1.1.dist-info/licenses/LICENSE.txt`.
-- Present upstream review references: [`LICENSE.txt`](<https://github.com/gboeing/osmnx/blob/v2.1.1/LICENSE.txt>).
+- Present upstream review references: [`LICENSE.txt`](<https://github.com/gboeing/osmnx/blob/2fc39cb2792ff869881b99f724a2d97f0e958667/LICENSE.txt>).
 
 ### `platformdirs` `4.5.1`
 - `sdist`: `platformdirs-4.5.1/LICENSE`.
 - `wheel`: `platformdirs-4.5.1.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/tox-dev/platformdirs/blob/4.5.1/LICENSE>).
+- Present upstream review references: [`LICENSE`](<https://github.com/tox-dev/platformdirs/blob/e4dbdb8c8ed8e448b7cdbbdce4a4ff5c54c5d685/LICENSE>).
 
 ### `pooch` `1.9.0`
 - `sdist`: `pooch-1.9.0/LICENSE.txt`.
 - `wheel`: `pooch-1.9.0.dist-info/licenses/AUTHORS.md`; `pooch-1.9.0.dist-info/licenses/LICENSE.txt`.
-- Present upstream review references: [`LICENSE.txt`](<https://github.com/fatiando/pooch/blob/v1.9.0/LICENSE.txt>), [`AUTHORS.md`](<https://github.com/fatiando/pooch/blob/v1.9.0/AUTHORS.md>).
+- Present upstream review references: [`LICENSE.txt`](<https://github.com/fatiando/pooch/blob/6aab6f90569774d335edb7197729005c9e99f7c1/LICENSE.txt>), [`AUTHORS.md`](<https://github.com/fatiando/pooch/blob/6aab6f90569774d335edb7197729005c9e99f7c1/AUTHORS.md>).
 
 ### `proglog` `0.1.12`
 - `sdist`: `proglog-0.1.12/LICENSE`.
 - `wheel`: `proglog-0.1.12.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/Edinburgh-Genome-Foundry/proglog/blob/v0.1.12/LICENSE>).
+- Present upstream review references: [`LICENSE`](<https://github.com/Edinburgh-Genome-Foundry/proglog/blob/0e38f134beded47852e931fb25e5c853a23d7ab0/LICENSE>).
 
 ### `pydantic` `2.12.5`
 - `sdist`: `pydantic-2.12.5/LICENSE`.
 - `wheel`: `pydantic-2.12.5.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/pydantic/pydantic/blob/v2.12.5/LICENSE>).
+- Present upstream review references: [`LICENSE`](<https://github.com/pydantic/pydantic/blob/bd2d0dd0137dfa1a8fdff2529b9dfb1547980150/LICENSE>).
 
 ### `pyparsing` `3.3.2`
 - `sdist`: `pyparsing-3.3.2/LICENSE`.
 - `wheel`: `pyparsing-3.3.2.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/pyparsing/pyparsing/blob/3.3.2/LICENSE>).
+- Present upstream review references: [`LICENSE`](<https://github.com/pyparsing/pyparsing/blob/fa24016d953353f8ba566abb5c8fc12e1d07556c/LICENSE>).
 
 ### `python-dotenv` `1.2.1`
 - `sdist`: `python_dotenv-1.2.1/LICENSE`; `python_dotenv-1.2.1/docs/license.md`.
 - `wheel`: `python_dotenv-1.2.1.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/theskumar/python-dotenv/blob/v1.2.1/LICENSE>), [`license.md`](<https://github.com/theskumar/python-dotenv/blob/v1.2.1/docs/license.md>).
+- Present upstream review references: [`LICENSE`](<https://github.com/theskumar/python-dotenv/blob/eaf2a9129ccec6febda0f741eb3bb852c3f947bd/LICENSE>), [`license.md`](<https://github.com/theskumar/python-dotenv/blob/eaf2a9129ccec6febda0f741eb3bb852c3f947bd/docs/license.md>).
 
 ### `pyvista` `0.48.4`
 - `sdist`: `pyvista-0.48.4/LICENSE`.
 - `wheel`: `pyvista-0.48.4.dist-info/licenses/AUTHORS.rst`; `pyvista-0.48.4.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/pyvista/pyvista/blob/v0.48.4/LICENSE>), [`AUTHORS.rst`](<https://github.com/pyvista/pyvista/blob/v0.48.4/AUTHORS.rst>).
+- Present upstream review references: [`LICENSE`](<https://github.com/pyvista/pyvista/blob/d91b8b7b9d7b07874a3d95c73a9790b67f5e0f58/LICENSE>), [`AUTHORS.rst`](<https://github.com/pyvista/pyvista/blob/d91b8b7b9d7b07874a3d95c73a9790b67f5e0f58/AUTHORS.rst>).
 
 ### `referencing` `0.37.0`
 - `sdist`: `referencing-0.37.0/COPYING`; `referencing-0.37.0/suite/LICENSE`.
 - `wheel`: `referencing-0.37.0.dist-info/licenses/COPYING`.
-- `suite/LICENSE` is present only in the sdist archive submodule snapshot. The archive `.gitmodules` declares `https://github.com/python-jsonschema/referencing-suite`; no submodule commit is asserted by this receipt. The package tag [tree](<https://github.com/python-jsonschema/referencing/tree/v0.37.0>) and archive member are retained so the unpinned submodule remains review-blocked.
-- Present upstream review references: [`COPYING`](<https://github.com/python-jsonschema/referencing/blob/v0.37.0/COPYING>).
+- `suite/LICENSE` is present only in the sdist archive submodule snapshot. The archive `.gitmodules` declares `https://github.com/python-jsonschema/referencing-suite`; no submodule commit is asserted by this receipt. The package tag [tree](<https://github.com/python-jsonschema/referencing/tree/944ed5a20bc5125f2349156cbdc365daac0e67e6>) and archive member are retained so the unpinned submodule remains review-blocked.
+- Present upstream review references: [`COPYING`](<https://github.com/python-jsonschema/referencing/blob/944ed5a20bc5125f2349156cbdc365daac0e67e6/COPYING>).
 
 ### `rich-rst` `2.0.1`
 - `sdist`: `rich_rst-2.0.1/LICENSE`; `rich_rst-2.0.1/rich_rst/_vendor/LICENSES.txt`.
 - `wheel`: `rich_rst-2.0.1.dist-info/licenses/LICENSE`; `rich_rst-2.0.1.dist-info/licenses/rich_rst/_vendor/LICENSES.txt`; `rich_rst/_vendor/LICENSES.txt`.
 - `rich_rst/_vendor/LICENSES.txt` documents a vendored Docutils 0.22.4 subset (public-domain and BSD-2-Clause files); exact references are [Docutils](<https://docutils.sourceforge.io/>) and [COPYING](<https://docutils.sourceforge.io/COPYING.html>). The `vendored` surface remains blocked.
-- Present upstream review references: [`LICENSE`](<https://github.com/wasi-master/rich-rst/blob/v2.0.1/LICENSE>), [`LICENSES.txt`](<https://github.com/wasi-master/rich-rst/blob/v2.0.1/rich_rst/_vendor/LICENSES.txt>).
+- Present upstream review references: [`LICENSE`](<https://github.com/wasi-master/rich-rst/blob/7a0e1ad49cdff41708831e50f81d016acd1fed1f/LICENSE>), [`LICENSES.txt`](<https://github.com/wasi-master/rich-rst/blob/7a0e1ad49cdff41708831e50f81d016acd1fed1f/rich_rst/_vendor/LICENSES.txt>).
 
 ### `scooby` `0.11.2`
 - `sdist`: `scooby-0.11.2/LICENSE`.
 - `wheel`: `scooby-0.11.2.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/banesullivan/scooby/blob/v0.11.2/LICENSE>).
+- Present upstream review references: [`LICENSE`](<https://github.com/banesullivan/scooby/blob/93816e93aeeea2e6ca5f694862386dc3882b4a8a/LICENSE>).
 
 ### `setuptools` `83.0.0`
 - `sdist`: `setuptools-83.0.0/LICENSE`; `setuptools-83.0.0/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE`; `setuptools-83.0.0/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE`; `setuptools-83.0.0/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE`; `setuptools-83.0.0/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE`; `setuptools-83.0.0/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE`; `setuptools-83.0.0/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE`; `setuptools-83.0.0/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE`; `setuptools-83.0.0/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE`; `setuptools-83.0.0/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE`; `setuptools-83.0.0/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD`; `setuptools-83.0.0/setuptools/_vendor/packaging/licenses/__init__.py`; `setuptools-83.0.0/setuptools/_vendor/packaging/licenses/_spdx.py`; `setuptools-83.0.0/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE`; `setuptools-83.0.0/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE`; `setuptools-83.0.0/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt`; `setuptools-83.0.0/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE`; `setuptools-83.0.0/setuptools/config/NOTICE`; `setuptools-83.0.0/setuptools/config/_validate_pyproject/NOTICE`.
 - `wheel`: `setuptools-83.0.0.dist-info/licenses/LICENSE`; `setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE`; `setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE`; `setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE`; `setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE`; `setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE`; `setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE`; `setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE`; `setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE`; `setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE`; `setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD`; `setuptools/_vendor/packaging/licenses/__init__.py`; `setuptools/_vendor/packaging/licenses/_spdx.py`; `setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE`; `setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE`; `setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt`; `setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE`; `setuptools/config/NOTICE`; `setuptools/config/_validate_pyproject/NOTICE`.
 - The listed `_vendor`, `packaging/licenses`, and `config/NOTICE` paths are retained as bundled/vendor evidence. Each corresponding source-tag blob URL is present in `upstream.notice_paths`; `bundled_source` and `vendored` remain blocked.
-- Present upstream review references: [`LICENSE`](<https://github.com/pypa/setuptools/blob/v83.0.0/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE>), [`LICENSE.APACHE`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE>), [`LICENSE.BSD`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD>), [`__init__.py`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/packaging/licenses/__init__.py>), [`_spdx.py`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/packaging/licenses/_spdx.py>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE>), [`LICENSE.txt`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE>), [`NOTICE`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/config/NOTICE>), [`NOTICE`](<https://github.com/pypa/setuptools/blob/v83.0.0/setuptools/config/_validate_pyproject/NOTICE>).
+- Present upstream review references: [`LICENSE`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE>), [`LICENSE.APACHE`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE>), [`LICENSE.BSD`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD>), [`__init__.py`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/packaging/licenses/__init__.py>), [`_spdx.py`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/packaging/licenses/_spdx.py>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE>), [`LICENSE.txt`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt>), [`LICENSE`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE>), [`NOTICE`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/config/NOTICE>), [`NOTICE`](<https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/config/_validate_pyproject/NOTICE>).
 
 ### `termcolor` `3.3.0`
 - `sdist`: `termcolor-3.3.0/COPYING.txt`.
 - `wheel`: `termcolor-3.3.0.dist-info/licenses/COPYING.txt`.
-- Present upstream review references: [`COPYING.txt`](<https://github.com/termcolor/termcolor/blob/3.3.0/COPYING.txt>).
+- Present upstream review references: [`COPYING.txt`](<https://github.com/termcolor/termcolor/blob/0980eb52aa867fc32f70859a61c0609501b73a99/COPYING.txt>).
 
 ### `typing-inspection` `0.4.2`
 - `sdist`: `typing_inspection-0.4.2/LICENSE`.
 - `wheel`: `typing_inspection-0.4.2.dist-info/licenses/LICENSE`.
-- Present upstream review references: [`LICENSE`](<https://github.com/pydantic/typing-inspection/blob/v0.4.2/LICENSE>).
+- Present upstream review references: [`LICENSE`](<https://github.com/pydantic/typing-inspection/blob/8db011350942f33ac4b5d7db60d4d9ea83ab480f/LICENSE>).
 
 ### `urllib3` `2.6.3`
 - `sdist`: `urllib3-2.6.3/LICENSE.txt`.
 - `wheel`: `urllib3-2.6.3.dist-info/licenses/LICENSE.txt`.
-- Present upstream review references: [`LICENSE.txt`](<https://github.com/urllib3/urllib3/blob/2.6.3/LICENSE.txt>).
+- Present upstream review references: [`LICENSE.txt`](<https://github.com/urllib3/urllib3/blob/0248277dd7ac0239204889ca991353ad3e3a1ddc/LICENSE.txt>).
 
 ### `werkzeug` `3.1.5`
 - `sdist`: `werkzeug-3.1.5/LICENSE.txt`; `werkzeug-3.1.5/docs/license.rst`.
 - `wheel`: `werkzeug-3.1.5.dist-info/licenses/LICENSE.txt`.
-- Present upstream review references: [`LICENSE.txt`](<https://github.com/pallets/werkzeug/blob/3.1.5/LICENSE.txt>), [`license.rst`](<https://github.com/pallets/werkzeug/blob/3.1.5/docs/license.rst>).
+- Present upstream review references: [`LICENSE.txt`](<https://github.com/pallets/werkzeug/blob/e3d06f4b1f7ff40a63eba78f81d9cda18f805d6d/LICENSE.txt>), [`license.rst`](<https://github.com/pallets/werkzeug/blob/e3d06f4b1f7ff40a63eba78f81d9cda18f805d6d/docs/license.rst>).
 
 ### `wheel` `0.46.3`
 - `sdist`: `wheel-0.46.3/LICENSE.txt`.
 - `wheel`: `wheel-0.46.3.dist-info/licenses/LICENSE.txt`.
-- Present upstream review references: [`LICENSE.txt`](<https://github.com/pypa/wheel/blob/0.46.3/LICENSE.txt>).
+- Present upstream review references: [`LICENSE.txt`](<https://github.com/pypa/wheel/blob/8b6fa740a7101edacb42b0f8e83a1b659ff61033/LICENSE.txt>).
 
 ## Disposition boundary
 

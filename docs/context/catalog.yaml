@@ -7467,3 +7467,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json.review.json
+  status: evidence
+  freshness: evidence
+  area: release_evidence

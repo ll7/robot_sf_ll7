@@ -108,7 +108,8 @@
       "policy_pending_package_count": 181,
       "unresolved_count": 181,
       "status": "blocked"
-    }
+    },
+    "sha256": "773a97f704d4f275802370afacc76f5ea50c460358be6827286a852fb6799b7a"
   },
   "review": {
     "status": "pending_independent_maintainer_review",
@@ -122,5 +123,649 @@
     "All 36 archive audits passed exact lock size/SHA checks and found at least one LICENSE/NOTICE or bundled third-party notice path in each archive. archive_notice_absences is empty for every row.",
     "The upstream tag probe recorded one non-fatal GitHub tag-page pagination 404 while resolving attrs; the exact attrs 25.4.0 tag and notice blobs were separately verified and retained.",
     "The strict report remains expectedly nonzero because the other selected packages and unresolved surfaces remain fail-closed."
-  ]
+  ],
+  "review_binding": {
+    "reviewed_head_sha": "39c1840c16fb53d2b8a881bde8786922f54bc170",
+    "reviewed_head_role": "candidate_source_commit",
+    "policy": {
+      "path": "scripts/validation/dependency_license_policy.v1.json",
+      "sha256": "8c7b128c341668fed8731469f2fc0fffa4845b8dbe81c1450767ae0f7643d4eb"
+    },
+    "normalized_records_sha256": "231e3dc6151ce1793ca29fcf238e91ff680aa2219b56401686864cb5e6b0c794",
+    "normalized_record_count": 36,
+    "license_files": [
+      {
+        "package": "absl-py",
+        "version": "2.4.0",
+        "archive_path": "absl_py-2.4.0.dist-info/licenses/AUTHORS"
+      },
+      {
+        "package": "absl-py",
+        "version": "2.4.0",
+        "archive_path": "absl_py-2.4.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "absl-py",
+        "version": "2.4.0",
+        "archive_path": "absl_py-2.4.0/LICENSE"
+      },
+      {
+        "package": "alembic",
+        "version": "1.18.4",
+        "archive_path": "alembic-1.18.4.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "alembic",
+        "version": "1.18.4",
+        "archive_path": "alembic-1.18.4/LICENSE"
+      },
+      {
+        "package": "alembic",
+        "version": "1.18.4",
+        "archive_path": "alembic-1.18.4/docs/_static/vendor/fontawesome/6.5.2/LICENSE.txt"
+      },
+      {
+        "package": "alembic",
+        "version": "1.18.4",
+        "archive_path": "alembic-1.18.4/docs/_static/vendor/fontawesome/6.5.2/css/all.min.css"
+      },
+      {
+        "package": "alembic",
+        "version": "1.18.4",
+        "archive_path": "alembic-1.18.4/docs/_static/vendor/fontawesome/6.5.2/js/all.min.js"
+      },
+      {
+        "package": "alembic",
+        "version": "1.18.4",
+        "archive_path": "alembic-1.18.4/docs/_static/vendor/fontawesome/6.5.2/js/all.min.js.LICENSE.txt"
+      },
+      {
+        "package": "attrs",
+        "version": "25.4.0",
+        "archive_path": "attrs-25.4.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "attrs",
+        "version": "25.4.0",
+        "archive_path": "attrs-25.4.0/LICENSE"
+      },
+      {
+        "package": "attrs",
+        "version": "25.4.0",
+        "archive_path": "attrs-25.4.0/docs/license.md"
+      },
+      {
+        "package": "click",
+        "version": "8.3.1",
+        "archive_path": "click-8.3.1.dist-info/licenses/LICENSE.txt"
+      },
+      {
+        "package": "click",
+        "version": "8.3.1",
+        "archive_path": "click-8.3.1/LICENSE.txt"
+      },
+      {
+        "package": "click",
+        "version": "8.3.1",
+        "archive_path": "click-8.3.1/docs/license.md"
+      },
+      {
+        "package": "cma",
+        "version": "4.4.4",
+        "archive_path": "cma-4.4.4.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "cma",
+        "version": "4.4.4",
+        "archive_path": "cma-4.4.4/LICENSE"
+      },
+      {
+        "package": "cyclopts",
+        "version": "4.18.0",
+        "archive_path": "cyclopts-4.18.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "cyclopts",
+        "version": "4.18.0",
+        "archive_path": "cyclopts-4.18.0/LICENSE"
+      },
+      {
+        "package": "fsspec",
+        "version": "2026.2.0",
+        "archive_path": "fsspec-2026.2.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "fsspec",
+        "version": "2026.2.0",
+        "archive_path": "fsspec-2026.2.0/LICENSE"
+      },
+      {
+        "package": "fsspec",
+        "version": "2026.2.0",
+        "archive_path": "fsspec-2026.2.0/docs/source/copying.rst"
+      },
+      {
+        "package": "geopandas",
+        "version": "1.1.4",
+        "archive_path": "geopandas-1.1.4.dist-info/licenses/LICENSE.txt"
+      },
+      {
+        "package": "geopandas",
+        "version": "1.1.4",
+        "archive_path": "geopandas-1.1.4/LICENSE.txt"
+      },
+      {
+        "package": "idna",
+        "version": "3.11",
+        "archive_path": "idna-3.11.dist-info/licenses/LICENSE.md"
+      },
+      {
+        "package": "idna",
+        "version": "3.11",
+        "archive_path": "idna-3.11/LICENSE.md"
+      },
+      {
+        "package": "imageio",
+        "version": "2.37.2",
+        "archive_path": "imageio-2.37.2.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "imageio",
+        "version": "2.37.2",
+        "archive_path": "imageio-2.37.2/LICENSE"
+      },
+      {
+        "package": "joblib",
+        "version": "1.5.3",
+        "archive_path": "joblib-1.5.3.dist-info/licenses/LICENSE.txt"
+      },
+      {
+        "package": "joblib",
+        "version": "1.5.3",
+        "archive_path": "joblib-1.5.3/LICENSE.txt"
+      },
+      {
+        "package": "jsonschema",
+        "version": "4.26.0",
+        "archive_path": "jsonschema-4.26.0.dist-info/licenses/COPYING"
+      },
+      {
+        "package": "jsonschema",
+        "version": "4.26.0",
+        "archive_path": "jsonschema-4.26.0/COPYING"
+      },
+      {
+        "package": "jsonschema",
+        "version": "4.26.0",
+        "archive_path": "jsonschema-4.26.0/json/LICENSE"
+      },
+      {
+        "package": "jsonschema-specifications",
+        "version": "2025.9.1",
+        "archive_path": "jsonschema_specifications-2025.9.1.dist-info/licenses/COPYING"
+      },
+      {
+        "package": "jsonschema-specifications",
+        "version": "2025.9.1",
+        "archive_path": "jsonschema_specifications-2025.9.1/COPYING"
+      },
+      {
+        "package": "lazy-loader",
+        "version": "0.5",
+        "archive_path": "lazy_loader-0.5.dist-info/licenses/LICENSE.md"
+      },
+      {
+        "package": "lazy-loader",
+        "version": "0.5",
+        "archive_path": "lazy_loader-0.5/LICENSE.md"
+      },
+      {
+        "package": "markdown",
+        "version": "3.10.2",
+        "archive_path": "markdown-3.10.2.dist-info/licenses/LICENSE.md"
+      },
+      {
+        "package": "markdown",
+        "version": "3.10.2",
+        "archive_path": "markdown-3.10.2/LICENSE.md"
+      },
+      {
+        "package": "narwhals",
+        "version": "2.22.1",
+        "archive_path": "narwhals-2.22.1.dist-info/licenses/LICENSE.md"
+      },
+      {
+        "package": "narwhals",
+        "version": "2.22.1",
+        "archive_path": "narwhals-2.22.1/LICENSE.md"
+      },
+      {
+        "package": "networkx",
+        "version": "3.6.1",
+        "archive_path": "networkx-3.6.1.dist-info/licenses/LICENSE.txt"
+      },
+      {
+        "package": "networkx",
+        "version": "3.6.1",
+        "archive_path": "networkx-3.6.1/LICENSE.txt"
+      },
+      {
+        "package": "opentelemetry-api",
+        "version": "1.44.0",
+        "archive_path": "opentelemetry_api-1.44.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "opentelemetry-api",
+        "version": "1.44.0",
+        "archive_path": "opentelemetry_api-1.44.0/LICENSE"
+      },
+      {
+        "package": "opt-einsum",
+        "version": "3.4.0",
+        "archive_path": "opt_einsum-3.4.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "opt-einsum",
+        "version": "3.4.0",
+        "archive_path": "opt_einsum-3.4.0/LICENSE"
+      },
+      {
+        "package": "osmnx",
+        "version": "2.1.1",
+        "archive_path": "osmnx-2.1.1.dist-info/licenses/LICENSE.txt"
+      },
+      {
+        "package": "osmnx",
+        "version": "2.1.1",
+        "archive_path": "osmnx-2.1.1/LICENSE.txt"
+      },
+      {
+        "package": "platformdirs",
+        "version": "4.5.1",
+        "archive_path": "platformdirs-4.5.1.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "platformdirs",
+        "version": "4.5.1",
+        "archive_path": "platformdirs-4.5.1/LICENSE"
+      },
+      {
+        "package": "pooch",
+        "version": "1.9.0",
+        "archive_path": "pooch-1.9.0.dist-info/licenses/AUTHORS.md"
+      },
+      {
+        "package": "pooch",
+        "version": "1.9.0",
+        "archive_path": "pooch-1.9.0.dist-info/licenses/LICENSE.txt"
+      },
+      {
+        "package": "pooch",
+        "version": "1.9.0",
+        "archive_path": "pooch-1.9.0/LICENSE.txt"
+      },
+      {
+        "package": "proglog",
+        "version": "0.1.12",
+        "archive_path": "proglog-0.1.12.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "proglog",
+        "version": "0.1.12",
+        "archive_path": "proglog-0.1.12/LICENSE"
+      },
+      {
+        "package": "pydantic",
+        "version": "2.12.5",
+        "archive_path": "pydantic-2.12.5.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "pydantic",
+        "version": "2.12.5",
+        "archive_path": "pydantic-2.12.5/LICENSE"
+      },
+      {
+        "package": "pyparsing",
+        "version": "3.3.2",
+        "archive_path": "pyparsing-3.3.2.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "pyparsing",
+        "version": "3.3.2",
+        "archive_path": "pyparsing-3.3.2/LICENSE"
+      },
+      {
+        "package": "python-dotenv",
+        "version": "1.2.1",
+        "archive_path": "python_dotenv-1.2.1.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "python-dotenv",
+        "version": "1.2.1",
+        "archive_path": "python_dotenv-1.2.1/LICENSE"
+      },
+      {
+        "package": "python-dotenv",
+        "version": "1.2.1",
+        "archive_path": "python_dotenv-1.2.1/docs/license.md"
+      },
+      {
+        "package": "pyvista",
+        "version": "0.48.4",
+        "archive_path": "pyvista-0.48.4.dist-info/licenses/AUTHORS.rst"
+      },
+      {
+        "package": "pyvista",
+        "version": "0.48.4",
+        "archive_path": "pyvista-0.48.4.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "pyvista",
+        "version": "0.48.4",
+        "archive_path": "pyvista-0.48.4/LICENSE"
+      },
+      {
+        "package": "referencing",
+        "version": "0.37.0",
+        "archive_path": "referencing-0.37.0.dist-info/licenses/COPYING"
+      },
+      {
+        "package": "referencing",
+        "version": "0.37.0",
+        "archive_path": "referencing-0.37.0/COPYING"
+      },
+      {
+        "package": "referencing",
+        "version": "0.37.0",
+        "archive_path": "referencing-0.37.0/suite/LICENSE"
+      },
+      {
+        "package": "rich-rst",
+        "version": "2.0.1",
+        "archive_path": "rich_rst-2.0.1.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "rich-rst",
+        "version": "2.0.1",
+        "archive_path": "rich_rst-2.0.1.dist-info/licenses/rich_rst/_vendor/LICENSES.txt"
+      },
+      {
+        "package": "rich-rst",
+        "version": "2.0.1",
+        "archive_path": "rich_rst-2.0.1/LICENSE"
+      },
+      {
+        "package": "rich-rst",
+        "version": "2.0.1",
+        "archive_path": "rich_rst-2.0.1/rich_rst/_vendor/LICENSES.txt"
+      },
+      {
+        "package": "rich-rst",
+        "version": "2.0.1",
+        "archive_path": "rich_rst/_vendor/LICENSES.txt"
+      },
+      {
+        "package": "scooby",
+        "version": "0.11.2",
+        "archive_path": "scooby-0.11.2.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "scooby",
+        "version": "0.11.2",
+        "archive_path": "scooby-0.11.2/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/packaging/licenses/__init__.py"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/packaging/licenses/_spdx.py"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/config/NOTICE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools-83.0.0/setuptools/config/_validate_pyproject/NOTICE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/packaging/licenses/__init__.py"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/packaging/licenses/_spdx.py"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/config/NOTICE"
+      },
+      {
+        "package": "setuptools",
+        "version": "83.0.0",
+        "archive_path": "setuptools/config/_validate_pyproject/NOTICE"
+      },
+      {
+        "package": "termcolor",
+        "version": "3.3.0",
+        "archive_path": "termcolor-3.3.0.dist-info/licenses/COPYING.txt"
+      },
+      {
+        "package": "termcolor",
+        "version": "3.3.0",
+        "archive_path": "termcolor-3.3.0/COPYING.txt"
+      },
+      {
+        "package": "typing-inspection",
+        "version": "0.4.2",
+        "archive_path": "typing_inspection-0.4.2.dist-info/licenses/LICENSE"
+      },
+      {
+        "package": "typing-inspection",
+        "version": "0.4.2",
+        "archive_path": "typing_inspection-0.4.2/LICENSE"
+      },
+      {
+        "package": "urllib3",
+        "version": "2.6.3",
+        "archive_path": "urllib3-2.6.3.dist-info/licenses/LICENSE.txt"
+      },
+      {
+        "package": "urllib3",
+        "version": "2.6.3",
+        "archive_path": "urllib3-2.6.3/LICENSE.txt"
+      },
+      {
+        "package": "werkzeug",
+        "version": "3.1.5",
+        "archive_path": "werkzeug-3.1.5.dist-info/licenses/LICENSE.txt"
+      },
+      {
+        "package": "werkzeug",
+        "version": "3.1.5",
+        "archive_path": "werkzeug-3.1.5/LICENSE.txt"
+      },
+      {
+        "package": "werkzeug",
+        "version": "3.1.5",
+        "archive_path": "werkzeug-3.1.5/docs/license.rst"
+      },
+      {
+        "package": "wheel",
+        "version": "0.46.3",
+        "archive_path": "wheel-0.46.3.dist-info/licenses/LICENSE.txt"
+      },
+      {
+        "package": "wheel",
+        "version": "0.46.3",
+        "archive_path": "wheel-0.46.3/LICENSE.txt"
+      }
+    ],
+    "license_files_sha256": "1f9ea1d3d62bdfb4c9ea57da8667280b7037290f633d88715f8d6ddce2a4191b",
+    "evidence_files": [
+      {
+        "path": "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "sha256": "70e1c5af8d57bdd68a2ede8fbdddbea31a0d22b0bf5e0e4792f27102b1bb99ff"
+      }
+    ]
+  }
 }

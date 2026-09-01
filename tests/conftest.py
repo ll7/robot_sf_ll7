@@ -432,6 +432,10 @@ _FAST_FILES = {
     # Predictive multimodal forecast types tests are deterministic pure-contract
     # coverage for the changed predictive types module (issue #8049).
     "test_predictive_types.py",
+    # Goal-belief contract tests are deterministic schema/lineage coverage for
+    # the changed actor-observation producer; keep them in fast PR shards
+    # (issue #8063).
+    "test_goal_belief_contract.py",
     # Topology-guided local-policy tests are deterministic planner-contract
     # coverage for the changed adapter; keep them in fast PR shards for the
     # exact-head changed-coverage gate.

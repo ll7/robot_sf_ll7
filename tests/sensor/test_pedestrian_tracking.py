@@ -1,6 +1,6 @@
 """Focused deterministic tests for the observation-derived tracker."""
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 
 import numpy as np
 import pytest
@@ -116,6 +116,31 @@ def test_config_rejects_invalid_contract_values(kwargs: dict[str, object]) -> No
     """Negative noise, invalid gates, and invalid horizons fail closed."""
     with pytest.raises((TypeError, ValueError)):
         PedestrianTrackingConfig(**kwargs)
+
+
+def test_config_rejects_alias_collisions() -> None:
+    """Two spellings for one configuration field cannot silently choose by mapping order."""
+    with pytest.raises(ValueError, match="duplicate"):
+        PedestrianTrackingConfig.from_mapping(
+            {"initial_covariance": 1.0, "initial_position_covariance": 1.0}
+        )
+
+
+def test_singular_covariance_gate_rejects_residual_in_zero_variance_direction() -> None:
+    """Exact-covariance inputs cannot silently accept an inconsistent match."""
+    tracker = _tracker(
+        process_noise=0.0,
+        initial_position_covariance=0.0,
+        initial_velocity_covariance=0.0,
+        measurement_position_covariance=0.0,
+        measurement_velocity_covariance=0.0,
+    )
+    tracker.update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]]))
+    result = tracker.update(_snapshot(1.0, 1, [[2.0, 0.0]], [[0.0, 0.0]]))
+    assert result.associations == ()
+    assert result.diagnostics.new_track_count == 1
+    assert result.track(1).status is TrackStatus.LOST
+    assert result.track(2).status is TrackStatus.TENTATIVE
 
 
 def test_static_reorder_keeps_track_identity_and_source_slot_is_diagnostic() -> None:
@@ -251,6 +276,61 @@ def test_non_monotonic_input_does_not_mutate_tracker_state() -> None:
     assert result.track(1).status is TrackStatus.CONFIRMED
 
 
+def test_failed_update_does_not_advance_temporal_cursor(monkeypatch) -> None:
+    """An internal update failure leaves the next valid snapshot retryable at the same step."""
+    tracker = _tracker()
+    tracker.update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]]))
+
+    def fail_build_cost_matrix(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise RuntimeError("synthetic cost-matrix failure")
+
+    monkeypatch.setattr(tracker, "_build_cost_matrix", fail_build_cost_matrix)
+    with pytest.raises(RuntimeError, match="cost-matrix"):
+        tracker.update(_snapshot(1.0, 1, [[1.0, 0.0]], [[0.0, 0.0]]))
+
+    monkeypatch.undo()
+    retried = tracker.update(_snapshot(1.0, 1, [[1.0, 0.0]], [[0.0, 0.0]]))
+    assert retried.track(1).status is TrackStatus.CONFIRMED
+
+
+def test_failed_update_rolls_back_partial_track_mutations(monkeypatch) -> None:
+    """A failed update cannot consume a track retirement before the same snapshot is retried."""
+    tracker = _tracker(max_missed_seconds=0.5)
+    tracker.update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]]))
+
+    def fail_build_cost_matrix(*args: object, **kwargs: object) -> object:
+        del args, kwargs
+        raise RuntimeError("synthetic cost-matrix failure")
+
+    monkeypatch.setattr(tracker, "_build_cost_matrix", fail_build_cost_matrix)
+    with pytest.raises(RuntimeError, match="cost-matrix"):
+        tracker.update(
+            _snapshot(
+                1.0,
+                1,
+                [[float("nan"), float("nan")]],
+                [[float("nan"), float("nan")]],
+                visible=[False],
+            )
+        )
+
+    assert tracker.tracks[0].status is TrackStatus.TENTATIVE
+    assert tracker.tracks[0].timestamp_s == 0.0
+
+    monkeypatch.undo()
+    retried = tracker.update(
+        _snapshot(
+            1.0,
+            1,
+            [[float("nan"), float("nan")]],
+            [[float("nan"), float("nan")]],
+            visible=[False],
+        )
+    )
+    assert retried.track(1).status is TrackStatus.RETIRED
+
+
 def test_timestamp_gap_grows_lost_covariance() -> None:
     """Constant-velocity process covariance scales with elapsed seconds."""
     tracker = _tracker(process_noise=1.0, max_missed_seconds=10.0)
@@ -309,6 +389,58 @@ def test_public_arrays_are_read_only_and_oracle_is_post_tracking_only() -> None:
     assert metrics.error_by_visibility["occluded"] is None
 
 
+def test_oracle_identity_permutation_cannot_change_actor_tracking() -> None:
+    """Evaluator-only identity permutations leave actor IDs and associations unchanged."""
+    first = _snapshot(
+        0.0,
+        0,
+        [[1.0, 0.0], [3.0, 0.0]],
+        [[1.0, 0.0], [0.0, 0.0]],
+    )
+    second = _snapshot(
+        1.0,
+        1,
+        [[2.0, 0.0], [3.0, 0.0]],
+        [[1.0, 0.0], [0.0, 0.0]],
+    )
+    tracker_a = _tracker(confirmation_steps=1)
+    tracker_b = _tracker(confirmation_steps=1)
+    tracker_a.update(first)
+    tracker_b.update(first)
+    result_a = tracker_a.update(second)
+    result_b = tracker_b.update(second)
+
+    OracleTrackingEvaluator().evaluate(result_a, {0: "sim-ped-a", 1: "sim-ped-b"})
+    OracleTrackingEvaluator().evaluate(result_b, {0: "sim-ped-b", 1: "sim-ped-a"})
+
+    assert [track.to_dict() for track in result_a.tracks] == [
+        track.to_dict() for track in result_b.tracks
+    ]
+    assert [
+        (
+            association.track_id,
+            association.observation_slot,
+            association.cost,
+            association.position_distance,
+            association.velocity_distance,
+            association.used_velocity,
+            association.confidence,
+        )
+        for association in result_a.associations
+    ] == [
+        (
+            association.track_id,
+            association.observation_slot,
+            association.cost,
+            association.position_distance,
+            association.velocity_distance,
+            association.used_velocity,
+            association.confidence,
+        )
+        for association in result_b.associations
+    ]
+
+
 def test_oracle_assignment_accuracy_stays_bounded_across_frames() -> None:
     """Cumulative assignment accuracy uses associations, not unique track count."""
     tracker = _tracker(confirmation_steps=1)
@@ -347,3 +479,55 @@ def test_normalized_contract_validates_optional_geometry() -> None:
     negative_radius["radius"] = np.array([-1.0])
     with pytest.raises(ValueError, match="radius"):
         NormalizedPedestrianObservation(**negative_radius)
+
+
+def test_result_rejects_duplicate_or_unbound_associations() -> None:
+    """A result cannot expose ambiguous associations or IDs absent from its track payload."""
+    tracker = _tracker(confirmation_steps=1)
+    tracker.update(_snapshot(0.0, 0, [[1.0, 0.0], [3.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]))
+    result = tracker.update(_snapshot(1.0, 1, [[1.0, 0.0], [3.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]))
+    assert len(result.associations) == 2
+
+    duplicate_slot = replace(
+        result.associations[1], observation_slot=result.associations[0].observation_slot
+    )
+    with pytest.raises(ValueError, match="observation slot"):
+        replace(result, associations=(result.associations[0], duplicate_slot))
+
+    unbound_track = replace(result.associations[0], track_id=99)
+    with pytest.raises(ValueError, match="result track"):
+        replace(result, associations=(result.associations[1], unbound_track))
+
+    mismatched_slot = replace(result.associations[0], observation_slot=99)
+    with pytest.raises(ValueError, match="last_observation_slot"):
+        replace(result, associations=(mismatched_slot,))
+
+
+def test_result_rejects_malformed_diagnostics_and_blockers() -> None:
+    """Public result diagnostics cannot bypass their typed immutable contract."""
+    tracker = _tracker(confirmation_steps=1)
+    result = tracker.update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]]))
+    with pytest.raises(TypeError, match="diagnostics"):
+        replace(result, diagnostics=object())
+    with pytest.raises(TypeError, match="contain strings"):
+        replace(result.track(1), blockers=(1,))
+
+
+def test_oracle_metrics_reject_malformed_metric_values() -> None:
+    """Evaluator metrics reject negative errors and invalid confirmation counts."""
+    result = _tracker(confirmation_steps=1).update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]]))
+    metrics = OracleTrackingEvaluator().evaluate(result, {0: "sim-ped-a"})
+    with pytest.raises(ValueError, match="error_by_visibility"):
+        replace(metrics, error_by_visibility={"visible": -1.0, "occluded": None})
+    with pytest.raises(ValueError, match="time_to_confirmation"):
+        replace(metrics, time_to_confirmation={"sim-ped-a": -1})
+
+
+def test_oracle_rejects_malformed_identity_bindings() -> None:
+    """Oracle-only evaluation requires explicit integer slots and non-empty identity strings."""
+    result = _tracker().update(_snapshot(0.0, 0, [[1.0, 0.0]], [[0.0, 0.0]]))
+    evaluator = OracleTrackingEvaluator()
+    with pytest.raises(TypeError, match="slots"):
+        evaluator.evaluate(result, {True: "sim-ped-a"})
+    with pytest.raises(TypeError, match="identities"):
+        evaluator.evaluate(result, {0: ""})

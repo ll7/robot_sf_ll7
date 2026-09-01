@@ -2379,13 +2379,17 @@ def _policy_archive_notice_mapping(
         if isinstance(url, str) and _upstream_notice_path(url) is not None
     ]
     mappings: set[tuple[str, str, str, str]] = set()
-    package_root = (
-        f"{_canonicalize_name(policy_row.get('package', ''))}-{policy_row.get('version', '')}/"
-    )
+    sdist_stems = {
+        str(artifact.get("filename", "")).removesuffix(".tar.gz")
+        for artifact in policy_row.get("artifacts", [])
+        if isinstance(artifact, dict) and artifact.get("kind") == "sdist"
+    }
     for archive_path in policy_row.get("upstream", {}).get("archive_notice_paths", []):
         if not isinstance(archive_path, str):
             continue
-        kind = "sdist" if archive_path.startswith(package_root) else "wheel"
+        kind = (
+            "sdist" if any(archive_path.startswith(f"{stem}/") for stem in sdist_stems) else "wheel"
+        )
         matching_urls = [
             (url, upstream_path)
             for url, upstream_path in immutable_urls
@@ -2400,6 +2404,23 @@ def _policy_archive_notice_mapping(
                 if len(upstream_path) == longest_path
             )
     return mappings
+
+
+def _policy_archive_notice_kinds(policy_row: dict[str, Any]) -> set[tuple[str, str]]:
+    """Derive exact artifact-kind bindings for every declared archive notice."""
+    sdist_stems = {
+        str(artifact.get("filename", "")).removesuffix(".tar.gz")
+        for artifact in policy_row.get("artifacts", [])
+        if isinstance(artifact, dict) and artifact.get("kind") == "sdist"
+    }
+    return {
+        (
+            path,
+            "sdist" if any(path.startswith(f"{stem}/") for stem in sdist_stems) else "wheel",
+        )
+        for path in policy_row.get("upstream", {}).get("archive_notice_paths", [])
+        if isinstance(path, str)
+    }
 
 
 def _archive_artifact_issues(
@@ -2463,10 +2484,7 @@ def _archive_artifact_issues(
         for path in artifact.get("notice_paths", [])
         if isinstance(path, str)
     }
-    expected_mappings = {
-        (path, kind)
-        for path, kind, _upstream_path, _url in _policy_archive_notice_mapping(policy_row)
-    }
+    expected_mappings = _policy_archive_notice_kinds(policy_row)
     if actual_mappings != expected_mappings:
         issues.append(f"dependency archive audit notice mappings differ for {identity[0]}")
     return issues
@@ -2697,13 +2715,15 @@ def _upstream_tags_semantic_issues(  # noqa: C901, PLR0912, PLR0915
             issues.append(f"dependency upstream tag result is not clean for {identity[0]}")
         checks = entry.get("notice_checks")
         archive_row = archive_by_identity.get(identity, {})
-        expected_archive_paths = _archive_notice_paths(archive_row)
+        expected_mappings = _policy_archive_notice_mapping(policy_row)
+        expected_archive_paths = {
+            archive_path for archive_path, _kind, _path, _url in expected_mappings
+        }
         expected_upstream_paths = {
             path
             for path in (_upstream_notice_path(url) for url in upstream.get("notice_paths", []))
             if path is not None
         }
-        expected_mappings = _policy_archive_notice_mapping(policy_row)
         actual_archive_paths: set[str] = set()
         actual_upstream_paths: set[str] = set()
         actual_mappings: set[tuple[Any, str, str, str]] = set()

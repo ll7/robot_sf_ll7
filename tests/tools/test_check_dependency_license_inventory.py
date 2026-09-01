@@ -21,12 +21,14 @@ from typing import TYPE_CHECKING
 from scripts.tools.check_dependency_license_inventory import (
     SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS,
     _archive_audit_semantic_issues,
+    _archive_notice_paths,
     _candidate_receipt_semantic_issues,
     _effective_profile_coverage,
     _exact_policy_coverage_failures,
     _github_notice_reference,
     _match_package_disposition,
     _policy_archive_notice_mapping,
+    _policy_archive_notice_kinds,
     _policy_records,
     _policy_source_matches,
     _report_content_digest,
@@ -1252,9 +1254,7 @@ def test_issue_8163_rehashed_audit_mutations_still_fail_semantically(  # noqa: P
                         "member_count": 1,
                         "notice_paths": [
                             path
-                            for path, kind, _upstream_path, _url in _policy_archive_notice_mapping(
-                                row
-                            )
+                            for path, kind in _policy_archive_notice_kinds(row)
                             if kind == artifact["kind"]
                         ],
                         "metadata_path": "",
@@ -1297,6 +1297,46 @@ def test_issue_8163_rehashed_audit_mutations_still_fail_semantically(  # noqa: P
                 "notice_checks": checks,
             }
         )
+
+    assert _archive_audit_semantic_issues(archive, rows) == []
+    assert _upstream_tags_semantic_issues(tags, rows, archive) == []
+
+    for package_name in ("absl-py", "python-dotenv", "rich-rst"):
+        forged = copy.deepcopy(archive)
+        package = next(item for item in forged["packages"] if item["name"] == package_name)
+        package["artifacts"][0]["notice_paths"], package["artifacts"][1]["notice_paths"] = (
+            package["artifacts"][1]["notice_paths"],
+            package["artifacts"][0]["notice_paths"],
+        )
+        assert _archive_audit_semantic_issues(forged, rows)
+
+    referencing_row = next(row for row in rows if row["package"] == "referencing")
+    referencing_package = next(
+        package for package in archive["packages"] if package["name"] == "referencing"
+    )
+    assert "referencing-0.37.0/suite/LICENSE" in _archive_notice_paths(referencing_package)
+    referencing_tags = next(item for item in tags if item["name"] == "referencing")
+    assert all(
+        check["archive_path"] != "referencing-0.37.0/suite/LICENSE"
+        for check in referencing_tags["notice_checks"]
+    )
+    fabricated = copy.deepcopy(tags)
+    fabricated_row = next(item for item in fabricated if item["name"] == "referencing")
+    fabricated_row["notice_checks"].append(
+        {
+            "archive_kind": "sdist",
+            "archive_path": "referencing-0.37.0/suite/LICENSE",
+            "upstream_path": "suite/LICENSE",
+            "status": "present",
+            "review_url": (
+                referencing_row["upstream"]["repository"]
+                + "/blob/"
+                + referencing_row["upstream"]["commit_sha"]
+                + "/suite/LICENSE"
+            ),
+        }
+    )
+    assert _upstream_tags_semantic_issues(fabricated, rows, archive)
 
     def write_json(name: str, value: object) -> Path:
         path = tmp_path / name

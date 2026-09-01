@@ -172,13 +172,6 @@ class PromotionError(ValueError):
     """Raised when promotion identity or receipt validation fails closed."""
 
 
-def _positive_run_attempt(value: Any, *, label: str) -> int:
-    """Require a real positive JSON integer for one workflow attempt field."""
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-        raise PromotionError(f"{label} must be a positive JSON integer")
-    return value
-
-
 def _json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -408,7 +401,7 @@ def _validate_optional_candidate_materialization(
     return _validate_candidate_materialization(manifest["materialization"])
 
 
-def _validate_manifest_header(
+def _validate_manifest_header(  # noqa: C901 - closed manifest contract
     manifest: Any,
     *,
     expected_source_sha: str,
@@ -447,13 +440,13 @@ def _validate_manifest_header(
     )
     if workflow["run_id"] != run_id:
         raise PromotionError("candidate workflow run ID does not match the dispatch identity")
-    observed_attempt = _positive_run_attempt(
-        workflow["run_attempt"], label="candidate workflow run_attempt"
-    )
-    expected_attempt = _positive_run_attempt(
-        expected_workflow_run_attempt, label="expected candidate workflow run_attempt"
-    )
-    if observed_attempt != expected_attempt:
+    if (
+        not isinstance(workflow["run_attempt"], int)
+        or isinstance(workflow["run_attempt"], bool)
+        or workflow["run_attempt"] < 1
+    ):
+        raise PromotionError("candidate workflow run attempt is invalid")
+    if workflow["run_attempt"] != expected_workflow_run_attempt:
         raise PromotionError("candidate workflow run attempt does not match the dispatch identity")
 
     package = manifest["package"]
@@ -676,11 +669,10 @@ def _artifact_metadata(  # noqa: C901, PLR0912 - identity branches fail closed
         label="artifact workflow run ID",
         pattern=RUN_ID_PATTERN,
     )
-    expected_attempt = (
-        _positive_run_attempt(expected_run_attempt, label="expected artifact workflow run_attempt")
-        if expected_run_attempt is not None
-        else None
-    )
+    if expected_run_attempt is not None and (
+        isinstance(expected_run_attempt, bool) or expected_run_attempt < 1
+    ):
+        raise PromotionError("artifact workflow run attempt must be positive")
     if kind == "candidate":
         expected_prefix = f"robot-sf-software-candidate-{_source_sha(expected_source_sha or '')}-"
         if not actual_name.startswith(expected_prefix) or not actual_name[
@@ -697,7 +689,9 @@ def _artifact_metadata(  # noqa: C901, PLR0912 - identity branches fail closed
             raise PromotionError("GitHub rights artifact name is not bound to source/run")
     elif actual_name.split("-")[-2] != expected_run:
         raise PromotionError("GitHub receipt artifact name is not bound to its workflow run")
-    if expected_attempt is not None and actual_name.rsplit("-", 1)[-1] != str(expected_attempt):
+    if expected_run_attempt is not None and actual_name.rsplit("-", 1)[-1] != str(
+        expected_run_attempt
+    ):
         raise PromotionError("GitHub artifact name is not bound to its workflow run attempt")
     if metadata.get("expired") is not False:
         raise PromotionError("GitHub artifact is expired or has no explicit unexpired status")
@@ -709,16 +703,6 @@ def _artifact_metadata(  # noqa: C901, PLR0912 - identity branches fail closed
         raise PromotionError("GitHub artifact has no workflow-run binding")
     if str(workflow_run.get("id")) != expected_run:
         raise PromotionError("GitHub artifact workflow run drifted from the dispatch identity")
-    if "run_attempt" in workflow_run:
-        observed_attempt = _positive_run_attempt(
-            workflow_run["run_attempt"], label="GitHub artifact workflow run_attempt"
-        )
-        if expected_attempt is not None and observed_attempt != expected_attempt:
-            raise PromotionError(
-                "GitHub artifact workflow run attempt drifted from the dispatch identity"
-            )
-        if actual_name.rsplit("-", 1)[-1] != str(observed_attempt):
-            raise PromotionError("GitHub artifact name is not bound to its workflow run attempt")
     _validate_artifact_source(
         workflow_run,
         kind=kind,
@@ -779,15 +763,14 @@ def _validate_workflow_run_metadata(  # noqa: C901 - closed metadata contract
     workflow_id = metadata.get("workflow_id")
     if isinstance(workflow_id, bool) or not isinstance(workflow_id, int) or workflow_id < 1:
         raise PromotionError(f"{kind} workflow-run has no valid workflow identity")
-    observed_attempt = _positive_run_attempt(
-        metadata.get("run_attempt"), label=f"{kind} workflow-run run_attempt"
-    )
-    expected_attempt = (
-        _positive_run_attempt(run_attempt, label=f"expected {kind} workflow run_attempt")
-        if run_attempt is not None
-        else None
-    )
-    if expected_attempt is not None and observed_attempt != expected_attempt:
+    observed_attempt = metadata.get("run_attempt")
+    if (
+        isinstance(observed_attempt, bool)
+        or not isinstance(observed_attempt, int)
+        or observed_attempt < 1
+    ):
+        raise PromotionError(f"{kind} workflow-run has no valid run attempt")
+    if run_attempt is not None and observed_attempt != run_attempt:
         raise PromotionError(f"{kind} workflow-run attempt drifted from the dispatch identity")
     return observed_attempt
 
@@ -871,11 +854,11 @@ def _assert_receipt_candidate(  # noqa: C901 - closed receipt contract
         or set(promotion) != {"workflow_run_id", "run_attempt"}
         or not isinstance(promotion.get("workflow_run_id"), str)
         or not RUN_ID_PATTERN.fullmatch(promotion["workflow_run_id"])
+        or not isinstance(promotion.get("run_attempt"), int)
+        or isinstance(promotion["run_attempt"], bool)
+        or promotion["run_attempt"] < 1
     ):
         raise PromotionError("promotion receipt has no valid publisher workflow identity")
-    promotion_attempt = _positive_run_attempt(
-        promotion.get("run_attempt"), label="promotion receipt run_attempt"
-    )
     if expected_promotion_run_id is not None:
         expected_run_id = _positive_identity(
             expected_promotion_run_id,
@@ -885,10 +868,11 @@ def _assert_receipt_candidate(  # noqa: C901 - closed receipt contract
         if promotion["workflow_run_id"] != expected_run_id:
             raise PromotionError("promotion receipt is bound to a different publisher run")
     if expected_promotion_run_attempt is not None:
-        expected_attempt = _positive_run_attempt(
-            expected_promotion_run_attempt, label="expected promotion workflow run_attempt"
-        )
-        if promotion_attempt != expected_attempt:
+        if (
+            isinstance(expected_promotion_run_attempt, bool)
+            or expected_promotion_run_attempt < 1
+            or promotion["run_attempt"] != expected_promotion_run_attempt
+        ):
             raise PromotionError("promotion receipt is bound to a different publisher attempt")
 
 
@@ -1501,9 +1485,8 @@ def _write_receipt(args: argparse.Namespace) -> None:
         label="promotion workflow run ID",
         pattern=RUN_ID_PATTERN,
     )
-    promotion_run_attempt = _positive_run_attempt(
-        args.promotion_run_attempt, label="promotion workflow run_attempt"
-    )
+    if not isinstance(args.promotion_run_attempt, int) or args.promotion_run_attempt < 1:
+        raise PromotionError("promotion workflow run attempt must be positive")
     receipt = {
         "candidate": _receipt_identity(
             identity=identity,
@@ -1515,7 +1498,7 @@ def _write_receipt(args: argparse.Namespace) -> None:
         "index_url": INDEX_URLS[args.channel],
         "package": identity["package"],
         "promotion": {
-            "run_attempt": promotion_run_attempt,
+            "run_attempt": args.promotion_run_attempt,
             "workflow_run_id": promotion_run_id,
         },
         "published": {"files": _published_members(identity)},

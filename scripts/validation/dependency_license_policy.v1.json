@@ -111,9 +111,10 @@
         "repository": "https://github.com/numba/llvmlite",
         "tag": "v0.49.0",
         "notice_paths": [
-          "https://github.com/numba/llvmlite/blob/v0.49.0/LICENSE",
-          "https://github.com/numba/llvmlite/blob/v0.49.0/LICENSE.thirdparty"
-        ]
+          "https://github.com/numba/llvmlite/blob/b5a0ba74ae0601806c0ac3964d746f6be5f6d7b4/LICENSE",
+          "https://github.com/numba/llvmlite/blob/b5a0ba74ae0601806c0ac3964d746f6be5f6d7b4/LICENSE.thirdparty"
+        ],
+        "commit_sha": "b5a0ba74ae0601806c0ac3964d746f6be5f6d7b4"
       },
       "profiles": [
         "core",
@@ -133,8 +134,14 @@
         "all",
         "fast-pysf"
       ],
-      "allowed_distribution_modes": ["user_installed", "not_distributed"],
-      "blocked_distribution_modes": ["bundled_source", "built_companion"],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
       "blocked_surface_conditions": [
         "mirrored",
         "vendored",
@@ -149,6 +156,3060 @@
       "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked.",
       "evidence_paths": [
         "docs/context/evidence/llvmlite_0.49.0_surface_disposition_2026-08-20.md"
+      ]
+    },
+    {
+      "id": "absl-py-2-4-0-external-install",
+      "package": "absl-py",
+      "version": "2.4.0",
+      "license_expression": "Apache-2.0",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/absl-py/2.4.0/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "absl_py-2.4.0.tar.gz",
+          "sha256": "8c6af82722b35cf71e0f4d1d47dcaebfff286e27110a99fc359349b247dfb5d4",
+          "size": 116543,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "absl_py-2.4.0-py3-none-any.whl",
+          "sha256": "88476fd881ca8aab94ffa78b7b6c632a782ab3ba1cd19c9bd423abc4fb4cd28d",
+          "size": 135750,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/abseil/abseil-py",
+        "tag": "v2.4.0",
+        "notice_paths": [
+          "https://github.com/abseil/abseil-py/blob/862e5d80cb61501745d0d345cf419d36495af493/LICENSE",
+          "https://github.com/abseil/abseil-py/blob/862e5d80cb61501745d0d345cf419d36495af493/AUTHORS",
+          "https://github.com/abseil/abseil-py/tree/862e5d80cb61501745d0d345cf419d36495af493"
+        ],
+        "archive_notice_paths": [
+          "absl_py-2.4.0/LICENSE",
+          "absl_py-2.4.0.dist-info/licenses/AUTHORS",
+          "absl_py-2.4.0.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "862e5d80cb61501745d0d345cf419d36495af493"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "alembic-1-18-4-external-install",
+      "package": "alembic",
+      "version": "1.18.4",
+      "license_expression": "MIT",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/alembic/1.18.4/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "alembic-1.18.4.tar.gz",
+          "sha256": "cb6e1fd84b6174ab8dbb2329f86d631ba9559dd78df550b57804d607672cedbc",
+          "size": 2056725,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "alembic-1.18.4-py3-none-any.whl",
+          "sha256": "a5ed4adcf6d8a4cb575f3d759f071b03cd6e5c7618eb796cb52497be25bfe19a",
+          "size": 263893,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/sqlalchemy/alembic",
+        "tag": "rel_1_18_4",
+        "notice_paths": [
+          "https://github.com/sqlalchemy/alembic/blob/766b5ee98e0aeea85a18f272a1ac813712ee0697/LICENSE",
+          "https://github.com/sqlalchemy/alembic/tree/766b5ee98e0aeea85a18f272a1ac813712ee0697",
+          "https://github.com/FortAwesome/Font-Awesome/blob/c0f460dca7f7688761120415ff3c9cf7f73119be/LICENSE.txt",
+          "https://github.com/FortAwesome/Font-Awesome/blob/c0f460dca7f7688761120415ff3c9cf7f73119be/css/all.min.css",
+          "https://github.com/FortAwesome/Font-Awesome/blob/c0f460dca7f7688761120415ff3c9cf7f73119be/js/all.min.js",
+          "https://github.com/FortAwesome/Font-Awesome/blob/c0f460dca7f7688761120415ff3c9cf7f73119be/js/all.min.js.LICENSE.txt",
+          "https://fontawesome.com/license/free"
+        ],
+        "archive_notice_paths": [
+          "alembic-1.18.4/LICENSE",
+          "alembic-1.18.4/docs/_static/vendor/fontawesome/6.5.2/LICENSE.txt",
+          "alembic-1.18.4/docs/_static/vendor/fontawesome/6.5.2/css/all.min.css",
+          "alembic-1.18.4/docs/_static/vendor/fontawesome/6.5.2/js/all.min.js",
+          "alembic-1.18.4/docs/_static/vendor/fontawesome/6.5.2/js/all.min.js.LICENSE.txt",
+          "alembic-1.18.4.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "766b5ee98e0aeea85a18f272a1ac813712ee0697"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ],
+      "evidence_blockers": [
+        "The sdist contains generated Font Awesome 6.5.2 assets that are absent from the Alembic source commit 766b5ee98e0aeea85a18f272a1ac813712ee0697; exact generated-asset provenance remains unresolved.",
+        "The archive member docs/_static/vendor/fontawesome/6.5.2/js/all.min.js.LICENSE.txt is absent from the Font Awesome 6.5.2 source commit c0f460dca7f7688761120415ff3c9cf7f73119be; exact generated-file provenance remains unresolved.",
+        "fontawesome.com/license/free is a moving page and is retained only as contextual provenance; it is not immutable evidence."
+      ]
+    },
+    {
+      "id": "attrs-25-4-0-external-install",
+      "package": "attrs",
+      "version": "25.4.0",
+      "license_expression": "MIT",
+      "python_requires": ">=3.9",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/attrs/25.4.0/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "attrs-25.4.0.tar.gz",
+          "sha256": "16d5969b87f0859ef33a48b35d55ac1be6e42ae49d5e853b597db70c35c57e11",
+          "size": 934251,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "attrs-25.4.0-py3-none-any.whl",
+          "sha256": "adcf7e2a1fb3b36ac48d97835bb6d8ade15b8dcce26aba8bf1d14847b57a3373",
+          "size": 67615,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/python-attrs/attrs",
+        "tag": "25.4.0",
+        "notice_paths": [
+          "https://github.com/python-attrs/attrs/blob/9a98e00a7c078360add417c5d62db820d4645ab1/LICENSE",
+          "https://github.com/python-attrs/attrs/blob/9a98e00a7c078360add417c5d62db820d4645ab1/docs/license.md",
+          "https://github.com/python-attrs/attrs/tree/9a98e00a7c078360add417c5d62db820d4645ab1"
+        ],
+        "archive_notice_paths": [
+          "attrs-25.4.0/LICENSE",
+          "attrs-25.4.0/docs/license.md",
+          "attrs-25.4.0.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "9a98e00a7c078360add417c5d62db820d4645ab1"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "click-8-3-1-external-install",
+      "package": "click",
+      "version": "8.3.1",
+      "license_expression": "BSD-3-Clause",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/click/8.3.1/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "click-8.3.1.tar.gz",
+          "sha256": "12ff4785d337a1bb490bb7e9c2b1ee5da3112e94a8622f26a6c77f5d2fc6842a",
+          "size": 295065,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "click-8.3.1-py3-none-any.whl",
+          "sha256": "981153a64e25f12d547d3426c367a4857371575ee7ad18df2a6183ab0545b2a6",
+          "size": 108274,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/pallets/click",
+        "tag": "8.3.1",
+        "notice_paths": [
+          "https://github.com/pallets/click/blob/1d038f270701498433cb432f54db89f95f07a845/LICENSE.txt",
+          "https://github.com/pallets/click/blob/1d038f270701498433cb432f54db89f95f07a845/docs/license.md",
+          "https://github.com/pallets/click/tree/1d038f270701498433cb432f54db89f95f07a845"
+        ],
+        "archive_notice_paths": [
+          "click-8.3.1/LICENSE.txt",
+          "click-8.3.1/docs/license.md",
+          "click-8.3.1.dist-info/licenses/LICENSE.txt"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "1d038f270701498433cb432f54db89f95f07a845"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "cma-4-4-4-external-install",
+      "package": "cma",
+      "version": "4.4.4",
+      "license_expression": "BSD-3-Clause",
+      "python_requires": null,
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/cma/4.4.4/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "cma-4.4.4.tar.gz",
+          "sha256": "632bd654b5dce04c0eaa3166679d3e4773ce7a79eab7934e7f363c341b9a8170",
+          "size": 316645,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "cma-4.4.4-py3-none-any.whl",
+          "sha256": "edb6d02eb2aac2d54650f16a8f0c70711ff17445957de7c9de92ff7fd4b7ef38",
+          "size": 328311,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/CMA-ES/pycma",
+        "tag": "r4.4.4",
+        "notice_paths": [
+          "https://github.com/CMA-ES/pycma/blob/83089d1d681165b8cc849f4a05c9f1c1869d79a3/LICENSE",
+          "https://github.com/CMA-ES/pycma/tree/83089d1d681165b8cc849f4a05c9f1c1869d79a3"
+        ],
+        "archive_notice_paths": [
+          "cma-4.4.4/LICENSE",
+          "cma-4.4.4.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "83089d1d681165b8cc849f4a05c9f1c1869d79a3"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "cyclopts-4-18-0-external-install",
+      "package": "cyclopts",
+      "version": "4.18.0",
+      "license_expression": "Apache-2.0",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/cyclopts/4.18.0/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "cyclopts-4.18.0.tar.gz",
+          "sha256": "fb7b730f21932e0784f7e54462df0447aaa1fbf034d65b605bd8a25dce58b188",
+          "size": 182821,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "cyclopts-4.18.0-py3-none-any.whl",
+          "sha256": "18ba2912e48e890a97ecc8a05c9beddf30a407b43f4e14cccfd40efddc41f029",
+          "size": 221216,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/BrianPugh/cyclopts",
+        "tag": "v4.18.0",
+        "notice_paths": [
+          "https://github.com/BrianPugh/cyclopts/blob/039060a76468d98b64e31c22303bea2ce602e83b/LICENSE",
+          "https://github.com/BrianPugh/cyclopts/tree/039060a76468d98b64e31c22303bea2ce602e83b"
+        ],
+        "archive_notice_paths": [
+          "cyclopts-4.18.0/LICENSE",
+          "cyclopts-4.18.0.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "039060a76468d98b64e31c22303bea2ce602e83b"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "fsspec-2026-2-0-external-install",
+      "package": "fsspec",
+      "version": "2026.2.0",
+      "license_expression": "BSD-3-Clause",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/fsspec/2026.2.0/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "fsspec-2026.2.0.tar.gz",
+          "sha256": "6544e34b16869f5aacd5b90bdf1a71acb37792ea3ddf6125ee69a22a53fb8bff",
+          "size": 313441,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "fsspec-2026.2.0-py3-none-any.whl",
+          "sha256": "98de475b5cb3bd66bedd5c4679e87b4fdfe1a3bf4d707b151b3c07e58c9a2437",
+          "size": 202505,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/fsspec/filesystem_spec",
+        "tag": "2026.2.0",
+        "notice_paths": [
+          "https://github.com/fsspec/filesystem_spec/blob/e6668a146cd07b9f50530c49ea3916d8ab13e169/LICENSE",
+          "https://github.com/fsspec/filesystem_spec/blob/e6668a146cd07b9f50530c49ea3916d8ab13e169/docs/source/copying.rst",
+          "https://github.com/fsspec/filesystem_spec/tree/e6668a146cd07b9f50530c49ea3916d8ab13e169"
+        ],
+        "archive_notice_paths": [
+          "fsspec-2026.2.0/LICENSE",
+          "fsspec-2026.2.0/docs/source/copying.rst",
+          "fsspec-2026.2.0.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "e6668a146cd07b9f50530c49ea3916d8ab13e169"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "geopandas-1-1-4-external-install",
+      "package": "geopandas",
+      "version": "1.1.4",
+      "license_expression": "BSD-3-Clause",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/geopandas/1.1.4/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "geopandas-1.1.4.tar.gz",
+          "sha256": "06f2890a07e1a239047daa14b486a7c6ae5ce82dcf7405e13c46bf31f5d0dd66",
+          "size": 337445,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "geopandas-1.1.4-py3-none-any.whl",
+          "sha256": "1a0c459cbdb1537cd154dafe6174be20d1760844b7f1c967dc8520b180f2e773",
+          "size": 343292,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/geopandas/geopandas",
+        "tag": "v1.1.4",
+        "notice_paths": [
+          "https://github.com/geopandas/geopandas/blob/91ec4af3c502be268ee147a3a832387534c0be3d/LICENSE.txt",
+          "https://github.com/geopandas/geopandas/tree/91ec4af3c502be268ee147a3a832387534c0be3d"
+        ],
+        "archive_notice_paths": [
+          "geopandas-1.1.4/LICENSE.txt",
+          "geopandas-1.1.4.dist-info/licenses/LICENSE.txt"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "91ec4af3c502be268ee147a3a832387534c0be3d"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "idna-3-11-external-install",
+      "package": "idna",
+      "version": "3.11",
+      "license_expression": "BSD-3-Clause",
+      "python_requires": ">=3.8",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/idna/3.11/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "idna-3.11.tar.gz",
+          "sha256": "795dafcc9c04ed0c1fb032c2aa73654d8e8c5023a7df64a53f39190ada629902",
+          "size": 194582,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "idna-3.11-py3-none-any.whl",
+          "sha256": "771a87f49d9defaf64091e6e6fe9c18d4833f140bd19464795bc32d966ca37ea",
+          "size": 71008,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/kjd/idna",
+        "tag": "v3.11",
+        "notice_paths": [
+          "https://github.com/kjd/idna/blob/ad949ee3052c2265c66e3df2dd8871a5832ba327/LICENSE.md",
+          "https://github.com/kjd/idna/tree/ad949ee3052c2265c66e3df2dd8871a5832ba327"
+        ],
+        "archive_notice_paths": [
+          "idna-3.11/LICENSE.md",
+          "idna-3.11.dist-info/licenses/LICENSE.md"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "ad949ee3052c2265c66e3df2dd8871a5832ba327"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "imageio-2-37-2-external-install",
+      "package": "imageio",
+      "version": "2.37.2",
+      "license_expression": "BSD-2-Clause",
+      "python_requires": ">=3.9",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/imageio/2.37.2/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "imageio-2.37.2.tar.gz",
+          "sha256": "0212ef2727ac9caa5ca4b2c75ae89454312f440a756fcfc8ef1993e718f50f8a",
+          "size": 389600,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "imageio-2.37.2-py3-none-any.whl",
+          "sha256": "ad9adfb20335d718c03de457358ed69f141021a333c40a53e57273d8a5bd0b9b",
+          "size": 317646,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/imageio/imageio",
+        "tag": "v2.37.2",
+        "notice_paths": [
+          "https://github.com/imageio/imageio/blob/761929cc6ae6503f93f2431e0b47d504837ba77a/LICENSE",
+          "https://github.com/imageio/imageio/tree/761929cc6ae6503f93f2431e0b47d504837ba77a"
+        ],
+        "archive_notice_paths": [
+          "imageio-2.37.2/LICENSE",
+          "imageio-2.37.2.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "761929cc6ae6503f93f2431e0b47d504837ba77a"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "joblib-1-5-3-external-install",
+      "package": "joblib",
+      "version": "1.5.3",
+      "license_expression": "BSD-3-Clause",
+      "python_requires": ">=3.9",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/joblib/1.5.3/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "joblib-1.5.3.tar.gz",
+          "sha256": "8561a3269e6801106863fd0d6d84bb737be9e7631e33aaed3fb9ce5953688da3",
+          "size": 331603,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "joblib-1.5.3-py3-none-any.whl",
+          "sha256": "5fc3c5039fc5ca8c0276333a188bbd59d6b7ab37fe6632daa76bc7f9ec18e713",
+          "size": 309071,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/joblib/joblib",
+        "tag": "1.5.3",
+        "notice_paths": [
+          "https://github.com/joblib/joblib/blob/40cd002ae1765195dfc4738a6bc7f5534b420a21/LICENSE.txt",
+          "https://github.com/joblib/joblib/tree/40cd002ae1765195dfc4738a6bc7f5534b420a21"
+        ],
+        "archive_notice_paths": [
+          "joblib-1.5.3/LICENSE.txt",
+          "joblib-1.5.3.dist-info/licenses/LICENSE.txt"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "40cd002ae1765195dfc4738a6bc7f5534b420a21"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "jsonschema-4-26-0-external-install",
+      "package": "jsonschema",
+      "version": "4.26.0",
+      "license_expression": "MIT",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/jsonschema/4.26.0/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "jsonschema-4.26.0.tar.gz",
+          "sha256": "0c26707e2efad8aa1bfc5b7ce170f3fccc2e4918ff85989ba9ffa9facb2be326",
+          "size": 366583,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "jsonschema-4.26.0-py3-none-any.whl",
+          "sha256": "d489f15263b8d200f8387e64b4c3a75f06629559fb73deb8fdfb525f2dab50ce",
+          "size": 90630,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/python-jsonschema/jsonschema",
+        "tag": "v4.26.0",
+        "notice_paths": [
+          "https://github.com/python-jsonschema/jsonschema/blob/a7277432b0f7bcd0551f6e589d30457017125df4/COPYING",
+          "https://github.com/python-jsonschema/jsonschema/blob/a7277432b0f7bcd0551f6e589d30457017125df4/json/LICENSE",
+          "https://github.com/python-jsonschema/jsonschema/tree/a7277432b0f7bcd0551f6e589d30457017125df4"
+        ],
+        "archive_notice_paths": [
+          "jsonschema-4.26.0/COPYING",
+          "jsonschema-4.26.0/json/LICENSE",
+          "jsonschema-4.26.0.dist-info/licenses/COPYING"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "a7277432b0f7bcd0551f6e589d30457017125df4"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "jsonschema-specifications-2025-9-1-external-install",
+      "package": "jsonschema-specifications",
+      "version": "2025.9.1",
+      "license_expression": "MIT",
+      "python_requires": ">=3.9",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/jsonschema-specifications/2025.9.1/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "jsonschema_specifications-2025.9.1.tar.gz",
+          "sha256": "b540987f239e745613c7a9176f3edb72b832a4ac465cf02712288397832b5e8d",
+          "size": 32855,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "jsonschema_specifications-2025.9.1-py3-none-any.whl",
+          "sha256": "98802fee3a11ee76ecaca44429fda8a41bff98b00a0f2838151b113f210cc6fe",
+          "size": 18437,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/python-jsonschema/jsonschema-specifications",
+        "tag": "v2025.9.1",
+        "notice_paths": [
+          "https://github.com/python-jsonschema/jsonschema-specifications/blob/3b846010c34ce254d8ced23023451d1d64de37f5/COPYING",
+          "https://github.com/python-jsonschema/jsonschema-specifications/tree/3b846010c34ce254d8ced23023451d1d64de37f5"
+        ],
+        "archive_notice_paths": [
+          "jsonschema_specifications-2025.9.1/COPYING",
+          "jsonschema_specifications-2025.9.1.dist-info/licenses/COPYING"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "3b846010c34ce254d8ced23023451d1d64de37f5"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "lazy-loader-0-5-external-install",
+      "package": "lazy-loader",
+      "version": "0.5",
+      "license_expression": "BSD-3-Clause",
+      "python_requires": ">=3.9",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/lazy-loader/0.5/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "lazy_loader-0.5.tar.gz",
+          "sha256": "717f9179a0dbed357012ddad50a5ad3d5e4d9a0b8712680d4e687f5e6e6ed9b3",
+          "size": 15294,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "lazy_loader-0.5-py3-none-any.whl",
+          "sha256": "ab0ea149e9c554d4ffeeb21105ac60bed7f3b4fd69b1d2360a4add51b170b005",
+          "size": 8044,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/scientific-python/lazy-loader",
+        "tag": "v0.5",
+        "notice_paths": [
+          "https://github.com/scientific-python/lazy-loader/blob/2566bebe6a36ecd0bc5dc5a69e8767f7e68fb6d0/LICENSE.md",
+          "https://github.com/scientific-python/lazy-loader/tree/2566bebe6a36ecd0bc5dc5a69e8767f7e68fb6d0"
+        ],
+        "archive_notice_paths": [
+          "lazy_loader-0.5/LICENSE.md",
+          "lazy_loader-0.5.dist-info/licenses/LICENSE.md"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "2566bebe6a36ecd0bc5dc5a69e8767f7e68fb6d0"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "markdown-3-10-2-external-install",
+      "package": "markdown",
+      "version": "3.10.2",
+      "license_expression": "BSD-3-Clause",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/markdown/3.10.2/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "markdown-3.10.2.tar.gz",
+          "sha256": "994d51325d25ad8aa7ce4ebaec003febcce822c3f8c911e3b17c52f7f589f950",
+          "size": 368805,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "markdown-3.10.2-py3-none-any.whl",
+          "sha256": "e91464b71ae3ee7afd3017d9f358ef0baf158fd9a298db92f1d4761133824c36",
+          "size": 108180,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/Python-Markdown/markdown",
+        "tag": "3.10.2",
+        "notice_paths": [
+          "https://github.com/Python-Markdown/markdown/blob/e7a0efb3a7c36d6b8005403122705662bc17c904/LICENSE.md",
+          "https://github.com/Python-Markdown/markdown/tree/e7a0efb3a7c36d6b8005403122705662bc17c904"
+        ],
+        "archive_notice_paths": [
+          "markdown-3.10.2/LICENSE.md",
+          "markdown-3.10.2.dist-info/licenses/LICENSE.md"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "e7a0efb3a7c36d6b8005403122705662bc17c904"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "narwhals-2-22-1-external-install",
+      "package": "narwhals",
+      "version": "2.22.1",
+      "license_expression": "MIT",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/narwhals/2.22.1/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "narwhals-2.22.1.tar.gz",
+          "sha256": "d62920805a0a43b7ff8b54b0c0d3142d796f8a9301836ada37e573d6a33cbcd9",
+          "size": 647493,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "narwhals-2.22.1-py3-none-any.whl",
+          "sha256": "60567d774edf77db53906f89d9fbd164e66e56d66d388e1e6990f17ac33cfb53",
+          "size": 454815,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/narwhals-dev/narwhals",
+        "tag": "v2.22.1",
+        "notice_paths": [
+          "https://github.com/narwhals-dev/narwhals/blob/27bf8dbac2b44d048e26b5c9042fe35575878a4d/LICENSE.md",
+          "https://github.com/narwhals-dev/narwhals/tree/27bf8dbac2b44d048e26b5c9042fe35575878a4d"
+        ],
+        "archive_notice_paths": [
+          "narwhals-2.22.1/LICENSE.md",
+          "narwhals-2.22.1.dist-info/licenses/LICENSE.md"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "27bf8dbac2b44d048e26b5c9042fe35575878a4d"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "networkx-3-6-1-external-install",
+      "package": "networkx",
+      "version": "3.6.1",
+      "license_expression": "BSD-3-Clause",
+      "python_requires": "!=3.14.1,>=3.11",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/networkx/3.6.1/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "networkx-3.6.1.tar.gz",
+          "sha256": "26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509",
+          "size": 2517025,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "networkx-3.6.1-py3-none-any.whl",
+          "sha256": "d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762",
+          "size": 2068504,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/networkx/networkx",
+        "tag": "networkx-3.6.1",
+        "notice_paths": [
+          "https://github.com/networkx/networkx/blob/7530809bfa1ea7ed6fdf918a4d1431488953cb1f/LICENSE.txt",
+          "https://github.com/networkx/networkx/tree/7530809bfa1ea7ed6fdf918a4d1431488953cb1f"
+        ],
+        "archive_notice_paths": [
+          "networkx-3.6.1/LICENSE.txt",
+          "networkx-3.6.1.dist-info/licenses/LICENSE.txt"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "7530809bfa1ea7ed6fdf918a4d1431488953cb1f"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "opentelemetry-api-1-44-0-external-install",
+      "package": "opentelemetry-api",
+      "version": "1.44.0",
+      "license_expression": "Apache-2.0",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/opentelemetry-api/1.44.0/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "opentelemetry_api-1.44.0.tar.gz",
+          "sha256": "67647e5e9566edcf421166fdf022b3537f818635daa852b289e34604dc6fb33a",
+          "size": 72406,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "opentelemetry_api-1.44.0-py3-none-any.whl",
+          "sha256": "94b98c893a91b88657eaac1e3ba89618cdb85be6918196705354f34728b2cdef",
+          "size": 60018,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/open-telemetry/opentelemetry-python",
+        "tag": "v1.44.0",
+        "notice_paths": [
+          "https://github.com/open-telemetry/opentelemetry-python/blob/53a5a40c9604583c501bcf13970a635f00e62df4/LICENSE",
+          "https://github.com/open-telemetry/opentelemetry-python/tree/53a5a40c9604583c501bcf13970a635f00e62df4"
+        ],
+        "archive_notice_paths": [
+          "opentelemetry_api-1.44.0/LICENSE",
+          "opentelemetry_api-1.44.0.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "53a5a40c9604583c501bcf13970a635f00e62df4"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "opt-einsum-3-4-0-external-install",
+      "package": "opt-einsum",
+      "version": "3.4.0",
+      "license_expression": "MIT",
+      "python_requires": ">=3.8",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/opt-einsum/3.4.0/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "opt_einsum-3.4.0.tar.gz",
+          "sha256": "96ca72f1b886d148241348783498194c577fa30a8faac108586b14f1ba4473ac",
+          "size": 63004,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "opt_einsum-3.4.0-py3-none-any.whl",
+          "sha256": "69bb92469f86a1565195ece4ac0323943e83477171b91d24c35afe028a90d7cd",
+          "size": 71932,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/dgasmith/opt_einsum",
+        "tag": "v3.4.0",
+        "notice_paths": [
+          "https://github.com/dgasmith/opt_einsum/blob/c15aec2c7dbbcaf5b9790b980f699bf295baa7d9/LICENSE",
+          "https://github.com/dgasmith/opt_einsum/tree/c15aec2c7dbbcaf5b9790b980f699bf295baa7d9"
+        ],
+        "archive_notice_paths": [
+          "opt_einsum-3.4.0/LICENSE",
+          "opt_einsum-3.4.0.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "c15aec2c7dbbcaf5b9790b980f699bf295baa7d9"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "osmnx-2-1-1-external-install",
+      "package": "osmnx",
+      "version": "2.1.1",
+      "license_expression": "MIT",
+      "python_requires": ">=3.11",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/osmnx/2.1.1/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "osmnx-2.1.1.tar.gz",
+          "sha256": "0785166487d4d8da5a551dac3d1562fe114fb39f3bf66f261c8b4d60baee9295",
+          "size": 90368,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "osmnx-2.1.1-py3-none-any.whl",
+          "sha256": "6680c98312a8c327dea01da8ec59328bf1d7b0e0cab42db6ce500d0cb83b87e5",
+          "size": 104711,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/gboeing/osmnx",
+        "tag": "v2.1.1",
+        "notice_paths": [
+          "https://github.com/gboeing/osmnx/blob/2fc39cb2792ff869881b99f724a2d97f0e958667/LICENSE.txt",
+          "https://github.com/gboeing/osmnx/tree/2fc39cb2792ff869881b99f724a2d97f0e958667"
+        ],
+        "archive_notice_paths": [
+          "osmnx-2.1.1/LICENSE.txt",
+          "osmnx-2.1.1.dist-info/licenses/LICENSE.txt"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "2fc39cb2792ff869881b99f724a2d97f0e958667"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "platformdirs-4-5-1-external-install",
+      "package": "platformdirs",
+      "version": "4.5.1",
+      "license_expression": "MIT",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/platformdirs/4.5.1/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "platformdirs-4.5.1.tar.gz",
+          "sha256": "61d5cdcc6065745cdd94f0f878977f8de9437be93de97c1c12f853c9c0cdcbda",
+          "size": 21715,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "platformdirs-4.5.1-py3-none-any.whl",
+          "sha256": "d03afa3963c806a9bed9d5125c8f4cb2fdaf74a55ab60e5d59b3fde758104d31",
+          "size": 18731,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/tox-dev/platformdirs",
+        "tag": "4.5.1",
+        "notice_paths": [
+          "https://github.com/tox-dev/platformdirs/blob/e4dbdb8c8ed8e448b7cdbbdce4a4ff5c54c5d685/LICENSE",
+          "https://github.com/tox-dev/platformdirs/tree/e4dbdb8c8ed8e448b7cdbbdce4a4ff5c54c5d685"
+        ],
+        "archive_notice_paths": [
+          "platformdirs-4.5.1/LICENSE",
+          "platformdirs-4.5.1.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "e4dbdb8c8ed8e448b7cdbbdce4a4ff5c54c5d685"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "pooch-1-9-0-external-install",
+      "package": "pooch",
+      "version": "1.9.0",
+      "license_expression": "BSD-3-Clause",
+      "python_requires": ">=3.9",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/pooch/1.9.0/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "pooch-1.9.0.tar.gz",
+          "sha256": "de46729579b9857ffd3e741987a2f6d5e0e03219892c167c6578c0091fb511ed",
+          "size": 61788,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "pooch-1.9.0-py3-none-any.whl",
+          "sha256": "f265597baa9f760d25ceb29d0beb8186c243d6607b0f60b83ecf14078dbc703b",
+          "size": 67175,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/fatiando/pooch",
+        "tag": "v1.9.0",
+        "notice_paths": [
+          "https://github.com/fatiando/pooch/blob/6aab6f90569774d335edb7197729005c9e99f7c1/LICENSE.txt",
+          "https://github.com/fatiando/pooch/blob/6aab6f90569774d335edb7197729005c9e99f7c1/AUTHORS.md",
+          "https://github.com/fatiando/pooch/tree/6aab6f90569774d335edb7197729005c9e99f7c1"
+        ],
+        "archive_notice_paths": [
+          "pooch-1.9.0/LICENSE.txt",
+          "pooch-1.9.0.dist-info/licenses/AUTHORS.md",
+          "pooch-1.9.0.dist-info/licenses/LICENSE.txt"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "6aab6f90569774d335edb7197729005c9e99f7c1"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "proglog-0-1-12-external-install",
+      "package": "proglog",
+      "version": "0.1.12",
+      "license_expression": "MIT",
+      "python_requires": null,
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/proglog/0.1.12/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "proglog-0.1.12.tar.gz",
+          "sha256": "361ee074721c277b89b75c061336cb8c5f287c92b043efa562ccf7866cda931c",
+          "size": 8794,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "proglog-0.1.12-py3-none-any.whl",
+          "sha256": "ccaafce51e80a81c65dc907a460c07ccb8ec1f78dc660cfd8f9ec3a22f01b84c",
+          "size": 6337,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/Edinburgh-Genome-Foundry/proglog",
+        "tag": "v0.1.12",
+        "notice_paths": [
+          "https://github.com/Edinburgh-Genome-Foundry/proglog/blob/0e38f134beded47852e931fb25e5c853a23d7ab0/LICENSE",
+          "https://github.com/Edinburgh-Genome-Foundry/proglog/tree/0e38f134beded47852e931fb25e5c853a23d7ab0"
+        ],
+        "archive_notice_paths": [
+          "proglog-0.1.12/LICENSE",
+          "proglog-0.1.12.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "0e38f134beded47852e931fb25e5c853a23d7ab0"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "pydantic-2-12-5-external-install",
+      "package": "pydantic",
+      "version": "2.12.5",
+      "license_expression": "MIT",
+      "python_requires": ">=3.9",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/pydantic/2.12.5/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "pydantic-2.12.5.tar.gz",
+          "sha256": "4d351024c75c0f085a9febbb665ce8c0c6ec5d30e903bdb6394b7ede26aebb49",
+          "size": 821591,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "pydantic-2.12.5-py3-none-any.whl",
+          "sha256": "e561593fccf61e8a20fc46dfc2dfe075b8be7d0188df33f221ad1f0139180f9d",
+          "size": 463580,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/pydantic/pydantic",
+        "tag": "v2.12.5",
+        "notice_paths": [
+          "https://github.com/pydantic/pydantic/blob/bd2d0dd0137dfa1a8fdff2529b9dfb1547980150/LICENSE",
+          "https://github.com/pydantic/pydantic/tree/bd2d0dd0137dfa1a8fdff2529b9dfb1547980150"
+        ],
+        "archive_notice_paths": [
+          "pydantic-2.12.5/LICENSE",
+          "pydantic-2.12.5.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "bd2d0dd0137dfa1a8fdff2529b9dfb1547980150"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "pyparsing-3-3-2-external-install",
+      "package": "pyparsing",
+      "version": "3.3.2",
+      "license_expression": "MIT",
+      "python_requires": ">=3.9",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/pyparsing/3.3.2/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "pyparsing-3.3.2.tar.gz",
+          "sha256": "c777f4d763f140633dcb6d8a3eda953bf7a214dc4eff598413c070bcdc117cbc",
+          "size": 6851574,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "pyparsing-3.3.2-py3-none-any.whl",
+          "sha256": "850ba148bd908d7e2411587e247a1e4f0327839c40e2e5e6d05a007ecc69911d",
+          "size": 122781,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/pyparsing/pyparsing",
+        "tag": "3.3.2",
+        "notice_paths": [
+          "https://github.com/pyparsing/pyparsing/blob/fa24016d953353f8ba566abb5c8fc12e1d07556c/LICENSE",
+          "https://github.com/pyparsing/pyparsing/tree/fa24016d953353f8ba566abb5c8fc12e1d07556c"
+        ],
+        "archive_notice_paths": [
+          "pyparsing-3.3.2/LICENSE",
+          "pyparsing-3.3.2.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "fa24016d953353f8ba566abb5c8fc12e1d07556c"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "python-dotenv-1-2-1-external-install",
+      "package": "python-dotenv",
+      "version": "1.2.1",
+      "license_expression": "BSD-3-Clause",
+      "python_requires": ">=3.9",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/python-dotenv/1.2.1/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "python_dotenv-1.2.1.tar.gz",
+          "sha256": "42667e897e16ab0d66954af0e60a9caa94f0fd4ecf3aaf6d2d260eec1aa36ad6",
+          "size": 44221,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "python_dotenv-1.2.1-py3-none-any.whl",
+          "sha256": "b81ee9561e9ca4004139c6cbba3a238c32b03e4894671e181b671e8cb8425d61",
+          "size": 21230,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/theskumar/python-dotenv",
+        "tag": "v1.2.1",
+        "notice_paths": [
+          "https://github.com/theskumar/python-dotenv/blob/eaf2a9129ccec6febda0f741eb3bb852c3f947bd/LICENSE",
+          "https://github.com/theskumar/python-dotenv/blob/eaf2a9129ccec6febda0f741eb3bb852c3f947bd/docs/license.md",
+          "https://github.com/theskumar/python-dotenv/tree/eaf2a9129ccec6febda0f741eb3bb852c3f947bd"
+        ],
+        "archive_notice_paths": [
+          "python_dotenv-1.2.1/LICENSE",
+          "python_dotenv-1.2.1/docs/license.md",
+          "python_dotenv-1.2.1.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "eaf2a9129ccec6febda0f741eb3bb852c3f947bd"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "pyvista-0-48-4-external-install",
+      "package": "pyvista",
+      "version": "0.48.4",
+      "license_expression": "MIT",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/pyvista/0.48.4/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "pyvista-0.48.4.tar.gz",
+          "sha256": "c639dad1bddff5e366d77371f66f783f6e6a0581446810a66439902222d8db07",
+          "size": 2581423,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "pyvista-0.48.4-py3-none-any.whl",
+          "sha256": "a46eda178e10e279afda550c341676a82dcee607c86db74565fa455ac0bd23e2",
+          "size": 2629373,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/pyvista/pyvista",
+        "tag": "v0.48.4",
+        "notice_paths": [
+          "https://github.com/pyvista/pyvista/blob/d91b8b7b9d7b07874a3d95c73a9790b67f5e0f58/LICENSE",
+          "https://github.com/pyvista/pyvista/blob/d91b8b7b9d7b07874a3d95c73a9790b67f5e0f58/AUTHORS.rst",
+          "https://github.com/pyvista/pyvista/tree/d91b8b7b9d7b07874a3d95c73a9790b67f5e0f58"
+        ],
+        "archive_notice_paths": [
+          "pyvista-0.48.4/LICENSE",
+          "pyvista-0.48.4.dist-info/licenses/AUTHORS.rst",
+          "pyvista-0.48.4.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "d91b8b7b9d7b07874a3d95c73a9790b67f5e0f58"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "referencing-0-37-0-external-install",
+      "package": "referencing",
+      "version": "0.37.0",
+      "license_expression": "MIT",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/referencing/0.37.0/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "referencing-0.37.0.tar.gz",
+          "sha256": "44aefc3142c5b842538163acb373e24cce6632bd54bdb01b21ad5863489f50d8",
+          "size": 78036,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "referencing-0.37.0-py3-none-any.whl",
+          "sha256": "381329a9f99628c9069361716891d34ad94af76e461dcb0335825aecc7692231",
+          "size": 26766,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/python-jsonschema/referencing",
+        "tag": "v0.37.0",
+        "notice_paths": [
+          "https://github.com/python-jsonschema/referencing/blob/944ed5a20bc5125f2349156cbdc365daac0e67e6/COPYING",
+          "https://github.com/python-jsonschema/referencing/tree/944ed5a20bc5125f2349156cbdc365daac0e67e6",
+          "https://github.com/python-jsonschema/referencing-suite"
+        ],
+        "archive_notice_paths": [
+          "referencing-0.37.0/COPYING",
+          "referencing-0.37.0/suite/LICENSE",
+          "referencing-0.37.0.dist-info/licenses/COPYING"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "944ed5a20bc5125f2349156cbdc365daac0e67e6"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ],
+      "evidence_blockers": [
+        "The sdist suite/LICENSE comes from the separate referencing-suite submodule; the archive records no submodule commit, so the external source cannot yet be bound to immutable evidence.",
+        "The referencing-suite repository URL is unversioned and retained only as contextual provenance until its exact commit is recorded."
+      ]
+    },
+    {
+      "id": "rich-rst-2-0-1-external-install",
+      "package": "rich-rst",
+      "version": "2.0.1",
+      "license_expression": "MIT",
+      "python_requires": null,
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/rich-rst/2.0.1/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "rich_rst-2.0.1.tar.gz",
+          "sha256": "cbe236ed0901d1ec8427cc6a50bf0a34353ba28ad014dc24def68bfe7f3b9e68",
+          "size": 300570,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "rich_rst-2.0.1-py3-none-any.whl",
+          "sha256": "7ee15f345ce25fa02b582c272a6cdbaf0c21243e38061cea273cff659bf3ef61",
+          "size": 272922,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/wasi-master/rich-rst",
+        "tag": "v2.0.1",
+        "notice_paths": [
+          "https://github.com/wasi-master/rich-rst/blob/7a0e1ad49cdff41708831e50f81d016acd1fed1f/LICENSE",
+          "https://github.com/wasi-master/rich-rst/blob/7a0e1ad49cdff41708831e50f81d016acd1fed1f/rich_rst/_vendor/LICENSES.txt",
+          "https://github.com/wasi-master/rich-rst/tree/7a0e1ad49cdff41708831e50f81d016acd1fed1f",
+          "https://docutils.sourceforge.io/",
+          "https://docutils.sourceforge.io/COPYING.html"
+        ],
+        "archive_notice_paths": [
+          "rich_rst-2.0.1/LICENSE",
+          "rich_rst-2.0.1/rich_rst/_vendor/LICENSES.txt",
+          "rich_rst-2.0.1.dist-info/licenses/LICENSE",
+          "rich_rst-2.0.1.dist-info/licenses/rich_rst/_vendor/LICENSES.txt",
+          "rich_rst/_vendor/LICENSES.txt"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "7a0e1ad49cdff41708831e50f81d016acd1fed1f"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ],
+      "evidence_blockers": [
+        "The vendored Docutils 0.22.4 subset is referenced only through unversioned docutils.sourceforge.io pages; exact source commit/license bytes remain unresolved.",
+        "The external Docutils URLs are retained only as contextual provenance and are not immutable evidence."
+      ]
+    },
+    {
+      "id": "scooby-0-11-2-external-install",
+      "package": "scooby",
+      "version": "0.11.2",
+      "license_expression": "MIT",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/scooby/0.11.2/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "scooby-0.11.2.tar.gz",
+          "sha256": "0575c73636ec4c2587bea1f8a038798ddcb249e02067fae897dac3bf4f4e444d",
+          "size": 242928,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "scooby-0.11.2-py3-none-any.whl",
+          "sha256": "f34c36bbee749b2c55816a080521f216d88304e635017e911c12249607d38c49",
+          "size": 20142,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/banesullivan/scooby",
+        "tag": "v0.11.2",
+        "notice_paths": [
+          "https://github.com/banesullivan/scooby/blob/93816e93aeeea2e6ca5f694862386dc3882b4a8a/LICENSE",
+          "https://github.com/banesullivan/scooby/tree/93816e93aeeea2e6ca5f694862386dc3882b4a8a"
+        ],
+        "archive_notice_paths": [
+          "scooby-0.11.2/LICENSE",
+          "scooby-0.11.2.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "93816e93aeeea2e6ca5f694862386dc3882b4a8a"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "setuptools-83-0-0-external-install",
+      "package": "setuptools",
+      "version": "83.0.0",
+      "license_expression": "MIT",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/setuptools/83.0.0/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "setuptools-83.0.0.tar.gz",
+          "sha256": "025bccbbf0fa05b6192bc64ae1e7b16e001fd6d6d4d5de03c97b1c1ade523bef",
+          "size": 1154254,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "setuptools-83.0.0-py3-none-any.whl",
+          "sha256": "29b23c360f22f414dc7336bb39178cc7bcbf6021ed2733cde173f09dba19abb3",
+          "size": 1008090,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/pypa/setuptools",
+        "tag": "v83.0.0",
+        "notice_paths": [
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/LICENSE",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/packaging/licenses/__init__.py",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/packaging/licenses/_spdx.py",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/config/NOTICE",
+          "https://github.com/pypa/setuptools/blob/6519f728c6f23c992df81a5691ef7655184a20eb/setuptools/config/_validate_pyproject/NOTICE",
+          "https://github.com/pypa/setuptools/tree/6519f728c6f23c992df81a5691ef7655184a20eb"
+        ],
+        "archive_notice_paths": [
+          "setuptools-83.0.0/LICENSE",
+          "setuptools-83.0.0/setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE",
+          "setuptools-83.0.0/setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE",
+          "setuptools-83.0.0/setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE",
+          "setuptools-83.0.0/setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE",
+          "setuptools-83.0.0/setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE",
+          "setuptools-83.0.0/setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE",
+          "setuptools-83.0.0/setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE",
+          "setuptools-83.0.0/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE",
+          "setuptools-83.0.0/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE",
+          "setuptools-83.0.0/setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD",
+          "setuptools-83.0.0/setuptools/_vendor/packaging/licenses/__init__.py",
+          "setuptools-83.0.0/setuptools/_vendor/packaging/licenses/_spdx.py",
+          "setuptools-83.0.0/setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE",
+          "setuptools-83.0.0/setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE",
+          "setuptools-83.0.0/setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt",
+          "setuptools-83.0.0/setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE",
+          "setuptools-83.0.0/setuptools/config/NOTICE",
+          "setuptools-83.0.0/setuptools/config/_validate_pyproject/NOTICE",
+          "setuptools-83.0.0.dist-info/licenses/LICENSE",
+          "setuptools/_vendor/autocommand-2.2.2.dist-info/LICENSE",
+          "setuptools/_vendor/backports.tarfile-1.2.0.dist-info/LICENSE",
+          "setuptools/_vendor/importlib_metadata-8.7.1.dist-info/licenses/LICENSE",
+          "setuptools/_vendor/jaraco.text-4.0.0.dist-info/LICENSE",
+          "setuptools/_vendor/jaraco_context-6.1.0.dist-info/licenses/LICENSE",
+          "setuptools/_vendor/jaraco_functools-4.4.0.dist-info/licenses/LICENSE",
+          "setuptools/_vendor/more_itertools-10.8.0.dist-info/licenses/LICENSE",
+          "setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE",
+          "setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.APACHE",
+          "setuptools/_vendor/packaging-26.0.dist-info/licenses/LICENSE.BSD",
+          "setuptools/_vendor/packaging/licenses/__init__.py",
+          "setuptools/_vendor/packaging/licenses/_spdx.py",
+          "setuptools/_vendor/platformdirs-4.4.0.dist-info/licenses/LICENSE",
+          "setuptools/_vendor/tomli-2.4.0.dist-info/licenses/LICENSE",
+          "setuptools/_vendor/wheel-0.46.3.dist-info/licenses/LICENSE.txt",
+          "setuptools/_vendor/zipp-3.23.0.dist-info/licenses/LICENSE",
+          "setuptools/config/NOTICE",
+          "setuptools/config/_validate_pyproject/NOTICE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "6519f728c6f23c992df81a5691ef7655184a20eb"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "termcolor-3-3-0-external-install",
+      "package": "termcolor",
+      "version": "3.3.0",
+      "license_expression": "MIT",
+      "python_requires": ">=3.10",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/termcolor/3.3.0/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "termcolor-3.3.0.tar.gz",
+          "sha256": "348871ca648ec6a9a983a13ab626c0acce02f515b9e1983332b17af7979521c5",
+          "size": 14434,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "termcolor-3.3.0-py3-none-any.whl",
+          "sha256": "cf642efadaf0a8ebbbf4bc7a31cec2f9b5f21a9f726f4ccbb08192c9c26f43a5",
+          "size": 7734,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/termcolor/termcolor",
+        "tag": "3.3.0",
+        "notice_paths": [
+          "https://github.com/termcolor/termcolor/blob/0980eb52aa867fc32f70859a61c0609501b73a99/COPYING.txt",
+          "https://github.com/termcolor/termcolor/tree/0980eb52aa867fc32f70859a61c0609501b73a99"
+        ],
+        "archive_notice_paths": [
+          "termcolor-3.3.0/COPYING.txt",
+          "termcolor-3.3.0.dist-info/licenses/COPYING.txt"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "0980eb52aa867fc32f70859a61c0609501b73a99"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "typing-inspection-0-4-2-external-install",
+      "package": "typing-inspection",
+      "version": "0.4.2",
+      "license_expression": "MIT",
+      "python_requires": ">=3.9",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/typing-inspection/0.4.2/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "typing_inspection-0.4.2.tar.gz",
+          "sha256": "ba561c48a67c5958007083d386c3295464928b01faa735ab8547c5692e87f464",
+          "size": 75949,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "typing_inspection-0.4.2-py3-none-any.whl",
+          "sha256": "4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7",
+          "size": 14611,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/pydantic/typing-inspection",
+        "tag": "v0.4.2",
+        "notice_paths": [
+          "https://github.com/pydantic/typing-inspection/blob/8db011350942f33ac4b5d7db60d4d9ea83ab480f/LICENSE",
+          "https://github.com/pydantic/typing-inspection/tree/8db011350942f33ac4b5d7db60d4d9ea83ab480f"
+        ],
+        "archive_notice_paths": [
+          "typing_inspection-0.4.2/LICENSE",
+          "typing_inspection-0.4.2.dist-info/licenses/LICENSE"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "8db011350942f33ac4b5d7db60d4d9ea83ab480f"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "urllib3-2-6-3-external-install",
+      "package": "urllib3",
+      "version": "2.6.3",
+      "license_expression": "MIT",
+      "python_requires": ">=3.9",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/urllib3/2.6.3/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "urllib3-2.6.3.tar.gz",
+          "sha256": "1b62b6884944a57dbe321509ab94fd4d3b307075e0c2eae991ac71ee15ad38ed",
+          "size": 435556,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "urllib3-2.6.3-py3-none-any.whl",
+          "sha256": "bf272323e553dfb2e87d9bfd225ca7b0f467b919d7bbd355436d3fd37cb0acd4",
+          "size": 131584,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/urllib3/urllib3",
+        "tag": "2.6.3",
+        "notice_paths": [
+          "https://github.com/urllib3/urllib3/blob/0248277dd7ac0239204889ca991353ad3e3a1ddc/LICENSE.txt",
+          "https://github.com/urllib3/urllib3/tree/0248277dd7ac0239204889ca991353ad3e3a1ddc"
+        ],
+        "archive_notice_paths": [
+          "urllib3-2.6.3/LICENSE.txt",
+          "urllib3-2.6.3.dist-info/licenses/LICENSE.txt"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "0248277dd7ac0239204889ca991353ad3e3a1ddc"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "werkzeug-3-1-5-external-install",
+      "package": "werkzeug",
+      "version": "3.1.5",
+      "license_expression": "BSD-3-Clause",
+      "python_requires": ">=3.9",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/werkzeug/3.1.5/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "werkzeug-3.1.5.tar.gz",
+          "sha256": "6a548b0e88955dd07ccb25539d7d0cc97417ee9e179677d22c7041c8f078ce67",
+          "size": 864754,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "werkzeug-3.1.5-py3-none-any.whl",
+          "sha256": "5111e36e91086ece91f93268bb39b4a35c1e6f1feac762c9c822ded0a4e322dc",
+          "size": 225025,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/pallets/werkzeug",
+        "tag": "3.1.5",
+        "notice_paths": [
+          "https://github.com/pallets/werkzeug/blob/e3d06f4b1f7ff40a63eba78f81d9cda18f805d6d/LICENSE.txt",
+          "https://github.com/pallets/werkzeug/blob/e3d06f4b1f7ff40a63eba78f81d9cda18f805d6d/docs/license.rst",
+          "https://github.com/pallets/werkzeug/tree/e3d06f4b1f7ff40a63eba78f81d9cda18f805d6d"
+        ],
+        "archive_notice_paths": [
+          "werkzeug-3.1.5/LICENSE.txt",
+          "werkzeug-3.1.5/docs/license.rst",
+          "werkzeug-3.1.5.dist-info/licenses/LICENSE.txt"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "e3d06f4b1f7ff40a63eba78f81d9cda18f805d6d"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+      ]
+    },
+    {
+      "id": "wheel-0-46-3-external-install",
+      "package": "wheel",
+      "version": "0.46.3",
+      "license_expression": "MIT",
+      "python_requires": ">=3.9",
+      "target": {
+        "os": "linux",
+        "architecture": "x86_64",
+        "python": {
+          "implementation": "CPython",
+          "version": "3.13"
+        }
+      },
+      "source": {
+        "registry": "https://pypi.org/simple",
+        "metadata_url": "https://pypi.org/pypi/wheel/0.46.3/json"
+      },
+      "artifacts": [
+        {
+          "kind": "sdist",
+          "filename": "wheel-0.46.3.tar.gz",
+          "sha256": "e3e79874b07d776c40bd6033f8ddf76a7dad46a7b8aa1b2787a83083519a1803",
+          "size": 60605,
+          "platform_tags": []
+        },
+        {
+          "kind": "wheel",
+          "filename": "wheel-0.46.3-py3-none-any.whl",
+          "sha256": "4b399d56c9d9338230118d705d9737a2a468ccca63d5e813e2a4fc7815d8bc4d",
+          "size": 30557,
+          "platform_tags": [
+            "py3",
+            "none",
+            "any"
+          ]
+        }
+      ],
+      "upstream": {
+        "repository": "https://github.com/pypa/wheel",
+        "tag": "0.46.3",
+        "notice_paths": [
+          "https://github.com/pypa/wheel/blob/8b6fa740a7101edacb42b0f8e83a1b659ff61033/LICENSE.txt",
+          "https://github.com/pypa/wheel/tree/8b6fa740a7101edacb42b0f8e83a1b659ff61033"
+        ],
+        "archive_notice_paths": [
+          "wheel-0.46.3/LICENSE.txt",
+          "wheel-0.46.3.dist-info/licenses/LICENSE.txt"
+        ],
+        "archive_notice_absences": [],
+        "commit_sha": "8b6fa740a7101edacb42b0f8e83a1b659ff61033"
+      },
+      "profiles": [
+        "all"
+      ],
+      "allowed_distribution_modes": [
+        "user_installed",
+        "not_distributed"
+      ],
+      "blocked_distribution_modes": [
+        "bundled_source",
+        "built_companion"
+      ],
+      "blocked_surface_conditions": [
+        "mirrored",
+        "vendored",
+        "container_bundled",
+        "unknown",
+        "unavailable",
+        "conflicting"
+      ],
+      "status": "pending_review",
+      "reviewer": null,
+      "reviewed_at": null,
+      "disposition": "external_dependency_not_redistributed",
+      "ruling": "A_surface_specific_disposition",
+      "rationale": "Permit this exact package, version, expression, source, and frozen profile/artifact identity only for user installation or an explicitly non-distributed profile; keep bundled, built, mirrored, vendored, container-bundled, unknown, and conflicting surfaces blocked until an independent maintainer review records the exact archive evidence.",
+      "evidence_paths": [
+        "docs/context/evidence/dependency_license_batch_2026-09-01.md",
+        "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
       ]
     }
   ]

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ast
+import json
+import re
 import tomllib
 from pathlib import Path
 
@@ -15,12 +17,105 @@ TEST_ROOTS = tuple(
     for relative_path in PROJECT_CONFIG["tool"]["pytest"]["ini_options"]["testpaths"]
 )
 JSONSCHEMA_CORE_REQUIREMENT = "jsonschema>=4.23.0"
+ISSUE_8163_BATCH = {
+    "absl-py": ("2.4.0", "Apache-2.0"),
+    "alembic": ("1.18.4", "MIT"),
+    "attrs": ("25.4.0", "MIT"),
+    "click": ("8.3.1", "BSD-3-Clause"),
+    "cma": ("4.4.4", "BSD-3-Clause"),
+    "cyclopts": ("4.18.0", "Apache-2.0"),
+    "fsspec": ("2026.2.0", "BSD-3-Clause"),
+    "geopandas": ("1.1.4", "BSD-3-Clause"),
+    "idna": ("3.11", "BSD-3-Clause"),
+    "imageio": ("2.37.2", "BSD-2-Clause"),
+    "joblib": ("1.5.3", "BSD-3-Clause"),
+    "jsonschema": ("4.26.0", "MIT"),
+    "jsonschema-specifications": ("2025.9.1", "MIT"),
+    "lazy-loader": ("0.5", "BSD-3-Clause"),
+    "markdown": ("3.10.2", "BSD-3-Clause"),
+    "narwhals": ("2.22.1", "MIT"),
+    "networkx": ("3.6.1", "BSD-3-Clause"),
+    "opentelemetry-api": ("1.44.0", "Apache-2.0"),
+    "opt-einsum": ("3.4.0", "MIT"),
+    "osmnx": ("2.1.1", "MIT"),
+    "platformdirs": ("4.5.1", "MIT"),
+    "pooch": ("1.9.0", "BSD-3-Clause"),
+    "proglog": ("0.1.12", "MIT"),
+    "pydantic": ("2.12.5", "MIT"),
+    "pyparsing": ("3.3.2", "MIT"),
+    "python-dotenv": ("1.2.1", "BSD-3-Clause"),
+    "pyvista": ("0.48.4", "MIT"),
+    "referencing": ("0.37.0", "MIT"),
+    "rich-rst": ("2.0.1", "MIT"),
+    "scooby": ("0.11.2", "MIT"),
+    "setuptools": ("83.0.0", "MIT"),
+    "termcolor": ("3.3.0", "MIT"),
+    "typing-inspection": ("0.4.2", "MIT"),
+    "urllib3": ("2.6.3", "MIT"),
+    "werkzeug": ("3.1.5", "BSD-3-Clause"),
+    "wheel": ("0.46.3", "MIT"),
+}
 
 
 def test_jsonschema_is_declared_as_a_core_dependency() -> None:
     """The schema-validation dependency must not be made optional accidentally."""
     dependencies = PROJECT_CONFIG["project"]["dependencies"]
     assert JSONSCHEMA_CORE_REQUIREMENT in dependencies
+
+
+def test_issue_8163_policy_batch_has_exact_scope_and_fail_closed_surfaces() -> None:
+    """The first license batch stays exact, target-scoped, and pending review."""
+    policy = json.loads(
+        (REPO_ROOT / "scripts/validation/dependency_license_policy.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    rows = {
+        row["package"]: row
+        for row in policy["package_dispositions"]
+        if row["package"] != "llvmlite"
+    }
+
+    assert rows.keys() == ISSUE_8163_BATCH.keys()
+    assert len(rows) == 36
+    for name, (version, expression) in ISSUE_8163_BATCH.items():
+        row = rows[name]
+        assert (row["version"], row["license_expression"]) == (version, expression)
+        assert row["profiles"] == ["all"]
+        assert row["target"] == {
+            "os": "linux",
+            "architecture": "x86_64",
+            "python": {"implementation": "CPython", "version": "3.13"},
+        }
+        assert row["source"] == {
+            "registry": "https://pypi.org/simple",
+            "metadata_url": f"https://pypi.org/pypi/{name}/{version}/json",
+        }
+        assert {artifact["kind"] for artifact in row["artifacts"]} == {"sdist", "wheel"}
+        assert set(row["allowed_distribution_modes"]) == {"not_distributed", "user_installed"}
+        assert set(row["blocked_distribution_modes"]) == {"built_companion", "bundled_source"}
+        assert set(row["blocked_surface_conditions"]) == {
+            "conflicting",
+            "container_bundled",
+            "mirrored",
+            "unknown",
+            "unavailable",
+            "vendored",
+        }
+        assert row["status"] == "pending_review"
+        assert row["reviewer"] is None
+        assert row["reviewed_at"] is None
+        assert re.fullmatch(r"[0-9a-f]{40}", row["upstream"]["commit_sha"])
+        assert all(
+            re.search(r"/(?:blob|tree)/[0-9a-f]{40}(?:/|$)", url)
+            for url in row["upstream"]["notice_paths"]
+            if "/blob/" in url or "/tree/" in url
+        )
+        assert row["upstream"]["archive_notice_paths"]
+        assert row["upstream"]["archive_notice_absences"] == []
+    assert all(
+        rows[name].get("evidence_blockers") for name in ("alembic", "referencing", "rich-rst")
+    )
 
 
 def test_schema_validation_policy_covers_both_configured_test_roots() -> None:

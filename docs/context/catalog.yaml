@@ -64,6 +64,14 @@ entries:
   status: evidence
   freshness: evidence
   area: release_evidence
+- path: docs/context/evidence/dependency_license_batch_2026-09-01.md
+  status: evidence
+  freshness: evidence
+  area: release_evidence
+- path: docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json
+  status: evidence
+  freshness: evidence
+  area: release_evidence
 - path: docs/context/evidence/issue_7600_context_curation_pilot/README.md
   status: evidence
   freshness: evidence
@@ -7459,3 +7467,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json.review.json
+  status: evidence
+  freshness: evidence
+  area: release_evidence

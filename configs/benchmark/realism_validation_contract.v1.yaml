@@ -1,0 +1,76 @@
+# Metadata-only preregistration for issue #8246.
+#
+# This contract defines how a future staged SDD run will be stratified. It does
+# not stage or contain SDD bytes, calibrate a model, or authorize benchmark or
+# paper-facing claims. The real-data lane remains blocked until #6530.
+schema_version: realism_validation_contract.v1
+status: blocked-external-input
+external_data_gate: "#6530"
+claim_boundary: >-
+  preregistered interaction-conditioned held-out pedestrian-model validation
+  contract; no staged-data, calibration, benchmark-ranking, or paper-facing claim
+
+calibration_scenes:
+  - bookstore_calibration
+  - coupa_calibration
+held_out_scenes:
+  - death_circle_held_out
+  - gates_held_out
+
+baseline_arms:
+  - constant_velocity
+  - social_force_default
+  - hsfm_alignment_torque_v1
+  - hsfm_anisotropic_fov_v1
+  - hsfm_ttc_predictive_v1
+  - hsfm_total_force_v1
+  - hsfm_zanlungo_collision_prediction_v1
+
+metric_families:
+  - trajectory_rmse
+  - fundamental_diagram_comparison
+  - lane_formation_comparison
+  - speed_distribution_distance
+  - proxemic_distribution_distance
+
+minimum_event_counts:
+  free_walking: 20
+  ped_ped_interaction: 10
+  obstacle_avoidance: 10
+  robot_approach: 10
+  crossing_conflict: 10
+  overtaking: 10
+  group: 10
+
+promotion_rule:
+  comparator: social_force_default
+  required_metric_families:
+    - trajectory_rmse
+    - fundamental_diagram_comparison
+    - lane_formation_comparison
+  required_interaction_classes:
+    - ped_ped_interaction
+    - crossing_conflict
+    - overtaking
+    - group
+  held_out_only: true
+  min_interaction_improvement: 0.0
+  max_free_walking_regression: 0.05
+
+segmentation:
+  frame_window_s: 0.8
+  frame_stride_s: 0.4
+  minimum_speed_mps: 0.1
+  ped_interaction_distance_m: 2.0
+  crossing_distance_m: 2.0
+  crossing_heading_min_deg: 45.0
+  overtaking_distance_m: 2.0
+  same_direction_cosine: 0.8
+  overtaking_speed_delta_mps: 0.1
+  group_distance_m: 1.5
+  group_min_tracks: 3
+  group_heading_cosine: 0.7
+  obstacle_distance_m: 0.75
+  obstacle_turn_angle_deg: 12.0
+  robot_distance_m: 2.0
+  robot_approach_min_speed_mps: 0.05

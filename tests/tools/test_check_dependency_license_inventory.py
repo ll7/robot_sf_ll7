@@ -9,6 +9,7 @@ import copy
 import hashlib
 import io
 import json
+import os
 import subprocess
 import sys
 import tarfile
@@ -19,12 +20,19 @@ from typing import TYPE_CHECKING
 
 from scripts.tools.check_dependency_license_inventory import (
     SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS,
+    _archive_audit_semantic_issues,
+    _archive_notice_paths,
+    _candidate_receipt_semantic_issues,
     _effective_profile_coverage,
     _exact_policy_coverage_failures,
     _github_notice_reference,
     _match_package_disposition,
+    _policy_archive_notice_kinds,
+    _policy_archive_notice_mapping,
     _policy_records,
     _policy_source_matches,
+    _report_content_digest,
+    _upstream_tags_semantic_issues,
     build_inventory,
     check_report_freshness,
     main,
@@ -1200,6 +1208,499 @@ def test_issue_8163_receipt_summaries_are_bound_fail_closed(tmp_path: Path) -> N
         assert any(
             expected in issue for issue in validate_dependency_license_receipt(root, tampered_path)
         )
+
+
+def test_issue_8163_rehashed_audit_mutations_still_fail_semantically(  # noqa: PLR0915
+    tmp_path: Path,
+) -> None:
+    """Receipt file hashes cannot launder forged archive or upstream evidence."""
+    root = Path(__file__).resolve().parents[2]
+    receipt_path = root / "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    policy = json.loads(
+        (root / "scripts/validation/dependency_license_policy.v1.json").read_text(encoding="utf-8")
+    )
+    rows = [
+        row
+        for row in policy["package_dispositions"]
+        if "docs/context/evidence/dependency_license_batch_2026-09-01.md"
+        in row.get("evidence_paths", [])
+    ]
+    archive = {
+        "schema_version": "robot-sf.issue-8163-archive-audit.v1",
+        "packages": [
+            {
+                "name": row["package"],
+                "version": row["version"],
+                "expected_expression": row["license_expression"],
+                "source": {
+                    key: value for key, value in row["source"].items() if key != "metadata_url"
+                },
+                "pypi_metadata_url": row["source"]["metadata_url"],
+                "pypi_info": {
+                    "name": row["package"],
+                    "version": row["version"],
+                    "requires_python": row["python_requires"],
+                    "license": None,
+                    "classifiers": [],
+                    "home_page": None,
+                    "project_urls": {},
+                },
+                "artifacts": [
+                    {
+                        **artifact,
+                        "url": "https://files.example/" + artifact["filename"],
+                        "archive_path": "",
+                        "member_count": 1,
+                        "notice_paths": [
+                            path
+                            for path, kind in _policy_archive_notice_kinds(row)
+                            if kind == artifact["kind"]
+                        ],
+                        "metadata_path": "",
+                        "metadata_license": None,
+                        "metadata_project_urls": {},
+                        "metadata_fields": {},
+                    }
+                    for artifact in row["artifacts"]
+                ],
+            }
+            for row in rows
+        ],
+        "failures": [],
+    }
+    tags = []
+    for row in rows:
+        checks = []
+        for archive_path, archive_kind, notice_path, notice_url in _policy_archive_notice_mapping(
+            row
+        ):
+            checks.append(
+                {
+                    "archive_kind": archive_kind,
+                    "archive_path": archive_path,
+                    "review_url": notice_url,
+                    "status": "present",
+                    "upstream_path": notice_path,
+                }
+            )
+        tags.append(
+            {
+                "name": row["package"],
+                "version": row["version"],
+                "repository": row["upstream"]["repository"],
+                "tag": row["upstream"]["tag"],
+                "tags": [row["upstream"]["tag"]],
+                "matching_tags": [row["upstream"]["tag"]],
+                "errors": [],
+                "source_url_key": "Source",
+                "notice_checks": checks,
+            }
+        )
+
+    assert _archive_audit_semantic_issues(archive, rows) == []
+    assert _upstream_tags_semantic_issues(tags, rows, archive) == []
+
+    for package_name in ("absl-py", "python-dotenv", "rich-rst"):
+        forged = copy.deepcopy(archive)
+        package = next(item for item in forged["packages"] if item["name"] == package_name)
+        package["artifacts"][0]["notice_paths"], package["artifacts"][1]["notice_paths"] = (
+            package["artifacts"][1]["notice_paths"],
+            package["artifacts"][0]["notice_paths"],
+        )
+        assert _archive_audit_semantic_issues(forged, rows)
+
+    referencing_row = next(row for row in rows if row["package"] == "referencing")
+    referencing_package = next(
+        package for package in archive["packages"] if package["name"] == "referencing"
+    )
+    assert "referencing-0.37.0/suite/LICENSE" in _archive_notice_paths(referencing_package)
+    referencing_tags = next(item for item in tags if item["name"] == "referencing")
+    assert all(
+        check["archive_path"] != "referencing-0.37.0/suite/LICENSE"
+        for check in referencing_tags["notice_checks"]
+    )
+    fabricated = copy.deepcopy(tags)
+    fabricated_row = next(item for item in fabricated if item["name"] == "referencing")
+    fabricated_row["notice_checks"].append(
+        {
+            "archive_kind": "sdist",
+            "archive_path": "referencing-0.37.0/suite/LICENSE",
+            "upstream_path": "suite/LICENSE",
+            "status": "present",
+            "review_url": (
+                referencing_row["upstream"]["repository"]
+                + "/blob/"
+                + referencing_row["upstream"]["commit_sha"]
+                + "/suite/LICENSE"
+            ),
+        }
+    )
+    assert _upstream_tags_semantic_issues(fabricated, rows, archive)
+
+    def write_json(name: str, value: object) -> Path:
+        path = tmp_path / name
+        path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+        return path
+
+    archive_path = write_json("archive-audit.json", archive)
+    tags_path = write_json("upstream-tags.json", tags)
+    receipt["archive_audit"]["path"] = f"operator-local:{archive_path}"
+    receipt["archive_audit"]["sha256"] = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+    receipt["archive_audit"]["upstream_tags_path"] = f"operator-local:{tags_path}"
+    receipt["archive_audit"]["upstream_tags_sha256"] = hashlib.sha256(
+        tags_path.read_bytes()
+    ).hexdigest()
+
+    archive_forged = copy.deepcopy(receipt)
+    archive_forged_data = copy.deepcopy(archive)
+    archive_forged_data["packages"][0]["expected_expression"] = "MIT"
+    archive_forged_path = write_json("archive-audit-forged.json", archive_forged_data)
+    archive_forged["archive_audit"]["path"] = f"operator-local:{archive_forged_path}"
+    archive_forged["archive_audit"]["sha256"] = hashlib.sha256(
+        archive_forged_path.read_bytes()
+    ).hexdigest()
+    archive_forged_receipt = write_json("receipt-forged-archive.json", archive_forged)
+    archive_issues = validate_dependency_license_receipt(root, archive_forged_receipt)
+    assert any("archive audit license expression differs" in issue for issue in archive_issues)
+    assert not any("archive_audit SHA-256 differs" in issue for issue in archive_issues)
+
+    tags_forged = copy.deepcopy(receipt)
+    tags_forged_data = copy.deepcopy(tags)
+    tags_forged_data[0]["repository"] = "https://github.com/attacker/forged"
+    tags_forged_path = write_json("upstream-tags-forged.json", tags_forged_data)
+    tags_forged["archive_audit"]["upstream_tags_path"] = f"operator-local:{tags_forged_path}"
+    tags_forged["archive_audit"]["upstream_tags_sha256"] = hashlib.sha256(
+        tags_forged_path.read_bytes()
+    ).hexdigest()
+    tags_forged_receipt = write_json("receipt-forged-tags.json", tags_forged)
+    tags_issues = validate_dependency_license_receipt(root, tags_forged_receipt)
+    assert any("upstream repository differs" in issue for issue in tags_issues), tags_issues
+    assert not any("upstream_tags SHA-256 differs" in issue for issue in tags_issues)
+
+    for name, mutate, expected in (
+        (
+            "archive-extra",
+            lambda value: value["packages"][0].__setitem__("forged", True),
+            "archive audit package",
+        ),
+        (
+            "pypi-extra",
+            lambda value: value["packages"][0]["pypi_info"].__setitem__("forged", True),
+            "PyPI metadata schema",
+        ),
+        (
+            "pypi-requires-python",
+            lambda value: value["packages"][0]["pypi_info"].__setitem__("requires_python", ">=0"),
+            "PyPI requires_python differs",
+        ),
+        (
+            "artifact-platform",
+            lambda value: value["packages"][0]["artifacts"][0].__setitem__(
+                "platform_tags", ["forged"]
+            ),
+            "artifact 0 platform_tags differs",
+        ),
+        (
+            "archive-malformed-version",
+            lambda value: value["packages"][0].__setitem__("version", []),
+            "unexpected package identity",
+        ),
+    ):
+        forged = copy.deepcopy(receipt)
+        forged_data = copy.deepcopy(archive)
+        mutate(forged_data)
+        forged_path = write_json(f"{name}.json", forged_data)
+        forged["archive_audit"]["path"] = f"operator-local:{forged_path}"
+        forged["archive_audit"]["sha256"] = hashlib.sha256(forged_path.read_bytes()).hexdigest()
+        forged_receipt = write_json(f"receipt-{name}.json", forged)
+        forged_issues = validate_dependency_license_receipt(root, forged_receipt)
+        assert any(expected in issue for issue in forged_issues), forged_issues
+
+    tag_extra = copy.deepcopy(receipt)
+    tag_extra_data = copy.deepcopy(tags)
+    tag_extra_data[0]["forged"] = True
+    tag_extra_path = write_json("upstream-tags-extra.json", tag_extra_data)
+    tag_extra["archive_audit"]["upstream_tags_path"] = f"operator-local:{tag_extra_path}"
+    tag_extra["archive_audit"]["upstream_tags_sha256"] = hashlib.sha256(
+        tag_extra_path.read_bytes()
+    ).hexdigest()
+    tag_extra_receipt = write_json("receipt-upstream-tags-extra.json", tag_extra)
+    assert any(
+        "upstream tags row 0 has unclassified fields" in issue
+        for issue in validate_dependency_license_receipt(root, tag_extra_receipt)
+    )
+
+    tag_path_forged = copy.deepcopy(receipt)
+    tag_path_data = copy.deepcopy(tags)
+    tag_path_data[0]["notice_checks"][0]["review_url"] = (
+        rows[0]["upstream"]["repository"] + "/blob/" + rows[0]["upstream"]["commit_sha"] + "/FORGED"
+    )
+    tag_path = write_json("upstream-tags-path-forged.json", tag_path_data)
+    tag_path_forged["archive_audit"]["upstream_tags_path"] = f"operator-local:{tag_path}"
+    tag_path_forged["archive_audit"]["upstream_tags_sha256"] = hashlib.sha256(
+        tag_path.read_bytes()
+    ).hexdigest()
+    tag_path_receipt = write_json("receipt-upstream-tags-path.json", tag_path_forged)
+    assert any(
+        "notice URL path differs from policy" in issue
+        for issue in validate_dependency_license_receipt(root, tag_path_receipt)
+    )
+
+
+def test_issue_8163_receipt_paths_reject_traversal_and_symlinks(tmp_path: Path) -> None:
+    """Operator-local evidence paths cannot escape lexically or through symlinks."""
+    root = Path(__file__).resolve().parents[2]
+    receipt_path = root / "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    traversal = copy.deepcopy(receipt)
+    traversal["archive_audit"]["path"] = "operator-local:/tmp/../forged/archive.json"
+    traversal_path = tmp_path / "receipt-traversal.json"
+    traversal_path.write_text(json.dumps(traversal, indent=2) + "\n", encoding="utf-8")
+    assert any(
+        "lexical traversal" in issue
+        for issue in validate_dependency_license_receipt(root, traversal_path)
+    )
+
+    target = tmp_path / "archive-target.json"
+    target.write_text("{}\n", encoding="utf-8")
+    symlink = tmp_path / "archive-link.json"
+    os.symlink(target, symlink)
+    linked = copy.deepcopy(receipt)
+    linked["archive_audit"]["path"] = f"operator-local:{symlink}"
+    linked_path = tmp_path / "receipt-symlink.json"
+    linked_path.write_text(json.dumps(linked, indent=2) + "\n", encoding="utf-8")
+    assert any(
+        "archive audit is missing" in issue
+        for issue in validate_dependency_license_receipt(root, linked_path)
+    )
+
+
+def test_issue_8163_cross_repository_notice_mapping_is_exact() -> None:
+    """A vendored notice may use its own immutable repository, but never a swapped tuple."""
+    root = Path(__file__).resolve().parents[2]
+    policy = json.loads(
+        (root / "scripts/validation/dependency_license_policy.v1.json").read_text(encoding="utf-8")
+    )
+    row = next(
+        item
+        for item in policy["package_dispositions"]
+        if item["package"] == "alembic"
+        and "docs/context/evidence/dependency_license_batch_2026-09-01.md"
+        in item.get("evidence_paths", [])
+    )
+    mappings = sorted(_policy_archive_notice_mapping(row))
+    archive = {
+        "schema_version": "robot-sf.issue-8163-archive-audit.v1",
+        "packages": [
+            {
+                "name": row["package"],
+                "version": row["version"],
+                "expected_expression": row["license_expression"],
+                "source": {
+                    key: value for key, value in row["source"].items() if key != "metadata_url"
+                },
+                "pypi_metadata_url": row["source"]["metadata_url"],
+                "pypi_info": {
+                    "name": row["package"],
+                    "version": row["version"],
+                    "requires_python": row["python_requires"],
+                    "license": None,
+                    "classifiers": [],
+                    "home_page": None,
+                    "project_urls": {},
+                },
+                "artifacts": [
+                    {
+                        **artifact,
+                        "url": "https://files.example/" + artifact["filename"],
+                        "archive_path": "",
+                        "member_count": 1,
+                        "notice_paths": [
+                            path for path, kind, _path, _url in mappings if kind == artifact["kind"]
+                        ],
+                        "metadata_path": "",
+                        "metadata_license": None,
+                        "metadata_project_urls": {},
+                        "metadata_fields": {},
+                    }
+                    for artifact in row["artifacts"]
+                ],
+            }
+        ],
+        "failures": [],
+    }
+    tags = [
+        {
+            "name": row["package"],
+            "version": row["version"],
+            "source_url_key": "Source",
+            "repository": row["upstream"]["repository"],
+            "tags": [row["upstream"]["tag"]],
+            "matching_tags": [row["upstream"]["tag"]],
+            "errors": [],
+            "tag": row["upstream"]["tag"],
+            "notice_checks": [
+                {
+                    "archive_kind": kind,
+                    "archive_path": archive_path,
+                    "upstream_path": upstream_path,
+                    "status": "present",
+                    "review_url": review_url,
+                }
+                for archive_path, kind, upstream_path, review_url in mappings
+            ],
+        }
+    ]
+    assert _archive_audit_semantic_issues(archive, [row]) == []
+    assert _upstream_tags_semantic_issues(tags, [row], archive) == []
+
+    forged = copy.deepcopy(tags)
+    forged[0]["notice_checks"][1]["review_url"] = (
+        "https://github.com/FortAwesome/Font-Awesome/blob/" + "0" * 40 + "/LICENSE.txt"
+    )
+    assert _upstream_tags_semantic_issues(forged, [row], archive)
+
+    swapped = copy.deepcopy(tags)
+    (
+        swapped[0]["notice_checks"][0]["archive_path"],
+        swapped[0]["notice_checks"][1]["archive_path"],
+    ) = (
+        swapped[0]["notice_checks"][1]["archive_path"],
+        swapped[0]["notice_checks"][0]["archive_path"],
+    )
+    assert _upstream_tags_semantic_issues(swapped, [row], archive)
+
+
+def test_issue_8163_rehashed_strict_report_rejects_extra_semantics(tmp_path: Path) -> None:
+    """A strict report's content contract remains fail-closed after hash recomputation."""
+    root = Path(__file__).resolve().parents[2]
+    receipt_path = root / "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    report = {
+        "schema_version": "robot-sf.dependency-license-inventory.v1",
+        "candidate_binding": {},
+        "environment": {},
+        "failures": [],
+        "installed_not_locked": [],
+        "packages": [],
+        "policy": {},
+        "profile_manifest": {},
+        "profiles": [],
+        "project": {},
+        "repository_inputs": {},
+        "structural_issues": [],
+        "summary": {},
+        "surface": {},
+        "target": {},
+        "unrepresented_lock_package_dispositions": [],
+        "unrepresented_lock_packages": [],
+        "unexpected_forged_field": "attacker-controlled",
+    }
+    report["report_content_sha256"] = _report_content_digest(report)
+    report_path = tmp_path / "forged-strict-report.json"
+    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    receipt["strict_report"]["path"] = f"operator-local:{report_path}"
+    receipt["strict_report"]["sha256"] = hashlib.sha256(report_path.read_bytes()).hexdigest()
+    forged_receipt = tmp_path / "receipt-forged-strict.json"
+    forged_receipt.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    issues = validate_dependency_license_receipt(root, forged_receipt)
+    assert any("strict report has missing or unclassified fields" in issue for issue in issues)
+    assert not any("strict report SHA-256 differs" in issue for issue in issues)
+
+    canonical = build_inventory(root, distributions=[], selected_profile_ids=["all"])
+    for name, mutate, expected in (
+        ("failures", lambda value: value["failures"].append("forged"), "failures"),
+        ("packages", lambda value: value["packages"].append({}), "packages"),
+        (
+            "environment",
+            lambda value: value["environment"].__setitem__("machine", "forged"),
+            "environment",
+        ),
+        (
+            "repository-inputs",
+            lambda value: value["repository_inputs"].append(
+                {"path": "pyproject.toml", "sha256": "0" * 64}
+            ),
+            "repository_inputs",
+        ),
+    ):
+        forged = copy.deepcopy(canonical)
+        mutate(forged)
+        forged["report_content_sha256"] = _report_content_digest(forged)
+        forged_path = tmp_path / f"strict-{name}.json"
+        forged_path.write_text(json.dumps(forged, indent=2) + "\n", encoding="utf-8")
+        forged_receipt = copy.deepcopy(receipt)
+        forged_receipt["strict_report"]["path"] = f"operator-local:{forged_path}"
+        forged_receipt["strict_report"]["sha256"] = hashlib.sha256(
+            forged_path.read_bytes()
+        ).hexdigest()
+        forged_receipt_path = tmp_path / f"receipt-strict-{name}.json"
+        forged_receipt_path.write_text(
+            json.dumps(forged_receipt, indent=2) + "\n", encoding="utf-8"
+        )
+        semantic_issues = validate_dependency_license_receipt(root, forged_receipt_path)
+        assert any(
+            f"strict report {expected} differs from canonical inventory" in issue
+            for issue in semantic_issues
+        ), semantic_issues
+
+
+def test_issue_8163_candidate_manifest_rejects_rehashed_invalid_member(
+    tmp_path: Path,
+) -> None:
+    """A candidate manifest cannot admit an extra member merely by rehashing it."""
+    _write_inputs(tmp_path)
+    bundle = _write_candidate_bundle(tmp_path)
+    manifest_path = bundle / "candidate-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["members"].append(
+        {
+            "filename": "forged.txt",
+            "kind": "not-a-candidate-kind",
+            "sha256": "0" * 64,
+            "size": 0,
+        }
+    )
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    candidate = build_inventory(
+        tmp_path,
+        distributions=[],
+        selected_profile_ids=["core"],
+        candidate_bundle_path=bundle,
+    )["candidate_binding"]
+    candidate["manifest_path"] = str(manifest_path)
+    candidate["manifest_sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    issues, _bundle, _canonical = _candidate_receipt_semantic_issues(
+        candidate,
+        repo_root=tmp_path,
+        expected_profiles=["core"],
+    )
+    assert any("candidate bundle is invalid" in issue for issue in issues)
+
+
+def test_issue_8163_candidate_receipt_uses_manifest_member_order(tmp_path: Path) -> None:
+    """A canonical candidate receipt validates when its members use manifest order."""
+    _write_inputs(tmp_path)
+    bundle = _write_candidate_bundle(tmp_path)
+    manifest_path = bundle / "candidate-manifest.json"
+    binding = build_inventory(
+        tmp_path,
+        distributions=[],
+        selected_profile_ids=["core"],
+        candidate_bundle_path=bundle,
+    )["candidate_binding"]
+    candidate = copy.deepcopy(binding)
+    candidate["manifest_path"] = str(manifest_path)
+    for member in candidate["members"]:
+        member["path"] = str(bundle / member["filename"])
+    issues, _bundle, canonical = _candidate_receipt_semantic_issues(
+        candidate,
+        repo_root=tmp_path,
+        expected_profiles=["core"],
+    )
+    assert issues == []
+    assert canonical is not None
 
 
 def test_github_notice_reference_requires_an_immutable_commit() -> None:

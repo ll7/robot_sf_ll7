@@ -73,7 +73,9 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from scripts.dev.check_pr_ci_status import (  # noqa: E402
+    _enrich_rest_check_runs,
     _latest_check_runs,
+    _rest_check_runs_to_rollup,
     _rollup_conclusion,
     _rollup_status,
 )
@@ -1562,27 +1564,13 @@ def _rest_check_rollup(
     statuses, status_err = _rest_commit_statuses(owner=owner, name=name, head_sha=head_sha)
     if status_err:
         return [], status_err
-    rollup: list[dict[str, Any]] = []
-    for check in check_runs:
-        name_value = check.get("name")
-        status_value = check.get("status")
-        conclusion_value = check.get("conclusion")
-        reported_head = check.get("head_sha")
-        rollup.append(
-            {
-                "__typename": "CheckRun",
-                "name": name_value,
-                "head_sha": reported_head or head_sha,
-                "status": status_value.upper(),
-                "conclusion": conclusion_value.upper() if isinstance(conclusion_value, str) else "",
-                "startedAt": check.get("started_at"),
-                "completedAt": check.get("completed_at"),
-                "detailsUrl": check.get("details_url"),
-                "html_url": check.get("html_url"),
-                "app": check.get("app") if isinstance(check.get("app"), dict) else {},
-                "context": name_value,
-            }
-        )
+    enriched_check_runs = _enrich_rest_check_runs(check_runs)
+    rollup = _rest_check_runs_to_rollup(enriched_check_runs)
+    for check, projected in zip(enriched_check_runs, rollup, strict=True):
+        projected["head_sha"] = check.get("head_sha") or head_sha
+        projected["html_url"] = check.get("html_url")
+        projected["app"] = check.get("app") if isinstance(check.get("app"), dict) else {}
+        projected["context"] = projected["name"]
     return [*rollup, *statuses], None
 
 

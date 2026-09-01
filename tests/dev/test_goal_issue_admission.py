@@ -70,6 +70,30 @@ def test_check_only_ready_issue_performs_no_write() -> None:
     acquire.assert_not_called()
 
 
+def test_check_only_forwards_prospective_ready_to_live_preflight() -> None:
+    """The readiness gate can opt into a private prospective label evaluation."""
+    with patch(
+        "scripts.dev.goal_issue_admission.issue_implementability.live_issue_report",
+        return_value=_preflight(ready=True),
+    ) as live_report:
+        payload = admit_issue(
+            7611,
+            repo="ll7/robot_sf_ll7",
+            remote="origin",
+            source_ref="origin/main",
+            check_only=True,
+            prospective_ready=True,
+        )
+
+    assert payload["ok"] is True
+    live_report.assert_called_once_with(
+        7611,
+        repo="ll7/robot_sf_ll7",
+        remote="origin",
+        prospective_ready=True,
+    )
+
+
 def test_ready_issue_calls_atomic_claim_once() -> None:
     claim = {"ok": True, "claimed": True, "sha": "abc"}
     with (

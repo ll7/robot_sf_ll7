@@ -2,12 +2,12 @@
 """Gate ``state:ready`` on a fresh live admission check after issue creation.
 
 The discovery write sequence is: create the issue without ``state:ready``, exact-read
-the returned item through the canonical REST owner, run the live
-``goal_issue_admission`` check-only boundary, re-read for drift, and add
-``state:ready`` only after a passing, unclaimed, current check with a verified label
-readback. Any failed, stale, or unavailable check leaves readiness absent and returns
-a stable JSON outcome naming the canonical result. Retries are idempotent and never
-remove labels.
+the returned item through the canonical REST owner, evaluate a private prospective
+``state:ready`` label when no state label exists, run the live ``goal_issue_admission``
+check-only boundary, re-read for drift, and add ``state:ready`` only after a passing,
+unclaimed, current check with a verified label readback. Any failed, stale, or
+unavailable check leaves readiness absent and returns a stable JSON outcome naming the
+canonical result. Retries are idempotent and never remove labels.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from typing import Any
 
 from scripts.dev import gh_issue_rest, gh_pr_label_rest, goal_issue_admission
 from scripts.dev.issue_implementability import READY_LABEL, preflight_body_file
+from scripts.dev.issue_state_taxonomy import state_labels
 
 DEFAULT_REMOTE = "origin"
 DEFAULT_SOURCE_REF = "origin/main"
@@ -99,6 +100,7 @@ def _evaluate_admission(
     repo: str,
     remote: str,
     source_ref: str,
+    prospective_ready: bool = False,
 ) -> dict[str, Any] | None:
     """Run the live admission boundary and return a stop result when not ready."""
     admission = goal_issue_admission.admit_issue(
@@ -107,6 +109,7 @@ def _evaluate_admission(
         remote=remote,
         source_ref=source_ref,
         check_only=True,
+        prospective_ready=prospective_ready,
     )
     preflight = admission.get("preflight")
     if isinstance(preflight, dict):
@@ -178,7 +181,14 @@ def gate_issue(
         )
     fingerprint = _fingerprint(first_read)
 
-    admission_result = _evaluate_admission(number, repo=repo, remote=remote, source_ref=source_ref)
+    prospective_ready = not state_labels(set(first_read.get("labels", [])))
+    admission_result = _evaluate_admission(
+        number,
+        repo=repo,
+        remote=remote,
+        source_ref=source_ref,
+        prospective_ready=prospective_ready,
+    )
     if admission_result is not None:
         return admission_result
 

@@ -406,6 +406,46 @@ def test_live_issue_report_applies_explicit_dependency_packet_gate(tmp_path: Pat
     )
 
 
+def test_live_issue_report_can_evaluate_prospective_ready_without_mutating_issue() -> None:
+    """Prospective readiness is isolated to evaluation and leaves the REST payload unchanged."""
+    issue = _issue(labels=["type:workflow"])
+
+    with (
+        patch("scripts.dev.issue_implementability.fetch_live_issue", return_value=issue),
+        patch("scripts.dev.issue_implementability.issue_claim.status_issue", return_value=_claim()),
+    ):
+        report = live_issue_report(
+            7611,
+            repo=REPOSITORY,
+            remote="origin",
+            prospective_ready=True,
+        )
+
+    assert report["classification"] == "ready"
+    assert report["issue"]["labels"] == ["state:ready", "type:workflow"]
+    assert issue["labels"] == ["type:workflow"]
+
+
+def test_live_issue_report_does_not_override_existing_state_with_prospective_ready() -> None:
+    """An existing execution state remains authoritative during prospective evaluation."""
+    issue = _issue(labels=["state:blocked"])
+
+    with (
+        patch("scripts.dev.issue_implementability.fetch_live_issue", return_value=issue),
+        patch("scripts.dev.issue_implementability.issue_claim.status_issue", return_value=_claim()),
+    ):
+        report = live_issue_report(
+            7611,
+            repo=REPOSITORY,
+            remote="origin",
+            prospective_ready=True,
+        )
+
+    assert report["classification"] == "state_conflict"
+    assert report["admission_reason"] == "state_label_conflict"
+    assert issue["labels"] == ["state:blocked"]
+
+
 def test_decision_heading_is_ignored_after_ruling() -> None:
     body = COMPLETE_BODY + "\n## Decision required\nHistorical choice is resolved.\n"
 

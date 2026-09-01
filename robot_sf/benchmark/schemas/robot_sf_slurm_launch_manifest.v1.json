@@ -1,0 +1,214 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ll7/robot_sf_ll7/schemas/robot_sf_slurm_launch_manifest.v1.json",
+  "title": "Robot SF pre-submit Slurm launch manifest",
+  "description": "Deterministic no-submit intent for the frozen S30/H600 release matrix.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_kind",
+    "status",
+    "no_submit",
+    "execution_status",
+    "submission_status",
+    "evidence_status",
+    "claim_boundary",
+    "campaign_id",
+    "expected_public_commit",
+    "release",
+    "source",
+    "packet",
+    "matrix",
+    "preflight",
+    "inputs",
+    "cells",
+    "aggregate"
+  ],
+  "properties": {
+    "schema_version": {"const": "robot-sf-slurm-launch-manifest.v1"},
+    "manifest_kind": {"const": "pre-submit-launch"},
+    "status": {"const": "pre_submit_intent"},
+    "no_submit": {"const": true},
+    "execution_status": {"const": "not_started"},
+    "submission_status": {"const": "not_submitted"},
+    "evidence_status": {"const": "not-benchmark-evidence"},
+    "claim_boundary": {"type": "string", "minLength": 1},
+    "campaign_id": {"type": "string", "minLength": 1},
+    "expected_public_commit": {"$ref": "#/$defs/commit"},
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["release_id", "release_tag"],
+      "properties": {
+        "release_id": {"type": "string", "minLength": 1},
+        "release_tag": {"type": "string", "minLength": 1}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "resolved_manifest_sha256", "resolved_identity"],
+      "properties": {
+        "commit": {"$ref": "#/$defs/commit"},
+        "resolved_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "resolved_identity": {"$ref": "#/$defs/identityRecord"}
+      }
+    },
+    "packet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["config", "sha256"],
+      "properties": {
+        "config": {"$ref": "#/$defs/relativePath"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "matrix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "planner_arms",
+        "planner_keys",
+        "scenarios",
+        "seeds",
+        "resolved_seeds",
+        "expected_episode_cells",
+        "horizon_steps",
+        "kinematics"
+      ],
+      "properties": {
+        "planner_arms": {"const": 14},
+        "planner_keys": {
+          "type": "array",
+          "minItems": 14,
+          "maxItems": 14,
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "scenarios": {"const": 48},
+        "seeds": {"const": 30},
+        "resolved_seeds": {
+          "type": "array",
+          "minItems": 30,
+          "maxItems": 30,
+          "items": {"type": "integer"},
+          "uniqueItems": true
+        },
+        "expected_episode_cells": {"const": 20160},
+        "horizon_steps": {"const": 600},
+        "kinematics": {
+          "type": "array",
+          "const": ["differential_drive"]
+        }
+      }
+    },
+    "preflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "runner_report", "artifacts"],
+      "properties": {
+        "status": {"const": "valid"},
+        "runner_report": {"$ref": "#/$defs/roleRecord"},
+        "artifacts": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 4,
+          "items": {"$ref": "#/$defs/roleRecord"}
+        }
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 2,
+      "items": {"$ref": "#/$defs/roleRecord"}
+    },
+    "cells": {
+      "type": "array",
+      "minItems": 14,
+      "maxItems": 14,
+      "items": {"$ref": "#/$defs/cell"}
+    },
+    "aggregate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "execution_status", "artifact_contract"],
+      "properties": {
+        "status": {"const": "available"},
+        "execution_status": {"const": "not_started"},
+        "artifact_contract": {"type": "string", "minLength": 1}
+      }
+    }
+  },
+  "$defs": {
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/).+$"
+    },
+    "roleRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "path", "sha256"],
+      "properties": {
+        "role": {"type": "string", "minLength": 1},
+        "path": {"$ref": "#/$defs/relativePath"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "identityRecord": {
+      "allOf": [
+        {"$ref": "#/$defs/roleRecord"},
+        {
+          "type": "object",
+          "properties": {
+            "role": {"const": "resolved_release_identity"}
+          }
+        }
+      ]
+    },
+    "cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "planner_key",
+        "scenario_count",
+        "seed_count",
+        "kinematics",
+        "declared_rows",
+        "instantiated_rows",
+        "row_semantics",
+        "output_root",
+        "artifact_contract",
+        "status",
+        "execution_status"
+      ],
+      "properties": {
+        "key": {"type": "string", "minLength": 1},
+        "planner_key": {"type": "string", "minLength": 1},
+        "scenario_count": {"const": 48},
+        "seed_count": {"const": 30},
+        "kinematics": {"const": "differential_drive"},
+        "declared_rows": {"const": 1440},
+        "instantiated_rows": {"const": 1440},
+        "row_semantics": {"type": "string", "minLength": 1},
+        "output_root": {
+          "type": "string",
+          "pattern": "^slurm_cells/[A-Za-z0-9_.-]+$"
+        },
+        "artifact_contract": {"type": "string", "minLength": 1},
+        "status": {"const": "available"},
+        "execution_status": {"const": "not_started"}
+      }
+    }
+  }
+}

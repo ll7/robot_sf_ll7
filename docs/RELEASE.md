@@ -119,6 +119,37 @@ or otherwise invalid receipt fails closed with
 `status: checkpoint_receipt_rejected` before campaign setup and is not
 benchmark evidence.
 
+### Full-release Slurm launch manifest
+
+For a full release, bind the exact resolved identity and the successful public
+runner preflight into a separate, deterministic launch manifest before handing
+the packet to private operations:
+
+```bash
+uv run python scripts/tools/run_benchmark_release.py \
+  --manifest output/release/release_identity.resolved.json \
+  --mode preflight > output/release/runner_preflight.json
+uv run python scripts/tools/generate_slurm_launch_manifest.py \
+  --resolved-identity output/release/release_identity.resolved.json \
+  --runner-preflight output/release/runner_preflight.json \
+  --output output/benchmarks/camera_ready/<campaign_id>/slurm_launch_manifest.json
+uv run python scripts/tools/slurm_campaign_preflight.py \
+  --manifest output/benchmarks/camera_ready/<campaign_id>/slurm_launch_manifest.json \
+  --public-repo . \
+  --json
+```
+
+`campaign_manifest.json` remains the runner's configuration/provenance
+artifact; it is not the Slurm launch packet. The generated launch manifest is
+an ignored, no-submit intent artifact with 14 planner-arm cells, 48 scenarios,
+30 resolved seeds, H600, differential-drive kinematics, and 1,440 declared
+rows per arm (20,160 total). It contains no scheduler identifier, execution
+result, benchmark-success claim, or publication authorization. Preserve only
+its source/config/input hashes and compact validation receipt when promoting
+durable provenance; keep the generated packet and raw preflight output in the
+worktree-local ignored output tree unless private operations explicitly
+hydrates them from a canonical source.
+
 ## Runtime-Smoke Run Mode
 
 Produce the required `release/release_result.json` with the canonical run-mode

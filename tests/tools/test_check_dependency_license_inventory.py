@@ -19,12 +19,15 @@ from typing import TYPE_CHECKING
 
 from scripts.tools.check_dependency_license_inventory import (
     SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS,
+    _candidate_receipt_semantic_issues,
     _effective_profile_coverage,
     _exact_policy_coverage_failures,
     _github_notice_reference,
     _match_package_disposition,
     _policy_records,
     _policy_source_matches,
+    _report_content_digest,
+    _upstream_notice_path,
     build_inventory,
     check_report_freshness,
     main,
@@ -1200,6 +1203,179 @@ def test_issue_8163_receipt_summaries_are_bound_fail_closed(tmp_path: Path) -> N
         assert any(
             expected in issue for issue in validate_dependency_license_receipt(root, tampered_path)
         )
+
+
+def test_issue_8163_rehashed_audit_mutations_still_fail_semantically(tmp_path: Path) -> None:
+    """Receipt file hashes cannot launder forged archive or upstream evidence."""
+    root = Path(__file__).resolve().parents[2]
+    receipt_path = root / "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    policy = json.loads(
+        (root / "scripts/validation/dependency_license_policy.v1.json").read_text(encoding="utf-8")
+    )
+    rows = [
+        row
+        for row in policy["package_dispositions"]
+        if "docs/context/evidence/dependency_license_batch_2026-09-01.md"
+        in row.get("evidence_paths", [])
+    ]
+    archive = {
+        "schema_version": "robot-sf.issue-8163-archive-audit.v1",
+        "packages": [
+            {
+                "name": row["package"],
+                "version": row["version"],
+                "expected_expression": row["license_expression"],
+                "source": {
+                    key: value for key, value in row["source"].items() if key != "metadata_url"
+                },
+                "pypi_metadata_url": row["source"]["metadata_url"],
+                "pypi_info": {"name": row["package"], "version": row["version"]},
+                "artifacts": row["artifacts"],
+                "archive_notice_paths": row["upstream"]["archive_notice_paths"],
+                "archive_notice_absences": row["upstream"]["archive_notice_absences"],
+            }
+            for row in rows
+        ],
+        "failures": [],
+    }
+    tags = []
+    for row in rows:
+        checks = []
+        for notice_url in row["upstream"]["notice_paths"]:
+            reference = _github_notice_reference(notice_url)
+            notice_path = _upstream_notice_path(notice_url)
+            if reference is not None and notice_path is not None:
+                checks.append(
+                    {
+                        "archive_path": row["upstream"]["archive_notice_paths"][0],
+                        "review_url": notice_url,
+                        "status": "present",
+                        "upstream_path": notice_path,
+                    }
+                )
+        tags.append(
+            {
+                "name": row["package"],
+                "version": row["version"],
+                "repository": row["upstream"]["repository"],
+                "tag": row["upstream"]["tag"],
+                "matching_tags": [row["upstream"]["tag"]],
+                "errors": [],
+                "source_url_key": "Source",
+                "notice_checks": checks,
+            }
+        )
+
+    def write_json(name: str, value: object) -> Path:
+        path = tmp_path / name
+        path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+        return path
+
+    archive_path = write_json("archive-audit.json", archive)
+    tags_path = write_json("upstream-tags.json", tags)
+    receipt["archive_audit"]["path"] = f"operator-local:{archive_path}"
+    receipt["archive_audit"]["sha256"] = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+    receipt["archive_audit"]["upstream_tags_path"] = f"operator-local:{tags_path}"
+    receipt["archive_audit"]["upstream_tags_sha256"] = hashlib.sha256(
+        tags_path.read_bytes()
+    ).hexdigest()
+
+    archive_forged = copy.deepcopy(receipt)
+    archive_forged_data = copy.deepcopy(archive)
+    archive_forged_data["packages"][0]["expected_expression"] = "MIT"
+    archive_forged_path = write_json("archive-audit-forged.json", archive_forged_data)
+    archive_forged["archive_audit"]["path"] = f"operator-local:{archive_forged_path}"
+    archive_forged["archive_audit"]["sha256"] = hashlib.sha256(
+        archive_forged_path.read_bytes()
+    ).hexdigest()
+    archive_forged_receipt = write_json("receipt-forged-archive.json", archive_forged)
+    archive_issues = validate_dependency_license_receipt(root, archive_forged_receipt)
+    assert any("archive audit license expression differs" in issue for issue in archive_issues)
+    assert not any("archive_audit SHA-256 differs" in issue for issue in archive_issues)
+
+    tags_forged = copy.deepcopy(receipt)
+    tags_forged_data = copy.deepcopy(tags)
+    tags_forged_data[0]["repository"] = "https://github.com/attacker/forged"
+    tags_forged_path = write_json("upstream-tags-forged.json", tags_forged_data)
+    tags_forged["archive_audit"]["upstream_tags_path"] = f"operator-local:{tags_forged_path}"
+    tags_forged["archive_audit"]["upstream_tags_sha256"] = hashlib.sha256(
+        tags_forged_path.read_bytes()
+    ).hexdigest()
+    tags_forged_receipt = write_json("receipt-forged-tags.json", tags_forged)
+    tags_issues = validate_dependency_license_receipt(root, tags_forged_receipt)
+    assert any("upstream repository differs" in issue for issue in tags_issues), tags_issues
+    assert not any("upstream_tags SHA-256 differs" in issue for issue in tags_issues)
+
+
+def test_issue_8163_rehashed_strict_report_rejects_extra_semantics(tmp_path: Path) -> None:
+    """A strict report's content contract remains fail-closed after hash recomputation."""
+    root = Path(__file__).resolve().parents[2]
+    receipt_path = root / "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    report = {
+        "schema_version": "robot-sf.dependency-license-inventory.v1",
+        "candidate_binding": {},
+        "environment": {},
+        "failures": [],
+        "installed_not_locked": [],
+        "packages": [],
+        "policy": {},
+        "profile_manifest": {},
+        "profiles": [],
+        "project": {},
+        "repository_inputs": {},
+        "structural_issues": [],
+        "summary": {},
+        "surface": {},
+        "target": {},
+        "unrepresented_lock_package_dispositions": [],
+        "unrepresented_lock_packages": [],
+        "unexpected_forged_field": "attacker-controlled",
+    }
+    report["report_content_sha256"] = _report_content_digest(report)
+    report_path = tmp_path / "forged-strict-report.json"
+    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    receipt["strict_report"]["path"] = f"operator-local:{report_path}"
+    receipt["strict_report"]["sha256"] = hashlib.sha256(report_path.read_bytes()).hexdigest()
+    forged_receipt = tmp_path / "receipt-forged-strict.json"
+    forged_receipt.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    issues = validate_dependency_license_receipt(root, forged_receipt)
+    assert any("strict report has missing or unclassified fields" in issue for issue in issues)
+    assert not any("strict report SHA-256 differs" in issue for issue in issues)
+
+
+def test_issue_8163_candidate_manifest_rejects_rehashed_invalid_member(
+    tmp_path: Path,
+) -> None:
+    """A candidate manifest cannot admit an extra member merely by rehashing it."""
+    _write_inputs(tmp_path)
+    bundle = _write_candidate_bundle(tmp_path)
+    manifest_path = bundle / "candidate-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["members"].append(
+        {
+            "filename": "forged.txt",
+            "kind": "not-a-candidate-kind",
+            "sha256": "0" * 64,
+            "size": 0,
+        }
+    )
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    candidate = build_inventory(
+        tmp_path,
+        distributions=[],
+        selected_profile_ids=["core"],
+        candidate_bundle_path=bundle,
+    )["candidate_binding"]
+    candidate["manifest_path"] = str(manifest_path)
+    candidate["manifest_sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    issues, _bundle, _canonical = _candidate_receipt_semantic_issues(
+        candidate,
+        repo_root=tmp_path,
+        expected_profiles=["core"],
+    )
+    assert any("candidate bundle is invalid" in issue for issue in issues)
 
 
 def test_github_notice_reference_requires_an_immutable_commit() -> None:

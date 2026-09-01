@@ -2473,24 +2473,29 @@ def _step_build_simulation_trace(
         evidence_status=sim.step_visibility_status,
         evidence_reason=sim.step_visibility_reason,
     )
-    state.simulation_step_trace.append(
-        {
-            "step": int(step_idx),
-            "time_s": float((step_idx + 1) * dt_seconds),
-            "robot": {
-                "position": [float(sim.robot_pos[0]), float(sim.robot_pos[1])],
-                "heading": float(sim.heading),
-                "velocity": [float(robot_velocity[0]), float(robot_velocity[1])],
-            },
-            "pedestrians": trace_pedestrians,
-            "planner": planner_payload,
-            "rl": {
-                "reward": float(sim.reward),
-                "terminated": bool(sim.terminated),
-                "truncated": bool(sim.truncated),
-            },
-        }
-    )
+    trace_entry: dict[str, Any] = {
+        "step": int(step_idx),
+        "time_s": float((step_idx + 1) * dt_seconds),
+        "robot": {
+            "position": [float(sim.robot_pos[0]), float(sim.robot_pos[1])],
+            "heading": float(sim.heading),
+            "velocity": [float(robot_velocity[0]), float(robot_velocity[1])],
+        },
+        "pedestrians": trace_pedestrians,
+        "planner": planner_payload,
+        "rl": {
+            "reward": float(sim.reward),
+            "terminated": bool(sim.terminated),
+            "truncated": bool(sim.truncated),
+        },
+    }
+    sim_info = getattr(sim, "info", None)
+    oracle_trace = sim_info.get("oracle_transition_trace") if isinstance(sim_info, dict) else None
+    if oracle_trace is not None:
+        # Preserve the evaluator-only trace as a sibling of planner data. It is
+        # never copied into observations or planner decision payloads.
+        trace_entry["oracle_transition_trace"] = oracle_trace
+    state.simulation_step_trace.append(trace_entry)
     state.previous_trace_robot_pos = np.array(sim.robot_pos, dtype=float, copy=True)
     state.previous_trace_ped_pos = np.array(sim.peds, dtype=float, copy=True)
     state.previous_trace_heading = float(sim.heading)

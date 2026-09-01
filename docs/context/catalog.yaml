@@ -60,6 +60,10 @@ entries:
   status: evidence
   freshness: evidence
   area: research_contract
+- path: docs/context/evidence/issue_8065_goal_force_instrumentation_receipt.v1.json
+  status: evidence
+  freshness: evidence
+  area: research_contract
 - path: docs/context/issue_8205_tracker_adapter_smoke.md
   status: current
   freshness: maintained

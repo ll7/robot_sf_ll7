@@ -27,18 +27,24 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from math import atan2, ceil, cos, isfinite, pi, sin
 from random import sample, uniform
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from loguru import logger
 from pysocialforce import Simulator as PySFSimulator
 from pysocialforce.config import SimulatorConfig as PySFSimConfig
+from pysocialforce.force_trace import (
+    ForceComputationResult,
+    annotate_force_component,
+)
 from pysocialforce.forces import Force as PySFForce
 from pysocialforce.forces import ObstacleForce, SocialForce
 from pysocialforce.simulator import make_forces as pysf_make_forces
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from pysocialforce.scene import PedestrianStepDiagnostics
 
     from robot_sf.common.types import Line2D, PedPose, RobotAction, RobotPose, Vec2D
     from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
@@ -69,6 +75,25 @@ from robot_sf.ped_npc.residual_adversary import (
     ResidualAdversaryConfig,
     build_default_residual_adversary,
 )
+from robot_sf.prediction.oracle_transition_trace import (
+    ORACLE_TRANSITION_TRACE_SCHEMA_VERSION,
+    ControllerMutationFlags,
+    DynamicsParameters,
+    ExactInverseReason,
+    ForceComponentOperationKind,
+    ForceComponentRecord,
+    ForceComponents,
+    ForceOperationKind,
+    ForceStageResult,
+    ForceTimeRobotState,
+    GoalChangeKind,
+    OracleTransitionTraceV1,
+    RobotForceState,
+    SpeedCap,
+    SpeedCapStatus,
+    TransitionBoundary,
+    TransitionBoundaryKind,
+)
 from robot_sf.sim.pedestrian_model_variants import (
     HSFM_ALIGNMENT_TORQUE_V1,
     HSFM_ANISOTROPIC_FOV_V1,
@@ -89,6 +114,25 @@ from robot_sf.sim.pedestrian_speed_tiers import sample_desired_pedestrian_speeds
 
 PYSF_TAU_INDEX = 6
 MIN_HEADING_SPEED_MPS = 1e-6
+
+
+@dataclass(frozen=True, slots=True)
+class _ForceStageArrays:
+    """Internal per-pedestrian force-stage arrays captured for one transition."""
+
+    operation_kind: ForceOperationKind
+    operation: str | None
+    delta_force_xy: np.ndarray | None
+    result_force_xy: np.ndarray | None
+
+
+def _row_xy(values: np.ndarray, row: int) -> tuple[float, float]:
+    """Return one finite two-dimensional row as a typed coordinate tuple.
+
+    Returns:
+        The selected row's ``(x, y)`` values.
+    """
+    return (float(values[row, 0]), float(values[row, 1]))
 
 
 def _heading_from_velocity(velocity_xy: np.ndarray, fallback_heading: float) -> float:
@@ -189,22 +233,52 @@ def _make_ped_forces(
         forces = [f for f in forces if not isinstance(f, ObstacleForce)]
 
     if prf_config.is_active:
-        for robot in robots:
+        for robot_index, robot in enumerate(robots):
             robot_prf_config = replace(prf_config, robot_radius=robot.config.radius)
+
+            def robot_position_provider(current_robot: Robot = robot) -> Vec2D:
+                """Return the current position for one robot force callback."""
+                return current_robot.pos
+
+            def response_multiplier_provider() -> np.ndarray | None:
+                """Return the current optional response-law multipliers."""
+                return pedestrian_response_multipliers
+
+            ped_robot_force = PedRobotForce(
+                robot_prf_config,
+                sim.peds,
+                robot_position_provider,
+                get_ped_response_multipliers=response_multiplier_provider,
+            )
             forces.append(
-                PedRobotForce(
-                    robot_prf_config,
-                    sim.peds,
-                    lambda robot=robot: robot.pos,
-                    get_ped_response_multipliers=lambda: pedestrian_response_multipliers,
-                ),
+                annotate_force_component(
+                    ped_robot_force,
+                    component_id=f"ped_robot:robot_{robot_index}",
+                    component_type="pedestrian_robot",
+                    source_entity=f"robot:{robot_index}",
+                )
             )
 
     if apf_config.is_active:
-        for robot in robots:
+        for robot_index, robot in enumerate(robots):
             robot_apf_config = replace(apf_config, robot_radius=robot.config.radius)
+
+            def robot_pose_provider(current_robot: Robot = robot) -> RobotPose:
+                """Return the current pose for one adversarial force callback."""
+                return current_robot.pose
+
+            adversarial_force = AdversarialPedForce(
+                robot_apf_config,
+                sim.peds,
+                robot_pose_provider,
+            )
             forces.append(
-                AdversarialPedForce(robot_apf_config, sim.peds, lambda robot=robot: robot.pose)
+                annotate_force_component(
+                    adversarial_force,
+                    component_id=f"adversarial:robot_{robot_index}",
+                    component_type="adversarial",
+                    source_entity=f"robot:{robot_index}",
+                )
             )
 
     return forces
@@ -417,6 +491,9 @@ class Simulator:
         peds_have_obstacle_forces: Enable pedestrian-obstacle collision forces.
             Note: Activating increases simulation duration by ~40%.
         last_ped_forces: (init=False, repr=False) Last computed pedestrian forces (K, 2).
+        last_force_computation: (init=False, repr=False) Opt-in typed force registry result.
+        last_step_diagnostics: (init=False, repr=False) Opt-in cap/integration snapshot.
+        last_oracle_transition_traces: (init=False, repr=False) Opt-in per-pedestrian traces.
     """
 
     config: SimulationSettings
@@ -439,6 +516,30 @@ class Simulator:
     pedestrian_model: str = field(init=False)
     _cached_social_force: SocialForce | None = field(init=False, repr=False, default=None)
     _residual_adversary: BoundedResidualAdversary | None = field(
+        init=False, repr=False, default=None
+    )
+    last_force_computation: ForceComputationResult | None = field(
+        init=False, repr=False, default=None
+    )
+    last_step_diagnostics: PedestrianStepDiagnostics | None = field(
+        init=False, repr=False, default=None
+    )
+    last_oracle_transition_traces: tuple[OracleTransitionTraceV1, ...] | None = field(
+        init=False, repr=False, default=None
+    )
+    _oracle_pre_behavior_state: np.ndarray | None = field(init=False, repr=False, default=None)
+    _oracle_post_behavior_state: np.ndarray | None = field(init=False, repr=False, default=None)
+    _oracle_pre_route_indices: tuple[int | None, ...] | None = field(
+        init=False, repr=False, default=None
+    )
+    _oracle_pre_groups: tuple[tuple[int, ...], ...] | None = field(
+        init=False, repr=False, default=None
+    )
+    _oracle_episode_index: int = field(init=False, repr=False, default=0)
+    _oracle_transition_step_index: int = field(init=False, repr=False, default=0)
+    _oracle_episode_id: str = field(init=False, repr=False, default="simulator-episode-0")
+    _last_residual_delta: np.ndarray | None = field(init=False, repr=False, default=None)
+    _last_model_variant_stage: _ForceStageArrays | None = field(
         init=False, repr=False, default=None
     )
 
@@ -509,6 +610,467 @@ class Simulator:
         speeds = np.linalg.norm(velocities, axis=-1)
         velocity_headings = np.arctan2(velocities[:, 1], velocities[:, 0])
         return np.where(speeds <= MIN_HEADING_SPEED_MPS, 0.0, velocity_headings)
+
+    def _oracle_trace_enabled(self) -> bool:
+        """Return whether privileged force-transition capture is explicitly enabled."""
+        return bool(getattr(self.config, "oracle_force_trace_enabled", False))
+
+    def _oracle_route_indices(self) -> tuple[int | None, ...]:
+        """Return best-effort route indices aligned with simulator pedestrian rows."""
+        count = int(self.pysf_state.num_peds)
+        indices: list[int | None] = [None] * count
+        for behavior in self.peds_behaviors:
+            if isinstance(behavior, FollowRouteBehavior):
+                for group_id, pedestrian_ids in behavior.groups.groups.items():
+                    navigator = behavior.navigators.get(group_id)
+                    if navigator is None:
+                        continue
+                    for pedestrian_id in pedestrian_ids:
+                        global_pedestrian_id = behavior.global_ped_offset + pedestrian_id
+                        if 0 <= global_pedestrian_id < count:
+                            indices[global_pedestrian_id] = int(navigator.waypoint_id)
+            elif isinstance(behavior, SinglePedestrianBehavior):
+                for runtime in behavior._runtimes:
+                    if 0 <= runtime.ped_id < count:
+                        indices[runtime.ped_id] = int(runtime.waypoint_index)
+        return tuple(indices)
+
+    def _oracle_group_snapshot(self) -> tuple[tuple[int, ...], ...]:
+        """Return a deterministic group-membership snapshot for mutation checks."""
+        groups = getattr(self.groups, "groups", {})
+        return tuple(
+            sorted(
+                tuple(sorted(int(pedestrian_id) for pedestrian_id in members))
+                for members in groups.values()
+            )
+        )
+
+    def _begin_oracle_transition(self) -> None:
+        """Snapshot the pre-behavior boundary for an opt-in transition."""
+        if not self._oracle_trace_enabled():
+            return
+        self._oracle_pre_behavior_state = np.array(
+            self.pysf_state.pysf_states(),
+            dtype=float,
+            copy=True,
+        )
+        self._oracle_pre_route_indices = self._oracle_route_indices()
+        self._oracle_pre_groups = self._oracle_group_snapshot()
+        self.last_oracle_transition_traces = None
+
+    def _oracle_force_time_robot_state(self) -> ForceTimeRobotState:
+        """Capture every robot pose used by robot-aware force callbacks.
+
+        Returns:
+            The force-time robot state record for all configured robots.
+        """
+        states: list[RobotForceState] = []
+        for robot_index, robot in enumerate(self.robots):
+            position, heading = robot.pose
+            velocity_xy: tuple[float, float] | None = None
+            angular_velocity: float | None = None
+            current_speed = getattr(robot, "current_speed", None)
+            if current_speed is not None:
+                try:
+                    linear_speed = float(current_speed[0])
+                    angular_velocity = float(current_speed[1])
+                    velocity_xy = (
+                        linear_speed * cos(float(heading)),
+                        linear_speed * sin(float(heading)),
+                    )
+                except (TypeError, IndexError, ValueError):
+                    velocity_xy = None
+                    angular_velocity = None
+            states.append(
+                RobotForceState(
+                    robot_index=robot_index,
+                    position_xy=(float(position[0]), float(position[1])),
+                    heading_rad=float(heading),
+                    velocity_xy=velocity_xy,
+                    angular_velocity_rad_s=angular_velocity,
+                )
+            )
+        return ForceTimeRobotState(tuple(states))
+
+    @staticmethod
+    def _oracle_mutation_flags(
+        pre_state: np.ndarray,
+        post_behavior_state: np.ndarray,
+        pre_groups: tuple[tuple[int, ...], ...],
+        post_groups: tuple[tuple[int, ...], ...],
+        behaviors: list[PedestrianBehavior],
+    ) -> ControllerMutationFlags:
+        """Classify controller-side mutations between state and force evaluation.
+
+        Returns:
+            Conservative mutation flags for the transition.
+        """
+        population_changed = pre_state.shape != post_behavior_state.shape
+        if population_changed:
+            position_changed = velocity_changed = goal_redirected = True
+        else:
+            position_changed = not np.array_equal(pre_state[:, 0:2], post_behavior_state[:, 0:2])
+            velocity_changed = not np.array_equal(pre_state[:, 2:4], post_behavior_state[:, 2:4])
+            goal_redirected = not np.array_equal(pre_state[:, 4:6], post_behavior_state[:, 4:6])
+        hold_wait_active = any(
+            bool(
+                getattr(runtime, "waiting_for_advance", False)
+                or getattr(runtime, "proximity_hold_engaged", False)
+            )
+            for behavior in behaviors
+            for runtime in getattr(behavior, "_runtimes", ())
+        )
+        hold_velocity_reset = velocity_changed and (
+            not population_changed
+            and bool(np.any(np.linalg.norm(post_behavior_state[:, 2:4], axis=1) <= 1e-12))
+        )
+        return ControllerMutationFlags(
+            goal_redirected=goal_redirected,
+            hold_velocity_reset=hold_velocity_reset,
+            respawn_reposition=position_changed,
+            population_changed=population_changed,
+            controller_jump_modelled=False,
+            position_changed=position_changed,
+            velocity_changed=velocity_changed,
+            group_changed=pre_groups != post_groups,
+            hold_wait_active=hold_wait_active,
+            role_changed=False,
+        )
+
+    @staticmethod
+    def _oracle_goal_change_kind(
+        pre_state: np.ndarray,
+        post_behavior_state: np.ndarray,
+        pre_route_index: int | None,
+        post_route_index: int | None,
+        mutation_flags: ControllerMutationFlags,
+        row: int,
+    ) -> GoalChangeKind:
+        """Classify a single pedestrian's behavior-time goal transition.
+
+        Returns:
+            The typed goal or route change classification.
+        """
+        if mutation_flags.respawn_reposition and not np.array_equal(
+            pre_state[row, 0:2], post_behavior_state[row, 0:2]
+        ):
+            return GoalChangeKind.RESPAWN
+        if np.array_equal(pre_state[row, 4:6], post_behavior_state[row, 4:6]):
+            return GoalChangeKind.NONE
+        if (
+            pre_route_index is not None
+            and post_route_index is not None
+            and post_route_index == pre_route_index + 1
+        ):
+            return GoalChangeKind.WAYPOINT_ADVANCE
+        return GoalChangeKind.REDIRECT
+
+    def _oracle_stage_for_row(
+        self,
+        stage: _ForceStageArrays | None,
+        row: int,
+    ) -> ForceStageResult:
+        """Convert a captured vector stage into the canonical per-ped record.
+
+        Returns:
+            The selected pedestrian's canonical force-stage record.
+        """
+        if stage is None:
+            return ForceStageResult()
+        result_force = (
+            None if stage.result_force_xy is None else _row_xy(stage.result_force_xy, row)
+        )
+        if stage.operation_kind is ForceOperationKind.ADDITIVE:
+            if stage.delta_force_xy is None or result_force is None:
+                return ForceStageResult(operation_kind=ForceOperationKind.UNKNOWN)
+            return ForceStageResult(
+                operation_kind=stage.operation_kind,
+                operation=stage.operation,
+                delta_force_xy=_row_xy(stage.delta_force_xy, row),
+                result_force_xy=result_force,
+            )
+        return ForceStageResult(
+            operation_kind=stage.operation_kind,
+            operation=stage.operation,
+            result_force_xy=result_force,
+        )
+
+    @staticmethod
+    def _oracle_force_component_records(
+        result: ForceComputationResult,
+        row: int,
+    ) -> tuple[ForceComponentRecord, ...]:
+        """Convert exact low-level arrays into canonical per-ped component records.
+
+        Returns:
+            Ordered component records for one pedestrian.
+        """
+        records: list[ForceComponentRecord] = []
+        for component in result.components:
+            if component.values is None:
+                records.append(
+                    ForceComponentRecord(
+                        component_id=component.component_id,
+                        component_type=component.component_type,
+                        implementation_module=component.implementation_module,
+                        implementation_class=component.implementation_class,
+                        source_entity=component.source_entity,
+                        force_xy=None,
+                        enabled=component.enabled,
+                        config_hash=component.config_hash,
+                        evaluation_order=component.evaluation_order,
+                        operation_kind=ForceComponentOperationKind.UNAVAILABLE,
+                        operation="unavailable",
+                        actor_observable=component.actor_observable,
+                        unavailable_reason="low-level force output unavailable",
+                    )
+                )
+                continue
+            records.append(
+                ForceComponentRecord(
+                    component_id=component.component_id,
+                    component_type=component.component_type,
+                    implementation_module=component.implementation_module,
+                    implementation_class=component.implementation_class,
+                    source_entity=component.source_entity,
+                    force_xy=_row_xy(component.values, row),
+                    enabled=component.enabled,
+                    config_hash=component.config_hash,
+                    evaluation_order=component.evaluation_order,
+                    operation_kind=ForceComponentOperationKind(component.operation.value),
+                    operation=component.operation.value,
+                    actor_observable=component.actor_observable,
+                )
+            )
+        return tuple(records)
+
+    def _oracle_force_components_for_row(
+        self,
+        result: ForceComputationResult,
+        row: int,
+        final_force: np.ndarray,
+        diagnostics: PedestrianStepDiagnostics | None,
+    ) -> tuple[ForceComponents, SpeedCap, DynamicsParameters]:
+        """Build canonical force, cap, and dynamics records for one pedestrian.
+
+        Returns:
+            Typed force, speed-cap, and dynamics records.
+        """
+        values_by_type: dict[str, list[np.ndarray]] = {}
+        for component in result.components:
+            if component.values is not None:
+                values_by_type.setdefault(component.component_type, []).append(
+                    component.values[row]
+                )
+
+        def aggregate(*component_types: str) -> tuple[float, float] | None:
+            values = [
+                value
+                for component_type in component_types
+                for value in values_by_type.get(component_type, [])
+            ]
+            if not values:
+                return None
+            total = np.sum(np.asarray(values, dtype=float), axis=0)
+            return (float(total[0]), float(total[1]))
+
+        base_total = result.base_total[row]
+        residual_stage = None
+        if self._last_residual_delta is not None:
+            residual_stage = _ForceStageArrays(
+                operation_kind=ForceOperationKind.ADDITIVE,
+                operation="additive_delta",
+                delta_force_xy=self._last_residual_delta,
+                result_force_xy=np.asarray(result.base_total, dtype=float)
+                + self._last_residual_delta,
+            )
+        force_components = ForceComponents(
+            social_force_xy=aggregate("social"),
+            goal_force_xy=aggregate("desired"),
+            obstacle_force_xy=aggregate("obstacle"),
+            pedestrian_robot_force_xy=aggregate("pedestrian_robot"),
+            adversarial_force_xy=aggregate("adversarial"),
+            group_force_xy=aggregate("group_coherence", "group_repulsive", "group_gaze"),
+            registry_total_force_xy=(float(base_total[0]), float(base_total[1])),
+            residual_operation=self._oracle_stage_for_row(residual_stage, row),
+            model_variant_operation=self._oracle_stage_for_row(
+                self._last_model_variant_stage,
+                row,
+            ),
+            final_pre_cap_force_xy=(float(final_force[0]), float(final_force[1])),
+            uncapped_velocity_xy=(
+                None if diagnostics is None else _row_xy(diagnostics.uncapped_velocity, row)
+            ),
+            applied_velocity_xy=(
+                None if diagnostics is None else _row_xy(diagnostics.applied_velocity, row)
+            ),
+            component_records=self._oracle_force_component_records(result, row),
+        )
+        if diagnostics is None:
+            speed_cap = SpeedCap(SpeedCapStatus.UNKNOWN)
+        else:
+            status = (
+                SpeedCapStatus.APPLIED
+                if bool(diagnostics.cap_active[row])
+                else SpeedCapStatus.NOT_APPLIED
+            )
+            speed_cap = SpeedCap(
+                status=status,
+                max_speed_mps=float(diagnostics.max_speed_mps[row]),
+                uncapped_speed_mps=float(diagnostics.uncapped_speed_mps[row]),
+                applied_speed_mps=float(np.linalg.norm(diagnostics.applied_velocity[row])),
+            )
+        desired_force = next(
+            (force for force in self.pysf_sim.forces if type(force).__name__ == "DesiredForce"),
+            None,
+        )
+        desired_config = getattr(desired_force, "config", None)
+        max_speeds = getattr(self.pysf_sim.peds, "max_speeds", None)
+        preferred_speed = (
+            None if max_speeds is None else float(np.asarray(max_speeds, dtype=float)[row])
+        )
+        dynamics = DynamicsParameters(
+            preferred_speed_mps=preferred_speed,
+            relaxation_time_s=getattr(desired_config, "relaxation_time", None),
+            desired_force_factor=getattr(desired_config, "factor", None),
+            goal_threshold_m=getattr(desired_config, "goal_threshold", None),
+            goal_threshold_reached=None,
+        )
+        return force_components, speed_cap, dynamics
+
+    def _record_oracle_transition(  # noqa: C901
+        self, post_behavior_state: np.ndarray
+    ) -> None:
+        """Finalize one opt-in canonical oracle trace after pedestrian integration."""
+        if not self._oracle_trace_enabled():
+            return
+        pre_state = self._oracle_pre_behavior_state
+        pre_route_indices = self._oracle_pre_route_indices
+        pre_groups = self._oracle_pre_groups
+        force_result = self.last_force_computation
+        if pre_state is None or pre_route_indices is None or pre_groups is None:
+            raise RuntimeError("oracle transition started without a pre-behavior snapshot")
+        if force_result is None:
+            raise RuntimeError("oracle transition has no captured force computation")
+        post_state = np.asarray(self.pysf_state.pysf_states(), dtype=float)
+        if post_state.shape != post_behavior_state.shape:
+            raise RuntimeError("pedestrian state changed after integration capture")
+        post_route_indices = self._oracle_route_indices()
+        post_groups = self._oracle_group_snapshot()
+        mutation_flags = self._oracle_mutation_flags(
+            pre_state,
+            post_behavior_state,
+            pre_groups,
+            post_groups,
+            self.peds_behaviors,
+        )
+        force_time_robot_state = self._oracle_force_time_robot_state()
+        diagnostics = self.last_step_diagnostics
+        final_force_array = np.asarray(self.last_ped_forces, dtype=float)
+        if self._last_model_variant_stage is not None:
+            if self._last_model_variant_stage.result_force_xy is None:
+                raise RuntimeError("oracle model-variant stage has no final force")
+            final_force_array = self._last_model_variant_stage.result_force_xy
+        if final_force_array.shape != post_state[:, 0:2].shape:
+            raise RuntimeError("oracle final force shape does not match pedestrian state")
+        traces: list[OracleTransitionTraceV1] = []
+        dt = float(self.config.time_per_step_in_secs)
+        step_index = self._oracle_transition_step_index
+        for row in range(post_state.shape[0]):
+            goal_change_kind = self._oracle_goal_change_kind(
+                pre_state,
+                post_behavior_state,
+                pre_route_indices[row] if row < len(pre_route_indices) else None,
+                post_route_indices[row] if row < len(post_route_indices) else None,
+                mutation_flags,
+                row,
+            )
+            force_components, speed_cap, dynamics = self._oracle_force_components_for_row(
+                force_result,
+                row,
+                final_force_array[row],
+                diagnostics,
+            )
+            reasons: set[ExactInverseReason] = set()
+            if diagnostics is None:
+                reasons.add(ExactInverseReason.SPEED_CAP_UNKNOWN)
+            elif bool(diagnostics.cap_active[row]):
+                reasons.add(ExactInverseReason.SPEED_CAP_ACTIVE)
+            if diagnostics is not None and (
+                np.linalg.norm(diagnostics.previous_velocity[row]) <= 1e-12
+                and np.linalg.norm(diagnostics.uncapped_velocity[row]) <= 1e-12
+            ):
+                reasons.add(ExactInverseReason.STATIONARY_EDGE_CASE)
+            if mutation_flags.hold_velocity_reset:
+                reasons.add(ExactInverseReason.HOLD_VELOCITY_RESET)
+            if mutation_flags.respawn_reposition:
+                reasons.add(ExactInverseReason.RESPAWN_REPOSITION)
+            if mutation_flags.population_changed:
+                reasons.add(ExactInverseReason.POPULATION_CHANGE)
+            if any(
+                (
+                    mutation_flags.position_changed,
+                    mutation_flags.velocity_changed,
+                    mutation_flags.group_changed,
+                    mutation_flags.hold_wait_active,
+                    mutation_flags.role_changed,
+                )
+            ):
+                reasons.add(ExactInverseReason.UNMODELED_CONTROLLER_MUTATION)
+            pre_boundary = TransitionBoundary(
+                boundary=TransitionBoundaryKind.PRE_BEHAVIOR,
+                timestamp_s=step_index * dt,
+                step_index=step_index,
+                position_xy=_row_xy(pre_state[:, 0:2], row),
+                velocity_xy=_row_xy(pre_state[:, 2:4], row),
+                active_goal_xy=_row_xy(pre_state[:, 4:6], row),
+                route_waypoint_index=pre_route_indices[row],
+                goal_threshold_reached=None,
+            )
+            post_behavior_boundary = TransitionBoundary(
+                boundary=TransitionBoundaryKind.POST_BEHAVIOR_PRE_FORCE,
+                timestamp_s=step_index * dt,
+                step_index=step_index,
+                position_xy=_row_xy(post_behavior_state[:, 0:2], row),
+                velocity_xy=_row_xy(post_behavior_state[:, 2:4], row),
+                active_goal_xy=_row_xy(post_behavior_state[:, 4:6], row),
+                route_waypoint_index=post_route_indices[row],
+                goal_threshold_reached=None,
+                force_time_robot_state=force_time_robot_state,
+                mutation_flags=mutation_flags,
+            )
+            post_integration_boundary = TransitionBoundary(
+                boundary=TransitionBoundaryKind.POST_INTEGRATION,
+                timestamp_s=(step_index + 1) * dt,
+                step_index=step_index + 1,
+                position_xy=_row_xy(post_state[:, 0:2], row),
+                velocity_xy=_row_xy(post_state[:, 2:4], row),
+                active_goal_xy=_row_xy(post_state[:, 4:6], row),
+                route_waypoint_index=post_route_indices[row],
+                goal_threshold_reached=None,
+            )
+            traces.append(
+                OracleTransitionTraceV1(
+                    episode_id=self._oracle_episode_id,
+                    transition_id=f"{self._oracle_episode_id}:t{step_index}",
+                    transition_step_index=step_index,
+                    simulator_pedestrian_id=f"pysf-{row}",
+                    actor_track_id=None,
+                    actor_tracking_epoch_id=None,
+                    backend="pysocialforce",
+                    pre_behavior=pre_boundary,
+                    post_behavior_pre_force=post_behavior_boundary,
+                    post_integration=post_integration_boundary,
+                    force_components=force_components,
+                    dynamics=dynamics,
+                    speed_cap=speed_cap,
+                    goal_change_kind=goal_change_kind,
+                    exact_inverse_eligible=not reasons,
+                    exact_inverse_reasons=tuple(reasons),
+                )
+            )
+        self.last_oracle_transition_traces = tuple(traces)
+        self._oracle_transition_step_index += 1
 
     def _build_residual_adversary(self) -> BoundedResidualAdversary | None:
         """Construct the bounded residual adversary from config.
@@ -594,6 +1156,9 @@ class Simulator:
         nominal Social Force contribution already present in ``ped_forces``. An empty
         crowd short-circuits with no residual.
         """
+        trace_enabled = bool(getattr(self.config, "oracle_force_trace_enabled", False))
+        if trace_enabled:
+            self._last_residual_delta = None
         if not self.config.residual_adversary.is_active:
             return ped_forces
         forces_array = np.asarray(ped_forces, dtype=float)
@@ -614,6 +1179,8 @@ class Simulator:
         # reactive reference for this slice.
         robot_pose = robot_poses[0]
         residual = adversary.step_residual(positions, velocities, max_speeds, robot_pose)
+        if trace_enabled:
+            self._last_residual_delta = np.array(residual, dtype=float, copy=True)
         return forces_array + residual
 
     @property
@@ -629,8 +1196,27 @@ class Simulator:
         adversary = self._residual_adversary
         return adversary.behavior_summary if adversary is not None else None
 
-    def _step_pedestrians(self, ped_forces: np.ndarray, groups: list[list[int]]) -> None:
+    @property
+    def oracle_force_trace_payload(self) -> dict[str, Any] | None:
+        """Return the latest privileged trace in the canonical transition shape."""
+        traces = self.last_oracle_transition_traces
+        if traces is None:
+            return None
+        return {
+            "schema_version": ORACLE_TRANSITION_TRACE_SCHEMA_VERSION,
+            "transitions": [trace.to_dict() for trace in traces],
+        }
+
+    def _step_pedestrians(  # noqa: C901, PLR0912
+        self,
+        ped_forces: np.ndarray,
+        groups: list[list[int]],
+        *,
+        capture_diagnostics: bool = False,
+    ) -> None:
         """Advance pedestrians through the configured pedestrian-model implementation."""
+        if not capture_diagnostics:
+            self.last_step_diagnostics = None
         if self.pedestrian_model not in {
             HSFM_TOTAL_FORCE_V1,
             HSFM_TTC_PREDICTIVE_V1,
@@ -638,7 +1224,16 @@ class Simulator:
             HSFM_ANISOTROPIC_FOV_V1,
             HSFM_ALIGNMENT_TORQUE_V1,
         }:
-            self.pysf_sim.peds.step(ped_forces, groups)
+            if capture_diagnostics:
+                self.pysf_sim.peds.step(
+                    ped_forces,
+                    groups,
+                    capture_diagnostics=True,
+                )
+            else:
+                self.pysf_sim.peds.step(ped_forces, groups)
+            if capture_diagnostics:
+                self.last_step_diagnostics = self.pysf_sim.peds.last_step_diagnostics
             self.ped_headings = self._headings_from_current_ped_velocities()
             return
 
@@ -654,7 +1249,7 @@ class Simulator:
                 )
             if ttc_config.include_ped_ped:
                 radii = np.full(current_state.shape[0], self.config.ped_radius, dtype=float)
-                ped_forces = np.asarray(ped_forces, dtype=float) + ttc_predictive_repulsion(
+                predictive_delta = ttc_predictive_repulsion(
                     current_state[:, PYSF_POSITION_SLICE],
                     current_state[:, PYSF_VELOCITY_SLICE],
                     radii,
@@ -662,6 +1257,20 @@ class Simulator:
                     horizon_s=ttc_config.horizon_s,
                     force_scale=ttc_config.force_scale,
                     max_force=ttc_config.max_force,
+                )
+                ped_forces = np.asarray(ped_forces, dtype=float) + predictive_delta
+                self._set_model_variant_stage(
+                    ForceOperationKind.ADDITIVE,
+                    "additive_delta",
+                    predictive_delta,
+                    ped_forces,
+                )
+            else:
+                self._set_model_variant_stage(
+                    ForceOperationKind.TRANSFORMED,
+                    "dedicated_integrator",
+                    None,
+                    ped_forces,
                 )
         elif self.pedestrian_model == HSFM_ZANLUNGO_COLLISION_PREDICTION_V1:
             zanlungo_config = self.config.zanlungo_collision_prediction
@@ -676,10 +1285,24 @@ class Simulator:
                     angle_threshold_rad=zanlungo_config.angle_threshold_rad,
                     max_force=zanlungo_config.max_force,
                 )
-                ped_forces = (
+                transformed_forces = (
                     np.asarray(ped_forces, dtype=float)
                     - pairwise_social.sum(axis=1)
                     + collision_prediction
+                )
+                ped_forces = transformed_forces
+                self._set_model_variant_stage(
+                    ForceOperationKind.TRANSFORMED,
+                    "transform_total",
+                    None,
+                    ped_forces,
+                )
+            else:
+                self._set_model_variant_stage(
+                    ForceOperationKind.TRANSFORMED,
+                    "dedicated_integrator",
+                    None,
+                    ped_forces,
                 )
         elif self.pedestrian_model == HSFM_ANISOTROPIC_FOV_V1:
             fov_config = self.config.anisotropic_fov
@@ -696,6 +1319,29 @@ class Simulator:
                 cone_half_angle_rad=fov_config.cone_half_angle_rad,
                 rear_weight=fov_config.rear_weight,
             )
+            self._set_model_variant_stage(
+                ForceOperationKind.TRANSFORMED,
+                "transform_total",
+                None,
+                ped_forces,
+            )
+        else:
+            # ``HSFM_TOTAL_FORCE_V1`` and the alignment-torque variant preserve the
+            # force values but use a dedicated integration/orientation stage.
+            self._set_model_variant_stage(
+                ForceOperationKind.TRANSFORMED,
+                "dedicated_integrator",
+                None,
+                ped_forces,
+            )
+        diagnostics = (
+            self.pysf_sim.peds.compute_step_diagnostics(
+                ped_forces,
+                cap_epsilon=1e-9,
+            )
+            if capture_diagnostics
+            else None
+        )
         next_state, target_headings = step_hsfm_total_force(
             current_state,
             ped_forces,
@@ -724,6 +1370,26 @@ class Simulator:
             self.ped_headings = target_headings
         current_state[...] = next_state
         self.pysf_sim.peds.update(current_state, groups)
+        if diagnostics is not None:
+            self.last_step_diagnostics = diagnostics
+            self.pysf_sim.peds.record_step_diagnostics(diagnostics)
+
+    def _set_model_variant_stage(
+        self,
+        operation_kind: ForceOperationKind,
+        operation: str,
+        delta_force_xy: np.ndarray | None,
+        result_force_xy: np.ndarray,
+    ) -> None:
+        """Record the exact model-variant operation used by the current step."""
+        self._last_model_variant_stage = _ForceStageArrays(
+            operation_kind=operation_kind,
+            operation=operation,
+            delta_force_xy=(
+                None if delta_force_xy is None else np.array(delta_force_xy, dtype=float, copy=True)
+            ),
+            result_force_xy=np.array(result_force_xy, dtype=float, copy=True),
+        )
 
     def _social_force_component(self) -> SocialForce:
         """Return the active PySocialForce ped-ped ``SocialForce`` component.
@@ -795,6 +1461,15 @@ class Simulator:
         if existing_headings is not None:
             self.ped_angular_velocities = np.zeros_like(existing_headings)
         self.last_ped_forces = np.zeros((0, 2), dtype=float)
+        self.last_force_computation = None
+        self.last_step_diagnostics = None
+        self.last_oracle_transition_traces = None
+        self._oracle_pre_behavior_state = None
+        self._oracle_post_behavior_state = None
+        self._oracle_pre_route_indices = None
+        self._oracle_pre_groups = None
+        self._last_residual_delta = None
+        self._last_model_variant_stage = None
         for behavior in getattr(self, "peds_behaviors", ()):
             behavior.reset()
 
@@ -858,6 +1533,9 @@ class Simulator:
         or continuous replay scenarios.
         """
         self._reset_social_force_state()
+        self._oracle_episode_index += 1
+        self._oracle_episode_id = f"simulator-episode-{self._oracle_episode_index}"
+        self._oracle_transition_step_index = 0
         for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs, strict=False)):
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
@@ -877,13 +1555,48 @@ class Simulator:
             actions: Control actions for each robot (velocity, angular velocity, etc.).
         """
         self._validate_robot_action_count(actions)
+        trace_enabled = bool(
+            getattr(getattr(self, "config", None), "oracle_force_trace_enabled", False)
+        )
+        if trace_enabled:
+            self._begin_oracle_transition()
         for behavior in self.peds_behaviors:
             behavior.step()
-        ped_forces = self.pysf_sim.compute_forces()
+        if trace_enabled:
+            self._oracle_post_behavior_state = np.array(
+                self.pysf_state.pysf_states(),
+                dtype=float,
+                copy=True,
+            )
+        if trace_enabled:
+            compute_components = getattr(self.pysf_sim, "compute_force_components", None)
+            if not callable(compute_components):
+                raise RuntimeError(
+                    "oracle_force_trace_enabled requires a PySocialForce backend with "
+                    "compute_force_components()"
+                )
+            self.last_force_computation = compute_components()
+            ped_forces = np.array(self.last_force_computation.base_total, copy=True)
+        else:
+            self.last_force_computation = None
+            ped_forces = self.pysf_sim.compute_forces()
         ped_forces = self._apply_residual_adversary(ped_forces)
         self.last_ped_forces = np.asarray(ped_forces, dtype=float)
         groups = self.groups.groups_as_lists
-        self._step_pedestrians(self.last_ped_forces, groups)
+        self._last_model_variant_stage = None
+        if trace_enabled:
+            self._step_pedestrians(
+                self.last_ped_forces,
+                groups,
+                capture_diagnostics=True,
+            )
+        else:
+            self._step_pedestrians(self.last_ped_forces, groups)
+        if trace_enabled:
+            post_behavior_state = self._oracle_post_behavior_state
+            if post_behavior_state is None:
+                raise RuntimeError("oracle transition missing post-behavior capture")
+            self._record_oracle_transition(post_behavior_state)
         for robot, nav, action in zip(self.robots, self.robot_navs, actions, strict=True):
             robot.apply_action(action, self.config.time_per_step_in_secs)
             nav.update_position(robot.pos)
@@ -1141,6 +1854,9 @@ class PedSimulator(Simulator):
         from the first robot.
         """
         self._reset_social_force_state()
+        self._oracle_episode_index += 1
+        self._oracle_episode_id = f"simulator-episode-{self._oracle_episode_index}"
+        self._oracle_transition_step_index = 0
         for i, (robot, nav) in enumerate(zip(self.robots, self.robot_navs, strict=False)):
             collision = not nav.reached_waypoint
             is_at_final_goal = nav.reached_destination
@@ -1183,13 +1899,47 @@ class PedSimulator(Simulator):
         """
         self._validate_robot_action_count(actions)
         self._validate_ego_ped_action_count(ego_ped_actions)
+        trace_enabled = bool(
+            getattr(getattr(self, "config", None), "oracle_force_trace_enabled", False)
+        )
+        if trace_enabled:
+            self._begin_oracle_transition()
         for behavior in self.peds_behaviors:
             behavior.step()
-        ped_forces = self.pysf_sim.compute_forces()
+        if trace_enabled:
+            self._oracle_post_behavior_state = np.array(
+                self.pysf_state.pysf_states(),
+                dtype=float,
+                copy=True,
+            )
+            compute_components = getattr(self.pysf_sim, "compute_force_components", None)
+            if not callable(compute_components):
+                raise RuntimeError(
+                    "oracle_force_trace_enabled requires a PySocialForce backend with "
+                    "compute_force_components()"
+                )
+            self.last_force_computation = compute_components()
+            ped_forces = np.array(self.last_force_computation.base_total, copy=True)
+        else:
+            self.last_force_computation = None
+            ped_forces = self.pysf_sim.compute_forces()
         ped_forces = self._apply_residual_adversary(ped_forces)
         self.last_ped_forces = np.asarray(ped_forces, dtype=float)
         groups = self.groups.groups_as_lists
-        self._step_pedestrians(self.last_ped_forces, groups)
+        self._last_model_variant_stage = None
+        if trace_enabled:
+            self._step_pedestrians(
+                self.last_ped_forces,
+                groups,
+                capture_diagnostics=True,
+            )
+        else:
+            self._step_pedestrians(self.last_ped_forces, groups)
+        if trace_enabled:
+            post_behavior_state = self._oracle_post_behavior_state
+            if post_behavior_state is None:
+                raise RuntimeError("oracle transition missing post-behavior capture")
+            self._record_oracle_transition(post_behavior_state)
         for robot, nav, action in zip(self.robots, self.robot_navs, actions, strict=True):
             robot.apply_action(action, self.config.time_per_step_in_secs)
             nav.update_position(robot.pos)

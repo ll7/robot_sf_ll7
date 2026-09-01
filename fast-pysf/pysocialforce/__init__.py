@@ -15,6 +15,11 @@ from .config import (
     SimulatorConfig,
     SocialForceConfig,
 )
+from .force_trace import (
+    ForceComponentOperation,
+    ForceComponentResult,
+    ForceComputationResult,
+)
 from .forces import (
     DebuggableForce,
     DesiredForce,
@@ -28,6 +33,7 @@ from .forces import (
 from .logging import logger
 from .map_config import Circle, GlobalRoute, Line2D, MapDefinition, Obstacle, Rect, Vec2D, Zone
 from .map_loader import load_map
+from .scene import PedestrianStepDiagnostics
 from .simulator import Simulator, Simulator_v2
 
 

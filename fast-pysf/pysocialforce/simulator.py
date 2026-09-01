@@ -14,6 +14,7 @@ import numpy as np
 
 from pysocialforce import forces
 from pysocialforce.config import SimulatorConfig
+from pysocialforce.force_trace import ForceComputationResult, compute_force_components
 from pysocialforce.map_config import MapDefinition
 from pysocialforce.ped_behavior import PedestrianBehavior
 from pysocialforce.ped_grouping import PedestrianGroupings, PedestrianStates
@@ -153,6 +154,17 @@ class Simulator_v2:
         """
         return self.peds.state, self.peds.groups
 
+    def compute_force_components(self) -> ForceComputationResult:
+        """Evaluate the registered forces once and retain their exact aggregate.
+
+        This diagnostic path is opt-in.  The regular stepping path continues to
+        use the historical aggregate helper and does not allocate provenance data.
+
+        Returns:
+            The ordered force components and exact aggregate.
+        """
+        return compute_force_components(self.forces, self.peds)
+
     @property
     def obstacles(self) -> list[np.ndarray]:
         """
@@ -250,6 +262,18 @@ class Simulator:
             np.ndarray: Combined force array for all pedestrians.
         """
         return _sum_forces_explicitly(self.forces, self.peds)
+
+    def compute_force_components(self) -> ForceComputationResult:
+        """Evaluate the registered forces once and retain their exact aggregate.
+
+        This diagnostic path is opt-in.  ``compute_forces`` keeps its historical
+        implementation and return semantics for callers that do not request
+        privileged force provenance.
+
+        Returns:
+            The ordered force components and exact aggregate.
+        """
+        return compute_force_components(self.forces, self.peds)
 
     @property
     def current_state(self) -> SimState:

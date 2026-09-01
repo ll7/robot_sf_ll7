@@ -40,6 +40,14 @@ entries:
   status: evidence
   freshness: evidence
   area: research_contract
+- path: docs/context/issue_8205_tracker_adapter_smoke.md
+  status: current
+  freshness: maintained
+  area: research_contract
+- path: docs/context/evidence/issue_8205_tracker_adapter_smoke_receipt.v1.json
+  status: evidence
+  freshness: evidence
+  area: research_contract
 - path: docs/context/issue_7883_biased_route_generator.md
   status: current
   freshness: maintained

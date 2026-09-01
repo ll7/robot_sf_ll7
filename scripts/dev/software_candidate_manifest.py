@@ -3371,6 +3371,15 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - clo
             for value in sbom.get("target_inactive_components", [])
             if isinstance(value, str) and "@" in value
         }
+        allowed_inactive_components = {
+            (row.get("normalized_name"), row.get("version"))
+            for package_id, row in rows_by_id.items()
+            if package_id not in selected_package_ids
+        }
+        if not inactive_components <= allowed_inactive_components:
+            raise CandidateError(
+                "supported dependency candidate SBOM has an unbound inactive component"
+            )
         if component_ids != expected_components | inactive_components:
             raise CandidateError(
                 "supported dependency candidate SBOM closure differs from all profile"

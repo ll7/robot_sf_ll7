@@ -27,9 +27,9 @@ beliefs = channel.beliefs
 - `TrackerGoalBeliefAdapterConfig()` is default-off. The disabled channel carries no timing,
   tracks, or beliefs, so it does not alter Gym observations, actions, spaces, checkpoint inputs,
   or reset metadata.
-- The enabled channel carries one `GoalBeliefV1` per tracker ID, sorted by stable `track_id`,
-  with `source=observation_only`, `coordinate_frame=global_xy`, the tracker timestamp and step,
-  explicit visibility masks, and the adapter configuration hash.
+- The enabled channel carries one `GoalBeliefV1` per tracker ID, sorted by the serialized textual
+  `track_id`, with `source=observation_only`, `coordinate_frame=global_xy`, the tracker timestamp
+  and step, one current decision-point history row, and the adapter configuration hash.
 - Until a separate observation-only candidate provider exists, every belief is explicitly
   `mode=unavailable` with all candidate mass assigned to `unknown_candidate_probability=1.0`.
   The adapter does not infer a destination, force, route, or posterior.
@@ -41,20 +41,22 @@ beliefs = channel.beliefs
 
 ## History and missing-data policy
 
-The tracker result stores an oldest-to-newest validity mask but does not expose a per-history-row
-velocity-validity mask. The adapter therefore uses a fail-closed projection:
+`pedestrian_tracking.v1` stores an oldest-to-newest history-validity mask alongside position and
+velocity history, but it does not expose row-level velocity provenance. A historical velocity can
+therefore be estimated or predicted even when the current velocity is later available. The adapter
+uses a stateless, fail-closed projection until the tracker contract provides that provenance:
 
-- a contiguous history whose span is provable from `age_steps` is converted into observed rows;
-  invalid rows inside that active span are emitted as `invisible` rows with no vectors;
-- padded rows before the first valid row are omitted;
-- timestamp/step gaps, malformed history, or an unavailable current velocity reduce the payload
-  to a current conservative row and record a `current_row_only_*` projection blocker;
-- a current invisible or prediction-only tracker row never promotes predicted position/velocity
-  into an observed actor row.
+- a currently visible row with currently available position and velocity becomes one `observed`
+  current decision-point row;
+- an unavailable current velocity, or a current invisible/lost/prediction-only row, becomes one
+  `invisible` row with no position or velocity vectors;
+- every enabled belief contains exactly one current row; prior position or velocity history is
+  withheld, and the projection records either `current_row_only_velocity_unavailable` or
+  `current_row_only_tracker_v1_velocity_provenance_unavailable` as appropriate.
 
-This is an integration contract, not a claim that the current tracker history is sufficient for a
-future estimator. Extending field-level history masks belongs with the tracker contract and must
-be reviewed separately.
+Occlusion and reacquisition are represented across successive channels as current-row masks. They
+are not reconstructed as multi-step actor history. Full history is explicitly deferred to a
+separately reviewed tracker-contract extension with per-row velocity provenance.
 
 ## Boundary and non-goals
 
@@ -64,9 +66,10 @@ generic simulator object and does not call the existing simulator-state
 is not an actor input to this adapter.
 
 The deterministic fixture covers stable row reorder, same-step robot-frame velocity normalization,
-brief occlusion and reacquisition, reset isolation, missing velocity, disabled tracking, malformed
-input, and deterministic serialization. The smoke receipt records implementation integrity only;
-it contains no tracking-quality, prediction-quality, planner, benchmark, or paper-grade result.
+brief occlusion and reacquisition across successive channels, reset isolation and epoch pairing,
+missing velocity and recovery, serialized textual ordering, disabled tracking, malformed input, and
+deterministic serialization. The smoke receipt records implementation integrity only; it contains no
+tracking-quality, prediction-quality, planner, benchmark, safety, or paper-grade result.
 
 ## Validation
 

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from itertools import pairwise
 from math import isclose
 from typing import Any
 
@@ -188,17 +187,20 @@ class TrackerGoalBeliefAdapter:
                 },
             )
         track_records = []
-        for track in sorted(result.tracks, key=lambda item: item.track_id):
+        tracking_epoch_id = str(self._tracking_epoch_id)
+        for track in result.tracks:
             _validate_track_alignment(track, result)
             history, history_projection = _track_history(track)
             belief = _belief_from_track(
                 track,
                 config_hash=self.config.config_hash,
+                tracking_epoch_id=tracking_epoch_id,
                 reset_provenance=self._reset_provenance,
                 history=history,
                 history_projection=history_projection,
             )
             track_records.append((track, belief, history_projection))
+        track_records.sort(key=lambda record: record[1].track_id)
         beliefs = tuple(record[1] for record in track_records)
         statuses = [belief.mode.value for belief in beliefs]
         track_statuses = [_track_status(track) for track, _, _ in track_records]
@@ -259,68 +261,29 @@ def _current_history_row(track: PedestrianTrack) -> ActorObservationStep:
 
 
 def _track_history(track: PedestrianTrack) -> tuple[tuple[ActorObservationStep, ...], str]:
-    """Project tracker history without treating predicted values as observations.
+    """Expose only the current row until tracker velocity provenance is row-level.
 
-    The tracker v1 output stores timestamps and a validity mask but not per-row step indices.  A
-    full history is therefore emitted only for a contiguous, non-truncated history whose length
-    is provable from ``age_steps``.  Otherwise the adapter emits the current row only and records
-    the conservative projection through a blocker.
+    The tracker v1 output exposes one history-validity mask for both position and velocity, so it
+    cannot prove that historical velocity values were observed rather than estimated or predicted.
+    The adapter therefore emits a stateless current-decision-point projection until the tracker
+    contract provides row-level velocity provenance.
 
     Returns:
         The actor history and a diagnostic describing the projection.
     """
-    valid_mask = track.history_valid_mask
     if "velocity_unavailable" in track.blockers:
         return ((_current_history_row(track),), "current_row_only_velocity_unavailable")
-    valid_indices = [int(index) for index in valid_mask.nonzero()[0]]
-    if not valid_indices:
-        return ((_current_history_row(track),), "current_row_only_no_observed_history")
-    first_valid = valid_indices[0]
-    history_span = valid_mask.shape[0] - first_valid
-    if track.age_steps != history_span:
-        return ((_current_history_row(track),), "current_row_only_step_history_unavailable")
-
-    steps = tuple(range(track.step_index - history_span + 1, track.step_index + 1))
-    if steps[0] < 0:
-        return ((_current_history_row(track),), "current_row_only_negative_inferred_step")
-    timestamps = track.timestamp_history_s[first_valid:]
-    if timestamps.shape != (history_span,) or any(
-        current < previous for previous, current in pairwise(timestamps)
-    ):
-        return ((_current_history_row(track),), "current_row_only_non_monotonic_timestamps")
-
-    rows: list[ActorObservationStep] = []
-    for offset, index in enumerate(range(first_valid, valid_mask.shape[0])):
-        if bool(valid_mask[index]):
-            position = (
-                float(track.position_history_global_xy[index, 0]),
-                float(track.position_history_global_xy[index, 1]),
-            )
-            velocity = (
-                float(track.velocity_history_global_xy[index, 0]),
-                float(track.velocity_history_global_xy[index, 1]),
-            )
-            mask = ObservationMask.OBSERVED
-        else:
-            position = None
-            velocity = None
-            mask = ObservationMask.INVISIBLE
-        rows.append(
-            ActorObservationStep(
-                timestamp_s=float(track.timestamp_history_s[index]),
-                step_index=steps[offset],
-                position_xy=position,
-                velocity_xy=velocity,
-                mask=mask,
-            )
-        )
-    return tuple(rows), "full_contiguous_history"
+    return (
+        (_current_history_row(track),),
+        "current_row_only_tracker_v1_velocity_provenance_unavailable",
+    )
 
 
 def _belief_from_track(
     track: PedestrianTrack,
     *,
     config_hash: str,
+    tracking_epoch_id: str,
     reset_provenance: str | None,
     history: tuple[ActorObservationStep, ...] | None = None,
     history_projection: str | None = None,
@@ -342,6 +305,7 @@ def _belief_from_track(
         blockers.add("track_retired")
     observation = GoalBeliefObservation(
         track_id=f"track-{track.track_id}",
+        tracking_epoch_id=tracking_epoch_id,
         timestamp_s=track.timestamp_s,
         step_index=track.step_index,
         config_hash=config_hash,

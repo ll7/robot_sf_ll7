@@ -109,6 +109,7 @@ def test_enabled_adapter_emits_observation_only_unavailable_belief() -> None:
     assert [belief.track_id for belief in channel.beliefs] == ["track-1"]
     belief = channel.beliefs[0]
     payload = belief.to_dict()
+    assert belief.tracking_epoch_id == "0"
     assert payload["source"] == "observation_only"
     assert payload["coordinate_frame"] == "global_xy"
     assert payload["mode"] == "unavailable"
@@ -123,7 +124,7 @@ def test_enabled_adapter_emits_observation_only_unavailable_belief() -> None:
 
 
 def test_fixture_preserves_reorder_frame_and_brief_occlusion_semantics() -> None:
-    """The adapter keeps identity, normalized velocity, and invisible history rows explicit."""
+    """The adapter keeps identity, normalized velocity, and current masks explicit."""
     tracker = _tracker()
     first = tracker.update(
         _snapshot(
@@ -171,19 +172,17 @@ def test_fixture_preserves_reorder_frame_and_brief_occlusion_semantics() -> None
     assert [belief.track_id for belief in reordered_channel.beliefs] == ["track-1", "track-2"]
     np.testing.assert_allclose(reordered.track(1).position_global_xy, [1.0, 0.0], atol=0.02)
     np.testing.assert_allclose(reordered.track(2).position_global_xy, [3.0, 0.0], atol=0.02)
+    assert first_channel.beliefs[0].to_dict()["history_steps"][0]["mask"] == "observed"
+    assert reordered_channel.beliefs[0].to_dict()["history_steps"][0]["mask"] == "observed"
     assert lost.track(1).status is TrackStatus.LOST
     lost_history = lost_channel.beliefs[0].to_dict()["history_steps"]
-    assert [row["mask"] for row in lost_history] == ["observed", "observed", "invisible"]
-    assert lost_history[-1]["position_xy"] is None
+    assert [row["mask"] for row in lost_history] == ["invisible"]
+    assert lost_history[0]["position_xy"] is None
     assert "occluded" in lost_channel.beliefs[0].blockers
     reacquired_history = reacquired_channel.beliefs[0].to_dict()["history_steps"]
-    assert [row["mask"] for row in reacquired_history] == [
-        "observed",
-        "observed",
-        "invisible",
-        "observed",
-    ]
-    assert reacquired_history[2]["velocity_xy"] is None
+    assert [row["mask"] for row in reacquired_history] == ["observed"]
+    assert reacquired_history[0]["velocity_xy"] is not None
+    assert all(len(belief.history_steps) == 1 for belief in reacquired_channel.beliefs)
     assert first_channel.content_digest != lost_channel.content_digest
 
 
@@ -197,9 +196,15 @@ def test_reset_isolation_changes_epoch_without_retaining_prior_beliefs() -> None
 
     assert old_channel.tracking_epoch_id == 0
     assert old_channel.beliefs[0].reset_provenance is None
+    assert old_channel.beliefs[0].tracking_epoch_id == "0"
     assert new_channel.tracking_epoch_id == 1
     assert new_channel.beliefs[0].reset_provenance == "episode-2"
+    assert new_channel.beliefs[0].tracking_epoch_id == "1"
     assert new_channel.beliefs[0].track_id == "track-1"
+    assert (old_channel.beliefs[0].tracking_epoch_id, old_channel.beliefs[0].track_id) != (
+        new_channel.beliefs[0].tracking_epoch_id,
+        new_channel.beliefs[0].track_id,
+    )
     assert new_channel.diagnostics["reset_provenance"] == "episode-2"
 
 
@@ -246,6 +251,44 @@ def test_adapter_does_not_promote_missing_velocity_to_an_observed_vector() -> No
     assert channel.diagnostics["history_projection_counts"] == {
         "current_row_only_velocity_unavailable": 1
     }
+
+
+def test_recovered_velocity_does_not_promote_prior_missing_velocity_history() -> None:
+    """A recovered current velocity cannot establish provenance for an older tracker row."""
+    tracker = _tracker()
+    tracker.update(_snapshot(0.0, 0, [[1.0, 0.0]], [[np.nan, np.nan]]))
+    recovered = tracker.update(_snapshot(0.1, 1, [[1.1, 0.0]], [[1.0, 0.0]]))
+
+    track = recovered.track(1)
+    assert "velocity_unavailable" not in track.blockers
+    assert track.age_steps == 2
+
+    channel = TrackerGoalBeliefAdapter(TrackerGoalBeliefAdapterConfig(enabled=True)).adapt(
+        recovered
+    )
+    payload = channel.beliefs[0].to_dict()
+
+    assert [row["step_index"] for row in payload["history_steps"]] == [1]
+    assert payload["history_steps"][0]["mask"] == "observed"
+    assert payload["history_steps"][0]["velocity_xy"] is not None
+    assert "current_row_only_tracker_v1_velocity_provenance_unavailable" in payload["blockers"]
+
+
+def test_adapter_orders_serialized_track_ids_lexically() -> None:
+    """Beliefs and serialized mappings use the channel's textual identity order."""
+    result = _tracking_result()
+    source = result.tracks[0]
+    result = replace(
+        result,
+        tracks=tuple(replace(source, track_id=value) for value in (1, 2, 10)),
+    )
+
+    channel = TrackerGoalBeliefAdapter(TrackerGoalBeliefAdapterConfig(enabled=True)).adapt(result)
+
+    expected = ["track-1", "track-10", "track-2"]
+    assert [belief.track_id for belief in channel.beliefs] == expected
+    assert list(channel.to_dict()["beliefs"]) == expected
+    assert len(set(expected)) == 3
 
 
 def test_adapter_rejects_track_decision_point_mismatch() -> None:

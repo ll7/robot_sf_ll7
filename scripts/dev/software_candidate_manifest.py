@@ -28,6 +28,11 @@ from email.policy import default as email_policy
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
+from scripts.tools.check_distribution_licenses import (
+    DistributionLicenseError,
+    check_distribution,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -2290,7 +2295,7 @@ def _load_rights_policy(  # noqa: C901, PLR0912 - closed policy contract
     }:
         raise CandidateError("software release rights policy materialization contract is malformed")
     if (
-        materialization["commit_parent"] != "source_sha"
+        materialization["commit_parent"] != "root_commit"
         or materialization["commit_message"] != ("Materialize Robot SF software candidate")
         or materialization["commit_timestamp"] != "2000-01-01T00:00:00Z"
     ):
@@ -3050,6 +3055,58 @@ def _candidate_receipt_identity(
     }
 
 
+def _strict_archive_gate(
+    bundle_dir: Path,
+    *,
+    candidate_root: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    """Re-run the canonical archive/tree gate over the exact candidate payload.
+
+    The candidate manifest already binds every archive byte.  This second check
+    deliberately runs against the materialized Git root rather than the source
+    checkout, so a rebound archive carrying a forbidden model or blocked member
+    cannot inherit the producer's earlier ``passed`` claim.
+    """
+    materialization = manifest.get("materialization")
+    if not isinstance(materialization, dict):
+        raise CandidateError("rights admission candidate has no materialization identity")
+    inventory_path = candidate_root / materialization["candidate_inventory_path"]
+    try:
+        result = check_distribution(
+            bundle_dir,
+            strict_asset_rights=True,
+            repo_root=candidate_root,
+            inventory_path=inventory_path,
+            source_tree_ref=materialization["candidate_commit_sha"],
+        )
+    except (DistributionLicenseError, OSError, ValueError) as exc:
+        raise CandidateError(f"strict candidate archive/tree gate failed: {exc}") from exc
+    expected = {
+        member["filename"]: member["sha256"]
+        for member in manifest["members"]
+        if member["kind"] in {"wheel", "sdist"}
+    }
+    actual = {archive.name: _sha256(archive) for archive in (*result.wheels, *result.sdists)}
+    if actual != expected:
+        raise CandidateError(
+            "strict candidate archive/tree gate did not cover the exact manifest archives"
+        )
+    # Keep the result canonical and hashable for focused callers/tests.  The
+    # receipt's existing closed schema binds this report through the exact
+    # archive member hashes and candidate manifest digest.
+    report = {
+        "archives": [{"filename": name, "sha256": actual[name]} for name in sorted(actual)],
+        "candidate_commit_sha": materialization["candidate_commit_sha"],
+        "candidate_tree_sha": materialization["candidate_tree_sha"],
+        "schema_version": "robot_sf.software_strict_archive_gate.v1",
+        "source_sha": manifest["source_sha"],
+        "status": "passed",
+    }
+    report["report_sha256"] = hashlib.sha256(_json_bytes(report)).hexdigest()
+    return report
+
+
 def _report_input_digest(report: dict[str, Any], path: str, *, label: str) -> str:
     """Return one canonical repository-input digest from a dependency report."""
     inputs = report.get("repository_inputs")
@@ -3090,6 +3147,43 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - clo
     summary = report.get("summary")
     if not isinstance(summary, dict):
         raise CandidateError("supported dependency report has no summary")
+    packages = report.get("packages")
+    if not isinstance(packages, list) or not packages:
+        raise CandidateError("supported dependency report has no package rows")
+    selected_rows = []
+    for row in packages:
+        if not isinstance(row, dict):
+            raise CandidateError("supported dependency report package row is malformed")
+        selected_profiles = row.get("selected_profiles")
+        if selected_profiles is not None and (
+            not isinstance(selected_profiles, list)
+            or any(
+                not isinstance(profile_id, str) or not profile_id
+                for profile_id in selected_profiles
+            )
+        ):
+            raise CandidateError("supported dependency report package selection is malformed")
+        if selected_profiles:
+            selected_rows.append(row)
+    pending_rows = [
+        row for row in selected_rows if row.get("policy_disposition") == "review_required"
+    ]
+    failures = report.get("failures")
+    structural_issues = report.get("structural_issues")
+    if not isinstance(failures, list) or not isinstance(structural_issues, list):
+        raise CandidateError("supported dependency report findings are malformed")
+    expected_summary = {
+        "selected_package_count": len(selected_rows),
+        "policy_pending_package_count": len(pending_rows),
+        "unresolved_count": len(failures),
+        "structural_issue_count": len(structural_issues),
+    }
+    for field, expected in expected_summary.items():
+        value = summary.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value != expected:
+            raise CandidateError(
+                f"supported dependency report summary.{field} is inconsistent with rows"
+            )
     if summary.get("status") != "complete" or summary.get("candidate_bound") is not True:
         raise CandidateError("supported dependency report is not a complete candidate binding")
     unresolved_count = summary.get("unresolved_count")
@@ -3414,6 +3508,11 @@ def _admit_rights(args: argparse.Namespace) -> None:  # noqa: C901, PLR0915 - cl
         candidate_artifact_id=args.candidate_artifact_id,
         candidate_artifact_name=args.candidate_artifact_name,
         candidate_artifact_digest=args.candidate_artifact_digest,
+    )
+    _strict_archive_gate(
+        args.candidate_bundle,
+        candidate_root=_candidate_root,
+        manifest=manifest,
     )
     if (
         manifest["package"]["name"] != "robot_sf"

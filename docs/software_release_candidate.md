@@ -53,6 +53,10 @@ exactly those thirteen `Provides-Extra` values. This transformation is determini
 candidate member bytes and tree hashes bind the resulting metadata; the authoritative checkout is
 never edited.
 
+The materialized Git repository intentionally has a deterministic root commit rather than a
+parent link to the source repository. Its separate `source_sha` field binds the candidate to the
+reviewed source commit; `commit_parent: root_commit` in the policy describes this truthful shape.
+
 The build root is then staged from that candidate commit, not directly from the authoritative
 checkout. The strict distribution-license gate runs against the staged candidate tree and its
 candidate-local inventory. The clean-install smoke still exercises the installed core runtime

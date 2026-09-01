@@ -65,6 +65,10 @@ aggregator and the twelve supported extras. Its wheel and source distribution th
 advertise exactly thirteen `Provides-Extra` values (`all` plus those twelve); the source checkout
 is never modified.
 
+The candidate Git repository is a deterministic standalone root; it does not pretend to have the
+source commit as a Git parent. The separate source SHA remains the provenance binding, reflected by
+the rights policy's `commit_parent: root_commit` contract.
+
 The selected profile closure is recorded under `surface.profile_ids`. Other declared profiles,
 lock rows, and installed distributions remain visible in the report with an explicit
 `outside_selected_profiles` marker; selection never turns an unresolved row into an approval.

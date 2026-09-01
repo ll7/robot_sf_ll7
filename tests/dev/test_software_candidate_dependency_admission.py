@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+import scripts.dev.software_candidate_manifest as candidate_manifest
 from scripts.dev.software_candidate_manifest import (
     SUPPORTED_DEPENDENCY_EXTRA_IDS,
     SUPPORTED_DEPENDENCY_POLICY_PATH,
@@ -109,7 +110,21 @@ def _report(identity: dict[str, object]) -> dict[str, object]:
         "schema_version": "robot-sf.dependency-license-inventory.v1",
         "failures": [],
         "structural_issues": [],
-        "summary": {"candidate_bound": True, "status": "complete", "unresolved_count": 0},
+        "packages": [
+            {
+                "name": "reviewed-package",
+                "selected_profiles": ["all"],
+                "policy_disposition": "external_dependency_not_redistributed",
+            }
+        ],
+        "summary": {
+            "candidate_bound": True,
+            "policy_pending_package_count": 0,
+            "selected_package_count": 1,
+            "status": "complete",
+            "structural_issue_count": 0,
+            "unresolved_count": 0,
+        },
         "surface": {"profile_ids": list(SUPPORTED_DEPENDENCY_PROFILE_IDS)},
     }
 
@@ -147,7 +162,7 @@ def test_supported_dependency_report_binds_exact_candidate_and_input_digests(
         (
             "summary",
             {"candidate_bound": True, "status": "complete", "unresolved_count": 1},
-            "unresolved",
+            "summary|unresolved",
         ),
         ("candidate_binding", {"status": "bound"}, "source SHA"),
         ("surface", {"profile_ids": []}, "profile surface"),
@@ -173,6 +188,77 @@ def test_supported_dependency_report_rejects_unbound_or_unresolved_variants(
             tree_sha256="e" * 64,
             workflow_run_attempt=identity["workflow_run_attempt"],
             materialization=identity["materialization"],
+        )
+
+
+def test_supported_dependency_report_rejects_forged_complete_summary(tmp_path: Path) -> None:
+    """A complete/zero summary cannot hide a pending selected package row."""
+    identity = _identity()
+    payload = _report(identity)
+    payload["packages"] = [
+        {
+            "name": "unreviewed-package",
+            "selected_profiles": ["all"],
+            "policy_disposition": "review_required",
+        }
+    ]
+    report_path = tmp_path / SUPPORTED_DEPENDENCY_REPORT_NAME
+    report_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    with pytest.raises(CandidateError, match="summary.policy_pending_package_count"):
+        _validate_supported_dependency_report(
+            report_path,
+            identity=identity,
+            source_sha=identity["source_sha"],
+            tree_sha256="e" * 64,
+            workflow_run_attempt=identity["workflow_run_attempt"],
+            materialization=identity["materialization"],
+        )
+
+
+def test_strict_archive_gate_rejects_forbidden_rebound_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The admission helper cannot trust a producer's earlier strict-gate claim."""
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    wheel = bundle / "robot_sf-0.0.6-py3-none-any.whl"
+    sdist = bundle / "robot_sf-0.0.6.tar.gz"
+    wheel.write_bytes(b"rebound wheel with forbidden model")
+    sdist.write_bytes(b"bound sdist")
+    candidate_root = tmp_path / "candidate"
+    candidate_root.mkdir()
+    materialization = {
+        "candidate_commit_sha": "c" * 40,
+        "candidate_tree_sha": "d" * 40,
+        "candidate_inventory_path": "candidate-inventory.json",
+    }
+    manifest = {
+        "materialization": materialization,
+        "members": [
+            {
+                "filename": wheel.name,
+                "kind": "wheel",
+                "sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
+            },
+            {
+                "filename": sdist.name,
+                "kind": "sdist",
+                "sha256": hashlib.sha256(sdist.read_bytes()).hexdigest(),
+            },
+        ],
+        "source_sha": "b" * 40,
+    }
+
+    def reject_forbidden_archive(*_args: object, **_kwargs: object) -> None:
+        raise candidate_manifest.DistributionLicenseError(
+            "model artifact member is forbidden in a software distribution"
+        )
+
+    monkeypatch.setattr(candidate_manifest, "check_distribution", reject_forbidden_archive)
+    with pytest.raises(CandidateError, match="strict candidate archive/tree gate failed"):
+        candidate_manifest._strict_archive_gate(
+            bundle, candidate_root=candidate_root, manifest=manifest
         )
 
 

@@ -75,7 +75,7 @@
       "additionalProperties": false,
       "required": ["commit_parent", "commit_message", "commit_timestamp", "tree_digest"],
       "properties": {
-        "commit_parent": {"type": "string", "const": "source_sha"},
+        "commit_parent": {"type": "string", "const": "root_commit"},
         "commit_message": {"type": "string", "const": "Materialize Robot SF software candidate"},
         "commit_timestamp": {"type": "string", "const": "2000-01-01T00:00:00Z"},
         "tree_digest": {"type": "string", "minLength": 1}

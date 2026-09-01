@@ -173,7 +173,7 @@
     }
   ],
   "materialization": {
-    "commit_parent": "source_sha",
+    "commit_parent": "root_commit",
     "commit_message": "Materialize Robot SF software candidate",
     "commit_timestamp": "2000-01-01T00:00:00Z",
     "tree_digest": "sha256(canonical UTF-8 JSON of source SHA and sorted admitted members; generated manifest is not a tree member)"

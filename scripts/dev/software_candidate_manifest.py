@@ -5,6 +5,8 @@ The helper never builds or publishes packages. ``assemble`` admits exactly one
 wheel and one source distribution that were built elsewhere, normalises a uv
 CycloneDX export, and binds every payload byte to deterministic provenance.
 ``verify`` is deliberately offline and only revalidates the admitted bytes.
+``rejected-diagnostic`` preserves failed strict-gate inputs as a checksummed,
+explicitly non-publishable forensic packet.
 """
 
 from __future__ import annotations
@@ -66,6 +68,9 @@ SANITIZED_MANIFEST_NAME = "sanitized-candidate.json"
 RIGHTS_ADMISSION_SCHEMA = "robot_sf.software_rights_admission.v1"
 RIGHTS_ADMISSION_NAME = "rights-admission.json"
 RIGHTS_ADMISSION_SCHEMA_PATH = "scripts/validation/software_rights_admission.v1.schema.json"
+REJECTED_DIAGNOSTIC_SCHEMA = "robot_sf.software_candidate.rejected_diagnostic.v1"
+REJECTED_DIAGNOSTIC_NAME = "rejected-diagnostic.json"
+REJECTED_DIAGNOSTIC_CHECKSUMS_NAME = "SHA256SUMS"
 RIGHTS_GATE_ID = "strict-distribution-rights"
 RIGHTS_GATE_COMMAND = (
     "python scripts/tools/check_distribution_licenses.py $DIST_DIR "
@@ -2693,6 +2698,373 @@ def _fresh_bundle_dir(path: Path) -> None:
         path.mkdir(parents=True)
 
 
+def _diagnostic_exit_code(value: str, *, label: str) -> int | None:
+    """Parse one strict-gate status while preserving an explicit not-run state."""
+    if value == "not-run":
+        return None
+    if not re.fullmatch(r"[0-9]+", value):
+        raise CandidateError(f"{label} must be a decimal exit code or not-run")
+    code = int(value)
+    if code > 255:
+        raise CandidateError(f"{label} must be a shell exit code between 0 and 255")
+    return code
+
+
+def _diagnostic_source_file(path: Path, *, label: str) -> bool:
+    """Return whether an optional diagnostic input exists, rejecting unsafe entries."""
+    if not path.exists() and not path.is_symlink():
+        return False
+    if path.is_symlink() or not path.is_file():
+        raise CandidateError(f"{label} must be a regular file: {path}")
+    return True
+
+
+def _copy_diagnostic_file(
+    source: Path,
+    destination: Path,
+    *,
+    label: str,
+) -> Path:
+    """Copy one immutable diagnostic input without following symlinks."""
+    if not _diagnostic_source_file(source, label=label):
+        raise CandidateError(f"{label} is missing: {source}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copyfile(source, destination)
+    except OSError as exc:
+        raise CandidateError(f"cannot preserve {label}: {source}: {exc}") from exc
+    return destination
+
+
+def _copy_diagnostic_tree(
+    source: Path,
+    destination_root: Path,
+    *,
+    label: str,
+) -> list[Path]:
+    """Copy a complete regular-file tree into the packet, refusing symlinks."""
+    if not source.exists() and not source.is_symlink():
+        return []
+    if source.is_symlink() or not source.is_dir():
+        raise CandidateError(f"{label} must be a real directory: {source}")
+    copied: list[Path] = []
+    for entry in sorted(source.rglob("*"), key=lambda path: path.as_posix()):
+        if entry.is_symlink():
+            raise CandidateError(f"{label} contains a symbolic link: {entry}")
+        if entry.is_dir():
+            continue
+        if not entry.is_file():
+            raise CandidateError(f"{label} contains a non-regular entry: {entry}")
+        relative = _safe_workspace_path(entry.relative_to(source).as_posix())
+        copied.append(
+            _copy_diagnostic_file(
+                entry,
+                destination_root.joinpath(*relative.parts),
+                label=f"{label} member {relative}",
+            )
+        )
+    return copied
+
+
+def _diagnostic_member(path: Path, *, root: Path) -> dict[str, Any]:
+    """Return the stable checksum record for one packet payload member."""
+    relative = _safe_workspace_path(path.relative_to(root).as_posix()).as_posix()
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        raise CandidateError(f"cannot stat diagnostic payload {path}: {exc}") from exc
+    return {"path": relative, "sha256": _sha256(path), "size": size}
+
+
+def _diagnostic_reason(path: Path | None, *, fallback: str) -> str:
+    """Extract a bounded human-readable terminal reason from a captured gate log."""
+    if path is not None and _diagnostic_source_file(path, label="diagnostic gate log"):
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError as exc:
+            raise CandidateError(f"cannot read diagnostic gate log {path}: {exc}") from exc
+        lines = [line.strip() for line in lines if line.strip()]
+        preferred = [
+            line
+            for line in lines
+            if line.startswith(("FAIL:", "ERROR:", "Error:"))
+            or "blocked" in line.casefold()
+            or "failed" in line.casefold()
+        ]
+        if preferred:
+            return preferred[-1][:1000]
+        if lines:
+            return lines[-1][:1000]
+    return fallback
+
+
+def _diagnostic_reported_count(path: Path | None) -> int:
+    """Read a dependency report's blocker count without making it a second gate."""
+    if path is None or not path.exists():
+        return 1
+    try:
+        payload = _load_json(path, label="diagnostic dependency report")
+    except CandidateError:
+        return 1
+    summary = payload.get("summary") if isinstance(payload, dict) else None
+    count = summary.get("unresolved_count") if isinstance(summary, dict) else None
+    if isinstance(count, int) and not isinstance(count, bool) and count >= 1:
+        return count
+    return 1
+
+
+def _diagnostic_artifact_record(
+    path: Path | None,
+    *,
+    root: Path,
+) -> dict[str, Any] | None:
+    """Return a packet-relative identity for an optional captured artifact."""
+    if path is None:
+        return None
+    if not path.exists():
+        return None
+    return _diagnostic_member(path, root=root)
+
+
+def _rejected_diagnostic(  # noqa: C901, PLR0912, PLR0915 - closed packet contract
+    args: argparse.Namespace,
+) -> None:
+    """Preserve a strict-gate failure as a checksummed, non-publishable packet."""
+    repo_root = args.repo_root.resolve()
+    if not SHA_PATTERN.fullmatch(args.source_sha):
+        raise CandidateError("rejected diagnostic source SHA is invalid")
+    if not REPOSITORY_PATTERN.fullmatch(args.repository):
+        raise CandidateError("rejected diagnostic repository is invalid")
+    if not RUN_ID_PATTERN.fullmatch(args.workflow_run_id):
+        raise CandidateError("rejected diagnostic workflow run ID is invalid")
+    if args.workflow_run_attempt < 1:
+        raise CandidateError("rejected diagnostic workflow attempt must be positive")
+    if not VERSION_PATTERN.fullmatch(args.candidate_version):
+        raise CandidateError("rejected diagnostic candidate version is invalid")
+    artifact_name = (
+        f"robot-sf-software-candidate-rejected-{args.source_sha}-"
+        f"{args.workflow_run_id}-{args.workflow_run_attempt}"
+    )
+    exits = {
+        "strict-distribution-rights": _diagnostic_exit_code(
+            args.strict_rights_exit, label="strict rights exit"
+        ),
+        "strict-supported-dependency-surface": _diagnostic_exit_code(
+            args.dependency_exit, label="dependency exit"
+        ),
+        "rights-admission": _diagnostic_exit_code(
+            args.rights_admission_exit, label="rights admission exit"
+        ),
+    }
+    failed = {gate_id: code for gate_id, code in exits.items() if code not in (None, 0)}
+    if not failed:
+        raise CandidateError("rejected diagnostic requires at least one failed strict gate")
+    _validate_source(repo_root, args.source_sha)
+
+    output_dir = Path(os.path.abspath(args.output_dir))
+    _require_external(output_dir, repo_root=repo_root, label="rejected diagnostic output")
+    if output_dir.is_symlink() or output_dir.exists():
+        raise CandidateError(f"rejected diagnostic output must not already exist: {output_dir}")
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    candidate_bundle = (
+        Path(os.path.abspath(args.candidate_bundle)) if args.candidate_bundle is not None else None
+    )
+    dist_dir = Path(os.path.abspath(args.dist_dir)) if args.dist_dir is not None else None
+    dependency_report = (
+        Path(os.path.abspath(args.dependency_report))
+        if args.dependency_report is not None
+        else None
+    )
+    materialization_report = (
+        Path(os.path.abspath(args.materialization_report))
+        if args.materialization_report is not None
+        else None
+    )
+    strict_rights_log = (
+        Path(os.path.abspath(args.strict_rights_log))
+        if args.strict_rights_log is not None
+        else None
+    )
+    dependency_log = (
+        Path(os.path.abspath(args.dependency_log)) if args.dependency_log is not None else None
+    )
+    rights_admission_log = (
+        Path(os.path.abspath(args.rights_admission_log))
+        if args.rights_admission_log is not None
+        else None
+    )
+    wheel_install_report = (
+        Path(os.path.abspath(args.wheel_install_report))
+        if args.wheel_install_report is not None
+        else None
+    )
+    inputs = (
+        (candidate_bundle, "candidate bundle"),
+        (dist_dir, "distribution directory"),
+        (dependency_report, "dependency report"),
+        (materialization_report, "materialization report"),
+        (strict_rights_log, "strict rights log"),
+        (dependency_log, "dependency log"),
+        (rights_admission_log, "rights admission log"),
+        (wheel_install_report, "wheel install report"),
+    )
+    for input_path, _label in inputs:
+        if input_path is not None:
+            resolved = Path(os.path.abspath(input_path))
+            try:
+                if output_dir.resolve(strict=False).is_relative_to(resolved.resolve(strict=False)):
+                    raise CandidateError(
+                        f"rejected diagnostic output cannot be inside an input path: {output_dir}"
+                    )
+            except RuntimeError as exc:
+                raise CandidateError(f"diagnostic input path is ambiguous: {input_path}") from exc
+
+    source_tree_sha = _candidate_tree_sha1(repo_root, args.source_sha)
+    staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
+    try:
+        payload_paths: list[Path] = []
+        if candidate_bundle is not None:
+            payload_paths.extend(
+                _copy_diagnostic_tree(
+                    candidate_bundle,
+                    staging / "candidate-bundle",
+                    label="candidate bundle",
+                )
+            )
+        if dist_dir is not None:
+            payload_paths.extend(
+                _copy_diagnostic_tree(dist_dir, staging / "dist", label="distribution directory")
+            )
+        file_inputs = (
+            (dependency_report, "reports/dependency-license-inventory.json", "dependency report"),
+            (
+                materialization_report,
+                "reports/materialization.json",
+                "materialization report",
+            ),
+            (strict_rights_log, "reports/strict-distribution-rights.log", "strict rights log"),
+            (
+                dependency_log,
+                "reports/strict-supported-dependency-surface.log",
+                "dependency log",
+            ),
+            (
+                rights_admission_log,
+                "reports/rights-admission.log",
+                "rights admission log",
+            ),
+            (wheel_install_report, "reports/wheel-install-smoke.json", "wheel install report"),
+        )
+        copied_inputs: dict[str, Path] = {}
+        for input_path, relative, label in file_inputs:
+            if input_path is None or (not input_path.exists() and not input_path.is_symlink()):
+                continue
+            destination = _copy_diagnostic_file(
+                Path(os.path.abspath(input_path)),
+                staging.joinpath(*_safe_workspace_path(relative).parts),
+                label=label,
+            )
+            copied_inputs[relative] = destination
+            payload_paths.append(destination)
+        payload_paths = sorted(
+            set(payload_paths), key=lambda path: path.relative_to(staging).as_posix()
+        )
+        if not payload_paths:
+            raise CandidateError("rejected diagnostic has no preserved candidate or gate payload")
+
+        payload = [_diagnostic_member(path, root=staging) for path in payload_paths]
+        checksums = staging / REJECTED_DIAGNOSTIC_CHECKSUMS_NAME
+        checksums.write_text(
+            "".join(f"{entry['sha256']}  {entry['path']}\n" for entry in payload),
+            encoding="ascii",
+        )
+        checksum_record = _diagnostic_member(checksums, root=staging)
+        log_paths = {
+            "strict-distribution-rights": copied_inputs.get(
+                "reports/strict-distribution-rights.log"
+            ),
+            "strict-supported-dependency-surface": copied_inputs.get(
+                "reports/strict-supported-dependency-surface.log"
+            ),
+            "rights-admission": copied_inputs.get("reports/rights-admission.log"),
+        }
+        report_paths = {
+            "strict-supported-dependency-surface": copied_inputs.get(
+                "reports/dependency-license-inventory.json"
+            )
+        }
+        fallback_reasons = {
+            "strict-distribution-rights": "strict distribution-rights gate failed",
+            "strict-supported-dependency-surface": "strict supported-dependency gate failed",
+            "rights-admission": "rights admission gate failed",
+        }
+        blockers: list[dict[str, Any]] = []
+        for gate_id, exit_code in exits.items():
+            if exit_code in (None, 0):
+                continue
+            report_path = report_paths.get(gate_id)
+            blockers.append(
+                {
+                    "exit_code": exit_code,
+                    "gate_id": gate_id,
+                    "log": _diagnostic_artifact_record(log_paths.get(gate_id), root=staging),
+                    "reason": _diagnostic_reason(
+                        log_paths.get(gate_id), fallback=fallback_reasons[gate_id]
+                    ),
+                    "report": _diagnostic_artifact_record(report_path, root=staging),
+                    "reported_blocker_count": (
+                        _diagnostic_reported_count(report_path)
+                        if gate_id == "strict-supported-dependency-surface"
+                        else 1
+                    ),
+                    "status": "failed",
+                }
+            )
+        metadata = {
+            "artifact_name": artifact_name,
+            "blocker_count": len(blockers),
+            "blockers": blockers,
+            "candidate": {
+                "package": {"name": "robot_sf", "version": args.candidate_version},
+                "repository": args.repository,
+                "source_sha": args.source_sha,
+                "source_tree_sha": source_tree_sha,
+                "workflow": {
+                    "run_attempt": args.workflow_run_attempt,
+                    "run_id": args.workflow_run_id,
+                },
+            },
+            "claim_boundary": "forensic diagnostic only; rejected bytes are not a release candidate",
+            "checksums": checksum_record,
+            "evidence_status": "rejected",
+            "payload": payload,
+            "promotion_eligible": False,
+            "publishable": False,
+            "schema_version": REJECTED_DIAGNOSTIC_SCHEMA,
+            "status": "rejected",
+            "terminal": {
+                "blocker_count": len(blockers),
+                "reason": "; ".join(blocker["reason"] for blocker in blockers),
+                "status": "rejected",
+            },
+        }
+        (staging / REJECTED_DIAGNOSTIC_NAME).write_bytes(_json_bytes(metadata))
+        os.replace(staging, output_dir)
+    except CandidateError:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    except OSError as exc:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise CandidateError(
+            f"cannot finalize rejected diagnostic output: {output_dir}: {exc}"
+        ) from exc
+    print(
+        f"PASS: preserved rejected software-candidate diagnostic at {output_dir} "
+        f"with {len(failed)} failed strict gate(s)"
+    )
+
+
 def _load_assembly_materialization_report(
     args: argparse.Namespace,
     repo_root: Path,
@@ -3751,7 +4123,7 @@ def _verify(args: argparse.Namespace) -> None:
     )
 
 
-def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:  # noqa: PLR0915 - one CLI surface
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -3797,6 +4169,29 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     admit.add_argument("--candidate-artifact-digest", required=True)
     admit.add_argument("--policy", type=Path, default=Path(RIGHTS_POLICY_PATH))
 
+    diagnostic = subparsers.add_parser(
+        "rejected-diagnostic",
+        help="preserve a failed strict gate as a checksummed non-publishable packet",
+    )
+    diagnostic.add_argument("--repo-root", type=Path, required=True)
+    diagnostic.add_argument("--output-dir", type=Path, required=True)
+    diagnostic.add_argument("--source-sha", required=True)
+    diagnostic.add_argument("--repository", required=True)
+    diagnostic.add_argument("--workflow-run-id", required=True)
+    diagnostic.add_argument("--workflow-run-attempt", type=int, required=True)
+    diagnostic.add_argument("--candidate-version", default="unknown")
+    diagnostic.add_argument("--candidate-bundle", type=Path)
+    diagnostic.add_argument("--dist-dir", type=Path)
+    diagnostic.add_argument("--dependency-report", type=Path)
+    diagnostic.add_argument("--materialization-report", type=Path)
+    diagnostic.add_argument("--strict-rights-log", type=Path)
+    diagnostic.add_argument("--dependency-log", type=Path)
+    diagnostic.add_argument("--rights-admission-log", type=Path)
+    diagnostic.add_argument("--wheel-install-report", type=Path)
+    diagnostic.add_argument("--strict-rights-exit", required=True)
+    diagnostic.add_argument("--dependency-exit", required=True)
+    diagnostic.add_argument("--rights-admission-exit", required=True)
+
     assemble = subparsers.add_parser("assemble", help="admit already-built candidate bytes")
     assemble.add_argument("--repo-root", type=Path, required=True)
     assemble.add_argument("--dist-dir", type=Path, required=True)
@@ -3833,6 +4228,8 @@ def main(argv: list[str] | None = None) -> int:
             _materialize_source(args)
         elif args.command == "rights-admission":
             _admit_rights(args)
+        elif args.command == "rejected-diagnostic":
+            _rejected_diagnostic(args)
         elif args.command == "assemble":
             _assemble(args)
         elif args.command == "verify":

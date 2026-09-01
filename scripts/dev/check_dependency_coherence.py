@@ -75,6 +75,11 @@ def _identity_value(value: Any) -> Any:
     return value
 
 
+def canonical_lock_value(value: Any) -> Any:
+    """Return the shared order-insensitive identity for a parsed lock value."""
+    return _identity_value(value)
+
+
 def _as_mapping(value: Any, label: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise CoherenceError(f"{label} must be an object")
@@ -277,7 +282,7 @@ def _lock_header(text: str) -> dict[str, Any]:
 
 
 def _material_row(row: Mapping[str, Any]) -> Any:
-    return _identity_value(
+    return canonical_lock_value(
         {key: value for key, value in row.items() if key != "resolution-markers"}
     )
 

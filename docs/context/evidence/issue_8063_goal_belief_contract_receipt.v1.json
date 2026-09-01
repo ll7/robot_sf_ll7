@@ -1,0 +1,179 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema": "goal_belief_contract_receipt.v1",
+  "issue": 8063,
+  "status": "verified",
+  "source_commit": "3079ac44bc414df641d309ebcf38a14860d78095",
+  "source_tree_scope": "implementation and tests before the receipt commit",
+  "claim_boundary": "implementation-integrity / smoke only",
+  "research_claim": "none",
+  "benchmark_outcomes": "none",
+  "schemas": [
+    {
+      "name": "goal_belief",
+      "version": "goal_belief.v1"
+    },
+    {
+      "name": "oracle_transition_trace",
+      "version": "oracle_transition_trace.v1"
+    }
+  ],
+  "algorithms": {
+    "canonicalization": "RFC 8785 canonical JSON",
+    "config_hash": "SHA-256 over RFC 8785 canonical configuration JSON",
+    "content_digest": "SHA-256 over RFC 8785 canonical payload JSON"
+  },
+  "actor": {
+    "field_list": [
+      "schema_version",
+      "timestamp_s",
+      "step_index",
+      "track_id",
+      "source",
+      "coordinate_frame",
+      "units",
+      "history_order",
+      "history_steps",
+      "force_estimate",
+      "desired_velocity_xy",
+      "desired_direction_rad",
+      "candidate_probabilities",
+      "unknown_candidate_probability",
+      "arrival_probability",
+      "change_probability",
+      "mode",
+      "track_confidence",
+      "censoring_state",
+      "speed_cap_status",
+      "blockers",
+      "reset_provenance",
+      "config_hash"
+    ],
+    "speed_cap_status_values": [
+      "clear",
+      "possible",
+      "unknown"
+    ],
+    "forbidden_oracle_fields": [
+      "goal_before_behavior",
+      "goal_after_behavior",
+      "route_truth",
+      "waypoint_truth",
+      "simulator_pedestrian_id",
+      "oracle_speed_cap_active",
+      "speed_cap_truth",
+      "uncapped_velocity_xy"
+    ]
+  },
+  "oracle": {
+    "field_list": [
+      "schema_version",
+      "episode_id",
+      "transition_id",
+      "transition_step_index",
+      "simulator_pedestrian_id",
+      "actor_track_id",
+      "backend",
+      "timing",
+      "pre_behavior",
+      "post_behavior_pre_force",
+      "post_integration",
+      "force_components",
+      "dynamics",
+      "speed_cap",
+      "goal_change_kind",
+      "exact_inverse_eligible",
+      "exact_inverse_reasons",
+      "reset_provenance"
+    ],
+    "boundary_fields": [
+      "boundary",
+      "timestamp_s",
+      "step_index",
+      "position_xy",
+      "velocity_xy",
+      "active_goal_xy",
+      "route_waypoint_index",
+      "goal_threshold_reached",
+      "force_time_robot_state",
+      "mutation_flags"
+    ],
+    "force_component_fields": [
+      "social_force_xy",
+      "goal_force_xy",
+      "obstacle_force_xy",
+      "pedestrian_robot_force_xy",
+      "group_force_xy",
+      "registry_total_force_xy",
+      "residual_operation",
+      "model_variant_operation",
+      "final_pre_cap_force_xy",
+      "uncapped_velocity_xy",
+      "applied_velocity_xy"
+    ],
+    "speed_cap_truth_fields": [
+      "status",
+      "speed_cap_active",
+      "max_speed_mps",
+      "uncapped_speed_mps",
+      "applied_speed_mps"
+    ],
+    "inverse_eligibility": {
+      "default": "ineligible",
+      "unmodeled_mutations": [
+        "hold_velocity_reset",
+        "respawn_reposition",
+        "population_change"
+      ],
+      "required_override": "controller_jump_modelled"
+    }
+  },
+  "timing": {
+    "provenance": "robot_sf.sim.simulator.Simulator.step_once",
+    "order": [
+      "state_t",
+      "behavior.step",
+      "goal_after_behavior_t",
+      "compute_force_t",
+      "apply_model_variant_or_residual",
+      "integrate",
+      "state_t+1"
+    ],
+    "assertion": "passed against the real Simulator.step_once path"
+  },
+  "canaries": {
+    "randomized_oracle_goal": "passed",
+    "privileged_object_rejection": "passed",
+    "actor_key_audit": "passed",
+    "slot_reorder": "passed",
+    "future_data_rejection": "passed",
+    "reset_linkage": "passed",
+    "waypoint_timing": "passed"
+  },
+  "validation": [
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/prediction/test_goal_belief_contract.py tests/sim/test_pedestrian_goal_transition_timing.py tests/prediction/test_oracle_transition_trace_contract.py -q",
+      "result": "20 passed"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/prediction tests/sim/test_pedestrian_goal_transition_timing.py tests/sim/test_simulator_action_count.py tests/sim/test_residual_adversary_wiring.py tests/prediction/test_oracle_transition_trace_contract.py -q",
+      "result": "63 passed"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check robot_sf/prediction tests/prediction/test_goal_belief_contract.py tests/prediction/test_oracle_transition_trace_contract.py tests/sim/test_pedestrian_goal_transition_timing.py",
+      "result": "All checks passed"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run ruff format --check robot_sf/prediction tests/prediction/test_goal_belief_contract.py tests/prediction/test_oracle_transition_trace_contract.py tests/sim/test_pedestrian_goal_transition_timing.py",
+      "result": "8 files already formatted"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run mypy robot_sf/prediction",
+      "result": "Success: no issues found in 5 source files"
+    }
+  ],
+  "limitations": [
+    "Typed force-stage fields are placeholders; instrumentation population remains a follow-up.",
+    "This receipt contains no benchmark, planner, estimator, training, or prediction-quality result."
+  ]
+}

@@ -6,6 +6,12 @@ benchmark-data tag identifies an immutable campaign contract, while the
 software tag identifies installable source. Do not infer a package version from
 the benchmark-data tag, or reuse a software-release DOI for benchmark data.
 
+For the software-package lane, first build the immutable candidate with
+[`software_release_candidate.md`](./software_release_candidate.md), then follow
+[`software_release_promotion.md`](./software_release_promotion.md) for the protected
+TestPyPI → PyPI promotion. That workflow is separate from this benchmark-data checklist and
+requires a passed public-index cold-install gate before production publication.
+
 The current campaign contract is the 14-arm, differential-drive matrix in
 `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`.
 Its publication-grade manifest is

@@ -36,6 +36,9 @@ if __package__ in (None, ""):
     # this file's own location so the executing source stays the imported one.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from scripts.tools.check_dependency_license_inventory import (
+    selected_policy_pending_package_count,
+)
 from scripts.tools.check_distribution_licenses import (
     DistributionLicenseError,
     check_distribution,
@@ -3772,16 +3775,14 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - clo
             raise CandidateError("supported dependency report package selection is malformed")
         if selected_profiles:
             selected_rows.append(row)
-    pending_rows = [
-        row for row in selected_rows if row.get("policy_disposition") == "review_required"
-    ]
+    pending_package_count = selected_policy_pending_package_count(selected_rows)
     failures = report.get("failures")
     structural_issues = report.get("structural_issues")
     if not isinstance(failures, list) or not isinstance(structural_issues, list):
         raise CandidateError("supported dependency report findings are malformed")
     expected_summary = {
         "selected_package_count": len(selected_rows),
-        "policy_pending_package_count": len(pending_rows),
+        "policy_pending_package_count": pending_package_count,
         "unresolved_count": len(failures),
         "structural_issue_count": len(structural_issues),
     }

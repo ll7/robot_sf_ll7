@@ -23,6 +23,15 @@ from email.policy import default as email_policy
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+if __package__ in (None, ""):
+    # Direct workflow invocation puts only scripts/dev on sys.path.  Add the
+    # checkout root before importing the canonical dependency-row contract.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from scripts.tools.check_dependency_license_inventory import (
+    selected_policy_pending_package_count,
+)
+
 SCHEMA_VERSION = "robot_sf.software_promotion.receipt.v1"
 COLD_INSTALL_SCHEMA_VERSION = "robot_sf.software_promotion.cold_install.v1"
 INDEX_VERIFICATION_SCHEMA_VERSION = "robot_sf.software_promotion.index_verification.v1"
@@ -1080,12 +1089,10 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - clo
     structural_issues = report.get("structural_issues")
     if not isinstance(failures, list) or not isinstance(structural_issues, list):
         raise PromotionError("supported dependency report findings are malformed")
-    pending_rows = [
-        row for row in selected_rows if row.get("policy_disposition") == "review_required"
-    ]
+    pending_package_count = selected_policy_pending_package_count(selected_rows)
     expected_summary = {
         "selected_package_count": len(selected_rows),
-        "policy_pending_package_count": len(pending_rows),
+        "policy_pending_package_count": pending_package_count,
         "unresolved_count": len(failures),
         "structural_issue_count": len(structural_issues),
     }

@@ -42,6 +42,18 @@ if TYPE_CHECKING:
 
 
 SCHEMA_VERSION = "robot-sf.dependency-license-inventory.v1"
+# The inventory wire schema remains v1. This nested version records the
+# summary accounting contract so receipts can distinguish the historical
+# message-count interpretation from the row-count interpretation without
+# invalidating otherwise compatible inventory fields.
+SUMMARY_CONTRACT_VERSION = "robot-sf.dependency-license-inventory-summary.v2"
+_LEGACY_SUMMARY_CONTRACT_VERSION = "robot-sf.dependency-license-inventory-summary.v1"
+_DEPENDENCY_RECEIPT_SCHEMA_VERSION = "robot-sf.issue-8163-dependency-license-batch.receipt.v1"
+_DEPENDENCY_RECEIPT_SCHEMA_VERSION_V2 = "robot-sf.issue-8163-dependency-license-batch.receipt.v2"
+_DEPENDENCY_RECEIPT_SCHEMA_VERSIONS = {
+    _DEPENDENCY_RECEIPT_SCHEMA_VERSION,
+    _DEPENDENCY_RECEIPT_SCHEMA_VERSION_V2,
+}
 CANONICAL_PROFILE_MANIFEST = "scripts/validation/dependency_license_profiles.v1.json"
 CANONICAL_POLICY = "scripts/validation/dependency_license_policy.v1.json"
 CANONICAL_GENERATOR = "scripts/tools/check_dependency_license_inventory.py"
@@ -285,6 +297,98 @@ def _effective_profile_coverage(actual: set[str], expected: set[str]) -> set[str
         return set(actual)
     explicit = expected - {"all"}
     return {"all"} | (actual & explicit)
+
+
+def selected_policy_pending_package_count(
+    package_records: Iterable[dict[str, Any]],
+) -> int:
+    """Count selected rows with the effective ``review_required`` disposition.
+
+    ``policy_pending_package_count`` is a row-level summary field.  It must
+    not be derived from the failure-message list: one package can contribute
+    several independent fail-closed findings (for example, a metadata and an
+    exact-policy mismatch), while the admission contract counts that package
+    once.  A policy row can remain ``pending_review`` while its effective
+    disposition is ``external_dependency_not_redistributed``; those rows are
+    deliberately excluded because they are not effective ``review_required``
+    rows. Keep this counter shared by the generator and its release admission
+    validators so the serialized report has one unambiguous meaning.
+    """
+    return sum(
+        1
+        for record in package_records
+        if record.get("selected_profiles") and record.get("policy_disposition") == "review_required"
+    )
+
+
+def _strict_report_summary_contract_issues(  # noqa: C901 - fail-closed summary contract branches
+    summary: dict[str, Any],
+    *,
+    receipt_status: Any,
+    expected_policy_count: int,
+    contract_version: str | None = None,
+) -> list[str]:
+    """Validate receipt summary accounting, including the v2 split counts.
+
+    Before summary contract v2, receipts incorrectly required the number of
+    unresolved finding messages to equal the number of effective pending
+    package rows. Contract v2 binds those independent counts and records
+    structural findings, which are included in ``unresolved_count`` but kept
+    separately for diagnostics. Legacy v1 receipts without the marker retain
+    the old equality check for backwards compatibility and fail closed on
+    ambiguity; v2 receipt schemas select the new contract explicitly.
+    """
+    issues: list[str] = []
+    if summary.get("policy_exact_disposition_count") != expected_policy_count:
+        issues.append("dependency receipt strict_report policy count differs from policy")
+    expected_status = "blocked" if receipt_status != "complete" else "complete"
+    if summary.get("status") != expected_status:
+        issues.append("dependency receipt strict_report status differs from receipt status")
+
+    pending = summary.get("policy_pending_package_count")
+    unresolved = summary.get("unresolved_count")
+    if not isinstance(pending, int) or isinstance(pending, bool) or pending < 0:
+        issues.append("dependency receipt strict_report pending count is invalid")
+    if not isinstance(unresolved, int) or isinstance(unresolved, bool) or unresolved < 0:
+        issues.append("dependency receipt strict_report unresolved count is invalid")
+
+    declared_contract = summary.get("summary_contract_version")
+    if contract_version is not None:
+        accepted_declared_contracts = (
+            (None, _LEGACY_SUMMARY_CONTRACT_VERSION)
+            if contract_version == _LEGACY_SUMMARY_CONTRACT_VERSION
+            else (contract_version,)
+        )
+        if declared_contract not in accepted_declared_contracts:
+            issues.append(
+                "dependency receipt strict_report summary contract does not match receipt schema"
+            )
+        contract = contract_version
+    else:
+        contract = declared_contract or _LEGACY_SUMMARY_CONTRACT_VERSION
+    if contract not in (_LEGACY_SUMMARY_CONTRACT_VERSION, SUMMARY_CONTRACT_VERSION):
+        issues.append("dependency receipt strict_report summary contract is unsupported")
+    elif contract == _LEGACY_SUMMARY_CONTRACT_VERSION:
+        if (
+            isinstance(pending, int)
+            and not isinstance(pending, bool)
+            and isinstance(unresolved, int)
+            and not isinstance(unresolved, bool)
+            and unresolved != pending
+        ):
+            issues.append(
+                "dependency receipt strict_report unresolved count differs from pending count"
+            )
+    else:
+        structural = summary.get("structural_issue_count")
+        if not isinstance(structural, int) or isinstance(structural, bool) or structural < 0:
+            issues.append("dependency receipt strict_report structural count is invalid")
+        elif isinstance(unresolved, int) and not isinstance(unresolved, bool):
+            if structural > unresolved:
+                issues.append(
+                    "dependency receipt strict_report structural count exceeds unresolved count"
+                )
+    return issues
 
 
 def _requirement_record(requirement: str) -> dict[str, Any]:
@@ -2955,6 +3059,8 @@ def _receipt_contract_issues(  # noqa: C901, PLR0912, PLR0915
     policy: dict[str, Any],
     policy_binding: dict[str, Any],
     repo_root: Path,
+    *,
+    receipt_schema_version: str,
 ) -> list[str]:
     """Validate receipt summaries against the immutable policy and bound files."""
     issues: list[str] = []
@@ -3226,24 +3332,18 @@ def _receipt_contract_issues(  # noqa: C901, PLR0912, PLR0915
         if not isinstance(summary, dict):
             issues.append("dependency receipt strict_report has no summary")
         else:
-            if summary.get("policy_exact_disposition_count") != len(
-                policy.get("package_dispositions", [])
-            ):
-                issues.append("dependency receipt strict_report policy count differs from policy")
-            if summary.get("status") != (
-                "blocked" if receipt.get("status") != "complete" else "complete"
-            ):
-                issues.append("dependency receipt strict_report status differs from receipt status")
-            pending = summary.get("policy_pending_package_count")
-            unresolved = summary.get("unresolved_count")
-            if not isinstance(pending, int) or pending < 0:
-                issues.append("dependency receipt strict_report pending count is invalid")
-            if not isinstance(unresolved, int) or unresolved < 0:
-                issues.append("dependency receipt strict_report unresolved count is invalid")
-            elif isinstance(pending, int) and unresolved != pending:
-                issues.append(
-                    "dependency receipt strict_report unresolved count differs from pending count"
+            issues.extend(
+                _strict_report_summary_contract_issues(
+                    summary,
+                    receipt_status=receipt.get("status"),
+                    expected_policy_count=len(policy.get("package_dispositions", [])),
+                    contract_version=(
+                        SUMMARY_CONTRACT_VERSION
+                        if receipt_schema_version == _DEPENDENCY_RECEIPT_SCHEMA_VERSION_V2
+                        else _LEGACY_SUMMARY_CONTRACT_VERSION
+                    ),
                 )
+            )
             expected_exit = 2 if summary.get("status") == "blocked" else 0
             if strict.get("exit_code") != expected_exit:
                 issues.append("dependency receipt strict_report exit_code differs from status")
@@ -3333,6 +3433,8 @@ def _receipt_contract_issues(  # noqa: C901, PLR0912, PLR0915
                             "policy_exact_disposition_count",
                             "policy_pending_package_count",
                             "unresolved_count",
+                            "summary_contract_version",
+                            "structural_issue_count",
                             "status",
                         ):
                             if report_summary.get(field) != summary.get(field):
@@ -3363,7 +3465,8 @@ def validate_dependency_license_receipt(  # noqa: C901, PLR0912, PLR0915
         receipt = _read_json(receipt_path)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         return [f"dependency receipt could not be read: {exc}"]
-    if receipt.get("schema_version") != "robot-sf.issue-8163-dependency-license-batch.receipt.v1":
+    receipt_schema_version = receipt.get("schema_version")
+    if receipt_schema_version not in _DEPENDENCY_RECEIPT_SCHEMA_VERSIONS:
         issues.append("dependency receipt has an unsupported schema_version")
 
     policy_path = repo_root / CANONICAL_POLICY
@@ -3374,7 +3477,16 @@ def validate_dependency_license_receipt(  # noqa: C901, PLR0912, PLR0915
         return [f"dependency receipt policy binding could not be computed: {exc}"]
     issues.extend(policy_issues)
     try:
-        issues.extend(_receipt_contract_issues(receipt, policy, policy_binding, repo_root))
+        if isinstance(receipt_schema_version, str):
+            issues.extend(
+                _receipt_contract_issues(
+                    receipt,
+                    policy,
+                    policy_binding,
+                    repo_root,
+                    receipt_schema_version=receipt_schema_version,
+                )
+            )
     except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as exc:
         issues.append(f"dependency receipt contract could not be checked: {exc}")
     binding = receipt.get("review_binding")
@@ -4158,7 +4270,8 @@ def build_inventory(  # noqa: C901, PLR0912, PLR0915
                 }
             ),
             "license_status_counts": dict(sorted(status_counts.items())),
-            "policy_pending_package_count": len(policy_failures),
+            "summary_contract_version": SUMMARY_CONTRACT_VERSION,
+            "policy_pending_package_count": selected_policy_pending_package_count(package_records),
             "policy_pending_component_count": len(component_failures),
             "policy_exact_disposition_count": len(package_dispositions),
             "policy_exact_match_count": exact_policy_match_count,

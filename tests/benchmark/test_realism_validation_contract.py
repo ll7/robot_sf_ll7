@@ -14,6 +14,7 @@ from robot_sf.benchmark.realism_validation_contract import (
     evaluate_interaction_event_counts,
     load_realism_validation_contract,
     realism_validation_contract_from_mapping,
+    validate_realism_validation_contract,
 )
 from robot_sf.sim.pedestrian_model_variants import SOCIAL_FORCE_DEFAULT, SUPPORTED_PEDESTRIAN_MODELS
 
@@ -101,3 +102,32 @@ def test_contract_requires_constant_velocity_comparator_baseline() -> None:
 
     with pytest.raises(RealismValidationContractError, match="constant_velocity"):
         realism_validation_contract_from_mapping(payload)
+
+
+def test_validation_alias_accepts_the_shipped_contract() -> None:
+    """The public mapping validator follows the same strict path as the loader."""
+
+    contract = load_realism_validation_contract(CONTRACT_PATH)
+
+    validated = validate_realism_validation_contract(contract.to_dict(), source="fixture")
+
+    assert validated.to_dict() == contract.to_dict()
+
+
+def test_loader_rejects_non_mapping_payload(tmp_path: Path) -> None:
+    """A YAML list cannot masquerade as a realism validation contract."""
+
+    path = tmp_path / "invalid.yaml"
+    path.write_text("- not-a-contract\n", encoding="utf-8")
+
+    with pytest.raises(RealismValidationContractError, match="must be a mapping"):
+        load_realism_validation_contract(path)
+
+
+def test_loader_rejects_missing_contract_file(tmp_path: Path) -> None:
+    """A missing preregistration fails closed with its source path."""
+
+    path = tmp_path / "missing.yaml"
+
+    with pytest.raises(RealismValidationContractError, match="cannot be read"):
+        load_realism_validation_contract(path)

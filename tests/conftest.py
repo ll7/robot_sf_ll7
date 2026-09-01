@@ -584,6 +584,10 @@ _FAST_FILES = {
     # coverage for the changed planner producer; keep them in the exact-head
     # fast lane for changed-coverage admission.
     "test_force_coupled_potential_field.py",
+    # The evaluator-only oracle channel test is a one-step deterministic contract
+    # for changed environment plumbing; keep it in PR fast shards so changed
+    # coverage proves the info-only branch.
+    "test_oracle_force_trace_channel.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

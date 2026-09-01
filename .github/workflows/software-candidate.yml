@@ -216,6 +216,7 @@ jobs:
 
       - name: Admit rights and dependency evidence into a separate receipt
         run: >-
+          uv run --no-project --with 'pyyaml==6.0.3' --with 'packaging==26.0'
           python scripts/dev/software_candidate_manifest.py rights-admission
           --repo-root "${GITHUB_WORKSPACE}"
           --candidate-root "${CANDIDATE_SOURCE}"

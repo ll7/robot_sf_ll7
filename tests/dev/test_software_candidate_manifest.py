@@ -1215,19 +1215,52 @@ def test_json_output_serialization_rejects_nonfinite_values() -> None:
 
 def test_helper_runs_as_bare_script_without_pythonpath(tmp_path: Path) -> None:
     """Hermetic workflow steps invoke the helper with bare ``python`` and no
-    project install: the ``scripts`` package must resolve from the helper's
-    own location, not from the caller's environment (issue #8145)."""
+    project install: the dependency-free identity path must resolve from the
+    helper's own location, not from the caller's environment (issue #8145)."""
     env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
-    result = subprocess.run(
-        [sys.executable, str(HELPER), "--help"],
-        cwd=tmp_path,
+    clean_root = tmp_path / "clean-source"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(clean_root), "HEAD"],
+        cwd=REPO_ROOT,
         capture_output=True,
         text=True,
-        env=env,
-        check=False,
+        check=True,
     )
-    assert result.returncode == 0, result.stderr
-    assert "No module named 'scripts'" not in result.stderr
+    try:
+        source_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=clean_root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-S",
+                str(clean_root / "scripts" / "dev" / "software_candidate_manifest.py"),
+                "check-source",
+                "--repo-root",
+                str(clean_root),
+                "--source-sha",
+                source_sha,
+            ],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "No module named 'scripts'" not in result.stderr
+    finally:
+        subprocess.run(
+            ["git", "worktree", "remove", "--force", str(clean_root)],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
 
 
 def test_bare_script_bootstrap_is_present_in_hermetic_entrypoints() -> None:

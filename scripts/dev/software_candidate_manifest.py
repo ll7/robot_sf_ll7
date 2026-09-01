@@ -34,10 +34,35 @@ if __package__ in (None, ""):
     # this file's own location so the executing source stays the imported one.
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from scripts.tools.check_distribution_licenses import (
-    DistributionLicenseError,
-    check_distribution,
-)
+
+class DistributionLicenseError(ValueError):
+    """Compatibility error exposed by the lazy distribution-license facade."""
+
+
+def check_distribution(
+    dist_dir: Path,
+    *,
+    require_pyrvo2: bool = False,
+    strict_asset_rights: bool = False,
+    repo_root: Path | None = None,
+    inventory_path: Path | None = None,
+    source_tree_ref: str | None = None,
+) -> Any:
+    """Load the canonical distribution gate only when strict admission needs it."""
+    from scripts.tools import check_distribution_licenses
+
+    try:
+        return check_distribution_licenses.check_distribution(
+            dist_dir,
+            require_pyrvo2=require_pyrvo2,
+            strict_asset_rights=strict_asset_rights,
+            repo_root=repo_root,
+            inventory_path=inventory_path,
+            source_tree_ref=source_tree_ref,
+        )
+    except check_distribution_licenses.DistributionLicenseError as exc:
+        raise DistributionLicenseError(str(exc)) from exc
+
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

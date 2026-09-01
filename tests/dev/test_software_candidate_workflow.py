@@ -203,6 +203,7 @@ def test_workflow_builds_once_then_only_validates_and_admits_same_dist_bytes() -
     assert dependency_index < upload_index < rights_index
     assert '--dependency-report "${DEPENDENCY_REPORT}"' in rights_run
     assert '--candidate-artifact-id "${{ steps.upload.outputs.artifact-id }}"' in rights_run
+    assert "uv run --no-project --with 'pyyaml==6.0.3' --with 'packaging==26.0'" in rights_run
 
     sbom_run = next(run for _index, run in run_steps if "uv export" in run)
     assert "--extra all" in sbom_run

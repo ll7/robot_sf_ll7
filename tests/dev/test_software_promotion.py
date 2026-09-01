@@ -15,6 +15,12 @@ from pathlib import Path
 from scripts.dev.software_promotion import PromotionError, _distribution_extras
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+DEPENDENCY_POLICY_SHA256 = hashlib.sha256(
+    (REPO_ROOT / "scripts/validation/dependency_license_policy.v1.json").read_bytes()
+).hexdigest()
+DEPENDENCY_PROFILE_SHA256 = hashlib.sha256(
+    (REPO_ROOT / "scripts/validation/dependency_license_profiles.v1.json").read_bytes()
+).hexdigest()
 CANDIDATE_HELPER = REPO_ROOT / "scripts" / "dev" / "software_candidate_manifest.py"
 PROMOTION_HELPER = REPO_ROOT / "scripts" / "dev" / "software_promotion.py"
 VALIDATORS = (
@@ -70,10 +76,13 @@ def _source_repo(path: Path) -> tuple[Path, str]:
 
 
 def _distributions(
-    path: Path, version: str = "0.0.6", extras: tuple[str, ...] = SUPPORTED_DISTRIBUTION_EXTRAS
+    path: Path,
+    version: str = "0.0.6",
+    extras: tuple[str, ...] = SUPPORTED_DISTRIBUTION_EXTRAS,
+    metadata_header: str = "Provides-Extra",
 ) -> Path:
     path.mkdir()
-    extra_metadata = "".join(f"Provides-Extra: {extra}\n" for extra in extras)
+    extra_metadata = "".join(f"{metadata_header}: {extra}\n" for extra in extras)
     wheel = path / f"robot_sf-{version}-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr(
@@ -124,9 +133,10 @@ def _candidate(
     *,
     include_materialization: bool = False,
     extras: tuple[str, ...] = SUPPORTED_DISTRIBUTION_EXTRAS,
+    metadata_header: str = "Provides-Extra",
 ) -> tuple[Path, str, Path]:
     source, source_sha = _source_repo(tmp_path / "source")
-    dist = _distributions(tmp_path / "dist", extras=extras)
+    dist = _distributions(tmp_path / "dist", extras=extras, metadata_header=metadata_header)
     raw_sbom = _raw_sbom(tmp_path / "raw-sbom.json")
     bundle = tmp_path / "bundle"
     args = [
@@ -214,23 +224,27 @@ def _candidate(
                         "gpu",
                         "training",
                         "recurrent",
+                        "rllib",
                         "progress",
                         "analytics",
                         "browser",
                         "sacadrl",
                         "socnav",
                         "criticality",
+                        "all",
+                        "fast-pysf",
+                        "socnavbench",
                     ],
                     "schema_version": "robot-sf.dependency-license-profiles.v1",
                 },
                 "repository_inputs": [
                     {
                         "path": "scripts/validation/dependency_license_policy.v1.json",
-                        "sha256": "d" * 64,
+                        "sha256": DEPENDENCY_POLICY_SHA256,
                     },
                     {
                         "path": "scripts/validation/dependency_license_profiles.v1.json",
-                        "sha256": "e" * 64,
+                        "sha256": DEPENDENCY_PROFILE_SHA256,
                     },
                 ],
                 "schema_version": "robot-sf.dependency-license-inventory.v1",
@@ -301,11 +315,11 @@ def _candidate(
                     ),
                     "id": "strict-supported-dependency-surface",
                     "policy_path": "scripts/validation/dependency_license_policy.v1.json",
-                    "policy_sha256": "d" * 64,
+                    "policy_sha256": DEPENDENCY_POLICY_SHA256,
                     "profile_manifest_path": (
                         "scripts/validation/dependency_license_profiles.v1.json"
                     ),
-                    "profile_manifest_sha256": "e" * 64,
+                    "profile_manifest_sha256": DEPENDENCY_PROFILE_SHA256,
                     "report_filename": "dependency-license-inventory.json",
                     "report_sha256": dependency_report_sha256,
                     "schema_version": "robot-sf.dependency-license-inventory.v1",
@@ -420,9 +434,9 @@ def test_candidate_verification_rejects_missing_or_unresolved_rights_admission(
         ),
         "id": "strict-supported-dependency-surface",
         "policy_path": "scripts/validation/dependency_license_policy.v1.json",
-        "policy_sha256": "d" * 64,
+        "policy_sha256": DEPENDENCY_POLICY_SHA256,
         "profile_manifest_path": "scripts/validation/dependency_license_profiles.v1.json",
-        "profile_manifest_sha256": "e" * 64,
+        "profile_manifest_sha256": DEPENDENCY_PROFILE_SHA256,
         "report_filename": "dependency-license-inventory.json",
         "report_sha256": "f" * 64,
         "schema_version": "robot-sf.dependency-license-inventory.v1",
@@ -500,21 +514,36 @@ def test_actual_built_wheel_is_checked_against_closed_distribution_surface(
 
     output_dir = tmp_path / "wheel"
     subprocess.run(
-        ["uv", "build", "--wheel", "--out-dir", str(output_dir), "--quiet"],
+        ["uv", "build", "--wheel", "--sdist", "--out-dir", str(output_dir), "--quiet"],
         cwd=REPO_ROOT,
         check=True,
         capture_output=True,
         text=True,
     )
-    wheel = next(output_dir.glob("*.whl"))
     try:
-        extras = _distribution_extras(wheel)
+        extras = _distribution_extras(next(output_dir.glob("*.whl")), kind="wheel")
     except PromotionError as exc:
         # The unsanitized development tree currently advertises rllib.  It
         # must be rejected until the producer removes it from the release.
         assert "unsupported=['rllib']" in str(exc)
     else:
         assert extras == frozenset(SUPPORTED_DISTRIBUTION_EXTRAS)
+    try:
+        extras = _distribution_extras(next(output_dir.glob("*.tar.gz")), kind="sdist")
+    except PromotionError as exc:
+        assert "unsupported=['rllib']" in str(exc)
+    else:
+        assert extras == frozenset(SUPPORTED_DISTRIBUTION_EXTRAS)
+
+
+def test_case_insensitive_distribution_metadata_headers_are_supported(tmp_path: Path) -> None:
+    """RFC-style case-insensitive metadata headers must work for wheel and sdist."""
+
+    bundle_root = tmp_path / "case-variant"
+    bundle_root.mkdir()
+    _source, source_sha, bundle = _candidate(bundle_root, metadata_header="pRoViDeS-eXtRa")
+    accepted = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle))
+    assert accepted.returncode == 0, accepted.stderr
 
 
 def test_candidate_verification_rejects_rebound_manifest_attempt_drift(tmp_path: Path) -> None:
@@ -553,7 +582,14 @@ def test_candidate_verification_rejects_rebound_embedded_profile_roster(tmp_path
     rights_dir = bundle.parent / "rights-admission-artifact"
     report_path = rights_dir / "dependency-license-inventory.json"
     report = json.loads(report_path.read_text(encoding="utf-8"))
-    report["profile_manifest"]["profile_ids"] = [*SUPPORTED_EXTRAS, "core", "rllib"]
+    report["profile_manifest"]["profile_ids"] = [
+        "core",
+        *SUPPORTED_EXTRAS,
+        "all",
+        "fast-pysf",
+        "socnavbench",
+        "orca",
+    ]
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     receipt_path = rights_dir / "rights-admission.json"
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -563,7 +599,28 @@ def test_candidate_verification_rejects_rebound_embedded_profile_roster(tmp_path
     receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
     assert rejected.returncode == 1
-    assert "embedded profile roster" in rejected.stderr
+    assert "profile roster" in rejected.stderr
+
+
+def test_candidate_verification_rejects_stale_dependency_input_digest(tmp_path: Path) -> None:
+    """Receipt/report rehashing must detect a policy input changed in the trusted checkout."""
+
+    _source, source_sha, bundle = _candidate(tmp_path)
+    rights_dir = bundle.parent / "rights-admission-artifact"
+    report_path = rights_dir / "dependency-license-inventory.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["repository_inputs"][0]["sha256"] = "0" * 64
+    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    receipt_path = rights_dir / "rights-admission.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["supported_dependency_gate"]["report_sha256"] = hashlib.sha256(
+        report_path.read_bytes()
+    ).hexdigest()
+    receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    rejected = _run_helper("verify-candidate", *_candidate_args(source_sha, bundle), check=False)
+    assert rejected.returncode == 1
+    assert "canonical dependency report is stale" in rejected.stderr
 
 
 def test_candidate_validation_roster_allows_strict_rights_upgrade(tmp_path: Path) -> None:

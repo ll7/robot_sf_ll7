@@ -3720,6 +3720,8 @@ def _verify(args: argparse.Namespace) -> None:
         raise CandidateError("expected source SHA must be one exact lowercase 40-hex identity")
     if not RUN_ID_PATTERN.fullmatch(args.expected_workflow_run_id):
         raise CandidateError("expected workflow run ID must be a positive decimal identity")
+    if args.expected_workflow_run_attempt < 1:
+        raise CandidateError("expected workflow run attempt must be positive")
     entries = _bundle_entries(args.bundle_dir)
     manifest = _validate_manifest(
         _load_json(args.bundle_dir / MANIFEST_NAME, label="candidate manifest")
@@ -3733,6 +3735,11 @@ def _verify(args: argparse.Namespace) -> None:
         raise CandidateError(
             f"candidate workflow-run drift: expected {args.expected_workflow_run_id}, "
             f"found {manifest['workflow']['run_id']}"
+        )
+    if manifest["workflow"]["run_attempt"] != args.expected_workflow_run_attempt:
+        raise CandidateError(
+            f"candidate workflow-attempt drift: expected {args.expected_workflow_run_attempt}, "
+            f"found {manifest['workflow']['run_attempt']}"
         )
     _verify_bundle_membership(args.bundle_dir, entries, manifest)
     _verify_archives_and_sbom(args.bundle_dir, manifest)
@@ -3807,6 +3814,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     verify.add_argument("--bundle-dir", type=Path, required=True)
     verify.add_argument("--expected-source-sha", required=True)
     verify.add_argument("--expected-workflow-run-id", required=True)
+    verify.add_argument("--expected-workflow-run-attempt", type=int, required=True)
     verify.add_argument("--schema", type=Path, default=SCHEMA_PATH)
     return parser.parse_args(argv)
 

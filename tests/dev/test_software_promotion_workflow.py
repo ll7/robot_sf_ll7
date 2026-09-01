@@ -144,7 +144,7 @@ def test_workflow_requires_the_external_sanitized_candidate_producer() -> None:
     assert "actions/runs/${{ inputs.rights_admission_run_id }}" not in text
     assert "same producer run attempt" in text
     assert "rights-admission.json" in text
-    assert "#8149" in text
+    assert "#8165" in text
     docs = (REPO_ROOT / "docs" / "software_release_promotion.md").read_text(encoding="utf-8")
     assert "supported-surface dependency" in docs
     assert "--fail-on-unresolved" in docs

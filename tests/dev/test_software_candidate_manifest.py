@@ -33,8 +33,11 @@ def _run(
     check: bool = True,
     env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    command = list(args)
+    if command and command[0] == "verify" and "--expected-workflow-run-attempt" not in command:
+        command.extend(("--expected-workflow-run-attempt", "1"))
     return subprocess.run(
-        [sys.executable, str(HELPER), *args],
+        [sys.executable, str(HELPER), *command],
         check=check,
         capture_output=True,
         text=True,
@@ -213,6 +216,8 @@ def test_assemble_is_deterministic_and_offline_verify_reuses_exact_bytes(tmp_pat
         source_sha,
         "--expected-workflow-run-id",
         "123456",
+        "--expected-workflow-run-attempt",
+        "1",
     )
     assert "PASS" in result.stdout
 
@@ -1064,11 +1069,25 @@ def test_verify_rejects_source_and_workflow_run_drift(tmp_path: Path) -> None:
         "999999",
         check=False,
     )
+    attempt_drift = _run(
+        "verify",
+        "--bundle-dir",
+        str(bundle),
+        "--expected-source-sha",
+        source_sha,
+        "--expected-workflow-run-id",
+        "123456",
+        "--expected-workflow-run-attempt",
+        "2",
+        check=False,
+    )
 
     assert source_drift.returncode == 1
     assert "candidate source drift" in source_drift.stderr
     assert run_drift.returncode == 1
     assert "candidate workflow-run drift" in run_drift.stderr
+    assert attempt_drift.returncode == 1
+    assert "candidate workflow-attempt drift" in attempt_drift.stderr
 
 
 def test_schema_accepts_emitted_manifest_and_invalid_schema_fails_closed(tmp_path: Path) -> None:

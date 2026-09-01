@@ -32,7 +32,7 @@ on:
         required: true
         type: string
       rights_admission_run_id:
-        description: "#8149 workflow run ID that produced the rights-clean admission receipt"
+        description: "#8165 workflow run ID that produced the rights-clean admission receipt"
         required: true
         type: string
       rights_admission_run_attempt:
@@ -40,7 +40,7 @@ on:
         required: true
         type: string
       rights_admission_artifact_id:
-        description: "Exact GitHub artifact ID for the #8149 rights-clean admission receipt"
+        description: "Exact GitHub artifact ID for the #8165 rights-clean admission receipt"
         required: true
         type: string
       rights_admission_artifact_name:
@@ -321,7 +321,8 @@ jobs:
           python scripts/dev/software_candidate_manifest.py verify \
             --bundle-dir "${CANDIDATE_DIR}" \
             --expected-source-sha "${SOURCE_SHA}" \
-            --expected-workflow-run-id "${RUN_ID}"
+            --expected-workflow-run-id "${RUN_ID}" \
+            --expected-workflow-run-attempt "${CANDIDATE_RUN_ATTEMPT}"
           printf 'version=%s\n' "${VERSION}" >> "${GITHUB_OUTPUT}"
 
   testpypi-upload:
@@ -451,7 +452,8 @@ jobs:
             --candidate-artifact-digest "${ARTIFACT_DIGEST}" --version "${VERSION}"
           python scripts/dev/software_candidate_manifest.py verify \
             --bundle-dir "${CANDIDATE_DIR}" --expected-source-sha "${SOURCE_SHA}" \
-            --expected-workflow-run-id "${RUN_ID}"
+            --expected-workflow-run-id "${RUN_ID}" \
+            --expected-workflow-run-attempt "${CANDIDATE_RUN_ATTEMPT}"
 
       - name: Stage exact wheel and sdist without rebuilding
         env:
@@ -717,7 +719,8 @@ jobs:
             --run-attempt "${RIGHTS_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind rights
           python scripts/dev/software_candidate_manifest.py verify \
             --bundle-dir "${CANDIDATE_DIR}" --expected-source-sha "${SOURCE_SHA}" \
-            --expected-workflow-run-id "${CANDIDATE_RUN_ID}"
+            --expected-workflow-run-id "${CANDIDATE_RUN_ID}" \
+            --expected-workflow-run-attempt "${CANDIDATE_RUN_ATTEMPT}"
           python scripts/dev/software_promotion.py check-artifact \
             --metadata "${receipt_metadata}" --artifact-id "${RECEIPT_ID}" \
             --artifact-name "${RECEIPT_NAME}" --artifact-digest "${RECEIPT_DIGEST}" \
@@ -962,7 +965,8 @@ jobs:
             --run-attempt "${GITHUB_RUN_ATTEMPT}" --source-sha "${SOURCE_SHA}" --kind promotion
           python scripts/dev/software_candidate_manifest.py verify \
             --bundle-dir "${CANDIDATE_DIR}" --expected-source-sha "${SOURCE_SHA}" \
-            --expected-workflow-run-id "${CANDIDATE_RUN_ID}"
+            --expected-workflow-run-id "${CANDIDATE_RUN_ID}" \
+            --expected-workflow-run-attempt "${CANDIDATE_RUN_ATTEMPT}"
           python scripts/dev/software_promotion.py check-artifact \
             --metadata "${test_metadata}" --artifact-id "${TEST_ID}" \
             --artifact-name "${TEST_NAME}" --artifact-digest "${TEST_DIGEST}" \

@@ -84,13 +84,13 @@ the publisher even when every surrounding receipt hash has been refreshed.
 
 ## First promotion
 
-1. Run the rights-clean candidate workflow and retain its exact
-   rights-admission artifact identity. Then run the reusable
-   [`software-candidate.yml`](../.github/workflows/software-candidate.yml)
-   workflow at the same reviewed source ref. Record its exact artifact ID, artifact
-   name, `sha256:` artifact digest, workflow run ID and attempt, source SHA,
-   and package version from the run summary as well as the five rights-admission
-   values.
+1. Run the sanctioned direct-dispatch producer from #8165 once at the reviewed
+   source ref. Retain the candidate and rights-admission artifacts from that
+   same successful run, including each exact artifact ID, name, `sha256:` digest,
+   workflow run ID and attempt, source SHA, and package version. The producer
+   must emit the candidate wheel/sdist with exactly the twelve supported extras
+   plus `all`, while its canonical profile report retains the complete profile
+   manifest.
 2. Dispatch `software-promotion.yml` with the candidate and rights-admission
    values. The
    candidate artifact is downloaded by immutable artifact ID, and its GitHub
@@ -120,13 +120,13 @@ Receipt artifact IDs and `sha256:` digests are printed as non-secret run
 ## Safe resume
 
 If TestPyPI accepted the package but the workflow stopped afterwards, dispatch
-again with the prior TestPyPI receipt artifact's run ID, artifact ID, name,
-and digest. The workflow verifies that unexpired artifact and the exact
+again with all five prior TestPyPI receipt fields: run ID, run attempt, artifact
+ID, artifact name, and artifact digest. The workflow verifies that unexpired artifact and the exact
 candidate binding, skips the TestPyPI upload, and reruns the public-index
 cold-install gate.
 
 If PyPI accepted the package but the workflow stopped while recording its
-receipt, supply the analogous prior PyPI receipt values. The production job
+receipt, supply all five analogous prior PyPI receipt fields. The production job
 then verifies that receipt and skips a duplicate upload; the downstream
 cold-verification job still downloads both formats and rechecks their exact
 hashes. Missing, expired,

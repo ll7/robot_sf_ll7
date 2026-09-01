@@ -16,7 +16,10 @@ import json
 import re
 import shutil
 import sys
+import tarfile
 import zipfile
+from email.parser import BytesParser
+from email.policy import default as email_policy
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -112,8 +115,9 @@ SUPPORTED_RELEASE_EXTRAS = frozenset(
 # ``all`` is the supported aggregator published by the sanitized candidate;
 # standalone ``rllib`` remains intentionally outside the release surface.
 SUPPORTED_RELEASE_DISTRIBUTION_EXTRAS = SUPPORTED_RELEASE_EXTRAS | {"all"}
-# Preserve the checked-in profile manifest order while excluding the unsupported
-# ``rllib``, ``fast-pysf``, and ``socnavbench`` profiles.
+# Preserve the complete checked-in profile-manifest order. The selected
+# release surface is still ``all``; the canonical manifest intentionally also
+# records non-release profiles as visible context.
 SUPPORTED_RELEASE_PROFILE_ROSTER = (
     "core",
     "viz",
@@ -122,12 +126,16 @@ SUPPORTED_RELEASE_PROFILE_ROSTER = (
     "gpu",
     "training",
     "recurrent",
+    "rllib",
     "progress",
     "analytics",
     "browser",
     "sacadrl",
     "socnav",
     "criticality",
+    "all",
+    "fast-pysf",
+    "socnavbench",
 )
 SUPPORTED_DEPENDENCY_GATE_ID = "strict-supported-dependency-surface"
 SUPPORTED_DEPENDENCY_REPORT_NAME = "dependency-license-inventory.json"
@@ -505,30 +513,45 @@ def _validate_provenance_materialization(
         raise PromotionError("candidate provenance materialization differs from the manifest")
 
 
-def _distribution_extras(path: Path) -> frozenset[str]:
-    """Read optional extras from the candidate wheel's exact metadata bytes."""
+def _distribution_extras(path: Path, *, kind: str) -> frozenset[str]:
+    """Read case-insensitive extras from one exact wheel or sdist metadata file."""
 
-    _require_real_file(path, label="candidate wheel")
+    _require_real_file(path, label=f"candidate {kind}")
     try:
-        with zipfile.ZipFile(path) as archive:
-            metadata_names = [
-                name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
-            ]
-            if len(metadata_names) != 1:
-                raise PromotionError("candidate wheel must contain exactly one METADATA file")
-            metadata = archive.read(metadata_names[0]).decode("utf-8")
-    except (OSError, UnicodeError, zipfile.BadZipFile) as exc:
-        raise PromotionError(f"candidate wheel metadata is unreadable: {path}") from exc
+        if kind == "wheel":
+            with zipfile.ZipFile(path) as archive:
+                metadata_names = [
+                    name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+                ]
+                if len(metadata_names) != 1:
+                    raise PromotionError("candidate wheel must contain exactly one METADATA file")
+                metadata_bytes = archive.read(metadata_names[0])
+        elif kind == "sdist":
+            with tarfile.open(path, "r:*") as archive:
+                metadata_members = [
+                    member for member in archive.getmembers() if member.name.endswith("/PKG-INFO")
+                ]
+                if len(metadata_members) != 1:
+                    raise PromotionError("candidate sdist must contain exactly one PKG-INFO file")
+                extracted = archive.extractfile(metadata_members[0])
+                if extracted is None:
+                    raise PromotionError("candidate sdist PKG-INFO is unreadable")
+                metadata_bytes = extracted.read()
+        else:
+            raise PromotionError(f"unsupported candidate distribution kind: {kind}")
+        metadata = BytesParser(policy=email_policy).parsebytes(metadata_bytes)
+    except (OSError, UnicodeError, tarfile.TarError, zipfile.BadZipFile) as exc:
+        raise PromotionError(f"candidate {kind} metadata is unreadable: {path}") from exc
     extras = frozenset(
-        line.partition(":")[2].strip()
-        for line in metadata.splitlines()
-        if line.startswith("Provides-Extra:") and line.partition(":")[2].strip()
+        value.strip().lower()
+        for value in metadata.get_all("Provides-Extra", [])
+        if isinstance(value, str) and value.strip()
     )
     if extras != SUPPORTED_RELEASE_DISTRIBUTION_EXTRAS:
         missing = sorted(SUPPORTED_RELEASE_DISTRIBUTION_EXTRAS - extras)
         unsupported = sorted(extras - SUPPORTED_RELEASE_DISTRIBUTION_EXTRAS)
         raise PromotionError(
-            "candidate wheel Provides-Extra values differ from the closed supported surface: "
+            f"candidate {kind} Provides-Extra values differ from the closed supported surface: "
             f"missing={missing}, unsupported={unsupported}"
         )
     return extras
@@ -579,8 +602,13 @@ def _load_candidate(
         "provenance_sha256": provenance_member["sha256"],
         "sbom_sha256": validated_members[2]["sha256"],
         "materialization": materialization,
-        "distribution_extras": _distribution_extras(bundle_dir / validated_members[0]["filename"]),
+        "distribution_extras": _distribution_extras(
+            bundle_dir / validated_members[0]["filename"], kind="wheel"
+        ),
     }
+    sdist_extras = _distribution_extras(bundle_dir / validated_members[1]["filename"], kind="sdist")
+    if sdist_extras != identity["distribution_extras"]:
+        raise PromotionError("candidate wheel and sdist advertise different optional extras")
     return manifest, identity
 
 
@@ -873,12 +901,51 @@ def _dependency_input_digest(report: dict[str, Any], path: str, *, label: str) -
     return digest
 
 
+def _validate_canonical_dependency_inputs(
+    report: dict[str, Any],
+    report_path: Path,
+    *,
+    repo_root: Path,
+) -> None:
+    """Bind report inputs and the full profile roster to the trusted checkout."""
+
+    try:
+        from scripts.tools.check_dependency_license_inventory import check_report_freshness
+
+        freshness_issues = check_report_freshness(repo_root, report_path)
+    except (OSError, ValueError, ImportError) as exc:
+        raise PromotionError("canonical dependency report freshness could not be checked") from exc
+    # The consumer independently validates candidate/package bindings below;
+    # the canonical helper's candidate-bundle requirement is therefore not an
+    # input-freshness failure at this boundary.
+    actionable = [
+        issue
+        for issue in freshness_issues
+        if issue != "candidate-bound report freshness requires --candidate-bundle"
+    ]
+    if actionable:
+        raise PromotionError(f"canonical dependency report is stale: {actionable}")
+
+    canonical_path = repo_root / SUPPORTED_DEPENDENCY_PROFILE_PATH
+    canonical = _load_json(canonical_path, label="canonical dependency profile manifest")
+    profiles = canonical.get("profiles")
+    if not isinstance(profiles, list):
+        raise PromotionError("canonical dependency profile manifest has no profile list")
+    canonical_ids = [profile.get("id") for profile in profiles if isinstance(profile, dict)]
+    if canonical_ids != list(SUPPORTED_RELEASE_PROFILE_ROSTER):
+        raise PromotionError("trusted checkout profile manifest roster is not the closed contract")
+    embedded = report.get("profile_manifest")
+    if not isinstance(embedded, dict) or embedded.get("profile_ids") != canonical_ids:
+        raise PromotionError("dependency report profile roster differs from trusted checkout")
+
+
 def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - closed report contract
     path: Path,
     *,
     identity: dict[str, Any],
     tree_sha256: str,
     expected_gate: dict[str, Any],
+    repo_root: Path,
 ) -> None:
     """Validate the transported dependency report, not only its receipt digest."""
 
@@ -902,6 +969,7 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - clo
         raise PromotionError("supported dependency report contains unresolved rows")
     if report.get("failures") != [] or report.get("structural_issues") != []:
         raise PromotionError("supported dependency report contains failures")
+    _validate_canonical_dependency_inputs(report, path, repo_root=repo_root)
 
     profile_manifest = report.get("profile_manifest")
     if not isinstance(profile_manifest, dict) or profile_manifest.get("path") != (
@@ -928,8 +996,8 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - clo
     embedded_profile_ids = profile_manifest.get("profile_ids")
     if embedded_profile_ids != list(SUPPORTED_RELEASE_PROFILE_ROSTER):
         raise PromotionError(
-            "supported dependency report embedded profile roster differs from the closed "
-            "supported surface"
+            "supported dependency report embedded profile roster differs from the trusted "
+            "canonical profile manifest"
         )
     if identity["distribution_extras"] != SUPPORTED_RELEASE_DISTRIBUTION_EXTRAS:
         raise PromotionError("candidate archive does not advertise the supported profile surface")
@@ -1009,6 +1077,7 @@ def _validate_rights_admission(  # noqa: C901, PLR0912, PLR0915 - closed rights 
     path: Path,
     *,
     identity: dict[str, Any],
+    repo_root: Path,
 ) -> None:
     """Require the independent rights-clean admission before publication.
 
@@ -1168,6 +1237,7 @@ def _validate_rights_admission(  # noqa: C901, PLR0912, PLR0915 - closed rights 
         identity=identity,
         tree_sha256=tree_sha256,
         expected_gate=dependency_gate,
+        repo_root=repo_root,
     )
 
 
@@ -1192,7 +1262,7 @@ def _load_and_bind_candidate(args: argparse.Namespace) -> tuple[dict[str, Any], 
     identity["artifact_digest"] = args.candidate_artifact_digest
     identity["artifact_id"] = args.candidate_artifact_id
     identity["artifact_name"] = args.candidate_artifact_name
-    _validate_rights_admission(args.rights_receipt, identity=identity)
+    _validate_rights_admission(args.rights_receipt, identity=identity, repo_root=Path.cwd())
     return manifest, identity
 
 

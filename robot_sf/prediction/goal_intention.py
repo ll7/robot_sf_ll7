@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from robot_sf.prediction._contract_utils import (
+    require_digest,
     require_finite,
     require_non_negative,
     require_probability,
@@ -39,6 +40,7 @@ class GoalCandidateRole(StrEnum):
 
     ACTIVE_WAYPOINT = "active_waypoint"
     FINAL_DESTINATION = "final_destination"
+    BOTH = "both"
     ROUTE_ENDPOINT = "route_endpoint"
     OPEN_RAY = "open_ray"
     UNKNOWN = "unknown"
@@ -64,8 +66,16 @@ class GoalCandidate:
     availability: GoalCandidateAvailability = GoalCandidateAvailability.AVAILABLE
     prior_weight: float | None = None
     coordinate_frame: CoordinateFrame = CoordinateFrame.GLOBAL_XY
+    direction: tuple[float, float] | None = None
+    angular_support_rad: float | None = None
+    parent_destination_id: str | None = None
+    path_tangent: tuple[float, float] | None = None
+    path_mode: str | None = None
+    feasibility_status: str = "feasible"
+    provenance_refs: tuple[str, ...] = ()
+    config_hash: str | None = None
 
-    def __post_init__(self) -> None:
+    def __post_init__(self) -> None:  # noqa: C901, PLR0912
         """Reject ambiguous identity, frame, provenance, and non-finite geometry."""
 
         object.__setattr__(self, "id", require_text(self.id, "candidate.id"))
@@ -98,6 +108,45 @@ class GoalCandidate:
                 "prior_weight",
                 require_non_negative(self.prior_weight, "candidate.prior_weight"),
             )
+        if self.direction is not None:
+            object.__setattr__(self, "direction", _unit_xy(self.direction, "candidate.direction"))
+        if self.angular_support_rad is not None:
+            support = require_finite(self.angular_support_rad, "candidate.angular_support_rad")
+            if not 0.0 <= support <= math.pi:
+                raise ValueError("candidate.angular_support_rad must be between 0 and pi")
+            object.__setattr__(self, "angular_support_rad", support)
+        if self.parent_destination_id is not None:
+            object.__setattr__(
+                self,
+                "parent_destination_id",
+                require_text(self.parent_destination_id, "candidate.parent_destination_id"),
+            )
+        if self.path_tangent is not None:
+            object.__setattr__(
+                self, "path_tangent", _unit_xy(self.path_tangent, "candidate.path_tangent")
+            )
+        if self.path_mode is not None:
+            object.__setattr__(
+                self, "path_mode", require_text(self.path_mode, "candidate.path_mode")
+            )
+        object.__setattr__(
+            self,
+            "feasibility_status",
+            require_text(self.feasibility_status, "candidate.feasibility_status"),
+        )
+        provenance = tuple(
+            require_text(ref, "candidate.provenance_refs[]") for ref in self.provenance_refs
+        )
+        if len(provenance) != len(set(provenance)):
+            raise ValueError("candidate.provenance_refs must be unique")
+        object.__setattr__(self, "provenance_refs", tuple(sorted(provenance)))
+        if self.config_hash is not None:
+            object.__setattr__(
+                self, "config_hash", require_digest(self.config_hash, "candidate.config_hash")
+            )
+
+        if self.role is GoalCandidateRole.OPEN_RAY and self.position is not None:
+            raise ValueError("open-ray candidates must not contain a Cartesian position")
 
     @property
     def candidate_id(self) -> str:
@@ -109,7 +158,7 @@ class GoalCandidate:
     def kind(self) -> GoalCandidateKind:
         """Map the richer candidate role to the v1 probability role."""
 
-        if self.role is GoalCandidateRole.FINAL_DESTINATION:
+        if self.role in {GoalCandidateRole.FINAL_DESTINATION, GoalCandidateRole.BOTH}:
             return GoalCandidateKind.FINAL_DESTINATION
         return GoalCandidateKind.ACTIVE_WAYPOINT
 
@@ -121,6 +170,7 @@ _POINT_CANDIDATE_ROLES = frozenset(
     {
         GoalCandidateRole.ACTIVE_WAYPOINT,
         GoalCandidateRole.FINAL_DESTINATION,
+        GoalCandidateRole.BOTH,
         GoalCandidateRole.ROUTE_ENDPOINT,
     }
 )
@@ -192,13 +242,31 @@ class GoalCandidateSet:
             "candidates": [
                 {
                     "id": candidate.id,
+                    "candidate_id": candidate.id,
                     "position": list(candidate.position) if candidate.position else None,
+                    "position_xy": list(candidate.position) if candidate.position else None,
                     "source": candidate.source,
+                    "candidate_source": candidate.source,
                     "role": candidate.role.value,
+                    "candidate_role": candidate.role.value,
                     "route_signature": candidate.route_signature,
                     "availability": candidate.availability.value,
                     "prior_weight": candidate.prior_weight,
                     "coordinate_frame": candidate.coordinate_frame.value,
+                    "direction": list(candidate.direction) if candidate.direction else None,
+                    "direction_xy": list(candidate.direction) if candidate.direction else None,
+                    "angular_support_rad": candidate.angular_support_rad,
+                    "parent_destination_id": candidate.parent_destination_id,
+                    "path_tangent": list(candidate.path_tangent)
+                    if candidate.path_tangent
+                    else None,
+                    "path_tangent_xy": list(candidate.path_tangent)
+                    if candidate.path_tangent
+                    else None,
+                    "path_mode": candidate.path_mode,
+                    "feasibility_status": candidate.feasibility_status,
+                    "provenance_refs": list(candidate.provenance_refs),
+                    "config_hash": candidate.config_hash,
                 }
                 for candidate in sorted(self.candidates, key=lambda item: item.id)
             ],
@@ -972,6 +1040,20 @@ def _finite_xy(
         require_finite(first, f"{field_name}[0]"),
         require_finite(second, f"{field_name}[1]"),
     )
+
+
+def _unit_xy(value: tuple[float, float] | Sequence[float], field_name: str) -> tuple[float, float]:
+    """Validate and normalize a non-zero two-dimensional direction.
+
+    Returns:
+        Unit vector in global coordinates.
+    """
+
+    x, y = _finite_xy(value, field_name)
+    norm = math.hypot(x, y)
+    if norm <= 0.0:
+        raise ValueError(f"{field_name} must be non-zero")
+    return (x / norm, y / norm)
 
 
 def _validate_candidate_goals(

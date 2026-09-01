@@ -28,6 +28,12 @@ from email.policy import default as email_policy
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
+if __package__ in (None, ""):
+    # Bare-script invocation (hermetic workflow steps run ``python`` without a
+    # project install): resolve the repository-root ``scripts`` package from
+    # this file's own location so the executing source stays the imported one.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from scripts.tools.check_distribution_licenses import (
     DistributionLicenseError,
     check_distribution,

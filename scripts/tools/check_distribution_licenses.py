@@ -39,6 +39,12 @@ from packaging.utils import InvalidWheelFilename, parse_wheel_filename
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+if __package__ in (None, ""):
+    # Bare-script invocation (hermetic release gates run ``python`` without a
+    # project install): resolve the repository-root ``scripts`` package from
+    # this file's own location so the executing source stays the imported one.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 from scripts.tools import check_asset_rights_inventory as asset_inventory
 
 

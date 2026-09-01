@@ -440,6 +440,30 @@ def test_source_parent_derivation_rejects_a_root_commit(tmp_path: Path) -> None:
         release_protocol._source_first_parent(repo, root_commit)
 
 
+def test_source_parent_derivation_uses_first_parent_of_a_merge_commit(tmp_path: Path) -> None:
+    """A merge candidate binds the mainline parent, not the second parent."""
+    repo, _template, source_commit = _release_template_repository(tmp_path)
+    _git(repo, "branch", "side", source_commit)
+    _git(repo, "switch", "-c", "candidate", source_commit)
+    (repo / "candidate.txt").write_text("candidate\n", encoding="utf-8")
+    _git(repo, "add", "candidate.txt")
+    _git(repo, "commit", "-qm", "fixture: candidate mainline change")
+    candidate_parent = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "switch", "side")
+    (repo / "side.txt").write_text("side\n", encoding="utf-8")
+    _git(repo, "add", "side.txt")
+    _git(repo, "commit", "-qm", "fixture: side change")
+    side_commit = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "switch", "candidate")
+    _git(repo, "merge", "--no-ff", "-qm", "fixture: merge candidate", "side")
+    merge_commit = _git(repo, "rev-parse", "HEAD")
+
+    assert candidate_parent != side_commit
+    assert _git(repo, "rev-parse", f"{merge_commit}^1") == candidate_parent
+    assert _git(repo, "rev-parse", f"{merge_commit}^2") == side_commit
+    assert release_protocol._source_first_parent(repo, merge_commit) == candidate_parent
+
+
 @pytest.mark.parametrize("field", ["latest_main_base_commit", "planning_base_sha"])
 def test_template_rejects_a_fixed_mainline_base(tmp_path: Path, field: str) -> None:
     """Tracked templates must derive the base from the selected source commit."""

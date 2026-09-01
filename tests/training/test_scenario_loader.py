@@ -339,6 +339,19 @@ def test_build_robot_config_applies_action_latency_overrides(tmp_path: Path) -> 
     assert ms_config.sim_config.resolved_action_latency_steps == 3
 
 
+def test_build_robot_config_applies_oracle_force_trace_override(tmp_path: Path) -> None:
+    """Scenario YAML can explicitly opt into evaluator-only force instrumentation."""
+    config = build_robot_config_from_scenario(
+        {
+            "name": "oracle-force-trace-runtime-smoke",
+            "simulation_config": {"oracle_force_trace_enabled": True},
+        },
+        scenario_path=tmp_path / "scenario.yaml",
+    )
+
+    assert config.sim_config.oracle_force_trace_enabled is True
+
+
 def test_build_robot_config_rejects_ambiguous_action_latency_overrides(tmp_path: Path) -> None:
     """A scenario cannot choose both step and millisecond delay representations."""
     scenario = {

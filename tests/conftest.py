@@ -447,6 +447,12 @@ _FAST_FILES = {
     "test_goal_posterior_planner_input.py",
     "test_goal_posterior_actor_smoke_issue_8068.py",
     "test_goal_posterior_planner_input_smoke_issue_4164.py",
+    # Public goal-candidate generation and candidate-coverage tests are
+    # deterministic schema/lineage contracts for the research provider;
+    # keep them in fast PR shards for the exact-head changed-coverage gate
+    # (issue #8073).
+    "test_goal_candidate_provider.py",
+    "test_goal_candidate_coverage.py",
     # Topology-guided local-policy tests are deterministic planner-contract
     # coverage for the changed adapter; keep them in fast PR shards for the
     # exact-head changed-coverage gate.
@@ -578,6 +584,10 @@ _FAST_FILES = {
     # coverage for the changed planner producer; keep them in the exact-head
     # fast lane for changed-coverage admission.
     "test_force_coupled_potential_field.py",
+    # The evaluator-only oracle channel test is a one-step deterministic contract
+    # for changed environment plumbing; keep it in PR fast shards so changed
+    # coverage proves the info-only branch.
+    "test_oracle_force_trace_channel.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

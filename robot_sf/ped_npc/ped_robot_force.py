@@ -40,7 +40,7 @@ class PedRobotForce:
         config: PedRobotForceConfig,
         peds: PedState,
         get_robot_pos: Callable[[], Vec2D],
-        get_ped_response_multipliers: Callable[[], np.ndarray] | None = None,
+        get_ped_response_multipliers: Callable[[], np.ndarray | None] | None = None,
     ):
         """Create a robot-aware pedestrian force.
 

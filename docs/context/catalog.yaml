@@ -20,6 +20,18 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/pedestrian_goal_force_prediction_research.md
+  status: current
+  freshness: maintained
+  area: research_contract
+- path: docs/context/evidence/issue_8073_goal_candidate_provider_smoke_2026-09-01.json
+  status: evidence
+  freshness: evidence
+  area: research_contract
+- path: docs/context/evidence/issue_8073_goal_candidate_provider_smoke_2026-09-01.json.review.json
+  status: evidence
+  freshness: evidence
+  area: research_contract
 - path: docs/context/issue_8068_goal_posterior_actor_baseline.md
   status: current
   freshness: maintained
@@ -45,6 +57,10 @@ entries:
   freshness: evidence
   area: research_contract
 - path: docs/context/evidence/issue_8063_goal_belief_contract_receipt.v1.json.review.json
+  status: evidence
+  freshness: evidence
+  area: research_contract
+- path: docs/context/evidence/issue_8065_goal_force_instrumentation_receipt.v1.json
   status: evidence
   freshness: evidence
   area: research_contract

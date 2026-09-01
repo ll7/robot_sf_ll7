@@ -58,6 +58,7 @@ from robot_sf.benchmark.release_protocol import (
     STRESS_SMOKE_EXPECTED_SCENARIO_IDS,
     STRESS_SMOKE_EXPECTED_SEED,
     StressSmokeBranchWitness,
+    load_release_campaign_config,
     resolve_campaign_artifact_path,
 )
 from robot_sf.benchmark.result_provenance import validate_result_provenance_manifest
@@ -1668,9 +1669,15 @@ def _resolve_expected_matrix_axes(  # noqa: C901
         if config_path is not None:
             try:
                 source_root = Path(source_repository_root or get_repository_root()).resolve()
-                campaign_config = load_campaign_config(
-                    _source_repository_path(config_path, source_root)
-                )
+                if getattr(manifest, "resolved_identity_path", None) is not None:
+                    campaign_config = load_release_campaign_config(
+                        manifest,
+                        repository_root=source_root,
+                    )
+                else:
+                    campaign_config = load_campaign_config(
+                        _source_repository_path(config_path, source_root)
+                    )
             except (OSError, ValueError, KeyError, TypeError):
                 blockers.append("canonical campaign config cannot be resolved")
     if campaign_config is not None:
@@ -1749,11 +1756,16 @@ def _full_release_planner_candidates(
         return None, blockers
     try:
         source_root = Path(source_repository_root or get_repository_root()).resolve()
-        candidates = getattr(
-            load_campaign_config(_source_repository_path(config_path, source_root)),
-            "planners",
-            None,
-        )
+        if getattr(manifest, "resolved_identity_path", None) is not None:
+            campaign_config = load_release_campaign_config(
+                manifest,
+                repository_root=source_root,
+            )
+        else:
+            campaign_config = load_campaign_config(
+                _source_repository_path(config_path, source_root)
+            )
+        candidates = getattr(campaign_config, "planners", None)
     except (OSError, ValueError, KeyError, TypeError):
         blockers.append("canonical campaign planner roster cannot be resolved")
     return candidates, blockers
@@ -1776,6 +1788,8 @@ def _full_release_campaign_config(
         return None, ["canonical campaign config is required for full-release provenance"]
     try:
         source_root = Path(source_repository_root or get_repository_root()).resolve()
+        if getattr(manifest, "resolved_identity_path", None) is not None:
+            return load_release_campaign_config(manifest, repository_root=source_root), []
         return load_campaign_config(_source_repository_path(config_path, source_root)), []
     except (OSError, ValueError, KeyError, TypeError):
         return None, ["canonical campaign config cannot be resolved for provenance"]

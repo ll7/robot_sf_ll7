@@ -8,6 +8,8 @@ permissions:
 
 env:
   PYTHONDONTWRITEBYTECODE: "1"
+  # Do not let a runner-level import path alter the release-helper environment.
+  PYTHONPATH: ""
   PYTHONUNBUFFERED: "1"
   SDL_VIDEODRIVER: dummy
   MPLBACKEND: Agg
@@ -43,6 +45,27 @@ jobs:
           UV_INSTALL_BACKOFF_CAP: "30"
         run: bash scripts/dev/ci_install_uv_retry.sh "${UV_VERSION}"
 
+      - name: Bootstrap isolated software-candidate helper environment
+        env:
+          HELPER_ENV: ${{ runner.temp }}/robot-sf-software-candidate-helper
+        run: |
+          set -euo pipefail
+          python_bin="$(python -c 'import sys; print(sys.executable)')"
+          uv venv --python "${python_bin}" "${HELPER_ENV}"
+          uv pip install --python "${HELPER_ENV}/bin/python" \
+            "packaging==26.0" \
+            "pyyaml==6.0.3"
+          {
+            printf 'SOFTWARE_CANDIDATE_PYTHON=%s/bin/python\n' "${HELPER_ENV}"
+          } >> "${GITHUB_ENV}"
+          "${HELPER_ENV}/bin/python" - <<'PY'
+          import packaging
+          import yaml
+
+          assert packaging.__version__ == "26.0"
+          assert yaml.__version__ == "6.0.3"
+          PY
+
       - name: Bind artifact identity
         id: identity
         run: |
@@ -67,14 +90,14 @@ jobs:
 
       - name: Require hermetic exact source identity before build
         run: >-
-          python scripts/dev/software_candidate_manifest.py check-source
+          "${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/software_candidate_manifest.py check-source
           --repo-root "${GITHUB_WORKSPACE}"
           --source-sha "${GITHUB_SHA}"
 
       - name: Materialize the rights-scoped source candidate
         id: materialize
         run: |
-          python scripts/dev/software_candidate_manifest.py materialize-source \
+          "${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/software_candidate_manifest.py materialize-source \
             --repo-root "${GITHUB_WORKSPACE}" \
             --candidate-root "${CANDIDATE_SOURCE}" \
             --source-sha "${GITHUB_SHA}" \
@@ -104,14 +127,14 @@ jobs:
 
       - name: Stage exact rights-scoped candidate in disposable build root
         run: >-
-          python scripts/dev/software_candidate_manifest.py stage-build-source
+          "${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/software_candidate_manifest.py stage-build-source
           --repo-root "${CANDIDATE_SOURCE}"
           --build-root "${BUILD_SOURCE}"
           --source-sha "${CANDIDATE_SOURCE_SHA}"
 
       - name: Prove disposable build source is the exact commit
         run: >-
-          python scripts/dev/software_candidate_manifest.py check-source
+          "${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/software_candidate_manifest.py check-source
           --repo-root "${BUILD_SOURCE}"
           --source-sha "${CANDIDATE_SOURCE_SHA}"
 
@@ -123,14 +146,13 @@ jobs:
 
       - name: Reject any source workspace mutation by the build
         run: >-
-          python scripts/dev/software_candidate_manifest.py check-source
+          "${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/software_candidate_manifest.py check-source
           --repo-root "${GITHUB_WORKSPACE}"
           --source-sha "${GITHUB_SHA}"
 
       - name: Validate version alignment
         run: >-
-          uv run --no-project --with 'pyyaml==6.0.3'
-          python scripts/dev/check_version_alignment.py
+          "${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/check_version_alignment.py
 
       - name: Validate package metadata and README rendering
         run: >-
@@ -140,8 +162,7 @@ jobs:
       - name: Validate candidate archive members and strict rights
         run: |
           cd "${BUILD_SOURCE}"
-          uv run --no-project --with 'pyyaml==6.0.3' --with 'packaging==26.0' \
-            python scripts/tools/check_distribution_licenses.py "${DIST_DIR}" \
+          "${SOFTWARE_CANDIDATE_PYTHON}" scripts/tools/check_distribution_licenses.py "${DIST_DIR}" \
             --strict-asset-rights \
             --repo-root "${BUILD_SOURCE}" \
             --inventory "${BUILD_SOURCE}/scripts/validation/software_candidate_asset_rights.v1.json" \
@@ -169,7 +190,7 @@ jobs:
 
       - name: Assemble deterministic candidate manifest and provenance
         run: >-
-          python scripts/dev/software_candidate_manifest.py assemble
+          "${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/software_candidate_manifest.py assemble
           --repo-root "${GITHUB_WORKSPACE}"
           --dist-dir "${DIST_DIR}"
           --raw-sbom "${RAW_SBOM}"
@@ -187,7 +208,7 @@ jobs:
 
       - name: Revalidate admitted bytes offline
         run: >-
-          python scripts/dev/software_candidate_manifest.py verify
+          "${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/software_candidate_manifest.py verify
           --bundle-dir "${BUNDLE_DIR}"
           --expected-source-sha "${GITHUB_SHA}"
           --expected-workflow-run-id "${GITHUB_RUN_ID}"
@@ -216,7 +237,7 @@ jobs:
 
       - name: Admit rights and dependency evidence into a separate receipt
         run: >-
-          python scripts/dev/software_candidate_manifest.py rights-admission
+          "${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/software_candidate_manifest.py rights-admission
           --repo-root "${GITHUB_WORKSPACE}"
           --candidate-root "${CANDIDATE_SOURCE}"
           --materialization-report "${MATERIALIZATION_REPORT}"

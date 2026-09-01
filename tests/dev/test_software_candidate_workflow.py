@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+HELPER = REPO_ROOT / "scripts" / "dev" / "software_candidate_manifest.py"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "software-candidate.yml"
 WHEEL_INSTALL_SMOKE = REPO_ROOT / "scripts" / "validation" / "wheel_install_smoke.sh"
 ACTION_PINS = {
@@ -72,6 +77,121 @@ def test_workflow_keeps_python_bytecode_outside_the_frozen_source() -> None:
     _text, workflow = _workflow()
 
     assert workflow["env"]["PYTHONDONTWRITEBYTECODE"] == "1"
+
+
+def test_workflow_bootstraps_one_isolated_pinned_helper_environment() -> None:
+    """Every candidate helper uses one clean, reviewed dependency surface."""
+    text, workflow = _workflow()
+    assert workflow["env"]["PYTHONPATH"] == ""
+    steps = _steps(workflow)
+    bootstrap_index, bootstrap = next(
+        (index, step)
+        for index, step in enumerate(steps)
+        if step.get("name") == "Bootstrap isolated software-candidate helper environment"
+    )
+    bootstrap_run = bootstrap["run"]
+    assert bootstrap["env"]["HELPER_ENV"] == "${{ runner.temp }}/robot-sf-software-candidate-helper"
+    assert 'uv venv --python "${python_bin}" "${HELPER_ENV}"' in bootstrap_run
+    assert 'uv pip install --python "${HELPER_ENV}/bin/python"' in bootstrap_run
+    assert '"packaging==26.0"' in bootstrap_run
+    assert '"pyyaml==6.0.3"' in bootstrap_run
+    assert bootstrap_run.count('"packaging==26.0"') == 1
+    assert bootstrap_run.count('"pyyaml==6.0.3"') == 1
+    assert "SOFTWARE_CANDIDATE_PYTHON=%s/bin/python" in bootstrap_run
+
+    helper_runs = [
+        (index, step["run"])
+        for index, step in enumerate(steps)
+        if "software_candidate_manifest.py" in step.get("run", "")
+    ]
+    assert len(helper_runs) == 8
+    assert all(
+        '"${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/software_candidate_manifest.py' in run
+        for _index, run in helper_runs
+    )
+    assert bootstrap_index < min(index for index, _run in helper_runs)
+    assert "python scripts/dev/software_candidate_manifest.py" not in text
+
+    version_run = next(
+        step["run"] for step in steps if step.get("name") == "Validate version alignment"
+    )
+    assert '"${SOFTWARE_CANDIDATE_PYTHON}" scripts/dev/check_version_alignment.py' in version_run
+    license_run = next(
+        step["run"]
+        for step in steps
+        if step.get("name") == "Validate candidate archive members and strict rights"
+    )
+    assert (
+        '"${SOFTWARE_CANDIDATE_PYTHON}" scripts/tools/check_distribution_licenses.py' in license_run
+    )
+    assert "uv run --no-project --with" not in license_run
+
+
+def test_clean_runner_check_source_reaches_semantic_validation(tmp_path: Path) -> None:
+    """A project-free, scrubbed runner reaches the exact-source gate."""
+    uv = shutil.which("uv")
+    if uv is None:
+        pytest.fail("uv is required to exercise the clean-runner bootstrap contract")
+    clean_repo = tmp_path / "clean-source"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--no-hardlinks", str(REPO_ROOT), str(clean_repo)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    source_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=clean_repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key
+        not in {
+            "PYTHONHOME",
+            "PYTHONPATH",
+            "PYTHONUSERBASE",
+            "UV_PROJECT_ENVIRONMENT",
+            "VIRTUAL_ENV",
+        }
+    }
+    env.update(
+        {
+            "PYTHONNOUSERSITE": "1",
+            "PYTHONPATH": "",
+            "UV_NO_CONFIG": "1",
+        }
+    )
+    result = subprocess.run(
+        [
+            uv,
+            "run",
+            "--isolated",
+            "--no-project",
+            "--with",
+            "packaging==26.0",
+            "--with",
+            "pyyaml==6.0.3",
+            "python",
+            str(HELPER),
+            "check-source",
+            "--repo-root",
+            str(clean_repo),
+            "--source-sha",
+            source_sha,
+        ],
+        cwd=tmp_path,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert f"PASS: source identity is clean and exact at {source_sha}" in result.stdout
+    assert "No module named 'yaml'" not in result.stderr
 
 
 def test_workflow_builds_only_from_staged_external_exact_commit() -> None:

@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from scripts.tools.check_dependency_license_inventory import (
+    _LEGACY_SUMMARY_CONTRACT_VERSION,
+    SUMMARY_CONTRACT_VERSION,
     SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS,
     _archive_audit_semantic_issues,
     _archive_notice_paths,
@@ -32,10 +34,12 @@ from scripts.tools.check_dependency_license_inventory import (
     _policy_records,
     _policy_source_matches,
     _report_content_digest,
+    _strict_report_summary_contract_issues,
     _upstream_tags_semantic_issues,
     build_inventory,
     check_report_freshness,
     main,
+    selected_policy_pending_package_count,
     validate_dependency_license_receipt,
 )
 
@@ -783,6 +787,129 @@ def test_inventory_keeps_unknown_proprietary_and_conflicting_metadata_blocked(
     assert demo["license_status"] == "metadata_conflict"
     assert demo["raw_license_metadata"]["License-Expression"].startswith("LicenseRef-")
     assert inventory["summary"]["unresolved_count"] > 0
+
+
+def test_policy_pending_package_count_counts_rows_not_failure_messages() -> None:
+    """The summary counts each selected review-required package once."""
+    root = Path(__file__).resolve().parents[2]
+    inventory = build_inventory(root, distributions=[], selected_profile_ids=["all"])
+    selected_rows = [row for row in inventory["packages"] if row.get("selected_profiles")]
+    expected = selected_policy_pending_package_count(selected_rows)
+
+    assert expected == 119
+    assert inventory["summary"]["policy_pending_package_count"] == expected
+    assert inventory["summary"]["policy_pending_package_count"] != 155
+
+
+def test_policy_pending_count_excludes_pending_external_policy_rows() -> None:
+    """Pending review status does not turn an external disposition into review-required."""
+    root = Path(__file__).resolve().parents[2]
+    policy = json.loads(
+        (root / "scripts/validation/dependency_license_policy.v1.json").read_text(encoding="utf-8")
+    )
+    pending_exact = [
+        row for row in policy["package_dispositions"] if row.get("status") == "pending_review"
+    ]
+    assert len(pending_exact) == 36
+    assert all(
+        row.get("disposition") == "external_dependency_not_redistributed" for row in pending_exact
+    )
+
+    inventory = build_inventory(root, distributions=[], selected_profile_ids=["all"])
+    selected_rows = [row for row in inventory["packages"] if row.get("selected_profiles")]
+    assert (
+        sum(
+            row.get("policy_disposition") == "external_dependency_not_redistributed"
+            for row in selected_rows
+        )
+        == 37
+    )
+    assert selected_policy_pending_package_count(selected_rows) == 119
+
+
+def test_v2_receipt_summary_separates_findings_and_pending_rows() -> None:
+    """Multiple findings and structural diagnostics do not collapse into one count."""
+    summary = {
+        "policy_exact_disposition_count": 37,
+        "policy_pending_package_count": 119,
+        "unresolved_count": 255,
+        "structural_issue_count": 2,
+        "summary_contract_version": SUMMARY_CONTRACT_VERSION,
+        "status": "blocked",
+    }
+    assert (
+        _strict_report_summary_contract_issues(
+            summary,
+            receipt_status="blocked",
+            expected_policy_count=37,
+            contract_version=SUMMARY_CONTRACT_VERSION,
+        )
+        == []
+    )
+
+    downgraded = copy.deepcopy(summary)
+    downgraded["summary_contract_version"] = "robot-sf.dependency-license-inventory-summary.v1"
+    issues = _strict_report_summary_contract_issues(
+        downgraded,
+        receipt_status="blocked",
+        expected_policy_count=37,
+        contract_version=SUMMARY_CONTRACT_VERSION,
+    )
+    assert any("does not match receipt schema" in issue for issue in issues)
+
+    legacy = copy.deepcopy(summary)
+    legacy.pop("summary_contract_version")
+    issues = _strict_report_summary_contract_issues(
+        legacy,
+        receipt_status="blocked",
+        expected_policy_count=37,
+    )
+    assert any("unresolved count differs from pending count" in issue for issue in issues)
+
+    forged = copy.deepcopy(summary)
+    forged["structural_issue_count"] = 256
+    issues = _strict_report_summary_contract_issues(
+        forged,
+        receipt_status="blocked",
+        expected_policy_count=37,
+    )
+    assert any("structural count exceeds unresolved count" in issue for issue in issues)
+
+
+def test_v1_receipt_cannot_select_v2_summary_semantics() -> None:
+    """A legacy top-level receipt cannot smuggle in the v2 count interpretation."""
+    markerless_legacy = {
+        "policy_exact_disposition_count": 37,
+        "policy_pending_package_count": 4,
+        "unresolved_count": 4,
+        "status": "blocked",
+    }
+    assert (
+        _strict_report_summary_contract_issues(
+            markerless_legacy,
+            receipt_status="blocked",
+            expected_policy_count=37,
+            contract_version=_LEGACY_SUMMARY_CONTRACT_VERSION,
+        )
+        == []
+    )
+
+    summary = {
+        "policy_exact_disposition_count": 37,
+        "policy_pending_package_count": 119,
+        "unresolved_count": 255,
+        "structural_issue_count": 2,
+        "summary_contract_version": SUMMARY_CONTRACT_VERSION,
+        "status": "blocked",
+    }
+    issues = _strict_report_summary_contract_issues(
+        summary,
+        receipt_status="blocked",
+        expected_policy_count=37,
+        contract_version=_LEGACY_SUMMARY_CONTRACT_VERSION,
+    )
+    assert any("does not match receipt schema" in issue for issue in issues)
+    assert any("unresolved count differs from pending count" in issue for issue in issues)
 
 
 def test_freshness_fails_when_a_locked_input_changes(tmp_path: Path) -> None:

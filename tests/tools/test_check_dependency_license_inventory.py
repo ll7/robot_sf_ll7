@@ -677,6 +677,7 @@ def test_cli_resolves_candidate_bundle_relative_to_repo_root(tmp_path: Path) -> 
         == 2
     )
     report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
     assert report["summary"]["candidate_bound"] is True
     assert (
         main(

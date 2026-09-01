@@ -33,6 +33,8 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote, urlsplit
 
+from robot_sf.evidence.writers import write_json
+
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
@@ -3282,7 +3284,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     rendered = json.dumps(inventory, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(rendered, encoding="utf-8")
+        write_json(args.output, inventory)
         print(f"wrote {args.output}")
     else:
         print(rendered, end="")

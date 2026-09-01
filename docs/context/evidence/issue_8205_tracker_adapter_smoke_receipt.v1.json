@@ -155,6 +155,10 @@
     {
       "command": "uv run python scripts/dev/check_docs_evidence_integrity.py --base-ref origin/main",
       "result": "10 changed file(s) passed"
+    },
+    {
+      "command": "PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh",
+      "result": "passed; changed-file coverage warnings remained above the 80% minimum"
     }
   ],
   "limitations": [

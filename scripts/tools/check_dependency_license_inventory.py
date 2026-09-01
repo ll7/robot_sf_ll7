@@ -2603,7 +2603,10 @@ def _receipt_contract_issues(  # noqa: C901, PLR0912, PLR0915
             if not resolved.is_absolute():
                 resolved = _resolve_path(repo_root, report_path)
             if not resolved.is_file():
-                issues.append(f"dependency receipt strict report is missing: {report_path}")
+                issues.append(
+                    "dependency receipt strict report SHA-256 cannot be verified because "
+                    f"the report is missing: {report_path}"
+                )
             else:
                 if report_sha != _sha256_file(resolved):
                     issues.append(

@@ -261,6 +261,9 @@ class HybridRuleLocalPlannerConfig:
     # carries confidence, not candidate goal coordinates, so this planner
     # combines confidence with current pedestrian position/velocity only.
     goal_posterior_avoidance_enabled: bool = False
+    # Evaluation guard: reject simulator upper-bound channels when this planner
+    # is being assessed as an actor-only consumer.
+    goal_posterior_actor_only: bool = False
     goal_posterior_min_confidence: float = 0.55
     goal_posterior_near_distance: float = 2.5
     goal_posterior_crossing_lateral_margin: float = 0.75
@@ -631,6 +634,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         """Return issue #4164 posterior-consumption configuration metadata."""
         return {
             "enabled": bool(self.config.goal_posterior_avoidance_enabled),
+            "actor_only": bool(self.config.goal_posterior_actor_only),
             "status": "ok" if self.config.goal_posterior_avoidance_enabled else "disabled",
             "min_confidence": float(self.config.goal_posterior_min_confidence),
             "near_distance": float(self.config.goal_posterior_near_distance),
@@ -670,6 +674,7 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
             "active": False,
             "blocker": None,
             "source": "planner_goal_posterior_channel",
+            "actor_only": bool(self.config.goal_posterior_actor_only),
         }
         if not bool(self.config.goal_posterior_avoidance_enabled):
             diagnostics["blocker"] = "planner_disabled"
@@ -681,6 +686,12 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         diagnostics["consumed"] = True
         if not bool(channel.get("enabled", False)):
             diagnostics["blocker"] = "channel_disabled"
+            return diagnostics
+        if bool(self.config.goal_posterior_actor_only) and (
+            channel.get("source") != "observation_only" or bool(channel.get("oracle_only", False))
+        ):
+            diagnostics["blocker"] = "oracle_source_rejected"
+            diagnostics["consumed"] = False
             return diagnostics
         summaries = channel.get("pedestrian_goal_posteriors")
         if not isinstance(summaries, dict) or not summaries:

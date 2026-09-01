@@ -440,6 +440,14 @@ _FAST_FILES = {
     # Tracker-to-goal-belief adapter tests are deterministic observation-contract
     # coverage; keep them in fast PR shards for the exact-head changed-coverage gate.
     "test_tracker_goal_belief_adapter.py",
+
+    # One-frame heading posterior and actor/oracle boundary tests are deterministic
+    # contract coverage for the observation-only research baseline (issue #8068).
+    "test_goal_intention.py",
+    "test_goal_posterior_actor_oracle_boundary.py",
+    "test_goal_posterior_planner_input.py",
+    "test_goal_posterior_actor_smoke_issue_8068.py",
+    "test_goal_posterior_planner_input_smoke_issue_4164.py",
     # Topology-guided local-policy tests are deterministic planner-contract
     # coverage for the changed adapter; keep them in fast PR shards for the
     # exact-head changed-coverage gate.

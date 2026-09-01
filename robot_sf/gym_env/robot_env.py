@@ -42,7 +42,10 @@ from robot_sf.gym_env.reward import route_completion_v2_reward
 from robot_sf.gym_env.snqi_proxy import StepSNQIProxy
 from robot_sf.nav.obstacle import Obstacle
 from robot_sf.nav.occupancy_grid import OccupancyGrid
-from robot_sf.prediction.goal_intention import planner_goal_posterior_channel_from_state
+from robot_sf.prediction.goal_intention import (
+    planner_goal_posterior_channel,
+    planner_goal_posterior_channel_unavailable,
+)
 from robot_sf.render.lidar_visual import render_lidar
 from robot_sf.render.sim_state import VisualizableAction, VisualizableSimState
 from robot_sf.robot.robot_state import RobotState
@@ -352,35 +355,21 @@ def _build_step_info(meta: dict[str, Any]) -> dict[str, Any]:
 
 
 def _build_goal_posterior_planner_input(env_config: EnvSettings, simulator: Any) -> dict[str, Any]:
-    """Return opt-in planner goal-posterior channel from current pedestrian state."""
+    """Return the opt-in actor channel without reading simulator goal columns.
+
+    A public candidate provider is not yet wired into ``EnvSettings``.  Enabled
+    environments therefore report an explicit unavailable actor channel rather
+    than silently turning the simulator's true goal column into a one-candidate
+    oracle posterior.
+    """
 
     enabled = bool(getattr(env_config, "goal_posterior_planner_input_enabled", False))
     if not enabled:
-        return planner_goal_posterior_channel_from_state(
-            enabled=False,
-            positions=(),
-            velocities=(),
-            goals=(),
-        )
-
-    pysf_state = getattr(simulator, "pysf_state", None)
-    if pysf_state is None:
-        raise RuntimeError(
-            "goal_posterior_planner_input requires a simulator with a valid pysf_state."
-        )
-    states = np.asarray(pysf_state.pysf_states(), dtype=float)
-    if states.ndim != 2 or states.shape[1] < 6:
-        raise RuntimeError(
-            "goal_posterior_planner_input requires PySocialForce states with "
-            "position, velocity, and goal columns."
-        )
-    return planner_goal_posterior_channel_from_state(
+        return planner_goal_posterior_channel((), enabled=False)
+    del simulator
+    return planner_goal_posterior_channel_unavailable(
         enabled=True,
-        positions=states[:, 0:2],
-        velocities=states[:, 2:4],
-        goals=states[:, 4:6],
-        config=getattr(env_config, "goal_posterior_planner_input", None),
-        candidate_source="scenario_route_endpoints",
+        blocker="candidate_provider_not_configured",
     )
 
 

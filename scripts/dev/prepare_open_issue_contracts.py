@@ -23,9 +23,12 @@ Modes
   explicit reviewed plan digest and issue list; aborts the whole batch on any
   relevant drift.
 
-The tool defaults to no-write mode and never creates labels, never adds PR
-runner labels to issues, and never mutates issue state, assignments,
+The tool defaults to no-write mode and never creates arbitrary labels, never
+adds PR runner labels to issues, and never mutates issue state, assignments,
 milestones, projects, comments, parent relations, PRs, or merges.
+The only readiness mutation is an explicit call to the canonical
+``issue_readiness_gate.gate_issue`` operation; generic label writes cannot add
+``state:ready``.
 """
 
 from __future__ import annotations
@@ -40,6 +43,8 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from scripts.dev import issue_implementability, issue_readiness_gate
+
 MARKER_START = "<!-- goal-autopilot-preparation:v1:start -->"
 MARKER_END = "<!-- goal-autopilot-preparation:v1:end -->"
 PACKET_SCHEMA = "goal_autopilot_preparation.v1"
@@ -51,6 +56,9 @@ HARD_BODY_CEILING = 25
 HARD_LABEL_CEILING = 50
 DEFAULT_REPOSITORY = "ll7/robot_sf_ll7"
 _RUNNER_LABELS = frozenset({"runner:luna", "runner:max"})
+_READINESS_GATE_ACTION = "gate_readiness"
+_READINESS_GATE_SUCCESS_OUTCOMES = frozenset({"ready", "already_ready"})
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 # LunaRunner: bounded docs/tests/config/CLI/adapter work with no planner,
 # metric, model, safety, or evidence semantics. MaxRunner: anything touching
@@ -241,8 +249,160 @@ def _live_issue_reader(issue: int, *, repo: str = DEFAULT_REPOSITORY) -> dict[st
     }
 
 
+def _readiness_gate_candidate(  # noqa: C901, PLR0912 - explicit authority and leaf checks
+    item: Mapping[str, Any],
+) -> bool:
+    """Return whether a complete local leaf may enter the canonical readiness gate.
+
+    ``issue_implementability`` intentionally classifies an issue with no
+    execution-state label as ``state_conflict``.  Preparation must recognize
+    only the narrow, safe subset of that classification that is actually a
+    complete local leaf; it must not turn missing facts, authority labels, or
+    active claims into readiness.
+    """
+    if item.get("classification") != "state_conflict":
+        return False
+    if item.get("admission_reason") != "state_label_conflict":
+        return False
+    if item.get("applicable") is not True or item.get("dispatch_eligible") is True:
+        return False
+    if str(item.get("state") or "open").lower() != "open":
+        return False
+    raw_labels = item.get("labels") or []
+    if not isinstance(raw_labels, list) or any(not isinstance(label, str) for label in raw_labels):
+        return False
+    labels = set(raw_labels)
+    if "state:ready" in labels or any(label.startswith("state:") for label in labels):
+        return False
+    if labels & (
+        _AUTHORITY_LABELS
+        | issue_implementability.PARENT_LABELS
+        | issue_implementability.HUMAN_DECISION_LABELS
+        | issue_implementability.COMPUTE_LABELS
+        | issue_implementability.EXTERNAL_LABELS
+        | issue_implementability.BLOCKING_LABELS
+    ) or any(label.startswith("blocked:") for label in labels):
+        return False
+    title = str(item.get("title") or "").strip().lower()
+    if title.startswith("[parent]") or title.startswith("[epic]"):
+        return False
+    missing_fields = item.get("missing_fields")
+    if not isinstance(missing_fields, list) or missing_fields:
+        return False
+    assignees = item.get("assignees")
+    if not isinstance(assignees, list) or assignees:
+        return False
+    claim = item.get("claim")
+    if not isinstance(claim, Mapping) or claim.get("ok") is not True:
+        return False
+    if claim.get("claimed") is not False:
+        return False
+    execution_contract = item.get("execution_contract")
+    if not isinstance(execution_contract, Mapping):
+        return False
+    if execution_contract.get("valid") is not True:
+        return False
+    if execution_contract.get("route_required", "local") != "local":
+        return False
+    if execution_contract.get("external_inputs"):
+        return False
+    if execution_contract.get("owning_repo") != DEFAULT_REPOSITORY:
+        return False
+    mutation_repos = execution_contract.get("mutation_repos")
+    if not isinstance(mutation_repos, list) or any(
+        not isinstance(repo, str) for repo in mutation_repos
+    ):
+        return False
+    if set(mutation_repos) != {DEFAULT_REPOSITORY}:
+        return False
+    body_sha256 = item.get("body_sha256")
+    return isinstance(body_sha256, str) and _SHA256_RE.fullmatch(body_sha256) is not None
+
+
+def _readiness_gate_operation(item: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Build the explicit CAS inputs for one canonical readiness-gate call."""
+    if not _readiness_gate_candidate(item):
+        return None
+    labels = _normalize_label_names(list(item.get("labels") or []))
+    return {
+        "issue": str(item.get("number")),
+        "action": _READINESS_GATE_ACTION,
+        "expected_body_sha256": item.get("body_sha256"),
+        "expected_labels": labels,
+    }
+
+
+def _authority_preparation_action(item: Mapping[str, Any]) -> str | None:
+    """Return a preparation action owned by an explicit issue authority."""
+    raw_labels = item.get("labels")
+    labels = (
+        {label for label in raw_labels if isinstance(label, str)}
+        if isinstance(raw_labels, list)
+        else set()
+    )
+    title = str(item.get("title") or "").strip().lower()
+    if labels & issue_implementability.PARENT_LABELS or title.startswith(("[parent]", "[epic]")):
+        return "decompose_issue"
+    if labels & issue_implementability.HUMAN_DECISION_LABELS:
+        return "prepare_decision"
+    if labels & issue_implementability.EXTERNAL_LABELS:
+        return "reconcile_blockers"
+    if labels & issue_implementability.COMPUTE_LABELS:
+        return "route_to_compute"
+    if labels & issue_implementability.BLOCKING_LABELS or any(
+        label.startswith("blocked:") for label in labels
+    ):
+        return "reconcile_blockers"
+    return None
+
+
+def _preparation_action(item: Mapping[str, Any]) -> str:
+    """Return the deterministic preparation action for one audit item."""
+    if _readiness_gate_candidate(item):
+        return _READINESS_GATE_ACTION
+    classification = item.get("classification")
+    if classification in {"error", "closed"}:
+        return str(item.get("next_action") or "")
+    authority_action = _authority_preparation_action(item)
+    if authority_action is not None:
+        return authority_action
+    if classification in {"assigned", "already_claimed", "working", "review", "stale_running"}:
+        return "active_handoff"
+    missing_fields = item.get("missing_fields")
+    if isinstance(missing_fields, list) and missing_fields:
+        return "formalize_issue"
+    action_by_classification = {
+        "needs_spec": "formalize_issue",
+        "parent": "decompose_issue",
+        "human_decision": "prepare_decision",
+        "blocked": "reconcile_blockers",
+    }
+    if classification in action_by_classification:
+        return action_by_classification[classification]
+    return str(item.get("next_action") or "")
+
+
+def _execution_mode(item: Mapping[str, Any]) -> str:
+    """Return the execution mode, including the explicit readiness-gate lane."""
+    action = _preparation_action(item)
+    mode_by_action = {
+        _READINESS_GATE_ACTION: _READINESS_GATE_ACTION,
+        "formalize_issue": "formalization",
+        "decompose_issue": "decomposition",
+        "prepare_decision": "decision",
+        "reconcile_blockers": "blocker",
+        "route_to_compute": "compute",
+        "active_handoff": "active-handoff",
+    }
+    if action in mode_by_action:
+        return mode_by_action[action]
+    return _EXECUTION_MODE.get(item.get("classification", "error"), "error-repair")
+
+
 def _worker_route(item: Mapping[str, Any]) -> str:
     """Return the worker route for one audit item."""
+    if _preparation_action(item) in {_READINESS_GATE_ACTION, "formalize_issue"}:
+        return "LunaRunner"
     classification = item.get("classification")
     if classification in _LUNA_CLASSIFICATIONS:
         return "LunaRunner"
@@ -266,13 +426,14 @@ def _render_envelope(
         "audit_schema": "open_issue_contract_audit.v1",
         "audit_digest": audit_digest,
         "audit_classification": classification,
-        "next_action": item.get("next_action", ""),
+        "next_action": _preparation_action(item),
         "authority": item.get("authority", ""),
-        "execution_mode": _EXECUTION_MODE.get(classification, "error-repair"),
+        "execution_mode": _execution_mode(item),
         "preferred_worker": _worker_route(item),
         "expected_pr_runner_label": _pr_runner_label(classification),
         "implementation_admitted": bool(item.get("dispatch_eligible")),
         "state_ready_change_proposed": _state_ready_proposed(item),
+        "readiness_gate": _readiness_gate_operation(item),
         "mutation_batch": batch_id,
     }
 
@@ -284,7 +445,7 @@ def _pr_runner_label(classification: str) -> str:
 
 def _state_ready_proposed(item: Mapping[str, Any]) -> bool:
     """Return whether the packet proposes a reviewed state:ready transition."""
-    return bool(item.get("dispatch_eligible")) and item.get("classification") == "ready"
+    return _readiness_gate_operation(item) is not None
 
 
 def _render_marker_block(item: Mapping[str, Any], *, audit_digest: str, batch_id: str) -> str:
@@ -305,13 +466,13 @@ def _render_marker_block(item: Mapping[str, Any], *, audit_digest: str, batch_id
     return "\n".join(body) + "\n"
 
 
-def _label_plan(item: Mapping[str, Any]) -> list[dict[str, str]]:
-    """Return the exact reviewed label plan for one item (add/remove only)."""
+def _label_plan(item: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Return the exact reviewed label plan, including canonical gate operations."""
     labels = set(item.get("labels") or [])
-    plan: list[dict[str, str]] = []
-    if item.get("classification") == "ready" and not item.get("dispatch_eligible"):
-        if "state:ready" not in labels and not (labels & _AUTHORITY_LABELS):
-            plan.append({"issue": str(item.get("number")), "action": "add", "label": "state:ready"})
+    plan: list[dict[str, Any]] = []
+    gate_operation = _readiness_gate_operation(item)
+    if gate_operation is not None:
+        plan.append(gate_operation)
     if "state:ready" in labels and item.get("classification") not in ("ready", "needs_ready_label"):
         plan.append({"issue": str(item.get("number")), "action": "remove", "label": "state:ready"})
     return plan
@@ -353,12 +514,14 @@ def build_plan(audit: Mapping[str, Any], *, batch_id: str) -> dict[str, Any]:
                 "classification_before": item.get("observed_classification"),
                 "classification_after": item.get("classification"),
                 "admission_reason": item.get("admission_reason"),
-                "execution_mode": _EXECUTION_MODE.get(item.get("classification", "error")),
+                "preparation_action": _preparation_action(item),
+                "execution_mode": _execution_mode(item),
                 "worker_route": _worker_route(item),
-                "next_action": item.get("next_action", ""),
+                "next_action": _preparation_action(item),
                 "authority": item.get("authority", ""),
                 "dispatch_eligible": bool(item.get("dispatch_eligible")),
                 "state_ready_change_proposed": _state_ready_proposed(item),
+                "readiness_gate": _readiness_gate_operation(item),
                 "body_patch": _body_patch_proposal(item),
                 "label_plan": _label_plan(item),
                 "skip_reason": _skip_reason(item),
@@ -394,6 +557,10 @@ def build_plan(audit: Mapping[str, Any], *, batch_id: str) -> dict[str, Any]:
             "by_worker_route": dict(route_counts),
             "ready_items": sum(1 for e in entries if e["classification_before"] == "ready"),
             "dispatch_eligible": sum(1 for e in entries if e["dispatch_eligible"]),
+            "promotable_count": sum(1 for e in entries if e["readiness_gate"] is not None),
+            "formalizable_count": sum(
+                1 for e in entries if e["preparation_action"] == "formalize_issue"
+            ),
             "label_operations": sum(len(e["label_plan"]) for e in entries),
         },
     }
@@ -406,13 +573,25 @@ def _skip_reason(item: Mapping[str, Any]) -> str:
     classification = item.get("classification")
     if item.get("listing_drift"):
         return "listing_drift"
-    if classification in ("assigned", "already_claimed", "working", "review"):
+    if classification in ("assigned", "already_claimed", "working", "review", "stale_running"):
         return "active_owner"
     if classification in ("closed",):
         return "closed"
     if classification == "error":
         return "error_row"
-    if classification in ("parent", "human_decision"):
+    raw_labels = item.get("labels")
+    labels = (
+        {label for label in raw_labels if isinstance(label, str)}
+        if isinstance(raw_labels, list)
+        else set()
+    )
+    title = str(item.get("title") or "").strip().lower()
+    if (
+        classification in ("parent", "human_decision")
+        or labels & issue_implementability.PARENT_LABELS
+        or labels & issue_implementability.HUMAN_DECISION_LABELS
+        or title.startswith(("[parent]", "[epic]"))
+    ):
         return "authority_held"
     return ""
 
@@ -523,7 +702,7 @@ def _normalize_issue_snapshot(snapshot: Mapping[str, Any], issue: int) -> dict[s
     }
 
 
-def _validate_one_label_operation(
+def _validate_one_label_operation(  # noqa: C901 - validate every mutation branch
     operation: object,
     *,
     issue: object,
@@ -552,6 +731,54 @@ def _validate_one_label_operation(
             }
         )
     action = operation.get("action")
+    if action == _READINESS_GATE_ACTION:
+        expected_body_sha256 = operation.get("expected_body_sha256")
+        if (
+            not isinstance(expected_body_sha256, str)
+            or _SHA256_RE.fullmatch(expected_body_sha256) is None
+        ):
+            errors.append(
+                {
+                    "issue": issue,
+                    "operation": "failed",
+                    "action": action,
+                    "reason": "expected_body_sha256_invalid",
+                }
+            )
+        expected_labels = operation.get("expected_labels")
+        try:
+            normalized_expected_labels = _normalize_label_names(expected_labels)
+        except ValueError as exc:
+            errors.append(
+                {
+                    "issue": issue,
+                    "operation": "failed",
+                    "action": action,
+                    "reason": f"expected_labels_invalid:{exc}",
+                }
+            )
+        else:
+            if "state:ready" in normalized_expected_labels:
+                errors.append(
+                    {
+                        "issue": issue,
+                        "operation": "failed",
+                        "action": action,
+                        "reason": "readiness_gate_expected_labels_already_ready",
+                    }
+                )
+        key = (str(action), str(expected_body_sha256))
+        if key in seen:
+            errors.append(
+                {
+                    "issue": issue,
+                    "operation": "failed",
+                    "action": action,
+                    "reason": "duplicate_label_operation",
+                }
+            )
+        seen.add(key)
+        return errors
     label = operation.get("label")
     if action not in {"add", "remove"}:
         errors.append(
@@ -611,7 +838,7 @@ def _validate_one_label_operation(
     return errors
 
 
-def _validate_label_entry(
+def _validate_label_entry(  # noqa: C901 - aggregate exact plan errors before writes
     entry: Mapping[str, Any],
     *,
     label_catalog: set[str] | None,
@@ -637,8 +864,9 @@ def _validate_label_entry(
     if issue_error is not None:
         errors.append(issue_error)
     try:
-        _normalize_label_names(entry.get("labels", []))
+        expected_labels = _normalize_label_names(entry.get("labels", []))
     except ValueError as exc:
+        expected_labels = []
         errors.append(
             {
                 "issue": issue,
@@ -661,6 +889,29 @@ def _validate_label_entry(
                 seen=seen,
             )
         )
+        if isinstance(operation, Mapping) and operation.get("action") == _READINESS_GATE_ACTION:
+            if operation.get("expected_body_sha256") != entry.get("body_sha256"):
+                errors.append(
+                    {
+                        "issue": issue,
+                        "operation": "failed",
+                        "action": _READINESS_GATE_ACTION,
+                        "reason": "readiness_gate_body_digest_does_not_match_entry",
+                    }
+                )
+            try:
+                operation_labels = _normalize_label_names(operation.get("expected_labels"))
+            except ValueError:
+                operation_labels = None
+            if operation_labels is not None and operation_labels != expected_labels:
+                errors.append(
+                    {
+                        "issue": issue,
+                        "operation": "failed",
+                        "action": _READINESS_GATE_ACTION,
+                        "reason": "readiness_gate_labels_do_not_match_entry",
+                    }
+                )
     return len(operations), errors
 
 
@@ -729,6 +980,21 @@ def _entry_is_actionable(entry: Mapping[str, Any]) -> bool:
     )
 
 
+def _is_readiness_gate_operation(operation: object) -> bool:
+    """Return whether a reviewed operation delegates readiness to the canonical gate."""
+    return isinstance(operation, Mapping) and operation.get("action") == _READINESS_GATE_ACTION
+
+
+def _has_generic_label_operations(entries: Sequence[Mapping[str, Any]]) -> bool:
+    """Return whether the batch needs the repository label catalog."""
+    return any(
+        any(
+            not _is_readiness_gate_operation(operation) for operation in entry.get("label_plan", [])
+        )
+        for entry in entries
+    )
+
+
 def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-closed batch state machine
     audit: Mapping[str, Any],
     plan: Mapping[str, Any],
@@ -740,12 +1006,14 @@ def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-clos
     issue_reader: Callable[[int], Mapping[str, Any]] | None = None,
     label_catalog: set[str] | None = None,
     label_writer: Callable[[int, str, str], Mapping[str, Any]] | None = None,
+    readiness_gater: Callable[[int], Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Apply a reviewed body/label batch with fail-closed label CAS guards.
+    """Apply a reviewed body/label batch with fail-closed CAS and readiness guards.
 
     ``body_writer``, ``issue_reader``, and ``label_writer`` are injectable so
-    the complete mutation protocol can be tested offline.  The live path uses
-    the shared REST transport and :mod:`gh_pr_label_rest`.
+    the complete mutation protocol can be tested offline.  Readiness operations
+    use ``readiness_gater`` and never call the generic label writer.  The live
+    path uses the shared REST transport and :mod:`gh_pr_label_rest`.
     """
     entries = [entry for entry in plan.get("entries", []) if isinstance(entry, Mapping)]
     issues = [int(entry["issue"]) for entry in entries if str(entry.get("issue", "")).isdigit()]
@@ -757,6 +1025,12 @@ def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-clos
         dry_run=dry_run,
         issues=issues,
     )
+    if any(
+        _is_readiness_gate_operation(operation)
+        for entry in entries
+        for operation in entry.get("label_plan", [])
+    ):
+        receipt["safe_order"] = "readiness_gate_then_body_then_labels"
     operations: list[dict[str, Any]] = receipt["operations"]
 
     def add_operation(operation: dict[str, Any]) -> None:
@@ -804,7 +1078,7 @@ def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-clos
         label_catalog=label_catalog,
     )
     receipt["label_operations_planned"] = planned_labels
-    if planned_labels and label_catalog is None:
+    if _has_generic_label_operations(entries) and label_catalog is None:
         receipt["aborted"] = True
         receipt["abort_reason"] = "label_catalog_unavailable"
         add_operation(
@@ -870,6 +1144,23 @@ def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-clos
                         "expected": expected_assignees,
                         "observed": snapshot["assignees"],
                     }
+                for operation in entry.get("label_plan", []):
+                    if not _is_readiness_gate_operation(operation):
+                        continue
+                    if operation.get("expected_body_sha256") != snapshot["body_sha256"]:
+                        mismatches["body_sha256"] = {
+                            "expected": operation.get("expected_body_sha256"),
+                            "observed": snapshot["body_sha256"],
+                        }
+                    try:
+                        gate_labels = _normalize_label_names(operation.get("expected_labels"))
+                    except ValueError:
+                        gate_labels = []
+                    if gate_labels != snapshot["labels"]:
+                        mismatches["readiness_gate_labels"] = {
+                            "expected": gate_labels,
+                            "observed": snapshot["labels"],
+                        }
                 if mismatches:
                     preflight_errors.append(
                         {
@@ -960,6 +1251,127 @@ def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-clos
             audit_digest=plan.get("audit_digest", ""),
             batch_id=batch_id,
         )
+        if issue_number in snapshots:
+            local_labels = set(snapshots[issue_number]["labels"])
+        else:
+            local_labels = set(_normalize_label_names(entry.get("labels", [])))
+
+        gate_operations = [
+            operation for operation in label_plan if _is_readiness_gate_operation(operation)
+        ]
+        generic_label_operations = [
+            operation for operation in label_plan if not _is_readiness_gate_operation(operation)
+        ]
+        for gate_operation in gate_operations:
+            label_count += 1
+            receipt["label_operations_attempted"] = label_count
+            expected_labels = set(_normalize_label_names(gate_operation.get("expected_labels")))
+            if local_labels != expected_labels:
+                aborted = True
+                abort_reason = "readiness_gate_prewrite_drift"
+                add_operation(
+                    {
+                        "issue": issue,
+                        "kind": "readiness_gate",
+                        "action": _READINESS_GATE_ACTION,
+                        "operation": "drifted",
+                        "expected_labels": sorted(expected_labels),
+                        "observed_labels": sorted(local_labels),
+                    }
+                )
+                break
+            if dry_run:
+                local_labels.add("state:ready")
+                add_operation(
+                    {
+                        "issue": issue,
+                        "kind": "readiness_gate",
+                        "action": _READINESS_GATE_ACTION,
+                        "operation": "would_write",
+                        "expected_body_sha256": gate_operation.get("expected_body_sha256"),
+                        "expected_labels": sorted(expected_labels),
+                        "expected_labels_after": sorted(local_labels),
+                    }
+                )
+                continue
+            if readiness_gater is None:
+                aborted = True
+                abort_reason = "readiness_gate_unavailable"
+                add_operation(
+                    {
+                        "issue": issue,
+                        "kind": "readiness_gate",
+                        "action": _READINESS_GATE_ACTION,
+                        "operation": "failed",
+                        "reason": "canonical issue_readiness_gate.gate_issue is unavailable",
+                    }
+                )
+                break
+            try:
+                gate_result = readiness_gater(issue_number)
+                if not isinstance(gate_result, Mapping):
+                    raise RuntimeError("readiness gate returned a non-object result")
+                outcome = gate_result.get("outcome")
+                if (
+                    outcome not in _READINESS_GATE_SUCCESS_OUTCOMES
+                    or gate_result.get("verified") is not True
+                ):
+                    raise RuntimeError(
+                        f"readiness gate outcome {outcome!r} was not a verified ready result"
+                    )
+            except (OSError, RuntimeError, TypeError, ValueError) as exc:
+                aborted = True
+                abort_reason = "readiness_gate_failed"
+                add_operation(
+                    {
+                        "issue": issue,
+                        "kind": "readiness_gate",
+                        "action": _READINESS_GATE_ACTION,
+                        "operation": "failed",
+                        "reason": str(exc),
+                    }
+                )
+                break
+            else:
+                local_labels.add("state:ready")
+                if issue_number in snapshots:
+                    snapshots[issue_number]["labels"] = sorted(local_labels)
+                add_operation(
+                    {
+                        "issue": issue,
+                        "kind": "readiness_gate",
+                        "action": _READINESS_GATE_ACTION,
+                        "operation": "written" if outcome == "ready" else "idempotent",
+                        "outcome": outcome,
+                        "verified": True,
+                        "expected_body_sha256": gate_operation.get("expected_body_sha256"),
+                        "expected_labels": sorted(expected_labels),
+                        "observed_labels_after": sorted(local_labels),
+                    }
+                )
+
+        if aborted:
+            if body_proposed:
+                add_operation(
+                    {
+                        "issue": issue,
+                        "kind": "body",
+                        "operation": "skip",
+                        "status": "skipped",
+                        "reason": abort_reason or "aborted_after_failure",
+                    }
+                )
+            for remaining in entries[index + 1 :]:
+                add_operation(
+                    {
+                        "issue": remaining.get("issue"),
+                        "operation": "skip",
+                        "status": "skipped",
+                        "reason": abort_reason or "aborted_after_failure",
+                    }
+                )
+            break
+
         if body_proposed:
             if body_count >= mutation_ceiling:
                 aborted = True
@@ -1027,7 +1439,7 @@ def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-clos
                         add_operation(body_operation)
 
         if aborted:
-            if label_plan:
+            if generic_label_operations:
                 add_operation(
                     {
                         "issue": issue,
@@ -1039,11 +1451,9 @@ def _apply_bodies(  # noqa: C901, PLR0912, PLR0913, PLR0915 - explicit fail-clos
                 )
             continue
 
-        if issue_number in snapshots:
-            local_labels = set(snapshots[issue_number]["labels"])
-        else:
-            local_labels = set(_normalize_label_names(entry.get("labels", [])))
         for label_operation in label_plan:
+            if _is_readiness_gate_operation(label_operation):
+                continue
             label_count += 1
             receipt["label_operations_attempted"] = label_count
             action = str(label_operation["action"])
@@ -1211,6 +1621,10 @@ def _restrict_plan(plan: Mapping[str, Any], numbers: Sequence[int]) -> dict[str,
             "by_worker_route": dict(route_counts),
             "ready_items": sum(1 for e in entries if e["classification_before"] == "ready"),
             "dispatch_eligible": sum(1 for e in entries if e["dispatch_eligible"]),
+            "promotable_count": sum(1 for e in entries if e["readiness_gate"] is not None),
+            "formalizable_count": sum(
+                1 for e in entries if e["preparation_action"] == "formalize_issue"
+            ),
             "label_operations": sum(len(e["label_plan"]) for e in entries),
         },
     }
@@ -1235,6 +1649,11 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912 - explici
         "--repo",
         default=DEFAULT_REPOSITORY,
         help="GitHub owner/repository for apply mode",
+    )
+    parser.add_argument(
+        "--source-ref",
+        default="origin/main",
+        help="Fresh source ref used by the canonical readiness gate",
     )
     parser.add_argument(
         "--issues",
@@ -1341,6 +1760,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912 - explici
             batch_id=args.batch_id,
             dry_run=args.dry_run,
             repo=args.repo,
+            source_ref=args.source_ref,
         )
 
     # Plan mode output
@@ -1498,6 +1918,7 @@ def _apply_mode(
     batch_id: str,
     dry_run: bool,
     repo: str = DEFAULT_REPOSITORY,
+    source_ref: str = "origin/main",
 ) -> int:
     """Apply mode: bounded, CAS-guarded body and label writes with a receipt."""
     if mutation_ceiling < 0 or mutation_ceiling > HARD_BODY_CEILING:
@@ -1507,7 +1928,7 @@ def _apply_mode(
         )
         return 2
     entries = [entry for entry in plan.get("entries", []) if isinstance(entry, Mapping)]
-    has_label_operations = any(entry.get("label_plan") for entry in entries)
+    has_label_operations = _has_generic_label_operations(entries)
     label_catalog: set[str] | None = None
     if has_label_operations:
         try:
@@ -1532,12 +1953,21 @@ def _apply_mode(
 
     entries_by_issue = {int(entry["issue"]): entry for entry in entries}
 
+    def expected_body_labels(entry: Mapping[str, Any]) -> list[str]:
+        """Return labels expected by the body writer after a readiness gate."""
+        labels = set(_normalize_label_names(entry.get("labels", [])))
+        if any(
+            _is_readiness_gate_operation(operation) for operation in entry.get("label_plan", [])
+        ):
+            labels.add("state:ready")
+        return sorted(labels)
+
     def body_writer(issue: int, block: str) -> Mapping[str, Any]:
         entry = entries_by_issue[issue]
         return _live_body_writer(
             issue,
             block,
-            expected_labels=_normalize_label_names(entry.get("labels", [])),
+            expected_labels=expected_body_labels(entry),
             repo=repo,
         )
 
@@ -1553,6 +1983,13 @@ def _apply_mode(
         label_writer=None
         if dry_run
         else lambda issue, action, label: _live_label_writer(issue, action, label, repo=repo),
+        readiness_gater=None
+        if dry_run
+        else lambda issue: issue_readiness_gate.gate_issue(
+            issue,
+            repo=repo,
+            source_ref=source_ref,
+        ),
     )
     print(_stable_json(receipt))
     return 0 if not receipt["failed"] and not receipt["drifted"] else 1

@@ -111,6 +111,59 @@ def test_plan_skips_active_and_error_items(tmp_path: Path) -> None:
     assert by_issue[1005]["skip_reason"] == "error_row"
 
 
+def test_complete_unready_leaf_plans_canonical_readiness_gate() -> None:
+    """An ordinary complete leaf gets a gate operation, never a generic add."""
+    _audit, plan = _label_plan_fixture()
+    entry = plan["entries"][0]
+
+    assert entry["preparation_action"] == "gate_readiness"
+    assert entry["state_ready_change_proposed"] is True
+    assert entry["label_plan"] == [
+        {
+            "issue": "1001",
+            "action": "gate_readiness",
+            "expected_body_sha256": prep._sha256_text("body-1001"),
+            "expected_labels": ["priority:1"],
+        }
+    ]
+    assert not any(operation.get("action") == "add" for operation in entry["label_plan"])
+
+
+def test_state_conflict_with_missing_fields_routes_to_formalization() -> None:
+    """Canonical state precedence must not hide an under-specified contract."""
+    audit = _audit_fixture()
+    item = audit["items"][0]
+    item["observed_classification"] = "state_conflict"
+    item["classification"] = "state_conflict"
+    item["admission_reason"] = "state_label_conflict"
+    item["missing_fields"] = ["scope"]
+    plan = prep.build_plan(audit, batch_id="b1")
+    entry = plan["entries"][0]
+
+    assert entry["preparation_action"] == "formalize_issue"
+    assert entry["execution_mode"] == "formalization"
+    assert entry["worker_route"] == "LunaRunner"
+    assert entry["readiness_gate"] is None
+
+
+def test_state_conflict_preserves_parent_authority() -> None:
+    """A missing execution-state label must not turn a parent into a leaf."""
+    audit = _audit_fixture()
+    item = audit["items"][0]
+    item["title"] = "[parent] bounded work"
+    item["labels"] = ["parent"]
+    item["observed_classification"] = "state_conflict"
+    item["classification"] = "state_conflict"
+    item["admission_reason"] = "state_label_conflict"
+    plan = prep.build_plan(audit, batch_id="b1")
+    entry = plan["entries"][0]
+
+    assert entry["preparation_action"] == "decompose_issue"
+    assert entry["execution_mode"] == "decomposition"
+    assert entry["skip_reason"] == "authority_held"
+    assert entry["readiness_gate"] is None
+
+
 def test_plan_cli_writes_nothing(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
     """The plan CLI performs zero writes and emits a plan JSON on stdout."""
     audit_path = _audit_path(tmp_path)
@@ -273,16 +326,31 @@ def _recording_writer(log: list[tuple[int, str]]):
 
 
 def _label_plan_fixture(*, numbers: tuple[int, ...] = (1001,)) -> tuple[dict, dict]:
-    """Build selected ready entries with one reviewed label transition each."""
+    """Build selected complete unlabeled leaves for readiness-gate tests."""
     audit = _audit_fixture()
     for item in audit["items"]:
         if item["number"] not in numbers:
             continue
-        item["observed_classification"] = "ready"
-        item["classification"] = "ready"
+        item["observed_classification"] = "state_conflict"
+        item["classification"] = "state_conflict"
         item["dispatch_eligible"] = False
         item["labels"] = ["priority:1"]
         item["body_sha256"] = prep._sha256_text(f"body-{item['number']}")
+        item["claim"] = {
+            "ok": True,
+            "claimed": False,
+            "claim_ref": None,
+            "sha": None,
+        }
+        item["missing_fields"] = []
+        item["admission_reason"] = "state_label_conflict"
+        item["execution_contract"] = {
+            "valid": True,
+            "owning_repo": "ll7/robot_sf_ll7",
+            "mutation_repos": ["ll7/robot_sf_ll7"],
+            "route_required": "local",
+            "external_inputs": [],
+        }
     full_plan = prep.build_plan(audit, batch_id="b1")
     return audit, prep._restrict_plan(full_plan, numbers)
 
@@ -401,8 +469,8 @@ def test_live_body_writer_uses_rest_path_and_verifies_readback(
     assert current_body.endswith(block)
 
 
-def test_apply_label_plan_writes_after_body_and_verifies_readback() -> None:
-    """A reviewed label plan is applied after the body and read back exactly."""
+def test_apply_readiness_gate_uses_canonical_gate_and_verifies_body_labels() -> None:
+    """Readiness uses the canonical gate and never calls the generic label writer."""
     audit, plan = _label_plan_fixture()
     issue = 1001
     snapshots = {
@@ -416,6 +484,7 @@ def test_apply_label_plan_writes_after_body_and_verifies_readback() -> None:
     }
     body_calls: list[int] = []
     label_calls: list[tuple[int, str, str]] = []
+    gate_calls: list[int] = []
 
     def read_issue(number: int) -> dict:
         snapshot = snapshots[number]
@@ -425,12 +494,13 @@ def test_apply_label_plan_writes_after_body_and_verifies_readback() -> None:
         body_calls.append(number)
         snapshots[number]["body"] = prep._compose_body(snapshots[number]["body"], block)
 
+    def gate(number: int) -> dict:
+        gate_calls.append(number)
+        snapshots[number]["labels"].append("state:ready")
+        return {"outcome": "ready", "ready_added": True, "verified": True}
+
     def write_label(number: int, action: str, label: str) -> dict:
         label_calls.append((number, action, label))
-        if action == "add":
-            snapshots[number]["labels"].append(label)
-        else:
-            snapshots[number]["labels"].remove(label)
         return {"status": "ok"}
 
     receipt = prep._apply_bodies(
@@ -441,18 +511,20 @@ def test_apply_label_plan_writes_after_body_and_verifies_readback() -> None:
         dry_run=False,
         body_writer=write_body,
         issue_reader=read_issue,
-        label_catalog={"priority:1", "state:ready"},
         label_writer=write_label,
+        readiness_gater=gate,
     )
 
     assert body_calls == [issue]
-    assert label_calls == [(issue, "add", "state:ready")]
+    assert gate_calls == [issue]
+    assert label_calls == []
     assert receipt["written"] == 2
     assert receipt["drifted"] == 0
     assert snapshots[issue]["labels"] == ["priority:1", "state:ready"]
-    assert receipt["safe_order"] == "body_then_labels"
+    assert receipt["safe_order"] == "readiness_gate_then_body_then_labels"
     assert (
-        next(op for op in receipt["operations"] if op.get("kind") == "label")["api_status"] == "ok"
+        next(op for op in receipt["operations"] if op.get("kind") == "readiness_gate")["outcome"]
+        == "ready"
     )
 
 
@@ -608,19 +680,29 @@ def test_apply_rejects_more_than_hard_label_ceiling() -> None:
 
 
 def test_apply_records_partial_failure_after_body_write() -> None:
-    """Non-transactional body-then-label failure is explicit and resumable."""
+    """A generic cleanup failure remains explicit and resumable after gate work."""
     audit, plan = _label_plan_fixture(numbers=(1001, 1002))
+    plan["entries"][1]["body_patch"]["proposed"] = False
+    plan["entries"][1]["labels"] = ["priority:1", "stale"]
+    plan["entries"][1]["label_plan"] = [{"issue": "1002", "action": "remove", "label": "stale"}]
     snapshots = {
-        number: {
-            "number": number,
+        1001: {
+            "number": 1001,
             "state": "open",
-            "body": f"body-{number}",
+            "body": "body-1001",
             "labels": ["priority:1"],
             "assignees": [],
-        }
-        for number in (1001, 1002)
+        },
+        1002: {
+            "number": 1002,
+            "state": "open",
+            "body": "body-1002",
+            "labels": ["priority:1", "stale"],
+            "assignees": [],
+        },
     }
     body_calls: list[int] = []
+    gate_calls: list[int] = []
 
     def read_issue(number: int) -> dict:
         snapshot = snapshots[number]
@@ -628,6 +710,11 @@ def test_apply_records_partial_failure_after_body_write() -> None:
 
     def write_body(number: int, block: str) -> None:
         body_calls.append(number)
+
+    def gate(number: int) -> dict:
+        gate_calls.append(number)
+        snapshots[number]["labels"].append("state:ready")
+        return {"outcome": "ready", "ready_added": True, "verified": True}
 
     def write_label(number: int, action: str, label: str) -> dict:
         raise RuntimeError("simulated label service failure")
@@ -640,21 +727,23 @@ def test_apply_records_partial_failure_after_body_write() -> None:
         dry_run=False,
         body_writer=write_body,
         issue_reader=read_issue,
-        label_catalog={"priority:1", "state:ready"},
+        label_catalog={"priority:1", "state:ready", "stale"},
         label_writer=write_label,
+        readiness_gater=gate,
     )
 
     assert body_calls == [1001]
+    assert gate_calls == [1001]
     assert receipt["partial_failure"] is True
-    assert receipt["written"] == 1
+    assert receipt["written"] == 2
     assert receipt["failed"] == 1
     assert any(
-        op.get("issue") == 1002 and op.get("status") == "skipped" for op in receipt["operations"]
+        op.get("issue") == 1002 and op.get("operation") == "failed" for op in receipt["operations"]
     )
 
 
-def test_apply_dry_run_includes_label_operations_without_writes() -> None:
-    """Dry-run renders body and label operations without requiring live issue reads."""
+def test_apply_dry_run_includes_readiness_gate_without_writes() -> None:
+    """Dry-run renders gate and body operations without requiring live issue reads."""
     audit, plan = _label_plan_fixture()
     body_calls: list[int] = []
     receipt = prep._apply_bodies(
@@ -664,16 +753,37 @@ def test_apply_dry_run_includes_label_operations_without_writes() -> None:
         batch_id="b1",
         dry_run=True,
         body_writer=lambda issue, block: body_calls.append(issue),
-        label_catalog={"priority:1", "state:ready"},
     )
 
     assert receipt["would_write"] == 2
     assert receipt["label_operations_attempted"] == 1
     assert body_calls == []
     assert any(
-        op.get("kind") == "label" and op.get("operation") == "would_write"
+        op.get("kind") == "readiness_gate" and op.get("operation") == "would_write"
         for op in receipt["operations"]
     )
+
+
+def test_readiness_gate_failure_writes_no_body_or_generic_label() -> None:
+    """A failed canonical gate leaves the issue untouched by preparation."""
+    audit, plan = _label_plan_fixture()
+    body_calls: list[int] = []
+    label_calls: list[tuple[int, str, str]] = []
+    receipt = prep._apply_bodies(
+        audit,
+        plan,
+        mutation_ceiling=10,
+        batch_id="b1",
+        dry_run=False,
+        body_writer=lambda issue, block: body_calls.append(issue),
+        readiness_gater=lambda issue: {"outcome": "needs_spec", "verified": False},
+        label_writer=lambda issue, action, label: label_calls.append((issue, action, label)),
+    )
+
+    assert receipt["abort_reason"] == "readiness_gate_failed"
+    assert receipt["failed"] == 1
+    assert body_calls == []
+    assert label_calls == []
 
 
 def test_apply_ceiling_too_high_fails_closed(tmp_path: Path) -> None:

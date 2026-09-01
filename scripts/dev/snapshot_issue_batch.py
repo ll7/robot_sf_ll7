@@ -1068,7 +1068,9 @@ def snapshot_claimable_issues(
     ``unavailable`` means discovery failed, was quota-blocked, or candidate
     evaluation was unavailable. A
     ``claimable_count == 0`` result may only be treated as ``genuine_zero_work`` when
-    ``queue_completeness`` is ``complete``.
+    ``queue_completeness`` is ``complete``. The returned
+    ``zero_work_authoritative`` flag makes that boundary machine-readable and
+    is true only for a complete, error-free page-one scan.
     """
     body_limit = body_limit if body_limit > 0 else BODY_EXCERPT_CHARS
     blocker_decisions, blocker_errors = _load_blocker_decisions(blocker_decision_paths or [])
@@ -1079,6 +1081,7 @@ def snapshot_claimable_issues(
             "body_excerpt_chars": body_limit,
             "mode": "candidate_queue",
             "legacy_mode": "claimable",
+            "candidate_scope": "state:ready",
             "status": "error",
             "data_source": "none",
             "queue_completeness": "unavailable",
@@ -1088,6 +1091,7 @@ def snapshot_claimable_issues(
             "candidate_count": 0,
             "claimable_issues": [],
             "claimable_count": 0,
+            "zero_work_authoritative": False,
             "admission_reason_histogram": {},
         }
     listing = _list_open_issues(
@@ -1103,6 +1107,7 @@ def snapshot_claimable_issues(
         "body_excerpt_chars": body_limit,
         "mode": "candidate_queue",
         "legacy_mode": "claimable",
+        "candidate_scope": "state:ready",
         "status": listing["status"],
         "data_source": listing["data_source"],
         "rate_limit": listing["rate_limit"],
@@ -1113,6 +1118,7 @@ def snapshot_claimable_issues(
         "candidate_count": 0,
         "claimable_issues": [],
         "claimable_count": 0,
+        "zero_work_authoritative": False,
         "admission_reason_histogram": {},
         "excluded_counts": {"blocked_external": 0},
         "transition_counts": {},
@@ -1192,7 +1198,9 @@ def snapshot_claimable_issues(
         **base,
         "mode": "candidate_queue",
         "legacy_mode": "claimable",
+        "candidate_scope": "state:ready",
         "queue_completeness": queue_completeness,
+        "zero_work_authoritative": queue_completeness == "complete",
         "truncated": truncated,
         "truncation_note": truncation_note,
         "include_blocked_external": include_blocked_external,

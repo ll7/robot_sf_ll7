@@ -1330,6 +1330,8 @@ def test_snapshot_claimable_issues_filters_ready_label_before_limit(
 
     assert payload["status"] == "ok"
     assert payload["queue_completeness"] == "complete"
+    assert payload["candidate_scope"] == "state:ready"
+    assert payload["zero_work_authoritative"] is True
     assert payload["claimable_count"] == 0
     list_issues.assert_called_once_with(
         repo="ll7/robot_sf_ll7",
@@ -1430,6 +1432,7 @@ def test_snapshot_claimable_issues_marks_truncated_scan_incomplete(
 
     assert payload["resume_cursor"] == {"source": "rest", "page": 2, "limit": 2}
     assert payload["queue_completeness"] == "incomplete"
+    assert payload["zero_work_authoritative"] is False
     assert payload["truncated"] is True
 
 
@@ -1468,4 +1471,5 @@ def test_snapshot_claimable_issues_marks_failed_scan_unavailable(
 
     assert payload["status"] == "quota_blocked"
     assert payload["queue_completeness"] == "unavailable"
+    assert payload["zero_work_authoritative"] is False
     assert payload["claimable_count"] == 0

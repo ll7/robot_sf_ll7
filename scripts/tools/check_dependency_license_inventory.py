@@ -2320,6 +2320,23 @@ def _receipt_contract_issues(  # noqa: C901, PLR0912, PLR0915
 ) -> list[str]:
     """Validate receipt summaries against the immutable policy and bound files."""
     issues: list[str] = []
+    expected_claim_boundary = (
+        "This receipt records reproducible package/archive and candidate-binding evidence. "
+        "It is not a legal opinion, redistribution authorization, release approval, or "
+        "independent review marker."
+    )
+    if receipt.get("claim_boundary") != expected_claim_boundary:
+        issues.append("dependency receipt claim_boundary is not the exact non-approval boundary")
+    review = receipt.get("review")
+    if not isinstance(review, dict):
+        issues.append("dependency receipt has no review status")
+    else:
+        if review.get("status") != "pending_independent_maintainer_review":
+            issues.append("dependency receipt review status must remain pending")
+        if review.get("reviewer") is not None or review.get("reviewed_at") is not None:
+            issues.append("dependency receipt review identity must remain null while pending")
+        if review.get("legal_or_redistribution_approval") is not False:
+            issues.append("dependency receipt cannot claim legal_or_redistribution_approval")
     batch_rows = [
         row
         for row in policy.get("package_dispositions", [])
@@ -2384,25 +2401,63 @@ def _receipt_contract_issues(  # noqa: C901, PLR0912, PLR0915
             if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
                 issues.append(f"dependency receipt archive_audit {field} is not a valid SHA-256")
         archive_path = archive.get("path")
-        if (
-            isinstance(archive_path, str)
-            and archive_path
-            and not archive_path.startswith("operator-local:")
-        ):
-            resolved = _resolve_path(repo_root, archive_path)
+        if isinstance(archive_path, str) and archive_path:
+            resolved = Path(archive_path.removeprefix("operator-local:"))
+            if not resolved.is_absolute():
+                resolved = _resolve_path(repo_root, archive_path)
             if not resolved.is_file():
                 issues.append(f"dependency receipt archive audit is missing: {archive_path}")
             else:
+                if archive.get("sha256") != _sha256_file(resolved):
+                    issues.append(
+                        "dependency receipt archive_audit SHA-256 differs from bound file"
+                    )
                 try:
                     archive_file = _read_json(resolved)
                 except (OSError, ValueError, json.JSONDecodeError) as exc:
                     issues.append(f"dependency receipt archive audit is invalid: {exc}")
                 else:
-                    for field in ("schema_version", "package_count", "artifact_count", "failures"):
-                        if archive_file.get(field) != archive.get(field):
+                    if archive_file.get("schema_version") != archive.get("schema_version"):
+                        issues.append(
+                            "dependency receipt archive_audit schema_version differs from bound file"
+                        )
+                    packages = archive_file.get("packages")
+                    if not isinstance(packages, list):
+                        issues.append("dependency receipt archive audit has no package rows")
+                    else:
+                        package_count = len(packages)
+                        artifact_count = sum(
+                            len(row.get("artifacts", []))
+                            for row in packages
+                            if isinstance(row, dict) and isinstance(row.get("artifacts"), list)
+                        )
+                        if package_count != archive.get("package_count"):
                             issues.append(
-                                f"dependency receipt archive_audit {field} differs from bound file"
+                                "dependency receipt archive_audit package_count differs from bound file"
                             )
+                        if artifact_count != archive.get("artifact_count"):
+                            issues.append(
+                                "dependency receipt archive_audit artifact_count differs from bound file"
+                            )
+                    if archive_file.get("failures") != archive.get("failures"):
+                        issues.append(
+                            "dependency receipt archive_audit failures differ from bound file"
+                        )
+        else:
+            issues.append("dependency receipt archive_audit.path is missing or unverifiable")
+        tags_path = archive.get("upstream_tags_path")
+        if isinstance(tags_path, str) and tags_path:
+            resolved_tags = Path(tags_path.removeprefix("operator-local:"))
+            if not resolved_tags.is_absolute():
+                resolved_tags = _resolve_path(repo_root, tags_path)
+            if not resolved_tags.is_file():
+                issues.append(f"dependency receipt upstream tags file is missing: {tags_path}")
+            elif archive.get("upstream_tags_sha256") != _sha256_file(resolved_tags):
+                issues.append("dependency receipt upstream_tags SHA-256 differs from bound file")
+        else:
+            issues.append(
+                "dependency receipt archive_audit.upstream_tags_path is missing or unverifiable"
+            )
 
     candidate = receipt.get("candidate_binding")
     if not isinstance(candidate, dict):
@@ -2448,6 +2503,56 @@ def _receipt_contract_issues(  # noqa: C901, PLR0912, PLR0915
                     issues.append(
                         f"dependency receipt candidate member {member['filename']} has invalid SHA-256"
                     )
+        manifest_path = candidate.get("manifest_path")
+        if not isinstance(manifest_path, str) or not manifest_path:
+            issues.append("dependency receipt candidate manifest_path is missing or unverifiable")
+        else:
+            resolved_manifest = Path(manifest_path.removeprefix("operator-local:"))
+            if not resolved_manifest.is_absolute():
+                resolved_manifest = _resolve_path(repo_root, manifest_path)
+            if not resolved_manifest.is_file():
+                issues.append(f"dependency receipt candidate manifest is missing: {manifest_path}")
+            else:
+                if candidate.get("manifest_sha256") != _sha256_file(resolved_manifest):
+                    issues.append(
+                        "dependency receipt candidate manifest SHA-256 differs from bound file"
+                    )
+                try:
+                    manifest_file = _read_json(resolved_manifest)
+                except (OSError, ValueError, json.JSONDecodeError) as exc:
+                    issues.append(f"dependency receipt candidate manifest is invalid: {exc}")
+                else:
+                    for field in ("repository", "source_sha", "package"):
+                        if manifest_file.get(field) != candidate.get(field):
+                            issues.append(
+                                f"dependency receipt candidate {field} differs from bound manifest"
+                            )
+                    if manifest_file.get("members") != [
+                        {key: member.get(key) for key in ("filename", "kind", "sha256", "size")}
+                        for member in members
+                        if isinstance(member, dict)
+                    ]:
+                        issues.append(
+                            "dependency receipt candidate members differ from bound manifest"
+                        )
+                    for member in members if isinstance(members, list) else []:
+                        member_path = member.get("path") if isinstance(member, dict) else None
+                        if not isinstance(member_path, str) or not member_path:
+                            issues.append(
+                                "dependency receipt candidate member path is missing or unverifiable"
+                            )
+                            continue
+                        resolved_member = Path(member_path.removeprefix("operator-local:"))
+                        if not resolved_member.is_absolute():
+                            resolved_member = _resolve_path(repo_root, member_path)
+                        if not resolved_member.is_file():
+                            issues.append(
+                                f"dependency receipt candidate member is missing: {member_path}"
+                            )
+                        elif member.get("sha256") != _sha256_file(resolved_member):
+                            issues.append(
+                                f"dependency receipt candidate member {member.get('filename')} SHA-256 differs from bound file"
+                            )
 
     strict = receipt.get("strict_report")
     if not isinstance(strict, dict):
@@ -2488,17 +2593,42 @@ def _receipt_contract_issues(  # noqa: C901, PLR0912, PLR0915
         if not isinstance(report_sha, str) or _SHA256_RE.fullmatch(report_sha) is None:
             issues.append("dependency receipt strict_report.sha256 is not a valid SHA-256")
         report_path = strict.get("path")
-        if (
-            isinstance(report_path, str)
-            and report_path
-            and not report_path.startswith("operator-local:")
-        ):
-            resolved = _resolve_path(repo_root, report_path)
+        if isinstance(report_path, str) and report_path:
+            resolved = Path(report_path.removeprefix("operator-local:"))
+            if not resolved.is_absolute():
+                resolved = _resolve_path(repo_root, report_path)
             if not resolved.is_file():
                 issues.append(f"dependency receipt strict report is missing: {report_path}")
-            elif report_sha != _sha256_file(resolved):
-                issues.append("dependency receipt strict report SHA-256 differs from report bytes")
-
+            else:
+                if report_sha != _sha256_file(resolved):
+                    issues.append(
+                        "dependency receipt strict report SHA-256 differs from report bytes"
+                    )
+                try:
+                    report_file = _read_json(resolved)
+                except (OSError, ValueError, json.JSONDecodeError) as exc:
+                    issues.append(f"dependency receipt strict report is invalid: {exc}")
+                else:
+                    report_summary = report_file.get("summary")
+                    if isinstance(report_summary, dict) and isinstance(summary, dict):
+                        for field in (
+                            "selected_package_count",
+                            "license_status_counts",
+                            "structural_issue_count",
+                            "policy_exact_match_count",
+                            "policy_exact_disposition_count",
+                            "policy_pending_package_count",
+                            "unresolved_count",
+                            "status",
+                        ):
+                            if report_summary.get(field) != summary.get(field):
+                                issues.append(
+                                    f"dependency receipt strict_report summary {field} differs from bound report"
+                                )
+                    else:
+                        issues.append("dependency receipt strict report has no summary object")
+        else:
+            issues.append("dependency receipt strict_report.path is missing or unverifiable")
     return issues
 
 
@@ -2510,11 +2640,9 @@ def validate_dependency_license_receipt(  # noqa: C901, PLR0912, PLR0915
 ) -> list[str]:
     """Validate a dependency-batch receipt's reproducible, non-approval bindings.
 
-    The checker validates hashes and identities but never upgrades a row to
-    ``reviewed``.  Operator-local strict reports are accepted as references
-    only when their declared digest is a well-formed SHA-256; a portable path
-    must exist and match when it is available in the repository or supplied
-    checkout.
+    The checker validates hashes, identities, summaries, and exact file contents
+    but never upgrades a row to ``reviewed``. Operator-local paths are not
+    trusted by label: they must resolve to the exact retained files.
     """
     issues: list[str] = []
     try:

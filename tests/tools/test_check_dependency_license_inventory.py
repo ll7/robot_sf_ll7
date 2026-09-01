@@ -1113,10 +1113,12 @@ def test_moving_notice_url_requires_a_pending_durable_blocker() -> None:
 
 
 def test_issue_8163_receipt_binds_policy_license_and_strict_inputs(tmp_path: Path) -> None:
-    """The checked-in receipt is deterministic and tamper-evident."""
+    """The checked-in receipt stays blocked when retained files are stale or unverifiable."""
     root = Path(__file__).resolve().parents[2]
     receipt_path = root / "docs/context/evidence/dependency_license_batch_2026-09-01.receipt.json"
-    assert validate_dependency_license_receipt(root, receipt_path) == []
+    issues = validate_dependency_license_receipt(root, receipt_path)
+    assert any("candidate manifest_path" in issue for issue in issues)
+    assert any("strict report SHA-256" in issue for issue in issues)
 
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     receipt["review_binding"]["normalized_records_sha256"] = "0" * 64
@@ -1172,6 +1174,27 @@ def test_issue_8163_receipt_summaries_are_bound_fail_closed(tmp_path: Path) -> N
             "candidate": tampered["candidate_binding"],
         }[name]
         mutate(target)
+        tampered_path = tmp_path / f"receipt-{name}.json"
+        tampered_path.write_text(json.dumps(tampered, indent=2) + "\n", encoding="utf-8")
+        assert any(
+            expected in issue for issue in validate_dependency_license_receipt(root, tampered_path)
+        )
+
+    for name, mutate, expected in (
+        ("claim", lambda value: value.__setitem__("claim_boundary", "approved"), "claim_boundary"),
+        (
+            "reviewer",
+            lambda value: value["review"].__setitem__("reviewer", "self"),
+            "review identity",
+        ),
+        (
+            "legal",
+            lambda value: value["review"].__setitem__("legal_or_redistribution_approval", True),
+            "legal_or_redistribution_approval",
+        ),
+    ):
+        tampered = copy.deepcopy(receipt)
+        mutate(tampered)
         tampered_path = tmp_path / f"receipt-{name}.json"
         tampered_path.write_text(json.dumps(tampered, indent=2) + "\n", encoding="utf-8")
         assert any(

@@ -189,9 +189,9 @@ def test_workflow_builds_once_then_only_validates_and_admits_same_dist_bytes() -
     assert '--repo-root "${BUILD_SOURCE}"' in dependency_run
     assert '--candidate-bundle "${BUNDLE_DIR}"' in dependency_run
     assert '--output "${DEPENDENCY_REPORT}"' in dependency_run
+    assert "--profile all" in dependency_run
     assert "--fail-on-unresolved" in dependency_run
     assert dependency_index == positions[-1]
-    assert "--profile all" not in dependency_run
     assert "--profile core" not in dependency_run
 
     upload_index = next(index for index, step in enumerate(steps) if step.get("id") == "upload")

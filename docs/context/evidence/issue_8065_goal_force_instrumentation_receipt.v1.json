@@ -3,7 +3,7 @@
   "schema": "goal_force_oracle_instrumentation_receipt.v1",
   "issue": 8065,
   "status": "verified",
-  "source_commit": "253d4208eae038e4fd297389153495b136978a81",
+  "source_commit": "3da35f1203ab4926bc5e27e969789c219344499c",
   "source_tree_scope": "runtime implementation and focused tests before the receipt revision",
   "claim_boundary": "implementation-integrity / smoke only",
   "research_claim": "none",

@@ -28,7 +28,11 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from scripts.dev._gh_pagination import is_likely_truncated  # noqa: E402
-from scripts.dev.check_pr_ci_status import _fetch_ci_status  # noqa: E402
+from scripts.dev.check_pr_ci_status import (  # noqa: E402
+    _fetch_ci_status,
+    _rest_api_get,
+    _summarize_check_runs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +70,8 @@ class WatchResult:
     checks: dict[str, Any]
     error: str
     drift_sample: DriftSample | None
+    target_kind: str = "pr_head"
+    target_sha: str = ""
 
     def to_json(self) -> str:
         """Serialize the result as deterministic JSON."""
@@ -201,6 +207,69 @@ def _build_drift_sample(
     )
 
 
+def _fetch_exact_commit_check_runs(commit_sha: str) -> Any:
+    """Fetch check runs for one exact commit through the repository REST endpoint."""
+    return _rest_api_get(f"commits/{commit_sha}/check-runs?per_page=100")
+
+
+def fetch_exact_commit_ci_status(
+    commit_sha: str,
+    *,
+    fetch_check_runs: Callable[[str], Any] = _fetch_exact_commit_check_runs,
+) -> dict[str, Any]:
+    """Return a fail-closed check summary for one exact commit SHA.
+
+    The commit endpoint is intentionally independent of PR lifecycle state.  This supports the
+    post-merge readback window where the PR is already terminal but its merge-commit checks are
+    still running.
+    """
+    commit_sha = commit_sha.strip()
+    if not commit_sha:
+        return {"status": "error", "error": "post-merge commit SHA is required"}
+    payload = fetch_check_runs(commit_sha)
+    if not isinstance(payload, dict):
+        return {
+            "status": "error",
+            "head_sha": commit_sha,
+            "error": f"could not fetch check runs for exact commit {commit_sha}",
+        }
+    check_runs = payload.get("check_runs")
+    if not isinstance(check_runs, list):
+        return {
+            "status": "error",
+            "head_sha": commit_sha,
+            "error": f"check-run response for exact commit {commit_sha} was malformed",
+        }
+    mismatched_shas = sorted(
+        {
+            str(check_run.get("head_sha") or "")
+            for check_run in check_runs
+            if isinstance(check_run, dict)
+            and check_run.get("head_sha")
+            and str(check_run.get("head_sha")) != commit_sha
+        }
+    )
+    if mismatched_shas:
+        return {
+            "status": "error",
+            "head_sha": commit_sha,
+            "error": (
+                f"check-run response SHA mismatch for exact commit {commit_sha}: "
+                + ", ".join(mismatched_shas)
+            ),
+        }
+    checks, _ = _summarize_check_runs(
+        [check_run for check_run in check_runs if isinstance(check_run, dict)]
+    )
+    return {
+        "status": "ok",
+        "head_sha": commit_sha,
+        "commit_sha": commit_sha,
+        "target_kind": "merge_commit",
+        "checks": checks,
+    }
+
+
 def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit injectable dependencies.
     *,
     pr_number: str,
@@ -212,6 +281,8 @@ def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit inj
     workflow: str = DEFAULT_WORKFLOW,
     sample_limit: int = DEFAULT_SAMPLE_LIMIT,
     fetch_status: Callable[..., dict[str, Any]] = _fetch_ci_status,
+    post_merge_commit_sha: str = "",
+    fetch_commit_status: Callable[..., dict[str, Any]] = fetch_exact_commit_ci_status,
     fetch_durations: Callable[..., list[int]] = fetch_recent_successful_ci_durations,
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
@@ -219,7 +290,17 @@ def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit inj
     emit_progress_json_every: int = 0,
     progress_stream: Any = sys.stderr,
 ) -> WatchResult:
-    """Poll PR CI status until success, failure, stale head, or budget timeout."""
+    """Poll PR or exact merge-commit CI status until a terminal result or timeout."""
+    expected_head_sha = expected_head_sha.strip()
+    post_merge_commit_sha = post_merge_commit_sha.strip()
+    if post_merge_commit_sha:
+        if expected_head_sha and expected_head_sha != post_merge_commit_sha:
+            raise ValueError(
+                "--expected-head-sha must match --post-merge-commit-sha when both are provided"
+            )
+        expected_head_sha = post_merge_commit_sha
+    target_kind = "merge_commit" if post_merge_commit_sha else "pr_head"
+    target_sha = post_merge_commit_sha or expected_head_sha
     if budget_override_seconds is not None:
         budget_seconds = max(budget_override_seconds, 0)
     else:
@@ -230,7 +311,11 @@ def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit inj
     poll_count = 0
 
     while True:
-        last_status = fetch_status(pr_number)
+        last_status = (
+            fetch_commit_status(post_merge_commit_sha)
+            if post_merge_commit_sha
+            else fetch_status(pr_number)
+        )
         poll_count += 1
         head_sha = str(last_status.get("head_sha") or "")
         if last_status.get("status") == "error":
@@ -247,9 +332,11 @@ def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit inj
                 checks={},
                 error=str(last_status.get("error") or "unknown status error"),
                 drift_sample=None,
+                target_kind=target_kind,
+                target_sha=target_sha or head_sha,
             )
         state = str(last_status.get("state") or "").upper()
-        if state in {"CLOSED", "MERGED"}:
+        if not post_merge_commit_sha and state in {"CLOSED", "MERGED"}:
             return WatchResult(
                 pr=last_status.get("pr", pr_number),
                 head_sha=head_sha,
@@ -263,6 +350,25 @@ def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit inj
                 checks=last_status.get("checks", {}),
                 error=f"PR is in terminal state: {state}",
                 drift_sample=None,
+                target_kind=target_kind,
+                target_sha=target_sha or head_sha,
+            )
+        if post_merge_commit_sha and head_sha != expected_head_sha:
+            return WatchResult(
+                pr=last_status.get("pr", pr_number),
+                head_sha=head_sha,
+                expected_head_sha=expected_head_sha,
+                baseline_seconds=baseline_seconds,
+                multiplier=multiplier,
+                budget_seconds=budget_seconds,
+                budget_overridden=budget_override_seconds is not None,
+                poll_interval_seconds=poll_interval_seconds,
+                final_status="error",
+                checks=last_status.get("checks", {}),
+                error="merge commit SHA did not match the requested exact target",
+                drift_sample=None,
+                target_kind=target_kind,
+                target_sha=target_sha or head_sha,
             )
         if expected_head_sha and head_sha and head_sha != expected_head_sha:
             return WatchResult(
@@ -276,8 +382,14 @@ def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit inj
                 poll_interval_seconds=poll_interval_seconds,
                 final_status="error",
                 checks=last_status.get("checks", {}),
-                error="PR head SHA changed while waiting for CI",
+                error=(
+                    "merge commit SHA did not match the requested exact target"
+                    if post_merge_commit_sha
+                    else "PR head SHA changed while waiting for CI"
+                ),
                 drift_sample=None,
+                target_kind=target_kind,
+                target_sha=target_sha or head_sha,
             )
 
         checks = last_status.get("checks", {})
@@ -296,6 +408,8 @@ def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit inj
                 checks=checks,
                 error="",
                 drift_sample=None,
+                target_kind=target_kind,
+                target_sha=target_sha or head_sha,
             )
         if once:
             return WatchResult(
@@ -311,6 +425,8 @@ def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit inj
                 checks=checks,
                 error="",
                 drift_sample=None,
+                target_kind=target_kind,
+                target_sha=target_sha or head_sha,
             )
 
         remaining = deadline - monotonic()
@@ -355,15 +471,27 @@ def watch_pr_ci_status(  # noqa: PLR0913, C901 - CLI/test seam with explicit inj
                 checks=checks,
                 error="CI remained pending after wait budget",
                 drift_sample=drift_sample,
+                target_kind=target_kind,
+                target_sha=target_sha or head_sha,
             )
         sleep(max(min(float(poll_interval_seconds), remaining), 0.0))
 
 
 def format_human(result: WatchResult) -> str:
     """Format a compact human-readable monitor summary."""
+    if result.target_kind == "merge_commit":
+        target_line = (
+            f"  merge commit: {result.target_sha or result.head_sha}  |  "
+            f"observed: {result.head_sha or 'not available'}  |  "
+            f"expected: {result.expected_head_sha or 'not set'}"
+        )
+    else:
+        target_line = (
+            f"  head: {result.head_sha}  |  expected: {result.expected_head_sha or 'not set'}"
+        )
     lines = [
         f"PR #{result.pr} CI watch: {result.final_status}",
-        (f"  head: {result.head_sha}  |  expected: {result.expected_head_sha or 'not set'}"),
+        target_line,
     ]
     if result.budget_overridden:
         lines.append(f"  budget: {result.budget_seconds}s (direct override)")
@@ -392,6 +520,10 @@ long-poll with SHA guard (agents should always pass --expected-head-sha):
   uv run python scripts/dev/watch_pr_ci_status.py 123 --json \\
       --expected-head-sha $(gh pr view 123 --json headRefOid -q .headRefOid) \\
       --poll-interval 90 --budget-seconds 900
+
+post-merge exact commit readback:
+
+  uv run python scripts/dev/watch_pr_ci_status.py 123 --json --post-merge-commit-sha "$MERGE_SHA"
 """
 
 
@@ -403,6 +535,14 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("pr_number", help="GitHub PR number to monitor.")
     parser.add_argument("--expected-head-sha", default="", help="Optional PR head SHA guard.")
+    parser.add_argument(
+        "--post-merge-commit-sha",
+        default="",
+        help=(
+            "Opt in to exact check-run polling for a merged PR commit; this bypasses the "
+            "terminal PR-state stop and requires the supplied SHA."
+        ),
+    )
     parser.add_argument(
         "--workflow", default=DEFAULT_WORKFLOW, help="Workflow name for drift sampling."
     )
@@ -452,6 +592,7 @@ def main(argv: list[str] | None = None) -> int:
         result = watch_pr_ci_status(
             pr_number=args.pr_number,
             expected_head_sha=args.expected_head_sha,
+            post_merge_commit_sha=args.post_merge_commit_sha,
             baseline_seconds=args.baseline_seconds,
             multiplier=args.multiplier,
             budget_override_seconds=args.budget_seconds,
@@ -459,6 +600,7 @@ def main(argv: list[str] | None = None) -> int:
             workflow=args.workflow,
             sample_limit=args.sample_limit,
             fetch_status=_fetch_ci_status,
+            fetch_commit_status=fetch_exact_commit_ci_status,
             fetch_durations=fetch_recent_successful_ci_durations,
             once=args.once,
             emit_progress_json_every=args.emit_progress_json_every,

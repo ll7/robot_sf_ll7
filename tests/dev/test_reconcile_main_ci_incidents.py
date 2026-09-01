@@ -359,6 +359,18 @@ def test_malformed_non_decisive_run_is_rejected_before_report_rendering() -> Non
         )
 
 
+def test_run_fetch_failure_is_wrapped_before_any_issue_write() -> None:
+    """An Actions fetch failure aborts the batch without guessing a stale state."""
+    fake = FakeREST(_issue(run_id=300))
+
+    def failed_fetch(*_args: object) -> list[dict[str, Any]]:
+        raise RuntimeError("temporary Actions API failure")
+
+    with pytest.raises(reconciler.ReconciliationError, match="temporary Actions API failure"):
+        reconciler.reconcile_batch(repo=REPO, apply=True, runner=fake, run_fetcher=failed_fetch)
+    assert not [call for call in fake.calls if call[2] in {"POST", "PATCH"}]
+
+
 def test_scheduled_workflow_uses_explicit_apply_lane_and_narrow_permissions() -> None:
     """The hosted schedule invokes the report helper with only required rights."""
     root = Path(__file__).parents[2]

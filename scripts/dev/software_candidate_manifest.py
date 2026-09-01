@@ -2741,21 +2741,30 @@ def _copy_diagnostic_tree(
     destination_root: Path,
     *,
     label: str,
+    exclude_hidden: bool = False,
 ) -> list[Path]:
-    """Copy a complete regular-file tree into the packet, refusing symlinks."""
+    """Copy a regular-file tree, optionally matching artifact hidden-file filtering.
+
+    GitHub's upload-artifact action is configured with ``include-hidden-files: false``.
+    When enabled here, every path component beginning with ``.`` is omitted so the
+    packet's checksum inventory describes exactly the files a consumer can download.
+    """
     if not source.exists() and not source.is_symlink():
         return []
     if source.is_symlink() or not source.is_dir():
         raise CandidateError(f"{label} must be a real directory: {source}")
     copied: list[Path] = []
     for entry in sorted(source.rglob("*"), key=lambda path: path.as_posix()):
+        relative = entry.relative_to(source)
+        if exclude_hidden and any(part.startswith(".") for part in relative.parts):
+            continue
         if entry.is_symlink():
             raise CandidateError(f"{label} contains a symbolic link: {entry}")
         if entry.is_dir():
             continue
         if not entry.is_file():
             raise CandidateError(f"{label} contains a non-regular entry: {entry}")
-        relative = _safe_workspace_path(entry.relative_to(source).as_posix())
+        relative = _safe_workspace_path(relative.as_posix())
         copied.append(
             _copy_diagnostic_file(
                 entry,
@@ -2764,6 +2773,120 @@ def _copy_diagnostic_tree(
             )
         )
     return copied
+
+
+def _diagnostic_embedded_binding(
+    path: Path | None,
+    *,
+    label: str,
+    source_sha: str,
+    workflow_run_id: str,
+    workflow_run_attempt: int,
+    require_workflow: bool,
+) -> dict[str, Any]:
+    """Classify source/run identity embedded in one preserved JSON report.
+
+    Rejected packets are forensic evidence, so unsupported or incomplete report
+    shapes remain preservable but are explicitly marked ``unverified``.  Identity
+    fields that are present are fail-closed: a mismatch would make the packet's
+    source/run claim misleading and therefore aborts packet creation.
+    """
+    if path is None or not path.exists():
+        return {"status": "not_present"}
+    _diagnostic_source_file(path, label=label)
+    payload = _load_json(path, label=label)
+    return _diagnostic_binding_payload(
+        payload,
+        label=label,
+        source_sha=source_sha,
+        workflow_run_id=workflow_run_id,
+        workflow_run_attempt=workflow_run_attempt,
+        require_workflow=require_workflow,
+    )
+
+
+def _diagnostic_binding_payload(
+    payload: Any,
+    *,
+    label: str,
+    source_sha: str,
+    workflow_run_id: str,
+    workflow_run_attempt: int,
+    require_workflow: bool,
+) -> dict[str, Any]:
+    """Classify identity fields from an already-loaded report object."""
+    if not isinstance(payload, dict):
+        return {"status": "unverified", "reason": f"{label} is not a JSON object"}
+    embedded_source = payload.get("source_sha")
+    if embedded_source is None:
+        return {"status": "unverified", "reason": f"{label} has no source_sha binding"}
+    if embedded_source != source_sha:
+        raise CandidateError(f"{label} source_sha does not match rejected diagnostic source SHA")
+    result: dict[str, Any] = {"source_sha": embedded_source}
+    embedded_workflow = payload.get("workflow")
+    if embedded_workflow is None:
+        if require_workflow:
+            return {
+                **result,
+                "status": "unverified",
+                "reason": f"{label} has no workflow binding",
+            }
+        result["status"] = "verified-source-only"
+        return result
+    if not isinstance(embedded_workflow, dict):
+        return {
+            **result,
+            "status": "unverified",
+            "reason": f"{label} workflow binding is not an object",
+        }
+    if (
+        embedded_workflow.get("run_id") != workflow_run_id
+        or embedded_workflow.get("run_attempt") != workflow_run_attempt
+    ):
+        raise CandidateError(
+            f"{label} workflow identity does not match rejected diagnostic workflow"
+        )
+    result["workflow"] = {
+        "run_id": workflow_run_id,
+        "run_attempt": workflow_run_attempt,
+    }
+    result["status"] = "verified"
+    return result
+
+
+def _diagnostic_dependency_binding(
+    path: Path | None,
+    *,
+    source_sha: str,
+    workflow_run_id: str,
+    workflow_run_attempt: int,
+) -> dict[str, Any]:
+    """Classify the optional dependency report's canonical candidate binding."""
+    if path is None or not path.exists():
+        return {"status": "not_present"}
+    _diagnostic_source_file(path, label="diagnostic dependency report")
+    payload = _load_json(path, label="diagnostic dependency report")
+    if not isinstance(payload, dict):
+        return {"status": "unverified", "reason": "dependency report is not a JSON object"}
+    binding = payload.get("candidate_binding")
+    if binding is None:
+        return {
+            "status": "unverified",
+            "reason": "dependency report has no candidate_binding record",
+        }
+    if not isinstance(binding, dict):
+        return {
+            "status": "unverified",
+            "reason": "dependency report candidate_binding is not an object",
+        }
+    return _diagnostic_binding_payload(
+        binding,
+        label="dependency report candidate_binding",
+        source_sha=source_sha,
+        workflow_run_id=workflow_run_id,
+        workflow_run_attempt=workflow_run_attempt,
+        require_workflow=True,
+    )
 
 
 def _diagnostic_member(path: Path, *, root: Path) -> dict[str, Any]:
@@ -2920,6 +3043,42 @@ def _rejected_diagnostic(  # noqa: C901, PLR0912, PLR0915 - closed packet contra
             except RuntimeError as exc:
                 raise CandidateError(f"diagnostic input path is ambiguous: {input_path}") from exc
 
+    embedded_provenance = {
+        "candidate-manifest": {"status": "not_present"},
+        "candidate-provenance": {"status": "not_present"},
+        "materialization-report": _diagnostic_embedded_binding(
+            materialization_report,
+            label="materialization report",
+            source_sha=args.source_sha,
+            workflow_run_id=args.workflow_run_id,
+            workflow_run_attempt=args.workflow_run_attempt,
+            require_workflow=False,
+        ),
+        "dependency-report": _diagnostic_dependency_binding(
+            dependency_report,
+            source_sha=args.source_sha,
+            workflow_run_id=args.workflow_run_id,
+            workflow_run_attempt=args.workflow_run_attempt,
+        ),
+    }
+    if candidate_bundle is not None:
+        embedded_provenance["candidate-manifest"] = _diagnostic_embedded_binding(
+            candidate_bundle / MANIFEST_NAME,
+            label="candidate manifest",
+            source_sha=args.source_sha,
+            workflow_run_id=args.workflow_run_id,
+            workflow_run_attempt=args.workflow_run_attempt,
+            require_workflow=True,
+        )
+        embedded_provenance["candidate-provenance"] = _diagnostic_embedded_binding(
+            candidate_bundle / PROVENANCE_NAME,
+            label="candidate provenance",
+            source_sha=args.source_sha,
+            workflow_run_id=args.workflow_run_id,
+            workflow_run_attempt=args.workflow_run_attempt,
+            require_workflow=True,
+        )
+
     source_tree_sha = _candidate_tree_sha1(repo_root, args.source_sha)
     staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
     try:
@@ -2930,11 +3089,17 @@ def _rejected_diagnostic(  # noqa: C901, PLR0912, PLR0915 - closed packet contra
                     candidate_bundle,
                     staging / "candidate-bundle",
                     label="candidate bundle",
+                    exclude_hidden=True,
                 )
             )
         if dist_dir is not None:
             payload_paths.extend(
-                _copy_diagnostic_tree(dist_dir, staging / "dist", label="distribution directory")
+                _copy_diagnostic_tree(
+                    dist_dir,
+                    staging / "dist",
+                    label="distribution directory",
+                    exclude_hidden=True,
+                )
             )
         file_inputs = (
             (dependency_report, "reports/dependency-license-inventory.json", "dependency report"),
@@ -3035,8 +3200,12 @@ def _rejected_diagnostic(  # noqa: C901, PLR0912, PLR0915 - closed packet contra
                     "run_id": args.workflow_run_id,
                 },
             },
-            "claim_boundary": "forensic diagnostic only; rejected bytes are not a release candidate",
+            "claim_boundary": (
+                "forensic diagnostic only; packet source/run identity is bound by this metadata; "
+                "embedded artifact bindings are classified below; rejected bytes are not a release candidate"
+            ),
             "checksums": checksum_record,
+            "embedded_provenance": embedded_provenance,
             "evidence_status": "rejected",
             "payload": payload,
             "promotion_eligible": False,

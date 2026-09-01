@@ -52,12 +52,30 @@ def test_rejected_diagnostic_preserves_failed_dependency_report_and_bundle(tmp_p
     bundle = tmp_path / "bundle"
     bundle.mkdir()
     (bundle / "candidate-manifest.json").write_text(
-        json.dumps({"source_sha": source_sha, "status": "built"}) + "\n", encoding="utf-8"
+        json.dumps(
+            {
+                "source_sha": source_sha,
+                "status": "built",
+                "workflow": {"run_id": "33498526595", "run_attempt": 1},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
     )
-    (bundle / "candidate-provenance.json").write_text("provenance bytes\n", encoding="utf-8")
+    (bundle / "candidate-provenance.json").write_text(
+        json.dumps(
+            {
+                "source_sha": source_sha,
+                "workflow": {"run_id": "33498526595", "run_attempt": 1},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     dist = tmp_path / "dist"
     dist.mkdir()
     (dist / "robot_sf-0.0.6-py3-none-any.whl").write_bytes(b"wheel bytes")
+    (dist / ".gitignore").write_text("ignored local files\n", encoding="utf-8")
     dependency_report = tmp_path / "dependency-license-inventory.json"
     dependency_report.write_text(
         json.dumps(
@@ -132,12 +150,25 @@ def test_rejected_diagnostic_preserves_failed_dependency_report_and_bundle(tmp_p
     payload_paths = {entry["path"] for entry in metadata["payload"]}
     assert "candidate-bundle/candidate-provenance.json" in payload_paths
     assert "reports/dependency-license-inventory.json" in payload_paths
+    assert "dist/.gitignore" not in payload_paths
+    assert metadata["embedded_provenance"]["candidate-manifest"]["status"] == "verified"
+    assert metadata["embedded_provenance"]["candidate-provenance"]["status"] == "verified"
+    assert metadata["embedded_provenance"]["dependency-report"]["status"] == "unverified"
 
     checksums = (output / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
     assert checksums
+    checksum_paths = {line.split("  ", maxsplit=1)[1] for line in checksums}
+    assert checksum_paths == payload_paths
     for line in checksums:
         digest, relative = line.split("  ", maxsplit=1)
         assert digest == hashlib.sha256((output / relative).read_bytes()).hexdigest()
+    uploaded_paths = {
+        path.relative_to(output).as_posix()
+        for path in output.rglob("*")
+        if path.is_file()
+        and not any(part.startswith(".") for part in path.relative_to(output).parts)
+    }
+    assert uploaded_paths == payload_paths | {"SHA256SUMS", "rejected-diagnostic.json"}
 
 
 def test_rejected_diagnostic_requires_a_failed_strict_gate(tmp_path: Path) -> None:
@@ -168,6 +199,82 @@ def test_rejected_diagnostic_requires_a_failed_strict_gate(tmp_path: Path) -> No
     )
     assert result.returncode == 1
     assert "at least one failed strict gate" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "binding",
+    ("candidate-manifest-source", "candidate-manifest-workflow", "materialization-report"),
+)
+def test_rejected_diagnostic_rejects_mismatched_embedded_source_binding(
+    tmp_path: Path, binding: str
+) -> None:
+    source = _clean_source(tmp_path)
+    source_sha = _source_sha()
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    (bundle / "candidate-manifest.json").write_text(
+        json.dumps(
+            {
+                "source_sha": ("f" * 40 if binding == "candidate-manifest-source" else source_sha),
+                "workflow": {
+                    "run_id": "99999999999"
+                    if binding == "candidate-manifest-workflow"
+                    else "33498526595",
+                    "run_attempt": 1,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (bundle / "candidate-provenance.json").write_text(
+        json.dumps(
+            {
+                "source_sha": source_sha,
+                "workflow": {"run_id": "33498526595", "run_attempt": 1},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    materialization = tmp_path / "materialization.json"
+    materialization.write_text(
+        json.dumps({"source_sha": "f" * 40 if binding == "materialization-report" else source_sha})
+        + "\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "diagnostic"
+    result = _run_helper(
+        "rejected-diagnostic",
+        "--repo-root",
+        str(source),
+        "--output-dir",
+        str(output),
+        "--source-sha",
+        source_sha,
+        "--repository",
+        "ll7/robot_sf_ll7",
+        "--workflow-run-id",
+        "33498526595",
+        "--workflow-run-attempt",
+        "1",
+        "--candidate-version",
+        "0.0.6",
+        "--candidate-bundle",
+        str(bundle),
+        "--materialization-report",
+        str(materialization),
+        "--strict-rights-exit",
+        "0",
+        "--dependency-exit",
+        "2",
+        "--rights-admission-exit",
+        "not-run",
+        check=False,
+    )
+    assert result.returncode == 1
+    assert "does not match rejected diagnostic" in result.stderr
+    assert not output.exists()
 
 
 @pytest.mark.parametrize(

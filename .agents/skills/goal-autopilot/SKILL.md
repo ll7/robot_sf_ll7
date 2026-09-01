@@ -261,8 +261,11 @@ if claimable_count == 0 and queue_completeness == "complete":
 if claimable_count == 0 and queue_completeness == "complete":
     run_next_unsaturated_discovery_lane(max_new_issues=2)
     prepare_and_admit_new_candidates()
-if claimable_count == 0 and queue_completeness == "complete":
-    stop as genuine_zero_work
+controller_decision = goal_autopilot_controller.arbitrate_controller(all_lane_evidence)
+if controller_decision.global_zero_work:
+    stop only with controller_decision.zero_work_proof
+else:
+    continue with controller_decision.next_action
 if claimable_count == 0 and queue_completeness != "complete":
     record the incomplete/unavailable queue state and continue recovery:
     incomplete -> resume from the returned cursor or raise --limit and re-scan
@@ -273,6 +276,58 @@ if claimable_count == 0 and queue_completeness != "complete":
 scan with no remaining truncation or resume cursor and with usable canonical admission
 and atomic-claim results for every discovered row. A resumed final page, admission
 error, or unavailable claim read is never complete queue evidence.
+
+### Parent-only zero-work arbiter
+
+`genuine_zero_work` is a controller-only terminal state. No delegated
+implementation, review, merge, preparation, or discovery worker may emit it.
+
+A child worker with no eligible item returns only its lane-local exhaustion
+state and the evidence supporting that state. The controller must continue
+through all remaining phases. Valid lane-local exhaustion states are
+`implementation_queue_exhausted`, `review_queue_exhausted`,
+`merge_queue_exhausted`, `preparation_queue_exhausted`, and
+`discovery_lane_saturated`.
+
+The parent combines the lane evidence with the deterministic arbiter:
+
+```bash
+uv run python scripts/dev/goal_autopilot_controller.py \
+  --snapshot /tmp/goal_autopilot_controller_snapshot.json --json
+```
+
+Before emitting `genuine_zero_work`, the controller must produce one
+head-bound zero-work proof covering:
+
+1. an authoritative complete ready-candidate scan and admission-reason
+   histogram;
+2. zero merge-ready, review-eligible, and recoverable active PRs;
+3. zero safely promotable or formalizable issue contracts;
+4. a completed blocker reconciliation pass;
+5. an unsaturated discovery pass followed by readiness gating, or a
+   head-bound saturated discovery verdict.
+
+The proof schema is `goal_autopilot_zero_work_proof.v1`. It binds
+`origin_main_sha`, issue labels/bodies, atomic claims, PR heads, the preparation
+audit digest, and discovery-relevant paths. Any drift invalidates the receipt.
+An open issue count is neither positive nor negative zero-work evidence. A zero
+claimable issue count proves only implementation-lane exhaustion.
+
+For each issue created during discovery, `readiness_outcomes` must contain the
+canonical gate result object (at minimum a non-empty `outcome` and boolean
+`verified` field), in the same order as `created_issue_numbers`. A missing or
+malformed result keeps discovery unfinished.
+
+Preparation must classify a complete, local, leaf, unblocked issue without an
+execution-state label as `gate_readiness`, then apply the canonical
+`issue_readiness_gate.gate_issue()` operation. It must not add `state:ready`
+through the generic label writer. Missing contract facts remain
+`formalize_issue`; missing decisions, external inputs, parent decomposition,
+and active handoffs remain their named authority lanes. Formalization may only
+reorganize facts already present in the issue and linked evidence; it must not
+invent scope, acceptance criteria, scientific claims, or maintainer rulings.
+
+No zero-work receipt means no `genuine_zero_work` result.
 
 The audit and queue snapshots must expose an admission-reason histogram. Use stable reasons such as
 `wrong_owner_repo`, `external_input_missing`, `covering_pr_open`, `parent_not_leaf`, `needs_spec`,
@@ -610,9 +665,11 @@ Transitions:
 - After `implement`, proceed to `review`.
 - After `review`, proceed to `merge`.
 - After `merge`, proceed to `discover`.
-- After `discover`, return to `implement` unless stop condition is met.
+- After `discover`, return to `implement` unless the parent arbiter emits a
+  valid `goal_autopilot_zero_work_proof.v1` receipt.
 - If any phase produces zero work (no eligible issue, no reviewable PR, no
-  merge-ready PR, no discovery candidate), record the zero-work outcome and advance.
+  merge-ready PR, no discovery candidate), record only that lane's exhaustion
+  outcome and advance.
 
 Do not reorder phases or skip a phase that has eligible work.
 
@@ -729,17 +786,19 @@ If the phase used `worker_sparse_artifacts`, require the self-review companion t
 - After implementation, review all open non-draft PRs that are not blocked.
 - Merge all PRs carrying the `merge-ready` label.
 - Run one bounded discovery pass after merge.
-- End the cycle when all three produce zero work.
+- End the cycle only when the parent arbiter proves that every controller lane
+  is empty and discovery is head-bound saturated.
 
 ## Stop Conditions
 
 Stop the autopilot when any:
 - all eligible issues have been implemented and merged,
 - no new discovery candidates remain,
-- the audited candidate queue, review queue, external-input owners, and unsaturated discovery lanes
-  provide no defensible single-repository leaf with an explicit `queue_completeness: complete`
-  scan verdict (`genuine_zero_work`; an unqualified `claimable_count == 0` from an
-  incomplete or unavailable scan is never zero-work evidence),
+- the parent-only controller arbiter emits `genuine_zero_work` together with a
+  `goal_autopilot_zero_work_proof.v1` receipt whose issue queue is an explicit,
+  authoritative `queue_completeness: complete` scan; an unqualified
+  `claimable_count == 0` from an incomplete or unavailable scan is never
+  zero-work evidence,
 - auth/credentials/env blocker that affects all phases,
 - user requests stop.
 

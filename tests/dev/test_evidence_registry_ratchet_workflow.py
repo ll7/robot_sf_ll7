@@ -59,3 +59,15 @@ def test_ratchet_step_propagates_check_exit_code() -> None:
         "the log pipe swallows the ratchet's non-zero exit code and the gate "
         "reports success while FAILED (issue #6740)"
     )
+
+
+def test_ratchet_runs_when_release_assurance_inputs_change() -> None:
+    """Pinned release-assurance inputs must trigger the pull-request ratchet."""
+    workflow = yaml.load(
+        WORKFLOW_PATH.read_text(encoding="utf-8"),
+        Loader=yaml.BaseLoader,
+    )
+    paths = workflow["on"]["pull_request"]["paths"]
+
+    assert "docs/RELEASE.md" in paths
+    assert "CITATION.cff" in paths

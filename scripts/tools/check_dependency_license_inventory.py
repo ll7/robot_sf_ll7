@@ -58,6 +58,7 @@ _REVIEW_MARKERS = (
     "non commercial",
     "no redistribution",
 )
+_REPORT_CONTENT_DIGEST_FIELD = "report_content_sha256"
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _CANDIDATE_MANIFEST_NAME = "candidate-manifest.json"
 _CANDIDATE_SCHEMA_VERSION = "robot_sf.software_candidate.v1"
@@ -201,6 +202,16 @@ def _sha256_file(path: Path) -> str:
 def _sha256_value(value: Any) -> str:
     """Hash a canonical JSON value."""
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
+
+
+def _report_content_digest(report: dict[str, Any]) -> str:
+    """Hash report content while excluding only the marker and this digest."""
+    content = {
+        key: value
+        for key, value in report.items()
+        if key not in {"review_marker", _REPORT_CONTENT_DIGEST_FIELD}
+    }
+    return _sha256_value(content)
 
 
 def _relative_path(repo_root: Path, path: Path) -> str:
@@ -1958,6 +1969,7 @@ def _policy_records(  # noqa: C901, PLR0912, PLR0915
     package_by_name: dict[str, list[dict[str, Any]]] = defaultdict(list)
     package_out: list[dict[str, Any]] = []
     package_ids: set[str] = set()
+    package_identity_keys: dict[tuple[str, str, str], str] = {}
     valid_modes = {"user_installed", "bundled_source", "built_companion", "not_distributed"}
     valid_conditions = {
         "mirrored",
@@ -2016,6 +2028,23 @@ def _policy_records(  # noqa: C901, PLR0912, PLR0915
                 issues.append(
                     f"package disposition {package_id} metadata_url does not match package identity"
                 )
+        identity_key = (
+            normalized_name,
+            str(package.get("version")),
+            _canonical_json(
+                _normalise_json(
+                    {key: value for key, value in source.items() if key != "metadata_url"}
+                )
+            ),
+        )
+        previous_id = package_identity_keys.get(identity_key)
+        if previous_id is not None:
+            issues.append(
+                "duplicate package disposition identity: "
+                f"{package_id} duplicates {previous_id} for {package_name}"
+            )
+        else:
+            package_identity_keys[identity_key] = package_id
         target = package.get("target")
         if not isinstance(target, dict) or not target:
             issues.append(f"package disposition {package_id} has no target")
@@ -2283,6 +2312,334 @@ def _issue_8163_receipt_binding(
     return binding, policy_issues
 
 
+def _receipt_contract_issues(  # noqa: C901, PLR0912, PLR0915
+    receipt: dict[str, Any],
+    policy: dict[str, Any],
+    policy_binding: dict[str, Any],
+    repo_root: Path,
+) -> list[str]:
+    """Validate receipt summaries against the immutable policy and bound files."""
+    issues: list[str] = []
+    expected_claim_boundary = (
+        "This receipt records reproducible package/archive and candidate-binding evidence. "
+        "It is not a legal opinion, redistribution authorization, release approval, or "
+        "independent review marker."
+    )
+    if receipt.get("claim_boundary") != expected_claim_boundary:
+        issues.append("dependency receipt claim_boundary is not the exact non-approval boundary")
+    review = receipt.get("review")
+    if not isinstance(review, dict):
+        issues.append("dependency receipt has no review status")
+    else:
+        if review.get("status") != "pending_independent_maintainer_review":
+            issues.append("dependency receipt review status must remain pending")
+        if review.get("reviewer") is not None or review.get("reviewed_at") is not None:
+            issues.append("dependency receipt review identity must remain null while pending")
+        if review.get("legal_or_redistribution_approval") is not False:
+            issues.append("dependency receipt cannot claim legal_or_redistribution_approval")
+    batch_rows = [
+        row
+        for row in policy.get("package_dispositions", [])
+        if isinstance(row, dict)
+        and "docs/context/evidence/dependency_license_batch_2026-09-01.md"
+        in row.get("evidence_paths", [])
+    ]
+    expected_profiles = sorted(
+        {
+            profile
+            for row in batch_rows
+            for profile in row.get("profiles", [])
+            if isinstance(profile, str)
+        }
+    )
+    manifest = _read_json(repo_root / CANONICAL_PROFILE_MANIFEST)
+    manifest_target = manifest.get("target", {})
+    expected_target = {
+        "os": manifest_target.get("os"),
+        "architecture": manifest_target.get("architecture"),
+        "python": {
+            "implementation": manifest_target.get("python", {}).get("implementation"),
+            "version": manifest_target.get("python", {}).get("version"),
+        },
+    }
+    expected_scope = {
+        "package_count": len(batch_rows),
+        "artifact_count": sum(len(row.get("artifacts", [])) for row in batch_rows),
+        "profile_ids": expected_profiles,
+        "target": expected_target,
+    }
+    expected_status = (
+        "blocked_diagnostic_only"
+        if any(row.get("status") != "reviewed" for row in batch_rows)
+        else "complete"
+    )
+    if receipt.get("status") != expected_status:
+        issues.append(
+            f"dependency receipt status does not match bound policy: expected {expected_status}"
+        )
+    scope = receipt.get("scope")
+    if not isinstance(scope, dict):
+        issues.append("dependency receipt has no scope summary")
+    else:
+        for field in ("package_count", "artifact_count", "profile_ids", "target"):
+            if _normalise_json(scope.get(field)) != _normalise_json(expected_scope[field]):
+                issues.append(f"dependency receipt scope {field} differs from bound policy")
+
+    archive = receipt.get("archive_audit")
+    if not isinstance(archive, dict):
+        issues.append("dependency receipt has no archive_audit summary")
+    else:
+        if archive.get("schema_version") != "robot-sf.issue-8163-archive-audit.v1":
+            issues.append("dependency receipt archive_audit has an unsupported schema_version")
+        for field in ("package_count", "artifact_count"):
+            if archive.get(field) != expected_scope[field]:
+                issues.append(f"dependency receipt archive_audit {field} differs from scope")
+        if archive.get("failures") != []:
+            issues.append("dependency receipt archive_audit failures must be empty")
+        for field in ("sha256", "upstream_tags_sha256"):
+            value = archive.get(field)
+            if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
+                issues.append(f"dependency receipt archive_audit {field} is not a valid SHA-256")
+        archive_path = archive.get("path")
+        if isinstance(archive_path, str) and archive_path:
+            resolved = Path(archive_path.removeprefix("operator-local:"))
+            if not resolved.is_absolute():
+                resolved = _resolve_path(repo_root, archive_path)
+            if not resolved.is_file():
+                issues.append(f"dependency receipt archive audit is missing: {archive_path}")
+            else:
+                if archive.get("sha256") != _sha256_file(resolved):
+                    issues.append(
+                        "dependency receipt archive_audit SHA-256 differs from bound file"
+                    )
+                try:
+                    archive_file = _read_json(resolved)
+                except (OSError, ValueError, json.JSONDecodeError) as exc:
+                    issues.append(f"dependency receipt archive audit is invalid: {exc}")
+                else:
+                    if archive_file.get("schema_version") != archive.get("schema_version"):
+                        issues.append(
+                            "dependency receipt archive_audit schema_version differs from bound file"
+                        )
+                    packages = archive_file.get("packages")
+                    if not isinstance(packages, list):
+                        issues.append("dependency receipt archive audit has no package rows")
+                    else:
+                        package_count = len(packages)
+                        artifact_count = sum(
+                            len(row.get("artifacts", []))
+                            for row in packages
+                            if isinstance(row, dict) and isinstance(row.get("artifacts"), list)
+                        )
+                        if package_count != archive.get("package_count"):
+                            issues.append(
+                                "dependency receipt archive_audit package_count differs from bound file"
+                            )
+                        if artifact_count != archive.get("artifact_count"):
+                            issues.append(
+                                "dependency receipt archive_audit artifact_count differs from bound file"
+                            )
+                    if archive_file.get("failures") != archive.get("failures"):
+                        issues.append(
+                            "dependency receipt archive_audit failures differ from bound file"
+                        )
+        else:
+            issues.append("dependency receipt archive_audit.path is missing or unverifiable")
+        tags_path = archive.get("upstream_tags_path")
+        if isinstance(tags_path, str) and tags_path:
+            resolved_tags = Path(tags_path.removeprefix("operator-local:"))
+            if not resolved_tags.is_absolute():
+                resolved_tags = _resolve_path(repo_root, tags_path)
+            if not resolved_tags.is_file():
+                issues.append(f"dependency receipt upstream tags file is missing: {tags_path}")
+            elif archive.get("upstream_tags_sha256") != _sha256_file(resolved_tags):
+                issues.append("dependency receipt upstream_tags SHA-256 differs from bound file")
+        else:
+            issues.append(
+                "dependency receipt archive_audit.upstream_tags_path is missing or unverifiable"
+            )
+
+    candidate = receipt.get("candidate_binding")
+    if not isinstance(candidate, dict):
+        issues.append("dependency receipt has no candidate_binding summary")
+    else:
+        if candidate.get("status") != "bound":
+            issues.append("dependency receipt candidate_binding must be bound")
+        if candidate.get("profile_ids") != expected_profiles:
+            issues.append("dependency receipt candidate profile_ids differ from scope")
+        package = candidate.get("package")
+        if not isinstance(package, dict) or not all(
+            isinstance(package.get(field), str) and package.get(field)
+            for field in ("name", "version")
+        ):
+            issues.append("dependency receipt candidate package identity is incomplete")
+        sbom = candidate.get("sbom")
+        expected_components = candidate.get("expected_component_count")
+        if not isinstance(expected_components, int) or expected_components <= 0:
+            issues.append("dependency receipt candidate expected_component_count is invalid")
+        if not isinstance(sbom, dict) or sbom.get("component_count") != expected_components:
+            issues.append("dependency receipt candidate SBOM count differs from candidate summary")
+        materialization = candidate.get("materialization")
+        if not isinstance(materialization, dict):
+            issues.append("dependency receipt candidate materialization summary is missing")
+        for field in ("manifest_sha256",):
+            value = candidate.get(field)
+            if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
+                issues.append(f"dependency receipt candidate {field} is not a valid SHA-256")
+        members = candidate.get("members")
+        if not isinstance(members, list) or not members:
+            issues.append("dependency receipt candidate members summary is missing")
+        elif len({member.get("filename") for member in members if isinstance(member, dict)}) != len(
+            members
+        ):
+            issues.append("dependency receipt candidate members contain duplicate filenames")
+        if isinstance(members, list):
+            for member in members:
+                if not isinstance(member, dict) or not isinstance(member.get("filename"), str):
+                    issues.append("dependency receipt candidate member is incomplete")
+                    continue
+                value = member.get("sha256")
+                if not isinstance(value, str) or _SHA256_RE.fullmatch(value) is None:
+                    issues.append(
+                        f"dependency receipt candidate member {member['filename']} has invalid SHA-256"
+                    )
+        manifest_path = candidate.get("manifest_path")
+        if not isinstance(manifest_path, str) or not manifest_path:
+            issues.append("dependency receipt candidate manifest_path is missing or unverifiable")
+        else:
+            resolved_manifest = Path(manifest_path.removeprefix("operator-local:"))
+            if not resolved_manifest.is_absolute():
+                resolved_manifest = _resolve_path(repo_root, manifest_path)
+            if not resolved_manifest.is_file():
+                issues.append(f"dependency receipt candidate manifest is missing: {manifest_path}")
+            else:
+                if candidate.get("manifest_sha256") != _sha256_file(resolved_manifest):
+                    issues.append(
+                        "dependency receipt candidate manifest SHA-256 differs from bound file"
+                    )
+                try:
+                    manifest_file = _read_json(resolved_manifest)
+                except (OSError, ValueError, json.JSONDecodeError) as exc:
+                    issues.append(f"dependency receipt candidate manifest is invalid: {exc}")
+                else:
+                    for field in ("repository", "source_sha", "package"):
+                        if manifest_file.get(field) != candidate.get(field):
+                            issues.append(
+                                f"dependency receipt candidate {field} differs from bound manifest"
+                            )
+                    if manifest_file.get("members") != [
+                        {key: member.get(key) for key in ("filename", "kind", "sha256", "size")}
+                        for member in members
+                        if isinstance(member, dict)
+                    ]:
+                        issues.append(
+                            "dependency receipt candidate members differ from bound manifest"
+                        )
+                    for member in members if isinstance(members, list) else []:
+                        member_path = member.get("path") if isinstance(member, dict) else None
+                        if not isinstance(member_path, str) or not member_path:
+                            issues.append(
+                                "dependency receipt candidate member path is missing or unverifiable"
+                            )
+                            continue
+                        resolved_member = Path(member_path.removeprefix("operator-local:"))
+                        if resolved_member.name != member.get("filename"):
+                            issues.append(
+                                "dependency receipt candidate member path does not match "
+                                f"filename {member.get('filename')}"
+                            )
+                        if not resolved_member.is_absolute():
+                            resolved_member = _resolve_path(repo_root, member_path)
+                        if not resolved_member.is_file():
+                            issues.append(
+                                f"dependency receipt candidate member is missing: {member_path}"
+                            )
+                        elif member.get("sha256") != _sha256_file(resolved_member):
+                            issues.append(
+                                f"dependency receipt candidate member {member.get('filename')} SHA-256 differs from bound file"
+                            )
+
+    strict = receipt.get("strict_report")
+    if not isinstance(strict, dict):
+        issues.append("dependency receipt has no strict_report binding")
+    else:
+        if strict.get("candidate_bound") != (
+            isinstance(candidate, dict) and candidate.get("status") == "bound"
+        ):
+            issues.append("dependency receipt strict_report candidate_bound differs from candidate")
+        if strict.get("surface_profile_ids") != expected_profiles:
+            issues.append("dependency receipt strict_report surface differs from scope")
+        summary = strict.get("summary")
+        if not isinstance(summary, dict):
+            issues.append("dependency receipt strict_report has no summary")
+        else:
+            if summary.get("policy_exact_disposition_count") != len(
+                policy.get("package_dispositions", [])
+            ):
+                issues.append("dependency receipt strict_report policy count differs from policy")
+            if summary.get("status") != (
+                "blocked" if receipt.get("status") != "complete" else "complete"
+            ):
+                issues.append("dependency receipt strict_report status differs from receipt status")
+            pending = summary.get("policy_pending_package_count")
+            unresolved = summary.get("unresolved_count")
+            if not isinstance(pending, int) or pending < 0:
+                issues.append("dependency receipt strict_report pending count is invalid")
+            if not isinstance(unresolved, int) or unresolved < 0:
+                issues.append("dependency receipt strict_report unresolved count is invalid")
+            elif isinstance(pending, int) and unresolved != pending:
+                issues.append(
+                    "dependency receipt strict_report unresolved count differs from pending count"
+                )
+            expected_exit = 2 if summary.get("status") == "blocked" else 0
+            if strict.get("exit_code") != expected_exit:
+                issues.append("dependency receipt strict_report exit_code differs from status")
+        report_sha = strict.get("sha256")
+        if not isinstance(report_sha, str) or _SHA256_RE.fullmatch(report_sha) is None:
+            issues.append("dependency receipt strict_report.sha256 is not a valid SHA-256")
+        report_path = strict.get("path")
+        if isinstance(report_path, str) and report_path:
+            resolved = Path(report_path.removeprefix("operator-local:"))
+            if not resolved.is_absolute():
+                resolved = _resolve_path(repo_root, report_path)
+            if not resolved.is_file():
+                issues.append(
+                    "dependency receipt strict report SHA-256 cannot be verified because "
+                    f"the report is missing: {report_path}"
+                )
+            else:
+                if report_sha != _sha256_file(resolved):
+                    issues.append(
+                        "dependency receipt strict report SHA-256 differs from report bytes"
+                    )
+                try:
+                    report_file = _read_json(resolved)
+                except (OSError, ValueError, json.JSONDecodeError) as exc:
+                    issues.append(f"dependency receipt strict report is invalid: {exc}")
+                else:
+                    report_summary = report_file.get("summary")
+                    if isinstance(report_summary, dict) and isinstance(summary, dict):
+                        for field in (
+                            "selected_package_count",
+                            "license_status_counts",
+                            "structural_issue_count",
+                            "policy_exact_match_count",
+                            "policy_exact_disposition_count",
+                            "policy_pending_package_count",
+                            "unresolved_count",
+                            "status",
+                        ):
+                            if report_summary.get(field) != summary.get(field):
+                                issues.append(
+                                    f"dependency receipt strict_report summary {field} differs from bound report"
+                                )
+                    else:
+                        issues.append("dependency receipt strict report has no summary object")
+        else:
+            issues.append("dependency receipt strict_report.path is missing or unverifiable")
+    return issues
+
+
 def validate_dependency_license_receipt(  # noqa: C901, PLR0912, PLR0915
     repo_root: Path,
     receipt_path: Path,
@@ -2291,11 +2648,9 @@ def validate_dependency_license_receipt(  # noqa: C901, PLR0912, PLR0915
 ) -> list[str]:
     """Validate a dependency-batch receipt's reproducible, non-approval bindings.
 
-    The checker validates hashes and identities but never upgrades a row to
-    ``reviewed``.  Operator-local strict reports are accepted as references
-    only when their declared digest is a well-formed SHA-256; a portable path
-    must exist and match when it is available in the repository or supplied
-    checkout.
+    The checker validates hashes, identities, summaries, and exact file contents
+    but never upgrades a row to ``reviewed``. Operator-local paths are not
+    trusted by label: they must resolve to the exact retained files.
     """
     issues: list[str] = []
     try:
@@ -2312,6 +2667,10 @@ def validate_dependency_license_receipt(  # noqa: C901, PLR0912, PLR0915
     except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as exc:
         return [f"dependency receipt policy binding could not be computed: {exc}"]
     issues.extend(policy_issues)
+    try:
+        issues.extend(_receipt_contract_issues(receipt, policy, policy_binding, repo_root))
+    except (OSError, ValueError, json.JSONDecodeError, tomllib.TOMLDecodeError) as exc:
+        issues.append(f"dependency receipt contract could not be checked: {exc}")
     binding = receipt.get("review_binding")
     if not isinstance(binding, dict):
         issues.append("dependency receipt has no review_binding record")
@@ -2451,8 +2810,16 @@ def _match_package_disposition(
     rows = candidates.get(package["normalized_name"], [])
     if not rows:
         return None, []
-    policy = rows[0]
     failures: list[str] = []
+    matching_rows = [
+        row
+        for row in rows
+        if row.get("version") == package.get("version")
+        and _policy_source_matches(package.get("source", {}), row.get("source", {}))
+    ]
+    if len(matching_rows) != 1:
+        return None, [f"exact policy identity is ambiguous ({len(matching_rows)} matching rows)"]
+    policy = matching_rows[0]
     if package.get("version") != policy.get("version"):
         failures.append(
             f"lock version {package.get('version')} does not match exact policy "
@@ -2991,7 +3358,7 @@ def build_inventory(  # noqa: C901, PLR0912, PLR0915
             *unrepresented_failures,
         }
     )
-    return {
+    inventory = {
         "schema_version": SCHEMA_VERSION,
         "repository_inputs": inputs,
         "target": _normalise_json(manifest.get("target", {})),
@@ -3085,9 +3452,11 @@ def build_inventory(  # noqa: C901, PLR0912, PLR0915
             "status": "blocked" if failures else "complete",
         },
     }
+    inventory[_REPORT_CONTENT_DIGEST_FIELD] = _report_content_digest(inventory)
+    return inventory
 
 
-def check_report_freshness(  # noqa: C901
+def check_report_freshness(  # noqa: C901, PLR0912
     repo_root: Path,
     report_path: Path,
     *,
@@ -3102,6 +3471,13 @@ def check_report_freshness(  # noqa: C901
     """
     report = _read_json(report_path)
     issues: list[str] = []
+    recorded_content_digest = report.get(_REPORT_CONTENT_DIGEST_FIELD)
+    if not isinstance(recorded_content_digest, str) or not _SHA256_RE.fullmatch(
+        recorded_content_digest
+    ):
+        issues.append("report has no valid report_content_sha256")
+    elif recorded_content_digest != _report_content_digest(report):
+        issues.append("report content digest differs from recorded report")
     inputs = report.get("repository_inputs")
     if not isinstance(inputs, list) or not inputs:
         return ["report has no repository_inputs digest list"]

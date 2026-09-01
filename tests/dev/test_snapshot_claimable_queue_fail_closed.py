@@ -128,6 +128,46 @@ def test_admission_error_makes_queue_unavailable() -> None:
     assert payload["admission_reason_histogram"] == {"error": 1}
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("outcome", ""), ("classification", ""), ("claim_outcome", None)],
+)
+def test_malformed_admission_result_makes_queue_unavailable(field: str, value: object) -> None:
+    """Missing or empty admission fields must not authorize a zero-work verdict."""
+    number = 9005
+    malformed_admission: dict[str, object] = {
+        "schema": goal_issue_admission.SCHEMA,
+        "ok": False,
+        "outcome": "not_admitted",
+        "classification": "needs_spec",
+        "claim_outcome": "unclaimed",
+    }
+    malformed_admission[field] = value
+    with (
+        patch(
+            "scripts.dev.snapshot_issue_batch._list_open_issues",
+            return_value=_listing([_ready_issue(number)]),
+        ),
+        patch(
+            "scripts.dev.snapshot_issue_batch._batch_claim_statuses",
+            return_value={number: _claim_status(number)},
+        ),
+        patch(
+            "scripts.dev.snapshot_issue_batch._issue_admission",
+            return_value=malformed_admission,
+        ),
+    ):
+        payload = snapshot_issue_batch.snapshot_claimable_issues(
+            repo="ll7/robot_sf_ll7",
+            remote="origin",
+            body_limit=150,
+            limit=20,
+        )
+
+    assert payload["claimable_count"] == 0
+    assert payload["queue_completeness"] == "unavailable"
+
+
 def test_unavailable_claim_read_makes_queue_unavailable() -> None:
     """An unusable claim read must not become complete zero-work evidence."""
     number = 9002

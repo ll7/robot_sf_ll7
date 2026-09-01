@@ -538,6 +538,29 @@ def _admission_reason(admission: dict[str, Any]) -> str:
     }.get(str(classification), str(classification or "unknown"))
 
 
+def _admission_result_usable(issue: dict[str, Any]) -> bool:
+    """Return whether an issue has a complete, non-error admission result.
+
+    Missing or empty outcome/classification fields are malformed even when they do not
+    explicitly carry an ``"error"`` marker, so they cannot support authoritative zero work.
+    """
+    admission = issue.get("admission")
+    if not isinstance(admission, dict):
+        return False
+
+    outcome = admission.get("outcome")
+    classification = admission.get("classification")
+    return (
+        isinstance(outcome, str)
+        and bool(outcome)
+        and outcome != "error"
+        and isinstance(classification, str)
+        and bool(classification)
+        and classification != "error"
+        and admission.get("claim_outcome") in {"unclaimed", "already_claimed"}
+    )
+
+
 def _is_external_admission(admission: dict[str, Any]) -> bool:
     """Return whether an admission row is blocked by an external input."""
     return _admission_reason(admission) == "external_input_missing"
@@ -1175,13 +1198,7 @@ def snapshot_claimable_issues(
         and issue["admission"].get("outcome") == "ready_check_only"
         and issue.get("dispatch_allowed", True) is not False
     ]
-    admission_results_complete = all(
-        isinstance(issue.get("admission"), dict)
-        and issue["admission"].get("outcome") != "error"
-        and issue["admission"].get("classification") != "error"
-        and issue["admission"].get("claim_outcome") in {"unclaimed", "already_claimed"}
-        for issue in snapshots
-    )
+    admission_results_complete = all(_admission_result_usable(issue) for issue in snapshots)
     if not admission_results_complete:
         queue_completeness = "unavailable"
     elif resume_page > 1 or truncated:

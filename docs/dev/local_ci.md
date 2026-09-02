@@ -71,6 +71,23 @@ BASE_REF=origin/main PR_READY_MODE=final scripts/dev/pr_ready_check.sh
 Use the core lane by default. Opt into `ROBOT_SF_TEST_LANE=optional` only when optional paths are
 part of the change. Do not treat fallback or degraded execution as benchmark success evidence.
 
+## Worktree-scoped readiness lock
+
+The local readiness entry point prevents duplicate expensive runs in one linked worktree while
+allowing readiness to run concurrently in independent worktrees. It derives the lock identity from
+the canonical absolute worktree path, not the shared Git directory or the process's `TMPDIR`.
+
+If another run is active, the command exits without waiting or terminating that process and prints
+the active worktree plus a safe retry command. Wait for the active run to finish, then rerun the
+same command. Lock anchors may remain under the host-local lock root after exit; their file
+presence is not used as ownership, so an interrupted run does not create a stale held lock. The
+default root is `/tmp/robot-sf-pr-ready-locks`; deterministic test harnesses may set
+`PR_READY_LOCK_DIR` to an isolated absolute directory.
+
+The lock uses the host Python implementation's kernel-backed `fcntl` primitive on supported Unix
+hosts. If that primitive cannot be initialized, readiness fails closed instead of running without
+the worktree lock.
+
 On a host where the shared NVIDIA CUDA (Compute Unified Device Architecture) probe reports a usable
 graphics processing unit (GPU), the optional and `all` lanes default to one in-process worker
 because some optional subprocess tests share GPU memory. This is a local readiness safety policy,

@@ -10,7 +10,7 @@ from typing import Any
 
 from gymnasium import Env, spaces
 
-from robot_sf.gym_env.base_env import BaseEnv
+from robot_sf.gym_env.base_env import BaseEnv, _warn_exit_deprecated
 from robot_sf.gym_env.unified_config import BaseSimulationConfig
 from robot_sf.render.sim_view import VisualizableSimState
 
@@ -111,10 +111,24 @@ class BaseSimulationEnv(Env, ABC):
         """Render the environment."""
         pass
 
-    def exit(self) -> None:
-        """Clean up and exit the simulation."""
+    def close(self) -> None:
+        """Release the simulation UI and close the Gymnasium environment.
+
+        Idempotent: calling it more than once is safe.
+        """
         if self.sim_ui:
             self.sim_ui.exit_simulation()
+            self.sim_ui = None
+        super().close()
+
+    def exit(self) -> None:
+        """Deprecated alias for :meth:`close`.
+
+        Kept for the two-release deprecation window; new code calls
+        :meth:`close`.
+        """
+        _warn_exit_deprecated()
+        self.close()
 
     def save_recording(self, filename: str | None = None) -> None:
         """Save recorded states to file."""

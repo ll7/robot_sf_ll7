@@ -306,10 +306,6 @@ class MultiRobotEnv(MultiAgentEnv):
         self.close_extras()
         super().close()
 
-    def exit(self) -> None:
-        """Close all resources, including all per-robot render views."""
-        self.close()
-
     def _setup_render_views(self) -> None:
         """Initialize one SimulationView per robot when rendering is enabled."""
         if not (self.debug or self.record_video):

@@ -6,6 +6,7 @@ Provides common functionality for all environments.
 import datetime
 import importlib
 import pickle
+import warnings
 from typing import TYPE_CHECKING, Any, SupportsFloat
 
 from gymnasium import Env
@@ -42,6 +43,23 @@ def _make_jsonl_recorder(**kwargs):
     """
     module = importlib.import_module("robot_sf.render.jsonl_recording")
     return module.JSONLRecorder(**kwargs)
+
+
+#: Process-level guard so the ``exit()`` deprecation warning fires only once.
+_EXIT_DEPRECATION_WARNED = False
+
+
+def _warn_exit_deprecated() -> None:
+    """Emit the ``exit()`` deprecation warning at most once per process."""
+    global _EXIT_DEPRECATION_WARNED
+    if not _EXIT_DEPRECATION_WARNED:
+        warnings.warn(
+            "env.exit() is deprecated and will be removed in a future "
+            "release; use env.close() instead.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        _EXIT_DEPRECATION_WARNED = True
 
 
 class BaseEnv(Env):
@@ -209,12 +227,24 @@ class BaseEnv(Env):
         """
         raise NotImplementedError
 
-    def exit(self) -> None:
-        """
-        Clean up and exit the simulation UI, if it exists.
+    def close(self) -> None:
+        """Release the simulation UI and close the Gymnasium environment.
+
+        Idempotent: calling it more than once is safe.
         """
         if self.sim_ui:
             self.sim_ui.exit_simulation()
+            self.sim_ui = None
+        super().close()
+
+    def exit(self) -> None:
+        """Deprecated alias for :meth:`close`.
+
+        Kept for the two-release deprecation window; new code calls
+        :meth:`close`.
+        """
+        _warn_exit_deprecated()
+        self.close()
 
     def save_recording(self, filename: str | None = None) -> None:
         """

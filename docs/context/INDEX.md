@@ -5,6 +5,12 @@ path-tangent/open-ray/unknown semantics, coverage-only evaluation, and the next 
 directions. Current receipts are smoke evidence only:
 [pedestrian_goal_force_prediction_research.md](pedestrian_goal_force_prediction_research.md).
 
+Issue #8072 observation-only inverse goal-force estimator: causal H=1/H=2/H=3 estimates,
+actor-visible force reconstruction, covariance/censoring diagnostics, #8073 candidate-provider
+integration, reset-scoped tracking history, and a separate oracle upper bound. The deterministic
+fixture is implementation-integrity smoke only:
+[issue_8072_goal_force_inverse_dynamics.md](issue_8072_goal_force_inverse_dynamics.md).
+
 Issue #8243 additive `core_contract.v1` simulation-state boundary: identity aliases for existing
 frame, pose, observation, force, transition, and episode contracts plus frozen finite `SimTime`,
 `Twist2D`, and `ActorState` values. This is implementation-integrity evidence only; it does not

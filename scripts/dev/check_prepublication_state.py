@@ -895,7 +895,7 @@ def evaluate_state(baseline: dict[str, Any], current: dict[str, Any]) -> dict[st
         )
 
     new_closing_prs = _new_closing_prs(baseline, current)
-    if current.get("closing_prs") or new_closing_prs:
+    if new_closing_prs:
         return _decision(
             baseline,
             current,
@@ -1197,10 +1197,7 @@ def _handle_capture(args: argparse.Namespace) -> int:
         for pr in snapshot.get("open_covering_prs", [])
         if isinstance(pr, dict) and pr.get("head_ref") != branch
     ]
-    if snapshot.get("closing_prs"):
-        decision = "superseded"
-        reason = "merged_pr_closes_issue"
-    elif competing_open_prs:
+    if competing_open_prs:
         decision = "superseded"
         reason = "open_pr_covers_issue"
     elif snapshot["issue_state"] != "OPEN":
@@ -1391,7 +1388,8 @@ def _evaluate_post_integration(
             },
         )
 
-    if refreshed.get("closing_prs"):
+    new_closing_prs = _new_closing_prs(current, refreshed)
+    if new_closing_prs:
         return _decision(
             baseline,
             refreshed,
@@ -1399,6 +1397,7 @@ def _evaluate_post_integration(
             reason="merged_pr_closes_issue",
             extra={
                 "closing_prs": refreshed.get("closing_prs", []),
+                "new_closing_prs": new_closing_prs,
                 "integration": integration,
                 "snapshot_path": str(snapshot_path),
                 "decision_path": str(decision_path),

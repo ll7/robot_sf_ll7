@@ -702,6 +702,25 @@ def test_record_is_isolation_failure_detects_worker_death_reason():
     )
 
 
+def test_record_is_isolation_failure_detects_worker_initialization_error():
+    """A missing PPO dependency during worker init is process isolation failure."""
+    record = {
+        "algorithm_metadata": {
+            "status": "policy_step_error_fallback",
+            "fallback_reason": "policy_step_error",
+            "policy_step_timeout": {
+                "last_error": (
+                    "planner step worker failed to initialize "
+                    "(ModuleNotFoundError: No module named 'stable_baselines3')"
+                )
+            },
+        }
+    }
+
+    assert _record_is_isolation_failure(record) is True
+    assert _classify_repeat_failure([record]) == (True, True)
+
+
 def test_record_is_isolation_failure_rejects_genuine_planner_fallback():
     """A genuine planner zero-action fallback is NOT an isolation failure."""
     assert (

@@ -180,6 +180,13 @@ def _record_is_isolation_failure(record: Any) -> bool:
     if isinstance(reason, str):
         if any(sig in reason for sig in _PROCESS_ISOLATION_FAILURE_SIGNATURES):
             return True
+    timeout_metadata = metadata.get("policy_step_timeout")
+    if isinstance(timeout_metadata, Mapping):
+        worker_error = timeout_metadata.get("last_error")
+        if isinstance(worker_error, str) and any(
+            sig in worker_error for sig in _PROCESS_ISOLATION_FAILURE_SIGNATURES
+        ):
+            return True
     # If a repeat carries no usable policy metadata at all, the worker boundary
     # failed before/around action production; treat it as an isolation failure so
     # it is not silently promoted to a determinism verdict (fail-closed).

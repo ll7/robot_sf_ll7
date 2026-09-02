@@ -527,6 +527,7 @@ _FAST_FILES = {
     "test_zenodo_publisher_edge_cases.py",
     # SocNav runtime-adapter tests cover the changed fallback diagnostics in
     # the planner modules without requiring an external benchmark dependency.
+    "test_socnav_observation.py",
     "test_socnav.py",
     "test_socnav_prediction_module.py",
     # Termination reason tests are deterministic unit contracts for canonical outcome flags.

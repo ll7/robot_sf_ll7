@@ -97,6 +97,7 @@ from robot_sf.benchmark.observation_noise import (
 from robot_sf.benchmark.result_provenance import build_execution_context_provenance
 from robot_sf.benchmark.seed_variance import build_seed_episode_rows
 from robot_sf.benchmark.snqi.campaign_contract import (
+    SNQI_FAILED_WARN_RECOMMENDATION,
     SnqiContractThresholds,
     build_positioning_recommendation,
     calibrate_weights,
@@ -2443,6 +2444,7 @@ def _apply_snqi_advisory_boundary(
         caveats.append(_SNQI_FAILED_WARN_BOUNDARY)
     positioning["caveats"] = caveats
     positioning["planner_ordering_informative"] = False
+    positioning["recommendation"] = SNQI_FAILED_WARN_RECOMMENDATION
     payload["release_claim_boundary"] = {
         "status": "advisory_only",
         "ranking_authority": False,

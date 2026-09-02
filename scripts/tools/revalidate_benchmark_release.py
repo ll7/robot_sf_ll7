@@ -53,6 +53,7 @@ from robot_sf.benchmark.release_protocol import (
     load_release_manifest,
     validate_release_manifest,
 )
+from robot_sf.benchmark.snqi.campaign_contract import SNQI_FAILED_WARN_RECOMMENDATION
 
 FROZEN_SOURCE_SHA = "b1d5ab6de708385c0828c99501a9d1c29727ec11"
 EXPECTED_PRODUCER_SUMS_SHA256 = "2408431cef70bd7f7cf96fe0c42c44e84db89a841ea446e27fbb5650be713506"
@@ -286,6 +287,27 @@ def load_recovery_contract(path: Path) -> RecoveryContract:  # noqa: C901
         arms=integers["arms"],
         goal_timeout_boundary_rows=frozenset(boundaries),
     )
+
+
+def _expected_current_producer_receipt_sha256(
+    recovery_contract: RecoveryContract,
+    *,
+    preserved_receipt_source: Path | None,
+) -> str:
+    """Select the exact current receipt digest for producer verification.
+
+    A preserved pre-refresh receipt proves the historical bytes. Its paired current receipt must
+    be pinned separately so a generalized contract can never inherit the job-14890 default.
+    """
+    if preserved_receipt_source is None:
+        return recovery_contract.producer_receipt_sha256
+    refreshed = recovery_contract.refreshed_producer_receipt_sha256
+    if refreshed is None:
+        raise DerivedReleaseError(
+            "recovery contract must pin refreshed_producer_receipt_sha256 when a preserved "
+            "receipt is supplied"
+        )
+    return refreshed
 
 
 def _assert_safe_directory(path: Path, *, label: str) -> Path:
@@ -1416,6 +1438,7 @@ def _reconcile_publication_snqi_diagnostics(
     diagnostics["release_claim_boundary"] = {
         "status": "advisory_only",
         "ranking_authority": False,
+        "ranking_claims_admitted": False,
         "calibration_status": "fail",
         "enforcement": "warn",
         "claim_boundary": SNQI_ADVISORY_BOUNDARY,
@@ -1423,6 +1446,7 @@ def _reconcile_publication_snqi_diagnostics(
     positioning = diagnostics.get("positioning")
     positioning = dict(positioning) if isinstance(positioning, Mapping) else {}
     positioning["planner_ordering_informative"] = False
+    positioning["recommendation"] = SNQI_FAILED_WARN_RECOMMENDATION
     caveats = positioning.get("caveats")
     caveats = list(caveats) if isinstance(caveats, list) else []
     if SNQI_ADVISORY_BOUNDARY not in caveats:
@@ -1779,6 +1803,7 @@ def _set_accepted_release_metadata(
             "release_exit_code": 0,
             "publication_requested": True,
             "publication_preflight_status": "pass",
+            "publication_preflight_violations": [],
             "publication_bundle": dict(publication_descriptor),
             "release_acceptance": dict(acceptance),
             "full_release_acceptance": dict(acceptance),
@@ -2068,10 +2093,9 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     producer_evidence = verify_producer_artifacts(
         producer_root,
         expected_sums_sha256=recovery_contract.producer_sums_sha256,
-        expected_receipt_sha256=(
-            recovery_contract.refreshed_producer_receipt_sha256
-            if preserved_receipt_source is not None
-            else recovery_contract.producer_receipt_sha256
+        expected_receipt_sha256=_expected_current_producer_receipt_sha256(
+            recovery_contract,
+            preserved_receipt_source=preserved_receipt_source,
         ),
         preserved_receipt_source=preserved_receipt_source,
         expected_preserved_receipt_sha256=recovery_contract.producer_receipt_sha256,
@@ -2246,10 +2270,9 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         producer_after = verify_producer_artifacts(
             producer_root,
             expected_sums_sha256=recovery_contract.producer_sums_sha256,
-            expected_receipt_sha256=(
-                recovery_contract.refreshed_producer_receipt_sha256
-                if preserved_receipt_source is not None
-                else recovery_contract.producer_receipt_sha256
+            expected_receipt_sha256=_expected_current_producer_receipt_sha256(
+                recovery_contract,
+                preserved_receipt_source=preserved_receipt_source,
             ),
             preserved_receipt_source=preserved_receipt_source,
             expected_preserved_receipt_sha256=recovery_contract.producer_receipt_sha256,

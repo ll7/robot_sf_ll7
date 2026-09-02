@@ -5510,6 +5510,28 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
     assert diagnostics["release_claim_boundary"]["ranking_authority"] is False
     assert diagnostics["release_claim_boundary"]["ranking_claims_admitted"] is False
     assert diagnostics["positioning"]["planner_ordering_informative"] is False
+    assert diagnostics["positioning"]["recommendation"] == "retain_as_advisory_only_not_for_ranking"
+
+
+def test_failed_warn_boundary_overrides_operational_positioning() -> None:
+    """Failed calibration cannot retain an operational-strengthening recommendation."""
+    positioning = {
+        "recommendation": "strengthen_as_operational_multi_objective_aggregation",
+        "planner_ordering_informative": True,
+        "caveats": [],
+    }
+    payload = {"positioning": positioning}
+
+    result = camera_ready_campaign_impl_module._apply_snqi_advisory_boundary(
+        payload,
+        positioning=positioning,
+        contract_status="fail",
+        contract_enforcement="warn",
+    )
+
+    assert result["positioning"]["recommendation"] == "retain_as_advisory_only_not_for_ranking"
+    assert result["positioning"]["planner_ordering_informative"] is False
+    assert result["release_claim_boundary"]["ranking_claims_admitted"] is False
 
 
 def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypatch) -> None:

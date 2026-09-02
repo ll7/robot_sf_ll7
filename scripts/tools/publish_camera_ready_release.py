@@ -372,8 +372,11 @@ def _check_release_collision(
     """
     if dry_run:
         return None, False
-    endpoint = f"repos/{repo}/releases/tags/{quote(tag, safe='')}"
-    view_cmd = ["gh", "api", endpoint]
+    # GitHub's release-by-tag endpoint returns published releases only.  The
+    # authenticated list endpoint is the REST surface that also includes
+    # drafts, so use its complete paginated result for retry-safe admission.
+    endpoint = f"repos/{repo}/releases?per_page=100"
+    view_cmd = ["gh", "api", "--paginate", "--slurp", endpoint]
     result = subprocess.run(
         view_cmd,
         check=False,
@@ -381,31 +384,54 @@ def _check_release_collision(
         text=True,
     )
     if result.returncode != 0:
-        # Only an explicit not-found response means that creation is safe.
-        # Authentication, transport, or malformed-query errors are ambiguous
-        # live state and must not be treated as an unused tag.
+        # Authentication, transport, and query errors are ambiguous live state
+        # and must not be treated as an unused release tag.
         detail = str(result.stderr or result.stdout or "")
-        if not re.search(r"(?:not found|does not exist|HTTP 404|status 404)", detail, re.I):
-            return (
-                f"cannot determine whether release {tag} exists: {detail or 'unknown error'}",
-                False,
-            )
+        return (
+            f"cannot determine whether release {tag} exists: {detail or 'unknown error'}",
+            False,
+        )
+    existing, parse_blocker = _parse_release_listing(result.stdout, tag=tag)
+    if parse_blocker is not None:
+        return parse_blocker, False
+    if existing is None:
         return None, False
-    try:
-        existing = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return f"cannot parse release lookup for {tag}; refusing to create or upload", False
-    target = str(existing.get("target_commitish") or existing.get("targetCommitish") or "").strip()
-    is_draft = bool(existing.get("draft", existing.get("isDraft")))
-    if target and target != expected_source_sha:
+    target_value = existing.get("target_commitish")
+    if not isinstance(target_value, str) or not target_value.strip():
+        return f"release {tag} does not declare an exact target commit; refusing to mutate", False
+    target = target_value.strip()
+    if target != expected_source_sha:
         return (
             f"release {tag} already exists at target {target!r}, not the required "
             f"{expected_source_sha!r}; refusing to create or upload",
             False,
         )
-    if not is_draft:
+    draft_value = existing.get("draft")
+    if not isinstance(draft_value, bool):
+        return f"release {tag} has a malformed draft flag; refusing to mutate", False
+    if draft_value is not True:
         return f"release {tag} already exists and is not a draft; refusing to mutate it", False
     return None, True
+
+
+def _parse_release_listing(
+    stdout: str,
+    *,
+    tag: str,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Return one exact-tag release from paginated ``gh api --slurp`` JSON."""
+    try:
+        pages = json.loads(stdout)
+    except json.JSONDecodeError:
+        return None, f"cannot parse release lookup for {tag}; refusing to create or upload"
+    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+        return None, f"release lookup for {tag} has an invalid response shape"
+    if any(not isinstance(release, dict) for page in pages for release in page):
+        return None, f"release lookup for {tag} contains an invalid release record"
+    matches = [release for page in pages for release in page if release.get("tag_name") == tag]
+    if len(matches) > 1:
+        return None, f"release lookup found multiple releases for tag {tag}; refusing to mutate"
+    return (matches[0] if matches else None), None
 
 
 def _check_tag_collision(*, repo: str, tag: str, dry_run: bool) -> str | None:

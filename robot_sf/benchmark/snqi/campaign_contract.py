@@ -31,6 +31,8 @@ SNQI_NORMALIZED_METRIC_NAMES = (
     "jerk_mean",
 )
 
+SNQI_FAILED_WARN_RECOMMENDATION = "retain_as_advisory_only_not_for_ranking"
+
 
 _VALIDATE_SNQI_MAX_ISSUES = 50
 

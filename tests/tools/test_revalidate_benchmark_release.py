@@ -74,6 +74,58 @@ def test_load_recovery_contract_rejects_unsafe_campaign_path(tmp_path: Path) -> 
         recovery.load_recovery_contract(contract_path)
 
 
+def test_preserved_receipt_requires_campaign_specific_refreshed_digest() -> None:
+    """A generalized recovery cannot inherit the historical job-14890 refresh digest."""
+    contract = recovery.RecoveryContract(
+        source_sha="5" * 40,
+        producer_sums_sha256="1" * 64,
+        producer_receipt_sha256="2" * 64,
+        rejected_result_sha256="3" * 64,
+        producer_file_count=1,
+        source_campaign_relative=Path("output/campaign"),
+        episode_rows=1,
+        arms=1,
+        goal_timeout_boundary_rows=frozenset(),
+    )
+
+    with pytest.raises(recovery.DerivedReleaseError, match="refreshed_producer"):
+        recovery._expected_current_producer_receipt_sha256(
+            contract,
+            preserved_receipt_source=Path("preserved.json.gz"),
+        )
+
+
+def test_current_receipt_digest_selection_is_explicit() -> None:
+    """Receipt selection uses the base digest normally and the pinned refresh with preservation."""
+    contract = recovery.RecoveryContract(
+        source_sha="5" * 40,
+        producer_sums_sha256="1" * 64,
+        producer_receipt_sha256="2" * 64,
+        refreshed_producer_receipt_sha256="4" * 64,
+        rejected_result_sha256="3" * 64,
+        producer_file_count=1,
+        source_campaign_relative=Path("output/campaign"),
+        episode_rows=1,
+        arms=1,
+        goal_timeout_boundary_rows=frozenset(),
+    )
+
+    assert (
+        recovery._expected_current_producer_receipt_sha256(
+            contract,
+            preserved_receipt_source=None,
+        )
+        == "2" * 64
+    )
+    assert (
+        recovery._expected_current_producer_receipt_sha256(
+            contract,
+            preserved_receipt_source=Path("preserved.json.gz"),
+        )
+        == "4" * 64
+    )
+
+
 def _snqi_metrics(*, curvature_mean: float) -> dict[str, float]:
     """Return a minimal metric payload on the pinned curvature-aware basis."""
     root = Path(__file__).resolve().parents[2]
@@ -923,7 +975,9 @@ def test_publication_projection_reconciles_snqi_ordering_as_advisory(
     assert reconciled["contract_status"] == "fail"
     assert reconciled["contract_enforcement"] == "warn"
     assert reconciled["release_claim_boundary"]["ranking_authority"] is False
+    assert reconciled["release_claim_boundary"]["ranking_claims_admitted"] is False
     assert reconciled["positioning"]["planner_ordering_informative"] is False
+    assert reconciled["positioning"]["recommendation"] == "retain_as_advisory_only_not_for_ranking"
     assert evidence["verified_episode_rows"] == 2
     assert evidence["post_reconciliation_violation_count"] == 0
     markdown = (campaign / "reports" / "snqi_diagnostics.md").read_text(encoding="utf-8")
@@ -1258,6 +1312,11 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
     final_campaign = output_root / "derived"
     assert result["status"] == "published_to_staging"
     assert final_campaign.is_dir()
+    accepted_result = json.loads(
+        (final_campaign / "release" / "release_result.json").read_text(encoding="utf-8")
+    )
+    assert accepted_result["publication_preflight_status"] == "pass"
+    assert accepted_result["publication_preflight_violations"] == []
     assert (final_campaign / "derived_publication").is_dir()
     final_inventory = (final_campaign / "SHA256SUMS").read_text()
     assert "derived_publication/" in final_inventory

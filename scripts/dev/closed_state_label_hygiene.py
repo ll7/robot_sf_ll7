@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -112,7 +113,16 @@ def _is_pull_request_url(raw_url: object) -> bool:
         return False
 
     parsed = urlsplit(raw_url)
-    if parsed.scheme != "https" or not parsed.netloc or parsed.query or parsed.fragment:
+    expected_host = (os.environ.get("GH_HOST") or "github.com").lower()
+    if (
+        parsed.scheme != "https"
+        or (parsed.hostname or "").lower() != expected_host
+        or parsed.port is not None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
         return False
     path_parts = [part for part in parsed.path.split("/") if part]
     if len(path_parts) != 4:

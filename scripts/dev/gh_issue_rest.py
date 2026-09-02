@@ -138,7 +138,16 @@ def validate_issue_identity(payload: object, *, repo: str, number: int) -> None:
 
     owner, repository = _repo_parts(repo)
     parsed = urlsplit(raw_url)
-    if parsed.scheme != "https" or not parsed.netloc or parsed.query or parsed.fragment:
+    expected_host = (os.environ.get("GH_HOST") or "github.com").lower()
+    if (
+        parsed.scheme != "https"
+        or (parsed.hostname or "").lower() != expected_host
+        or parsed.port is not None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
         raise ValueError(f"issue identity URL is not canonical: {raw_url!r}")
     resource = "pull" if is_pull_request else "issues"
     expected_path = f"/{owner}/{repository}/{resource}/{number}"

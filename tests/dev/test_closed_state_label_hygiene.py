@@ -147,6 +147,10 @@ def test_reconcile_stale_issues_preserves_current_rest_live_labels() -> None:
         ("https://github.com/ll7/robot_sf_ll7/pull/not-a-number", False),
         ("https://github.com/ll7/robot_sf_ll7/pulls/12", False),
         ("http://github.com/ll7/robot_sf_ll7/pull/12", False),
+        ("https://evil.example/ll7/robot_sf_ll7/pull/12", False),
+        ("https://github.com:443/ll7/robot_sf_ll7/pull/12", False),
+        ("https://user@github.com/ll7/robot_sf_ll7/pull/12", False),
+        ("https://user:pass@github.com/ll7/robot_sf_ll7/pull/12", False),
         (None, False),
     ],
 )

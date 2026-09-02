@@ -22,6 +22,7 @@ from scripts.dev.gh_issue_rest import (
     main,
     read_complete_issue_thread,
     render_issue_plain,
+    validate_issue_identity,
 )
 
 
@@ -659,3 +660,54 @@ def test_fetch_issue_with_comments_propagates_comments_error() -> None:
     assert payload["status"] == "error"
     assert "rate limit exceeded" in payload["error"]
     assert payload["number"] == 5186
+
+
+def test_validate_issue_identity_accepts_canonical_issue_and_pull() -> None:
+    """Canonical issue and pull URLs on github.com must validate cleanly."""
+    validate_issue_identity(
+        {
+            "number": 12,
+            "state": "OPEN",
+            "is_pull_request": False,
+            "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
+        },
+        repo="ll7/robot_sf_ll7",
+        number=12,
+    )
+    validate_issue_identity(
+        {
+            "number": 42,
+            "state": "CLOSED",
+            "is_pull_request": True,
+            "url": "https://github.com/ll7/robot_sf_ll7/pull/42",
+        },
+        repo="ll7/robot_sf_ll7",
+        number=42,
+    )
+
+
+@pytest.mark.parametrize(
+    "invalid_url",
+    [
+        "https://evil.example/ll7/robot_sf_ll7/issues/12",
+        "https://github.com:443/ll7/robot_sf_ll7/issues/12",
+        "https://user@github.com/ll7/robot_sf_ll7/issues/12",
+        "https://user:pass@github.com/ll7/robot_sf_ll7/issues/12",
+        "http://github.com/ll7/robot_sf_ll7/issues/12",
+        "https://github.com/ll7/robot_sf_ll7/issues/12?query=1",
+        "https://github.com/ll7/robot_sf_ll7/issues/12#fragment",
+    ],
+)
+def test_validate_issue_identity_rejects_non_canonical_authority(invalid_url: str) -> None:
+    """Non-canonical host, userinfo, port, scheme, query, or fragment must be rejected."""
+    with pytest.raises(ValueError, match="not canonical"):
+        validate_issue_identity(
+            {
+                "number": 12,
+                "state": "OPEN",
+                "is_pull_request": False,
+                "url": invalid_url,
+            },
+            repo="ll7/robot_sf_ll7",
+            number=12,
+        )

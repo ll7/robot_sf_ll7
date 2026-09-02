@@ -17,6 +17,8 @@ Options:
   --branch BRANCH          New branch name.
   --base REF               Base ref; defaults to origin/main.
   --minimum-free-bytes N   Override ROBOT_SF_WORKTREE_MIN_FREE_BYTES.
+  --receipt PATH            Write a delegated-worker receipt after creation.
+  --task-id ID              Task identifier for --receipt (delegated mode).
   --dry-run                Run the preflight without invoking Git.
   --exec COMMAND [ARG...]  Run an explicit command from inside the new worktree.
   -h, --help               Show this help and exit.
@@ -42,6 +44,8 @@ worktree_path=""
 branch_name=""
 base_ref="origin/main"
 minimum_free_bytes="${ROBOT_SF_WORKTREE_MIN_FREE_BYTES:-}"
+receipt_path=""
+task_id=""
 dry_run=0
 command_args=()
 
@@ -65,6 +69,16 @@ while [[ $# -gt 0 ]]; do
     --minimum-free-bytes)
       [[ $# -ge 2 ]] || { echo "--minimum-free-bytes requires a value" >&2; exit 2; }
       minimum_free_bytes="$2"
+      shift 2
+      ;;
+    --receipt)
+      [[ $# -ge 2 ]] || { echo "--receipt requires a value" >&2; exit 2; }
+      receipt_path="$2"
+      shift 2
+      ;;
+    --task-id)
+      [[ $# -ge 2 ]] || { echo "--task-id requires a value" >&2; exit 2; }
+      task_id="$2"
       shift 2
       ;;
     --dry-run)
@@ -95,6 +109,11 @@ done
 if [[ -z "$worktree_path" || -z "$branch_name" ]]; then
   echo "--path and --branch are required" >&2
   show_help >&2
+  exit 2
+fi
+
+if [[ -n "$task_id" && -z "$receipt_path" ]] || [[ -n "$receipt_path" && -z "$task_id" ]]; then
+  echo "--receipt and --task-id must be supplied together" >&2
   exit 2
 fi
 
@@ -171,6 +190,10 @@ git worktree prune
 # ``git branch --set-upstream-to``; creation itself must remain safe when
 # several workers create worktrees concurrently.
 git worktree add --no-track -b "$branch_name" "$worktree_path" "$base_ref"
+if [[ -n "$receipt_path" ]]; then
+  python3 "$SCRIPT_DIR/worktree_receipt.py" create \
+    --worktree "$worktree_path" --task-id "$task_id" --base-ref "$base_ref" --output "$receipt_path"
+fi
 flock -u "$worktree_lock_fd"
 exec {worktree_lock_fd}>&-
 echo "create_worktree: created $worktree_path on branch $branch_name from $base_ref"
@@ -180,6 +203,9 @@ if [[ "${#command_args[@]}" -gt 0 ]]; then
   echo "create_worktree: executing supplied command in $worktree_path"
   (
     cd -- "$worktree_path"
+    if [[ -n "$receipt_path" ]]; then
+      python3 "$SCRIPT_DIR/worktree_receipt.py" check --receipt "$receipt_path" --worktree . --json
+    fi
     exec "${command_args[@]}"
   )
 fi

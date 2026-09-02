@@ -84,6 +84,22 @@ def test_newly_merged_closing_pr_supersedes_issue() -> None:
     assert result["new_closing_prs"][0]["number"] == 7001
 
 
+def test_historical_merged_closing_pr_does_not_supersede_reopened_issue() -> None:
+    """A closer already present at capture must not block a reopened issue."""
+    historical_closer = {
+        "number": 7001,
+        "title": "fix: deliver the claimed issue",
+        "merged_at": "2026-08-12T10:02:00Z",
+    }
+    baseline = _snapshot(closing_prs=[historical_closer])
+    current = _snapshot(closing_prs=[historical_closer])
+
+    result = gate.evaluate_state(baseline, current)
+
+    assert result["decision"] == "ready"
+    assert result["reason"] == "remote_state_unchanged"
+
+
 def test_newly_opened_covering_pr_supersedes_issue() -> None:
     """A newly opened explicit covering PR must stop duplicate publication."""
     baseline = _snapshot()
@@ -826,6 +842,45 @@ def test_check_cli_writes_superseded_decision_for_closed_issue(
     assert persisted["reason"] == "issue_closed"
 
 
+def test_capture_cli_ignores_historical_closing_pr_for_open_issue(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """Initial capture cannot classify an existing closer as newly observed."""
+    snapshot_path = tmp_path / "state.json"
+    historical_closer = {
+        "number": 7001,
+        "title": "fix: deliver the claimed issue",
+        "merged_at": "2026-08-12T10:02:00Z",
+    }
+    monkeypatch.setattr(
+        gate,
+        "collect_live_state",
+        lambda **_: _snapshot(closing_prs=[historical_closer]),
+    )
+
+    assert (
+        gate.main(
+            [
+                "capture",
+                "--repo",
+                "ll7/robot_sf_ll7",
+                "--issue",
+                "6916",
+                "--branch",
+                "feature/fresh-state",
+                "--snapshot-path",
+                str(snapshot_path),
+            ]
+        )
+        == 0
+    )
+
+    output = json.loads(capsys.readouterr().out)
+    assert output["decision"] == "ready"
+    assert output["reason"] == "baseline_captured"
+    assert output["closing_prs"] == [historical_closer]
+
+
 def test_sync_failure_nests_integration_result(tmp_path, monkeypatch, capsys) -> None:
     """Integration failures retain the original drift reason and schema shape."""
     snapshot_path = tmp_path / "state.json"
@@ -884,6 +939,63 @@ def test_sync_unpushed_branch_success_integrates_base(tmp_path, monkeypatch, cap
     persisted_snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
     assert persisted_snapshot["base_sha"] == "base-b"
     assert persisted_snapshot["local_head_sha"] == "head-merge"
+
+
+@pytest.mark.parametrize("new_closer_observed", [False, True])
+def test_sync_distinguishes_historical_and_new_closing_prs(
+    tmp_path, monkeypatch, capsys, new_closer_observed
+) -> None:
+    """Post-sync checks ignore historical closers but reject a newly observed one."""
+    snapshot_path = tmp_path / "state.json"
+    historical_closer = {
+        "number": 7001,
+        "title": "fix: historical closer",
+        "merged_at": "2026-08-12T10:02:00Z",
+    }
+    new_closer = {
+        "number": 7002,
+        "title": "fix: newly merged closer",
+        "merged_at": "2026-08-12T10:04:00Z",
+    }
+    snapshot_path.write_text(
+        json.dumps(_snapshot(closing_prs=[historical_closer])), encoding="utf-8"
+    )
+    states = iter(
+        [
+            _snapshot(base_sha="base-b", remote_branch_sha=None, closing_prs=[historical_closer]),
+            _snapshot(
+                base_sha="base-b",
+                remote_branch_sha=None,
+                local_head_sha="head-merge",
+                closing_prs=(
+                    [historical_closer, new_closer] if new_closer_observed else [historical_closer]
+                ),
+            ),
+        ]
+    )
+    monkeypatch.setattr(gate, "collect_live_state", lambda **_: next(states))
+    monkeypatch.setattr(
+        gate,
+        "_integrate_targets",
+        lambda **_: {
+            "ok": True,
+            "merged": ["refs/remotes/origin/main"],
+            "merged_shas": ["base-b"],
+        },
+    )
+
+    exit_code = gate.main(["sync", "--snapshot-path", str(snapshot_path), "--integrate"])
+
+    output = json.loads(capsys.readouterr().out)
+    if new_closer_observed:
+        assert exit_code == 3
+        assert output["decision"] == "superseded"
+        assert output["reason"] == "merged_pr_closes_issue"
+        assert output["new_closing_prs"] == [new_closer]
+    else:
+        assert exit_code == 0
+        assert output["decision"] == "ready"
+        assert output["reason"] == "remote_state_integrated"
 
 
 def test_sync_pushed_branch_base_merge_requires_push_and_recapture(

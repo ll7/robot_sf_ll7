@@ -112,8 +112,6 @@ def test_create_draft_then_upload_order(tmp_path: Path) -> None:
         calls.append(list(cmd))
         if cmd[:2] == ["gh", "api"]:
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
-        if cmd[:3] == ["gh", "release", "view"]:
-            raise subprocess.CalledProcessError(1, cmd, output="", stderr="not found")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     with patch("subprocess.run", side_effect=_fake_run):
@@ -128,11 +126,11 @@ def test_create_draft_then_upload_order(tmp_path: Path) -> None:
 def test_collision_with_existing_release_on_different_sha_fails_closed(tmp_path: Path) -> None:
     """An existing release at a different target SHA blocks creation and upload."""
     existing = json.dumps(
-        {"isDraft": True, "targetCommitish": "b" * 40},
+        {"draft": True, "target_commitish": "b" * 40},
     )
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        if cmd[:3] == ["gh", "release", "view"]:
+        if cmd[:2] == ["gh", "api"] and "/releases/tags/" in cmd[2]:
             return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
         raise AssertionError(f"unexpected command: {cmd}")
 
@@ -144,11 +142,11 @@ def test_collision_with_existing_release_on_different_sha_fails_closed(tmp_path:
 def test_collision_with_public_release_fails_closed(tmp_path: Path) -> None:
     """A non-draft existing release is never mutated."""
     existing = json.dumps(
-        {"isDraft": False, "targetCommitish": _SOURCE_SHA},
+        {"draft": False, "target_commitish": _SOURCE_SHA},
     )
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        if cmd[:3] == ["gh", "release", "view"]:
+        if cmd[:2] == ["gh", "api"] and "/releases/tags/" in cmd[2]:
             return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
         raise AssertionError(f"unexpected command: {cmd}")
 
@@ -160,15 +158,13 @@ def test_collision_with_public_release_fails_closed(tmp_path: Path) -> None:
 def test_existing_exact_sha_draft_allows_upload(tmp_path: Path) -> None:
     """An exact-SHA draft is not a blocker; upload proceeds without creation."""
     existing = json.dumps(
-        {"isDraft": True, "targetCommitish": _SOURCE_SHA},
+        {"draft": True, "target_commitish": _SOURCE_SHA},
     )
     calls: list[list[str]] = []
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(list(cmd))
-        if cmd[:2] == ["gh", "api"]:
-            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
-        if cmd[:3] == ["gh", "release", "view"]:
+        if cmd[:2] == ["gh", "api"] and "/releases/tags/" in cmd[2]:
             return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
@@ -181,15 +177,13 @@ def test_existing_exact_sha_draft_allows_upload(tmp_path: Path) -> None:
 
 
 def test_missing_release_creates_draft(tmp_path: Path) -> None:
-    """When `gh release view` finds nothing, draft creation is planned."""
+    """When the REST release lookup finds nothing, draft creation is planned."""
     calls: list[list[str]] = []
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(list(cmd))
         if cmd[:2] == ["gh", "api"]:
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
-        if cmd[:3] == ["gh", "release", "view"]:
-            raise subprocess.CalledProcessError(1, cmd, output="", stderr="not found")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     with patch("subprocess.run", side_effect=_fake_run):
@@ -202,11 +196,11 @@ def test_missing_release_creates_draft(tmp_path: Path) -> None:
 
 def test_existing_git_tag_blocks_draft_creation(tmp_path: Path) -> None:
     """A Git tag collision is never silently adopted by draft creation."""
-    existing = json.dumps({"isDraft": True, "targetCommitish": _SOURCE_SHA})
+    existing = json.dumps({"draft": True, "target_commitish": _SOURCE_SHA})
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        if cmd[:3] == ["gh", "release", "view"]:
-            raise subprocess.CalledProcessError(1, cmd, output="", stderr="release not found")
+        if cmd[:2] == ["gh", "api"] and "/releases/tags/" in cmd[2]:
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="release not found")
         if cmd[:2] == ["gh", "api"]:
             return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
         raise AssertionError(f"unexpected command: {cmd}")
@@ -221,8 +215,8 @@ def test_ambiguous_release_lookup_blocks_draft_creation(tmp_path: Path) -> None:
     """An authentication/transport error is not interpreted as release absence."""
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        if cmd[:3] == ["gh", "release", "view"]:
-            raise subprocess.CalledProcessError(1, cmd, output="", stderr="authentication failed")
+        if cmd[:2] == ["gh", "api"] and "/releases/tags/" in cmd[2]:
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="authentication failed")
         raise AssertionError(f"unexpected command: {cmd}")
 
     with patch("subprocess.run", side_effect=_fake_run), pytest.raises(SystemExit) as exc_info:

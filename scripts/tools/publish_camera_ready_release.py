@@ -372,19 +372,19 @@ def _check_release_collision(
     """
     if dry_run:
         return None, False
-    view_cmd = ["gh", "release", "view", tag, "--repo", repo, "--json", "isDraft,targetCommitish"]
-    try:
-        result = subprocess.run(
-            view_cmd,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except subprocess.CalledProcessError as exc:
+    endpoint = f"repos/{repo}/releases/tags/{quote(tag, safe='')}"
+    view_cmd = ["gh", "api", endpoint]
+    result = subprocess.run(
+        view_cmd,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
         # Only an explicit not-found response means that creation is safe.
         # Authentication, transport, or malformed-query errors are ambiguous
         # live state and must not be treated as an unused tag.
-        detail = str(exc.stderr or exc.output or "")
+        detail = str(result.stderr or result.stdout or "")
         if not re.search(r"(?:not found|does not exist|HTTP 404|status 404)", detail, re.I):
             return (
                 f"cannot determine whether release {tag} exists: {detail or 'unknown error'}",
@@ -394,9 +394,9 @@ def _check_release_collision(
     try:
         existing = json.loads(result.stdout)
     except json.JSONDecodeError:
-        return f"cannot parse `gh release view {tag}` output; refusing to create or upload", False
-    target = str(existing.get("targetCommitish") or "").strip()
-    is_draft = bool(existing.get("isDraft"))
+        return f"cannot parse release lookup for {tag}; refusing to create or upload", False
+    target = str(existing.get("target_commitish") or existing.get("targetCommitish") or "").strip()
+    is_draft = bool(existing.get("draft", existing.get("isDraft")))
     if target and target != expected_source_sha:
         return (
             f"release {tag} already exists at target {target!r}, not the required "

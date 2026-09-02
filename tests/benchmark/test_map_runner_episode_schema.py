@@ -14,6 +14,7 @@ These tests pin the native emission of the ``failure_mechanism_taxonomy.v1`` and
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,7 @@ from robot_sf.benchmark.failure_mechanism_taxonomy import (
 from robot_sf.benchmark.interaction_exposure import INTERACTION_EXPOSURE_SCHEMA_VERSION
 from robot_sf.benchmark.map_runner.map_runner_episode import (
     _INTERACTION_EXPOSURE_RADIUS_M,
+    _build_obstacle_force_runtime_record,
     _episode_evidence_fields,
     _finite_pedestrian_frames,
 )
@@ -156,6 +158,20 @@ class _PedSim:
         self.map_def = _minimal_map_def()
         self.last_ped_forces = np.zeros((2, 2), dtype=float)
 
+    @staticmethod
+    def obstacle_force_law_metadata() -> dict[str, object]:
+        """Expose the fast-pysf site payload used by the record-path test."""
+        return {
+            "schema_version": "obstacle_force_law_metadata.v1",
+            "law_version": "legacy_shifted_gradient_v1",
+            "site": "fast_pysf",
+            "geometry_convention": "map_line_endpoints_orthogonal_vector",
+            "radius_convention": "threshold_plus_agent_radius_sigma",
+            "compatibility_mode": "legacy_compatible",
+            "enabled": True,
+            "applied": True,
+        }
+
 
 class _PedEnv:
     """Environment stub emitting a pedestrian-carrying observation for one step."""
@@ -228,6 +244,29 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
         lambda metrics, **kwargs: metrics,
     )
 
+    planner_metadata = {
+        "schema_version": "obstacle_force_law_metadata.v1",
+        "law_version": "surface_distance_unit_normal_v2",
+        "site": "socnav_social_force",
+        "geometry_convention": "occupancy_cell_centers",
+        "radius_convention": "cell_derived_radius_plus_robot_radius",
+        "compatibility_mode": "corrected_opt_in",
+        "enabled": True,
+        "applied": True,
+    }
+
+    def policy_builder(_algo, _algo_config, **_kwargs):
+        """Provide a planner diagnostics hook for the durable-record assertion."""
+
+        def policy(_obs):
+            return 0.0, 0.0
+
+        policy._planner_stats = lambda: {
+            "planner_type": "SocialForcePlannerAdapter",
+            "obstacle_force_law": planner_metadata,
+        }
+        return policy, {"status": "ok"}
+
     record = _run_map_episode(
         {"name": "episode-schema-smoke", "simulation_config": {"max_episode_steps": 1}},
         seed=1,
@@ -239,6 +278,7 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
         algo="stream_gap",
         algo_config={},
         scenario_path=_SCENARIO_PATH,
+        policy_builder=policy_builder,
     )
 
     assert record["failure_mechanism"]["mechanism_schema_version"] == MECHANISM_SCHEMA_VERSION
@@ -247,3 +287,40 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
     assert exposure["interaction_exposure_schema_version"] == INTERACTION_EXPOSURE_SCHEMA_VERSION
     # Two pedestrians are present, so exposure is derivable (computed), not blank.
     assert exposure["interaction_exposure_status"] == "computed"
+    runtime = record["algorithm_metadata"]["obstacle_force_law"]
+    assert runtime["schema_version"] == "obstacle_force_law_runtime_record.v1"
+    assert runtime["sites"]["fast_pysf"]["enabled"] is True
+    assert runtime["sites"]["fast_pysf"]["applied"] is True
+    assert runtime["sites"]["socnav_social_force"]["law_version"] == (
+        "surface_distance_unit_normal_v2"
+    )
+
+
+def test_obstacle_force_sites_are_serialized_in_episode_metadata() -> None:
+    """The durable runtime record keeps both site payloads and application state."""
+    fast_pysf = _PedSim.obstacle_force_law_metadata()
+    planner = {
+        "schema_version": "obstacle_force_law_metadata.v1",
+        "law_version": "surface_distance_unit_normal_v2",
+        "site": "socnav_social_force",
+        "geometry_convention": "occupancy_cell_centers",
+        "radius_convention": "cell_derived_radius_plus_robot_radius",
+        "compatibility_mode": "corrected_opt_in",
+        "enabled": True,
+        "applied": False,
+    }
+    record = {
+        "algorithm_metadata": {
+            "obstacle_force_law": _build_obstacle_force_runtime_record(
+                simulator_metadata=fast_pysf,
+                planner_metadata=None,
+                planner_runtime_snapshot={"obstacle_force_law": planner},
+            )
+        }
+    }
+
+    serialized = json.loads(json.dumps(record))
+    runtime = serialized["algorithm_metadata"]["obstacle_force_law"]
+    assert runtime["schema_version"] == "obstacle_force_law_runtime_record.v1"
+    assert runtime["sites"]["fast_pysf"]["applied"] is True
+    assert runtime["sites"]["socnav_social_force"]["applied"] is False

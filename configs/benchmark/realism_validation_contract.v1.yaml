@@ -43,6 +43,19 @@ minimum_event_counts:
   overtaking: 10
   group: 10
 
+# Diagnostic-only synthetic fixture gate. Each class has one planted positive event;
+# all seven must be recovered before synthetic implementation-integrity evidence passes.
+synthetic_class_mix:
+  expected_event_counts:
+    free_walking: 1
+    ped_ped_interaction: 1
+    obstacle_avoidance: 1
+    robot_approach: 1
+    crossing_conflict: 1
+    overtaking: 1
+    group: 1
+  minimum_per_class_recall: 1.0
+
 promotion_rule:
   comparator: social_force_default
   required_metric_families:

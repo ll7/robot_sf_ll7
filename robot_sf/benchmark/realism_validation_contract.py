@@ -66,6 +66,22 @@ class RealismPromotionRule:
 
 
 @dataclass(frozen=True, slots=True)
+class RealismSyntheticClassMixRule:
+    """Predeclared recovery rule for the diagnostic synthetic class-mix fixture."""
+
+    expected_event_counts: dict[str, int]
+    minimum_per_class_recall: float
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe synthetic class-mix rule mapping."""
+
+        return {
+            "expected_event_counts": dict(self.expected_event_counts),
+            "minimum_per_class_recall": self.minimum_per_class_recall,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class RealismValidationContract:
     """Versioned calibration/held-out contract for the realism harness."""
 
@@ -75,6 +91,7 @@ class RealismValidationContract:
     baseline_arms: tuple[str, ...]
     metric_families: tuple[str, ...]
     minimum_event_counts: dict[str, int]
+    synthetic_class_mix: RealismSyntheticClassMixRule
     promotion_rule: RealismPromotionRule
     segmentation: InteractionSegmentationConfig
     external_data_gate: str = DEFAULT_EXTERNAL_DATA_GATE
@@ -94,6 +111,7 @@ class RealismValidationContract:
             "baseline_arms": list(self.baseline_arms),
             "metric_families": list(self.metric_families),
             "minimum_event_counts": dict(self.minimum_event_counts),
+            "synthetic_class_mix": self.synthetic_class_mix.to_dict(),
             "promotion_rule": self.promotion_rule.to_dict(),
             "segmentation": self.segmentation.to_dict(),
         }
@@ -199,6 +217,9 @@ def realism_validation_contract_from_mapping(  # noqa: C901 - strict contract va
             )
         minimum_event_counts[label] = int(value)
 
+    synthetic_class_mix = _parse_synthetic_class_mix(
+        payload.get("synthetic_class_mix"), location=location
+    )
     promotion_rule = _parse_promotion_rule(
         payload.get("promotion_rule"),
         baseline_arms=baseline_arms,
@@ -236,6 +257,7 @@ def realism_validation_contract_from_mapping(  # noqa: C901 - strict contract va
         baseline_arms=baseline_arms,
         metric_families=metric_families,
         minimum_event_counts=minimum_event_counts,
+        synthetic_class_mix=synthetic_class_mix,
         promotion_rule=promotion_rule,
         segmentation=segmentation,
         external_data_gate=external_data_gate,
@@ -281,6 +303,105 @@ def evaluate_interaction_event_counts(
         else "insufficient_events",
         "rows": rows,
     }
+
+
+def evaluate_synthetic_class_mix_recall(
+    observed_event_counts: Mapping[str, int],
+    rule: RealismSyntheticClassMixRule,
+) -> dict[str, Any]:
+    """Evaluate recovery of the declared synthetic class mix.
+
+    ``observed_event_counts`` must contain counts of planted events recovered for each
+    interaction class. Missing declared classes are treated as zero so a missed class
+    fails the rule rather than disappearing from the report. The result is explicitly
+    diagnostic-only and does not establish real-data or benchmark evidence.
+
+    Returns:
+        Diagnostic acceptance status and one recall row per interaction class.
+    """
+
+    if not isinstance(observed_event_counts, Mapping):
+        raise RealismValidationContractError("observed_event_counts must be a mapping")
+    if not isinstance(rule, RealismSyntheticClassMixRule):
+        raise RealismValidationContractError(
+            "synthetic class-mix evaluation requires a RealismSyntheticClassMixRule"
+        )
+
+    expected_event_counts = _class_count_mapping(
+        rule.expected_event_counts,
+        "synthetic_class_mix.expected_event_counts",
+        "",
+        allow_zero=False,
+    )
+    minimum_recall = _recall_threshold(
+        rule.minimum_per_class_recall,
+        "synthetic_class_mix.minimum_per_class_recall",
+        "",
+    )
+    unknown_classes = [
+        key
+        for key in observed_event_counts
+        if not isinstance(key, str) or key not in INTERACTION_CLASSES
+    ]
+    if unknown_classes:
+        raise RealismValidationContractError(
+            f"observed_event_counts contains unknown interaction classes: {unknown_classes!r}"
+        )
+
+    rows: dict[str, dict[str, int | float | str]] = {}
+    for label in INTERACTION_CLASSES:
+        observed = observed_event_counts.get(label, 0)
+        if isinstance(observed, bool) or not isinstance(observed, int) or observed < 0:
+            raise RealismValidationContractError(
+                f"observed_event_counts[{label!r}] must be a non-negative integer"
+            )
+        expected = expected_event_counts[label]
+        recall = min(observed / expected, 1.0)
+        rows[label] = {
+            "observed": observed,
+            "expected": expected,
+            "recall": recall,
+            "minimum_recall": minimum_recall,
+            "status": "sufficient" if recall >= minimum_recall else "insufficient_recall",
+        }
+    return {
+        "status": "sufficient"
+        if all(row["status"] == "sufficient" for row in rows.values())
+        else "insufficient_recall",
+        "evidence_status": "diagnostic-only",
+        "minimum_per_class_recall": minimum_recall,
+        "rows": rows,
+    }
+
+
+def _parse_synthetic_class_mix(
+    raw_rule: Any,
+    *,
+    location: str,
+) -> RealismSyntheticClassMixRule:
+    """Validate the required synthetic class-mix acceptance rule.
+
+    Returns:
+        The typed synthetic class-mix rule.
+    """
+
+    if not isinstance(raw_rule, Mapping):
+        raise RealismValidationContractError(f"synthetic_class_mix must be a mapping{location}")
+    expected_event_counts = _class_count_mapping(
+        raw_rule.get("expected_event_counts"),
+        "synthetic_class_mix.expected_event_counts",
+        location,
+        allow_zero=False,
+    )
+    minimum_per_class_recall = _recall_threshold(
+        raw_rule.get("minimum_per_class_recall"),
+        "synthetic_class_mix.minimum_per_class_recall",
+        location,
+    )
+    return RealismSyntheticClassMixRule(
+        expected_event_counts=expected_event_counts,
+        minimum_per_class_recall=minimum_per_class_recall,
+    )
 
 
 def _parse_promotion_rule(
@@ -415,6 +536,56 @@ def _non_negative_float(raw: Any, name: str, location: str) -> float:
     return value
 
 
+def _recall_threshold(raw: Any, name: str, location: str) -> float:
+    """Validate a finite recall threshold in the useful interval ``(0, 1]``.
+
+    Returns:
+        The normalized recall threshold.
+    """
+
+    value = _non_negative_float(raw, name, location)
+    if value <= 0.0 or value > 1.0:
+        raise RealismValidationContractError(
+            f"{name} must be greater than 0 and at most 1{location}"
+        )
+    return value
+
+
+def _class_count_mapping(
+    raw: Any,
+    name: str,
+    location: str,
+    *,
+    allow_zero: bool,
+) -> dict[str, int]:
+    """Validate a complete interaction-class count mapping.
+
+    Returns:
+        A normalized count mapping ordered by the interaction-class vocabulary.
+    """
+
+    if not isinstance(raw, Mapping):
+        raise RealismValidationContractError(f"{name} must be a mapping{location}")
+    unknown_keys = [
+        key for key in raw if not isinstance(key, str) or key not in INTERACTION_CLASSES
+    ]
+    missing_keys = [label for label in INTERACTION_CLASSES if label not in raw]
+    if unknown_keys or missing_keys:
+        raise RealismValidationContractError(
+            f"{name} must name exactly the interaction classes; "
+            f"missing={missing_keys}, extra={unknown_keys}{location}"
+        )
+    counts: dict[str, int] = {}
+    for label in INTERACTION_CLASSES:
+        value = raw[label]
+        valid = isinstance(value, int) and not isinstance(value, bool)
+        if not valid or value < 0 or (not allow_zero and value == 0):
+            expected = "a non-negative integer" if allow_zero else "a positive integer"
+            raise RealismValidationContractError(f"{name}[{label!r}] must be {expected}{location}")
+        counts[label] = int(value)
+    return counts
+
+
 __all__ = [
     "CONSTANT_VELOCITY_BASELINE",
     "CONTRACT_STATUS_BLOCKED_EXTERNAL",
@@ -423,9 +594,11 @@ __all__ = [
     "REALISM_VALIDATION_CONTRACT_CLAIM_BOUNDARY",
     "REALISM_VALIDATION_CONTRACT_SCHEMA_VERSION",
     "RealismPromotionRule",
+    "RealismSyntheticClassMixRule",
     "RealismValidationContract",
     "RealismValidationContractError",
     "evaluate_interaction_event_counts",
+    "evaluate_synthetic_class_mix_recall",
     "load_realism_validation_contract",
     "realism_validation_contract_from_mapping",
     "validate_realism_validation_contract",

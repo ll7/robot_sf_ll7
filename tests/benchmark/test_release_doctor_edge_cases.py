@@ -783,8 +783,8 @@ class _AuthSession:
     [
         (_result([], returncode=1), False, "fail", "unavailable"),
         (_result([], stdout="not-json"), False, "fail", "invalid"),
-        (_result([], stdout="[]"), False, "pass", "not found"),
-        (_result([], stdout="[]"), True, "fail", "not found"),
+        (_result([], stdout="[]"), False, "pass", "absent"),
+        (_result([], stdout="[]"), True, "pass", "absent"),
         (
             _result([], stdout=json.dumps([{"active": False, "config": {"url": "zenodo"}}])),
             True,

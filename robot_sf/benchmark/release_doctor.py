@@ -2336,13 +2336,16 @@ def _zenodo_check(
     except (json.JSONDecodeError, AttributeError):
         checks.append(ReleaseDoctorCheck("zenodo_hook", "fail", "GitHub hook state is invalid"))
         return checks
-    passed = not require_hook_disabled or (bool(zenodo_hooks) and not active)
+    # Publication safety requires that no automatic Zenodo hook can fire. An
+    # absent hook is at least as safe as a present inactive hook and is the
+    # expected state after a compromised receiver URL is removed.
+    passed = not require_hook_disabled or not active
     summary = (
         "Zenodo webhook is disabled"
         if zenodo_hooks and not active
         else "Zenodo webhook remains active"
         if active
-        else "Zenodo webhook was not found"
+        else "Zenodo webhook is absent"
     )
     checks.append(ReleaseDoctorCheck("zenodo_hook", "pass" if passed else "fail", summary))
     return checks

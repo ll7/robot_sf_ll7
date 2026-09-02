@@ -102,7 +102,12 @@ This is a generic implementation gate. Research campaigns still require `researc
 route evidence. Its `classification`, `reasons`, `ready`, `write_allowed`, `outcome`, and
 `claim_outcome` fields are projections of the canonical wrapper; snapshot producers must not
 reimplement the admission precedence. A `ready_check_only` result never writes a claim. An
-`error` or `unavailable` result is a fail-closed hold.
+`error` or `unavailable` result is a fail-closed hold. For the ready-candidate
+snapshot, `candidate_scope: state:ready` and
+`zero_work_authoritative: true` are emitted only when the page-one scan is
+complete and every admission/claim read is usable. That flag proves only
+implementation-lane exhaustion; the parent controller must inspect PR,
+preparation, blocker, and discovery lanes before stopping.
 
 For a write-enabled admission, the wrapper performs a complete second live preflight immediately
 before the atomic claim attempt. A changed issue state, body digest, label, title, assignee, or

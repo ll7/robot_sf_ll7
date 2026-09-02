@@ -204,7 +204,7 @@ def _build_route_clearance_warnings(
         _route_clearance_module.convert_map = original_convert_map
 
 
-def prepare_campaign_preflight(
+def prepare_campaign_preflight(  # noqa: PLR0913
     cfg: CampaignConfig,
     *,
     output_root: Path | None = None,
@@ -214,6 +214,7 @@ def prepare_campaign_preflight(
     checkpoint_preflight_mode: str = "metadata_only",
     checkpoint_cache_dir: Path | None = None,
     checkpoint_registry_path: str | Path | None = None,
+    authoritative_checkpoint_admission: bool = False,
 ) -> dict[str, Any]:
     """Prepare campaign preflight artifacts via the extracted preflight module.
 
@@ -231,6 +232,7 @@ def prepare_campaign_preflight(
         checkpoint_preflight_mode=checkpoint_preflight_mode,  # type: ignore[arg-type]
         checkpoint_cache_dir=checkpoint_cache_dir,
         checkpoint_registry_path=checkpoint_registry_path,
+        authoritative_checkpoint_admission=authoritative_checkpoint_admission,
     )
 
 

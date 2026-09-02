@@ -281,6 +281,60 @@ def test_snapshot_claimable_issues_includes_classification_without_body() -> Non
     claim.assert_called_once_with([2667, 2668], remote="origin")
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("outcome", None), ("outcome", ""), ("classification", None), ("classification", " ")],
+)
+def test_snapshot_claimable_issues_rejects_malformed_admission_fields(
+    field: str, value: object
+) -> None:
+    """Missing or empty admission fields cannot authorize complete queue evidence."""
+    number = 9005
+    issue_list = [
+        {
+            "number": number,
+            "title": f"ready issue {number}",
+            "state": "OPEN",
+            "url": f"https://github.test/issues/{number}",
+            "labels": [{"name": "state:ready"}],
+            "assignees": [],
+        }
+    ]
+    malformed = {
+        "schema": snapshot_issue_batch.goal_issue_admission.SCHEMA,
+        "ok": False,
+        "outcome": "not_admitted",
+        "classification": "needs_spec",
+        "claim_outcome": "unclaimed",
+        "reasons": ["missing contract section"],
+    }
+    if value is None:
+        malformed.pop(field)
+    else:
+        malformed[field] = value
+    with (
+        patch("scripts.dev.snapshot_issue_batch._gh") as mock_gh,
+        patch(
+            "scripts.dev.snapshot_issue_batch._batch_claim_statuses",
+            return_value={number: _claim_status(number)},
+        ),
+        patch(
+            "scripts.dev.snapshot_issue_batch._issue_admission",
+            return_value=malformed,
+        ),
+    ):
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(issue_list), stderr="")
+        payload = snapshot_claimable_issues(
+            repo="ll7/robot_sf_ll7",
+            remote="origin",
+            body_limit=150,
+            limit=20,
+        )
+
+    assert payload["queue_completeness"] == "unavailable"
+    assert payload["zero_work_authoritative"] is False
+
+
 def test_snapshot_claimable_issues_uses_live_admission_for_ready_candidates() -> None:
     """Ready candidates must use the canonical check-only wrapper, including future gates."""
     issue_list = [
@@ -1330,6 +1384,8 @@ def test_snapshot_claimable_issues_filters_ready_label_before_limit(
 
     assert payload["status"] == "ok"
     assert payload["queue_completeness"] == "complete"
+    assert payload["candidate_scope"] == "state:ready"
+    assert payload["zero_work_authoritative"] is True
     assert payload["claimable_count"] == 0
     list_issues.assert_called_once_with(
         repo="ll7/robot_sf_ll7",
@@ -1430,6 +1486,7 @@ def test_snapshot_claimable_issues_marks_truncated_scan_incomplete(
 
     assert payload["resume_cursor"] == {"source": "rest", "page": 2, "limit": 2}
     assert payload["queue_completeness"] == "incomplete"
+    assert payload["zero_work_authoritative"] is False
     assert payload["truncated"] is True
 
 
@@ -1468,4 +1525,5 @@ def test_snapshot_claimable_issues_marks_failed_scan_unavailable(
 
     assert payload["status"] == "quota_blocked"
     assert payload["queue_completeness"] == "unavailable"
+    assert payload["zero_work_authoritative"] is False
     assert payload["claimable_count"] == 0

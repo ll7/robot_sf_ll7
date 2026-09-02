@@ -472,6 +472,7 @@ def check_campaign_arm_checkpoints_preflight(
     registry_path: str | Path | None = None,
     cache_dir: str | Path | None = None,
     fail_closed_implicit: bool = False,
+    suppress_not_submit_safe_warning: bool = False,
 ) -> dict[str, Any]:
     """Fail fast when any enabled arm's checkpoint cannot be resolved before a campaign runs.
 
@@ -488,6 +489,9 @@ def check_campaign_arm_checkpoints_preflight(
         registry_path: Optional model-registry path override (useful for tests/fixtures).
         cache_dir: Optional cache directory override for staged downloads.
         fail_closed_implicit: Whether implicit registry defaults are blocking when unresolved.
+        suppress_not_submit_safe_warning: Suppress the metadata-only warning when a caller has
+            independently admitted an authoritative staged-checkpoint receipt. This does not
+            change the metadata-only ``submit_safe`` result.
 
     Returns:
         dict[str, Any]: A summary with the checked/resolved counts and per-arm resolution status;
@@ -505,6 +509,7 @@ def check_campaign_arm_checkpoints_preflight(
             "checked": 0,
             "resolved": 0,
             "stage": bool(stage),
+            "metadata_resolvable": False,
             "submit_safe": False,
             "arms": [],
         }
@@ -535,7 +540,7 @@ def check_campaign_arm_checkpoints_preflight(
         raise CampaignCheckpointPreflightError(message, arms=failing_arms)
 
     submit_safe = _compute_submit_safe(resolutions, stage=stage)
-    if not submit_safe:
+    if not submit_safe and not suppress_not_submit_safe_warning:
         logger.warning(
             "Checkpoint preflight passed resolvability but is NOT submit-safe: "
             "every checkpoint must be present or staged before sbatch. Stage remote-backed arms "
@@ -548,6 +553,7 @@ def check_campaign_arm_checkpoints_preflight(
         "checked": len(resolutions),
         "resolved": len(resolutions) - len(failures),
         "stage": bool(stage),
+        "metadata_resolvable": not failures,
         "submit_safe": submit_safe,
         "arms": [
             {

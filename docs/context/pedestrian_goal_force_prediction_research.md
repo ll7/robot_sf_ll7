@@ -68,7 +68,11 @@ Required disposition:
 
 ### 2.2 Exact planner-visible observation contract
 
-The current `SOCNAV_STRUCT` observation does not already provide a stable tracked-agent stream.
+The default `SOCNAV_STRUCT` observation does not already provide a stable tracked-agent stream.
+When `ObservationVisibilitySettings.include_track_ids` and its tracking configuration are
+enabled, the channel can expose observation-derived episode-local IDs, but the option is
+default-off and the structured payload still does not expose the full tracking state needed by
+an estimator.
 
 | Field | Current semantics | Consequence for goal inference |
 | --- | --- | --- |
@@ -79,7 +83,11 @@ The current `SOCNAV_STRUCT` observation does not already provide a stable tracke
 | `robot.heading` | wrapped world heading | required for the pedestrian-velocity transform |
 | `sim.timestep` | simulation-step duration | not an observation timestamp |
 
-Stable pedestrian IDs, observation timestamps, visibility-age masks, association confidence, and a durable lost-track identity are not currently exposed. They are implementation prerequisites, not fields the estimator may assume exist.
+Stable pedestrian IDs are therefore available only through an explicit observation-derived
+tracking option. Observation timestamps, visibility-age masks, association confidence, and a
+durable lost-track identity are not part of the default structured payload (and ambiguous rows
+remain unavailable to the presentation channel). They are implementation prerequisites, not
+fields the estimator may assume exist without enabling and validating the tracking seam.
 
 Benchmark observation levels remain separate provenance contracts:
 
@@ -88,7 +96,10 @@ Benchmark observation levels remain separate provenance contracts:
 - `occluded_partial_state` carries partial-observation assumptions;
 - `lidar_2d` is not interchangeable with tracked pedestrian state.
 
-The first observation-derived tracker must therefore construct episode-local `track_id` values from policy-visible rows and must be evaluated separately against simulator identity.
+An estimator that needs temporal identity must explicitly consume the opt-in episode-local
+`track_id` values or own an equivalent observation-only tracking seam; it must never infer
+identity from row positions. The observation-derived tracker must be evaluated separately
+against simulator identity.
 
 ### 2.3 Force pipeline and the meaning of `last_ped_forces`
 

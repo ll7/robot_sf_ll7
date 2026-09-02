@@ -561,6 +561,55 @@ def _normalize_repository_input(path: Path, *, field_name: str) -> Path:
     return resolved
 
 
+def _preflight_checkpoint_admission(
+    args: Any,
+    cfg: Any,
+    manifest: Any,
+) -> dict[str, Any]:
+    """Validate an optional staged-checkpoint receipt for release preflight.
+
+    The camera-ready preflight still runs its cheap metadata-only checkpoint check.  A validated
+    receipt is a separate, authoritative admission signal so the two results cannot be conflated.
+    """
+    if args.checkpoint_receipt is None:
+        return {
+            "schema_version": "benchmark-release-checkpoint-admission.v1",
+            "status": "not_supplied",
+            "source": "none",
+            "submit_safe": False,
+        }
+
+    try:
+        checkpoint_receipt_path = _required_repo_relative(args.checkpoint_receipt)
+        checkpoint_receipt = validate_checkpoint_staging_receipt(
+            cfg,
+            args.checkpoint_receipt,
+            campaign_config_path=manifest.canonical_campaign_config_path,
+            max_age_hours=args.checkpoint_receipt_max_age_hours,
+            repo_root=get_repository_root(),
+        )
+        if checkpoint_receipt.get("submit_safe") is not True:
+            raise CheckpointStagingReceiptError("checkpoint staging receipt has submit_safe=false")
+        return {
+            "schema_version": "benchmark-release-checkpoint-admission.v1",
+            "status": "admitted",
+            "source": "checkpoint_receipt",
+            "path": checkpoint_receipt_path,
+            "sha256": sha256_file(args.checkpoint_receipt),
+            "generated_at_utc": checkpoint_receipt.get("generated_at_utc"),
+            "submit_safe": True,
+            "arm_count": len(checkpoint_receipt.get("arms", [])),
+        }
+    except (OSError, TypeError, ValueError, KeyError, CheckpointStagingReceiptError) as exc:
+        return {
+            "schema_version": "benchmark-release-checkpoint-admission.v1",
+            "status": "rejected",
+            "source": "checkpoint_receipt",
+            "submit_safe": False,
+            "blockers": [f"checkpoint staging admission failed: {exc}"],
+        }
+
+
 def _checkpoint_arm_identities(
     payload: dict[str, Any], *, label: str
 ) -> list[tuple[str, str, str, str, bool, str]]:
@@ -1252,13 +1301,43 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
         resolved_manifest_kwargs["source_commit"] = runtime_source_commit
     resolved_manifest = build_resolved_release_manifest(manifest, **resolved_manifest_kwargs)
     if args.mode == "preflight":
+        checkpoint_admission = _preflight_checkpoint_admission(args, cfg, manifest)
+        if checkpoint_admission["status"] == "rejected":
+            reason = str(checkpoint_admission["blockers"][0])
+            result = {
+                "mode": "preflight",
+                "status": "checkpoint_receipt_rejected",
+                "status_reason": reason,
+                "benchmark_success": False,
+                "release_benchmark_success": False,
+                "campaign_execution_status": "not_started",
+                "evidence_status": "blocked",
+                "checkpoint_admission": {
+                    "metadata_resolvable": None,
+                    "metadata_submit_safe": False,
+                    "staged_checkpoint_admission": checkpoint_admission,
+                },
+                "manifest_validation": validation,
+                "resolved_manifest": resolved_manifest,
+                "release_exit_code": 2,
+            }
+            print(json.dumps(result, indent=2))
+            return 2
+        authoritative_checkpoint_admission = checkpoint_admission["status"] == "admitted"
+        if authoritative_checkpoint_admission:
+            logger.info(
+                "Authoritative staged-checkpoint receipt admitted: submit_safe=true; "
+                "metadata-only checkpoint resolvability remains a diagnostic."
+            )
         prepared = prepare_campaign_preflight(
             cfg,
             output_root=args.output_root,
             label=args.label,
             campaign_id=args.campaign_id,
             invoked_command=invoked_command,
+            authoritative_checkpoint_admission=authoritative_checkpoint_admission,
         )
+        checkpoint_summary = prepared.get("checkpoint_preflight_summary", {})
         preflight_payload = {
             "mode": "preflight",
             "manifest_validation": validation,
@@ -1269,6 +1348,16 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0
             "preview_scenarios_path": str(prepared["preview_scenarios_path"]),
             "matrix_summary_json": str(prepared["matrix_summary_json_path"]),
             "matrix_summary_csv": str(prepared["matrix_summary_csv_path"]),
+            "checkpoint_admission": {
+                "metadata_resolvable": bool(
+                    checkpoint_summary.get(
+                        "metadata_resolvable",
+                        checkpoint_summary.get("submit_safe", False),
+                    )
+                ),
+                "metadata_submit_safe": bool(checkpoint_summary.get("submit_safe")),
+                "staged_checkpoint_admission": checkpoint_admission,
+            },
         }
         if stress_smoke:
             preflight_payload["runtime_source_commit"] = runtime_source_commit

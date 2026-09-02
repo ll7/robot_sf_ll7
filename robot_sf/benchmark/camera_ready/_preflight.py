@@ -397,6 +397,12 @@ def _build_preflight_validate_payload(  # noqa: PLR0913
             "stage": bool(checkpoint_preflight_summary.get("stage")),
             "checked": int(checkpoint_preflight_summary.get("checked", 0)),
             "resolved": int(checkpoint_preflight_summary.get("resolved", 0)),
+            "metadata_resolvable": bool(
+                checkpoint_preflight_summary.get(
+                    "metadata_resolvable",
+                    checkpoint_preflight_summary.get("submit_safe", False),
+                )
+            ),
             "submit_safe": bool(checkpoint_preflight_summary.get("submit_safe")),
             "arms": list(checkpoint_preflight_summary.get("arms", [])),
         },
@@ -538,6 +544,7 @@ def _run_preflight_checks(
     checkpoint_preflight_mode: CheckpointPreflightMode,
     checkpoint_cache_dir: Path | None,
     checkpoint_registry_path: str | Path | None,
+    authoritative_checkpoint_admission: bool,
 ) -> dict[str, Any]:
     """Run ORCA, policy-dependency, and arm-checkpoint preflight checks.
 
@@ -560,6 +567,7 @@ def _run_preflight_checks(
         registry_path=checkpoint_registry_path,
         cache_dir=checkpoint_cache_dir,
         fail_closed_implicit=cfg.checkpoint_provenance_enforcement == "error",
+        suppress_not_submit_safe_warning=authoritative_checkpoint_admission,
     )
 
 
@@ -596,6 +604,7 @@ def _validate_and_setup_campaign(
     checkpoint_preflight_mode: CheckpointPreflightMode,
     checkpoint_cache_dir: Path | None,
     checkpoint_registry_path: str | Path | None,
+    authoritative_checkpoint_admission: bool,
     output_root: Path | None,
     label: str | None,
     campaign_id: str | None,
@@ -610,6 +619,7 @@ def _validate_and_setup_campaign(
         checkpoint_preflight_mode=checkpoint_preflight_mode,
         checkpoint_cache_dir=checkpoint_cache_dir,
         checkpoint_registry_path=checkpoint_registry_path,
+        authoritative_checkpoint_admission=authoritative_checkpoint_admission,
     )
     campaign_id, campaign_root, reports_dir, preflight_dir = _setup_campaign_directories(
         cfg,
@@ -763,6 +773,12 @@ def _write_preflight_artifacts(  # noqa: PLR0913
             "stage": bool(checkpoint_preflight_report.get("stage")),
             "checked": int(checkpoint_preflight_report.get("checked", 0)),
             "resolved": int(checkpoint_preflight_report.get("resolved", 0)),
+            "metadata_resolvable": bool(
+                checkpoint_preflight_report.get(
+                    "metadata_resolvable",
+                    checkpoint_preflight_report.get("submit_safe", False),
+                )
+            ),
             "submit_safe": bool(checkpoint_preflight_report.get("submit_safe")),
             "arms": list(checkpoint_preflight_report.get("arms", [])),
         },
@@ -1353,11 +1369,16 @@ def prepare_campaign_preflight(  # noqa: PLR0913
     checkpoint_preflight_mode: CheckpointPreflightMode = "metadata_only",
     checkpoint_cache_dir: Path | None = None,
     checkpoint_registry_path: str | Path | None = None,
+    authoritative_checkpoint_admission: bool = False,
 ) -> dict[str, Any]:
     """Prepare campaign preflight artifacts and matrix-definition summary.
 
     Returns:
         Paths and metadata required by preflight-only workflows and full runs.
+
+    ``authoritative_checkpoint_admission`` is set only when the caller has separately validated
+    a fresh, configuration-bound staged-checkpoint receipt. It keeps the metadata-only diagnostic
+    in the campaign artifacts while preventing that diagnostic from contradicting the receipt.
     """
     if validate_campaign_config is None:
         from robot_sf.benchmark.camera_ready_campaign import (  # noqa: PLC0415
@@ -1373,6 +1394,7 @@ def prepare_campaign_preflight(  # noqa: PLR0913
             checkpoint_preflight_mode=checkpoint_preflight_mode,
             checkpoint_cache_dir=checkpoint_cache_dir,
             checkpoint_registry_path=checkpoint_registry_path,
+            authoritative_checkpoint_admission=authoritative_checkpoint_admission,
             output_root=output_root,
             label=label,
             campaign_id=campaign_id,

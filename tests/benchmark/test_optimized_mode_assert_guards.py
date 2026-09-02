@@ -60,6 +60,17 @@ def test_converted_guards_survive_python_optimized_mode(
         from pathlib import Path
 
         import numpy as np
+        import pysocialforce
+
+        vendored_root = (Path.cwd() / "fast-pysf").resolve()
+        force_trace_file = Path(
+            getattr(__import__("pysocialforce.force_trace", fromlist=["__file__"]), "__file__")
+        ).resolve()
+        if not force_trace_file.is_relative_to(vendored_root):
+            raise AssertionError(
+                "pysocialforce.force_trace resolved outside the vendored source: "
+                f"{force_trace_file}"
+            )
 
         from robot_sf.benchmark import figure_qa
         from robot_sf.benchmark.full_classic import encode
@@ -103,7 +114,15 @@ def test_converted_guards_survive_python_optimized_mode(
         """
     )
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(REPO_ROOT)
+    env["PYTHONPATH"] = os.pathsep.join(
+        part
+        for part in (
+            str(REPO_ROOT),
+            str(REPO_ROOT / "fast-pysf"),
+            os.environ.get("PYTHONPATH", ""),
+        )
+        if part
+    )
     env["DISPLAY"] = ""
     env["MPLBACKEND"] = "Agg"
     env["SDL_VIDEODRIVER"] = "dummy"

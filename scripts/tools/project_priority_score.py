@@ -1043,18 +1043,41 @@ class GhProjectClient:
         """Write a numeric field value back to the project item."""
 
         number_literal = _numeric_field_literal(number)
-        self.run(
-            "project",
-            "item-edit",
-            "--id",
-            item_id,
-            "--project-id",
-            project_id,
-            "--field-id",
-            field_id,
-            "--number",
-            number_literal,
+        # ``gh project item-edit --number`` parses its argument as float32 on
+        # the supported CLI version. Values such as ``0.7`` therefore reach
+        # GraphQL as a binary float with more than eight decimal places and
+        # are rejected by GitHub Projects. Keep the validated decimal literal
+        # in the GraphQL document so the server sees the intended value.
+        payload = self.run_json(
+            "api",
+            "graphql",
+            "-f",
+            "query="
+            + f"""
+mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!) {{
+  updateProjectV2ItemFieldValue(input: {{
+    projectId: $projectId
+    itemId: $itemId
+    fieldId: $fieldId
+    value: {{ number: {number_literal} }}
+  }}) {{
+    projectV2Item {{ id }}
+  }}
+}}
+""".strip(),
+            "-F",
+            f"projectId={project_id}",
+            "-F",
+            f"itemId={item_id}",
+            "-F",
+            f"fieldId={field_id}",
         )
+        mutation = payload.get("data", {}).get("updateProjectV2ItemFieldValue")
+        if not isinstance(mutation, dict) or not isinstance(mutation.get("projectV2Item"), dict):
+            raise RuntimeError(
+                "GitHub Projects numeric update returned no updated project item: "
+                + json.dumps(payload, sort_keys=True)
+            )
 
 
 #: GitHub Projects numeric fields reject values with more than 8 decimal

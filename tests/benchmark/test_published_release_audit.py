@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import stat
+import struct
 import subprocess
 import sys
 import tarfile
@@ -63,6 +64,52 @@ def _make_archive(path: Path, archive_kind: str, entries: list[tuple[str, bytes]
             info = tarfile.TarInfo(name)
             info.size = len(data)
             archive.addfile(info, io.BytesIO(data))
+
+
+def _make_zip64_archive(path: Path) -> tuple[Path, int, int]:
+    """Write a small ZIP whose end records use the ZIP64 metadata structures."""
+    _make_bundle(path)
+    raw = path.read_bytes()
+    eocd_offset = raw.rfind(b"PK\x05\x06")
+    assert eocd_offset >= 0
+    (
+        _signature,
+        _disk_number,
+        _directory_disk,
+        entries_on_disk,
+        entries_total,
+        central_directory_size,
+        central_directory_offset,
+        _comment_size,
+    ) = struct.unpack_from("<4s4H2LH", raw, eocd_offset)
+    zip64_offset = eocd_offset
+    zip64_record = struct.pack(
+        "<4sQ2H2L4Q",
+        b"PK\x06\x06",
+        44,
+        45,
+        45,
+        0,
+        0,
+        entries_on_disk,
+        entries_total,
+        central_directory_size,
+        central_directory_offset,
+    )
+    locator = struct.pack("<4sLQL", b"PK\x06\x07", 0, zip64_offset, 1)
+    zip_eocd = struct.pack(
+        "<4s4H2LH",
+        b"PK\x05\x06",
+        0,
+        0,
+        0xFFFF,
+        0xFFFF,
+        0xFFFFFFFF,
+        0xFFFFFFFF,
+        0,
+    )
+    path.write_bytes(raw[:eocd_offset] + zip64_record + locator + zip_eocd)
+    return path, zip64_offset, zip64_offset + len(zip64_record)
 
 
 def _make_erratum_assets(
@@ -978,6 +1025,164 @@ def test_bundle_extraction_and_internal_checksums(tmp_path: Path) -> None:
     assert receipt["ok"] is True
     assert receipt["observations"]["bundle"] == "bundle.zip"
     assert receipt["observations"]["bundle_member_count"] == 2
+
+
+def test_zip_central_directory_size_is_preflighted_before_zipfile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A huge declared central directory is rejected before stdlib parsing."""
+    archive_path = tmp_path / "oversized-central-directory.zip"
+    _make_bundle(archive_path)
+    raw = bytearray(archive_path.read_bytes())
+    eocd_offset = raw.rfind(b"PK\x05\x06")
+    assert eocd_offset >= 0
+    struct.pack_into(
+        "<L",
+        raw,
+        eocd_offset + 12,
+        published_audit_module.DEFAULT_MAX_ZIP_CENTRAL_DIRECTORY_BYTES + 1,
+    )
+    archive_path.write_bytes(raw)
+
+    zipfile_calls: list[tuple[object, ...]] = []
+
+    def unexpected_zipfile(*args: object, **kwargs: object) -> object:
+        zipfile_calls.append(args)
+        raise AssertionError("ZipFile must not parse oversized central-directory metadata")
+
+    monkeypatch.setattr(published_audit_module.zipfile, "ZipFile", unexpected_zipfile)
+    with pytest.raises(ValueError, match="central directory exceeds limit"):
+        _extract_members(archive_path, tmp_path / "oversized-central-directory-dest")
+    assert zipfile_calls == []
+
+
+def test_zip64_entry_count_is_preflighted_before_zipfile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ZIP64 entry counts cannot force an unbounded ``infolist`` allocation."""
+    archive_path, zip64_offset, _locator_offset = _make_zip64_archive(
+        tmp_path / "oversized-entry-count.zip"
+    )
+    raw = bytearray(archive_path.read_bytes())
+    enormous_count = 1 << 63
+    struct.pack_into("<Q", raw, zip64_offset + 24, enormous_count)
+    struct.pack_into("<Q", raw, zip64_offset + 32, enormous_count)
+    archive_path.write_bytes(raw)
+
+    zipfile_calls: list[tuple[object, ...]] = []
+
+    def unexpected_zipfile(*args: object, **kwargs: object) -> object:
+        zipfile_calls.append(args)
+        raise AssertionError("ZipFile must not parse oversized ZIP64 entry metadata")
+
+    monkeypatch.setattr(published_audit_module.zipfile, "ZipFile", unexpected_zipfile)
+    with pytest.raises(ValueError, match="member count exceeds limit"):
+        _extract_members(archive_path, tmp_path / "oversized-entry-count-dest")
+    assert zipfile_calls == []
+
+
+def test_zip64_central_directory_size_is_preflighted_before_zipfile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ZIP64 central-directory sizes are bounded before stdlib parsing."""
+    archive_path, zip64_offset, _locator_offset = _make_zip64_archive(
+        tmp_path / "oversized-zip64-central-directory.zip"
+    )
+    raw = bytearray(archive_path.read_bytes())
+    struct.pack_into(
+        "<Q",
+        raw,
+        zip64_offset + 40,
+        published_audit_module.DEFAULT_MAX_ZIP_CENTRAL_DIRECTORY_BYTES + 1,
+    )
+    archive_path.write_bytes(raw)
+
+    zipfile_calls: list[tuple[object, ...]] = []
+
+    def unexpected_zipfile(*args: object, **kwargs: object) -> object:
+        zipfile_calls.append(args)
+        raise AssertionError("ZipFile must not parse oversized ZIP64 central-directory metadata")
+
+    monkeypatch.setattr(published_audit_module.zipfile, "is_zipfile", lambda _path: True)
+    monkeypatch.setattr(published_audit_module.zipfile, "ZipFile", unexpected_zipfile)
+    with pytest.raises(ValueError, match="central directory exceeds limit"):
+        _extract_members(archive_path, tmp_path / "oversized-zip64-central-directory-dest")
+    assert zipfile_calls == []
+
+
+def test_valid_zip64_archive_extracts_with_existing_streaming_limits(tmp_path: Path) -> None:
+    """A structurally valid ZIP64 archive still uses the streaming extractor."""
+    archive_path, _zip64_offset, _locator_offset = _make_zip64_archive(tmp_path / "valid-zip64.zip")
+
+    members = _extract_members(archive_path, tmp_path / "valid-zip64-dest")
+
+    assert members == ["manifest.json"]
+    assert (tmp_path / "valid-zip64-dest" / "manifest.json").read_bytes() == b"bundle-bytes"
+
+
+def test_prefixed_zip_keeps_supported_central_directory_offsets(tmp_path: Path) -> None:
+    """A valid self-extracting-style prefix remains compatible with ZIP parsing."""
+    archive_path = tmp_path / "prefixed.zip"
+    _make_bundle(archive_path)
+    prefixed_path = tmp_path / "prefixed-with-stub.zip"
+    prefixed_path.write_bytes(b"self-extracting-stub\n" + archive_path.read_bytes())
+
+    members = _extract_members(prefixed_path, tmp_path / "prefixed-dest")
+
+    assert members == ["manifest.json"]
+    assert (tmp_path / "prefixed-dest" / "manifest.json").read_bytes() == b"bundle-bytes"
+
+
+def test_prefixed_zip64_keeps_supported_central_directory_offsets(tmp_path: Path) -> None:
+    """A ZIP64 archive with a self-extracting-style prefix remains readable."""
+    archive_path, _zip64_offset, _locator_offset = _make_zip64_archive(
+        tmp_path / "prefixed-zip64.zip"
+    )
+    prefixed_path = tmp_path / "prefixed-zip64-with-stub.zip"
+    prefixed_path.write_bytes(b"self-extracting-stub\n" + archive_path.read_bytes())
+
+    members = _extract_members(prefixed_path, tmp_path / "prefixed-zip64-dest")
+
+    assert members == ["manifest.json"]
+    assert (tmp_path / "prefixed-zip64-dest" / "manifest.json").read_bytes() == b"bundle-bytes"
+
+
+def test_zip_preflight_rejects_truncated_eocd_comment(tmp_path: Path) -> None:
+    """A full EOCD that declares bytes past EOF is not passed to ``ZipFile``."""
+    archive_path = tmp_path / "truncated-eocd.zip"
+    archive_path.write_bytes(struct.pack("<4s4H2LH", b"PK\x05\x06", 0, 0, 0, 0, 0, 0, 1))
+
+    with pytest.raises(ValueError, match="end-of-central-directory record"):
+        _extract_members(archive_path, tmp_path / "truncated-eocd-dest")
+
+
+@pytest.mark.parametrize("case", ["missing-locator", "gap", "bad-offset", "oversized-record"])
+def test_zip64_preflight_rejects_malformed_metadata(
+    tmp_path: Path, case: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Malformed ZIP64 locators/records fail before central-directory parsing."""
+    archive_path, zip64_offset, locator_offset = _make_zip64_archive(
+        tmp_path / f"malformed-{case}.zip"
+    )
+    raw = bytearray(archive_path.read_bytes())
+    if case == "missing-locator":
+        raw[locator_offset : locator_offset + 4] = b"NOPE"
+    elif case == "gap":
+        raw[locator_offset:locator_offset] = b"X"
+    elif case == "bad-offset":
+        struct.pack_into("<Q", raw, locator_offset + 8, (1 << 64) - 1)
+    else:
+        struct.pack_into(
+            "<Q",
+            raw,
+            zip64_offset + 4,
+            published_audit_module._MAX_ZIP64_EOCD_RECORD_BYTES + 1,
+        )
+    archive_path.write_bytes(raw)
+
+    monkeypatch.setattr(published_audit_module.zipfile, "is_zipfile", lambda _path: True)
+    with pytest.raises(ValueError, match="zip64 end-of-central-directory"):
+        _extract_members(archive_path, tmp_path / f"malformed-{case}-dest")
 
 
 def test_path_escape_fails_closed(tmp_path: Path) -> None:

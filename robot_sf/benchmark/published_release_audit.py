@@ -24,6 +24,7 @@ import json
 import re
 import shutil
 import stat
+import struct
 import sys
 import tarfile
 import tempfile
@@ -63,6 +64,18 @@ DEFAULT_MAX_ARCHIVE_MEMBERS = 100_000
 DEFAULT_MAX_MEMBER_EXPANDED_BYTES = 1 * 1024 * 1024 * 1024
 DEFAULT_MAX_ARCHIVE_EXPANDED_BYTES = 2 * 1024 * 1024 * 1024
 DEFAULT_EXTRACTION_CHUNK_SIZE = 1024 * 1024
+DEFAULT_MAX_ZIP_CENTRAL_DIRECTORY_BYTES = 64 * 1024 * 1024
+_ZIP_EOCD_SIGNATURE = b"PK\x05\x06"
+_ZIP64_EOCD_SIGNATURE = b"PK\x06\x06"
+_ZIP64_EOCD_LOCATOR_SIGNATURE = b"PK\x06\x07"
+_ZIP_EOCD_STRUCT = struct.Struct("<4s4H2LH")
+_ZIP64_EOCD_LOCATOR_STRUCT = struct.Struct("<4sLQL")
+_ZIP64_EOCD_STRUCT = struct.Struct("<4sQ2H2L4Q")
+_ZIP_EOCD_SIZE = _ZIP_EOCD_STRUCT.size
+_ZIP64_EOCD_LOCATOR_SIZE = _ZIP64_EOCD_LOCATOR_STRUCT.size
+_ZIP64_EOCD_FIXED_SIZE = _ZIP64_EOCD_STRUCT.size
+_ZIP_CENTRAL_DIRECTORY_FIXED_SIZE = 46
+_MAX_ZIP64_EOCD_RECORD_BYTES = 1 * 1024 * 1024
 _ARCHIVE_SUFFIXES = (".zip", ".tar.gz", ".tgz")
 ERRATUM_CUSTODY_ASSET = "publication_custody.json"
 ERRATUM_MANIFEST_ASSET = "publication_manifest.json"
@@ -246,6 +259,226 @@ def _stream_archive_member(  # noqa: PLR0913
     return expanded_bytes + written_bytes
 
 
+def _validate_zip_central_directory_metadata(
+    *,
+    entries: int,
+    central_directory_size: int,
+    central_directory_offset: int,
+    central_directory_end: int,
+    max_members: int,
+) -> None:
+    """Reject ZIP central-directory metadata before ``ZipFile`` parses it."""
+    if entries > max_members:
+        raise ValueError(f"zip member count exceeds limit: {entries} > {max_members}")
+    if central_directory_size > DEFAULT_MAX_ZIP_CENTRAL_DIRECTORY_BYTES:
+        raise ValueError(
+            "zip central directory exceeds limit: "
+            f"{central_directory_size} > {DEFAULT_MAX_ZIP_CENTRAL_DIRECTORY_BYTES}"
+        )
+    if central_directory_size > central_directory_end:
+        raise ValueError("zip central directory extends before the archive start")
+    central_directory_start = central_directory_end - central_directory_size
+    if central_directory_offset > central_directory_start:
+        raise ValueError("zip central directory offset is invalid")
+    if entries > central_directory_size // _ZIP_CENTRAL_DIRECTORY_FIXED_SIZE:
+        raise ValueError("zip central directory is too small for its declared member count")
+
+
+def _read_zip64_end_record(  # noqa: C901
+    handle: Any,
+    *,
+    file_size: int,
+    locator_offset: int,
+    locator: bytes,
+) -> tuple[int, int, int, int, int, int, int] | None:
+    """Read bounded ZIP64 metadata from a structurally valid locator.
+
+    The locator and record offsets are untrusted archive bytes.  They are
+    range-checked before any seek, and the variable extensible-data section is
+    bounded without being loaded into memory.
+
+    Returns:
+        ``(record_offset, disk, directory_disk, entries_on_disk,
+        entries_total, central_directory_size, central_directory_offset)``
+        when the locator points at a valid ZIP64 end record; otherwise ``None``
+        for a non-ZIP64 locator signature.
+    """
+    if len(locator) != _ZIP64_EOCD_LOCATOR_SIZE:
+        raise ValueError("zip64 end-of-central-directory locator is truncated")
+    signature, disk, declared_record_offset, disks = _ZIP64_EOCD_LOCATOR_STRUCT.unpack(locator)
+    if signature != _ZIP64_EOCD_LOCATOR_SIGNATURE:
+        return None
+    if disk != 0 or disks != 1:
+        raise ValueError("zip archive spans multiple disks")
+    if declared_record_offset > file_size - _ZIP64_EOCD_FIXED_SIZE:
+        raise ValueError("zip64 end-of-central-directory record is truncated")
+
+    # The locator offset is relative to the archive disk and may not include a
+    # self-extracting prefix.  Derive the physical location from the fixed
+    # record/locator adjacency first; the untrusted locator offset is only
+    # range-checked above and never used to size a read.
+    record_offset = locator_offset - _ZIP64_EOCD_FIXED_SIZE
+    if record_offset < 0:
+        raise ValueError("zip64 end-of-central-directory record is truncated")
+    handle.seek(record_offset)
+    record = handle.read(_ZIP64_EOCD_FIXED_SIZE)
+    if len(record) != _ZIP64_EOCD_FIXED_SIZE:
+        raise ValueError("zip64 end-of-central-directory record is truncated")
+    if record[:4] != _ZIP64_EOCD_SIGNATURE:
+        # A ZIP64 record with extensible data is not fixed-size.  Fall back to
+        # the locator's bounded, range-checked offset so valid non-prefixed
+        # records remain supported while still rejecting a bad locator.
+        record_offset = declared_record_offset
+        handle.seek(record_offset)
+        record = handle.read(_ZIP64_EOCD_FIXED_SIZE)
+        if len(record) != _ZIP64_EOCD_FIXED_SIZE:
+            raise ValueError("zip64 end-of-central-directory record is truncated")
+    (
+        record_signature,
+        record_size,
+        _create_version,
+        _read_version,
+        disk_number,
+        directory_disk,
+        entries_on_disk,
+        entries_total,
+        central_directory_size,
+        central_directory_offset,
+    ) = _ZIP64_EOCD_STRUCT.unpack(record)
+    if record_signature != _ZIP64_EOCD_SIGNATURE:
+        raise ValueError("zip64 end-of-central-directory record has invalid signature")
+    if record_size < _ZIP64_EOCD_FIXED_SIZE - 12:
+        raise ValueError("zip64 end-of-central-directory record is malformed")
+    if record_size > _MAX_ZIP64_EOCD_RECORD_BYTES:
+        raise ValueError("zip64 end-of-central-directory record exceeds metadata limit")
+    if declared_record_offset > record_offset:
+        raise ValueError("zip64 end-of-central-directory locator offset is invalid")
+    record_end = record_offset + 12 + record_size
+    if record_end != locator_offset:
+        raise ValueError("zip64 end-of-central-directory record is truncated")
+    if disk_number != 0 or directory_disk != 0 or entries_on_disk != entries_total:
+        raise ValueError("zip archive spans multiple disks")
+    return (
+        record_offset,
+        disk_number,
+        directory_disk,
+        entries_on_disk,
+        entries_total,
+        central_directory_size,
+        central_directory_offset,
+    )
+
+
+def _preflight_zip_metadata(archive_path: Path, *, max_members: int) -> None:  # noqa: C901
+    """Bound ZIP metadata before constructing ``zipfile.ZipFile``.
+
+    Only the bounded end-of-archive window plus fixed-size ZIP64 records are
+    read.  In particular, the declared central-directory size is checked
+    before ``ZipFile`` can allocate/read that directory or instantiate one
+    ``ZipInfo`` object per attacker-controlled entry.
+    """
+    eocd_size = _ZIP_EOCD_SIZE
+    max_comment_size = (1 << 16) - 1
+    eocd_search_size = eocd_size + max_comment_size
+    try:
+        file_size = archive_path.stat().st_size
+        if file_size < eocd_size:
+            raise ValueError("zip end-of-central-directory record is truncated")
+        with archive_path.open("rb") as handle:
+            tail_size = min(file_size, eocd_search_size)
+            tail_start = file_size - tail_size
+            handle.seek(tail_start)
+            tail = handle.read(tail_size)
+            if len(tail) != tail_size:
+                raise ValueError("zip end-of-central-directory record is truncated")
+
+            eocd_offset: int | None = None
+            eocd: tuple[Any, ...] | None = None
+            search_end = len(tail)
+            while True:
+                candidate = tail.rfind(_ZIP_EOCD_SIGNATURE, 0, search_end)
+                if candidate < 0:
+                    break
+                search_end = candidate
+                if candidate + eocd_size > len(tail):
+                    continue
+                candidate_data = tail[candidate : candidate + eocd_size]
+                candidate_eocd = _ZIP_EOCD_STRUCT.unpack(candidate_data)
+                comment_size = candidate_eocd[-1]
+                if candidate + eocd_size + comment_size == len(tail):
+                    eocd_offset = tail_start + candidate
+                    eocd = candidate_eocd
+                    break
+            if eocd_offset is None or eocd is None:
+                raise ValueError("zip end-of-central-directory record is missing or truncated")
+
+            (
+                _disk_number,
+                _directory_disk,
+                entries_on_disk,
+                entries_total,
+                central_directory_size_32,
+                central_directory_offset_32,
+                _comment_size,
+            ) = eocd[1:]
+            requires_zip64 = (
+                entries_on_disk == (1 << 16) - 1
+                or entries_total == (1 << 16) - 1
+                or central_directory_size_32 == (1 << 32) - 1
+                or central_directory_offset_32 == (1 << 32) - 1
+            )
+            zip64_metadata: tuple[int, int, int, int, int, int, int] | None = None
+            locator_offset = eocd_offset - _ZIP64_EOCD_LOCATOR_SIZE
+            if locator_offset >= 0:
+                handle.seek(locator_offset)
+                locator = handle.read(_ZIP64_EOCD_LOCATOR_SIZE)
+                if locator[:4] == _ZIP64_EOCD_LOCATOR_SIGNATURE:
+                    try:
+                        zip64_metadata = _read_zip64_end_record(
+                            handle,
+                            file_size=file_size,
+                            locator_offset=locator_offset,
+                            locator=locator,
+                        )
+                    except ValueError:
+                        if requires_zip64:
+                            raise
+            if requires_zip64 and zip64_metadata is None:
+                raise ValueError("zip64 end-of-central-directory record is missing or truncated")
+
+            if zip64_metadata is None:
+                disk_number, directory_disk = eocd[1:3]
+                if disk_number != 0 or directory_disk != 0 or entries_on_disk != entries_total:
+                    raise ValueError("zip archive spans multiple disks")
+                _validate_zip_central_directory_metadata(
+                    entries=entries_total,
+                    central_directory_size=central_directory_size_32,
+                    central_directory_offset=central_directory_offset_32,
+                    central_directory_end=eocd_offset,
+                    max_members=max_members,
+                )
+                return
+
+            (
+                record_offset,
+                _disk_number,
+                _directory_disk,
+                _entries_on_disk,
+                entries_total,
+                central_directory_size,
+                central_directory_offset,
+            ) = zip64_metadata
+            _validate_zip_central_directory_metadata(
+                entries=entries_total,
+                central_directory_size=central_directory_size,
+                central_directory_offset=central_directory_offset,
+                central_directory_end=record_offset,
+                max_members=max_members,
+            )
+    except OSError as exc:
+        raise ValueError("unable to read ZIP metadata") from exc
+
+
 def _extract_zip_members(  # noqa: C901
     archive_path: Path,
     dest: Path,
@@ -260,6 +493,7 @@ def _extract_zip_members(  # noqa: C901
     Returns:
         Validated archive member names.
     """
+    _preflight_zip_metadata(archive_path, max_members=max_members)
     with zipfile.ZipFile(archive_path) as archive:
         infos = archive.infolist()
         if len(infos) > max_members:

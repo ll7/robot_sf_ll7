@@ -102,11 +102,16 @@ sweeps.
 - Trigger: `on: issues: types: [closed]`. The `issues.closed` event is the single choke point that
   covers every close path — manual close, duplicate/wontfix, and PR-merge auto-close.
 - Permissions: `issues: write` only (least privilege), using the default `GITHUB_TOKEN`.
-- Read-then-write: the job re-confirms the issue is `CLOSED` (and not a pull request) via
-  `gh issue view` before any removal, as defense-in-depth even though the trigger implies closure.
+- Read-then-write: the job re-confirms the issue is `CLOSED` (and not a pull request) via the
+  REST-backed `gh_issue_rest.py view --json state url` command before any removal, as
+  defense-in-depth even though the trigger implies closure. This state-only read does not fetch
+  comments; complete thread reads remain opt-in with `--comments`.
 - Removal is guarded by label presence: it fetches the issue's current labels and removes only the
   live `state:*` labels that are actually present, so it is a no-op when none are stale and never
   fails the job for a missing label. Only the documented live state set is touched — no other label.
+- Label inventory and removals use the verified REST helper: `gh_pr_label_rest.py list` reads the
+  complete paginated label set, and `gh_pr_label_rest.py remove` verifies each deletion. An
+  allowlist-import failure is checked before the workflow can enter its no-op path.
 - Single source of truth: the live label set is read at runtime from
   `scripts/dev/closed_state_label_hygiene.py::LIVE_STATE_LABELS`; the workflow hard-codes no second
   copy of the label list.

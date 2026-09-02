@@ -36,9 +36,16 @@ jobs:
           # Single source of truth: derive the live state-label set from the detector module
           # (scripts/dev/closed_state_label_hygiene.py::LIVE_STATE_LABELS) so this Action and the
           # CLI never drift. No second hard-coded label list lives here.
-          mapfile -t LIVE_LABELS < <(
+          if ! live_labels_output=$(
             python -c 'import sys; sys.path.insert(0, "scripts/dev"); import closed_state_label_hygiene as h; print("\n".join(h.LIVE_STATE_LABELS))'
-          )
+          ); then
+            echo "Unable to load the live state-label allowlist; refusing cleanup." >&2
+            exit 1
+          fi
+          LIVE_LABELS=()
+          if [ -n "$live_labels_output" ]; then
+            mapfile -t LIVE_LABELS <<<"$live_labels_output"
+          fi
           echo "Live state labels: ${LIVE_LABELS[*]}"
 
           # Read-then-write (defense-in-depth): the trigger already implies the issue is closed,

@@ -202,6 +202,8 @@ def test_closure_workflow_routes_state_label_io_through_rest_helpers() -> None:
     assert "python -m scripts.dev.gh_issue_rest view" in code
     assert "python -m scripts.dev.gh_pr_label_rest list" in code
     assert "python -m scripts.dev.gh_pr_label_rest remove" in code
+    assert "if ! live_labels_output=$(" in code
+    assert "mapfile -t LIVE_LABELS < <(" not in code
     assert "gh issue view" not in code
     assert "gh issue edit" not in code
 

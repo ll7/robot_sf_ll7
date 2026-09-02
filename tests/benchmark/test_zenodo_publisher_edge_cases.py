@@ -383,9 +383,7 @@ def test_new_version_rejects_non_url_successor_source_relation_before_remote_mut
     session = _new_version_fixture()
     metadata = _new_version_metadata()
     source_relation = next(
-        item
-        for item in metadata["related_identifiers"]
-        if item["relation"] == "isSupplementTo"
+        item for item in metadata["related_identifiers"] if item["relation"] == "isSupplementTo"
     )
     if scheme is None:
         source_relation.pop("scheme")

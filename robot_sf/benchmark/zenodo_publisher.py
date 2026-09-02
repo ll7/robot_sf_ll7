@@ -377,27 +377,63 @@ def _validate_successor_payload(
 def _validate_successor_metadata_readback(
     expected_metadata: Mapping[str, Any], payload: Mapping[str, Any]
 ) -> None:
-    """Require the PUT response metadata to equal the requested metadata contract."""
+    """Require every user-controlled field to match the requested metadata contract."""
     observed = payload.get("metadata")
     if not isinstance(observed, Mapping):
         raise ZenodoPublisherError("Zenodo new-version PUT response omitted metadata")
-    expected_contract = {
-        key: _canonical_metadata_value_for_comparison(key, value)
-        for key, value in _metadata_contract(expected_metadata).items()
-    }
-    observed_contract = {
-        key: _canonical_metadata_value_for_comparison(key, value)
-        for key, value in _metadata_contract(observed).items()
-    }
-    if expected_contract == observed_contract:
-        return
-    mismatched_keys = sorted(
-        key
-        for key in set(expected_contract) | set(observed_contract)
-        if expected_contract.get(key) != observed_contract.get(key)
+    for key, value in _metadata_contract(expected_metadata).items():
+        expected = _canonical_metadata_value_for_comparison(key, value)
+        actual = _canonical_metadata_value_for_comparison(key, observed.get(key))
+        if expected != actual:
+            raise ZenodoPublisherError(
+                f"Zenodo new-version metadata readback mismatch at metadata.{key}"
+            )
+
+
+def _validate_new_version_relation(
+    metadata: Mapping[str, Any], *, expected_predecessor_doi: str
+) -> None:
+    """Require exactly one DOI relation to the immutable predecessor version."""
+    related = metadata.get("related_identifiers")
+    matches = (
+        [
+            item
+            for item in related
+            if isinstance(item, Mapping)
+            and item.get("identifier") == expected_predecessor_doi
+            and item.get("relation") == "isNewVersionOf"
+            and item.get("scheme") == "doi"
+        ]
+        if isinstance(related, list)
+        else []
     )
-    key = mismatched_keys[0] if mismatched_keys else "unknown"
-    raise ZenodoPublisherError(f"Zenodo new-version metadata readback mismatch at metadata.{key}")
+    if len(matches) != 1:
+        raise ZenodoPublisherError(
+            "Zenodo successor metadata must contain exactly one isNewVersionOf predecessor DOI"
+        )
+
+
+def _validate_predecessor_payload(
+    payload: Mapping[str, Any],
+    *,
+    predecessor_deposition_id: int,
+    expected_predecessor_doi: str,
+    expected_concept_doi: str,
+) -> None:
+    """Bind the mutating new-version action to one exact published predecessor."""
+    deposition_id = _positive_deposition_id(payload.get("id"), "predecessor deposition response ID")
+    record_id = _positive_deposition_id(payload.get("record_id"), "predecessor record ID")
+    if deposition_id != predecessor_deposition_id or record_id != predecessor_deposition_id:
+        raise ZenodoPublisherError("Zenodo predecessor response changed the requested identity")
+    if payload.get("doi") != expected_predecessor_doi:
+        raise ZenodoPublisherError("Zenodo predecessor DOI does not match the requested version")
+    _validate_successor_concept(
+        payload,
+        expected_concept_doi=expected_concept_doi,
+        operation="predecessor",
+    )
+    if payload.get("submitted") is not True or payload.get("state") != "done":
+        raise ZenodoPublisherError("Zenodo predecessor must be a published deposition")
 
 
 def _binding_value(binding: Any, key: str) -> Any:
@@ -898,8 +934,16 @@ def new_version(
         raise ZenodoPublisherError("expected concept DOI is invalid")
     if expected_predecessor_doi == expected_concept_doi:
         raise ZenodoPublisherError("expected predecessor and concept DOIs must differ")
+    if predecessor_id != int(expected_predecessor_doi.rsplit(".", 1)[-1]):
+        raise ZenodoPublisherError(
+            "predecessor deposition ID does not match the expected predecessor DOI"
+        )
 
     normalized_metadata = _validate_metadata(metadata)
+    _validate_new_version_relation(
+        normalized_metadata,
+        expected_predecessor_doi=expected_predecessor_doi,
+    )
     preregistered = normalized_metadata.get("prereserve_doi")
     if preregistered is not None and preregistered is not True:
         raise ZenodoPublisherError(
@@ -913,6 +957,17 @@ def new_version(
     )
     validated_base = _validated_api_base(api_base)
     base = validated_base.rstrip("/")
+
+    predecessor = _json_object(
+        session.get(f"{base}/deposit/depositions/{predecessor_id}", timeout=60),
+        "retrieve predecessor",
+    )
+    _validate_predecessor_payload(
+        predecessor,
+        predecessor_deposition_id=predecessor_id,
+        expected_predecessor_doi=expected_predecessor_doi,
+        expected_concept_doi=expected_concept_doi,
+    )
 
     created = _json_object(
         session.post(
@@ -934,10 +989,11 @@ def new_version(
         operation="new-version draft",
     )
 
+    successor_metadata = _metadata_contract(normalized_metadata)
     updated = _json_object(
         session.put(
             f"{base}/deposit/depositions/{state['deposition_id']}",
-            json={"metadata": normalized_metadata},
+            json={"metadata": successor_metadata},
             timeout=60,
         ),
         "new-version metadata update",
@@ -953,7 +1009,7 @@ def new_version(
     for key in ("deposition_id", "record_id", "concept_record_id", "doi"):
         if updated_state.get(key) != state.get(key):
             raise ZenodoPublisherError(f"Zenodo new-version metadata readback changed {key}")
-    _validate_successor_metadata_readback(normalized_metadata, updated)
+    _validate_successor_metadata_readback(successor_metadata, updated)
 
     updated_state.update(
         {

@@ -128,12 +128,42 @@ def _successor_draft(
         "state": "done" if submitted else "unsubmitted",
         "submitted": submitted,
         "metadata": {
-            **(metadata or _metadata()),
+            **(metadata or _new_version_metadata()),
             "prereserve_doi": {"doi": doi or "10.5281/zenodo.8"},
         },
         "links": {"bucket": "https://zenodo.test/api/files/bucket"},
         "files": [],
     }
+
+
+def _new_version_metadata() -> dict[str, Any]:
+    """Return benchmark metadata explicitly related to the predecessor version."""
+    metadata = _metadata()
+    metadata["related_identifiers"] = [
+        *metadata["related_identifiers"],
+        {
+            "identifier": "10.5281/zenodo.7",
+            "relation": "isNewVersionOf",
+            "scheme": "doi",
+        },
+    ]
+    return metadata
+
+
+def _predecessor_deposition(**updates: Any) -> dict[str, Any]:
+    """Return the exact published predecessor required before mutation."""
+    payload = {
+        "id": 7,
+        "record_id": 7,
+        "conceptrecid": "6",
+        "conceptdoi": "10.5281/zenodo.6",
+        "doi": "10.5281/zenodo.7",
+        "state": "done",
+        "submitted": True,
+        "metadata": _metadata(),
+    }
+    payload.update(updates)
+    return payload
 
 
 def _new_version_fixture(
@@ -156,7 +186,7 @@ def _new_version_fixture(
             status_code=201,
         )
     ]
-    session.gets = [_Response(draft_payload)]
+    session.gets = [_Response(_predecessor_deposition()), _Response(draft_payload)]
     session.puts = [_Response(readback or draft_payload, status_code=200)]
     return session
 
@@ -165,7 +195,7 @@ def _new_version(session: _Session) -> dict[str, Any]:
     """Reserve a successor with the fixture's predecessor and concept identity."""
     return publisher.new_version(
         session,
-        _metadata(),
+        _new_version_metadata(),
         predecessor_deposition_id=7,
         expected_predecessor_doi="10.5281/zenodo.7",
         expected_concept_doi="10.5281/zenodo.6",
@@ -180,11 +210,12 @@ def test_new_version_replaces_metadata_and_seals_predecessor_identity() -> None:
     state = _new_version(session)
 
     assert session.urls == [
+        "https://zenodo.test/api/deposit/depositions/7",
         "https://zenodo.test/api/deposit/depositions/7/actions/newversion",
         "https://zenodo.test/api/deposit/depositions/8",
         "https://zenodo.test/api/deposit/depositions/8",
     ]
-    assert session.put_kwargs == [{"json": {"metadata": _metadata()}, "timeout": 60}]
+    assert session.put_kwargs == [{"json": {"metadata": _new_version_metadata()}, "timeout": 60}]
     assert state["deposition_id"] == 8
     assert state["record_id"] == 8
     assert state["concept_record_id"] == "6"
@@ -223,6 +254,7 @@ def test_new_version_rejects_malformed_or_cross_host_latest_draft(latest_draft: 
     """The new-version link cannot redirect the authenticated session elsewhere."""
     session = _Session()
     session.posts = [_Response({"links": {"latest_draft": latest_draft}}, status_code=201)]
+    session.gets = [_Response(_predecessor_deposition())]
 
     with pytest.raises(publisher.ZenodoPublisherError, match="latest_draft"):
         _new_version(session)
@@ -263,6 +295,54 @@ def test_new_version_rejects_metadata_readback_mismatch() -> None:
 
     with pytest.raises(publisher.ZenodoPublisherError, match="metadata readback mismatch"):
         _new_version(session)
+
+
+@pytest.mark.parametrize(
+    ("predecessor", "match"),
+    [
+        (_predecessor_deposition(doi="10.5281/zenodo.99"), "predecessor DOI"),
+        (_predecessor_deposition(conceptrecid="99"), "concept ID"),
+        (_predecessor_deposition(submitted=False, state="unsubmitted"), "published"),
+        (_predecessor_deposition(record_id=9), "changed the requested identity"),
+    ],
+)
+def test_new_version_rejects_wrong_or_unpublished_predecessor(
+    predecessor: dict[str, Any], match: str
+) -> None:
+    """No mutating action occurs until the predecessor identity is proven."""
+    session = _new_version_fixture()
+    session.gets[0] = _Response(predecessor)
+
+    with pytest.raises(publisher.ZenodoPublisherError, match=match):
+        _new_version(session)
+
+    assert session.posts
+    assert len(session.posts) == 1
+
+
+def test_new_version_requires_exact_predecessor_relation_and_deposition_id() -> None:
+    """A generic dataset deposition cannot silently become an erratum successor."""
+    session = _new_version_fixture()
+    with pytest.raises(publisher.ZenodoPublisherError, match="isNewVersionOf"):
+        publisher.new_version(
+            session,
+            _metadata(),
+            predecessor_deposition_id=7,
+            expected_predecessor_doi="10.5281/zenodo.7",
+            expected_concept_doi="10.5281/zenodo.6",
+            api_base="https://zenodo.test/api",
+        )
+    assert session.urls == []
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="deposition ID"):
+        publisher.new_version(
+            session,
+            _new_version_metadata(),
+            predecessor_deposition_id=9,
+            expected_predecessor_doi="10.5281/zenodo.7",
+            expected_concept_doi="10.5281/zenodo.6",
+            api_base="https://zenodo.test/api",
+        )
 
 
 def test_token_file_missing_and_empty_are_rejected(tmp_path: Path) -> None:

@@ -147,6 +147,7 @@ def _new_version_metadata() -> dict[str, Any]:
         {
             "identifier": ("https://github.com/ll7/robot_sf_ll7/releases/tag/" + SUCCESSOR_TAG),
             "relation": "isSupplementTo",
+            "scheme": "url",
         },
         {
             "identifier": "10.5281/zenodo.7",
@@ -372,6 +373,43 @@ def test_new_version_requires_exact_predecessor_relation_and_deposition_id() -> 
             expected_successor_tag=SUCCESSOR_TAG,
             api_base="https://zenodo.test/api",
         )
+
+
+@pytest.mark.parametrize("scheme", [None, "doi", "https"])
+def test_new_version_rejects_non_url_successor_source_relation_before_remote_mutation(
+    scheme: str | None,
+) -> None:
+    """A successor source relation must be an explicit URL before any API call."""
+    session = _new_version_fixture()
+    metadata = _new_version_metadata()
+    source_relation = next(
+        item
+        for item in metadata["related_identifiers"]
+        if item["relation"] == "isSupplementTo"
+    )
+    if scheme is None:
+        source_relation.pop("scheme")
+    else:
+        source_relation["scheme"] = scheme
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="exact source tag"):
+        publisher.new_version(
+            session,
+            metadata,
+            predecessor_deposition_id=7,
+            expected_predecessor_doi="10.5281/zenodo.7",
+            expected_concept_doi="10.5281/zenodo.6",
+            expected_predecessor_tag=PREDECESSOR_TAG,
+            expected_source_sha=SOURCE_SHA,
+            expected_successor_tag=SUCCESSOR_TAG,
+            api_base="https://zenodo.test/api",
+        )
+
+    assert session.urls == []
+    assert len(session.gets) == 2
+    assert len(session.posts) == 1
+    assert len(session.puts) == 1
+    assert session.put_kwargs == []
 
 
 def test_new_version_rejects_wrong_successor_tag_before_remote_mutation() -> None:

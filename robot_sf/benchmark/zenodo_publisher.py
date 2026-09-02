@@ -97,27 +97,35 @@ def _assert_credential_free(payload: Any) -> None:
             _assert_credential_free(value)
 
 
-def _source_tag(metadata: Mapping[str, Any]) -> str:
-    """Return the one exact GitHub release URL bound to dataset metadata."""
+def _source_tag(metadata: Mapping[str, Any], *, require_url_scheme: bool = False) -> str:
+    """Return the one exact GitHub release URL bound to dataset metadata.
+
+    ``new_version`` uses the stricter form because it is about to mutate a
+    published Zenodo concept. The source relation must therefore identify the
+    GitHub URL with Zenodo's explicit ``url`` scheme, rather than relying on
+    the identifier text alone. The default remains permissive for legacy
+    metadata reads and non-mutating recovery of older records.
+    """
     related = metadata.get("related_identifiers")
     if not isinstance(related, list):
         raise ZenodoPublisherError(
             "Zenodo metadata must relate the dataset to the exact source tag"
         )
     matches = [
-        item.get("identifier")
+        item
         for item in related
         if isinstance(item, Mapping) and item.get("relation") == "isSupplementTo"
     ]
     if (
         len(matches) != 1
-        or not isinstance(matches[0], str)
-        or not _SOURCE_TAG_RE.fullmatch(matches[0])
+        or not isinstance(matches[0].get("identifier"), str)
+        or not _SOURCE_TAG_RE.fullmatch(matches[0]["identifier"])
+        or (require_url_scheme and matches[0].get("scheme") != "url")
     ):
         raise ZenodoPublisherError(
             "Zenodo metadata must contain exactly one exact source tag release identity"
         )
-    return matches[0]
+    return matches[0]["identifier"]
 
 
 def _expected_source_tag_url(value: str, *, label: str) -> str:
@@ -999,7 +1007,7 @@ def new_version(  # noqa: PLR0913
         )
 
     normalized_metadata = _validate_metadata(metadata)
-    if _source_tag(normalized_metadata) != expected_source_url:
+    if _source_tag(normalized_metadata, require_url_scheme=True) != expected_source_url:
         raise ZenodoPublisherError(
             "new-version metadata source tag does not match the expected successor tag"
         )

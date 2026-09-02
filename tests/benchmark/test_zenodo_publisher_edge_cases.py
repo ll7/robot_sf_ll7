@@ -208,9 +208,14 @@ def _new_version_fixture(
 
 def _new_version(session: _Session) -> dict[str, Any]:
     """Reserve a successor with the fixture's predecessor and concept identity."""
+    return _new_version_with_metadata(session, _new_version_metadata())
+
+
+def _new_version_with_metadata(session: _Session, metadata: dict[str, Any]) -> dict[str, Any]:
+    """Reserve a successor with caller-supplied metadata and fixture identities."""
     return publisher.new_version(
         session,
-        _new_version_metadata(),
+        metadata,
         predecessor_deposition_id=7,
         expected_predecessor_doi="10.5281/zenodo.7",
         expected_concept_doi="10.5281/zenodo.6",
@@ -373,6 +378,55 @@ def test_new_version_requires_exact_predecessor_relation_and_deposition_id() -> 
             expected_successor_tag=SUCCESSOR_TAG,
             api_base="https://zenodo.test/api",
         )
+
+
+@pytest.mark.parametrize(
+    "relation_case",
+    ["missing", "duplicate", "alternate", "wrong scheme"],
+)
+def test_new_version_rejects_non_unique_or_mismatched_predecessor_relation_before_remote_mutation(
+    relation_case: str,
+) -> None:
+    """Every invalid predecessor relation fails before an authenticated request."""
+    session = _new_version_fixture()
+    metadata = _new_version_metadata()
+    source_relation = next(
+        item for item in metadata["related_identifiers"] if item["relation"] == "isSupplementTo"
+    )
+    predecessor_relation = {
+        "identifier": "10.5281/zenodo.7",
+        "relation": "isNewVersionOf",
+        "scheme": "doi",
+    }
+    if relation_case == "missing":
+        predecessor_relations: list[dict[str, str]] = []
+    elif relation_case == "duplicate":
+        predecessor_relations = [predecessor_relation, dict(predecessor_relation)]
+    elif relation_case == "alternate":
+        predecessor_relations = [
+            predecessor_relation,
+            {
+                **predecessor_relation,
+                "identifier": "10.5281/zenodo.99",
+            },
+        ]
+    else:
+        predecessor_relations = [
+            {
+                **predecessor_relation,
+                "scheme": "url",
+            }
+        ]
+    metadata["related_identifiers"] = [source_relation, *predecessor_relations]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="isNewVersionOf"):
+        _new_version_with_metadata(session, metadata)
+
+    assert session.urls == []
+    assert len(session.gets) == 2
+    assert len(session.posts) == 1
+    assert len(session.puts) == 1
+    assert session.put_kwargs == []
 
 
 @pytest.mark.parametrize("scheme", [None, "doi", "https"])

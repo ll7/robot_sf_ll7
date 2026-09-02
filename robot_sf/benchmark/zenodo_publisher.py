@@ -423,19 +423,20 @@ def _validate_new_version_relation(
 ) -> None:
     """Require exactly one DOI relation to the immutable predecessor version."""
     related = metadata.get("related_identifiers")
-    matches = (
+    predecessor_relations = (
         [
             item
             for item in related
-            if isinstance(item, Mapping)
-            and item.get("identifier") == expected_predecessor_doi
-            and item.get("relation") == "isNewVersionOf"
-            and item.get("scheme") == "doi"
+            if isinstance(item, Mapping) and item.get("relation") == "isNewVersionOf"
         ]
         if isinstance(related, list)
         else []
     )
-    if len(matches) != 1:
+    if (
+        len(predecessor_relations) != 1
+        or predecessor_relations[0].get("identifier") != expected_predecessor_doi
+        or predecessor_relations[0].get("scheme") != "doi"
+    ):
         raise ZenodoPublisherError(
             "Zenodo successor metadata must contain exactly one isNewVersionOf predecessor DOI"
         )

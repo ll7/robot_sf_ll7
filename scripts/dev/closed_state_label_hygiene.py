@@ -9,17 +9,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote, urlsplit
 
+from scripts.dev import gh_pr_label_rest
 from scripts.dev._gh_pagination import is_likely_truncated
+from scripts.dev.gh_issue_rest import VALID_ISSUE_STATES, validate_issue_identity
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 LIVE_STATE_LABELS = ("state:ready", "state:running", "state:blocked")
-JSON_FIELDS = "number,title,url,state,labels"
+JSON_FIELDS = "number,title,url,state,labels,isPullRequest"
+_MISSING = object()
 PER_PAGE = 100
 DEFAULT_MAX_REST_PAGES = 10
 GRAPHQL_FALLBACK_MARKERS = ("graphql:", "graphql ")
@@ -79,29 +83,114 @@ class CandidateDiscoveryResult:
 
 
 def _label_names(raw_labels: object) -> set[str]:
-    """Extract label names from GitHub CLI label payloads."""
+    """Extract and validate label names from a GitHub payload."""
     if not isinstance(raw_labels, list):
-        return set()
+        raise ValueError("candidate labels must be a list")
 
     names: set[str] = set()
-    for label in raw_labels:
+    for index, label in enumerate(raw_labels):
         if isinstance(label, str):
-            names.add(label)
+            name = label
         elif isinstance(label, dict) and isinstance(label.get("name"), str):
-            names.add(label["name"])
+            name = label["name"]
+        else:
+            raise ValueError(f"candidate label row {index} must contain a name string")
+        if not name.strip():
+            raise ValueError(f"candidate label row {index} must contain a non-empty name")
+        if not name.isprintable():
+            raise ValueError(f"candidate label row {index} must contain printable text")
+        if name in names:
+            raise ValueError(f"candidate label row {index} duplicates label {name!r}")
+        names.add(name)
     return names
 
 
 def _is_pull_request_url(raw_url: object) -> bool:
-    """Return True for GitHub pull-request URLs returned by issue search/view commands."""
-    if not isinstance(raw_url, str):
+    """Return True for syntactically canonical pull-request URLs.
+
+    Callers that have a requested repository and number must use
+    :func:`validate_issue_identity` for the authoritative check.
+    """
+    if not isinstance(raw_url, str) or not raw_url.isprintable():
         return False
 
-    path_parts = [part for part in urlsplit(raw_url).path.split("/") if part]
+    parsed = urlsplit(raw_url)
+    expected_host = (os.environ.get("GH_HOST") or "github.com").lower()
+    if (
+        parsed.scheme != "https"
+        or (parsed.hostname or "").lower() != expected_host
+        # ``urlsplit(...).port`` is None for an explicit empty port; reject every
+        # authority colon so the syntactic companion matches the identity validator.
+        or ":" in parsed.netloc
+        or parsed.port is not None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        return False
+    path_parts = [part for part in parsed.path.split("/") if part]
     if len(path_parts) != 4:
         return False
     owner, repo, resource, number = path_parts
     return bool(owner and repo and resource == "pull" and number.isdecimal())
+
+
+def _validate_candidate_row(
+    row: dict[str, object],
+    *,
+    repo: str,
+    context: str,
+) -> dict[str, object]:
+    """Validate one discovery row before it can affect the audit result."""
+    number = row.get("number")
+    if type(number) is not int or number < 1:
+        raise ValueError(f"malformed candidate row ({context}): number must be a positive integer")
+    title = row.get("title")
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError(f"malformed candidate row ({context}): title must be non-empty text")
+    raw_state = row.get("state")
+    if not isinstance(raw_state, str):
+        raise ValueError(f"malformed candidate row ({context}): state must be text")
+    state = raw_state.upper()
+    if state not in VALID_ISSUE_STATES:
+        raise ValueError(
+            f"malformed candidate row ({context}): state must be OPEN or CLOSED, got {raw_state!r}"
+        )
+    is_pull_request = row.get("is_pull_request")
+    if type(is_pull_request) is not bool:
+        raise ValueError(f"malformed candidate row ({context}): is_pull_request must be a boolean")
+    labels = _label_names(row.get("labels"))
+    identity = {
+        "number": number,
+        "state": state,
+        "url": row.get("url"),
+        "is_pull_request": is_pull_request,
+    }
+    try:
+        validate_issue_identity(identity, repo=repo, number=number)
+    except ValueError as exc:
+        raise ValueError(f"malformed candidate row ({context}): {exc}") from exc
+
+    normalized = dict(row)
+    normalized["state"] = state
+    normalized["labels"] = sorted(labels)
+    return normalized
+
+
+def _normalize_native_search_row(
+    row: dict[str, object],
+    *,
+    repo: str,
+    context: str,
+) -> dict[str, object]:
+    """Normalize the GitHub CLI search discriminator into the shared row shape."""
+    marker = row.get("isPullRequest")
+    if type(marker) is not bool:
+        raise ValueError(f"malformed candidate row ({context}): isPullRequest must be a boolean")
+    normalized = dict(row)
+    normalized["is_pull_request"] = marker
+    return _validate_candidate_row(normalized, repo=repo, context=context)
 
 
 def build_search_command(*, repo: str, label: str, limit: int) -> list[str]:
@@ -123,8 +212,12 @@ def build_search_command(*, repo: str, label: str, limit: int) -> list[str]:
     ]
 
 
-def _run_search_command(command: list[str]) -> list[dict[str, object]]:
-    """Run one read-only GitHub search command and return object rows."""
+def _run_search_command(
+    command: list[str],
+    *,
+    repo: str = DEFAULT_REPO,
+) -> list[dict[str, object]]:
+    """Run one read-only GitHub search command and validate every object row."""
     try:
         result = subprocess.run(command, check=True, capture_output=True, text=True)
     except FileNotFoundError as exc:
@@ -135,14 +228,28 @@ def _run_search_command(command: list[str]) -> list[dict[str, object]]:
         raise RuntimeError(f"GitHub CLI command failed ({' '.join(command)}){details}") from exc
 
     try:
-        payload = json.loads(result.stdout or "[]")
+        payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
         raise RuntimeError(
             f"Failed to parse GitHub CLI JSON output ({' '.join(command)}): {exc.msg}"
         ) from exc
     if not isinstance(payload, list):
         raise ValueError(f"Expected a JSON list from {' '.join(command)}")
-    return [row for row in payload if isinstance(row, dict)]
+    rows: list[dict[str, object]] = []
+    for index, row in enumerate(payload):
+        if not isinstance(row, dict):
+            raise ValueError(
+                f"Malformed GitHub CLI candidate row {index} from {' '.join(command)}: "
+                "expected an object"
+            )
+        rows.append(
+            _normalize_native_search_row(
+                row,
+                repo=repo,
+                context=f"gh search row {index}",
+            )
+        )
+    return rows
 
 
 def _parse_rest_list_payload(
@@ -152,7 +259,7 @@ def _parse_rest_list_payload(
 ) -> list[dict[str, object]]:
     """Parse a REST list payload and require an object row list."""
     try:
-        payload = json.loads(stdout or "[]")
+        payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid JSON from GitHub REST ({context}): {exc.msg}") from exc
     if not isinstance(payload, list):
@@ -165,15 +272,52 @@ def _parse_rest_list_payload(
     return rows
 
 
-def _normalize_rest_issue_row(row: dict[str, object]) -> dict[str, object]:
-    """Project a REST issue row onto the gh-search row shape consumed by this audit."""
-    return {
+def _normalize_rest_issue_row(
+    row: dict[str, object],
+    *,
+    repo: str = DEFAULT_REPO,
+) -> dict[str, object]:
+    """Project and validate one REST issue row for the audit."""
+    marker = row.get("pull_request", _MISSING)
+    if marker is not _MISSING and not isinstance(marker, dict):
+        raise ValueError("REST candidate pull_request must be an object when present")
+    normalized = {
         "number": row.get("number"),
-        "title": str(row.get("title", "")),
-        "url": str(row.get("html_url") or row.get("url") or ""),
-        "state": str(row.get("state", "")),
+        "title": row.get("title"),
+        "url": row.get("html_url"),
+        "state": row.get("state"),
         "labels": row.get("labels"),
+        "is_pull_request": marker is not _MISSING,
     }
+    return _validate_candidate_row(
+        normalized,
+        repo=repo,
+        context="REST candidate row",
+    )
+
+
+def _validated_stale_row(
+    row: dict[str, object],
+    *,
+    search_label: str,
+    index: int,
+    repo: str,
+    watched: set[str],
+) -> tuple[dict[str, object], set[str]] | None:
+    """Validate one discovery row and return its stale labels when actionable."""
+    normalized = _validate_candidate_row(
+        row,
+        repo=repo,
+        context=f"{search_label} row {index}",
+    )
+    if normalized["is_pull_request"] or normalized["state"] != "CLOSED":
+        return None
+    matching_labels = _label_names(normalized["labels"]) & watched
+    if search_label in watched:
+        matching_labels.add(search_label)
+    if not matching_labels:
+        return None
+    return normalized, matching_labels
 
 
 def _paginate_rest_closed_issues_for_label(
@@ -203,7 +347,7 @@ def _paginate_rest_closed_issues_for_label(
             ).strip() or f"exit code {result.returncode}"
             raise RuntimeError(f"GitHub REST read failed ({path}): {detail}")
         page_rows = _parse_rest_list_payload(result.stdout, context=path)
-        rows.extend(_normalize_rest_issue_row(row) for row in page_rows)
+        rows.extend(_normalize_rest_issue_row(row, repo=repo) for row in page_rows)
         pages_read = page
         if len(page_rows) < per_page:
             break
@@ -222,6 +366,7 @@ def _paginate_rest_closed_issues_for_label(
 def collect_stale_issues(
     rows_by_label: dict[str, list[dict[str, object]]],
     *,
+    repo: str = DEFAULT_REPO,
     watched_labels: tuple[str, ...] = LIVE_STATE_LABELS,
 ) -> list[StaleIssue]:
     """Aggregate closed issues carrying watched live state labels.
@@ -234,22 +379,28 @@ def collect_stale_issues(
     issue_labels: dict[int, set[str]] = {}
 
     for search_label, rows in rows_by_label.items():
-        for row in rows:
-            if _is_pull_request_url(row.get("url")):
+        if not isinstance(search_label, str) or not search_label.strip():
+            raise ValueError("candidate discovery label must be a non-empty string")
+        if not isinstance(rows, list):
+            raise ValueError(f"candidate rows for {search_label!r} must be a list")
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                raise ValueError(
+                    f"malformed candidate row ({search_label} row {index}): expected an object"
+                )
+            stale_row = _validated_stale_row(
+                row,
+                search_label=search_label,
+                index=index,
+                repo=repo,
+                watched=watched,
+            )
+            if stale_row is None:
                 continue
-            if str(row.get("state", "")).lower() != "closed":
-                continue
+            row, matching_labels = stale_row
 
-            try:
-                number = int(row["number"])
-            except (KeyError, TypeError, ValueError):
-                continue
-
-            matching_labels = _label_names(row.get("labels")) & watched
-            if search_label in watched:
-                matching_labels.add(search_label)
-            if not matching_labels:
-                continue
+            number = row["number"]
+            assert type(number) is int
 
             issue_rows.setdefault(number, row)
             issue_labels.setdefault(number, set()).update(matching_labels)
@@ -287,19 +438,24 @@ def reconcile_stale_issues(
 
         fetch_issue = fetch_issue_rest
 
-    watched = set(watched_labels)
+    watched = set(watched_labels) & set(LIVE_STATE_LABELS)
     stale: list[StaleIssue] = []
     for candidate in candidates:
         payload = fetch_issue(candidate.number, repo=repo)
         if payload.get("status") != "ok":
             error = payload.get("error", "unknown error")
             raise RuntimeError(f"Failed to read issue {candidate.number}: {error}")
-        if _is_pull_request_url(payload.get("url")):
+        try:
+            validate_issue_identity(payload, repo=repo, number=candidate.number)
+            labels = _label_names(payload.get("labels"))
+        except ValueError as exc:
+            raise RuntimeError(f"Malformed issue {candidate.number} response: {exc}") from exc
+        if payload["is_pull_request"]:
             continue
-        if str(payload.get("state", "")).lower() != "closed":
+        if payload["state"] != "CLOSED":
             continue
 
-        matching_labels = _label_names(payload.get("labels")) & watched
+        matching_labels = labels & watched
         if not matching_labels:
             continue
 
@@ -322,10 +478,9 @@ def build_view_command(*, repo: str, number: int) -> list[str]:
     field that breaks ``gh issue view --json`` on some CLI versions (issue #5269).
     """
     return [
-        "uv",
-        "run",
-        "python",
-        "scripts/dev/gh_issue_rest.py",
+        sys.executable,
+        "-m",
+        "scripts.dev.gh_issue_rest",
         "view",
         str(number),
         "--repo",
@@ -334,41 +489,8 @@ def build_view_command(*, repo: str, number: int) -> list[str]:
         "number",
         "state",
         "url",
+        "is_pull_request",
     ]
-
-
-def build_remove_label_command(*, repo: str, number: int, label: str) -> list[str]:
-    """Build the verified REST label-helper command for one issue label."""
-    return [
-        "uv",
-        "run",
-        "python",
-        "-m",
-        "scripts.dev.gh_pr_label_rest",
-        "remove",
-        str(number),
-        "--repo",
-        repo,
-        "--label",
-        label,
-    ]
-
-
-def _run_gh_command(command: list[str]) -> str:
-    """Run the REST label helper command and map failures to RuntimeError."""
-    try:
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
-    except FileNotFoundError as exc:
-        raise RuntimeError(
-            "REST label helper command was not found; install uv and Python or add them to PATH."
-        ) from exc
-    except subprocess.CalledProcessError as exc:
-        stderr = (exc.stderr or "").strip()
-        details = f": {stderr}" if stderr else ""
-        raise RuntimeError(
-            f"REST label helper command failed ({' '.join(command)}){details}"
-        ) from exc
-    return result.stdout or ""
 
 
 def confirm_issue_closed(*, repo: str, number: int) -> bool:
@@ -386,9 +508,98 @@ def confirm_issue_closed(*, repo: str, number: int) -> bool:
     if payload.get("status") != "ok":
         error = payload.get("error", "unknown error")
         raise RuntimeError(f"Failed to read issue {number}: {error}")
-    if _is_pull_request_url(payload.get("url")):
+    try:
+        validate_issue_identity(payload, repo=repo, number=number)
+    except ValueError as exc:
+        raise RuntimeError(f"Malformed issue {number} response: {exc}") from exc
+    if payload["is_pull_request"]:
         return False
-    return str(payload.get("state", "")).lower() == "closed"
+    return payload["state"] == "CLOSED"
+
+
+def _remove_and_validate_label(
+    *,
+    repo: str,
+    remove_label: Any,
+    number: int,
+    label: str,
+) -> None:
+    """Remove one label and reject a result naming a different write."""
+    if remove_label is None:
+        result = gh_pr_label_rest.remove_label(number, label, repo=repo)
+    else:
+        result = remove_label(number, label)
+    try:
+        gh_pr_label_rest.validate_result_envelope(
+            result,
+            action="remove",
+            number=number,
+            repo=repo,
+            label=label,
+        )
+    except ValueError as exc:
+        raise RuntimeError(
+            f"REST label remove returned an invalid result for issue {number}, "
+            f"label {label!r}: {exc}"
+        ) from exc
+
+
+def _labels_to_remove(
+    issue: StaleIssue,
+    *,
+    repo: str,
+    watched: set[str],
+) -> list[str]:
+    """Validate a stale issue and return only canonical labels eligible for removal."""
+    try:
+        validate_issue_identity(
+            {
+                "number": issue.number,
+                "state": str(issue.state).upper(),
+                "url": issue.url,
+                "is_pull_request": False,
+            },
+            repo=repo,
+            number=issue.number,
+        )
+    except ValueError as exc:
+        raise RuntimeError(f"Malformed stale issue {issue.number}: {exc}") from exc
+    if any(type(label) is not str or not label.strip() for label in issue.stale_labels):
+        raise RuntimeError(f"Malformed stale labels for issue {issue.number}")
+    return sorted(set(issue.stale_labels) & watched)
+
+
+def _fix_one_stale_issue(
+    issue: StaleIssue,
+    *,
+    repo: str,
+    watched: set[str],
+    confirm_closed: Any,
+    remove_label: Any,
+) -> dict[str, Any] | None:
+    """Reconfirm and fix one stale issue, returning its action when applicable."""
+    labels_to_remove = _labels_to_remove(issue, repo=repo, watched=watched)
+    if not labels_to_remove:
+        return None
+    if not confirm_closed(repo=repo, number=issue.number):
+        return {
+            "number": issue.number,
+            "skipped": True,
+            "reason": "not_closed",
+            "removed_labels": [],
+        }
+    for label in labels_to_remove:
+        _remove_and_validate_label(
+            repo=repo,
+            remove_label=remove_label,
+            number=issue.number,
+            label=label,
+        )
+    return {
+        "number": issue.number,
+        "skipped": False,
+        "removed_labels": labels_to_remove,
+    }
 
 
 def fix_stale_issues(
@@ -405,37 +616,26 @@ def fix_stale_issues(
     removes labels in ``watched_labels`` (the single source of truth ``LIVE_STATE_LABELS``). Missing
     labels are tolerated by gh as a no-op. Returns a per-issue action log.
     """
+    unsupported_labels = sorted(set(watched_labels) - set(LIVE_STATE_LABELS))
+    if unsupported_labels:
+        raise ValueError(
+            "fix only supports live state labels: "
+            f"{', '.join(LIVE_STATE_LABELS)}; unsupported: {', '.join(unsupported_labels)}"
+        )
     watched = set(watched_labels)
-
-    def _default_remove(number: int, label: str) -> None:
-        _run_gh_command(build_remove_label_command(repo=repo, number=number, label=label))
-
-    remove = remove_label or _default_remove
 
     actions: list[dict[str, Any]] = []
     for issue in stale_issues:
-        labels_to_remove = sorted(set(issue.stale_labels) & watched)
-        if not labels_to_remove:
-            continue
-        if not confirm_closed(repo=repo, number=issue.number):
-            actions.append(
-                {
-                    "number": issue.number,
-                    "skipped": True,
-                    "reason": "not_closed",
-                    "removed_labels": [],
-                }
-            )
-            continue
-        for label in labels_to_remove:
-            remove(issue.number, label)
-        actions.append(
-            {
-                "number": issue.number,
-                "skipped": False,
-                "removed_labels": labels_to_remove,
-            }
+        action = _fix_one_stale_issue(
+            issue,
+            repo=repo,
+            watched=watched,
+            confirm_closed=confirm_closed,
+            remove_label=remove_label,
         )
+        if action is None:
+            continue
+        actions.append(action)
     return actions
 
 
@@ -538,7 +738,7 @@ def fetch_closed_issues_by_label(
     rows_by_label: dict[str, list[dict[str, object]]] = {}
     for label in labels:
         command = build_search_command(repo=repo, label=label, limit=limit)
-        rows_by_label[label] = _run_search_command(command)
+        rows_by_label[label] = _run_search_command(command, repo=repo)
     return rows_by_label
 
 
@@ -671,7 +871,11 @@ def main(argv: list[str] | None = None) -> int:
             limit=args.limit,
             max_rest_pages=args.max_rest_pages,
         )
-        candidates = collect_stale_issues(discovery.rows_by_label, watched_labels=labels)
+        candidates = collect_stale_issues(
+            discovery.rows_by_label,
+            repo=args.repo,
+            watched_labels=labels,
+        )
         stale_issues = reconcile_stale_issues(
             repo=args.repo,
             candidates=candidates,

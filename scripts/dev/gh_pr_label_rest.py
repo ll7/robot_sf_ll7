@@ -59,6 +59,15 @@ LABEL_PAGE_CEILING = 10
 TRANSPORT_CONTRACT = get_transport_contract("gh_pr_label_rest.py")
 
 
+def _label_name_error(raw_name: object, *, context: str) -> str | None:
+    """Return a validation error for a label name, or ``None`` when it is safe to transport."""
+    if not isinstance(raw_name, str) or not raw_name.strip():
+        return f"{context} must be non-empty text"
+    if not raw_name.isprintable():
+        return f"{context} must be printable text"
+    return None
+
+
 def _is_absent_label_delete(result: subprocess.CompletedProcess[str]) -> bool:
     """Recognize only GitHub's idempotent missing-label DELETE response."""
     if result.returncode == 0:
@@ -70,6 +79,7 @@ def _is_absent_label_delete(result: subprocess.CompletedProcess[str]) -> bool:
 def _get_label_names(number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30) -> dict[str, Any]:
     """Return a complete, strictly validated label inventory, or an error dict."""
     names: list[str] = []
+    seen_names: set[str] = set()
     for page in range(1, LABEL_PAGE_CEILING + 1):
         path = f"repos/{repo}/issues/{number}/labels?per_page={LABEL_PAGE_SIZE}&page={page}"
         result = _gh_api_get(path, timeout=timeout)
@@ -96,12 +106,24 @@ def _get_label_names(number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30
                     "status": "error",
                     "error": f"malformed label row on page {page}: expected an object",
                 }
-            name = row.get("name")
-            if not isinstance(name, str) or not name.strip():
+            raw_name = row.get("name")
+            if (
+                name_error := _label_name_error(
+                    raw_name, context=f"malformed label row on page {page}: name"
+                )
+            ) is not None:
                 return {
                     "status": "error",
-                    "error": f"malformed label row on page {page}: name must be non-empty text",
+                    "error": name_error,
                 }
+            assert isinstance(raw_name, str)
+            name = raw_name
+            if name in seen_names:
+                return {
+                    "status": "error",
+                    "error": f"duplicate label row on page {page}: {name!r}",
+                }
+            seen_names.add(name)
             names.append(name)
         if len(data) < LABEL_PAGE_SIZE:
             return {"status": "ok", "labels": names}
@@ -113,7 +135,7 @@ def _get_label_names(number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30
 
 def get_label_names(number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30) -> dict[str, Any]:
     """Read the complete current label inventory for an issue or pull request."""
-    if number < 1:
+    if type(number) is not int or number < 1:
         return {"status": "error", "error": f"issue/PR number must be positive, got {number}"}
     return _get_label_names(number, repo=repo, timeout=timeout)
 
@@ -130,6 +152,82 @@ def list_labels(number: int, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
         "repo": repo,
         "labels": result["labels"],
     }
+
+
+def validate_result_envelope(
+    result: object,
+    *,
+    action: str,
+    number: int,
+    repo: str,
+    label: str | None = None,
+) -> dict[str, Any]:
+    """Validate a successful CLI result before an orchestrator trusts it.
+
+    Shell callers and direct library callers use the same contract: a success
+    result must identify the operation, exact issue/PR number, repository, and
+    label where applicable. List results additionally require a distinct,
+    non-empty string inventory.
+    """
+    if action not in {"list", "add", "remove"}:
+        raise ValueError(f"unsupported label helper action {action!r}")
+    _validate_result_identity(result, action=action, number=number, repo=repo)
+    if action == "list":
+        _validate_list_result(result)
+    else:
+        _validate_write_result(result, label=label)
+    return result
+
+
+def _validate_result_identity(result: object, *, action: str, number: int, repo: str) -> None:
+    """Validate the common identity fields in a successful label result."""
+    if not isinstance(result, dict):
+        raise ValueError("label helper result must be a JSON object")
+    if result.get("status") != "ok":
+        raise ValueError(f"label helper result status must be ok, got {result.get('status')!r}")
+    if type(number) is not int or number < 1:
+        raise ValueError(f"expected issue/PR number must be a positive integer, got {number!r}")
+    if result.get("action") != action:
+        raise ValueError(
+            f"label helper result action does not match request "
+            f"({result.get('action')!r} != {action!r})"
+        )
+    if type(result.get("number")) is not int or result.get("number") != number:
+        raise ValueError(
+            f"label helper result number does not match request "
+            f"({result.get('number')!r} != {number})"
+        )
+    if result.get("repo") != repo:
+        raise ValueError(
+            f"label helper result repository does not match request "
+            f"({result.get('repo')!r} != {repo!r})"
+        )
+
+
+def _validate_list_result(result: dict[str, Any]) -> None:
+    """Validate the label inventory in a successful list result."""
+    labels = result.get("labels")
+    if not isinstance(labels, list):
+        raise ValueError("label helper list result labels must be a list")
+    for name in labels:
+        if (
+            name_error := _label_name_error(name, context="label helper list result labels")
+        ) is not None:
+            raise ValueError(name_error)
+    if len(set(labels)) != len(labels):
+        raise ValueError("label helper list result labels must be distinct")
+
+
+def _validate_write_result(result: dict[str, Any], *, label: str | None) -> None:
+    """Validate the requested label in a successful add/remove result."""
+    label_error = _label_name_error(label, context="expected label")
+    if label_error is not None:
+        raise ValueError(label_error)
+    if result.get("label") != label:
+        raise ValueError(
+            f"label helper result label does not match request "
+            f"({result.get('label')!r} != {label!r})"
+        )
 
 
 def _guarded_merge_ready_write(
@@ -190,10 +288,11 @@ def add_label(
     Returns a compact success or error payload rather than raising so shell callers
     receive a deterministic exit status and an actionable error message.
     """
-    if number < 1:
+    if type(number) is not int or number < 1:
         return {"status": "error", "error": f"issue/PR number must be positive, got {number}"}
-    if not label:
-        return {"status": "error", "error": "label must be a non-empty string"}
+    label_error = _label_name_error(label, context="label")
+    if label_error is not None:
+        return {"status": "error", "error": label_error}
 
     def _write() -> dict[str, Any]:
         """Apply and verify one label after any required PR preflight."""
@@ -245,10 +344,11 @@ def remove_label(number: int, label: str, *, repo: str = DEFAULT_REPO) -> dict[s
     Returns a compact success or error payload rather than raising so shell callers
     receive a deterministic exit status and an actionable error message.
     """
-    if number < 1:
+    if type(number) is not int or number < 1:
         return {"status": "error", "error": f"issue/PR number must be positive, got {number}"}
-    if not label:
-        return {"status": "error", "error": "label must be a non-empty string"}
+    label_error = _label_name_error(label, context="label")
+    if label_error is not None:
+        return {"status": "error", "error": label_error}
 
     path = f"repos/{repo}/issues/{number}/labels/{quote(label, safe='')}"
     result = _gh_api_delete(path)
@@ -325,6 +425,18 @@ def main(argv: list[str] | None = None) -> int:
         )
     else:
         result = remove_label(args.number, args.label, repo=args.repo)
+
+    if result.get("status") == "ok":
+        try:
+            validate_result_envelope(
+                result,
+                action=args.action,
+                number=args.number,
+                repo=args.repo,
+                label=args.label,
+            )
+        except ValueError as exc:
+            result = {"status": "error", "error": f"invalid label helper result: {exc}"}
 
     stream = sys.stdout if result["status"] == "ok" else sys.stderr
     print(json.dumps(result, sort_keys=True), file=stream)

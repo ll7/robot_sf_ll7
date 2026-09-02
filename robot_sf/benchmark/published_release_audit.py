@@ -57,6 +57,19 @@ DEFAULT_MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024
 ERRATUM_CUSTODY_ASSET = "publication_custody.json"
 ERRATUM_MANIFEST_ASSET = "publication_manifest.json"
 ERRATUM_CHECKSUMS_ASSET = "checksums.sha256"
+ERRATUM_REPOSITORY_URL = "https://github.com/ll7/robot_sf_ll7"
+_ERRATUM_CURRENT_TAG_KEYS = (
+    "release_tag",
+    "release_id",
+    "benchmark_release_tag",
+    "benchmark_release_id",
+)
+_ERRATUM_CURRENT_DOI_KEYS = ("doi", "version_doi")
+_ERRATUM_OPTIONAL_DOCUMENTS = (
+    "campaign_manifest.json",
+    "manifest.json",
+    "run_meta.json",
+)
 
 _DOI_RE = re.compile(r"^10\.5281/zenodo\.\d+$")
 _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -297,7 +310,398 @@ def _read_json_mapping(path: Path, *, label: str) -> Mapping[str, Any]:
     return payload
 
 
-def _verify_erratum_bundle_inventory(bundle_root: Path) -> dict[str, Any]:
+def _normalise_erratum_manifest_path(value: Any, *, label: str) -> str:
+    """Return a safe payload-relative path from one manifest file entry."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} path is missing")
+    relative = value.strip().removeprefix("payload/")
+    candidate = Path(relative)
+    if (
+        not relative
+        or candidate.is_absolute()
+        or not candidate.parts
+        or any(part in {"", ".", ".."} for part in candidate.parts)
+        or "\\" in relative
+        or "\x00" in relative
+    ):
+        raise ValueError(f"{label} path is unsafe")
+    return candidate.as_posix()
+
+
+def _assert_erratum_url_mapping(
+    mapping: Mapping[str, Any],
+    *,
+    label: str,
+    tag: str,
+    doi: str,
+    repository_url: str,
+    archive_name: str,
+    require_coordinates: bool,
+) -> None:
+    """Bind present release/tag/DOI URL aliases to one requested publication."""
+    tag_values = [mapping[key] for key in _ERRATUM_CURRENT_TAG_KEYS if key in mapping]
+    doi_values = [mapping[key] for key in _ERRATUM_CURRENT_DOI_KEYS if key in mapping]
+    if require_coordinates and not tag_values:
+        raise ValueError(f"{label} is missing its release tag")
+    if require_coordinates and not doi_values:
+        raise ValueError(f"{label} is missing its version DOI")
+    if require_coordinates and "release_url" not in mapping:
+        raise ValueError(f"{label} is missing its release URL")
+    if any(value != tag for value in tag_values):
+        raise ValueError(f"{label} release tag is not bound to the requested tag")
+    if any(value != doi for value in doi_values):
+        raise ValueError(f"{label} version DOI is not bound to the requested DOI")
+
+    expected_release_url = f"{repository_url}/releases/tag/{tag}"
+    expected_asset_url = f"{repository_url}/releases/download/{tag}/{archive_name}"
+    expected_doi_url = f"https://doi.org/{doi}"
+    url_values = {
+        "release_url": expected_release_url,
+        "release_asset_url": expected_asset_url,
+        "doi_url": expected_doi_url,
+    }
+    for key, expected in url_values.items():
+        if key in mapping and mapping[key] != expected:
+            raise ValueError(f"{label}.{key} is not bound to the requested release")
+
+
+def _verify_erratum_manifest_coordinates(
+    manifest: Mapping[str, Any], *, bundle_root: Path, archive_name: str, tag: str, doi: str
+) -> None:
+    """Validate publication-channel, bundle, and release URL identity."""
+    channels = manifest.get("publication_channels")
+    if not isinstance(channels, Mapping):
+        raise ValueError("erratum publication manifest publication_channels is missing")
+    repository_url = channels.get("repository_url")
+    if repository_url != ERRATUM_REPOSITORY_URL:
+        raise ValueError("erratum publication channels repository URL is not canonical")
+    _assert_erratum_url_mapping(
+        channels,
+        label="erratum publication_channels",
+        tag=tag,
+        doi=doi,
+        repository_url=ERRATUM_REPOSITORY_URL,
+        archive_name=archive_name,
+        require_coordinates=True,
+    )
+    if manifest.get("bundle_name") != bundle_root.name:
+        raise ValueError("erratum publication manifest bundle name is stale")
+    for key in ("bundle", "release"):
+        value = manifest.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, Mapping):
+            raise ValueError(f"erratum publication manifest {key} must be an object")
+        _assert_erratum_url_mapping(
+            value,
+            label=f"erratum publication manifest {key}",
+            tag=tag,
+            doi=doi,
+            repository_url=ERRATUM_REPOSITORY_URL,
+            archive_name=archive_name,
+            require_coordinates=False,
+        )
+
+
+def _verify_erratum_manifest_entry(
+    raw_entry: Any,
+    *,
+    index: int,
+    bundle_root: Path,
+    payload_files: set[str],
+    checksums: Mapping[str, str],
+) -> tuple[str, int]:
+    """Validate one publication-manifest entry against its payload bytes.
+
+    Returns:
+        The normalized payload path and its verified byte size.
+    """
+    label = f"erratum publication manifest files[{index}]"
+    if not isinstance(raw_entry, Mapping):
+        raise ValueError(f"{label} must be an object")
+    relative = _normalise_erratum_manifest_path(raw_entry.get("path"), label=label)
+    if relative not in {path.removeprefix("payload/") for path in payload_files}:
+        raise ValueError(f"{label} names a missing payload file: {relative}")
+    path = bundle_root / "payload" / relative
+    declared_size = raw_entry.get("size_bytes")
+    if isinstance(declared_size, bool) or not isinstance(declared_size, int) or declared_size < 0:
+        raise ValueError(f"{label} has an invalid size_bytes value")
+    actual_size = path.stat().st_size
+    if declared_size != actual_size:
+        raise ValueError(f"{label} size_bytes disagrees with payload bytes for {relative}")
+    declared_digest = raw_entry.get("sha256")
+    if not isinstance(declared_digest, str) or _SHA256_RE.fullmatch(declared_digest) is None:
+        raise ValueError(f"{label} has an invalid sha256 value")
+    actual_digest = sha256_file(path)
+    if declared_digest.lower() != actual_digest:
+        raise ValueError(f"{label} sha256 disagrees with payload bytes for {relative}")
+    checksum_path = f"payload/{relative}"
+    if checksums.get(checksum_path) != actual_digest:
+        raise ValueError(f"{label} sha256 disagrees with checksums.sha256 for {relative}")
+    return relative, declared_size
+
+
+def _verify_erratum_manifest_files(
+    manifest: Mapping[str, Any],
+    *,
+    bundle_root: Path,
+    payload_files: set[str],
+    checksums: Mapping[str, str],
+) -> dict[str, Any]:
+    """Authenticate every publication-manifest file entry against payload bytes.
+
+    Returns:
+        Verified file-count and byte-total observations.
+    """
+    manifest_files = manifest.get("files")
+    if not isinstance(manifest_files, list):
+        raise ValueError("erratum publication manifest files must be a list")
+    payload_relative_files = {path.removeprefix("payload/") for path in payload_files}
+    observed_entries: set[str] = set()
+    declared_bytes = 0
+    for index, raw_entry in enumerate(manifest_files):
+        label = f"erratum publication manifest files[{index}]"
+        relative, declared_size = _verify_erratum_manifest_entry(
+            raw_entry,
+            index=index,
+            bundle_root=bundle_root,
+            payload_files=payload_files,
+            checksums=checksums,
+        )
+        if relative in observed_entries:
+            raise ValueError(f"{label} repeats {relative!r}")
+        observed_entries.add(relative)
+        declared_bytes += declared_size
+
+    if observed_entries != payload_relative_files:
+        raise ValueError("erratum publication manifest files differ from the payload inventory")
+    totals = manifest.get("totals")
+    if not isinstance(totals, Mapping):
+        raise ValueError("erratum publication manifest totals must be an object")
+    if (
+        totals.get("file_count") != len(observed_entries)
+        or totals.get("total_bytes") != declared_bytes
+    ):
+        raise ValueError("erratum publication manifest totals disagree with file entries")
+    return {
+        "file_count": len(observed_entries),
+        "total_bytes": declared_bytes,
+    }
+
+
+def _assert_cold_current_aliases(
+    payload: Mapping[str, Any],
+    *,
+    label: str,
+    tag: str,
+    doi: str,
+    concept_doi: str,
+    required: bool,
+) -> None:
+    """Reject predecessor coordinates in one current-publication mapping."""
+    tag_values = [payload[key] for key in _ERRATUM_CURRENT_TAG_KEYS if key in payload]
+    doi_values = [payload[key] for key in _ERRATUM_CURRENT_DOI_KEYS if key in payload]
+    if required and not tag_values:
+        raise ValueError(f"{label} is missing its current release tag")
+    if required and not doi_values:
+        raise ValueError(f"{label} is missing its current version DOI")
+    if any(value != tag for value in tag_values):
+        raise ValueError(f"{label} contains a stale release-tag alias")
+    if any(value != doi for value in doi_values):
+        raise ValueError(f"{label} contains a stale version-DOI alias")
+    if "concept_doi" in payload and payload["concept_doi"] != concept_doi:
+        raise ValueError(f"{label} contains an invalid concept-DOI alias")
+    provenance = payload.get("provenance")
+    if isinstance(provenance, Mapping):
+        _assert_cold_current_aliases(
+            provenance,
+            label=f"{label}.provenance",
+            tag=tag,
+            doi=doi,
+            concept_doi=concept_doi,
+            required=False,
+        )
+
+
+def _assert_cold_publication_mapping(
+    payload: Mapping[str, Any],
+    *,
+    label: str,
+    tag: str,
+    doi: str,
+    concept_doi: str,
+    predecessor_doi: str,
+    required: bool,
+) -> None:
+    """Validate a nested ``publication`` mapping in a downloaded document."""
+    publication = payload.get("publication")
+    if publication is None and not required:
+        return
+    if not isinstance(publication, Mapping):
+        raise ValueError(f"{label}.publication must be an object")
+    _assert_cold_current_aliases(
+        publication,
+        label=f"{label}.publication",
+        tag=tag,
+        doi=doi,
+        concept_doi=concept_doi,
+        required=True,
+    )
+    if publication.get("predecessor_version_doi") != predecessor_doi:
+        raise ValueError(f"{label}.publication contains a stale predecessor DOI alias")
+
+
+def _assert_cold_predecessor_aliases(
+    payload: Mapping[str, Any],
+    *,
+    label: str,
+    predecessor_tag: str,
+    predecessor_doi: str,
+    concept_doi: str,
+    source_sha: str,
+) -> None:
+    """Validate an explicitly preserved scientific-execution identity."""
+    tags = [payload[key] for key in _ERRATUM_CURRENT_TAG_KEYS if key in payload]
+    dois = [payload[key] for key in _ERRATUM_CURRENT_DOI_KEYS if key in payload]
+    if not tags or any(value != predecessor_tag for value in tags):
+        raise ValueError(f"{label} contains an invalid predecessor tag alias")
+    if not dois or any(value != predecessor_doi for value in dois):
+        raise ValueError(f"{label} contains an invalid predecessor DOI alias")
+    if "concept_doi" in payload and payload["concept_doi"] != concept_doi:
+        raise ValueError(f"{label} contains an invalid predecessor concept DOI")
+    for key in ("source_sha", "source_commit", "scientific_source_sha"):
+        if key in payload and payload[key] != source_sha:
+            raise ValueError(f"{label} contains an invalid scientific source SHA")
+    provenance = payload.get("provenance")
+    if isinstance(provenance, Mapping) and any(
+        key in provenance
+        for key in (*_ERRATUM_CURRENT_TAG_KEYS, *_ERRATUM_CURRENT_DOI_KEYS, "concept_doi")
+    ):
+        _assert_cold_predecessor_aliases(
+            provenance,
+            label=f"{label}.provenance",
+            predecessor_tag=predecessor_tag,
+            predecessor_doi=predecessor_doi,
+            concept_doi=concept_doi,
+            source_sha=source_sha,
+        )
+
+
+def _assert_cold_publication_document(
+    payload: Mapping[str, Any],
+    *,
+    label: str,
+    tag: str,
+    doi: str,
+    predecessor_doi: str,
+    predecessor_tag: str,
+    concept_doi: str,
+    source_sha: str,
+) -> None:
+    """Audit current and explicitly preserved identities in one JSON document."""
+    _assert_cold_current_aliases(
+        payload,
+        label=label,
+        tag=tag,
+        doi=doi,
+        concept_doi=concept_doi,
+        required=False,
+    )
+    _assert_cold_publication_mapping(
+        payload,
+        label=label,
+        tag=tag,
+        doi=doi,
+        concept_doi=concept_doi,
+        predecessor_doi=predecessor_doi,
+        required=False,
+    )
+    for key in ("benchmark_release", "resolved_manifest", "campaign"):
+        current = payload.get(key)
+        if not isinstance(current, Mapping):
+            continue
+        _assert_cold_current_aliases(
+            current,
+            label=f"{label}.{key}",
+            tag=tag,
+            doi=doi,
+            concept_doi=concept_doi,
+            required=True,
+        )
+        _assert_cold_publication_mapping(
+            current,
+            label=f"{label}.{key}",
+            tag=tag,
+            doi=doi,
+            concept_doi=concept_doi,
+            predecessor_doi=predecessor_doi,
+            required=True,
+        )
+    for key in (
+        "scientific_execution_benchmark_release",
+        "scientific_execution_resolved_manifest",
+        "scientific_execution_release_identity",
+    ):
+        execution = payload.get(key)
+        if isinstance(execution, Mapping):
+            _assert_cold_predecessor_aliases(
+                execution,
+                label=f"{label}.{key}",
+                predecessor_tag=predecessor_tag,
+                predecessor_doi=predecessor_doi,
+                concept_doi=concept_doi,
+                source_sha=source_sha,
+            )
+
+
+def _verify_erratum_cold_publication_documents(
+    campaign_root: Path,
+    *,
+    tag: str,
+    doi: str,
+    predecessor_tag: str,
+    predecessor_doi: str,
+    concept_doi: str,
+    source_sha: str,
+) -> dict[str, Any]:
+    """Audit copied optional/current release documents after archive extraction.
+
+    Returns:
+        The list of copied documents checked successfully.
+    """
+    checked: list[str] = []
+    relative_documents = (
+        *_ERRATUM_OPTIONAL_DOCUMENTS,
+        "release/release_manifest.resolved.json",
+        "release/release_result.json",
+        "reports/campaign_summary.json",
+    )
+    for relative in relative_documents:
+        path = campaign_root / relative
+        if path.is_symlink():
+            raise ValueError(f"published {relative} must not be a symlink")
+        if not path.exists():
+            continue
+        if not path.is_file():
+            raise ValueError(f"published {relative} is not a regular file")
+        document = _read_json_mapping(path, label=f"published {relative}")
+        _assert_cold_publication_document(
+            document,
+            label=f"published {relative}",
+            tag=tag,
+            doi=doi,
+            predecessor_doi=predecessor_doi,
+            predecessor_tag=predecessor_tag,
+            concept_doi=concept_doi,
+            source_sha=source_sha,
+        )
+        checked.append(relative)
+    return {"status": "pass", "checked_documents": checked}
+
+
+def _verify_erratum_bundle_inventory(
+    bundle_root: Path, *, archive_name: str, tag: str, doi: str
+) -> dict[str, Any]:
     """Authenticate the exact manifest/checksum/payload member inventory.
 
     Returns:
@@ -342,21 +746,21 @@ def _verify_erratum_bundle_inventory(bundle_root: Path) -> dict[str, Any]:
     expected_files = payload_files | allowed_root_files
     if actual_files != expected_files:
         raise ValueError("erratum archive contains an unlisted or missing bundle member")
-
-    manifest_files = manifest.get("files")
-    if not isinstance(manifest_files, list):
-        raise ValueError("erratum publication manifest files must be a list")
-    totals = manifest.get("totals")
-    if not isinstance(totals, Mapping):
-        raise ValueError("erratum publication manifest totals must be an object")
-    payload_bytes = sum((bundle_root / path).stat().st_size for path in payload_files)
-    if totals.get("file_count") != len(payload_files) or totals.get("total_bytes") != payload_bytes:
-        raise ValueError("erratum publication manifest totals disagree with the payload")
+    _verify_erratum_manifest_coordinates(
+        manifest, bundle_root=bundle_root, archive_name=archive_name, tag=tag, doi=doi
+    )
+    manifest_totals = _verify_erratum_manifest_files(
+        manifest,
+        bundle_root=bundle_root,
+        payload_files=payload_files,
+        checksums=checksums,
+    )
     return {
         "status": "pass",
         "preflight_status": preflight.get("status"),
         "payload_file_count": len(payload_files),
-        "payload_bytes": payload_bytes,
+        "payload_bytes": manifest_totals["total_bytes"],
+        "manifest_file_count": manifest_totals["file_count"],
         "publication_manifest_sha256": sha256_file(manifest_path),
         "checksums_sha256": sha256_file(bundle_root / ERRATUM_CHECKSUMS_ASSET),
     }
@@ -559,7 +963,9 @@ def _verify_canonical_erratum_bundle(
     assets_by_name = _erratum_external_assets(github_assets, source_sha=source_sha)
     assert source_sha is not None
     _compare_erratum_sidecars(bundle_root, assets_by_name)
-    inventory = _verify_erratum_bundle_inventory(bundle_root)
+    inventory = _verify_erratum_bundle_inventory(
+        bundle_root, archive_name=bundle.name, tag=tag, doi=doi
+    )
     receipt_path, metadata_path = _erratum_identity_paths(bundle_root, relative_members)
     try:
         receipt = validate_erratum_receipt_against_campaign(
@@ -579,7 +985,36 @@ def _verify_canonical_erratum_bundle(
         receipt_path=receipt_path,
         source_sha=source_sha,
     )
-    return {"inventory": inventory, "receipt": receipt, "custody": custody}
+    embedded_receipt = _read_json_mapping(receipt_path, label="embedded erratum receipt")
+    supersedes = embedded_receipt.get("supersedes")
+    if not isinstance(supersedes, Mapping):
+        raise ValueError("embedded erratum receipt lacks predecessor identity")
+    predecessor_tag = supersedes.get("github_release_tag")
+    predecessor_doi = (
+        receipt.get("predecessor_version_doi")
+        or embedded_receipt.get("predecessor_version_doi")
+        or supersedes.get("version_doi")
+    )
+    concept_doi = receipt.get("concept_doi") or embedded_receipt.get("concept_doi")
+    if not isinstance(predecessor_tag, str) or not isinstance(predecessor_doi, str):
+        raise ValueError("embedded erratum receipt has an invalid predecessor identity")
+    if not isinstance(concept_doi, str):
+        raise ValueError("embedded erratum receipt has an invalid concept DOI")
+    cold_documents = _verify_erratum_cold_publication_documents(
+        bundle_root / "payload",
+        tag=tag,
+        doi=doi,
+        predecessor_tag=predecessor_tag,
+        predecessor_doi=predecessor_doi,
+        concept_doi=concept_doi,
+        source_sha=source_sha,
+    )
+    return {
+        "inventory": inventory,
+        "receipt": receipt,
+        "cold_documents": cold_documents,
+        "custody": custody,
+    }
 
 
 def _verify_bundle(
@@ -625,6 +1060,7 @@ def _verify_bundle(
             )
             observations["erratum_bundle_inventory"] = proof["inventory"]
             observations["erratum"] = proof["receipt"]
+            observations["erratum_cold_documents"] = proof["cold_documents"]
             observations["erratum_custody"] = proof["custody"]
     except (OSError, ValueError) as exc:
         problems.append(str(exc))

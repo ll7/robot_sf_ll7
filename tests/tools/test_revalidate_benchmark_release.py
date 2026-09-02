@@ -252,6 +252,9 @@ def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
         == "release_metadata/zenodo_metadata.json"
     )
     assert resolved["provenance"]["scientific_execution_metadata_sha256"] == "c" * 64
+    assert resolved["publication"]["release_tag"] == new_tag
+    assert resolved["publication"]["version_doi"] == "10.5281/zenodo.22229999"
+    assert resolved["publication"]["predecessor_version_doi"] == "10.5281/zenodo.22227035"
     result = json.loads((campaign / "release/release_result.json").read_text(encoding="utf-8"))
     assert result["publication_preflight_status"] == "pass"
     assert result["publication_preflight_violations"] == []
@@ -259,10 +262,20 @@ def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
     assert result["derivation"]["builder_sha"] == "a" * 40
     assert result["benchmark_release"]["release_tag"] == new_tag
     assert result["benchmark_release"]["release_id"] == new_tag
+    assert result["benchmark_release"]["publication"]["release_tag"] == new_tag
+    assert result["benchmark_release"]["publication"]["version_doi"] == "10.5281/zenodo.22229999"
     assert result["scientific_execution_benchmark_release"]["release_tag"] == old_tag
     summary = json.loads((campaign / "reports/campaign_summary.json").read_text(encoding="utf-8"))
     assert summary["campaign"]["release_tag"] == new_tag
+    assert summary["campaign"]["publication"]["release_tag"] == new_tag
+    assert summary["campaign"]["publication"]["version_doi"] == "10.5281/zenodo.22229999"
     assert summary["campaign"]["scientific_execution_release_identity"]["release_tag"] == old_tag
+    for relative in ("campaign_manifest.json", "manifest.json", "run_meta.json"):
+        copied = json.loads((campaign / relative).read_text(encoding="utf-8"))
+        assert copied["publication"]["release_tag"] == new_tag
+        assert (
+            copied["benchmark_release"]["publication"]["version_doi"] == "10.5281/zenodo.22229999"
+        )
     assert launch.read_bytes() == launch_before
     assert (campaign / recovery.ERRATUM_METADATA_RELATIVE).read_bytes() == metadata.read_bytes()
 

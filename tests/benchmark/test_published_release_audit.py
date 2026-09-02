@@ -238,6 +238,9 @@ def _full_erratum_payload(
         metadata_sha256=sha256_file(metadata_path),
     )
     publication = {
+        "release_tag": successor_tag,
+        "release_id": successor_tag,
+        "doi": successor_doi,
         "concept_doi": concept_doi,
         "version_doi": successor_doi,
         "predecessor_version_doi": predecessor_doi,
@@ -381,6 +384,132 @@ def test_erratum_audit_runs_real_preflight_and_cold_validation(tmp_path: Path) -
     assert correction_receipt["scientific_equality"]["status"] == "identical"
 
 
+def test_erratum_audit_rejects_manifest_file_size_tampering(tmp_path: Path) -> None:
+    """A manifest entry cannot authenticate bytes with a false declared size."""
+    payload_files, _receipt, tag, doi = _full_erratum_payload(tmp_path)
+    entries = [
+        {
+            "path": relative,
+            "size_bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "kind": "provenance",
+        }
+        for relative, data in sorted(payload_files.items())
+    ]
+    entries[0]["size_bytes"] = int(entries[0]["size_bytes"]) + 1
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    _make_erratum_assets(
+        github,
+        zenodo,
+        source_sha="5" * 40,
+        tag=tag,
+        doi=doi,
+        payload_files=payload_files,
+        manifest_overrides={"files": entries},
+    )
+
+    result = audit_published(
+        tag=tag,
+        doi=doi,
+        github_dir=github,
+        zenodo_dir=zenodo,
+        source_sha="5" * 40,
+    )
+
+    assert result["status"] == "fail"
+    assert any(
+        "size_bytes disagrees with payload bytes" in problem for problem in result["problems"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        ("release_tag", "old-release", "release tag is not bound"),
+        (
+            "release_url",
+            "https://github.com/ll7/robot_sf_ll7/releases/tag/old-release",
+            "release_url is not bound",
+        ),
+    ],
+)
+def test_erratum_audit_rejects_tampered_publication_channel(
+    tmp_path: Path, field: str, value: str, expected: str
+) -> None:
+    """Publication-channel coordinates must match the requested tag and DOI."""
+    payload_files, _receipt, tag, doi = _full_erratum_payload(tmp_path)
+    channels = {
+        "repository_url": "https://github.com/ll7/robot_sf_ll7",
+        "release_tag": tag,
+        "release_url": f"https://github.com/ll7/robot_sf_ll7/releases/tag/{tag}",
+        "doi": doi,
+    }
+    channels[field] = value
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    _make_erratum_assets(
+        github,
+        zenodo,
+        source_sha="5" * 40,
+        tag=tag,
+        doi=doi,
+        payload_files=payload_files,
+        manifest_overrides={"publication_channels": channels},
+    )
+
+    result = audit_published(
+        tag=tag,
+        doi=doi,
+        github_dir=github,
+        zenodo_dir=zenodo,
+        source_sha="5" * 40,
+    )
+
+    assert result["status"] == "fail"
+    assert any(expected in problem for problem in result["problems"])
+
+
+@pytest.mark.parametrize("tamper", ["root_tag", "nested_doi"])
+def test_erratum_audit_rejects_stale_optional_publication_document(
+    tmp_path: Path, tamper: str
+) -> None:
+    """Copied optional metadata cannot retain predecessor tag or DOI aliases."""
+    payload_files, receipt, tag, doi = _full_erratum_payload(tmp_path)
+    predecessor = receipt["supersedes"]
+    predecessor_tag = str(predecessor["github_release_tag"])
+    predecessor_doi = str(predecessor["version_doi"])
+    document = json.loads(payload_files["release/release_manifest.resolved.json"])
+    if tamper == "root_tag":
+        document["release_tag"] = predecessor_tag
+    else:
+        document["publication"]["version_doi"] = predecessor_doi
+    payload_files["manifest.json"] = json.dumps(document, sort_keys=True).encode()
+
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    _make_erratum_assets(
+        github,
+        zenodo,
+        source_sha="5" * 40,
+        tag=tag,
+        doi=doi,
+        payload_files=payload_files,
+    )
+
+    result = audit_published(
+        tag=tag,
+        doi=doi,
+        github_dir=github,
+        zenodo_dir=zenodo,
+        source_sha="5" * 40,
+    )
+
+    assert result["status"] == "fail"
+    expected = "stale release-tag alias" if tamper == "root_tag" else "stale version-DOI alias"
+    assert any(expected in problem for problem in result["problems"])
+
+
 def test_cross_channel_byte_identity_passes(tmp_path: Path) -> None:
     github = tmp_path / "github"
     zenodo = tmp_path / "zenodo"
@@ -413,8 +542,13 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
         "schema_version": "benchmark-release-erratum-receipt.v1",
         "correction_id": "fixture-erratum.1",
         "correction_scope": "derived_publication_metadata_only",
-        "supersedes": {"version_doi": "10.5281/zenodo.7"},
-        "successor": {"version_doi": doi},
+        "supersedes": {
+            "version_doi": "10.5281/zenodo.7",
+            "github_release_tag": f"paper-matrix-v2-h600-s30-2026-09-{source_sha}",
+        },
+        "successor": {"version_doi": doi, "github_release_tag": tag},
+        "predecessor_version_doi": "10.5281/zenodo.7",
+        "concept_doi": "10.5281/zenodo.6",
         "scientific_equality": {"status": "identical"},
     }
     receipt_bytes = json.dumps(correction_receipt, sort_keys=True).encode()

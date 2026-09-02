@@ -2128,11 +2128,46 @@ def _rewrite_embedded_publication_identity(
             "metadata_sha256": contract.metadata_sha256,
         }
     )
+    updated["publication"] = _rewrite_publication_identity_mapping(
+        updated.get("publication"), contract=contract
+    )
     if isinstance(updated.get("provenance"), Mapping):
         updated["provenance"] = _rewrite_publication_provenance(
             updated["provenance"], contract=contract
         )
     return updated
+
+
+def _rewrite_publication_identity_mapping(
+    payload: Mapping[str, Any] | None, *, contract: ErratumContract
+) -> dict[str, Any]:
+    """Rewrite one nested current-publication identity mapping.
+
+    The nested mapping is a publication view, not execution provenance.  It is
+    therefore safe to add the complete coordinate set here: every copied
+    benchmark-release document gets the same machine-readable successor
+    identity while the separately named scientific-execution mappings retain
+    the predecessor coordinates.
+
+    Returns:
+        A copied mapping with canonical successor and predecessor coordinates.
+    """
+    publication = dict(payload) if isinstance(payload, Mapping) else {}
+    publication.update(
+        {
+            "release_tag": contract.successor_github_release_tag,
+            "release_id": contract.successor_github_release_tag,
+            "doi": contract.successor_version_doi,
+            "version_doi": contract.successor_version_doi,
+            "concept_doi": contract.concept_doi,
+            "predecessor_version_doi": contract.predecessor_version_doi,
+            "bundle_metadata_path": ERRATUM_METADATA_RELATIVE,
+            "metadata_path": ERRATUM_METADATA_RELATIVE,
+            "metadata_sha256": contract.metadata_sha256,
+            "correction_scope": "derived_publication_metadata_only",
+        }
+    )
+    return publication
 
 
 def _rewrite_resolved_manifest_publication_identity(
@@ -2150,17 +2185,17 @@ def _rewrite_resolved_manifest_publication_identity(
         resolved["concept_doi"] = contract.concept_doi
     provenance = _rewrite_publication_provenance(resolved.get("provenance"), contract=contract)
     resolved["provenance"] = provenance
-    resolved["publication"] = {
-        "channel": provenance.get("publication_channel", "direct_zenodo_benchmark_dataset"),
-        "concept_doi": contract.concept_doi,
-        "version_doi": contract.successor_version_doi,
-        "concept_record_id": contract.concept_doi.rsplit(".", 1)[-1],
-        "version_record_id": contract.successor_version_doi.rsplit(".", 1)[-1],
-        "bundle_metadata_path": ERRATUM_METADATA_RELATIVE,
-        "metadata_sha256": contract.metadata_sha256,
-        "correction_scope": "derived_publication_metadata_only",
-        "predecessor_version_doi": contract.predecessor_version_doi,
-    }
+    publication = _rewrite_publication_identity_mapping(
+        resolved.get("publication"), contract=contract
+    )
+    publication.update(
+        {
+            "channel": provenance.get("publication_channel", "direct_zenodo_benchmark_dataset"),
+            "concept_record_id": contract.concept_doi.rsplit(".", 1)[-1],
+            "version_record_id": contract.successor_version_doi.rsplit(".", 1)[-1],
+        }
+    )
+    resolved["publication"] = publication
     resolved["erratum"] = {
         "correction_id": contract.correction_id,
         "correction_scope": "derived_publication_metadata_only",
@@ -2196,6 +2231,25 @@ def _assert_successor_identity_fields(
         raise DerivedReleaseError(f"{label} does not name the successor concept DOI")
 
 
+def _assert_publication_identity_mapping(
+    payload: Mapping[str, Any], *, contract: ErratumContract, label: str
+) -> None:
+    """Require one nested current-publication mapping to be self-consistent."""
+    publication = payload.get("publication")
+    if not isinstance(publication, Mapping):
+        raise DerivedReleaseError(f"{label} lacks a nested publication identity mapping")
+    _assert_successor_identity_fields(publication, contract=contract, label=f"{label}.publication")
+    expected = {
+        "predecessor_version_doi": contract.predecessor_version_doi,
+        "bundle_metadata_path": ERRATUM_METADATA_RELATIVE,
+        "metadata_path": ERRATUM_METADATA_RELATIVE,
+        "metadata_sha256": contract.metadata_sha256,
+        "correction_scope": "derived_publication_metadata_only",
+    }
+    if any(publication.get(key) != value for key, value in expected.items()):
+        raise DerivedReleaseError(f"{label}.publication identity is stale")
+
+
 def _assert_resolved_erratum_provenance(provenance: Any, *, contract: ErratumContract) -> None:
     """Require one resolved manifest's provenance to use successor coordinates."""
     if not isinstance(provenance, Mapping):
@@ -2214,31 +2268,24 @@ def _assert_erratum_manifest_identities(campaign_root: Path, *, contract: Erratu
     """Check the resolved and copied manifest identity separations."""
     resolved = _read_json(campaign_root / "release" / "release_manifest.resolved.json")
     _assert_successor_identity_fields(resolved, contract=contract, label="resolved manifest")
+    _assert_publication_identity_mapping(resolved, contract=contract, label="resolved manifest")
     _assert_resolved_erratum_provenance(resolved.get("provenance"), contract=contract)
-    publication = resolved.get("publication")
-    if not isinstance(publication, Mapping) or any(
-        publication.get(key) != value
-        for key, value in {
-            "concept_doi": contract.concept_doi,
-            "version_doi": contract.successor_version_doi,
-            "predecessor_version_doi": contract.predecessor_version_doi,
-            "bundle_metadata_path": ERRATUM_METADATA_RELATIVE,
-            "metadata_sha256": contract.metadata_sha256,
-            "correction_scope": "derived_publication_metadata_only",
-        }.items()
-    ):
-        raise DerivedReleaseError("resolved manifest publication identity is stale")
 
     for relative in ("campaign_manifest.json", "manifest.json", "run_meta.json"):
         path = campaign_root / relative
         if not path.is_file():
             continue
         payload = _read_json(path)
+        _assert_successor_identity_fields(payload, contract=contract, label=relative)
+        _assert_publication_identity_mapping(payload, contract=contract, label=relative)
         benchmark_release = payload.get("benchmark_release")
         execution_release = payload.get("scientific_execution_benchmark_release")
         if not isinstance(benchmark_release, Mapping) or not isinstance(execution_release, Mapping):
             raise DerivedReleaseError(f"{relative} does not separate publication and execution")
         _assert_successor_identity_fields(
+            benchmark_release, contract=contract, label=f"{relative}.benchmark_release"
+        )
+        _assert_publication_identity_mapping(
             benchmark_release, contract=contract, label=f"{relative}.benchmark_release"
         )
         if execution_release.get("release_tag") != contract.predecessor_github_release_tag:
@@ -2253,6 +2300,7 @@ def _assert_erratum_release_result(campaign_root: Path, *, contract: ErratumCont
     """Check the successor result verdict and retained execution identity."""
     result = _read_json(campaign_root / "release" / "release_result.json")
     _assert_successor_identity_fields(result, contract=contract, label="release result")
+    _assert_publication_identity_mapping(result, contract=contract, label="release result")
     for current_key, execution_key in (
         ("benchmark_release", "scientific_execution_benchmark_release"),
         ("resolved_manifest", "scientific_execution_resolved_manifest"),
@@ -2262,6 +2310,9 @@ def _assert_erratum_release_result(campaign_root: Path, *, contract: ErratumCont
         if not isinstance(current, Mapping) or not isinstance(execution, Mapping):
             raise DerivedReleaseError(f"release result does not separate {current_key} identity")
         _assert_successor_identity_fields(
+            current, contract=contract, label=f"release result {current_key}"
+        )
+        _assert_publication_identity_mapping(
             current, contract=contract, label=f"release result {current_key}"
         )
         if execution.get("release_tag") != contract.predecessor_github_release_tag:
@@ -2303,10 +2354,17 @@ def _assert_erratum_summary(campaign_root: Path, *, contract: ErratumContract) -
     artifacts = summary.get("artifacts")
     if not all(isinstance(value, Mapping) for value in (summary_release, campaign, artifacts)):
         raise DerivedReleaseError("campaign summary lacks successor publication identity")
+    _assert_publication_identity_mapping(summary, contract=contract, label="campaign summary")
     _assert_successor_identity_fields(
         summary_release,
         contract=contract,
         label="campaign summary benchmark_release",
+    )
+    _assert_publication_identity_mapping(
+        summary_release, contract=contract, label="campaign summary benchmark_release"
+    )
+    _assert_publication_identity_mapping(
+        campaign, contract=contract, label="campaign summary.campaign"
     )
     expected_release_url = (
         "https://github.com/ll7/robot_sf_ll7/releases/tag/" + contract.successor_github_release_tag
@@ -2353,6 +2411,9 @@ def _rewrite_erratum_campaign_summary(campaign_root: Path, *, contract: ErratumC
     """Rewrite current publication coordinates while retaining execution identity."""
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     summary = _read_json(summary_path)
+    summary["publication"] = _rewrite_publication_identity_mapping(
+        summary.get("publication"), contract=contract
+    )
     summary_release = summary.get("benchmark_release")
     if isinstance(summary_release, Mapping):
         summary.setdefault("scientific_execution_benchmark_release", dict(summary_release))
@@ -2387,6 +2448,9 @@ def _rewrite_erratum_campaign_summary(campaign_root: Path, *, contract: ErratumC
                 + contract.successor_github_release_tag
             ),
         }
+    )
+    campaign["publication"] = _rewrite_publication_identity_mapping(
+        campaign.get("publication"), contract=contract
     )
     existing_asset_url = campaign.get("release_asset_url")
     if isinstance(existing_asset_url, str) and existing_asset_url.rsplit("/", 1)[-1]:
@@ -2456,6 +2520,9 @@ def _apply_erratum_publication_identity(
         payload["doi"] = contract.successor_version_doi
         payload["version_doi"] = contract.successor_version_doi
         payload["concept_doi"] = contract.concept_doi
+        payload["publication"] = _rewrite_publication_identity_mapping(
+            payload.get("publication"), contract=contract
+        )
         benchmark_release = payload.get("benchmark_release")
         if isinstance(benchmark_release, Mapping):
             payload.setdefault("scientific_execution_benchmark_release", dict(benchmark_release))
@@ -2475,6 +2542,9 @@ def _apply_erratum_publication_identity(
 
     result_path = campaign_root / "release" / "release_result.json"
     result = _read_json(result_path)
+    result["publication"] = _rewrite_publication_identity_mapping(
+        result.get("publication"), contract=contract
+    )
     benchmark_release = result.get("benchmark_release")
     if isinstance(benchmark_release, Mapping):
         result.setdefault("scientific_execution_benchmark_release", dict(benchmark_release))

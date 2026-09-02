@@ -1,0 +1,91 @@
+schema_version: dissertation_coverage_profile.v1
+consumer_id: ll7-diss-submission-2026
+repository: ll7/robot_sf_ll7
+
+anchor:
+  source_commit: b1d5ab6de708385c0828c99501a9d1c29727ec11
+  release_tag: paper-matrix-v2-h600-s30-2026-08-cd831d7582c1
+  release_doi: 10.5281/zenodo.22077448
+  campaign_id: paper_matrix_v2_h600_s30_2026_08_cd831d7582c1
+  planner_count: 14
+  scenario_cell_count: 48
+  seed_count: 30
+  expected_episode_count: 20160
+
+release_metadata:
+  manifest_path: configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml
+  manifest_sha256: 6b2fd25d185e01c28a9883ccec6b3716ee996a052b44dd89cc89c16f6c80a182
+  campaign_config_path: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml
+  campaign_config_sha256: aa3057faeeefbd2ced41e3e093da32d1705270330cb1c124bc0b3558f8f88afd
+
+source_packages:
+  - source_id: planner_development_funnel
+    path: docs/context/evidence/planner_development_funnel.v1.json
+    schema: planner_development_funnel.v1
+    sha256: c2f9c365fe1583d256f84a698f99ffc12f956df3754632c2020d3637375589ad
+    record_field: candidates
+    producer_issue: 8045
+    producer_pr: 8142
+    producer_merge_commit: f5eb7af664691561280f9dddc755faeb5035c8c4
+  - source_id: post_anchor_capability_delta
+    path: docs/context/evidence/post_anchor_capability_delta.v1.json
+    schema: post_anchor_capability_delta.v1
+    sha256: 5941b37252a952b0a5201828b110f3112601de141494d6f304e4b35df5ce1e5d
+    record_field: capabilities
+    producer_issue: 8046
+    producer_pr: 8138
+    producer_merge_commit: 31d40a3d0930f47fb65724d71638c81d2aaec446
+  - source_id: future_work_card_amv_actuation_realism_bridge
+    path: docs/context/evidence/future_work_cards/amv_actuation_realism_bridge.v1.json
+    schema: future_work_bridge_status_card.v1
+    sha256: 1ae39ff43de5456a0418faeb2a897972dac37c33b53dd5390ce9b1d98b7f71b4
+    record_field: root
+    producer_issue: 8048
+    producer_pr: 8137
+    producer_merge_commit: 55e6f91491f470cf3c455f8267602971518c398d
+  - source_id: future_work_card_carla_cross_simulator_bridge
+    path: docs/context/evidence/future_work_cards/carla_cross_simulator_bridge.v1.json
+    schema: future_work_bridge_status_card.v1
+    sha256: 734e8382d47310d14517ce80187653a6e282014a6fe90b8df96e63fa85257b81
+    record_field: root
+    producer_issue: 8048
+    producer_pr: 8137
+    producer_merge_commit: 55e6f91491f470cf3c455f8267602971518c398d
+  - source_id: future_work_card_incident_to_scenario_provenance
+    path: docs/context/evidence/future_work_cards/incident_to_scenario_provenance.v1.json
+    schema: future_work_bridge_status_card.v1
+    sha256: 2c02a7174b732fbe924a982abac11c177b750b73e9925861590dfba9263ec181
+    record_field: root
+    producer_issue: 8048
+    producer_pr: 8137
+    producer_merge_commit: 55e6f91491f470cf3c455f8267602971518c398d
+  - source_id: future_work_card_route_choice_homotopy_observability
+    path: docs/context/evidence/future_work_cards/route_choice_homotopy_observability.v1.json
+    schema: future_work_bridge_status_card.v1
+    sha256: 42d377e43cd50a8b276880e38f07fab17e620e040685549a324fcd73dd30a54b
+    record_field: root
+    producer_issue: 8048
+    producer_pr: 8137
+    producer_merge_commit: 55e6f91491f470cf3c455f8267602971518c398d
+
+# These are expected, explicit source-accounting gaps. The aggregate records
+# them; it never repairs or silently drops the source values.
+expected_source_reconciliation:
+  planner_roster:
+    source_only:
+      - scenario_adaptive_hybrid_orca_v1
+    release_manifest_only:
+      - scenario_adaptive_hybrid_orca_v2_bottleneck_yield
+  stale_owner_paths:
+    - source_id: future_work_card_incident_to_scenario_provenance
+      capability_id: incident_to_scenario_provenance
+      path: robot_sf/provenance/
+    - source_id: post_anchor_capability_delta
+      capability_id: carla_cross_simulator_bridge
+      path: scripts/carla/
+    - source_id: future_work_card_carla_cross_simulator_bridge
+      capability_id: carla_cross_simulator_bridge
+      path: scripts/carla/
+    - source_id: future_work_card_carla_cross_simulator_bridge
+      capability_id: carla_cross_simulator_bridge
+      path: docs/context/carla_replay_parity.md

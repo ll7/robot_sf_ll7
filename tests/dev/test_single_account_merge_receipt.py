@@ -1001,3 +1001,99 @@ def test_validate_mode_is_read_only(monkeypatch: pytest.MonkeyPatch, tmp_path: P
 def test_merge_authority_fixture_is_current() -> None:
     result = validate_merge_authority_fixture()
     assert result["passed"] is True, result
+
+
+def test_report_only_mode_writes_to_nested_output_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    receipt = _receipt()
+    nested_output = tmp_path / "deeply" / "nested" / "output" / "receipt.json"
+    assert not nested_output.parent.exists()
+
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (_live_evidence(receipt), None),
+    )
+
+    exit_code = receipt_module.main(
+        [
+            "--pr",
+            "42",
+            "--repo",
+            "owner/repo",
+            "--mode",
+            "report-only",
+            "--output",
+            str(nested_output),
+        ]
+    )
+    assert exit_code == 0
+    assert nested_output.exists()
+    written = json.loads(nested_output.read_text(encoding="utf-8"))
+    captured = json.loads(capsys.readouterr().out)
+    assert written == captured
+    assert written["status"] == "ready"
+    assert written["pr_number"] == 42
+
+
+def test_report_only_mode_fails_closed_on_unwritable_output_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    receipt = _receipt()
+    blocking_file = tmp_path / "file_blocking_dir"
+    blocking_file.write_text("not a directory", encoding="utf-8")
+    unwritable_output = blocking_file / "nested" / "receipt.json"
+
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (_live_evidence(receipt), None),
+    )
+
+    exit_code = receipt_module.main(
+        [
+            "--pr",
+            "42",
+            "--repo",
+            "owner/repo",
+            "--mode",
+            "report-only",
+            "--output",
+            str(unwritable_output),
+        ]
+    )
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["status"] == "error"
+    assert "failed to write output receipt" in payload["error"]
+
+
+def test_report_only_mode_fails_closed_on_invalid_output_path(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    receipt = _receipt()
+
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (_live_evidence(receipt), None),
+    )
+
+    exit_code = receipt_module.main(
+        [
+            "--pr",
+            "42",
+            "--repo",
+            "owner/repo",
+            "--mode",
+            "report-only",
+            "--output",
+            "\x00invalid",
+        ]
+    )
+    assert exit_code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "error"
+    assert "failed to write output receipt" in payload["error"]

@@ -1,5 +1,48 @@
 # Context Retrieval Index
 
+Issue #8222 obstacle-force compatibility boundary: preserves frozen/unversioned historical laws,
+separates the fast-pysf segment kernel from the vectorized planner point site, and defines the
+opt-in, domain-gated runtime correction boundary. This is a compatibility and implementation-context
+note only; it does not establish physical, safety, benchmark, or paper-facing evidence:
+[issue_8222_obstacle_force_compatibility.md](issue_8222_obstacle_force_compatibility.md).
+
+Public pedestrian goal and force prediction research: observation-only candidate generation,
+path-tangent/open-ray/unknown semantics, coverage-only evaluation, and the next held-out research
+directions. Current receipts are smoke evidence only:
+[pedestrian_goal_force_prediction_research.md](pedestrian_goal_force_prediction_research.md).
+
+Issue #8072 observation-only inverse goal-force estimator: causal H=1/H=2/H=3 estimates,
+actor-visible force reconstruction, covariance/censoring diagnostics, #8073 candidate-provider
+integration, reset-scoped tracking history, and a separate oracle upper bound. The deterministic
+fixture is implementation-integrity smoke only:
+[issue_8072_goal_force_inverse_dynamics.md](issue_8072_goal_force_inverse_dynamics.md).
+
+Issue #8243 additive `core_contract.v1` simulation-state boundary: identity aliases for existing
+frame, pose, observation, force, transition, and episode contracts plus frozen finite `SimTime`,
+`Twist2D`, and `ActorState` values. This is implementation-integrity evidence only; it does not
+migrate consumers or establish simulator, planner, benchmark, human-behaviour, or paper-facing
+claims:
+[core_contract_v1.md](core_contract_v1.md).
+
+Issue #8246 interaction-conditioned realism validation preregistration: a seven-class trajectory-
+window segmenter, per-class scorecard floors, calibration/held-out scene contract, and baseline
+hierarchy prepared before Stanford Drone Dataset (SDD) staging. Current evidence is synthetic and
+implementation-only; external-data execution remains blocked by #6530:
+[issue_8246_realism_validation_preregistration.md](issue_8246_realism_validation_preregistration.md).
+
+Issue #8205 observation-derived tracker goal-belief adapter: a default-off, actor-safe bridge
+from `PedestrianTrackingResult` to `GoalBeliefV1`, with stable track ordering, global-frame
+timing, explicit visibility/history masks, reset provenance, and smoke-only evidence. It does not
+claim tracking or prediction quality and does not accept simulator identity or true goals:
+[issue_8205_tracker_adapter_smoke.md](issue_8205_tracker_adapter_smoke.md).
+
+Issue #8068 observation-only one-frame goal-posterior baseline: strict public
+candidate sets, explicit unknown mass and entropy, stationary/ambiguous handling,
+and an oracle-labelled compatibility boundary. The deterministic fixture is
+implementation-integrity smoke only; it is not calibrated intention or planner
+benchmark evidence:
+[issue_8068_goal_posterior_actor_baseline.md](issue_8068_goal_posterior_actor_baseline.md).
+
 Issue #7889 force-coupled potential-field comparator: an opt-in experimental local planner with
 strict observation and occupancy-grid validation, bounded command-rate behavior, deterministic
 analytic smoke, and explicit implementation-only evidence boundaries. It does not establish

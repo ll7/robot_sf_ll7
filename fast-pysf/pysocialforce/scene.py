@@ -74,6 +74,76 @@ def normalize_integration_scheme(value: str | None) -> str:
     raise ValueError(f"Unsupported integration_scheme {value!r}. Supported values: {supported}.")
 
 
+@dataclass(frozen=True, slots=True)
+class PedestrianStepDiagnostics:
+    """Exact velocity-cap and position-integration values for one step."""
+
+    previous_velocity: np.ndarray
+    uncapped_velocity: np.ndarray
+    max_speed_mps: np.ndarray
+    uncapped_speed_mps: np.ndarray
+    cap_active: np.ndarray
+    applied_velocity: np.ndarray
+    position_velocity: np.ndarray
+    integration_scheme: str
+
+    def __post_init__(self) -> None:
+        """Validate and freeze all arrays so the snapshot cannot drift."""
+        arrays_2d = (
+            "previous_velocity",
+            "uncapped_velocity",
+            "applied_velocity",
+            "position_velocity",
+        )
+        arrays_1d = ("max_speed_mps", "uncapped_speed_mps", "cap_active")
+        converted: dict[str, np.ndarray] = {}
+        for field_name in (*arrays_2d, *arrays_1d):
+            value = np.asarray(getattr(self, field_name))
+            if field_name in arrays_2d:
+                if value.ndim != 2 or value.shape[1] != 2:
+                    raise ValueError(f"{field_name} must have shape (N, 2)")
+            elif value.ndim != 1:
+                raise ValueError(f"{field_name} must have shape (N,)")
+            if field_name != "cap_active" and not np.issubdtype(value.dtype, np.number):
+                raise TypeError(f"{field_name} must be numeric")
+            if field_name == "cap_active" and value.dtype != np.dtype(bool):
+                raise TypeError("cap_active must be boolean")
+            if field_name != "cap_active" and not np.all(np.isfinite(value)):
+                raise ValueError(f"{field_name} must be finite")
+            frozen = np.array(value, dtype=value.dtype, copy=True)
+            frozen.setflags(write=False)
+            converted[field_name] = frozen
+        row_count = converted["previous_velocity"].shape[0]
+        for field_name in arrays_2d:
+            if converted[field_name].shape[0] != row_count:
+                raise ValueError("diagnostic velocity arrays must have matching row counts")
+        for field_name in arrays_1d:
+            if converted[field_name].shape[0] != row_count:
+                raise ValueError("diagnostic scalar arrays must match velocity row count")
+        max_speeds = converted["max_speed_mps"]
+        if np.any(max_speeds < 0.0):
+            raise ValueError("max_speed_mps must be non-negative")
+        if not isinstance(self.integration_scheme, str):
+            raise TypeError("integration_scheme must be text")
+        normalized_scheme = normalize_integration_scheme(self.integration_scheme)
+        for field_name, value in converted.items():
+            object.__setattr__(self, field_name, value)
+        object.__setattr__(self, "integration_scheme", normalized_scheme)
+
+    def to_dict(self) -> dict[str, object]:
+        """Return JSON-safe diagnostic values."""
+        return {
+            "previous_velocity": self.previous_velocity.tolist(),
+            "uncapped_velocity": self.uncapped_velocity.tolist(),
+            "max_speed_mps": self.max_speed_mps.tolist(),
+            "uncapped_speed_mps": self.uncapped_speed_mps.tolist(),
+            "cap_active": self.cap_active.tolist(),
+            "applied_velocity": self.applied_velocity.tolist(),
+            "position_velocity": self.position_velocity.tolist(),
+            "integration_scheme": self.integration_scheme,
+        }
+
+
 class PedState:
     """Track pedestrian kinematic state and optional social groups."""
 
@@ -101,6 +171,7 @@ class PedState:
         # (``max_speeds``) from the spawn speed (issue #4972). When ``None`` the
         # legacy ``max_speed_multiplier * initial_speed`` derivation is used.
         self._explicit_desired_speeds: np.ndarray | None = None
+        self.last_step_diagnostics: PedestrianStepDiagnostics | None = None
         self.update(state, groups)
         # After the initial state is cached, optionally sample a decoupled
         # desired-speed distribution from the scene configuration.
@@ -234,43 +305,124 @@ class PedState:
         """Return the speeds corresponding to a given state."""
         return np.linalg.norm(self.vel(), axis=1)
 
-    def step(self, force, groups=None):
+    def compute_step_diagnostics(
+        self,
+        force,
+        *,
+        cap_epsilon: float = 0.0,
+    ) -> PedestrianStepDiagnostics:
+        """Preview one integration step without mutating pedestrian state.
+
+        Args:
+            force: Per-pedestrian force vectors.
+            cap_epsilon: Positive-speed threshold used by callers with a matching
+                integration implementation. The default preserves ``PedState``
+                capping semantics.
+
+        Returns:
+            The exact uncapped, capped, and position-integration values.
+        """
+        if not np.isfinite(cap_epsilon) or cap_epsilon < 0.0:
+            raise ValueError("cap_epsilon must be finite and non-negative")
+        force_array = np.asarray(force, dtype=float)
+        if force_array.shape != (self.size(), 2):
+            raise ValueError("force must have shape (N, 2) matching pedestrian state")
+        if not np.all(np.isfinite(force_array)):
+            raise ValueError("force must be finite for step diagnostics")
+        if self.max_speeds is None:
+            raise ValueError("max_speeds must be available for step diagnostics")
+        max_speeds = np.asarray(self.max_speeds, dtype=float)
+        if max_speeds.shape != (self.size(),) or not np.all(np.isfinite(max_speeds)):
+            raise ValueError("max_speeds must be finite with one value per pedestrian")
+        if np.any(max_speeds < 0.0):
+            raise ValueError("max_speeds must be non-negative")
+
+        previous_velocity = np.array(self.vel(), dtype=float, copy=True)
+        uncapped_velocity = previous_velocity + float(self.d_t) * force_array
+        uncapped_speed = np.linalg.norm(uncapped_velocity, axis=-1)
+        applied_velocity = self.capped_velocity(
+            uncapped_velocity,
+            max_speeds,
+            speed_epsilon=cap_epsilon,
+        )
+        cap_active = (uncapped_speed > max_speeds) & (uncapped_speed > cap_epsilon)
+        position_velocity = (
+            previous_velocity if self.integration_scheme == EXPLICIT_EULER else applied_velocity
+        )
+        return PedestrianStepDiagnostics(
+            previous_velocity=previous_velocity,
+            uncapped_velocity=uncapped_velocity,
+            max_speed_mps=max_speeds,
+            uncapped_speed_mps=uncapped_speed,
+            cap_active=cap_active,
+            applied_velocity=applied_velocity,
+            position_velocity=np.array(position_velocity, copy=True),
+            integration_scheme=self.integration_scheme,
+        )
+
+    def record_step_diagnostics(self, diagnostics: PedestrianStepDiagnostics) -> None:
+        """Retain a validated diagnostic snapshot for an explicit consumer."""
+        if type(diagnostics) is not PedestrianStepDiagnostics:
+            raise TypeError("diagnostics must be PedestrianStepDiagnostics")
+        if diagnostics.previous_velocity.shape != (self.size(), 2):
+            raise ValueError("diagnostics row count must match pedestrian state")
+        self.last_step_diagnostics = diagnostics
+
+    def step(self, force, groups=None, *, capture_diagnostics: bool = False):
         """Advance pedestrians by one integration step.
 
         Args:
             force: Per-pedestrian force vectors.
             groups: Optional updated group assignments.
+            capture_diagnostics: Retain exact velocity-cap and integration values.
         """
-        previous_velocity = self.vel().copy()
-        desired_velocity = previous_velocity + self.d_t * force
-        desired_velocity = self.capped_velocity(desired_velocity, self.max_speeds)
+        if not capture_diagnostics:
+            self.last_step_diagnostics = None
+        diagnostics = self.compute_step_diagnostics(force) if capture_diagnostics else None
+        if diagnostics is None:
+            previous_velocity = self.vel().copy()
+            desired_velocity = previous_velocity + self.d_t * force
+            desired_velocity = self.capped_velocity(desired_velocity, self.max_speeds)
+            position_velocity = (
+                previous_velocity if self.integration_scheme == EXPLICIT_EULER else desired_velocity
+            )
+        else:
+            previous_velocity = diagnostics.previous_velocity
+            desired_velocity = diagnostics.applied_velocity
+            position_velocity = diagnostics.position_velocity
+            self.last_step_diagnostics = diagnostics
         # stop when arrived
         # desired_velocity[stateutils.desired_directions(self.state)[1] < 0.5] = [0, 0]
 
         # update state
         next_state = self.state
-        position_velocity = (
-            previous_velocity if self.integration_scheme == EXPLICIT_EULER else desired_velocity
-        )
         next_state[:, 0:2] += position_velocity * self.d_t
         next_state[:, 2:4] = desired_velocity
         next_groups = groups if groups is not None else self.groups
         self.update(next_state, next_groups)
 
     @staticmethod
-    def capped_velocity(desired_velocity, max_velocity):
+    def capped_velocity(desired_velocity, max_velocity, *, speed_epsilon: float = 0.0):
         """Scale down desired velocities to their capped speeds.
 
         Args:
             desired_velocity: Array of desired velocity vectors.
             max_velocity: Maximum allowed speed per pedestrian.
+            speed_epsilon: Speeds at or below this value are treated as zero.
 
         Returns:
             np.ndarray: Capped velocity vectors.
         """
+        if not np.isfinite(speed_epsilon) or speed_epsilon < 0.0:
+            raise ValueError("speed_epsilon must be finite and non-negative")
         desired_speeds = np.linalg.norm(desired_velocity, axis=-1)
-        factor = np.zeros_like(desired_speeds, dtype=float)
-        np.divide(max_velocity, desired_speeds, out=factor, where=desired_speeds > 0.0)
+        factor = np.ones_like(desired_speeds, dtype=float)
+        np.divide(
+            max_velocity,
+            desired_speeds,
+            out=factor,
+            where=desired_speeds > speed_epsilon,
+        )
         np.minimum(factor, 1.0, out=factor)
         return desired_velocity * np.expand_dims(factor, -1)
 

@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from scripts.tools.check_dependency_license_inventory import (
+    _LEGACY_SUMMARY_CONTRACT_VERSION,
+    SUMMARY_CONTRACT_VERSION,
     SUPPORTED_SOFTWARE_CANDIDATE_DISTRIBUTION_EXTRA_IDS,
     _archive_audit_semantic_issues,
     _archive_notice_paths,
@@ -32,10 +34,12 @@ from scripts.tools.check_dependency_license_inventory import (
     _policy_records,
     _policy_source_matches,
     _report_content_digest,
+    _strict_report_summary_contract_issues,
     _upstream_tags_semantic_issues,
     build_inventory,
     check_report_freshness,
     main,
+    selected_policy_pending_package_count,
     validate_dependency_license_receipt,
 )
 
@@ -785,6 +789,129 @@ def test_inventory_keeps_unknown_proprietary_and_conflicting_metadata_blocked(
     assert inventory["summary"]["unresolved_count"] > 0
 
 
+def test_policy_pending_package_count_counts_rows_not_failure_messages() -> None:
+    """The summary counts each selected review-required package once."""
+    root = Path(__file__).resolve().parents[2]
+    inventory = build_inventory(root, distributions=[], selected_profile_ids=["all"])
+    selected_rows = [row for row in inventory["packages"] if row.get("selected_profiles")]
+    expected = selected_policy_pending_package_count(selected_rows)
+
+    assert expected == 119
+    assert inventory["summary"]["policy_pending_package_count"] == expected
+    assert inventory["summary"]["policy_pending_package_count"] != 155
+
+
+def test_policy_pending_count_excludes_pending_external_policy_rows() -> None:
+    """Pending review status does not turn an external disposition into review-required."""
+    root = Path(__file__).resolve().parents[2]
+    policy = json.loads(
+        (root / "scripts/validation/dependency_license_policy.v1.json").read_text(encoding="utf-8")
+    )
+    pending_exact = [
+        row for row in policy["package_dispositions"] if row.get("status") == "pending_review"
+    ]
+    assert len(pending_exact) == 36
+    assert all(
+        row.get("disposition") == "external_dependency_not_redistributed" for row in pending_exact
+    )
+
+    inventory = build_inventory(root, distributions=[], selected_profile_ids=["all"])
+    selected_rows = [row for row in inventory["packages"] if row.get("selected_profiles")]
+    assert (
+        sum(
+            row.get("policy_disposition") == "external_dependency_not_redistributed"
+            for row in selected_rows
+        )
+        == 37
+    )
+    assert selected_policy_pending_package_count(selected_rows) == 119
+
+
+def test_v2_receipt_summary_separates_findings_and_pending_rows() -> None:
+    """Multiple findings and structural diagnostics do not collapse into one count."""
+    summary = {
+        "policy_exact_disposition_count": 37,
+        "policy_pending_package_count": 119,
+        "unresolved_count": 255,
+        "structural_issue_count": 2,
+        "summary_contract_version": SUMMARY_CONTRACT_VERSION,
+        "status": "blocked",
+    }
+    assert (
+        _strict_report_summary_contract_issues(
+            summary,
+            receipt_status="blocked",
+            expected_policy_count=37,
+            contract_version=SUMMARY_CONTRACT_VERSION,
+        )
+        == []
+    )
+
+    downgraded = copy.deepcopy(summary)
+    downgraded["summary_contract_version"] = "robot-sf.dependency-license-inventory-summary.v1"
+    issues = _strict_report_summary_contract_issues(
+        downgraded,
+        receipt_status="blocked",
+        expected_policy_count=37,
+        contract_version=SUMMARY_CONTRACT_VERSION,
+    )
+    assert any("does not match receipt schema" in issue for issue in issues)
+
+    legacy = copy.deepcopy(summary)
+    legacy.pop("summary_contract_version")
+    issues = _strict_report_summary_contract_issues(
+        legacy,
+        receipt_status="blocked",
+        expected_policy_count=37,
+    )
+    assert any("unresolved count differs from pending count" in issue for issue in issues)
+
+    forged = copy.deepcopy(summary)
+    forged["structural_issue_count"] = 256
+    issues = _strict_report_summary_contract_issues(
+        forged,
+        receipt_status="blocked",
+        expected_policy_count=37,
+    )
+    assert any("structural count exceeds unresolved count" in issue for issue in issues)
+
+
+def test_v1_receipt_cannot_select_v2_summary_semantics() -> None:
+    """A legacy top-level receipt cannot smuggle in the v2 count interpretation."""
+    markerless_legacy = {
+        "policy_exact_disposition_count": 37,
+        "policy_pending_package_count": 4,
+        "unresolved_count": 4,
+        "status": "blocked",
+    }
+    assert (
+        _strict_report_summary_contract_issues(
+            markerless_legacy,
+            receipt_status="blocked",
+            expected_policy_count=37,
+            contract_version=_LEGACY_SUMMARY_CONTRACT_VERSION,
+        )
+        == []
+    )
+
+    summary = {
+        "policy_exact_disposition_count": 37,
+        "policy_pending_package_count": 119,
+        "unresolved_count": 255,
+        "structural_issue_count": 2,
+        "summary_contract_version": SUMMARY_CONTRACT_VERSION,
+        "status": "blocked",
+    }
+    issues = _strict_report_summary_contract_issues(
+        summary,
+        receipt_status="blocked",
+        expected_policy_count=37,
+        contract_version=_LEGACY_SUMMARY_CONTRACT_VERSION,
+    )
+    assert any("does not match receipt schema" in issue for issue in issues)
+    assert any("unresolved count differs from pending count" in issue for issue in issues)
+
+
 def test_freshness_fails_when_a_locked_input_changes(tmp_path: Path) -> None:
     """The report binds its input digest set and detects lock drift."""
     _write_inputs(tmp_path)
@@ -1078,6 +1205,141 @@ def test_all_profile_policy_ignores_transitive_membership_edges() -> None:
         )
         == []
     )
+
+
+def test_selected_all_projects_exact_llvmlite_review_scope() -> None:
+    """The exact llvmlite row projects its reviewed scope onto ``all``."""
+    root = Path(__file__).resolve().parents[2]
+    inventory = build_inventory(
+        root,
+        distributions=[
+            _Distribution(
+                "llvmlite",
+                "0.49.0",
+                License_Expression="BSD-2-Clause AND Apache-2.0 WITH LLVM-exception",
+            )
+        ],
+        selected_profile_ids=["all"],
+    )
+
+    llvmlite = [
+        row
+        for row in inventory["packages"]
+        if row["package_id"] == "llvmlite@0.49.0#402fd93edfed2799"
+    ]
+    assert len(llvmlite) == 1
+    assert llvmlite[0]["profiles"] == [
+        "all",
+        "analytics",
+        "benchmark",
+        "browser",
+        "core",
+        "criticality",
+        "gpu",
+        "maps",
+        "progress",
+        "recurrent",
+        "rllib",
+        "sacadrl",
+        "socnav",
+        "training",
+        "viz",
+    ]
+    assert llvmlite[0]["selected_profiles"] == ["all"]
+    assert llvmlite[0]["exact_policy_status"] == "accepted"
+    assert not any(
+        "llvmlite" in failure and "profile coverage differs" in failure
+        for failure in inventory["failures"]
+    )
+
+
+def test_selected_policy_scope_rejects_missing_explicit_profile() -> None:
+    """Selecting two reviewed profiles cannot hide a missing explicit row member."""
+    policy = {
+        "id": "llvmlite-0-49-0-external-install",
+        "package": "llvmlite",
+        "version": "0.49.0",
+        "source": {"registry": "https://pypi.org/simple"},
+        "profiles": ["all", "core"],
+    }
+    record = {
+        "normalized_name": "llvmlite",
+        "version": "0.49.0",
+        "source": {"registry": "https://pypi.org/simple"},
+        "profiles": ["all", "core"],
+        "selected_profiles": ["all"],
+    }
+
+    failures = _exact_policy_coverage_failures(
+        [policy],
+        [record],
+        {"all", "core"},
+        {"all", "core"},
+    )
+
+    assert failures == [
+        "package disposition llvmlite-0-49-0-external-install profile coverage differs: "
+        "expected=['all', 'core'] actual=['all']"
+    ]
+
+
+def test_selected_scope_does_not_treat_all_as_a_wildcard() -> None:
+    """An aggregate selection cannot authorize a policy row for another profile."""
+    policy = {
+        "id": "demo-1-core-only",
+        "package": "demo",
+        "version": "1.0.0",
+        "source": {"registry": "https://pypi.org/simple"},
+        "profiles": ["core"],
+    }
+    record = {
+        "normalized_name": "demo",
+        "version": "1.0.0",
+        "source": {"registry": "https://pypi.org/simple"},
+        "profiles": ["all"],
+        "selected_profiles": ["all"],
+    }
+
+    failures = _exact_policy_coverage_failures(
+        [policy],
+        [record],
+        {"all", "core"},
+        {"all"},
+    )
+
+    assert failures == [
+        "package disposition demo-1-core-only profile coverage differs: expected=[] actual=['all']"
+    ]
+
+
+def test_selected_all_union_rejects_unreviewed_independent_profile() -> None:
+    """A narrowed ``all`` union cannot hide an unreviewed standalone profile."""
+    policy = {
+        "id": "demo-reviewed-all-core",
+        "package": "demo",
+        "version": "1.0.0",
+        "source": {"registry": "https://pypi.org/simple"},
+        "profiles": ["all", "core"],
+    }
+    record = {
+        "normalized_name": "demo",
+        "version": "1.0.0",
+        "source": {"registry": "https://pypi.org/simple"},
+        "profiles": ["all", "core", "rllib"],
+        "selected_profiles": ["all", "rllib"],
+    }
+
+    failures = _exact_policy_coverage_failures(
+        [policy],
+        [record],
+        {"all", "core", "rllib"},
+        {"all", "rllib"},
+    )
+
+    assert failures == [
+        "package disposition demo-reviewed-all-core profile coverage differs: "
+        "expected=['all'] actual=['all', 'rllib']"
+    ]
 
 
 def test_moving_notice_url_requires_a_pending_durable_blocker() -> None:

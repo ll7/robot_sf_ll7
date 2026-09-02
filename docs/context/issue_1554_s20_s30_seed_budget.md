@@ -119,6 +119,20 @@ schedule, adds static seed-set contract tests (`tests/benchmark/test_seed_sets_v
 S10 ⊂ S20 ⊂ S30 prefix-nesting property, and records this ruling. The status below is unchanged — a
 durable S20/S30 campaign result store is still the gate for any S20/S30 claim.
 
+## Rank-stability provenance correction (issue #8220, 2026-09-01)
+
+The repeated statement that **7/9 S10→S20 planner ranks were identical** in the closed #4304
+record and in earlier versions of this note is not an independent measurement. The dissertation
+claim-ledger closure found that the number originated in dissertation commit `fae420a1`, has no
+independent producer or reproducible ranking metadata, and was demoted to diagnostic provenance.
+The tool that would produce the comparison was also blocked by the absence of increased-seed rows.
+
+Accordingly, job 13175 and its preserved artifacts remain historical diagnostic provenance only;
+the 7/9 figure must not be used as independent corroboration or paper-grade evidence. This note
+does not change the S20 draft tier, the deferred S30 schedule, the frozen artifacts, or any
+campaign result. See [issue #8220](https://github.com/ll7/robot_sf_ll7/issues/8220) for the source
+record and claim boundary.
+
 ## Status
 
 `job_13198_constraints_first_analyzed` for the completed S20 H500 planner-family run. The

@@ -235,8 +235,7 @@ def _run_deterministic_episode(
 
         env.end_episode_recording()
     finally:
-        env.close_recorder()
-        env.exit()
+        env.close()
 
     # The JSONLRecorder names files as ``{suite}_{scenario}_{algorithm}_{seed}_ep{id}.jsonl``;
     # prefer that, falling back to the most recent recording in the directory.

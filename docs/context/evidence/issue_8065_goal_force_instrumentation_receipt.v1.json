@@ -1,0 +1,146 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema": "goal_force_oracle_instrumentation_receipt.v1",
+  "issue": 8065,
+  "status": "verified",
+  "source_commit": "3da35f1203ab4926bc5e27e969789c219344499c",
+  "source_tree_scope": "runtime implementation and focused tests before the receipt revision",
+  "claim_boundary": "implementation-integrity / smoke only",
+  "research_claim": "none",
+  "benchmark_outcomes": "none",
+  "artifact_provenance": {
+    "classification": "tracked-compact-evidence",
+    "raw_output": "not retained; values are reproducible from tracked tests and the read-only smoke command",
+    "path": "docs/context/evidence/issue_8065_goal_force_instrumentation_receipt.v1.json"
+  },
+  "backend": {
+    "simulator": "robot_sf.sim.simulator.Simulator",
+    "physics_backend": "fast-pysf / pysocialforce.Simulator",
+    "oracle_schema": "oracle_transition_trace.v1",
+    "integration_scheme": "semi_implicit_euler",
+    "configuration": {
+      "oracle_force_trace_enabled": true,
+      "default_value": false,
+      "actor_observation_exposure": false,
+      "planner_input_exposure": false
+    }
+  },
+  "component_roster": {
+    "default_fixture": [
+      {
+        "component_id": "desired",
+        "component_type": "desired",
+        "evaluation_order": 0
+      },
+      {
+        "component_id": "social",
+        "component_type": "social",
+        "evaluation_order": 1
+      },
+      {
+        "component_id": "obstacle",
+        "component_type": "obstacle",
+        "evaluation_order": 2
+      },
+      {
+        "component_id": "group_coherence",
+        "component_type": "group_coherence",
+        "evaluation_order": 3
+      },
+      {
+        "component_id": "group_repulsive",
+        "component_type": "group_repulsive",
+        "evaluation_order": 4
+      },
+      {
+        "component_id": "group_gaze",
+        "component_type": "group_gaze",
+        "evaluation_order": 5
+      }
+    ],
+    "active_robot_force_additions": [
+      {
+        "component_id": "ped_robot:robot_0",
+        "component_type": "pedestrian_robot",
+        "source_entity": "robot:0"
+      },
+      {
+        "component_id": "adversarial:robot_0",
+        "component_type": "adversarial",
+        "source_entity": "robot:0"
+      }
+    ],
+    "identity_rule": "stable configured IDs; multiplicity uses source-scoped IDs and evaluation order"
+  },
+  "invariants": {
+    "force_component_evaluation": "each registered callable is evaluated once on the opt-in path",
+    "component_sum_max_abs_error": 0.0,
+    "stage_chain": "registry_total -> residual operation -> model-variant operation -> final_pre_cap -> uncapped velocity -> cap -> applied velocity",
+    "nonfinite_output": "rejected before serialization",
+    "default_aggregate_path": "preserved; disabled trajectory parity is covered"
+  },
+  "canaries": {
+    "unsaturated": {
+      "cap_active": false,
+      "uncapped_speed_mps": 0.12000000000000001,
+      "applied_speed_mps": 0.12000000000000001
+    },
+    "saturated": {
+      "cap_active": true,
+      "uncapped_speed_mps": 2.0,
+      "applied_speed_mps": 0.5
+    },
+    "disabled_path": {
+      "fixture": "same seeded one-pedestrian simulator, five steps, zero robot action",
+      "state_parity": true,
+      "trajectory_parity_digest": "5c44af869c21693842bc724944f1e94b22cc296e14b2a6a8a19d1363a67d8820"
+    },
+    "reset": "passed: force result, integration diagnostics, and oracle transition payload clear on reset",
+    "actor_boundary": "passed: oracle trace is attached to info after observation construction and is absent from actor observation",
+    "variant_matrix": "passed: default path plus HSFM total-force, TTC predictive, Zanlungo, anisotropic-FOV, and alignment-torque variants",
+    "stage_matrix": "passed: residual additive fold and separate pedestrian-robot/adversarial source records"
+  },
+  "runtime_sample": {
+    "steps_measured": 5,
+    "warmup_steps": 1,
+    "oracle_off_ms": 0.8914459031075239,
+    "oracle_on_ms": 4.317000042647123,
+    "classification": "diagnostic timing sample only; not an overhead claim or benchmark result"
+  },
+  "validation": [
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest fast-pysf/tests/test_simulator.py tests/sim/test_goal_force_instrumentation.py tests/prediction/test_oracle_transition_trace_contract.py tests/sim/test_pedestrian_goal_transition_timing.py tests/gym_env/test_oracle_force_trace_channel.py tests/benchmark/test_oracle_force_trace_attachment.py tests/training/test_scenario_loader.py tests/test_simulator_force_factory.py -q",
+      "result": "76 passed"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest fast-pysf/tests -q",
+      "result": "46 passed"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/sim -k 'force_component or pedestrian_force or speed_cap' -q",
+      "result": "2 passed; 249 deselected"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/benchmark/test_oracle_force_trace_attachment.py tests/benchmark/test_map_runner_episode_typed.py -q",
+      "result": "27 passed"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check fast-pysf/pysocialforce robot_sf/sim robot_sf/benchmark fast-pysf/tests tests/sim tests/benchmark",
+      "result": "All checks passed"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- uv run ruff format --check fast-pysf/pysocialforce robot_sf/sim robot_sf/benchmark fast-pysf/tests tests/sim tests/benchmark",
+      "result": "1081 files already formatted"
+    },
+    {
+      "command": "scripts/dev/run_worktree_shared_venv.sh -- python -m compileall -q fast-pysf/pysocialforce robot_sf/prediction robot_sf/sim robot_sf/training/scenario_loader.py",
+      "result": "passed"
+    }
+  ],
+  "limitations": [
+    "This receipt proves typed simulator-oracle instrumentation and deterministic smoke behavior only.",
+    "It is not observation-only estimator evidence, tracking-quality evidence, calibration evidence, benchmark evidence, planner-benefit evidence, safety evidence, or paper-facing evidence.",
+    "Runtime timing is a single warmed local CPU sample and must not be used as a performance conclusion.",
+    "Exact inverse eligibility remains fail-closed for active caps, stationary edge cases, controller mutations, unavailable stages, and non-decomposable future variants."
+  ]
+}

@@ -82,6 +82,18 @@ class ForceOperationKind(StrEnum):
     UNKNOWN = "unknown"
 
 
+class ForceComponentOperationKind(StrEnum):
+    """Semantic role of a typed component in the force registry."""
+
+    BASE_COMPONENT = "base_component"
+    ADDITIVE_DELTA = "additive_delta"
+    REPLACEMENT_TOTAL = "replacement_total"
+    TRANSFORM_TOTAL = "transform_total"
+    POST_PROCESSING_DELTA = "post_processing_delta"
+    DEDICATED_INTEGRATOR = "dedicated_integrator"
+    UNAVAILABLE = "unavailable"
+
+
 class ExactInverseReason(StrEnum):
     """Reason a transition cannot support an exact inverse-force label."""
 
@@ -92,6 +104,9 @@ class ExactInverseReason(StrEnum):
     FORCE_STAGE_UNINSTRUMENTED = "force_stage_uninstrumented"
     ROBOT_FORCE_STATE_UNAVAILABLE = "robot_force_state_unavailable"
     SPEED_CAP_UNKNOWN = "speed_cap_unknown"
+    SPEED_CAP_ACTIVE = "speed_cap_active"
+    STATIONARY_EDGE_CASE = "stationary_edge_case"
+    NONFINITE_STATE = "nonfinite_state"
     OTHER = "other"
 
 
@@ -144,6 +159,11 @@ def _add_xy(left: tuple[float, float], right: tuple[float, float]) -> tuple[floa
         The component-wise vector sum.
     """
     return (left[0] + right[0], left[1] + right[1])
+
+
+def _xy_matches(left: tuple[float, float], right: tuple[float, float]) -> bool:
+    """Return whether two finite vectors agree within the trace tolerance."""
+    return all(math.isclose(left[index], right[index], abs_tol=1e-9) for index in (0, 1))
 
 
 @dataclass(frozen=True, slots=True)
@@ -258,6 +278,11 @@ class ControllerMutationFlags:
     respawn_reposition: bool = False
     population_changed: bool = False
     controller_jump_modelled: bool = False
+    position_changed: bool = False
+    velocity_changed: bool = False
+    group_changed: bool = False
+    hold_wait_active: bool = False
+    role_changed: bool = False
 
     def __post_init__(self) -> None:
         """Require explicit boolean mutation flags."""
@@ -267,6 +292,11 @@ class ControllerMutationFlags:
             "respawn_reposition",
             "population_changed",
             "controller_jump_modelled",
+            "position_changed",
+            "velocity_changed",
+            "group_changed",
+            "hold_wait_active",
+            "role_changed",
         ):
             if type(getattr(self, field_name)) is not bool:
                 raise TypeError(f"{field_name} must be bool")
@@ -279,6 +309,11 @@ class ControllerMutationFlags:
             "respawn_reposition": self.respawn_reposition,
             "population_changed": self.population_changed,
             "controller_jump_modelled": self.controller_jump_modelled,
+            "position_changed": self.position_changed,
+            "velocity_changed": self.velocity_changed,
+            "group_changed": self.group_changed,
+            "hold_wait_active": self.hold_wait_active,
+            "role_changed": self.role_changed,
         }
 
     @classmethod
@@ -294,19 +329,37 @@ class ControllerMutationFlags:
             "respawn_reposition",
             "population_changed",
             "controller_jump_modelled",
+            "position_changed",
+            "velocity_changed",
+            "group_changed",
+            "hold_wait_active",
+            "role_changed",
         }
         reject_unknown_keys(value, allowed, "controller_mutation_flags")
-        if set(value) != allowed:
+        required = {
+            "goal_redirected",
+            "hold_velocity_reset",
+            "respawn_reposition",
+            "population_changed",
+            "controller_jump_modelled",
+        }
+        if not required.issubset(set(value)):
             raise ValueError("controller_mutation_flags is missing a required field")
-        return cls(**{field_name: value[field_name] for field_name in allowed})
+        return cls(**{field_name: value.get(field_name, False) for field_name in allowed})
 
 
 @dataclass(frozen=True, slots=True)
 class ForceStageResult:
-    """Operation and typed result for a post-registry force stage."""
+    """Operation, delta, and typed result for a post-registry force stage.
+
+    ``delta_force_xy`` is populated only for an additive stage.  ``result_force_xy``
+    is the post-stage force for every applied stage, which lets the force chain be
+    checked without treating a replacement as an additive perturbation.
+    """
 
     operation_kind: ForceOperationKind = ForceOperationKind.NOT_APPLIED
     operation: str | None = None
+    delta_force_xy: tuple[float, float] | None = None
     result_force_xy: tuple[float, float] | None = None
 
     def __post_init__(self) -> None:
@@ -315,22 +368,54 @@ class ForceStageResult:
             raise TypeError("operation_kind must be ForceOperationKind")
         if self.operation is not None:
             require_text(self.operation, "operation")
+        if self.delta_force_xy is not None:
+            object.__setattr__(
+                self, "delta_force_xy", require_xy(self.delta_force_xy, "delta_force_xy")
+            )
         if self.result_force_xy is not None:
             object.__setattr__(
                 self, "result_force_xy", require_xy(self.result_force_xy, "result_force_xy")
             )
         if self.operation_kind is ForceOperationKind.NOT_APPLIED and (
-            self.operation is not None or self.result_force_xy is not None
+            self.operation is not None
+            or self.delta_force_xy is not None
+            or self.result_force_xy is not None
         ):
-            raise ValueError("not_applied force stages must omit operation and result")
-        if self.operation_kind is not ForceOperationKind.NOT_APPLIED and self.operation is None:
+            raise ValueError("not_applied force stages must omit operation, delta, and result")
+        if (
+            self.operation_kind
+            in {
+                ForceOperationKind.ADDITIVE,
+                ForceOperationKind.REPLACEMENT,
+                ForceOperationKind.TRANSFORMED,
+            }
+            and self.operation is None
+        ):
             raise ValueError("applied force stages must name their operation")
+        if self.operation_kind is ForceOperationKind.ADDITIVE and (
+            self.delta_force_xy is None or self.result_force_xy is None
+        ):
+            raise ValueError("additive force stages require delta_force_xy and result_force_xy")
+        if self.operation_kind in {
+            ForceOperationKind.REPLACEMENT,
+            ForceOperationKind.TRANSFORMED,
+        } and (self.delta_force_xy is not None or self.result_force_xy is None):
+            raise ValueError(
+                "replacement and transformed force stages require result_force_xy only"
+            )
+        if self.operation_kind is ForceOperationKind.UNKNOWN and (
+            self.delta_force_xy is not None or self.result_force_xy is not None
+        ):
+            raise ValueError("unknown force stages must omit delta_force_xy and result_force_xy")
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe force-stage result."""
         return {
             "operation_kind": self.operation_kind.value,
             "operation": self.operation,
+            "delta_force_xy": (
+                list(self.delta_force_xy) if self.delta_force_xy is not None else None
+            ),
             "result_force_xy": (
                 list(self.result_force_xy) if self.result_force_xy is not None else None
             ),
@@ -343,7 +428,7 @@ class ForceStageResult:
         Returns:
             A validated force-stage operation and result.
         """
-        allowed = {"operation_kind", "operation", "result_force_xy"}
+        allowed = {"operation_kind", "operation", "delta_force_xy", "result_force_xy"}
         reject_unknown_keys(value, allowed, "force_stage_result")
         if set(value) != allowed:
             raise ValueError("force_stage_result is missing a required field")
@@ -352,6 +437,7 @@ class ForceStageResult:
                 ForceOperationKind, value["operation_kind"], "operation_kind"
             ),
             operation=value["operation"],
+            delta_force_xy=_optional_xy(value["delta_force_xy"], "delta_force_xy"),
             result_force_xy=_optional_xy(value["result_force_xy"], "result_force_xy"),
         )
 
@@ -369,6 +455,42 @@ def validate_simulator_timing_order(observed: Sequence[str]) -> tuple[str, ...]:
             f"expected {SIMULATOR_TIMING_ORDER!r}, observed {actual!r}"
         )
     return actual
+
+
+def _fold_force_stage(
+    previous_force_xy: tuple[float, float] | None,
+    stage: ForceStageResult,
+    field_name: str,
+) -> tuple[float, float] | None:
+    """Fold one recorded force stage onto the preceding force value.
+
+    Returns ``None`` when an unknown stage or an unavailable preceding force makes
+    the chain unverifiable.  Applied stages are complete by construction; additive
+    stages additionally prove that their recorded result equals the preceding force
+    plus the recorded delta.
+
+    Returns:
+        The folded post-stage force, or ``None`` when the chain is unverifiable.
+    """
+    if stage.operation_kind is ForceOperationKind.NOT_APPLIED:
+        return previous_force_xy
+    if stage.operation_kind is ForceOperationKind.UNKNOWN:
+        return None
+    if stage.operation_kind is ForceOperationKind.ADDITIVE:
+        if previous_force_xy is None:
+            return None
+        assert stage.delta_force_xy is not None
+        assert stage.result_force_xy is not None
+        expected_result = _add_xy(previous_force_xy, stage.delta_force_xy)
+        if not _xy_matches(expected_result, stage.result_force_xy):
+            raise ValueError(f"{field_name}.result_force_xy does not match its additive delta")
+        return expected_result
+    assert stage.operation_kind in {
+        ForceOperationKind.REPLACEMENT,
+        ForceOperationKind.TRANSFORMED,
+    }
+    assert stage.result_force_xy is not None
+    return stage.result_force_xy
 
 
 @dataclass(frozen=True, slots=True)
@@ -488,6 +610,122 @@ class TransitionBoundary:
 
 
 @dataclass(frozen=True, slots=True)
+class ForceComponentRecord:
+    """One per-pedestrian force value with implementation provenance."""
+
+    component_id: str
+    component_type: str
+    implementation_module: str
+    implementation_class: str
+    source_entity: str | None
+    force_xy: tuple[float, float] | None
+    enabled: bool
+    config_hash: str
+    evaluation_order: int
+    operation_kind: ForceComponentOperationKind
+    operation: str
+    actor_observable: bool
+    unavailable_reason: str | None = None
+
+    def __post_init__(self) -> None:
+        """Validate stable identity, operation semantics, and finite values."""
+        for field_name in (
+            "component_id",
+            "component_type",
+            "implementation_module",
+            "implementation_class",
+            "config_hash",
+            "operation",
+        ):
+            require_text(getattr(self, field_name), field_name)
+        if self.source_entity is not None:
+            require_text(self.source_entity, "source_entity")
+        if type(self.enabled) is not bool or type(self.actor_observable) is not bool:
+            raise TypeError("enabled and actor_observable must be bool")
+        object.__setattr__(
+            self,
+            "evaluation_order",
+            require_step_index(self.evaluation_order, "evaluation_order"),
+        )
+        if not isinstance(self.operation_kind, ForceComponentOperationKind):
+            raise TypeError("operation_kind must be ForceComponentOperationKind")
+        if self.force_xy is None:
+            if self.operation_kind is not ForceComponentOperationKind.UNAVAILABLE:
+                raise ValueError("unavailable force components must use operation_kind=unavailable")
+            if not isinstance(self.unavailable_reason, str) or not self.unavailable_reason.strip():
+                raise ValueError("unavailable force components must name unavailable_reason")
+        else:
+            object.__setattr__(self, "force_xy", require_xy(self.force_xy, "force_xy"))
+            if self.operation_kind is ForceComponentOperationKind.UNAVAILABLE:
+                raise ValueError("available force components cannot use operation_kind=unavailable")
+            if self.unavailable_reason is not None:
+                raise ValueError("available force components must omit unavailable_reason")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe component record."""
+        return {
+            "component_id": self.component_id,
+            "component_type": self.component_type,
+            "implementation_module": self.implementation_module,
+            "implementation_class": self.implementation_class,
+            "source_entity": self.source_entity,
+            "force_xy": list(self.force_xy) if self.force_xy is not None else None,
+            "enabled": self.enabled,
+            "config_hash": self.config_hash,
+            "evaluation_order": self.evaluation_order,
+            "operation_kind": self.operation_kind.value,
+            "operation": self.operation,
+            "actor_observable": self.actor_observable,
+            "unavailable_reason": self.unavailable_reason,
+        }
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> ForceComponentRecord:
+        """Parse one strict per-pedestrian component record.
+
+        Returns:
+            A validated component record.
+        """
+        allowed = {
+            "component_id",
+            "component_type",
+            "implementation_module",
+            "implementation_class",
+            "source_entity",
+            "force_xy",
+            "enabled",
+            "config_hash",
+            "evaluation_order",
+            "operation_kind",
+            "operation",
+            "actor_observable",
+            "unavailable_reason",
+        }
+        reject_unknown_keys(value, allowed, "force_component_record")
+        if set(value) != allowed:
+            raise ValueError("force_component_record is missing a required field")
+        return cls(
+            component_id=value["component_id"],
+            component_type=value["component_type"],
+            implementation_module=value["implementation_module"],
+            implementation_class=value["implementation_class"],
+            source_entity=value["source_entity"],
+            force_xy=_optional_xy(value["force_xy"], "force_xy"),
+            enabled=value["enabled"],
+            config_hash=value["config_hash"],
+            evaluation_order=value["evaluation_order"],
+            operation_kind=_parse_enum(
+                ForceComponentOperationKind,
+                value["operation_kind"],
+                "operation_kind",
+            ),
+            operation=value["operation"],
+            actor_observable=value["actor_observable"],
+            unavailable_reason=value["unavailable_reason"],
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ForceComponents:
     """Typed force stages; ``None`` means the instrumentation is unavailable."""
 
@@ -495,6 +733,7 @@ class ForceComponents:
     goal_force_xy: tuple[float, float] | None = None
     obstacle_force_xy: tuple[float, float] | None = None
     pedestrian_robot_force_xy: tuple[float, float] | None = None
+    adversarial_force_xy: tuple[float, float] | None = None
     group_force_xy: tuple[float, float] | None = None
     registry_total_force_xy: tuple[float, float] | None = None
     residual_operation: ForceStageResult = field(default_factory=ForceStageResult)
@@ -502,6 +741,7 @@ class ForceComponents:
     final_pre_cap_force_xy: tuple[float, float] | None = None
     uncapped_velocity_xy: tuple[float, float] | None = None
     applied_velocity_xy: tuple[float, float] | None = None
+    component_records: tuple[ForceComponentRecord, ...] = ()
 
     def __post_init__(self) -> None:  # noqa: C901
         """Validate components and any available vector-sum invariant."""
@@ -510,6 +750,7 @@ class ForceComponents:
             "goal_force_xy",
             "obstacle_force_xy",
             "pedestrian_robot_force_xy",
+            "adversarial_force_xy",
             "group_force_xy",
             "registry_total_force_xy",
             "final_pre_cap_force_xy",
@@ -523,11 +764,22 @@ class ForceComponents:
             raise TypeError("residual_operation must be ForceStageResult")
         if type(self.model_variant_operation) is not ForceStageResult:
             raise TypeError("model_variant_operation must be ForceStageResult")
+        records = tuple(self.component_records)
+        if any(type(record) is not ForceComponentRecord for record in records):
+            raise TypeError("component_records must contain ForceComponentRecord values")
+        record_ids = [record.component_id for record in records]
+        if len(record_ids) != len(set(record_ids)):
+            raise ValueError("component_records must not duplicate component_id")
+        record_orders = [record.evaluation_order for record in records]
+        if record_orders != sorted(record_orders):
+            raise ValueError("component_records must be ordered by evaluation_order")
+        object.__setattr__(self, "component_records", records)
         nominal_components = (
             self.social_force_xy,
             self.goal_force_xy,
             self.obstacle_force_xy,
             self.pedestrian_robot_force_xy,
+            self.adversarial_force_xy,
             self.group_force_xy,
         )
         if self.registry_total_force_xy is not None and all(
@@ -542,39 +794,32 @@ class ForceComponents:
             ):
                 raise ValueError("registry_total_force_xy must equal the nominal component sum")
 
-        expected_final = self.registry_total_force_xy
-        if (
-            expected_final is not None
-            and self.residual_operation.operation_kind is ForceOperationKind.ADDITIVE
-            and self.residual_operation.result_force_xy is not None
-        ):
-            expected_final = _add_xy(expected_final, self.residual_operation.result_force_xy)
-        if (
-            expected_final is not None
-            and self.model_variant_operation.operation_kind is ForceOperationKind.ADDITIVE
-            and self.model_variant_operation.result_force_xy is not None
-        ):
-            expected_final = _add_xy(expected_final, self.model_variant_operation.result_force_xy)
-        elif (
-            expected_final is not None
-            and self.model_variant_operation.operation_kind
-            in {ForceOperationKind.REPLACEMENT, ForceOperationKind.TRANSFORMED}
-            and self.model_variant_operation.result_force_xy is not None
-        ):
-            expected_final = self.model_variant_operation.result_force_xy
+        expected_final = _fold_force_stage(
+            self.registry_total_force_xy,
+            self.residual_operation,
+            "residual_operation",
+        )
+        expected_final = _fold_force_stage(
+            expected_final,
+            self.model_variant_operation,
+            "model_variant_operation",
+        )
         if (
             expected_final is not None
             and self.final_pre_cap_force_xy is not None
-            and self.residual_operation.operation_kind is not ForceOperationKind.UNKNOWN
-            and self.model_variant_operation.operation_kind is not ForceOperationKind.UNKNOWN
-            and not all(
-                math.isclose(
-                    expected_final[index], self.final_pre_cap_force_xy[index], abs_tol=1e-9
-                )
-                for index in (0, 1)
-            )
+            and not _xy_matches(expected_final, self.final_pre_cap_force_xy)
         ):
             raise ValueError("final_pre_cap_force_xy does not match the recorded force stages")
+        if records and self.registry_total_force_xy is not None:
+            available_base = [
+                record.force_xy
+                for record in records
+                if record.operation_kind is ForceComponentOperationKind.BASE_COMPONENT
+            ]
+            if len(available_base) == len(records):
+                record_sum = _sum_xy(tuple(force for force in available_base if force is not None))
+                if not _xy_matches(record_sum, self.registry_total_force_xy):
+                    raise ValueError("component_records must equal registry_total_force_xy")
 
     def to_dict(self) -> dict[str, Any]:
         """Return all typed force stages with unavailable values as JSON null."""
@@ -585,6 +830,7 @@ class ForceComponents:
                 "goal_force_xy",
                 "obstacle_force_xy",
                 "pedestrian_robot_force_xy",
+                "adversarial_force_xy",
                 "group_force_xy",
                 "registry_total_force_xy",
                 "final_pre_cap_force_xy",
@@ -594,6 +840,7 @@ class ForceComponents:
         } | {
             "residual_operation": self.residual_operation.to_dict(),
             "model_variant_operation": self.model_variant_operation.to_dict(),
+            "component_records": [record.to_dict() for record in self.component_records],
         }
 
     @classmethod
@@ -608,6 +855,7 @@ class ForceComponents:
             "goal_force_xy",
             "obstacle_force_xy",
             "pedestrian_robot_force_xy",
+            "adversarial_force_xy",
             "group_force_xy",
             "registry_total_force_xy",
             "residual_operation",
@@ -615,16 +863,24 @@ class ForceComponents:
             "final_pre_cap_force_xy",
             "uncapped_velocity_xy",
             "applied_velocity_xy",
+            "component_records",
         }
         reject_unknown_keys(value, allowed, "force_components")
-        if set(value) != allowed:
+        required = allowed - {"adversarial_force_xy", "component_records"}
+        if not required.issubset(set(value)):
             raise ValueError("force_components is missing a required field")
+        raw_records = value.get("component_records", ())
+        if not isinstance(raw_records, Sequence) or isinstance(raw_records, (str, bytes)):
+            raise TypeError("force_components.component_records must be an array")
         return cls(
             social_force_xy=_optional_xy(value["social_force_xy"], "social_force_xy"),
             goal_force_xy=_optional_xy(value["goal_force_xy"], "goal_force_xy"),
             obstacle_force_xy=_optional_xy(value["obstacle_force_xy"], "obstacle_force_xy"),
             pedestrian_robot_force_xy=_optional_xy(
                 value["pedestrian_robot_force_xy"], "pedestrian_robot_force_xy"
+            ),
+            adversarial_force_xy=_optional_xy(
+                value.get("adversarial_force_xy"), "adversarial_force_xy"
             ),
             group_force_xy=_optional_xy(value["group_force_xy"], "group_force_xy"),
             registry_total_force_xy=_optional_xy(
@@ -643,6 +899,10 @@ class ForceComponents:
                 value["uncapped_velocity_xy"], "uncapped_velocity_xy"
             ),
             applied_velocity_xy=_optional_xy(value["applied_velocity_xy"], "applied_velocity_xy"),
+            component_records=tuple(
+                ForceComponentRecord.from_dict(_mapping(item, "force_component_record"))
+                for item in raw_records
+            ),
         )
 
 
@@ -802,6 +1062,7 @@ class OracleTransitionTraceV1:
     transition_step_index: int
     simulator_pedestrian_id: str
     actor_track_id: str | None
+    actor_tracking_epoch_id: str | None
     backend: str
     pre_behavior: TransitionBoundary
     post_behavior_pre_force: TransitionBoundary
@@ -832,6 +1093,12 @@ class OracleTransitionTraceV1:
         require_text(self.simulator_pedestrian_id, "simulator_pedestrian_id")
         if self.actor_track_id is not None:
             require_text(self.actor_track_id, "actor_track_id")
+        if self.actor_tracking_epoch_id is not None:
+            require_text(self.actor_tracking_epoch_id, "actor_tracking_epoch_id")
+        if (self.actor_track_id is None) != (self.actor_tracking_epoch_id is None):
+            raise ValueError(
+                "actor_track_id and actor_tracking_epoch_id must be provided as a pair"
+            )
         require_text(self.backend, "backend")
         require_text(self.timing_provenance, "timing_provenance")
         if type(self.pre_behavior) is not TransitionBoundary:
@@ -888,6 +1155,26 @@ class OracleTransitionTraceV1:
         if self.goal_change_kind is GoalChangeKind.WAYPOINT_ADVANCE:
             if self.pre_behavior.active_goal_xy == self.post_behavior_pre_force.active_goal_xy:
                 raise ValueError("waypoint_advance must change the active goal")
+            route_indices = (
+                self.pre_behavior.route_waypoint_index,
+                self.post_behavior_pre_force.route_waypoint_index,
+                self.post_integration.route_waypoint_index,
+            )
+            if any(index is not None for index in route_indices):
+                if any(index is None for index in route_indices):
+                    raise ValueError(
+                        "waypoint_advance route indices must be provided at all boundaries"
+                    )
+                pre_index, post_behavior_index, post_integration_index = route_indices
+                assert pre_index is not None
+                assert post_behavior_index is not None
+                assert post_integration_index is not None
+                if post_behavior_index != pre_index + 1:
+                    raise ValueError("waypoint_advance route_waypoint_index must advance by one")
+                if post_integration_index != post_behavior_index:
+                    raise ValueError(
+                        "post_integration route_waypoint_index must match post-behavior index"
+                    )
         elif (
             self.goal_change_kind is GoalChangeKind.NONE
             and self.pre_behavior.active_goal_xy != self.post_behavior_pre_force.active_goal_xy
@@ -905,6 +1192,16 @@ class OracleTransitionTraceV1:
             required_reasons.add(ExactInverseReason.RESPAWN_REPOSITION)
         if mutations.population_changed:
             required_reasons.add(ExactInverseReason.POPULATION_CHANGE)
+        if any(
+            (
+                mutations.position_changed,
+                mutations.velocity_changed,
+                mutations.group_changed,
+                mutations.hold_wait_active,
+                mutations.role_changed,
+            )
+        ):
+            required_reasons.add(ExactInverseReason.UNMODELED_CONTROLLER_MUTATION)
         if required_reasons and not mutations.controller_jump_modelled:
             if self.exact_inverse_eligible:
                 raise ValueError(
@@ -929,14 +1226,29 @@ class OracleTransitionTraceV1:
                 )
             if self.speed_cap.status is SpeedCapStatus.UNKNOWN:
                 raise ValueError("eligible inverse traces require oracle speed-cap truth")
-            if any(
-                stage.operation_kind is ForceOperationKind.UNKNOWN
-                for stage in (
-                    self.force_components.residual_operation,
-                    self.force_components.model_variant_operation,
-                )
+            for stage in (
+                self.force_components.residual_operation,
+                self.force_components.model_variant_operation,
             ):
-                raise ValueError("eligible inverse traces require known force-stage operations")
+                if stage.operation_kind is ForceOperationKind.UNKNOWN:
+                    raise ValueError("eligible inverse traces require known force-stage operations")
+                if stage.operation_kind is ForceOperationKind.ADDITIVE and (
+                    stage.delta_force_xy is None or stage.result_force_xy is None
+                ):
+                    raise ValueError(
+                        "eligible inverse traces require complete additive force stages"
+                    )
+                if (
+                    stage.operation_kind
+                    in {
+                        ForceOperationKind.REPLACEMENT,
+                        ForceOperationKind.TRANSFORMED,
+                    }
+                    and stage.result_force_xy is None
+                ):
+                    raise ValueError(
+                        "eligible inverse traces require complete applied force stages"
+                    )
 
     def to_dict(self) -> dict[str, Any]:
         """Return an oracle-only JSON payload with timing and identity provenance."""
@@ -947,6 +1259,7 @@ class OracleTransitionTraceV1:
             "transition_step_index": self.transition_step_index,
             "simulator_pedestrian_id": self.simulator_pedestrian_id,
             "actor_track_id": self.actor_track_id,
+            "actor_tracking_epoch_id": self.actor_tracking_epoch_id,
             "backend": self.backend,
             "timing": {
                 "provenance": self.timing_provenance,
@@ -987,6 +1300,7 @@ class OracleTransitionTraceV1:
             "transition_step_index",
             "simulator_pedestrian_id",
             "actor_track_id",
+            "actor_tracking_epoch_id",
             "backend",
             "timing",
             "pre_behavior",
@@ -1015,6 +1329,7 @@ class OracleTransitionTraceV1:
             transition_step_index=value["transition_step_index"],
             simulator_pedestrian_id=value["simulator_pedestrian_id"],
             actor_track_id=value["actor_track_id"],
+            actor_tracking_epoch_id=value["actor_tracking_epoch_id"],
             backend=value["backend"],
             timing_provenance=timing["provenance"],
             pre_behavior=TransitionBoundary.from_dict(
@@ -1050,6 +1365,8 @@ __all__ = [
     "ControllerMutationFlags",
     "DynamicsParameters",
     "ExactInverseReason",
+    "ForceComponentOperationKind",
+    "ForceComponentRecord",
     "ForceComponents",
     "ForceOperationKind",
     "ForceStageResult",

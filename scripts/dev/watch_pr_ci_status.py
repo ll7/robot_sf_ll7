@@ -29,8 +29,13 @@ if _REPO_ROOT not in sys.path:
 
 from scripts.dev._gh_pagination import is_likely_truncated  # noqa: E402
 from scripts.dev.check_pr_ci_status import (  # noqa: E402
+    PENDING_STATUSES,
+    _actions_run_id,
+    _enrich_rest_check_runs,
     _fetch_ci_status,
+    _latest_check_runs_with_evidence,
     _rest_api_get,
+    _rest_check_runs_to_rollup,
     _summarize_check_runs,
 )
 
@@ -212,16 +217,286 @@ def _fetch_exact_commit_check_runs(commit_sha: str) -> Any:
     return _rest_api_get(f"commits/{commit_sha}/check-runs?per_page=100")
 
 
+def _fetch_exact_commit_workflow_runs(commit_sha: str) -> Any:
+    """Fetch Actions workflow runs for one exact commit through the REST endpoint."""
+    return _rest_api_get(f"actions/runs?head_sha={commit_sha}&per_page=100")
+
+
+def _workflow_run_id(run: dict[str, Any]) -> int | None:
+    """Return a positive Actions workflow-run ID, or ``None`` for malformed metadata."""
+    raw_id = run.get("id")
+    if isinstance(raw_id, bool):
+        return None
+    if isinstance(raw_id, int):
+        run_id = raw_id
+    elif isinstance(raw_id, str) and raw_id.isdigit():
+        run_id = int(raw_id)
+    else:
+        return None
+    return run_id if run_id > 0 else None
+
+
+def _workflow_run_workflow_id(run: dict[str, Any]) -> str:
+    """Return the stable workflow identity exposed by Actions run metadata."""
+    for key in ("workflow_id", "workflowId"):
+        value = run.get(key)
+        if value is None:
+            continue
+        identity = str(value).strip()
+        if identity and identity != "0":
+            return identity
+    return ""
+
+
+def _workflow_run_started_at(run: dict[str, Any]) -> str:
+    """Return the best timestamp for ordering a replacement workflow run."""
+    for key in ("run_started_at", "runStartedAt", "created_at", "createdAt"):
+        value = run.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
+def _exact_workflow_runs(payload: Any, commit_sha: str) -> list[dict[str, Any]]:
+    """Keep only well-formed workflow runs that independently confirm the exact SHA."""
+    if not isinstance(payload, dict):
+        return []
+    workflow_runs = payload.get("workflow_runs")
+    if not isinstance(workflow_runs, list):
+        return []
+    return [
+        run
+        for run in workflow_runs
+        if isinstance(run, dict) and str(run.get("head_sha") or "") == commit_sha
+    ]
+
+
+def _bind_workflow_run_identities(
+    check_runs: list[dict[str, Any]], workflow_runs: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Use exact-SHA workflow metadata to fill missing check-run workflow identities."""
+    workflow_ids_by_run_id = {
+        str(run_id): _workflow_run_workflow_id(run)
+        for run in workflow_runs
+        if (run_id := _workflow_run_id(run)) is not None and _workflow_run_workflow_id(run)
+    }
+    bound_runs: list[dict[str, Any]] = []
+    for check_run in check_runs:
+        bound = dict(check_run)
+        details_url = str(bound.get("details_url") or bound.get("detailsUrl") or "")
+        run_id = _actions_run_id(details_url)
+        workflow_id = workflow_ids_by_run_id.get(str(run_id)) if run_id is not None else None
+        if workflow_id and not (bound.get("workflow_id") or bound.get("workflowId")):
+            bound["workflow_id"] = workflow_id
+        bound_runs.append(bound)
+    return bound_runs
+
+
+def _newer_workflow_run(
+    check: dict[str, Any], workflow_runs: list[dict[str, Any]]
+) -> dict[str, Any] | None:
+    """Return the newest exact-SHA workflow run replacing one cancelled check."""
+    details_url = str(check.get("detailsUrl") or check.get("details_url") or "")
+    old_run_id = _actions_run_id(details_url)
+    workflow_id = str(check.get("workflowId") or check.get("workflow_id") or "")
+    if old_run_id is None or not workflow_id:
+        return None
+    candidates = [
+        run
+        for run in workflow_runs
+        if _workflow_run_id(run) is not None
+        and _workflow_run_id(run) > old_run_id
+        and _workflow_run_workflow_id(run) == workflow_id
+    ]
+    if not candidates:
+        return None
+    return max(
+        candidates, key=lambda run: (_workflow_run_id(run) or 0, _workflow_run_started_at(run))
+    )
+
+
+def _find_materialized_replacement(
+    check: dict[str, Any], replacement: dict[str, Any], visible_checks: list[dict[str, Any]]
+) -> int | None:
+    """Return the visible replacement check index for this named job, if any."""
+    replacement_run_id = _workflow_run_id(replacement)
+    if replacement_run_id is None:
+        return None
+    check_name = str(check.get("name") or check.get("context") or "")
+    if not check_name:
+        return None
+    for index, visible in enumerate(visible_checks):
+        visible_name = str(visible.get("name") or visible.get("context") or "")
+        details_url = str(visible.get("details_url") or visible.get("detailsUrl") or "")
+        if visible_name == check_name and _actions_run_id(details_url) == replacement_run_id:
+            return index
+    return None
+
+
+def _replacement_materialization_marker(
+    replacement: dict[str, Any],
+    *,
+    details_url: str,
+    check_status: str,
+    check_conclusion: Any,
+) -> dict[str, Any] | None:
+    """Build URL-bound replacement evidence for a synthetic or materialized check.
+
+    The check details URL is the source of truth for the run identity carried into the reducer.
+    A malformed workflow URL is rejected when present; a missing one falls back to the already
+    validated check URL so the real job check can still carry the workflow-run ordering evidence.
+    """
+    replacement_run_id = _workflow_run_id(replacement)
+    workflow_id = _workflow_run_workflow_id(replacement)
+    if replacement_run_id is None or not workflow_id:
+        return None
+    if _actions_run_id(details_url) != replacement_run_id:
+        return None
+
+    replacement_url = str(
+        replacement.get("html_url") or replacement.get("htmlUrl") or replacement.get("url") or ""
+    )
+    if replacement_url and _actions_run_id(replacement_url) != replacement_run_id:
+        return None
+    replacement_url = replacement_url or details_url
+    return {
+        "source": "actions_workflow_run_metadata",
+        "replacement_run_id": replacement_run_id,
+        "replacement_run_url": replacement_url,
+        "workflow_id": workflow_id,
+        "run_status": str(replacement.get("status") or "").lower() or None,
+        "run_conclusion": str(replacement.get("conclusion") or "").lower() or None,
+        "check_status": str(check_status or "").lower() or None,
+        "check_conclusion": str(check_conclusion).lower() if check_conclusion else None,
+    }
+
+
+def _replacement_check_shape(
+    check: dict[str, Any], replacement: dict[str, Any], commit_sha: str
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """Build one representative check for a replacement job not yet materialized by GitHub."""
+    replacement_run_id = _workflow_run_id(replacement)
+    workflow_id = _workflow_run_workflow_id(replacement)
+    started_at = _workflow_run_started_at(replacement)
+    if replacement_run_id is None or not workflow_id or not started_at:
+        return None
+
+    raw_status = str(replacement.get("status") or "").lower()
+    # A workflow-level terminal conclusion does not prove that this individual job's
+    # check-run has materialized. Keep the representative pending until the job check
+    # itself is visible; the conclusion remains diagnostic evidence in the marker.
+    check_status = raw_status if raw_status in PENDING_STATUSES else "in_progress"
+    check_conclusion: str | None = None
+
+    replacement_url = str(
+        replacement.get("html_url") or replacement.get("htmlUrl") or replacement.get("url") or ""
+    )
+    materialization = _replacement_materialization_marker(
+        replacement,
+        details_url=replacement_url,
+        check_status=check_status,
+        check_conclusion=check_conclusion,
+    )
+    if materialization is None:
+        return None
+    synthetic = {
+        "__typename": "CheckRun",
+        "name": str(check.get("name") or check.get("context") or "unknown"),
+        "status": check_status,
+        "conclusion": check_conclusion,
+        "head_sha": commit_sha,
+        "started_at": started_at,
+        "completed_at": None,
+        "details_url": replacement_url,
+        "workflow_id": workflow_id,
+        "__replacement_materialization": materialization,
+    }
+    return synthetic, materialization
+
+
+def _materialized_replacement_marker(
+    replacement: dict[str, Any], visible_check: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Build replacement evidence from the actual visible check without changing its outcome."""
+    workflow_id = _workflow_run_workflow_id(replacement)
+    visible_workflow_id = str(
+        visible_check.get("workflow_id") or visible_check.get("workflowId") or ""
+    )
+    if not workflow_id or visible_workflow_id != workflow_id:
+        return None
+    details_url = str(visible_check.get("details_url") or visible_check.get("detailsUrl") or "")
+    check_status = str(visible_check.get("status") or visible_check.get("state") or "")
+    return _replacement_materialization_marker(
+        replacement,
+        details_url=details_url,
+        check_status=check_status,
+        check_conclusion=visible_check.get("conclusion"),
+    )
+
+
+def _materialize_missing_replacements(
+    check_runs: list[dict[str, Any]],
+    *,
+    commit_sha: str,
+    fetch_workflow_runs: Callable[[str], Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Add missing replacement representatives and mark visible ones with run-order evidence."""
+    normalized = _rest_check_runs_to_rollup(check_runs)
+    effective, _, _ = _latest_check_runs_with_evidence(normalized)
+    if not any(str(check.get("conclusion") or "").lower() == "cancelled" for check in effective):
+        return check_runs, []
+
+    try:
+        workflow_runs = _exact_workflow_runs(fetch_workflow_runs(commit_sha), commit_sha)
+    except (OSError, subprocess.SubprocessError, TypeError, ValueError):
+        # A replacement lookup is optional evidence. Any lookup failure leaves the original
+        # cancellation visible and therefore preserves fail-closed behavior.
+        return check_runs, []
+    if not workflow_runs:
+        return check_runs, []
+
+    bound_check_runs = _bind_workflow_run_identities(check_runs, workflow_runs)
+    normalized = _rest_check_runs_to_rollup(bound_check_runs)
+    effective, _, _ = _latest_check_runs_with_evidence(normalized)
+    additions: list[dict[str, Any]] = []
+    materializations: list[dict[str, Any]] = []
+    for check in effective:
+        if str(check.get("conclusion") or "").lower() != "cancelled":
+            continue
+        replacement = _newer_workflow_run(check, workflow_runs)
+        if replacement is None:
+            continue
+        materialized_index = _find_materialized_replacement(check, replacement, bound_check_runs)
+        if materialized_index is not None:
+            visible_check = bound_check_runs[materialized_index]
+            marker = _materialized_replacement_marker(replacement, visible_check)
+            if marker is None:
+                continue
+            marked_check = dict(visible_check)
+            marked_check["__replacement_materialization"] = marker
+            bound_check_runs[materialized_index] = marked_check
+            continue
+        shape = _replacement_check_shape(check, replacement, commit_sha)
+        if shape is None:
+            continue
+        synthetic, materialization = shape
+        additions.append(synthetic)
+        materializations.append(materialization)
+    return bound_check_runs + additions, materializations
+
+
 def fetch_exact_commit_ci_status(
     commit_sha: str,
     *,
     fetch_check_runs: Callable[[str], Any] = _fetch_exact_commit_check_runs,
+    fetch_workflow_runs: Callable[[str], Any] = _fetch_exact_commit_workflow_runs,
 ) -> dict[str, Any]:
     """Return a fail-closed check summary for one exact commit SHA.
 
     The commit endpoint is intentionally independent of PR lifecycle state.  This supports the
     post-merge readback window where the PR is already terminal but its merge-commit checks are
-    still running.
+    still running. If a visible cancelled check has a newer exact-SHA workflow run, Actions run
+    metadata supplies a pending representative until that job's check record materializes.
     """
     commit_sha = commit_sha.strip()
     if not commit_sha:
@@ -258,9 +533,24 @@ def fetch_exact_commit_ci_status(
                 + ", ".join(mismatched_shas)
             ),
         }
-    checks, _ = _summarize_check_runs(
-        [check_run for check_run in check_runs if isinstance(check_run, dict)]
+    raw_check_runs = [check_run for check_run in check_runs if isinstance(check_run, dict)]
+    # The commit endpoint returns REST-shaped fields (for example ``workflow_id`` and
+    # ``started_at``), while the shared rerun reducer consumes the normalized rollup shape.
+    # Normalize and enrich before summarizing so an older cancelled run cannot override a newer
+    # exact-commit replacement.  Unknown workflow identities remain independent and fail closed.
+    enriched_check_runs = _enrich_rest_check_runs(raw_check_runs)
+    enriched_check_runs, materializations = _materialize_missing_replacements(
+        enriched_check_runs,
+        commit_sha=commit_sha,
+        fetch_workflow_runs=fetch_workflow_runs,
     )
+    normalized_check_runs = _rest_check_runs_to_rollup(enriched_check_runs)
+    checks, _ = _summarize_check_runs(normalized_check_runs)
+    if materializations:
+        checks["replacement_materialization"] = materializations
+        if any(item["check_status"] in PENDING_STATUSES for item in materializations):
+            checks["pending_reason"] = "replacement_check_materialization"
+            checks["diagnostic"] = "workflow_replacement_check_materialization"
     return {
         "status": "ok",
         "head_sha": commit_sha,

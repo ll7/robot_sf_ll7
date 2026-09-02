@@ -73,7 +73,7 @@ def run_simulation() -> None:
         if done:
             obs, _ = env.reset()
             env.render()
-    env.exit()
+    env.close()
 
 
 def prepare_gym_spaces():

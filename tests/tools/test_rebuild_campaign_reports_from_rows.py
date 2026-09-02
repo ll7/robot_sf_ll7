@@ -132,6 +132,7 @@ def test_reconcile_snqi_diagnostics_uses_curvature_aware_stored_field(tmp_path: 
         "smooth",
         "curved",
     ]
+    assert diagnostics["planner_ordering_basis"] == "stored_metrics.snqi"
     reconciliation = diagnostics["score_basis_reconciliation"]
     assert reconciliation["verified_episode_rows"] == 2
     assert reconciliation["effective_weights"]["w_curvature"] == 1.0

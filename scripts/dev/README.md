@@ -109,6 +109,25 @@ See [`docs/ai/open-issue-contract-preparation.md`](../../docs/ai/open-issue-cont
 for the operator contract. Focused offline tests live in
 `tests/dev/test_prepare_open_issue_contracts.py`.
 
+## Parent goal-autopilot arbitration
+
+[`goal_autopilot_controller.py`](goal_autopilot_controller.py) is the
+machine-checked parent arbiter for the continuous implement/review/merge/
+discover loop. Child workers may report only lane-local exhaustion, such as
+`implementation_queue_exhausted`; only the parent can emit
+`genuine_zero_work`. A terminal result includes a fresh
+`goal_autopilot_zero_work_proof.v1` receipt bound to the origin/main SHA,
+issue/claim state, PR heads, preparation audit, and discovery inputs.
+
+```bash
+uv run python scripts/dev/goal_autopilot_controller.py \
+  --snapshot /tmp/goal_autopilot_controller_snapshot.json --json
+```
+
+The arbiter routes merge, review, recovery, implementation, readiness-gate,
+formalization, and discovery work before considering a terminal result. Focused
+regression coverage lives in `tests/dev/test_goal_autopilot_controller.py`.
+
 ## Classification rule
 
 - Required automatic enforcement belongs in an explicit workflow or readiness

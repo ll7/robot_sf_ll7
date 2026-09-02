@@ -1,0 +1,12 @@
+{
+  "schema_version": "benchmark-derived-release-recovery.v1",
+  "source_sha": "59577bad289dd692ba3580e1600c4a649ae27880",
+  "producer_sums_sha256": "16d3144a8ac853169e6fc42184186fe65a4ad9985f6e13875bba81858015e727",
+  "producer_receipt_sha256": "679979c66545265c2efc3adbb85f3179afebef6fc4039e5b51c373bed936713d",
+  "rejected_result_sha256": "c70a5c39e3eeabaaaacb4a313577a75e2eb1e5e9bbfc538c39837c6bb2965afb",
+  "producer_file_count": 110,
+  "source_campaign_relative": "output/benchmarks/camera_ready/issue8018_release_full-s30-h600-59577bad289d-v1_20260901",
+  "episode_rows": 20160,
+  "arms": 14,
+  "goal_timeout_boundary_rows": []
+}

@@ -32,6 +32,11 @@ the full world state.
   visible pedestrians in the `ScenarioBelief` visibility-limited adapter. Use `0.0` for exact
   zero-noise reproduction.
 
+SocNav-only identity experiments may additionally set `ordering_tie_break: stable` for a
+deterministic distance/content-key order and `include_track_ids: true` to expose the optional
+episode-local `pedestrians.track_id` channel. These are observation-derived implementation
+features, not calibrated tracking or benchmark-quality evidence; the default remains unchanged.
+
 The smoke scenario
 `configs/scenarios/single/observation_visibility_blind_corner_smoke.yaml` demonstrates all settings
 on the Francis 2023 blind-corner map.

@@ -20,6 +20,42 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/issue_8222_obstacle_force_compatibility.md
+  status: current
+  freshness: policy
+  area: planner
+- path: docs/context/pedestrian_goal_force_prediction_research.md
+  status: current
+  freshness: maintained
+  area: research_contract
+- path: docs/context/core_contract_v1.md
+  status: current
+  freshness: maintained
+  area: research_contract
+- path: docs/context/evidence/issue_8073_goal_candidate_provider_smoke_2026-09-01.json
+  status: evidence
+  freshness: evidence
+  area: research_contract
+- path: docs/context/evidence/issue_8073_goal_candidate_provider_smoke_2026-09-01.json.review.json
+  status: evidence
+  freshness: evidence
+  area: research_contract
+- path: docs/context/evidence/issue_8072_goal_force_inverse_smoke_receipt.v1.json
+  status: evidence
+  freshness: evidence
+  area: research_contract
+- path: docs/context/evidence/issue_8072_goal_force_inverse_smoke_receipt.v1.json.review.json
+  status: evidence
+  freshness: evidence
+  area: research_contract
+- path: docs/context/issue_8068_goal_posterior_actor_baseline.md
+  status: current
+  freshness: maintained
+  area: research_contract
+- path: docs/context/evidence/issue_8068_goal_posterior_actor_smoke_receipt.v1.json
+  status: evidence
+  freshness: evidence
+  area: research_contract
 - path: docs/context/issue_7603_anisotropic_gaussian_cost.md
   status: current
   freshness: maintained
@@ -37,6 +73,22 @@ entries:
   freshness: evidence
   area: research_contract
 - path: docs/context/evidence/issue_8063_goal_belief_contract_receipt.v1.json.review.json
+  status: evidence
+  freshness: evidence
+  area: research_contract
+- path: docs/context/evidence/issue_8065_goal_force_instrumentation_receipt.v1.json
+  status: evidence
+  freshness: evidence
+  area: research_contract
+- path: docs/context/issue_8205_tracker_adapter_smoke.md
+  status: current
+  freshness: maintained
+  area: research_contract
+- path: docs/context/issue_8246_realism_validation_preregistration.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_8205_tracker_adapter_smoke_receipt.v1.json
   status: evidence
   freshness: evidence
   area: research_contract

@@ -437,6 +437,31 @@ _FAST_FILES = {
     # (issue #8063).
     "test_goal_belief_contract.py",
     "test_oracle_transition_trace_contract.py",
+    # Tracker-to-goal-belief adapter tests are deterministic observation-contract
+    # coverage; keep them in fast PR shards for the exact-head changed-coverage gate.
+    "test_tracker_goal_belief_adapter.py",
+    # One-frame heading posterior and actor/oracle boundary tests are deterministic
+    # contract coverage for the observation-only research baseline (issue #8068).
+    "test_goal_intention.py",
+    "test_goal_posterior_actor_oracle_boundary.py",
+    "test_goal_posterior_planner_input.py",
+    "test_goal_posterior_actor_smoke_issue_8068.py",
+    "test_goal_posterior_planner_input_smoke_issue_4164.py",
+    # Public goal-candidate generation and candidate-coverage tests are
+    # deterministic schema/lineage contracts for the research provider;
+    # keep them in fast PR shards for the exact-head changed-coverage gate
+    # (issue #8073).
+    "test_goal_candidate_provider.py",
+    "test_goal_candidate_coverage.py",
+    # Inverse goal-force estimator tests are deterministic actor/oracle-boundary
+    # contracts; keep their implementation-integrity coverage in PR fast shards.
+    "test_goal_force_inverse_dynamics.py",
+    # Core simulation-state contract tests are deterministic alias, schema, and
+    # import-boundary coverage for the additive core package (issue #8243).
+    "test_contract_v1.py",
+    # The pre-submit launch-manifest tests cover deterministic release-input
+    # binding and the public Slurm preflight consumer contract.
+    "test_generate_slurm_launch_manifest.py",
     # Topology-guided local-policy tests are deterministic planner-contract
     # coverage for the changed adapter; keep them in fast PR shards for the
     # exact-head changed-coverage gate.
@@ -502,6 +527,7 @@ _FAST_FILES = {
     "test_zenodo_publisher_edge_cases.py",
     # SocNav runtime-adapter tests cover the changed fallback diagnostics in
     # the planner modules without requiring an external benchmark dependency.
+    "test_socnav_observation.py",
     "test_socnav.py",
     "test_socnav_prediction_module.py",
     # Termination reason tests are deterministic unit contracts for canonical outcome flags.
@@ -568,6 +594,28 @@ _FAST_FILES = {
     # coverage for the changed planner producer; keep them in the exact-head
     # fast lane for changed-coverage admission.
     "test_force_coupled_potential_field.py",
+    # Versioned obstacle-force dispatch tests are deterministic contract
+    # coverage for the planner, simulator, and wrapper seams; keep their
+    # top-level modules in PR shards so changed coverage cannot exclude them as
+    # auto-marked slow tests.
+    "test_socnav_planner_adapter.py",
+    "test_fast_pysf_wrapper.py",
+    "test_simulator_init_factory.py",
+    # The evaluator-only oracle channel test is a one-step deterministic contract
+    # for changed environment plumbing; keep it in PR fast shards so changed
+    # coverage proves the info-only branch.
+    "test_oracle_force_trace_channel.py",
+    # Release preflight and camera-ready checkpoint tests are deterministic
+    # admission-contract coverage for changed release producers.
+    "test__legacy_campaign_facade.py",
+    "test_campaign_checkpoint_preflight.py",
+    # Interaction-conditioned realism validation and its contract tests are
+    # deterministic schema/segmenter contracts for the changed benchmark
+    # producer; keep them in fast shards for the exact-head changed-coverage
+    # gate (issue #8246).
+    "test_pedestrian_realism_validation.py",
+    "test_realism_validation_contract.py",
+    "test_realism_segmenter.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

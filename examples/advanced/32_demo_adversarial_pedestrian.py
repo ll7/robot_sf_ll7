@@ -175,7 +175,7 @@ def run_debug_rollout(args: argparse.Namespace) -> None:
             obs = reset_out[0] if isinstance(reset_out, tuple) else reset_out
             env.render()
 
-    env.exit()
+    env.close()
 
 
 def main() -> None:

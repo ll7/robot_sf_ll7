@@ -14,6 +14,7 @@ import pytest
 import yaml
 
 import robot_sf.benchmark.camera_ready._preflight as preflight_module
+import robot_sf.benchmark.campaign.campaign_checkpoint_preflight as checkpoint_module
 from robot_sf.benchmark.camera_ready._config_types import (
     CampaignConfig,
     PlannerSpec,
@@ -153,6 +154,47 @@ def test_cheap_check_passes_when_remote_source_declared(tmp_path: Path) -> None:
     assert summary["arms"][0]["status"] == "stageable_remote"
 
 
+def test_authoritative_receipt_suppresses_contradictory_metadata_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An external staged receipt keeps metadata diagnostics without a false submit warning."""
+    registry_path = _write_registry(
+        tmp_path,
+        [
+            {
+                "model_id": "remote",
+                "local_path": "output/model_cache/remote/model.zip",
+                "github_release": {
+                    "asset_name": "remote-model.zip",
+                    "url": "https://example.invalid/remote-model.zip",
+                    "sha256": "0" * 64,
+                },
+            }
+        ],
+    )
+    algo_config = _write_algo_config(tmp_path, "ppo.yaml", {"algo": "ppo", "model_id": "remote"})
+    cfg = _campaign(
+        (PlannerSpec(key="ppo", algo="ppo", algo_config_path=algo_config),),
+        tmp_path=tmp_path,
+    )
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        checkpoint_module.logger,
+        "warning",
+        lambda message, *args, **kwargs: warnings.append(str(message).format(*args)),
+    )
+
+    summary = check_campaign_arm_checkpoints_preflight(
+        cfg,
+        registry_path=registry_path,
+        suppress_not_submit_safe_warning=True,
+    )
+
+    assert summary["metadata_resolvable"] is True
+    assert summary["submit_safe"] is False
+    assert warnings == []
+
+
 def test_cheap_check_rejects_unknown_model_id(tmp_path: Path) -> None:
     """An unknown/mistyped model_id fails closed and names the arm."""
     registry_path = _write_registry(
@@ -222,6 +264,7 @@ def test_empty_campaign_returns_zero_checked_but_not_submit_safe(tmp_path: Path)
         "checked": 0,
         "resolved": 0,
         "stage": False,
+        "metadata_resolvable": False,
         "submit_safe": False,
         "arms": [],
     }

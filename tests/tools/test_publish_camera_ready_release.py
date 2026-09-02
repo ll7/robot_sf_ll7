@@ -140,6 +140,34 @@ def test_publish_camera_ready_release_dry_run_outputs_plan(
     assert payload["upload_command"][0:3] == ["gh", "release", "upload"]
 
 
+def test_publish_camera_ready_release_accepts_campaign_relative_derived_bundle(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """Recovered releases may keep their publication bundle beside the campaign."""
+    campaign_root = _make_campaign_tree(tmp_path, tag="v1.0.0-derived")
+    repository_publication = tmp_path / "output" / "benchmarks" / "publication"
+    campaign_publication = campaign_root / "publication"
+    repository_publication.rename(campaign_publication)
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["publication_bundle"] = {
+        "archive_path": "publication/bundle.tar.gz",
+        "checksums_path": "publication/bundle/checksums.sha256",
+        "manifest_path": "publication/bundle/publication_manifest.json",
+    }
+    _write_json(summary_path, summary)
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+
+    exit_code = publish_camera_ready_release.main(
+        ["--campaign-root", str(campaign_root), "--tag", "v1.0.0-derived"]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["archive_path"].startswith(str(campaign_root))
+    assert payload["manifest_path"].startswith(str(campaign_root))
+
+
 def test_publish_camera_ready_release_executes_upload(tmp_path: Path, monkeypatch) -> None:
     """Execute mode should call subprocess upload command."""
     campaign_root = _make_campaign_tree(tmp_path, tag="v1.0.1")

@@ -12,6 +12,7 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.camera_ready_campaign import CampaignConfig, PlannerSpec, SeedPolicy
+from robot_sf.benchmark.checkpoint_staging_receipt import CheckpointStagingReceiptError
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
 from robot_sf.benchmark.release_protocol import load_release_manifest
 from scripts.tools import rebuild_campaign_reports_from_rows, run_benchmark_release
@@ -1106,6 +1107,157 @@ def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_
     payload = json.loads(capsys.readouterr().out)
     assert payload["manifest_validation"]["status"] == "valid"
     assert payload["campaign_id"] == "cid"
+
+
+def test_release_preflight_admits_staged_receipt_separately_from_metadata_diagnostic(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """A valid staged receipt becomes authoritative without overwriting metadata diagnostics."""
+    config_path = tmp_path / "campaign.yaml"
+    receipt_path = tmp_path / "checkpoint-receipt.json"
+    config_path.write_text("name: campaign\n", encoding="utf-8")
+    receipt_path.write_text("{}\n", encoding="utf-8")
+    manifest = SimpleNamespace(canonical_campaign_config_path=config_path)
+    sentinel_cfg = object()
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: sentinel_cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda manifest, campaign_config=None: {"status": "valid", "problems": []},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_resolved_release_manifest",
+        lambda manifest, **kwargs: {"release_id": "rid"},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_required_repo_relative",
+        lambda path: "output/checkpoint-receipt.json",
+    )
+    monkeypatch.setattr(run_benchmark_release, "sha256_file", lambda path: "a" * 64)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_checkpoint_staging_receipt",
+        lambda cfg, path, **kwargs: {
+            "generated_at_utc": "2026-09-01T00:00:00Z",
+            "submit_safe": True,
+            "arms": [{"planner_key": "ppo"}],
+        },
+    )
+
+    def _fake_prepare(cfg, **kwargs):
+        captured.update(kwargs)
+        return {
+            "campaign_id": "cid",
+            "campaign_root": tmp_path / "out" / "cid",
+            "validate_config_path": tmp_path / "out" / "cid" / "preflight" / "validate.json",
+            "preview_scenarios_path": tmp_path / "out" / "cid" / "preflight" / "preview.json",
+            "matrix_summary_json_path": tmp_path / "out" / "cid" / "reports" / "matrix.json",
+            "matrix_summary_csv_path": tmp_path / "out" / "cid" / "reports" / "matrix.csv",
+            "checkpoint_preflight_summary": {
+                "metadata_resolvable": True,
+                "submit_safe": False,
+            },
+        }
+
+    monkeypatch.setattr(run_benchmark_release, "prepare_campaign_preflight", _fake_prepare)
+
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "manifest.yaml",
+            "--mode",
+            "preflight",
+            "--checkpoint-receipt",
+            str(receipt_path),
+        ]
+    )
+
+    captured_output = capsys.readouterr()
+    payload = json.loads(captured_output.out)
+    assert exit_code == 0
+    assert captured["authoritative_checkpoint_admission"] is True
+    assert payload["checkpoint_admission"] == {
+        "metadata_resolvable": True,
+        "metadata_submit_safe": False,
+        "staged_checkpoint_admission": {
+            "schema_version": "benchmark-release-checkpoint-admission.v1",
+            "status": "admitted",
+            "source": "checkpoint_receipt",
+            "path": "output/checkpoint-receipt.json",
+            "sha256": "a" * 64,
+            "generated_at_utc": "2026-09-01T00:00:00Z",
+            "submit_safe": True,
+            "arm_count": 1,
+        },
+    }
+
+
+def test_release_preflight_rejects_invalid_staged_receipt_before_campaign_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    """A supplied stale or malformed receipt fails before preflight artifacts are created."""
+    manifest = SimpleNamespace(canonical_campaign_config_path=tmp_path / "campaign.yaml")
+    sentinel_cfg = object()
+    monkeypatch.setattr(run_benchmark_release, "load_release_manifest", lambda path: manifest)
+    monkeypatch.setattr(run_benchmark_release, "load_campaign_config", lambda path: sentinel_cfg)
+    monkeypatch.setattr(run_benchmark_release, "check_orca_rvo2_preflight", lambda cfg: None)
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_release_manifest",
+        lambda manifest, campaign_config=None: {"status": "valid", "problems": []},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "build_resolved_release_manifest",
+        lambda manifest, **kwargs: {"release_id": "rid"},
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "_required_repo_relative",
+        lambda path: "output/checkpoint-receipt.json",
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "validate_checkpoint_staging_receipt",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            CheckpointStagingReceiptError("checkpoint staging receipt is stale")
+        ),
+    )
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "prepare_campaign_preflight",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("invalid receipts must be rejected before campaign setup")
+        ),
+    )
+
+    exit_code = run_benchmark_release.main(
+        [
+            "--manifest",
+            "manifest.yaml",
+            "--mode",
+            "preflight",
+            "--checkpoint-receipt",
+            "receipt.json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["status"] == "checkpoint_receipt_rejected"
+    assert payload["campaign_execution_status"] == "not_started"
+    assert payload["checkpoint_admission"]["staged_checkpoint_admission"]["status"] == "rejected"
+    assert "stale" in payload["status_reason"]
 
 
 def test_release_run_fails_closed_on_invalid_manifest(monkeypatch, capsys) -> None:

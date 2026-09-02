@@ -23,6 +23,15 @@ from email.policy import default as email_policy
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+if __package__ in (None, ""):
+    # Direct workflow invocation puts only scripts/dev on sys.path.  Add the
+    # checkout root before importing the canonical dependency-row contract.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from scripts.tools.check_dependency_license_inventory import (
+    selected_policy_pending_package_count,
+)
+
 SCHEMA_VERSION = "robot_sf.software_promotion.receipt.v1"
 COLD_INSTALL_SCHEMA_VERSION = "robot_sf.software_promotion.cold_install.v1"
 INDEX_VERIFICATION_SCHEMA_VERSION = "robot_sf.software_promotion.index_verification.v1"
@@ -44,6 +53,9 @@ RUN_ID_PATTERN = re.compile(r"[1-9][0-9]*\Z")
 VERSION_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9.+!_-]*\Z")
 ARTIFACT_NAME_PATTERN = re.compile(
     r"robot-sf-software-candidate-[0-9a-f]{40}-[1-9][0-9]*-[1-9][0-9]*\Z"
+)
+REJECTED_DIAGNOSTIC_ARTIFACT_NAME_PATTERN = re.compile(
+    r"robot-sf-software-candidate-rejected-[0-9a-f]{40}-[1-9][0-9]*-[1-9][0-9]*\Z"
 )
 RECEIPT_ARTIFACT_NAME_PATTERN = re.compile(
     r"robot-sf-(?:testpypi|pypi)-(?:receipt|cold-install)-[1-9][0-9]*-[1-9][0-9]*\Z"
@@ -77,6 +89,7 @@ PUBLISHED_MEMBER_KINDS = ("wheel", "sdist")
 MANIFEST_NAME = "candidate-manifest.json"
 PROVENANCE_NAME = "candidate-provenance.json"
 RIGHTS_RECEIPT_NAME = "rights-admission.json"
+REJECTED_DIAGNOSTIC_NAME = "rejected-diagnostic.json"
 RIGHTS_POLICY_ID = "robot_sf.software_release_rights_policy.v1"
 RIGHTS_POLICY_PATH = "scripts/validation/software_release_rights_policy.v1.json"
 SANITIZED_CANDIDATE_SCHEMA = "robot_sf.software_sanitized_candidate.v1"
@@ -263,6 +276,12 @@ def _artifact_digest(value: str) -> str:
 
 
 def _artifact_name(value: str, *, kind: str) -> str:
+    if (
+        kind == "candidate"
+        and isinstance(value, str)
+        and REJECTED_DIAGNOSTIC_ARTIFACT_NAME_PATTERN.fullmatch(value)
+    ):
+        raise PromotionError("rejected diagnostic artifact is never eligible for promotion")
     pattern = {
         "candidate": ARTIFACT_NAME_PATTERN,
         "receipt": RECEIPT_ARTIFACT_NAME_PATTERN,
@@ -568,6 +587,9 @@ def _load_candidate(
     """Load a candidate and return ``(manifest, identity)`` after byte checks."""
 
     _require_real_dir(bundle_dir, label="candidate bundle")
+    rejected_marker = bundle_dir / REJECTED_DIAGNOSTIC_NAME
+    if rejected_marker.is_symlink() or rejected_marker.is_file():
+        raise PromotionError("rejected diagnostic bundle is never eligible for promotion")
     entries = sorted(bundle_dir.iterdir(), key=lambda path: path.name)
     if any(path.is_symlink() or not path.is_file() for path in entries):
         raise PromotionError("candidate bundle contains a non-regular member")
@@ -1067,12 +1089,10 @@ def _validate_supported_dependency_report(  # noqa: C901, PLR0912, PLR0915 - clo
     structural_issues = report.get("structural_issues")
     if not isinstance(failures, list) or not isinstance(structural_issues, list):
         raise PromotionError("supported dependency report findings are malformed")
-    pending_rows = [
-        row for row in selected_rows if row.get("policy_disposition") == "review_required"
-    ]
+    pending_package_count = selected_policy_pending_package_count(selected_rows)
     expected_summary = {
         "selected_package_count": len(selected_rows),
-        "policy_pending_package_count": len(pending_rows),
+        "policy_pending_package_count": pending_package_count,
         "unresolved_count": len(failures),
         "structural_issue_count": len(structural_issues),
     }

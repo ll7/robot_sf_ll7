@@ -68,7 +68,7 @@ def test_simulation(map_definition: MapDefinition) -> None:
 
         env.reset()
     finally:
-        env.exit()
+        env.close()
 
 
 def get_file() -> Path:

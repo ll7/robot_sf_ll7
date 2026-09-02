@@ -10,7 +10,7 @@ from robot_sf.gym_env.robot_env import (
     _build_goal_posterior_planner_input,
     _build_step_info,
 )
-from robot_sf.prediction.goal_intention import planner_goal_posterior_channel_from_state
+from robot_sf.prediction.goal_intention import planner_oracle_goal_posterior_channel_from_state
 
 
 class _FakePysfState:
@@ -29,7 +29,7 @@ class _FakeSimulator:
 def test_planner_goal_posterior_state_channel_absent_when_disabled() -> None:
     """Disabled planner-input channel carries no posterior summaries."""
 
-    channel = planner_goal_posterior_channel_from_state(
+    channel = planner_oracle_goal_posterior_channel_from_state(
         enabled=False,
         positions=[(0.0, 0.0)],
         velocities=[(1.0, 0.0)],
@@ -42,7 +42,7 @@ def test_planner_goal_posterior_state_channel_absent_when_disabled() -> None:
 def test_planner_goal_posterior_state_channel_present_when_enabled() -> None:
     """Enabled planner-input channel exposes top-goal metadata."""
 
-    channel = planner_goal_posterior_channel_from_state(
+    channel = planner_oracle_goal_posterior_channel_from_state(
         enabled=True,
         positions=[(0.0, 0.0)],
         velocities=[(1.0, 0.0)],
@@ -52,7 +52,9 @@ def test_planner_goal_posterior_state_channel_present_when_enabled() -> None:
 
     summary = channel["pedestrian_goal_posteriors"]["crossing_ped"]
     assert channel["enabled"] is True
-    assert summary["candidate_source"] == "scenario_route_endpoints"
+    assert summary["candidate_source"] == "oracle_true_goal_identity"
+    assert summary["source"] == "simulator_upper_bound"
+    assert summary["oracle_only"] is True
     assert summary["top_goal_id"] == "crossing_ped_route_goal"
     assert summary["top_goal_confidence"] == 1.0
     assert isinstance(summary["config_hash"], str)
@@ -61,7 +63,7 @@ def test_planner_goal_posterior_state_channel_present_when_enabled() -> None:
 def test_planner_goal_posterior_state_channel_stationary_blocker() -> None:
     """Stationary pedestrians report blocker provenance instead of NaNs."""
 
-    channel = planner_goal_posterior_channel_from_state(
+    channel = planner_oracle_goal_posterior_channel_from_state(
         enabled=True,
         positions=[(0.0, 0.0)],
         velocities=[(0.0, 0.0)],
@@ -91,8 +93,19 @@ def test_robot_env_goal_posterior_planner_input_is_opt_in_metadata() -> None:
     channel = _build_goal_posterior_planner_input(config, simulator)
 
     assert channel["enabled"] is True
-    assert sorted(channel["pedestrian_goal_posteriors"]) == ["ped_0", "ped_1"]
-    assert channel["pedestrian_goal_posteriors"]["ped_0"]["top_goal_id"] == ("ped_0_route_goal")
+    assert channel["status"] == "unavailable"
+    assert channel["source"] == "observation_only"
+    assert channel["oracle_only"] is False
+    assert channel["blocker"] == "candidate_provider_not_configured"
+    assert channel["pedestrian_goal_posteriors"] == {}
+
+
+def test_robot_env_goal_posterior_builder_is_empty_when_disabled() -> None:
+    """The direct builder preserves the exact disabled channel contract."""
+
+    channel = _build_goal_posterior_planner_input(EnvSettings(), object())
+
+    assert channel == {"enabled": False, "pedestrian_goal_posteriors": {}}
 
 
 def _enabled_config_and_sim() -> tuple[EnvSettings, _FakeSimulator]:

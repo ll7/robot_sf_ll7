@@ -48,9 +48,15 @@ Outside that envelope, the correct result is a calibrated distribution, a censor
 
 ## 2. Current repository truth
 
-### 2.1 Existing goal-posterior plumbing is oracle-backed
+### 2.1 Existing goal-posterior plumbing and delivered baseline contracts
 
-`robot_sf/prediction/goal_intention.py` contains a useful heading-likelihood calculation over explicit candidate points. The current environment adapter, however, constructs one candidate from the true PySocialForce goal columns. A one-candidate posterior with probability one is an oracle identity mapping, not deployable inference.
+`robot_sf/prediction/goal_intention.py` contains a useful heading-likelihood calculation over explicit candidate points. The historical environment adapter constructed one candidate from the true PySocialForce goal columns, which is an oracle identity mapping, not deployable inference.
+
+Delivered progress across early programme waves:
+- Issue [#8068](https://github.com/ll7/robot_sf_ll7/issues/8068) delivered the actor-safe one-frame heading posterior baseline (`robot_sf/prediction/goal_intention.py`), rejecting oracle state.
+- Issue [#8072](https://github.com/ll7/robot_sf_ll7/issues/8072) delivered the inverse goal-force estimator (`robot_sf/prediction/goal_force_inverse_dynamics.py`).
+- Issue [#8073](https://github.com/ll7/robot_sf_ll7/issues/8073) delivered the public goal candidate provider (`robot_sf/prediction/goal_candidate_provider.py`) with compact receipt [`evidence/issue_8073_goal_candidate_provider_smoke_2026-09-01.json`](evidence/issue_8073_goal_candidate_provider_smoke_2026-09-01.json).
+- Issue [#8205](https://github.com/ll7/robot_sf_ll7/issues/8205) delivered the tracker goal belief adapter.
 
 Required disposition:
 

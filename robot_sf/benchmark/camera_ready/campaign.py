@@ -97,6 +97,7 @@ from robot_sf.benchmark.observation_noise import (
 from robot_sf.benchmark.result_provenance import build_execution_context_provenance
 from robot_sf.benchmark.seed_variance import build_seed_episode_rows
 from robot_sf.benchmark.snqi.campaign_contract import (
+    SNQI_FAILED_WARN_RECOMMENDATION,
     SnqiContractThresholds,
     build_positioning_recommendation,
     calibrate_weights,
@@ -105,6 +106,7 @@ from robot_sf.benchmark.snqi.campaign_contract import (
     compute_component_correlations,
     compute_component_dominance,
     compute_planner_snqi_ordering,
+    compute_stored_snqi_ordering,
     compute_weight_sensitivity,
     evaluate_snqi_contract,
     resolve_weight_mapping,
@@ -122,6 +124,10 @@ if TYPE_CHECKING:
 
 
 CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
+_SNQI_FAILED_WARN_BOUNDARY = (
+    "SNQI calibration failed under warn and remains advisory only; it is not a "
+    "planner-ranking authority."
+)
 DEFAULT_EPISODE_SCHEMA_PATH = Path("robot_sf/benchmark/schemas/episode.schema.v1.json")
 
 _CAMPAIGN_TABLE_HEADERS = (
@@ -2241,7 +2247,7 @@ def _build_and_write_snqi_section(  # noqa: PLR0913
     positioning_results = _compute_snqi_positioning(
         planner_rows, episodes, baseline_for_eval, configured_weights, cfg
     )
-    positioning = positioning_results["positioning"]
+    positioning = dict(positioning_results["positioning"])
     weights_sha256, baseline_sha256 = _compute_snqi_hashes(
         cfg, configured_weights, baseline_for_eval
     )
@@ -2310,10 +2316,15 @@ def _compute_snqi_positioning(
         weights=configured_weights,
         baseline=baseline_for_eval,
     )
-    planner_ordering = compute_planner_snqi_ordering(
+    diagnostic_ordering = compute_planner_snqi_ordering(
         episodes,
         weights=configured_weights,
         baseline=baseline_for_eval,
+    )
+    stored_ordering = compute_stored_snqi_ordering(episodes)
+    planner_ordering = stored_ordering or diagnostic_ordering
+    planner_ordering_basis = (
+        "stored_metrics.snqi" if stored_ordering is not None else "diagnostic_scalarizer"
     )
     weight_sensitivity = compute_weight_sensitivity(
         episodes,
@@ -2330,6 +2341,7 @@ def _compute_snqi_positioning(
         "component_dominance": component_dominance,
         "component_correlations": component_correlations,
         "planner_ordering": planner_ordering,
+        "planner_ordering_basis": planner_ordering_basis,
         "weight_sensitivity": weight_sensitivity,
         "positioning": positioning,
     }
@@ -2354,14 +2366,14 @@ def _build_snqi_diagnostics_payload(  # noqa: PLR0913
     Returns:
         Complete SNQI diagnostics payload for artifact writing.
     """
-    positioning = positioning_results["positioning"]
+    positioning = dict(positioning_results["positioning"])
     weights_path = (
         _repo_relative(cfg.snqi_weights_path) if cfg.snqi_weights_path is not None else None
     )
     baseline_path = (
         _repo_relative(cfg.snqi_baseline_path) if cfg.snqi_baseline_path is not None else None
     )
-    return {
+    payload = {
         "schema_version": "benchmark-snqi-diagnostics.v1",
         "campaign_id": campaign_id,
         "generated_at_utc": campaign_finished_at_utc,
@@ -2400,9 +2412,48 @@ def _build_snqi_diagnostics_payload(  # noqa: PLR0913
         "component_dominance": positioning_results["component_dominance"],
         "component_correlations": positioning_results["component_correlations"],
         "planner_ordering": positioning_results["planner_ordering"],
+        "planner_ordering_basis": positioning_results["planner_ordering_basis"],
         "weight_sensitivity": positioning_results["weight_sensitivity"],
         "positioning": positioning,
     }
+    return _apply_snqi_advisory_boundary(
+        payload,
+        positioning=positioning,
+        contract_status=contract_eval.status,
+        contract_enforcement=cfg.snqi_contract.enforcement,
+    )
+
+
+def _apply_snqi_advisory_boundary(
+    payload: dict[str, Any],
+    *,
+    positioning: dict[str, Any],
+    contract_status: str,
+    contract_enforcement: str,
+) -> dict[str, Any]:
+    """Make failed-under-warn SNQI explicitly non-authoritative for ranking claims.
+
+    Returns:
+        The diagnostics payload with an advisory boundary when required.
+    """
+    if contract_status != "fail" or contract_enforcement != "warn":
+        return payload
+    caveats = positioning.get("caveats")
+    caveats = list(caveats) if isinstance(caveats, list) else []
+    if _SNQI_FAILED_WARN_BOUNDARY not in caveats:
+        caveats.append(_SNQI_FAILED_WARN_BOUNDARY)
+    positioning["caveats"] = caveats
+    positioning["planner_ordering_informative"] = False
+    positioning["recommendation"] = SNQI_FAILED_WARN_RECOMMENDATION
+    payload["release_claim_boundary"] = {
+        "status": "advisory_only",
+        "ranking_authority": False,
+        "ranking_claims_admitted": False,
+        "calibration_status": "fail",
+        "enforcement": "warn",
+        "claim_boundary": _SNQI_FAILED_WARN_BOUNDARY,
+    }
+    return payload
 
 
 def _write_seed_variability_section(  # noqa: PLR0913

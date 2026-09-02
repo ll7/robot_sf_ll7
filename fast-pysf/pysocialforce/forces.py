@@ -17,18 +17,21 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from math import atan2, exp
-from typing import Protocol
+from typing import Any, Protocol
 
 import numpy as np
 from numba import njit
 
 from pysocialforce.config import (
+    LEGACY_SHIFTED_GRADIENT_V1,
     DesiredForceConfig,
     GroupCoherenceForceConfig,
     GroupGazeForceConfig,
     GroupReplusiveForceConfig,
     ObstacleForceConfig,
     SocialForceConfig,
+    obstacle_force_law_metadata,
+    resolve_obstacle_force_law,
 )
 from pysocialforce.logging import logger
 from pysocialforce.scene import Line2D, PedState, Point2D
@@ -427,8 +430,23 @@ class ObstacleForce:
         threshold = self.config.threshold
 
         threshold = threshold + self.get_agent_radius() * sigma
-        all_obstacle_forces(forces, ped_positions, obstacles, threshold)
+        law_version = resolve_obstacle_force_law(getattr(self.config, "law_version", None))
+        if law_version == LEGACY_SHIFTED_GRADIENT_V1:
+            all_obstacle_forces(forces, ped_positions, obstacles, threshold)
+        else:
+            all_obstacle_forces_surface_distance_unit_normal(
+                forces, ped_positions, obstacles, threshold
+            )
         return forces * self.config.factor
+
+    def law_metadata(self) -> dict[str, str]:
+        """Return the fast-pysf law and site conventions used by this force."""
+        return obstacle_force_law_metadata(
+            getattr(self.config, "law_version", None),
+            site="fast_pysf",
+            geometry_convention="map_line_endpoints_orthogonal_vector",
+            radius_convention="threshold_plus_agent_radius_sigma",
+        )
 
 
 @njit(fastmath=True, nogil=True)
@@ -456,6 +474,31 @@ def all_obstacle_forces(
             )
 
             # Accumulate forces from all obstacles on the current pedestrian
+            out_forces[i, 0] += force_x
+            out_forces[i, 1] += force_y
+
+
+@njit(fastmath=True, nogil=True)
+def all_obstacle_forces_surface_distance_unit_normal(
+    out_forces: np.ndarray, ped_positions: np.ndarray, obstacles: np.ndarray, ped_radius: float
+):
+    """Populate ``out_forces`` with the opt-in unit-normal obstacle law.
+
+    The obstacle endpoints and orthogonal-vector segment-selection convention are
+    shared with :func:`all_obstacle_forces`; only the force direction normalization
+    differs from the historical shifted-gradient law.
+    """
+    obstacle_segments = obstacles[:, :4]
+    ortho_vecs = obstacles[:, 4:]
+    num_peds = ped_positions.shape[0]
+    num_obstacles = obstacles.shape[0]
+
+    for i in range(num_peds):
+        ped_pos = ped_positions[i]
+        for j in range(num_obstacles):
+            force_x, force_y = obstacle_force_surface_distance_unit_normal(
+                obstacle_segments[j], ortho_vecs[j], ped_pos, ped_radius
+            )
             out_forces[i, 0] += force_x
             out_forces[i, 1] += force_y
 
@@ -536,6 +579,157 @@ def obstacle_force(
         (cross_x - ped_pos[0]) * dy3_cross_x + (cross_y - ped_pos[1]) * (dy3_cross_y - 1)
     ) / obst_dist
     return potential_field_force(obst_dist, dx_obst_dist, dy_obst_dist)
+
+
+@njit(fastmath=True, nogil=True)
+def surface_distance_unit_normal_force(
+    raw_distance: float, dx_to_surface: float, dy_to_surface: float, ped_radius: float
+) -> tuple[float, float]:
+    """Compute the corrected inverse-cubic force from a raw surface normal.
+
+    ``ped_radius`` is the site-specific effective offset passed by the caller.
+    At an exactly coincident point the unit normal is undefined, so the force is
+    explicitly zero; positive near-contact distances remain finite because the
+    same collision-distance floor is retained.
+
+    Returns:
+        tuple[float, float]: Corrected repulsive force components.
+    """
+    if raw_distance <= 0.0:
+        return 0.0, 0.0
+    obst_dist = max(raw_distance - ped_radius, 1e-5)
+    der_potential = 1 / pow(obst_dist, 3)
+    normal_x = dx_to_surface / raw_distance
+    normal_y = dy_to_surface / raw_distance
+    return der_potential * normal_x, der_potential * normal_y
+
+
+@njit(fastmath=True, nogil=True)
+def obstacle_force_surface_distance_unit_normal(
+    obstacle: Line2D, ortho_vec: Point2D, ped_pos: Point2D, ped_radius: float
+) -> tuple[float, float]:
+    """Calculate the corrected surface-distance/unit-normal obstacle force.
+
+    The point, endpoint, and orthogonal-projection segment branches intentionally
+    mirror :func:`obstacle_force`.  The distance offset is applied only to the
+    potential magnitude; direction is the unit vector from the selected obstacle
+    surface point to the pedestrian position.
+
+    Returns:
+        tuple[float, float]: Corrected repulsive force components.
+    """
+    x1, y1, x2, y2 = obstacle
+    (x3, y3), (x4, y4) = ped_pos, (ped_pos[0] + ortho_vec[0], ped_pos[1] + ortho_vec[1])
+
+    if (x1, y1) == (x2, y2):
+        raw_distance = euclid_dist(ped_pos[0], ped_pos[1], x1, y1)
+        return surface_distance_unit_normal_force(
+            raw_distance, ped_pos[0] - x1, ped_pos[1] - y1, ped_radius
+        )
+
+    num = (x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)
+    den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+    if den == 0.0:
+        ortho_hit = False
+        t = 0.0
+    else:
+        t = num / den
+        ortho_hit = 0 <= t <= 1
+
+    if not ortho_hit:
+        d1 = euclid_dist(ped_pos[0], ped_pos[1], x1, y1)
+        d2 = euclid_dist(ped_pos[0], ped_pos[1], x2, y2)
+        if d1 < d2:
+            bound_x, bound_y = x1, y1
+            raw_distance = d1
+        else:
+            bound_x, bound_y = x2, y2
+            raw_distance = d2
+        return surface_distance_unit_normal_force(
+            raw_distance, ped_pos[0] - bound_x, ped_pos[1] - bound_y, ped_radius
+        )
+
+    cross_x, cross_y = x1 + t * (x2 - x1), y1 + t * (y2 - y1)
+    raw_distance = euclid_dist(ped_pos[0], ped_pos[1], cross_x, cross_y)
+    return surface_distance_unit_normal_force(
+        raw_distance, ped_pos[0] - cross_x, ped_pos[1] - cross_y, ped_radius
+    )
+
+
+def obstacle_force_for_law(
+    obstacle: Line2D,
+    ortho_vec: Point2D,
+    ped_pos: Point2D,
+    ped_radius: float,
+    law_version: Any = None,
+) -> tuple[float, float]:
+    """Dispatch one obstacle force while preserving the unversioned legacy path.
+
+    Returns:
+        tuple[float, float]: Force components from the selected law.
+    """
+    resolved = resolve_obstacle_force_law(law_version)
+    if resolved == LEGACY_SHIFTED_GRADIENT_V1:
+        return obstacle_force(obstacle, ortho_vec, ped_pos, ped_radius)
+    return obstacle_force_surface_distance_unit_normal(obstacle, ortho_vec, ped_pos, ped_radius)
+
+
+def all_obstacle_forces_for_law(
+    out_forces: np.ndarray,
+    ped_positions: np.ndarray,
+    obstacles: np.ndarray,
+    ped_radius: float,
+    law_version: Any = None,
+) -> None:
+    """Dispatch batched obstacle forces by explicit law identifier."""
+    resolved = resolve_obstacle_force_law(law_version)
+    if resolved == LEGACY_SHIFTED_GRADIENT_V1:
+        all_obstacle_forces(out_forces, ped_positions, obstacles, ped_radius)
+    else:
+        all_obstacle_forces_surface_distance_unit_normal(
+            out_forces, ped_positions, obstacles, ped_radius
+        )
+
+
+def surface_distance_unit_normal_force_vectors(
+    relative_positions: np.ndarray,
+    effective_offsets: np.ndarray | float,
+) -> np.ndarray:
+    """Evaluate corrected point-obstacle forces for a vectorized runtime site.
+
+    Args:
+        relative_positions: Rows of ``pedestrian_position - obstacle_center``.
+        effective_offsets: Per-obstacle offset, including the site's radius terms.
+
+    Returns:
+        Unscaled force rows with one vector per obstacle. Coincident or non-finite
+        rows are returned as zero vectors.
+    """
+    positions = np.asarray(relative_positions, dtype=float)
+    if positions.ndim != 2 or positions.shape[1] != 2:
+        raise ValueError("relative_positions must have shape (N, 2)")
+
+    raw_distances = np.linalg.norm(positions, axis=1)
+    offsets = np.asarray(effective_offsets, dtype=float)
+    if offsets.ndim == 0:
+        offsets = np.full(raw_distances.shape, float(offsets), dtype=float)
+    else:
+        offsets = offsets.reshape(-1)
+    if offsets.shape != raw_distances.shape:
+        raise ValueError("effective_offsets must be scalar or have one value per position")
+
+    surface_distances = np.maximum(raw_distances - offsets, 1e-5)
+    valid = (
+        np.isfinite(positions).all(axis=1)
+        & np.isfinite(raw_distances)
+        & (raw_distances > 0.0)
+        & np.isfinite(surface_distances)
+    )
+    forces = np.zeros_like(positions, dtype=float)
+    if np.any(valid):
+        normal = positions[valid] / raw_distances[valid, np.newaxis]
+        forces[valid] = normal / surface_distances[valid, np.newaxis] ** 3
+    return forces
 
 
 @njit(fastmath=True)

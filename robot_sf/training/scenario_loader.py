@@ -1344,7 +1344,16 @@ def _apply_observation_visibility_overrides(
         return
     if not isinstance(overrides, Mapping):
         raise ValueError("observation_visibility must be a mapping.")
-    allowed = {"enabled", "fov_degrees", "max_range_m", "static_occlusion", "dynamic_occlusion"}
+    allowed = {
+        "enabled",
+        "fov_degrees",
+        "max_range_m",
+        "static_occlusion",
+        "dynamic_occlusion",
+        "ordering_tie_break",
+        "include_track_ids",
+        "tracking_config",
+    }
     unknown = sorted(set(overrides) - allowed)
     if unknown:
         raise ValueError(f"observation_visibility contains unknown keys: {', '.join(unknown)}.")
@@ -1386,12 +1395,32 @@ def _apply_observation_visibility_overrides(
         if "dynamic_occlusion" in overrides
         else False
     )
+    ordering_tie_break = overrides.get("ordering_tie_break", "legacy")
+    if not isinstance(ordering_tie_break, str):
+        raise ValueError("observation_visibility.ordering_tie_break must be a string.")
+    ordering_tie_break = ordering_tie_break.strip().lower()
+    if ordering_tie_break not in {"legacy", "stable"}:
+        raise ValueError("observation_visibility.ordering_tie_break must be 'legacy' or 'stable'.")
+    include_track_ids = (
+        _coerce_bool(
+            overrides["include_track_ids"],
+            field_name="observation_visibility.include_track_ids",
+        )
+        if "include_track_ids" in overrides
+        else False
+    )
+    tracking_config = overrides.get("tracking_config")
+    if tracking_config is not None and not isinstance(tracking_config, Mapping):
+        raise ValueError("observation_visibility.tracking_config must be a mapping.")
     config.observation_visibility = ObservationVisibilitySettings(
         enabled=enabled,
         fov_degrees=fov_degrees,
         max_range_m=max_range_m,
         static_occlusion=static_occlusion,
         dynamic_occlusion=dynamic_occlusion,
+        ordering_tie_break=ordering_tie_break,
+        include_track_ids=include_track_ids,
+        tracking_config=None if tracking_config is None else dict(tracking_config),
     )
 
 
@@ -2190,7 +2219,7 @@ def _set_simulation_override_attr(
             enable_attr,
             replace(getattr(config.sim_config, enable_attr), enabled=True),
         )
-    elif attr == "pedestrian_uncertainty_envelope_enabled":
+    elif attr in {"pedestrian_uncertainty_envelope_enabled", "oracle_force_trace_enabled"}:
         setattr(
             config.sim_config,
             attr,
@@ -2304,6 +2333,7 @@ def _apply_simulation_overrides(
         "action_latency_steps",
         "action_latency_ms",
         "pedestrian_integration_scheme",
+        "oracle_force_trace_enabled",
         "ped_radius",
         "pedestrian_uncertainty_envelope_enabled",
         "pedestrian_uncertainty_alpha_mps",

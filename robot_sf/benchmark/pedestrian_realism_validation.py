@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -54,7 +55,6 @@ from robot_sf.data.external.eth_ucy_trajectories import (
 from robot_sf.nav.map_config import SinglePedestrianDefinition
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
     from pathlib import Path
 
     from robot_sf.data.external.eth_ucy_trajectories import EthUcyTrackSet
@@ -63,13 +63,18 @@ if TYPE_CHECKING:
     TrackSet = EthUcyTrackSet | SddTrajectoryTrackSet
 
 __all__ = [
+    "INTERACTION_CLASSES",
     "REALISM_CLAIM_BOUNDARY",
     "REALISM_SCORECARD_SCHEMA_VERSION",
     "RECONSTRUCTION_CLAIM_BOUNDARY",
     "RECONSTRUCTION_SCHEMA_VERSION",
     "STATIC_OBSTACLE_SEMANTIC",
+    "InteractionSegmentationConfig",
+    "InteractionSegmentationResult",
+    "InteractionWindow",
     "RealismCrowdInputs",
     "RealismEntryExitFlow",
+    "RealismInteractionContext",
     "RealismMetricConfig",
     "RealismObstacle",
     "RealismReconstructionPlan",
@@ -89,6 +94,7 @@ __all__ = [
     "run_realism_validation",
     "run_realism_validation_from_staged_dataset",
     "run_realism_validation_from_track_set",
+    "segment_interactions",
     "speed_density_points",
     "speed_distribution_distance",
     "trajectory_rmse",
@@ -106,6 +112,25 @@ RECONSTRUCTION_CLAIM_BOUNDARY = (
     "geometry; scene-faithful benchmark evidence remains unavailable without a simulator trace"
 )
 STATIC_OBSTACLE_SEMANTIC = "static_blocking"
+
+INTERACTION_CLASSES: tuple[str, ...] = (
+    "free_walking",
+    "ped_ped_interaction",
+    "obstacle_avoidance",
+    "robot_approach",
+    "crossing_conflict",
+    "overtaking",
+    "group",
+)
+_INTERACTION_LABEL_PRECEDENCE: tuple[str, ...] = (
+    "robot_approach",
+    "obstacle_avoidance",
+    "crossing_conflict",
+    "overtaking",
+    "group",
+    "ped_ped_interaction",
+    "free_walking",
+)
 
 #: Status reported when the real reference data is not staged. Per the repository
 #: fail-closed contract this is never treated as success evidence.
@@ -436,6 +461,1064 @@ class RealismStagedDatasetReference:
     root: Path | str | None = None
     provenance_manifest: Path | str | None = None
     scene_geometry: RealismSceneGeometry | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class InteractionSegmentationConfig:
+    """Declared geometric thresholds for interaction-conditioned windows.
+
+    The segmenter is intentionally conservative.  A frame window is assigned one
+    primary class using the fixed precedence in ``_INTERACTION_LABEL_PRECEDENCE``;
+    the evidence fields preserve the participating track ids.  Missing robot or
+    obstacle context never causes an inferred context-dependent label, and it
+    prevents an otherwise unclassified window from being called ``free_walking``.
+    Supplied robot context must cover the complete admitted window and its
+    prediction horizon.
+    """
+
+    frame_window_s: float = 0.8
+    frame_stride_s: float = 0.4
+    minimum_speed_mps: float = 0.1
+    ped_interaction_distance_m: float = 2.0
+    crossing_distance_m: float = 2.0
+    crossing_heading_min_deg: float = 45.0
+    overtaking_distance_m: float = 2.0
+    same_direction_cosine: float = 0.8
+    overtaking_speed_delta_mps: float = 0.1
+    group_distance_m: float = 1.5
+    group_min_tracks: int = 3
+    group_heading_cosine: float = 0.7
+    obstacle_distance_m: float = 0.75
+    obstacle_turn_angle_deg: float = 12.0
+    robot_distance_m: float = 2.0
+    robot_approach_min_speed_mps: float = 0.05
+
+    def __post_init__(self) -> None:
+        """Reject thresholds that would make the classifier ambiguous or non-finite."""
+
+        for name in (
+            "frame_window_s",
+            "frame_stride_s",
+            "ped_interaction_distance_m",
+            "crossing_distance_m",
+            "overtaking_distance_m",
+            "group_distance_m",
+            "obstacle_distance_m",
+            "robot_distance_m",
+        ):
+            _require_positive_finite_float(getattr(self, name), name)
+        for name in (
+            "minimum_speed_mps",
+            "overtaking_speed_delta_mps",
+            "robot_approach_min_speed_mps",
+        ):
+            _require_non_negative_finite_float(getattr(self, name), name)
+        for name in ("crossing_heading_min_deg", "obstacle_turn_angle_deg"):
+            value = _require_finite_float(getattr(self, name), name)
+            if not 0.0 < value < 180.0:
+                raise ValueError(f"{name} must be between 0 and 180 degrees")
+        for name in ("same_direction_cosine", "group_heading_cosine"):
+            value = _require_finite_float(getattr(self, name), name)
+            if not -1.0 <= value <= 1.0:
+                raise ValueError(f"{name} must be between -1 and 1")
+        if (
+            isinstance(self.group_min_tracks, bool)
+            or int(self.group_min_tracks) != self.group_min_tracks
+            or self.group_min_tracks < 2
+        ):
+            raise ValueError("group_min_tracks must be an integer >= 2")
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any]) -> InteractionSegmentationConfig:
+        """Build thresholds from a YAML/JSON mapping, rejecting unknown keys.
+
+        Returns:
+            Validated segmentation thresholds.
+        """
+
+        if not isinstance(payload, Mapping):
+            raise ValueError("segmentation must be a mapping")
+        allowed = set(cls.__dataclass_fields__)
+        unknown = sorted(set(payload) - allowed)
+        if unknown:
+            raise ValueError(f"segmentation contains unsupported fields: {unknown}")
+        return cls(**dict(payload))
+
+    def to_dict(self) -> dict[str, float | int]:
+        """Return the threshold contract as JSON-safe scalar values."""
+
+        return {
+            name: (int(value) if name == "group_min_tracks" else float(value))
+            for name, value in (
+                (field, getattr(self, field)) for field in self.__dataclass_fields__
+            )
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RealismInteractionContext:
+    """Optional robot trajectory and trusted obstacle context for segmentation."""
+
+    robot_time_s: np.ndarray | None = None
+    robot_positions: np.ndarray | None = None
+    scene_geometry: RealismSceneGeometry | None = None
+
+    def __post_init__(self) -> None:
+        """Validate and freeze the optional robot trajectory arrays."""
+
+        if (self.robot_time_s is None) != (self.robot_positions is None):
+            raise ValueError("robot_time_s and robot_positions must be supplied together")
+        if self.robot_time_s is None:
+            return
+        time_s = np.array(self.robot_time_s, dtype=float, copy=True).reshape(-1)
+        positions = np.array(self.robot_positions, dtype=float, copy=True)
+        if time_s.shape[0] < 2 or positions.shape != (time_s.shape[0], 2):
+            raise ValueError("robot trajectory must contain matching time_s and (T, 2) positions")
+        if not np.all(np.isfinite(time_s)) or not np.all(np.isfinite(positions)):
+            raise ValueError("robot trajectory arrays must be finite")
+        if not np.all(np.diff(time_s) > 0.0):
+            raise ValueError("robot_time_s must be strictly increasing")
+        time_s.setflags(write=False)
+        positions.setflags(write=False)
+        object.__setattr__(self, "robot_time_s", time_s)
+        object.__setattr__(self, "robot_positions", positions)
+
+
+@dataclass(frozen=True, slots=True)
+class InteractionWindow:
+    """One primary interaction label assigned to a time window."""
+
+    scene_id: str
+    start_time_s: float
+    end_time_s: float
+    label: str
+    track_ids: tuple[int, ...]
+    evidence: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        """Validate the serialized window contract."""
+
+        if self.label not in INTERACTION_CLASSES:
+            raise ValueError(f"unsupported interaction label {self.label!r}")
+        if not self.scene_id.strip():
+            raise ValueError("scene_id must be non-empty")
+        if not math.isfinite(self.start_time_s) or not math.isfinite(self.end_time_s):
+            raise ValueError("interaction window times must be finite")
+        if self.end_time_s <= self.start_time_s:
+            raise ValueError("interaction window end must be after start")
+        if not self.track_ids:
+            raise ValueError("interaction window must name at least one track")
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe representation."""
+
+        return {
+            "scene_id": self.scene_id,
+            "start_time_s": float(self.start_time_s),
+            "end_time_s": float(self.end_time_s),
+            "label": self.label,
+            "track_ids": list(self.track_ids),
+            "evidence": list(self.evidence),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class InteractionSegmentationResult:
+    """Fail-closed segmentation result with window and event denominators.
+
+    ``counts`` retains the diagnostic number of labeled windows.  ``event_counts``
+    deduplicates overlapping or touching windows with the same label and participant
+    tracks, and is the denominator used for preregistered event floors.
+    """
+
+    scene_id: str
+    status: str
+    windows: tuple[InteractionWindow, ...]
+    counts: dict[str, int]
+    config: dict[str, float | int]
+    blockers: tuple[str, ...] = ()
+    excluded_window_counts: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def event_counts(self) -> dict[str, int]:
+        """Return independent interaction-episode counts derived from the windows."""
+
+        return _independent_interaction_event_counts(self.windows)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the scorecard-facing JSON representation."""
+
+        return {
+            "schema_version": "interaction_conditioned_segmentation.v1",
+            "claim_boundary": (
+                "complete moving synthetic/real trajectory-window labels for descriptive realism "
+                "stratification; insufficient-context windows are excluded; no human-behavior or "
+                "benchmark-ranking claim"
+            ),
+            "scene_id": self.scene_id,
+            "status": self.status,
+            "window_count": len(self.windows),
+            "counts": {label: int(self.counts.get(label, 0)) for label in INTERACTION_CLASSES},
+            "event_counts": {
+                label: int(self.event_counts.get(label, 0)) for label in INTERACTION_CLASSES
+            },
+            "config": dict(self.config),
+            "blockers": list(self.blockers),
+            "excluded_window_counts": dict(self.excluded_window_counts),
+            "windows": [window.to_dict() for window in self.windows],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class _InteractionTrackState:
+    """Interpolated state for one track inside a segmentation window."""
+
+    track_id: int
+    center_time_s: float
+    position: np.ndarray
+    velocity: np.ndarray
+    start_position: np.ndarray | None
+    end_position: np.ndarray | None
+
+
+def segment_interactions(
+    track_set: TrackSet | None,
+    *,
+    config: InteractionSegmentationConfig | None = None,
+    context: RealismInteractionContext | None = None,
+    scene_id: str | None = None,
+) -> InteractionSegmentationResult:
+    """Assign one conservative interaction label to each complete moving track window.
+
+    The segmenter consumes any parsed ETH/UCY or SDD-like track set exposing a
+    ``tracks`` sequence with ``pedestrian_id``, ``time_s``, and ``positions``.
+    Pedestrian-only labels are inferred from geometry and finite differences;
+    robot and obstacle labels require explicit caller-supplied context.  No
+    external data is loaded and no missing or temporally partial context is treated as a
+    positive event.  Supplied scene bounds are checked for active tracks before context-dependent
+    labels are admitted.
+
+    Returns:
+        A deterministic, denominator-aware segmentation result.  ``not_available``
+        is returned for an absent track set and ``empty`` when no complete moving
+        windows can be formed.  Incomplete or insufficient-motion windows are
+        excluded and reported in ``excluded_window_counts`` rather than labeled
+        ``free_walking``.
+    """
+
+    cfg = config or InteractionSegmentationConfig()
+    resolved_scene_id = scene_id or _segmentation_scene_id(track_set)
+    counts = dict.fromkeys(INTERACTION_CLASSES, 0)
+    blockers = _segmentation_context_blockers(context)
+    if track_set is None:
+        return InteractionSegmentationResult(
+            scene_id=resolved_scene_id,
+            status=STATUS_NOT_AVAILABLE,
+            windows=(),
+            counts=counts,
+            config=cfg.to_dict(),
+            blockers=("real track set not provided", *blockers),
+        )
+
+    tracks = tuple(getattr(track_set, "tracks", ()))
+    if not tracks:
+        return InteractionSegmentationResult(
+            scene_id=resolved_scene_id,
+            status=STATUS_NOT_AVAILABLE,
+            windows=(),
+            counts=counts,
+            config=cfg.to_dict(),
+            blockers=("track set contains no parsed tracks", *blockers),
+        )
+
+    track_arrays = [_validated_segmentation_track(track) for track in tracks]
+    global_start = min(float(times[0]) for times, _positions, _track_id in track_arrays)
+    global_end = max(float(times[-1]) for times, _positions, _track_id in track_arrays)
+    starts = _segmentation_window_starts(global_start, global_end, cfg)
+    windows: list[InteractionWindow] = []
+    excluded_window_counts = {
+        "incomplete_track_coverage": 0,
+        "insufficient_motion_evidence": 0,
+        "insufficient_context": 0,
+    }
+    for start_time_s in starts:
+        end_time_s = start_time_s + cfg.frame_window_s
+        center_time_s = start_time_s + 0.5 * cfg.frame_window_s
+        states = [
+            _interpolate_segmentation_state(
+                times,
+                positions,
+                track_id,
+                start_time_s=start_time_s,
+                center_time_s=center_time_s,
+                end_time_s=end_time_s,
+            )
+            for times, positions, track_id in track_arrays
+        ]
+        active_states = [state for state in states if state is not None]
+        if not active_states:
+            excluded_window_counts["incomplete_track_coverage"] += 1
+            continue
+        track_positions_in_scene = _active_track_positions_within_scene_bounds(
+            active_states,
+            track_arrays,
+            scene_geometry=context.scene_geometry if context is not None else None,
+            start_time_s=float(start_time_s),
+            end_time_s=float(end_time_s),
+        )
+        classified = _classify_interaction_window(
+            active_states,
+            config=cfg,
+            context=context,
+            window_start_s=float(start_time_s),
+            window_end_s=float(end_time_s),
+            horizon_s=cfg.frame_window_s,
+            track_positions_in_scene=track_positions_in_scene,
+        )
+        if classified is None:
+            if not _states_have_observed_motion(active_states, config=cfg):
+                excluded_window_counts["insufficient_motion_evidence"] += 1
+            else:
+                excluded_window_counts["insufficient_context"] += 1
+            continue
+        label, track_ids, evidence = classified
+        window = InteractionWindow(
+            scene_id=resolved_scene_id,
+            start_time_s=start_time_s,
+            end_time_s=end_time_s,
+            label=label,
+            track_ids=tuple(sorted(track_ids)),
+            evidence=evidence,
+        )
+        windows.append(window)
+        counts[label] += 1
+
+    return InteractionSegmentationResult(
+        scene_id=resolved_scene_id,
+        status=STATUS_OK if windows else STATUS_EMPTY,
+        windows=tuple(windows),
+        counts=counts,
+        config=cfg.to_dict(),
+        blockers=tuple(blockers),
+        excluded_window_counts=excluded_window_counts,
+    )
+
+
+def _segmentation_scene_id(track_set: TrackSet | None) -> str:
+    """Return a stable scene id without reading trajectory content into output."""
+
+    if track_set is None:
+        return "realism/unknown"
+    asset_id = str(getattr(track_set, "asset_id", "track-set"))
+    scene = getattr(track_set, "scene", None)
+    split = str(getattr(track_set, "split", "unknown"))
+    return f"{asset_id}/{scene}/{split}" if scene else f"{asset_id}/{split}"
+
+
+def _segmentation_context_blockers(
+    context: RealismInteractionContext | None,
+) -> list[str]:
+    """Describe unavailable context required for conservative classification.
+
+    Returns:
+        Human-readable blockers for context-dependent labels.
+    """
+
+    blockers: list[str] = []
+    if context is None or context.robot_positions is None:
+        blockers.append("robot_approach requires a caller-supplied robot trajectory")
+    if context is None or context.scene_geometry is None:
+        blockers.append("obstacle_avoidance requires caller-supplied static obstacle geometry")
+    return blockers
+
+
+def _validated_segmentation_track(
+    track: Any,
+) -> tuple[np.ndarray, np.ndarray, int]:
+    """Validate the minimal common track interface used by the segmenter.
+
+    Returns:
+        Validated ``(time_s, positions, pedestrian_id)`` values.
+    """
+
+    track_id = getattr(track, "pedestrian_id", getattr(track, "track_id", None))
+    if isinstance(track_id, bool) or track_id is None:
+        raise ValueError("each segmentation track must expose an integer pedestrian_id")
+    try:
+        normalized_id = int(track_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("each segmentation track must expose an integer pedestrian_id") from exc
+    if normalized_id != track_id:
+        raise ValueError("each segmentation track must expose an integer pedestrian_id")
+    times = np.asarray(getattr(track, "time_s", None), dtype=float).reshape(-1)
+    positions = np.asarray(getattr(track, "positions", None), dtype=float)
+    if times.shape[0] < 2 or positions.shape != (times.shape[0], 2):
+        raise ValueError("segmentation tracks require time_s and positions with matching shape")
+    if not np.all(np.isfinite(times)) or not np.all(np.isfinite(positions)):
+        raise ValueError("segmentation tracks must contain finite values")
+    if not np.all(np.diff(times) > 0.0):
+        raise ValueError("segmentation track time_s must be strictly increasing")
+    return times, positions, normalized_id
+
+
+def _active_track_positions_within_scene_bounds(
+    states: Sequence[_InteractionTrackState],
+    track_arrays: Sequence[tuple[np.ndarray, np.ndarray, int]],
+    *,
+    scene_geometry: RealismSceneGeometry | None,
+    start_time_s: float,
+    end_time_s: float,
+) -> bool:
+    """Return whether active track positions fit supplied bounds for this window.
+
+    The check is deliberately window-aware: incomplete tracks are already excluded by the
+    caller, and samples from complete active tracks are checked only over the admitted window.
+    Interpolated window endpoints and centres are checked as well so sparse tracks cannot bypass
+    the scene contract between raw samples.
+    """
+
+    if scene_geometry is None:
+        return True
+    lower = np.asarray(scene_geometry.bounds_m[0], dtype=float)
+    upper = np.asarray(scene_geometry.bounds_m[1], dtype=float)
+    active_track_ids = {state.track_id for state in states}
+    tolerance = 1e-9
+    for times, positions, track_id in track_arrays:
+        if track_id not in active_track_ids:
+            continue
+        in_window = (times >= start_time_s - tolerance) & (times <= end_time_s + tolerance)
+        window_positions = positions[in_window]
+        if window_positions.size and (
+            np.any(window_positions < lower - tolerance)
+            or np.any(window_positions > upper + tolerance)
+        ):
+            return False
+    for state in states:
+        for position in (state.start_position, state.position, state.end_position):
+            if position is not None and (
+                np.any(position < lower - tolerance) or np.any(position > upper + tolerance)
+            ):
+                return False
+    return True
+
+
+def _segmentation_window_starts(
+    global_start: float,
+    global_end: float,
+    config: InteractionSegmentationConfig,
+) -> np.ndarray:
+    """Build complete, deterministic windows over the global track span.
+
+    Returns:
+        Window start times, or an empty array when no complete window exists.
+    """
+
+    if global_end - global_start < config.frame_window_s:
+        return np.empty((0,), dtype=float)
+    last_start = global_end - config.frame_window_s
+    return np.arange(
+        global_start,
+        last_start + 0.5 * config.frame_stride_s,
+        config.frame_stride_s,
+        dtype=float,
+    )
+
+
+def _interpolate_segmentation_state(
+    times: np.ndarray,
+    positions: np.ndarray,
+    track_id: int,
+    *,
+    start_time_s: float,
+    center_time_s: float,
+    end_time_s: float,
+) -> _InteractionTrackState | None:
+    """Interpolate one track only when it covers the complete window.
+
+    Returns:
+        The interpolated state, or ``None`` when the track does not cover both
+        window endpoints.
+    """
+
+    if start_time_s < times[0] or end_time_s > times[-1]:
+        return None
+    position = _interpolate_position(times, positions, center_time_s)
+    velocity = _track_velocity_at(times, positions, center_time_s)
+    start_position = _interpolate_position(times, positions, start_time_s)
+    end_position = _interpolate_position(times, positions, end_time_s)
+    return _InteractionTrackState(
+        track_id=track_id,
+        center_time_s=float(center_time_s),
+        position=position,
+        velocity=velocity,
+        start_position=start_position,
+        end_position=end_position,
+    )
+
+
+def _interpolate_position(times: np.ndarray, positions: np.ndarray, time_s: float) -> np.ndarray:
+    """Linearly interpolate a two-dimensional position.
+
+    Returns:
+        The interpolated ``(x, y)`` position.
+    """
+
+    return np.asarray(
+        [
+            np.interp(time_s, times, positions[:, 0]),
+            np.interp(time_s, times, positions[:, 1]),
+        ],
+        dtype=float,
+    )
+
+
+def _track_velocity_at(times: np.ndarray, positions: np.ndarray, time_s: float) -> np.ndarray:
+    """Return the local finite-difference velocity at one track time."""
+
+    right = int(np.searchsorted(times, time_s, side="right"))
+    left = max(0, right - 1)
+    right = min(right, len(times) - 1)
+    if left == right:
+        if left == 0:
+            right = 1
+        else:
+            left = right - 1
+    delta_t = float(times[right] - times[left])
+    if delta_t <= 0.0:
+        raise ValueError("segmentation track time_s must be strictly increasing")
+    return np.asarray((positions[right] - positions[left]) / delta_t, dtype=float)
+
+
+def _classify_interaction_window(
+    states: Sequence[_InteractionTrackState],
+    *,
+    config: InteractionSegmentationConfig,
+    context: RealismInteractionContext | None,
+    window_start_s: float,
+    window_end_s: float,
+    horizon_s: float,
+    track_positions_in_scene: bool,
+) -> tuple[str, tuple[int, ...], tuple[str, ...]] | None:
+    """Apply the fixed primary-label precedence to one time window.
+
+    Returns:
+        The primary label, participating track ids, and evidence notes, or
+        ``None`` when the window lacks sufficient motion evidence for a positive
+        label.
+    """
+
+    if track_positions_in_scene:
+        robot_ids = _robot_approach_ids(
+            states,
+            context,
+            config=config,
+            window_start_s=window_start_s,
+            window_end_s=window_end_s,
+            horizon_s=horizon_s,
+        )
+        if robot_ids:
+            return (
+                "robot_approach",
+                tuple(robot_ids),
+                ("explicit robot trajectory approached pedestrian",),
+            )
+
+        obstacle_ids = _obstacle_avoidance_ids(states, context, config=config)
+        if obstacle_ids:
+            return (
+                "obstacle_avoidance",
+                tuple(obstacle_ids),
+                ("turning trajectory near static obstacle",),
+            )
+
+    crossing_pair = _first_crossing_pair(states, config=config, horizon_s=horizon_s)
+    if crossing_pair:
+        return (
+            "crossing_conflict",
+            crossing_pair,
+            ("opposing headings closing or at predicted closest approach",),
+        )
+
+    overtaking_pair = _first_overtaking_pair(states, config=config)
+    if overtaking_pair:
+        return (
+            "overtaking",
+            overtaking_pair,
+            ("same-direction faster pedestrian behind slower pedestrian",),
+        )
+
+    group_ids = _first_group(states, config=config)
+    if group_ids:
+        return "group", tuple(group_ids), ("co-moving spatial cluster",)
+
+    interaction_pair = _first_pedestrian_interaction_pair(states, config=config)
+    if interaction_pair:
+        return (
+            "ped_ped_interaction",
+            interaction_pair,
+            ("close pedestrian pair with relative motion",),
+        )
+
+    if not _states_have_observed_motion(states, config=config):
+        return None
+    if not _free_walking_context_available(
+        context,
+        window_start_s=window_start_s,
+        window_end_s=window_end_s,
+        prediction_horizon_s=horizon_s,
+        track_positions_in_scene=track_positions_in_scene,
+    ):
+        return None
+    return "free_walking", tuple(state.track_id for state in states), ()
+
+
+def _state_has_observed_motion(
+    state: _InteractionTrackState,
+    *,
+    config: InteractionSegmentationConfig,
+) -> bool:
+    """Return whether one state has enough finite motion for free walking."""
+
+    speed = float(np.linalg.norm(state.velocity))
+    return speed > 1e-12 and speed >= config.minimum_speed_mps
+
+
+def _states_have_observed_motion(
+    states: Sequence[_InteractionTrackState],
+    *,
+    config: InteractionSegmentationConfig,
+) -> bool:
+    """Return whether every state has enough motion evidence."""
+
+    return all(_state_has_observed_motion(state, config=config) for state in states)
+
+
+def _free_walking_context_available(
+    context: RealismInteractionContext | None,
+    *,
+    window_start_s: float,
+    window_end_s: float,
+    prediction_horizon_s: float,
+    track_positions_in_scene: bool,
+) -> bool:
+    """Return whether context can rule out unobserved interactions for this window.
+
+    The robot trace must cover the whole window and the same forward horizon used by the
+    context-dependent classifier; scene bounds must also validate the active tracks.
+    """
+
+    return (
+        track_positions_in_scene
+        and context is not None
+        and context.scene_geometry is not None
+        and _robot_context_covers_window(
+            context,
+            window_start_s=window_start_s,
+            window_end_s=window_end_s,
+            prediction_horizon_s=prediction_horizon_s,
+        )
+    )
+
+
+def _robot_context_covers_window(
+    context: RealismInteractionContext | None,
+    *,
+    window_start_s: float,
+    window_end_s: float,
+    prediction_horizon_s: float,
+) -> bool:
+    """Return whether the robot trace covers a window and its prediction horizon."""
+
+    if context is None or context.robot_time_s is None or context.robot_positions is None:
+        return False
+    required_end_s = window_end_s + prediction_horizon_s
+    tolerance = 1e-9
+    return bool(
+        context.robot_time_s[0] <= window_start_s + tolerance
+        and context.robot_time_s[-1] + tolerance >= required_end_s
+    )
+
+
+def _independent_interaction_event_counts(
+    windows: Sequence[InteractionWindow],
+) -> dict[str, int]:
+    """Count connected runs of same-label, same-participant windows.
+
+    Consecutive windows may overlap because the segmentation stride can be shorter
+    than the frame window.  A connected run of overlapping or touching windows is
+    one descriptive event episode; a temporal gap starts a new episode.
+
+    Returns:
+        One independent event count per interaction class.
+    """
+
+    counts = dict.fromkeys(INTERACTION_CLASSES, 0)
+    grouped: dict[tuple[str, tuple[int, ...]], list[InteractionWindow]] = {}
+    for window in windows:
+        signature = (window.label, tuple(sorted(window.track_ids)))
+        grouped.setdefault(signature, []).append(window)
+    for (label, _track_ids), group in grouped.items():
+        previous_end: float | None = None
+        for window in sorted(group, key=lambda candidate: candidate.start_time_s):
+            if previous_end is None or window.start_time_s > previous_end + 1e-9:
+                counts[label] += 1
+            previous_end = (
+                window.end_time_s if previous_end is None else max(previous_end, window.end_time_s)
+            )
+    return counts
+
+
+def _pairwise_states(
+    states: Sequence[_InteractionTrackState],
+) -> Sequence[tuple[_InteractionTrackState, _InteractionTrackState]]:
+    """Return unordered state pairs in deterministic track order."""
+
+    ordered = sorted(states, key=lambda state: state.track_id)
+    return tuple(
+        (ordered[left], ordered[right])
+        for left in range(len(ordered))
+        for right in range(left + 1, len(ordered))
+    )
+
+
+def _pair_geometry(
+    first: _InteractionTrackState,
+    second: _InteractionTrackState,
+    *,
+    horizon_s: float,
+) -> tuple[float, float, float, float | None, float, float, float]:
+    """Return distance, predicted minimum distance, time, heading cosine, and speeds."""
+
+    relative_position = second.position - first.position
+    relative_velocity = second.velocity - first.velocity
+    velocity_norm_sq = float(np.dot(relative_velocity, relative_velocity))
+    closest_time = 0.0
+    if velocity_norm_sq > 1e-12:
+        closest_time = float(
+            np.clip(
+                -np.dot(relative_position, relative_velocity) / velocity_norm_sq, 0.0, horizon_s
+            )
+        )
+    closest_distance = float(np.linalg.norm(relative_position + closest_time * relative_velocity))
+    distance = float(np.linalg.norm(relative_position))
+    first_speed = float(np.linalg.norm(first.velocity))
+    second_speed = float(np.linalg.norm(second.velocity))
+    heading_cosine = _heading_cosine(first.velocity, second.velocity)
+    closing_dot = float(np.dot(relative_position, relative_velocity))
+    return (
+        distance,
+        closest_distance,
+        closest_time,
+        heading_cosine,
+        first_speed,
+        second_speed,
+        closing_dot,
+    )
+
+
+def _heading_cosine(first_velocity: np.ndarray, second_velocity: np.ndarray) -> float | None:
+    """Return cosine of the heading angle, or ``None`` for stationary tracks."""
+
+    first_norm = float(np.linalg.norm(first_velocity))
+    second_norm = float(np.linalg.norm(second_velocity))
+    if first_norm <= 1e-12 or second_norm <= 1e-12:
+        return None
+    return float(np.dot(first_velocity, second_velocity) / (first_norm * second_norm))
+
+
+def _first_crossing_pair(
+    states: Sequence[_InteractionTrackState],
+    *,
+    config: InteractionSegmentationConfig,
+    horizon_s: float,
+) -> tuple[int, int] | None:
+    """Find the first opposing-heading pair with a predicted crossing conflict.
+
+    Returns:
+        The sorted pair of track ids, or ``None`` when no conflict is detected.
+    """
+
+    minimum_cosine = math.cos(math.radians(config.crossing_heading_min_deg))
+    for first, second in _pairwise_states(states):
+        (
+            distance,
+            closest_distance,
+            _time,
+            heading_cosine,
+            first_speed,
+            second_speed,
+            closing_dot,
+        ) = _pair_geometry(first, second, horizon_s=horizon_s)
+        if (
+            heading_cosine is not None
+            and heading_cosine <= minimum_cosine
+            and max(first_speed, second_speed) >= config.minimum_speed_mps
+            and min(distance, closest_distance) <= config.crossing_distance_m
+            and closing_dot <= 0.0
+        ):
+            return first.track_id, second.track_id
+    return None
+
+
+def _first_overtaking_pair(
+    states: Sequence[_InteractionTrackState],
+    *,
+    config: InteractionSegmentationConfig,
+) -> tuple[int, int] | None:
+    """Find a same-direction pair where the faster track is behind.
+
+    Returns:
+        The pair of track ids, or ``None`` when no overtake is detected.
+    """
+
+    for first, second in _pairwise_states(states):
+        distance, _closest, _time, heading_cosine, first_speed, second_speed, _closing = (
+            _pair_geometry(first, second, horizon_s=0.0)
+        )
+        if heading_cosine is None or heading_cosine < config.same_direction_cosine:
+            continue
+        if distance > config.overtaking_distance_m:
+            continue
+        direction = first.velocity + second.velocity
+        direction_norm = float(np.linalg.norm(direction))
+        if direction_norm <= 1e-12:
+            continue
+        direction /= direction_norm
+        first_is_behind = float(np.dot(first.position - second.position, direction)) < 0.0
+        second_is_behind = not first_is_behind
+        if (first_is_behind and first_speed > second_speed + config.overtaking_speed_delta_mps) or (
+            second_is_behind and second_speed > first_speed + config.overtaking_speed_delta_mps
+        ):
+            return first.track_id, second.track_id
+    return None
+
+
+def _first_group(
+    states: Sequence[_InteractionTrackState],
+    *,
+    config: InteractionSegmentationConfig,
+) -> tuple[int, ...] | None:
+    """Find the largest deterministic co-moving spatial cluster.
+
+    Returns:
+        Sorted cluster track ids, or ``None`` when no qualifying group exists.
+    """
+
+    if len(states) < config.group_min_tracks:
+        return None
+    ordered = sorted(states, key=lambda state: state.track_id)
+    adjacency = {state.track_id: set() for state in ordered}
+    for first, second in _pairwise_states(ordered):
+        distance = float(np.linalg.norm(first.position - second.position))
+        heading_cosine = _heading_cosine(first.velocity, second.velocity)
+        first_speed = float(np.linalg.norm(first.velocity))
+        second_speed = float(np.linalg.norm(second.velocity))
+        if (
+            distance <= config.group_distance_m
+            and heading_cosine is not None
+            and heading_cosine >= config.group_heading_cosine
+            and max(first_speed, second_speed) >= config.minimum_speed_mps
+            and abs(first_speed - second_speed) <= max(0.5, 2.0 * config.overtaking_speed_delta_mps)
+        ):
+            adjacency[first.track_id].add(second.track_id)
+            adjacency[second.track_id].add(first.track_id)
+    components: list[tuple[int, ...]] = []
+    unseen = set(adjacency)
+    while unseen:
+        seed = min(unseen)
+        stack = [seed]
+        component: set[int] = set()
+        while stack:
+            current = stack.pop()
+            if current in component:
+                continue
+            component.add(current)
+            unseen.discard(current)
+            stack.extend(sorted(adjacency[current] - component, reverse=True))
+        if len(component) >= config.group_min_tracks:
+            components.append(tuple(sorted(component)))
+    return max(
+        components,
+        key=lambda component: (len(component), tuple(-value for value in component)),
+        default=None,
+    )
+
+
+def _first_pedestrian_interaction_pair(
+    states: Sequence[_InteractionTrackState],
+    *,
+    config: InteractionSegmentationConfig,
+) -> tuple[int, int] | None:
+    """Find a close pair with enough relative motion to be an interaction.
+
+    Returns:
+        The pair of track ids, or ``None`` when no interaction is detected.
+    """
+
+    for first, second in _pairwise_states(states):
+        distance, _closest, _time, heading_cosine, first_speed, second_speed, closing_dot = (
+            _pair_geometry(first, second, horizon_s=0.0)
+        )
+        relative_speed = float(np.linalg.norm(first.velocity - second.velocity))
+        headings_differ = (
+            heading_cosine is not None and heading_cosine < config.same_direction_cosine
+        )
+        if (
+            distance <= config.ped_interaction_distance_m
+            and max(first_speed, second_speed) >= config.minimum_speed_mps
+            and (
+                closing_dot < 0.0
+                or relative_speed >= config.overtaking_speed_delta_mps
+                or headings_differ
+            )
+        ):
+            return first.track_id, second.track_id
+    return None
+
+
+def _robot_approach_ids(
+    states: Sequence[_InteractionTrackState],
+    context: RealismInteractionContext | None,
+    *,
+    config: InteractionSegmentationConfig,
+    window_start_s: float,
+    window_end_s: float,
+    horizon_s: float,
+) -> tuple[int, ...]:
+    """Return pedestrians approached by the explicit robot trajectory.
+
+    Returns:
+        Sorted pedestrian ids approached within the configured horizon.
+    """
+
+    if context is None or context.robot_time_s is None or context.robot_positions is None:
+        return ()
+    if not _robot_context_covers_window(
+        context,
+        window_start_s=window_start_s,
+        window_end_s=window_end_s,
+        prediction_horizon_s=horizon_s,
+    ):
+        return ()
+    robot_time_s = context.robot_time_s
+    robot_positions = context.robot_positions
+    center_time_s = _state_center_time(states)
+    robot_position = _interpolate_position(robot_time_s, robot_positions, center_time_s)
+    robot_velocity = _track_velocity_at(robot_time_s, robot_positions, center_time_s)
+    ids: list[int] = []
+    for state in states:
+        relative_position = state.position - robot_position
+        relative_velocity = state.velocity - robot_velocity
+        distance = float(np.linalg.norm(relative_position))
+        velocity_norm_sq = float(np.dot(relative_velocity, relative_velocity))
+        closest_distance = distance
+        if velocity_norm_sq > 1e-12:
+            closest_time = float(
+                np.clip(
+                    -np.dot(relative_position, relative_velocity) / velocity_norm_sq, 0.0, horizon_s
+                )
+            )
+            closest_distance = float(
+                np.linalg.norm(relative_position + closest_time * relative_velocity)
+            )
+        approach_rate = -float(np.dot(relative_position, relative_velocity)) / max(distance, 1e-12)
+        if (
+            min(distance, closest_distance) <= config.robot_distance_m
+            and approach_rate >= config.robot_approach_min_speed_mps
+        ):
+            ids.append(state.track_id)
+    return tuple(sorted(ids))
+
+
+def _state_center_time(states: Sequence[_InteractionTrackState]) -> float:
+    """Return a representative centre time carried by the first state."""
+
+    return float(states[0].center_time_s)
+
+
+def _obstacle_avoidance_ids(
+    states: Sequence[_InteractionTrackState],
+    context: RealismInteractionContext | None,
+    *,
+    config: InteractionSegmentationConfig,
+) -> tuple[int, ...]:
+    """Return pedestrians turning near trusted static obstacles.
+
+    Returns:
+        Sorted pedestrian ids with a turning trajectory near an obstacle.
+    """
+
+    if context is None or context.scene_geometry is None or not context.scene_geometry.obstacles:
+        return ()
+    ids: list[int] = []
+    polygons = [
+        np.asarray(obstacle.polygon_m, dtype=float) for obstacle in context.scene_geometry.obstacles
+    ]
+    for state in states:
+        if state.start_position is None or state.end_position is None:
+            continue
+        distance = min(_point_to_polygon_distance(state.position, polygon) for polygon in polygons)
+        reference = state.end_position - state.start_position
+        reference_norm = float(np.linalg.norm(reference))
+        velocity_norm = float(np.linalg.norm(state.velocity))
+        if (
+            distance > config.obstacle_distance_m
+            or reference_norm <= 1e-12
+            or velocity_norm <= 1e-12
+        ):
+            continue
+        cosine = float(np.dot(reference, state.velocity) / (reference_norm * velocity_norm))
+        turn_angle_deg = math.degrees(math.acos(float(np.clip(cosine, -1.0, 1.0))))
+        if turn_angle_deg >= config.obstacle_turn_angle_deg:
+            ids.append(state.track_id)
+    return tuple(sorted(ids))
+
+
+def _point_to_polygon_distance(point: np.ndarray, polygon: np.ndarray) -> float:
+    """Return the Euclidean distance from a point to a polygon boundary/interior."""
+
+    if _point_inside_polygon(point, polygon):
+        return 0.0
+    distances = [
+        _point_to_segment_distance(point, polygon[index], polygon[(index + 1) % len(polygon)])
+        for index in range(len(polygon))
+    ]
+    return float(min(distances))
+
+
+def _point_inside_polygon(point: np.ndarray, polygon: np.ndarray) -> bool:
+    """Use a deterministic ray-crossing test for a non-self-intersecting polygon.
+
+    Returns:
+        ``True`` when the point is inside the polygon.
+    """
+
+    x, y = float(point[0]), float(point[1])
+    inside = False
+    for index in range(len(polygon)):
+        x_first, y_first = polygon[index]
+        x_second, y_second = polygon[(index + 1) % len(polygon)]
+        crosses = (y_first > y) != (y_second > y)
+        if crosses:
+            crossing_x = (x_second - x_first) * (y - y_first) / (y_second - y_first) + x_first
+            if x < crossing_x:
+                inside = not inside
+    return inside
+
+
+def _point_to_segment_distance(
+    point: np.ndarray,
+    first: np.ndarray,
+    second: np.ndarray,
+) -> float:
+    """Return the Euclidean point-to-segment distance."""
+
+    segment = second - first
+    denominator = float(np.dot(segment, segment))
+    if denominator <= 1e-12:
+        return float(np.linalg.norm(point - first))
+    fraction = float(np.clip(np.dot(point - first, segment) / denominator, 0.0, 1.0))
+    return float(np.linalg.norm(point - (first + fraction * segment)))
 
 
 # --------------------------------------------------------------------------- #
@@ -1101,6 +2184,8 @@ def build_dataset_scorecard(  # noqa: PLR0913 - explicit metric families are con
     reconstruction: dict[str, Any] | None = None,
     speed_distribution: dict[str, Any] | None = None,
     proxemic_distribution: dict[str, Any] | None = None,
+    interaction_segmentation: InteractionSegmentationResult | Mapping[str, Any] | None = None,
+    interaction_minimum_event_counts: Mapping[str, int] | None = None,
 ) -> RealismScorecard:
     """Aggregate per-metric results into a per-dataset scorecard.
 
@@ -1115,6 +2200,9 @@ def build_dataset_scorecard(  # noqa: PLR0913 - explicit metric families are con
         reconstruction: Content-light reconstruction readiness summary.
         speed_distribution: Speed-distribution distance mapping (or ``None``).
         proxemic_distribution: Proxemic-distribution distance mapping (or ``None``).
+        interaction_segmentation: Optional interaction-window result or serialized mapping.
+        interaction_minimum_event_counts: Optional independent-event floors used to mark sparse
+            classes.  The segmentation result must provide ``event_counts`` when floors are used.
 
     Returns:
         A :class:`RealismScorecard` with aggregated statistics.
@@ -1165,6 +2253,24 @@ def build_dataset_scorecard(  # noqa: PLR0913 - explicit metric families are con
         metrics["speed_distribution_distance"] = speed_distribution
     if proxemic_distribution is not None:
         metrics["proxemic_distribution_distance"] = proxemic_distribution
+    if interaction_segmentation is not None:
+        if isinstance(interaction_segmentation, InteractionSegmentationResult):
+            interaction_metric = interaction_segmentation.to_dict()
+        elif isinstance(interaction_segmentation, Mapping):
+            interaction_metric = dict(interaction_segmentation)
+        else:
+            raise TypeError("interaction_segmentation must be a result or mapping")
+        counts = interaction_metric.get("counts")
+        if not isinstance(counts, Mapping):
+            raise ValueError("interaction_segmentation must contain a counts mapping")
+        if interaction_minimum_event_counts is not None:
+            _set_interaction_event_count_status(
+                interaction_metric,
+                interaction_minimum_event_counts,
+            )
+        metrics["interaction_conditioned_segmentation"] = interaction_metric
+    elif interaction_minimum_event_counts is not None:
+        raise ValueError("interaction_minimum_event_counts requires interaction_segmentation")
     return RealismScorecard(
         dataset_id=dataset_id,
         status=status,
@@ -1187,6 +2293,8 @@ def run_realism_validation(  # noqa: PLR0913 - metric inputs are explicit for ca
     reconstruction: dict[str, Any] | None = None,
     movement_axis: int = 0,
     lateral_axis: int = 1,
+    interaction_segmentation: InteractionSegmentationResult | Mapping[str, Any] | None = None,
+    interaction_minimum_event_counts: Mapping[str, int] | None = None,
 ) -> RealismScorecard:
     """Run the realism metrics and build a per-dataset scorecard.
 
@@ -1248,6 +2356,8 @@ def run_realism_validation(  # noqa: PLR0913 - metric inputs are explicit for ca
         reconstruction=reconstruction,
         speed_distribution=speed_dist,
         proxemic_distribution=proxemic_dist,
+        interaction_segmentation=interaction_segmentation,
+        interaction_minimum_event_counts=interaction_minimum_event_counts,
     )
 
 
@@ -1694,6 +2804,9 @@ def run_realism_validation_from_track_set(  # noqa: PLR0913 - explicit metric an
     notes: Sequence[str] | None = None,
     movement_axis: int = 0,
     scene_geometry: RealismSceneGeometry | None = None,
+    interaction_config: InteractionSegmentationConfig | None = None,
+    interaction_context: RealismInteractionContext | None = None,
+    interaction_minimum_event_counts: Mapping[str, int] | None = None,
 ) -> RealismScorecard:
     """Run realism validation against a parsed real trajectory track set.
 
@@ -1710,6 +2823,14 @@ def run_realism_validation_from_track_set(  # noqa: PLR0913 - explicit metric an
 
     cfg = config or RealismMetricConfig()
     base_notes = list(notes or [])
+    resolved_interaction_context = interaction_context
+    if resolved_interaction_context is None and scene_geometry is not None:
+        resolved_interaction_context = RealismInteractionContext(scene_geometry=scene_geometry)
+    interaction_segmentation = segment_interactions(
+        track_set,
+        config=interaction_config,
+        context=resolved_interaction_context,
+    )
     reconstruction = build_track_reconstruction_plan(
         track_set,
         dataset_id=dataset_id,
@@ -1735,6 +2856,8 @@ def run_realism_validation_from_track_set(  # noqa: PLR0913 - explicit metric an
                 "docs/datasets/eth-ucy.md and re-run."
             ],
             reconstruction=reconstruction.summary_dict(),
+            interaction_segmentation=interaction_segmentation,
+            interaction_minimum_event_counts=interaction_minimum_event_counts,
         )
 
     real_positions, real_velocities = _gridded_crowd_from_tracks(track_set, cfg)
@@ -1762,10 +2885,12 @@ def run_realism_validation_from_track_set(  # noqa: PLR0913 - explicit metric an
         reconstruction=reconstruction.summary_dict(),
         movement_axis=movement_axis,
         lateral_axis=1,
+        interaction_segmentation=interaction_segmentation,
+        interaction_minimum_event_counts=interaction_minimum_event_counts,
     )
 
 
-def run_realism_validation_from_staged_dataset(
+def run_realism_validation_from_staged_dataset(  # noqa: PLR0913 - explicit metric and scene inputs
     *,
     dataset_id: str,
     dataset: RealismStagedDatasetReference,
@@ -1775,6 +2900,9 @@ def run_realism_validation_from_staged_dataset(
     config: RealismMetricConfig | None = None,
     notes: Sequence[str] | None = None,
     movement_axis: int = 0,
+    interaction_config: InteractionSegmentationConfig | None = None,
+    interaction_context: RealismInteractionContext | None = None,
+    interaction_minimum_event_counts: Mapping[str, int] | None = None,
 ) -> RealismScorecard:
     """Run the scorecard path only after provenance-gated ETH/UCY loading.
 
@@ -1819,6 +2947,12 @@ def run_realism_validation_from_staged_dataset(
                 "staging before rerunning.",
             ],
             reconstruction=reconstruction.summary_dict(),
+            interaction_segmentation=segment_interactions(
+                None,
+                config=interaction_config,
+                context=interaction_context,
+            ),
+            interaction_minimum_event_counts=interaction_minimum_event_counts,
         )
 
     reconstruction = build_track_reconstruction_plan(
@@ -1844,6 +2978,9 @@ def run_realism_validation_from_staged_dataset(
         ],
         movement_axis=movement_axis,
         scene_geometry=dataset.scene_geometry,
+        interaction_config=interaction_config,
+        interaction_context=interaction_context,
+        interaction_minimum_event_counts=interaction_minimum_event_counts,
     )
 
 
@@ -1901,6 +3038,38 @@ def render_scorecard_markdown(scorecard: RealismScorecard) -> str:
             f"- geometry: `{reconstruction.get('geometry_status', 'unavailable')}`",
             f"- timing: `{reconstruction.get('timing_status', 'unavailable')}`",
             f"- entry/exit flows: {reconstruction.get('entry_exit_flow_count', 0)}",
+            "",
+        ]
+    interaction = sc["metrics"].get("interaction_conditioned_segmentation")
+    if isinstance(interaction, dict):
+        excluded_counts = interaction.get("excluded_window_counts", {})
+        excluded_window_count = (
+            sum(excluded_counts.values()) if isinstance(excluded_counts, Mapping) else 0
+        )
+        lines += [
+            "## Interaction-Conditioned Segmentation",
+            "",
+            f"- status: `{interaction.get('status', 'empty')}`",
+            f"- windows: {interaction.get('window_count', 0)}",
+            f"- excluded windows: {excluded_window_count}",
+            "- counts are diagnostic windows; floors use independent event episodes:",
+            "",
+            "| class | observed events | minimum | status |",
+            "| --- | ---: | ---: | --- |",
+        ]
+        counts = interaction.get("counts", {})
+        event_counts = interaction.get("event_counts", counts)
+        floor_status = interaction.get("event_count_status", {})
+        floor_rows = floor_status.get("rows", {}) if isinstance(floor_status, dict) else {}
+        for label in INTERACTION_CLASSES:
+            row = floor_rows.get(label, {})
+            observed = row.get("observed", event_counts.get(label, counts.get(label, 0)))
+            minimum = row.get("minimum", "—")
+            row_status = row.get("status", "not_evaluated")
+            lines.append(f"| `{label}` | {observed} | {minimum} | `{row_status}` |")
+        lines += [
+            "",
+            f"- claim boundary: {interaction.get('claim_boundary', 'descriptive stratification only')}",
             "",
         ]
     rmse = sc["metrics"].get("trajectory_rmse", {})
@@ -1974,6 +3143,97 @@ def render_scorecard_markdown(scorecard: RealismScorecard) -> str:
 # --------------------------------------------------------------------------- #
 # Internal helpers
 # --------------------------------------------------------------------------- #
+
+
+def _require_finite_float(value: Any, name: str) -> float:
+    """Return a finite scalar as ``float`` and reject booleans."""
+
+    if isinstance(value, bool):
+        raise ValueError(f"{name} must be finite")
+    try:
+        normalized = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be finite") from exc
+    if not math.isfinite(normalized):
+        raise ValueError(f"{name} must be finite")
+    return normalized
+
+
+def _require_positive_finite_float(value: Any, name: str) -> float:
+    """Validate a finite positive scalar.
+
+    Returns:
+        The normalized scalar.
+    """
+
+    normalized = _require_finite_float(value, name)
+    if normalized <= 0.0:
+        raise ValueError(f"{name} must be positive")
+    return normalized
+
+
+def _require_non_negative_finite_float(value: Any, name: str) -> float:
+    """Validate a finite non-negative scalar.
+
+    Returns:
+        The normalized scalar.
+    """
+
+    normalized = _require_finite_float(value, name)
+    if normalized < 0.0:
+        raise ValueError(f"{name} must be non-negative")
+    return normalized
+
+
+def _interaction_event_count_status(
+    counts: Mapping[str, Any],
+    minimum_event_counts: Mapping[str, int],
+) -> dict[str, Any]:
+    """Mark each interaction class as sufficient or ``insufficient_events``.
+
+    Returns:
+        Overall floor status and one observed/minimum row per interaction class.
+    """
+
+    if set(minimum_event_counts) != set(INTERACTION_CLASSES):
+        raise ValueError("interaction minimum counts must name exactly the interaction classes")
+    rows: dict[str, dict[str, int | str]] = {}
+    for label in INTERACTION_CLASSES:
+        observed = counts.get(label, 0)
+        minimum = minimum_event_counts[label]
+        if isinstance(observed, bool) or not isinstance(observed, int) or observed < 0:
+            raise ValueError(f"interaction count for {label!r} must be a non-negative integer")
+        if isinstance(minimum, bool) or not isinstance(minimum, int) or minimum < 0:
+            raise ValueError(f"interaction minimum for {label!r} must be a non-negative integer")
+        rows[label] = {
+            "observed": int(observed),
+            "minimum": int(minimum),
+            "status": "sufficient" if observed >= minimum else "insufficient_events",
+        }
+    status = (
+        "sufficient"
+        if all(row["status"] == "sufficient" for row in rows.values())
+        else "insufficient_events"
+    )
+    return {"status": status, "rows": rows}
+
+
+def _set_interaction_event_count_status(
+    interaction_metric: dict[str, Any],
+    minimum_event_counts: Mapping[str, int],
+) -> None:
+    """Attach floor status using independent event counts to a scorecard mapping."""
+
+    event_counts = interaction_metric.get("event_counts")
+    if not isinstance(event_counts, Mapping):
+        raise ValueError(
+            "interaction_segmentation must contain an event_counts mapping when "
+            "interaction floors are evaluated"
+        )
+    interaction_metric["event_count_status"] = _interaction_event_count_status(
+        event_counts,
+        minimum_event_counts,
+    )
 
 
 def _gridded_crowd_from_tracks(

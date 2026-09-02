@@ -435,11 +435,15 @@ def _select_fields(payload: dict[str, Any], fields: list[str]) -> dict[str, Any]
 
 def _cmd_view(args: argparse.Namespace) -> int:
     """Implement the ``view`` subcommand."""
-    payload = fetch_issue_with_comments(
-        args.number,
-        repo=args.repo,
-        max_comment_pages=args.max_comment_pages,
-    )
+    include_comments = args.comments or "comments" in args.fields
+    if include_comments:
+        payload = fetch_issue_with_comments(
+            args.number,
+            repo=args.repo,
+            max_comment_pages=args.max_comment_pages,
+        )
+    else:
+        payload = fetch_issue(args.number, repo=args.repo)
     if payload.get("status") != "ok":
         print(payload.get("error", "unknown error"), file=sys.stderr)
         return 1

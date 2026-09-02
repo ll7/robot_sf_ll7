@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_8072_goal_force_inverse_smoke_receipt.v1.json",
+  "artifact_sha256": "02f481d942bd86fe023b0bc9ebb7a659ff1e9a82daf94e1837287701986222d2",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

@@ -58,6 +58,18 @@ instead of writing its own final commit SHA into tracked bytes. After the exact
 clean source commit and already-reserved concept/version DOI coordinates are
 known, generate and verify the ignored resolved identity:
 
+- Manifest template:
+  `configs/benchmarks/releases/benchmark_data_release_s30_h600.template.yaml`
+- Campaign template:
+  `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_template.yaml`
+- Zenodo metadata template:
+  `configs/benchmarks/releases/benchmark_data_release_s30_h600_zenodo_metadata.template.json`
+
+The resolver derives `latest_main_base_commit` from the exact first parent of
+the selected source commit (and applies the same value to the optional
+`planning_base_sha`). This records the immutable mainline base without tracking
+the moving `origin/main` or creating a self-referential manifest.
+
 ```bash
 SOURCE_COMMIT="$(git rev-parse --verify HEAD^{commit})"
 RELEASE_TAG="${RELEASE_PREFIX:?set the reviewed release prefix}-${SOURCE_COMMIT}"
@@ -97,6 +109,58 @@ Verify:
 - matrix summary reflects all 14 planner arms, one smoke scenario, one seed,
   H600, and differential-drive kinematics
 - smoke output is labeled `runtime-smoke`; it is not full benchmark evidence
+
+To admit checkpoints that were staged by the canonical staging workflow, pass
+the fresh receipt during preflight as well:
+
+```bash
+uv run python scripts/tools/run_benchmark_release.py \
+  --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml \
+  --mode preflight \
+  --checkpoint-receipt output/release/checkpoints/runtime_smoke_staging_receipt.json
+```
+
+Preflight validates the receipt against the manifest's canonical campaign
+config. A valid receipt is reported under
+`checkpoint_admission.staged_checkpoint_admission` with `status: admitted` and
+`submit_safe: true`. The separate metadata-only check remains visible as
+`metadata_resolvable` and `metadata_submit_safe`; a metadata-only
+`submit_safe: false` result is diagnostic when the staged receipt is admitted,
+not a contradictory release decision. A supplied missing, stale, mismatched,
+or otherwise invalid receipt fails closed with
+`status: checkpoint_receipt_rejected` before campaign setup and is not
+benchmark evidence.
+
+### Full-release Slurm launch manifest
+
+For a full release, bind the exact resolved identity and the successful public
+runner preflight into a separate, deterministic launch manifest before handing
+the packet to private operations:
+
+```bash
+uv run python scripts/tools/run_benchmark_release.py \
+  --manifest output/release/release_identity.resolved.json \
+  --mode preflight > output/release/runner_preflight.json
+uv run python scripts/tools/generate_slurm_launch_manifest.py \
+  --resolved-identity output/release/release_identity.resolved.json \
+  --runner-preflight output/release/runner_preflight.json \
+  --output output/benchmarks/camera_ready/<campaign_id>/slurm_launch_manifest.json
+uv run python scripts/tools/slurm_campaign_preflight.py \
+  --manifest output/benchmarks/camera_ready/<campaign_id>/slurm_launch_manifest.json \
+  --public-repo . \
+  --json
+```
+
+`campaign_manifest.json` remains the runner's configuration/provenance
+artifact; it is not the Slurm launch packet. The generated launch manifest is
+an ignored, no-submit intent artifact with 14 planner-arm cells, 48 scenarios,
+30 resolved seeds, H600, differential-drive kinematics, and 1,440 declared
+rows per arm (20,160 total). It contains no scheduler identifier, execution
+result, benchmark-success claim, or publication authorization. Preserve only
+its source/config/input hashes and compact validation receipt when promoting
+durable provenance; keep the generated packet and raw preflight output in the
+worktree-local ignored output tree unless private operations explicitly
+hydrates them from a canonical source.
 
 ## Runtime-Smoke Run Mode
 

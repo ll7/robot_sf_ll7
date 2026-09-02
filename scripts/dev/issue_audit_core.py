@@ -164,6 +164,12 @@ NON_AUTHORITATIVE_RULING_CONTEXT_RE = re.compile(
     r"do\s+not\s+apply|not\s+a\s+ruling)\b",
     re.IGNORECASE,
 )
+CONDITIONAL_DECISION_REVIVAL_RE = re.compile(
+    r"\b(?:reopen(?:s|ed|ing)?|reapply)\b.{0,120}\bonly\s+if\b"
+    r"|^\s*any\b.{0,160}\b(?:drift|change|mismatch|failure)\b.{0,120}"
+    r"\breopen(?:s|ed|ing)?\b",
+    re.IGNORECASE,
+)
 READY_HEADING_PATTERN = re.compile(
     r"^#{2,4}\s+(?:acceptance(?: criteria)?|definition of done|success criteria|"
     r"validation(?: / testing| command| commands)?|implementation plan)\s*$",
@@ -974,6 +980,22 @@ def _text_for_issue(issue: Mapping[str, Any]) -> str:
     return "\n".join(parts)
 
 
+def _canonical_ruling_line_indices(lines: Sequence[str], issue_number: int) -> list[int]:
+    """Return authoritative same-issue ruling lines from normalized text."""
+    return [
+        index
+        for index, line in enumerate(lines)
+        if (
+            (match := CANONICAL_RULING_RE.fullmatch(line)) is not None
+            and int(match.group("issue")) == issue_number
+            and not any(
+                NON_AUTHORITATIVE_RULING_CONTEXT_RE.search(context)
+                for context in lines[max(0, index - 2) : index]
+            )
+        )
+    ]
+
+
 def _gate_evidence(text: str) -> list[dict[str, str]]:
     """Return current, issue-local provenance, rights, compute, and input gates."""
     evidence: list[dict[str, str]] = []
@@ -1113,23 +1135,14 @@ def _decision_evidence(
     )
     if issue_number is not None and comment_order_complete:
         latest_ruling = max(
-            (
-                index
-                for index, line in enumerate(lines)
-                if (
-                    (match := CANONICAL_RULING_RE.fullmatch(line)) is not None
-                    and int(match.group("issue")) == issue_number
-                    and not any(
-                        NON_AUTHORITATIVE_RULING_CONTEXT_RE.search(context)
-                        for context in lines[max(0, index - 2) : index]
-                    )
-                )
-            ),
+            _canonical_ruling_line_indices(lines, issue_number),
             default=-1,
         )
         last_resolution = max(last_resolution, latest_ruling)
     for index, line in enumerate(lines):
         if not line:
+            continue
+        if CONDITIONAL_DECISION_REVIVAL_RE.search(line):
             continue
         for pattern in DECISION_PATTERNS:
             match = pattern.search(line)
@@ -1156,7 +1169,12 @@ def _ready_evidence(body: str) -> list[str]:
     return evidence
 
 
-def _terminal_review_evidence(text: str) -> list[str]:
+def _terminal_review_evidence(
+    issue: Mapping[str, Any],
+    *,
+    issue_number: int,
+    comment_order_complete: bool,
+) -> list[str]:
     """Return explicit report-status evidence that execution awaits review.
 
     The status-line requirement is deliberate: prose about a future campaign,
@@ -1165,15 +1183,27 @@ def _terminal_review_evidence(text: str) -> list[str]:
     ``diagnostic_ready_for_domain_review`` is current evidence that the
     completed execution has crossed into interpretation or domain review.
     """
+    comment_texts, observed_order_complete = _ordered_comment_texts(issue)
+    sources = [str(issue.get("body") or ""), *comment_texts]
+    latest_ruling_source = -1
+    if comment_order_complete and observed_order_complete:
+        for source_index, source in enumerate(sources):
+            lines = [" ".join(line.split()) for line in source.splitlines()]
+            if _canonical_ruling_line_indices(lines, issue_number):
+                latest_ruling_source = source_index
+
     evidence: list[str] = []
-    for raw_line in text.splitlines():
-        line = " ".join(raw_line.split())
-        if not line:
+    for source_index, source in enumerate(sources):
+        if source_index <= latest_ruling_source:
             continue
-        match = TERMINAL_REVIEW_STATUS_LINE_PATTERN.match(line)
-        if not match or not TERMINAL_REVIEW_STATUS_PATTERN.search(match.group("status")):
-            continue
-        evidence.append(f"terminal review status: {_compact_excerpt(line)}")
+        for raw_line in source.splitlines():
+            line = " ".join(raw_line.split())
+            if not line:
+                continue
+            match = TERMINAL_REVIEW_STATUS_LINE_PATTERN.match(line)
+            if not match or not TERMINAL_REVIEW_STATUS_PATTERN.search(match.group("status")):
+                continue
+            evidence.append(f"terminal review status: {_compact_excerpt(line)}")
     return evidence[:3]
 
 
@@ -1461,8 +1491,12 @@ def classify_issue(
             "SLURM job inventory unavailable; preserve this issue and do not promote it to ready"
         )
 
-    terminal_review_evidence = _terminal_review_evidence(text)
     _, comment_order_complete = _ordered_comment_texts(issue)
+    terminal_review_evidence = _terminal_review_evidence(
+        issue,
+        issue_number=number,
+        comment_order_complete=comment_order_complete,
+    )
     decision_evidence = _decision_evidence(
         text,
         labels,

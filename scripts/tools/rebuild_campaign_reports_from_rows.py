@@ -398,6 +398,7 @@ def _reconcile_snqi_diagnostics(campaign_root: Path, cfg: Any) -> None:
     diagnostics_path = campaign_root / "reports" / "snqi_diagnostics.json"
     diagnostics = _read_json(diagnostics_path)
     diagnostics["planner_ordering"] = ordering
+    diagnostics["planner_ordering_basis"] = "stored_metrics.snqi"
     diagnostics["score_basis_reconciliation"] = {
         "status": "reconciled",
         "canonical_formula": "robot_sf.benchmark.metrics.snqi",

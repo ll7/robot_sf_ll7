@@ -132,6 +132,11 @@ Split broad ideas before writing.
      (`needs_spec`, `blocked`, `parent`, `human_decision`, `already_claimed`,
      `state_conflict`, `drift`, or `error`) naming the next authority. Retries are
      idempotent and never remove labels owned by a human or another workflow.
+   - Discovery is not complete until every created issue has both a passing
+     `issue_implementability.py --preflight-body` result and a recorded
+     `issue_readiness_gate.py` outcome. A created issue without a readiness
+     outcome is an unfinished discovery result and cannot support a saturated
+     lane verdict.
 6. Route Project #5 metadata in a single batch pass with score sync once at the end.
 7. Stop on no new candidates, budget/time expiry, or blocked writes.
 

@@ -19,9 +19,11 @@ The helper is a bounded-github-mutation tool:
 - **Never reimplements canonical owners.** Classification, claim ownership,
   dependency resolution, blocker transitions, terminal-label policy, and
   scientific admission stay in their canonical `scripts/dev/` modules.
-- **Never creates labels**, never adds `runner:luna`/`runner:max` to issues,
-  and never mutates issue state, assignments, milestones, projects, comments,
-  parent relations, PRs, or merges.
+- **Does not create arbitrary labels**, never adds `runner:luna`/`runner:max`
+  to issues, and never mutates issue state, assignments, milestones, projects, comments,
+  parent relations, PRs, or merges. A reviewed readiness transition is the
+  exception: it invokes the canonical `issue_readiness_gate.gate_issue()`
+  function, and the generic label writer is never allowed to add `state:ready`.
 - **One marker per issue.** At most one `goal-autopilot-preparation:v1` block;
   bytes outside the marker region are preserved.
 
@@ -53,6 +55,22 @@ with classification before/after, execution mode, worker route, next action,
 authority, admission reason, proposed label plan, and skip reasons. Its summary
 retains the admission-reason histogram and `not_admitted` projection. `mutation_authorized` is
 always `false` in plan mode.
+
+An ordinary complete, local, leaf issue with no blocking authority and no
+execution-state label remains `state_conflict` in the canonical audit (the
+admission contract is not weakened), but the preparation planner emits a
+`gate_readiness` operation instead of a generic `add state:ready` operation:
+
+```yaml
+action: gate_readiness
+issue: 1234
+expected_body_sha256: "<issue-body-sha256>"
+expected_labels: ["type:workflow"]
+```
+
+Incomplete contracts remain formalization work. Parent, decision, external
+input, compute, blocker, and active-handoff classifications retain their own
+authority and are never promoted by preparation.
 
 ### 3. Render (report-only)
 
@@ -93,7 +111,8 @@ uv run python scripts/dev/prepare_open_issue_contracts.py \
   --batch-id <stable-batch-id> \
   --mutation-ceiling 10 \
   --issues <number>... \
-  --reviewed-plan-digest <selected-plan-content-sha256>
+  --reviewed-plan-digest <selected-plan-content-sha256> \
+  --source-ref origin/main
 ```
 
 Real apply requires an explicit issue list, a digest of that exact selected
@@ -102,24 +121,26 @@ compare-and-swap guarded:
 
 - default maximum 10 issue-body mutations per batch; hard ceiling 25 body
   mutations or 50 label operations, whichever occurs first;
-- the reviewed `label_plan` is validated before any write: every operation
-  names its entry issue, uses only `add`/`remove`, refers to an existing
-  repository label, contains no duplicate operation, and never targets
-  `runner:luna`/`runner:max`;
+- the reviewed `label_plan` is validated before any write: generic operations
+  name their entry issue, use only `add`/`remove`, refer to an existing
+  repository label, contain no duplicate operation, and never target
+  `runner:luna`/`runner:max`; readiness operations instead carry the exact
+  expected body digest and label set and invoke the canonical gate;
 - every actionable issue is re-read before mutation; any drift in state,
-  labels, or assignees aborts the batch before its first write;
-- body markers are applied before labels, because GitHub REST writes are not
-  transactional; each label is checked immediately before and after its
-  write, and a partial receipt identifies the exact completed and skipped
-  operations;
+  body, labels, or assignees aborts the batch before its first write;
+- readiness gates run before their marker body write, then generic label
+  cleanup follows the body, because GitHub REST writes are not transactional;
+  each operation is recorded and a partial receipt identifies the exact
+  completed and skipped operations;
 - this issue does not add a body compare-and-swap protocol: body writes retain
   the existing marker-only composition and immediate body readback contract;
 - the batch aborts on unknown identity, active-owner drift, audit mismatch,
   rate limit, or REST error;
 - body and label writes are immediately read back and verified;
 - the receipt records the selected plan and audit digests, expected/observed
-  body and label state, operation status, API-helper status, safe order,
-  partial failure, and proof that no unauthorized mutation occurred.
+  body and label state, readiness-gate outcomes, operation status, API-helper
+  status, safe order, partial failure, and proof that no unauthorized mutation
+  occurred.
 
 Use `--dry-run` first to render the exact operations without writing.
 

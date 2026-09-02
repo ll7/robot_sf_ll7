@@ -1,6 +1,10 @@
 """TODO docstring. Document this module."""
 
 import pytest
+from pysocialforce.config import (
+    LEGACY_SHIFTED_GRADIENT_V1,
+    SURFACE_DISTANCE_UNIT_NORMAL_V2,
+)
 
 from robot_sf.gym_env.env_config import (
     BicycleDriveRobot,
@@ -80,6 +84,28 @@ def test_non_reactive_response_multiplier_default_and_validation():
 
     with pytest.raises(ValueError, match="non_reactive_response_multiplier"):
         SimulationSettings(non_reactive_response_multiplier=float("inf"))
+
+
+def test_oracle_force_trace_enabled_requires_a_boolean() -> None:
+    """The evaluator-only trace flag must reject truthy non-boolean values."""
+    assert SimulationSettings().oracle_force_trace_enabled is False
+    assert SimulationSettings(oracle_force_trace_enabled=True).oracle_force_trace_enabled is True
+
+    with pytest.raises(TypeError, match="oracle_force_trace_enabled must be bool"):
+        SimulationSettings(oracle_force_trace_enabled=1)  # type: ignore[arg-type]
+
+
+def test_obstacle_force_law_defaults_to_legacy_and_accepts_corrected_opt_in() -> None:
+    """Simulation settings resolve historical inputs and expose the explicit opt-in law."""
+    assert SimulationSettings().obstacle_force_law == LEGACY_SHIFTED_GRADIENT_V1
+    assert SimulationSettings(obstacle_force_law=None).obstacle_force_law == (  # type: ignore[arg-type]
+        LEGACY_SHIFTED_GRADIENT_V1
+    )
+    corrected = SimulationSettings(obstacle_force_law=SURFACE_DISTANCE_UNIT_NORMAL_V2)
+    assert corrected.obstacle_force_law_version == SURFACE_DISTANCE_UNIT_NORMAL_V2
+
+    with pytest.raises(ValueError, match="unsupported obstacle-force law"):
+        SimulationSettings(obstacle_force_law="unsupported")
 
 
 def test_desired_speed_default_preserves_legacy_behavior():

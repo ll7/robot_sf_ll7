@@ -1,7 +1,7 @@
 {
   "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_8063_goal_belief_contract_receipt.v1.json",
-  "artifact_sha256": "e7ac68e9b54fd41d7b5d644f3bee1ad8b1a30617c3cfcf2f5c2a9d610251bf0f",
+  "artifact_sha256": "7c9fc2c245fe9011b60f166bc9023d88681825cc63842ad0adf83cf292a07f16",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "preserved_exact_bytes": true
 }

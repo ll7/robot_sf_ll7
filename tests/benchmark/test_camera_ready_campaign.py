@@ -118,6 +118,51 @@ def test_camera_ready_campaign_reexports_package_config_loader() -> None:
         )
 
 
+def test_stored_snqi_ordering_rejects_partial_fields() -> None:
+    """Mixed present/absent SNQI fields cannot silently define a release ordering."""
+    episodes = [
+        {
+            "planner_key": "planner_a",
+            "kinematics": "differential_drive",
+            "metrics": {"snqi": 0.1},
+        },
+        {
+            "planner_key": "planner_b",
+            "kinematics": "differential_drive",
+            "metrics": {"success": True},
+        },
+    ]
+
+    with pytest.raises(ValueError, match="all episodes or no episodes"):
+        camera_ready_campaign_impl_module.compute_stored_snqi_ordering(episodes)
+
+
+@pytest.mark.parametrize("metrics", [{"snqi": None}, None, "invalid"])
+def test_stored_snqi_ordering_rejects_present_invalid_fields(metrics: object) -> None:
+    """A declared but invalid SNQI surface cannot trigger legacy-scalarizer fallback."""
+    episode = {
+        "planner_key": "planner_a",
+        "kinematics": "differential_drive",
+        "metrics": metrics,
+    }
+
+    with pytest.raises(ValueError, match="metrics"):
+        camera_ready_campaign_impl_module.compute_stored_snqi_ordering([episode])
+
+
+def test_stored_snqi_ordering_allows_campaigns_that_omit_field() -> None:
+    """Historical non-SNQI campaigns may continue to use diagnostic ordering."""
+    episodes = [
+        {
+            "planner_key": "planner_a",
+            "kinematics": "differential_drive",
+            "metrics": {"success": True},
+        }
+    ]
+
+    assert camera_ready_campaign_impl_module.compute_stored_snqi_ordering(episodes) is None
+
+
 def test_camera_ready_campaign_legacy_module_is_package_owned_facade() -> None:
     """Legacy campaign module resolves to the package-owned compatibility facade."""
     assert camera_ready_campaign_module is camera_ready_legacy_facade
@@ -5380,6 +5425,14 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
     # The soft contract warning must not change the process exit code (stays 0 on a completed run).
     assert result["exit_code"] == 0
     assert result["soft_contract_warning"] is True
+    diagnostics = json.loads(
+        (Path(result["summary_json"]).parent / "snqi_diagnostics.json").read_text(encoding="utf-8")
+    )
+    assert diagnostics["planner_ordering_basis"] == "diagnostic_scalarizer"
+    assert diagnostics["release_claim_boundary"]["ranking_authority"] is False
+    assert diagnostics["release_claim_boundary"]["ranking_claims_admitted"] is False
+    assert diagnostics["positioning"]["planner_ordering_informative"] is False
+    assert diagnostics["positioning"]["recommendation"] == "retain_as_advisory_only_not_for_ranking"
 
 
 def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypatch) -> None:

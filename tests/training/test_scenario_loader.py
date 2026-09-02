@@ -81,6 +81,25 @@ def test_build_robot_config_parses_observation_visibility_settings(tmp_path: Pat
     assert config.observation_visibility.dynamic_occlusion is True
 
 
+def test_build_robot_config_parses_socnav_ordering_and_tracking_options(tmp_path: Path) -> None:
+    """Scenario YAML should expose the opt-in stable order and tracker configuration."""
+    config = build_robot_config_from_scenario(
+        {
+            "name": "identity_case",
+            "observation_visibility": {
+                "ordering_tie_break": "stable",
+                "include_track_ids": True,
+                "tracking_config": {"confirmation_steps": 1},
+            },
+        },
+        scenario_path=tmp_path / "scenario.yaml",
+    )
+
+    assert config.observation_visibility.ordering_tie_break == "stable"
+    assert config.observation_visibility.include_track_ids is True
+    assert config.observation_visibility.tracking_config == {"confirmation_steps": 1}
+
+
 def test_build_robot_config_rejects_invalid_observation_visibility(tmp_path: Path) -> None:
     """Visibility config validation should fail closed for unsupported sensor settings."""
     with pytest.raises(ValueError, match="fov_degrees must be <= 360"):
@@ -98,6 +117,39 @@ def test_build_robot_config_rejects_invalid_observation_visibility(tmp_path: Pat
         """Positive float validation should match sibling robot_config error prefixes."""
         with pytest.raises(ValueError, match=r"robot_config\.radius must be > 0\."):
             _coerce_positive_float(0, field_name="radius")
+
+
+@pytest.mark.parametrize(
+    ("visibility", "message"),
+    [
+        (
+            {"ordering_tie_break": 1},
+            "observation_visibility.ordering_tie_break must be a string",
+        ),
+        (
+            {"ordering_tie_break": "unsupported"},
+            "observation_visibility.ordering_tie_break must be 'legacy' or 'stable'",
+        ),
+        (
+            {"tracking_config": []},
+            "observation_visibility.tracking_config must be a mapping",
+        ),
+    ],
+)
+def test_build_robot_config_rejects_invalid_socnav_options(
+    tmp_path: Path,
+    visibility: dict[str, object],
+    message: str,
+) -> None:
+    """New SocNav options should reject malformed values with actionable errors."""
+    with pytest.raises(ValueError, match=message):
+        build_robot_config_from_scenario(
+            {
+                "name": "invalid_identity_case",
+                "observation_visibility": visibility,
+            },
+            scenario_path=tmp_path / "scenario.yaml",
+        )
 
 
 def test_load_scenarios_select_scenarios_preserves_explicit_order(tmp_path: Path) -> None:
@@ -337,6 +389,19 @@ def test_build_robot_config_applies_action_latency_overrides(tmp_path: Path) -> 
 
     assert step_config.sim_config.resolved_action_latency_steps == 2
     assert ms_config.sim_config.resolved_action_latency_steps == 3
+
+
+def test_build_robot_config_applies_oracle_force_trace_override(tmp_path: Path) -> None:
+    """Scenario YAML can explicitly opt into evaluator-only force instrumentation."""
+    config = build_robot_config_from_scenario(
+        {
+            "name": "oracle-force-trace-runtime-smoke",
+            "simulation_config": {"oracle_force_trace_enabled": True},
+        },
+        scenario_path=tmp_path / "scenario.yaml",
+    )
+
+    assert config.sim_config.oracle_force_trace_enabled is True
 
 
 def test_build_robot_config_rejects_ambiguous_action_latency_overrides(tmp_path: Path) -> None:

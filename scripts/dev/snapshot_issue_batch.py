@@ -538,6 +538,24 @@ def _admission_reason(admission: dict[str, Any]) -> str:
     }.get(str(classification), str(classification or "unknown"))
 
 
+def _admission_result_is_complete(admission: object) -> bool:
+    """Return whether an admission result has the fields needed for queue truth."""
+    if not isinstance(admission, dict):
+        return False
+    outcome = admission.get("outcome")
+    classification = admission.get("classification")
+    if (
+        not isinstance(outcome, str)
+        or not outcome.strip()
+        or outcome.strip().lower() == "error"
+        or not isinstance(classification, str)
+        or not classification.strip()
+        or classification.strip().lower() == "error"
+    ):
+        return False
+    return admission.get("claim_outcome") in {"unclaimed", "already_claimed"}
+
+
 def _is_external_admission(admission: dict[str, Any]) -> bool:
     """Return whether an admission row is blocked by an external input."""
     return _admission_reason(admission) == "external_input_missing"
@@ -1068,7 +1086,9 @@ def snapshot_claimable_issues(
     ``unavailable`` means discovery failed, was quota-blocked, or candidate
     evaluation was unavailable. A
     ``claimable_count == 0`` result may only be treated as ``genuine_zero_work`` when
-    ``queue_completeness`` is ``complete``.
+    ``queue_completeness`` is ``complete``. The returned
+    ``zero_work_authoritative`` flag makes that boundary machine-readable and
+    is true only for a complete, error-free page-one scan.
     """
     body_limit = body_limit if body_limit > 0 else BODY_EXCERPT_CHARS
     blocker_decisions, blocker_errors = _load_blocker_decisions(blocker_decision_paths or [])
@@ -1079,6 +1099,7 @@ def snapshot_claimable_issues(
             "body_excerpt_chars": body_limit,
             "mode": "candidate_queue",
             "legacy_mode": "claimable",
+            "candidate_scope": "state:ready",
             "status": "error",
             "data_source": "none",
             "queue_completeness": "unavailable",
@@ -1088,6 +1109,7 @@ def snapshot_claimable_issues(
             "candidate_count": 0,
             "claimable_issues": [],
             "claimable_count": 0,
+            "zero_work_authoritative": False,
             "admission_reason_histogram": {},
         }
     listing = _list_open_issues(
@@ -1103,6 +1125,7 @@ def snapshot_claimable_issues(
         "body_excerpt_chars": body_limit,
         "mode": "candidate_queue",
         "legacy_mode": "claimable",
+        "candidate_scope": "state:ready",
         "status": listing["status"],
         "data_source": listing["data_source"],
         "rate_limit": listing["rate_limit"],
@@ -1113,6 +1136,7 @@ def snapshot_claimable_issues(
         "candidate_count": 0,
         "claimable_issues": [],
         "claimable_count": 0,
+        "zero_work_authoritative": False,
         "admission_reason_histogram": {},
         "excluded_counts": {"blocked_external": 0},
         "transition_counts": {},
@@ -1176,11 +1200,7 @@ def snapshot_claimable_issues(
         and issue.get("dispatch_allowed", True) is not False
     ]
     admission_results_complete = all(
-        isinstance(issue.get("admission"), dict)
-        and issue["admission"].get("outcome") != "error"
-        and issue["admission"].get("classification") != "error"
-        and issue["admission"].get("claim_outcome") in {"unclaimed", "already_claimed"}
-        for issue in snapshots
+        _admission_result_is_complete(issue.get("admission")) for issue in snapshots
     )
     if not admission_results_complete:
         queue_completeness = "unavailable"
@@ -1192,7 +1212,9 @@ def snapshot_claimable_issues(
         **base,
         "mode": "candidate_queue",
         "legacy_mode": "claimable",
+        "candidate_scope": "state:ready",
         "queue_completeness": queue_completeness,
+        "zero_work_authoritative": queue_completeness == "complete",
         "truncated": truncated,
         "truncation_note": truncation_note,
         "include_blocked_external": include_blocked_external,

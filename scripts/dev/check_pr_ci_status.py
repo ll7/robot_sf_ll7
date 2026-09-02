@@ -41,6 +41,7 @@ DEFAULT_QUEUE_STARVATION_SECONDS = 300.0
 _ACTIONS_JOB_URL_RE = re.compile(
     r"/actions/runs/(?P<run_id>[0-9]+)/job/(?P<job_id>[0-9]+)(?:$|[/?#])"
 )
+_ACTIONS_RUN_URL_RE = re.compile(r"/actions/runs/(?P<run_id>[0-9]+)(?:$|[/?#])")
 _TERMINAL_STEP_CONCLUSIONS = {"neutral", "skipped", "success"}
 _WORKFLOW_ID_BY_RUN_ID: dict[str, str] = {}
 STABILITY_SNAPSHOT_SCHEMA = "pr_stability_snapshot.v1"
@@ -201,8 +202,8 @@ def _check_run_identity(check: dict[str, Any]) -> tuple[str, str] | None:
 
     GitHub's PR rollup retains completed runs when editing a PR body retriggers
     a workflow on the same commit.  Only runs from the same workflow job can
-    supersede one another; legacy statuses and runs without a timestamp remain
-    independently fail-closed.
+    supersede one another; legacy statuses, runs without a timestamp, and
+    malformed replacement representatives remain independently fail-closed.
     """
     if check.get("__typename") != "CheckRun":
         return None
@@ -212,6 +213,21 @@ def _check_run_identity(check: dict[str, Any]) -> tuple[str, str] | None:
     workflow_identity = f"id:{workflow_id}" if workflow_id else f"name:{workflow_name}"
     if not (workflow_id or workflow_name) or not started_at:
         return None
+    if "__replacement_materialization" in check:
+        materialization = check["__replacement_materialization"]
+        if not isinstance(materialization, dict):
+            return None
+        replacement_run_id = _replacement_materialization_run_id(check)
+        materialization_workflow_id = str(materialization.get("workflow_id") or "")
+        materialization_url = str(materialization.get("replacement_run_url") or "")
+        if (
+            replacement_run_id is None
+            or not materialization_workflow_id
+            or materialization_workflow_id != workflow_id
+            or _actions_run_id(_check_details_url(check)) != replacement_run_id
+            or _actions_run_id(materialization_url) != replacement_run_id
+        ):
+            return None
     return workflow_identity, _rollup_name(check)
 
 
@@ -237,6 +253,36 @@ def _check_started_at(check: dict[str, Any]) -> str:
     return str(check.get("startedAt") or check.get("started_at") or "")
 
 
+def _replacement_materialization_run_id(check: dict[str, Any]) -> int | None:
+    """Return a validated workflow run ID from synthetic replacement evidence."""
+    materialization = check.get("__replacement_materialization")
+    if not isinstance(materialization, dict):
+        return None
+    raw_run_id = materialization.get("replacement_run_id")
+    if isinstance(raw_run_id, bool):
+        return None
+    if isinstance(raw_run_id, int):
+        run_id = raw_run_id
+    elif isinstance(raw_run_id, str) and raw_run_id.strip().isdigit():
+        try:
+            run_id = int(raw_run_id.strip())
+        except ValueError:
+            return None
+    else:
+        return None
+    return run_id if run_id > 0 else None
+
+
+def _check_run_order_key(check: dict[str, Any]) -> tuple[int, int, str]:
+    """Return an ordering key that gives validated replacement runs ID precedence."""
+    replacement_run_id = _replacement_materialization_run_id(check)
+    if replacement_run_id is not None:
+        # Workflow-run IDs are authoritative across the workflow/run and job/check API layers;
+        # their timestamps can differ while a replacement check is materializing.
+        return 1, replacement_run_id, _check_started_at(check)
+    return 0, 0, _check_started_at(check)
+
+
 def _check_completed_at(check: dict[str, Any]) -> str:
     """Return a normalized check-run completion timestamp."""
     return str(check.get("completedAt") or check.get("completed_at") or "")
@@ -255,6 +301,12 @@ def _actions_run_job_ids(details_url: str) -> tuple[int, int] | None:
     return int(match.group("run_id")), int(match.group("job_id"))
 
 
+def _actions_run_id(details_url: str) -> int | None:
+    """Extract an Actions workflow-run ID from a check or workflow-run URL."""
+    match = _ACTIONS_RUN_URL_RE.search(details_url)
+    return int(match.group("run_id")) if match is not None else None
+
+
 def _run_identity_evidence(check: dict[str, Any]) -> dict[str, Any]:
     """Return compact, URL-backed identity evidence for one check run."""
     details_url = _check_details_url(check)
@@ -270,20 +322,27 @@ def _run_identity_evidence(check: dict[str, Any]) -> dict[str, Any]:
     }
     if run_job_ids is not None:
         evidence["run_id"], evidence["job_id"] = run_job_ids
+    materialization = check.get("__replacement_materialization")
+    if isinstance(materialization, dict):
+        evidence["materialization"] = materialization
     return evidence
 
 
 def _latest_check_runs_with_evidence(
     rollup: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], int, list[dict[str, Any]]]:
-    """Keep current runs and describe every discarded exact-head replacement."""
+    """Keep current runs and describe every discarded exact-head replacement.
+
+    Synthetic replacement representatives use their validated workflow-run ID as the ordering
+    authority because workflow and job timestamps can describe different API layers.
+    """
     latest_by_identity: dict[tuple[str, str], dict[str, Any]] = {}
     for check in rollup:
         identity = _check_run_identity(check)
         if identity is None:
             continue
         latest = latest_by_identity.get(identity)
-        if latest is None or str(check["startedAt"]) > str(latest["startedAt"]):
+        if latest is None or _check_run_order_key(check) > _check_run_order_key(latest):
             latest_by_identity[identity] = check
 
     effective_rollup: list[dict[str, Any]] = []
@@ -296,7 +355,11 @@ def _latest_check_runs_with_evidence(
             superseded = _run_identity_evidence(check)
             replacement = _run_identity_evidence(latest_by_identity[identity])
             superseded["replacement"] = replacement
-            superseded["reason"] = "newer_same_workflow_job"
+            superseded["reason"] = (
+                "newer_same_workflow_run_materialization"
+                if replacement.get("materialization") is not None
+                else "newer_same_workflow_job"
+            )
             superseded_runs.append(superseded)
             continue
         effective_rollup.append(check)
@@ -488,6 +551,11 @@ def _rest_check_runs_to_rollup(check_runs: list[dict[str, Any]]) -> list[dict[st
                 )
                 if isinstance(run, dict)
                 else ""
+            ),
+            **(
+                {"__replacement_materialization": run["__replacement_materialization"]}
+                if isinstance(run.get("__replacement_materialization"), dict)
+                else {}
             ),
         }
         for run in check_runs

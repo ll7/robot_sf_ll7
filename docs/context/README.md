@@ -7,6 +7,10 @@ For broad context lookup, start with [INDEX.md](INDEX.md). It is the retrieval-f
 current entry points, status rules, and curated context-pack scopes. This README remains the note
 maintenance workflow and full discoverability surface.
 
+The issue #8068 observation-only goal-posterior baseline is documented in
+[issue_8068_goal_posterior_actor_baseline.md](issue_8068_goal_posterior_actor_baseline.md); its
+tracked smoke receipt is implementation-integrity evidence only.
+
 The route-side and homotopy observability contract is documented in
 [issue_7890_route_choice_observability.md](issue_7890_route_choice_observability.md); it is an
 analysis-only diagnostic for planner-route observability, not evidence of human preference or
@@ -34,6 +38,11 @@ it binds cross-host verdicts to numerical context without establishing a determi
 The post-rollout stale-base observation contract is documented in
 [issue_7261_stale_base_observation.md](issue_7261_stale_base_observation.md); it measures only
 SHA-pinned workflow records and keeps missing or unknown attribution unavailable.
+
+The interaction-conditioned realism validation preregistration is documented in
+[issue_8246_realism_validation_preregistration.md](issue_8246_realism_validation_preregistration.md);
+its current evidence is synthetic implementation-integrity proof and the external-data lane remains
+blocked.
 
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.

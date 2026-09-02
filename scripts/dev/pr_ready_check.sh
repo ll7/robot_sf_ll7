@@ -231,6 +231,115 @@ case "$pr_ready_mode_lower" in
     ;;
 esac
 
+# Issue #8286: serialize readiness only within this canonical worktree.  The
+# lock anchor lives under one stable host-local lock root and is keyed by the
+# physical worktree path, so linked worktrees that share one Git common
+# directory remain independently runnable.  Python's inherited descriptor keeps
+# the kernel lock held by this shell until the final readiness cleanup completes.
+pr_ready_lock_fd=""
+pr_ready_worktree=""
+pr_ready_lock_path=""
+
+release_pr_ready_lock() {
+  local exit_code=$?
+  if [[ -n "$pr_ready_lock_fd" ]]; then
+    exec {pr_ready_lock_fd}>&-
+    pr_ready_lock_fd=""
+  fi
+  return "$exit_code"
+}
+
+acquire_pr_ready_worktree_lock() {
+  local lock_root lock_key lock_rc
+
+  if ! pr_ready_worktree="$(cd -- "$REPO_ROOT" && pwd -P)"; then
+    printf 'Cannot determine the canonical absolute worktree path; refusing to run readiness without a lock.\n' >&2
+    return 1
+  fi
+
+  lock_root="${PR_READY_LOCK_DIR:-/tmp/robot-sf-pr-ready-locks}"
+  if [[ "$lock_root" != /* ]]; then
+    lock_root="$REPO_ROOT/$lock_root"
+  fi
+  if ! mkdir -m 700 -p -- "$lock_root"; then
+    printf 'Cannot create the PR readiness lock directory %q; refusing to run without a lock.\n' \
+      "$lock_root" >&2
+    return 1
+  fi
+  if ! lock_root="$(cd -- "$lock_root" && pwd -P)"; then
+    printf 'Cannot resolve the PR readiness lock directory %q; refusing to run without a lock.\n' \
+      "$lock_root" >&2
+    return 1
+  fi
+
+  if ! lock_key="$(PR_READY_WORKTREE="$pr_ready_worktree" python3 - <<'PY'
+import hashlib
+import os
+
+print(hashlib.sha256(os.fsencode(os.environ["PR_READY_WORKTREE"])).hexdigest())
+PY
+)"; then
+    printf 'Cannot derive the PR readiness lock key; refusing to run without a lock.\n' >&2
+    return 1
+  fi
+
+  pr_ready_lock_path="$lock_root/$lock_key.lock"
+  if ! exec {pr_ready_lock_fd}>>"$pr_ready_lock_path"; then
+    printf 'Cannot open the PR readiness lock %q; refusing to run without a lock.\n' \
+      "$pr_ready_lock_path" >&2
+    return 1
+  fi
+
+  if python3 - "$pr_ready_lock_fd" <<'PY'
+import errno
+import sys
+
+try:
+    import fcntl
+except ImportError as exc:
+    print(
+        f"Kernel-backed worktree locking is unavailable: Python fcntl support is required ({exc}).",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+try:
+    fcntl.flock(int(sys.argv[1]), fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError:
+    raise SystemExit(75)
+except OSError as exc:
+    if exc.errno in (errno.EACCES, errno.EAGAIN):
+        raise SystemExit(75)
+    print(f"Kernel-backed worktree lock failed: {exc}", file=sys.stderr)
+    raise SystemExit(1)
+PY
+  then
+    return 0
+  else
+    lock_rc=$?
+  fi
+
+  if [[ "$lock_rc" -eq 75 ]]; then
+    printf 'PR readiness is already running for worktree %q.\n' "$pr_ready_worktree" >&2
+    printf 'Wait for that run to finish, then retry: %q\n' "$0" >&2
+    return 2
+  fi
+
+  printf 'Cannot start PR readiness: kernel-backed worktree locking is unavailable; refusing to run without the lock.\n' >&2
+  return 1
+}
+
+# Close the lock explicitly on normal exit and trapped signals.  SIGKILL cannot
+# run a trap, but the kernel still releases the descriptor-bound lock when this
+# shell terminates; the persistent anchor file is never used as a held-lock
+# indicator.
+trap release_pr_ready_lock EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 131' QUIT
+trap 'exit 143' TERM
+acquire_pr_ready_worktree_lock
+
 # Friction guard for issue #5533: untracked new files are invisible to the
 # committed-HEAD diff gates (changed-file coverage, docstring TODO diff). They
 # previously produced a misleading "No changed files vs BASE_REF" while silently
@@ -431,6 +540,12 @@ cleanup_pr_ready_coverage() {
     rm -rf -- "$pr_ready_coverage_dir"
   fi
 }
+cleanup_pr_ready_exit() {
+  local exit_code=$?
+  cleanup_pr_ready_coverage || true
+  release_pr_ready_lock || true
+  return "$exit_code"
+}
 coverage_tmp_parent="${TMPDIR:-/tmp}"
 if [[ ! -d "$coverage_tmp_parent" ]]; then
   printf 'Coverage temporary parent does not exist: %s\n' "$coverage_tmp_parent" >&2
@@ -439,7 +554,7 @@ fi
 pr_ready_coverage_dir="$(mktemp -d "$coverage_tmp_parent/robot-sf-pr-ready-coverage.XXXXXX")"
 pr_ready_coverage_dir="$(cd "$pr_ready_coverage_dir" && pwd -P)"
 export COVERAGE_FILE="$pr_ready_coverage_dir/.coverage"
-trap cleanup_pr_ready_coverage EXIT
+trap cleanup_pr_ready_exit EXIT
 printf 'Using readiness-owned coverage database: %s\n' "$COVERAGE_FILE" >&2
 
 printf 'Running core readiness lane.\n' >&2

@@ -99,6 +99,10 @@ def test_analyze_snqi_contract_writes_expected_outputs(tmp_path: Path, capsys) -
     assert "dominant_component" in diagnostics
     assert "component_correlations" in diagnostics
     assert "planner_ordering" in diagnostics
+    assert diagnostics["planner_ordering_basis"] in {
+        "stored_metrics.snqi",
+        "diagnostic_scalarizer",
+    }
     assert "weight_sensitivity" in diagnostics
     assert "positioning" in diagnostics
     assert diagnostics["weights_path"] == "derived"
@@ -107,6 +111,7 @@ def test_analyze_snqi_contract_writes_expected_outputs(tmp_path: Path, capsys) -
     assert len(diagnostics["baseline_sha256"]) == 64
     assert diagnostics["positioning"]["recommendation"]
     assert diagnostics["planner_ordering"][0]["planner_key"] == "goal"
+    assert "Score basis:" in diagnostics_md.read_text(encoding="utf-8")
     sensitivity_header = sensitivity_csv.read_text(encoding="utf-8").splitlines()[0]
     assert "metric_name" in sensitivity_header
     assert "mean_abs_contribution" in sensitivity_header

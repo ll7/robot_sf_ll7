@@ -13,7 +13,7 @@ from warnings import warn
 import numpy as np
 
 from pysocialforce import forces
-from pysocialforce.config import SimulatorConfig
+from pysocialforce.config import SimulatorConfig, obstacle_force_law_metadata
 from pysocialforce.force_trace import ForceComputationResult, compute_force_components
 from pysocialforce.map_config import MapDefinition
 from pysocialforce.ped_behavior import PedestrianBehavior
@@ -165,6 +165,15 @@ class Simulator_v2:
         """
         return compute_force_components(self.forces, self.peds)
 
+    def obstacle_force_law_metadata(self) -> dict[str, str]:
+        """Return the configured fast-pysf obstacle-law metadata."""
+        return obstacle_force_law_metadata(
+            getattr(self.config.obstacle_force_config, "law_version", None),
+            site="fast_pysf",
+            geometry_convention="map_line_endpoints_orthogonal_vector",
+            radius_convention="threshold_plus_agent_radius_sigma",
+        )
+
     @property
     def obstacles(self) -> list[np.ndarray]:
         """
@@ -274,6 +283,15 @@ class Simulator:
             The ordered force components and exact aggregate.
         """
         return compute_force_components(self.forces, self.peds)
+
+    def obstacle_force_law_metadata(self) -> dict[str, str]:
+        """Return the configured fast-pysf obstacle-law metadata."""
+        return obstacle_force_law_metadata(
+            getattr(self.config.obstacle_force_config, "law_version", None),
+            site="fast_pysf",
+            geometry_convention="map_line_endpoints_orthogonal_vector",
+            radius_convention="threshold_plus_agent_radius_sigma",
+        )
 
     @property
     def current_state(self) -> SimState:

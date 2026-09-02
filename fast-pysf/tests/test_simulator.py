@@ -5,7 +5,13 @@ import warnings
 import numpy as np
 import pysocialforce as pysf
 import pytest
-from pysocialforce.config import SceneConfig
+from pysocialforce.config import (
+    LEGACY_SHIFTED_GRADIENT_V1,
+    SURFACE_DISTANCE_UNIT_NORMAL_V2,
+    ObstacleForceConfig,
+    SceneConfig,
+    SimulatorConfig,
+)
 from pysocialforce.force_trace import annotate_force_component
 from pysocialforce.ped_grouping import PedestrianGroupings, PedestrianStates
 from pysocialforce.scene import PedState
@@ -76,6 +82,21 @@ def test_compute_forces_accumulates_multiple_force_components():
     assert isinstance(forces, np.ndarray)
     assert forces.shape == (2, 2)
     assert np.array_equal(forces, np.array([[6.0, 8.0], [10.0, 12.0]], dtype=float))
+
+
+def test_simulator_emits_explicit_obstacle_force_law_metadata():
+    """Simulator metadata records legacy defaults and corrected opt-in dispatch."""
+    state = np.zeros((0, 7), dtype=float)
+    legacy = pysf.Simulator(state=state)
+    corrected = pysf.Simulator(
+        state=state,
+        config=SimulatorConfig(
+            obstacle_force_config=ObstacleForceConfig(law_version=SURFACE_DISTANCE_UNIT_NORMAL_V2)
+        ),
+    )
+
+    assert legacy.obstacle_force_law_metadata()["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
+    assert corrected.obstacle_force_law_metadata()["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
 
 
 def test_compute_force_components_evaluates_each_force_once_and_preserves_default_sum():

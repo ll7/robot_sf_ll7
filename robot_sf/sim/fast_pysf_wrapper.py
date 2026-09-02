@@ -29,7 +29,7 @@ class FastPysfWrapper:
     The implementation composes individual force contributions using the
     canonical functions defined in `pysocialforce.forces`:
     - `social_force_ped_ped` for pairwise pedestrian-social interactions
-    - `obstacle_force` for obstacle contributions
+    - `obstacle_force_for_law` for versioned obstacle contributions
     - (optional) desired force is computed inline when a goal is provided
 
     Notes:
@@ -75,6 +75,12 @@ class FastPysfWrapper:
         """
         payload = dict(self._diagnostics)
         payload["fallback_reasons"] = dict(self._diagnostics["fallback_reasons"])
+        payload["obstacle_force_law"] = pf_forces.obstacle_force_law_metadata(
+            getattr(self.sim.config.obstacle_force_config, "law_version", None),
+            site="fast_pysf_wrapper",
+            geometry_convention="map_line_endpoints_orthogonal_vector",
+            radius_convention="agent_radius_direct",
+        )
         return payload
 
     def _record_fallback(self, reason: str, exc: BaseException | None = None) -> None:
@@ -282,17 +288,19 @@ class FastPysfWrapper:
             return total
 
         ped_radius = float(self.sim.peds.agent_radius)
+        law_version = getattr(self.sim.config.obstacle_force_config, "law_version", None)
         for row in raw_obs:
             line = tuple(map(float, row[:4]))
             ortho = tuple(map(float, row[4:6]))
             try:
-                fx, fy = pf_forces.obstacle_force(line, ortho, p.astype(float), ped_radius)
+                fx, fy = pf_forces.obstacle_force_for_law(
+                    line, ortho, p.astype(float), ped_radius, law_version
+                )
                 total += np.array([fx, fy], dtype=float) * float(
                     self.sim.config.obstacle_force_config.factor,
                 )
             except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError) as exc:
                 self._record_fallback("obstacle_force_dropped", exc)
-                pass
         return total
 
     def _compute_obstacle_forces_at_points(self, points: np.ndarray) -> np.ndarray:
@@ -307,11 +315,12 @@ class FastPysfWrapper:
             return forces
 
         try:
-            pf_forces.all_obstacle_forces(
+            pf_forces.all_obstacle_forces_for_law(
                 forces,
                 points.astype(float),
                 np.asarray(raw_obs, dtype=float),
                 float(self.sim.peds.agent_radius),
+                getattr(self.sim.config.obstacle_force_config, "law_version", None),
             )
             return forces * float(self.sim.config.obstacle_force_config.factor)
         except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError) as exc:

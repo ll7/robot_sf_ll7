@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from robot_sf.benchmark import artifact_publication as artifact_publication_module
 from robot_sf.benchmark.artifact_publication import (
     _SNQI_DEFAULT_BASELINE_NAME,
     _SNQI_DEFAULT_WEIGHTS_NAME,
@@ -181,6 +182,24 @@ def test_goal_timeout_boundary_rejects_incomplete_or_mutating_exclusion(
     _count, rejections = _check_goal_timeout_boundary(payload)
 
     assert rejections
+
+
+def test_goal_timeout_exclusion_parser_fails_closed_without_resolved_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An inconsistent row parser result cannot admit an unsigned identity."""
+    monkeypatch.setattr(
+        artifact_publication_module,
+        "_goal_timeout_exclusion_identity",
+        lambda *_args, **_kwargs: (None, None),
+    )
+
+    identities, errors = artifact_publication_module._parse_goal_timeout_exclusion_rows(
+        {"excluded_rows": [{}], "excluded_row_count": 0}
+    )
+
+    assert identities == set()
+    assert errors == ["run_meta goal-timeout exclusion row 0 has no resolved identity"]
 
 
 def test_discover_run_directories_returns_leaf_runs(tmp_path: Path) -> None:

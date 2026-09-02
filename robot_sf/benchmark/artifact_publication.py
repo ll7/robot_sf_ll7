@@ -1804,7 +1804,11 @@ def _parse_goal_timeout_exclusion_rows(
             if error is not None:
                 errors.append(error)
                 continue
-            assert identity is not None
+            if identity is None:
+                errors.append(
+                    f"run_meta goal-timeout exclusion row {index} has no resolved identity"
+                )
+                continue
             if identity in declared:
                 errors.append("run_meta goal-timeout exclusion contains a duplicate identity")
             declared.add(identity)

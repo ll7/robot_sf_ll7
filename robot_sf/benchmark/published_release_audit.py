@@ -960,8 +960,9 @@ def _verify_canonical_erratum_bundle(
     internal_problems = _verify_internal_checksums(bundle_root, relative_members)
     if internal_problems:
         raise ValueError("; ".join(internal_problems))
+    if source_sha is None:
+        raise ValueError("erratum publication requires the exact GitHub tag target SHA")
     assets_by_name = _erratum_external_assets(github_assets, source_sha=source_sha)
-    assert source_sha is not None
     _compare_erratum_sidecars(bundle_root, assets_by_name)
     inventory = _verify_erratum_bundle_inventory(
         bundle_root, archive_name=bundle.name, tag=tag, doi=doi

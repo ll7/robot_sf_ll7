@@ -384,6 +384,32 @@ def test_erratum_audit_runs_real_preflight_and_cold_validation(tmp_path: Path) -
     assert correction_receipt["scientific_equality"]["status"] == "identical"
 
 
+def test_erratum_audit_requires_exact_tag_target_before_bundle_validation(tmp_path: Path) -> None:
+    """A canonical erratum cannot be audited without its immutable source target."""
+    payload_files, _receipt, tag, doi = _full_erratum_payload(tmp_path)
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    _make_erratum_assets(
+        github,
+        zenodo,
+        source_sha="5" * 40,
+        tag=tag,
+        doi=doi,
+        payload_files=payload_files,
+    )
+
+    result = audit_published(
+        tag=tag,
+        doi=doi,
+        github_dir=github,
+        zenodo_dir=zenodo,
+        source_sha=None,
+    )
+
+    assert result["status"] == "fail"
+    assert any("exact GitHub tag target SHA" in problem for problem in result["problems"])
+
+
 def test_erratum_audit_rejects_manifest_file_size_tampering(tmp_path: Path) -> None:
     """A manifest entry cannot authenticate bytes with a false declared size."""
     payload_files, _receipt, tag, doi = _full_erratum_payload(tmp_path)

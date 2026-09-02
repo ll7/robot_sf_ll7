@@ -436,10 +436,16 @@ same Zenodo concept instead:
    `checksums.sha256`, and `publication_custody.json` assets to both draft
    channels. Their file-name inventories and bytes must be identical. Verify
    both drafts from empty directories, and only then publish. The cold audit
-   must run the publication preflight, authenticate the exact archive member
-   inventory against the manifest/checksums/custody chain, recompute the
-   successor's scientific digests, and match the embedded correction receipt.
-   Leave the predecessor DOI, tag, files, and checksum unchanged.
+   must resolve the predecessor independently from the successor's sole
+   `isNewVersionOf` relation and exact `-erratum.1` tag lineage. It downloads
+   the predecessor archive from both GitHub and Zenodo, requires positive
+   advertised sizes and byte-identical SHA-256 values, opens that detached
+   archive, and compares its complete scientific snapshot with the successor.
+   It must also run the publication preflight, authenticate the exact successor
+   archive inventory against the manifest/checksums/custody chain, recompute
+   both scientific digests, and match the embedded correction receipt. A
+   successor receipt cannot authenticate its own predecessor. Leave the
+   predecessor DOI, tag, files, and checksum unchanged.
 
 An erratum tag may append `-erratum.<positive integer>` after the exact
 40-character scientific source SHA. The suffix creates a new publication

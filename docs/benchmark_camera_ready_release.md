@@ -277,6 +277,14 @@ identity/download check, not full benchmark evidence and does not authorize
 publication. The command cannot reserve, upload, edit, publish, or rename a
 release.
 
+For a canonical `-erratum.1` release, the same command also resolves the
+predecessor tag and the sole Zenodo `isNewVersionOf` relation independently. It
+downloads the predecessor archive from both public channels, requires the same
+source commit, concept DOI, positive byte count, and SHA-256, and reopens the
+predecessor to recompute its scientific leaves. The successor's embedded
+receipt is evidence to check, not authority for the predecessor identity or
+contents.
+
 1. Download the GitHub Release archive and its checksum/manifest assets. For a
    derived-metadata erratum, also require the detached
    `publication_custody.json`; the archive, `publication_manifest.json`,

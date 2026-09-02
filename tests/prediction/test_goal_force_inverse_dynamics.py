@@ -1,0 +1,768 @@
+"""Focused contract tests for the observation-only inverse-force slice."""
+
+from dataclasses import FrozenInstanceError
+
+import numpy as np
+import pytest
+
+from robot_sf.prediction import (
+    ActorSpeedCapStatus,
+    CensoringState,
+    ControllerMutationFlags,
+    DynamicsParameters,
+    ExactInverseReason,
+    ForceComponents,
+    ForceTimeRobotState,
+    GoalCandidateProvider,
+    GoalCandidateProviderConfig,
+    GoalCandidateSet,
+    GoalCandidateSource,
+    GoalChangeKind,
+    GoalForceEstimatorMode,
+    GoalForceInformationMode,
+    GoalForceInverseConfig,
+    GoalForceInverseEstimator,
+    GoalForceObservation,
+    GoalForceTrackingAdapter,
+    ObservableForceComponent,
+    ObservationMask,
+    OracleTransitionTraceV1,
+    PublicGoalCandidateRecord,
+    SpeedCap,
+    SpeedCapStatus,
+    TransitionBoundary,
+    TransitionBoundaryKind,
+    reconstruct_observable_force,
+)
+from robot_sf.sensor.pedestrian_tracking import (
+    PedestrianObservationSnapshot,
+    PedestrianTracker,
+    PedestrianTrackingConfig,
+)
+
+
+def _observation(
+    timestamp_s: float,
+    step_index: int,
+    velocity: tuple[float, float],
+    *,
+    confidence: float = 1.0,
+    blockers: tuple[str, ...] = (),
+    status: str = "confirmed",
+) -> GoalForceObservation:
+    """Build one deterministic global-frame observation row."""
+
+    return GoalForceObservation(
+        track_id="track-1",
+        tracking_epoch_id="epoch-1",
+        timestamp_s=timestamp_s,
+        step_index=step_index,
+        position_xy=(timestamp_s * velocity[0], timestamp_s * velocity[1]),
+        velocity_xy=velocity,
+        confidence=confidence,
+        blockers=blockers,
+        status=status,
+    )
+
+
+def _complete_components(
+    social: tuple[float, float] = (0.0, 0.0),
+) -> tuple[ObservableForceComponent, ...]:
+    """Declare every configured non-goal family, including known zeroes."""
+
+    values = {
+        "social": social,
+        "obstacle": (0.0, 0.0),
+        "pedestrian_robot": (0.0, 0.0),
+        "group": (0.0, 0.0),
+        "adversarial": (0.0, 0.0),
+    }
+    return tuple(
+        ObservableForceComponent(
+            component_id=component_type, component_type=component_type, force_xy=force
+        )
+        for component_type, force in values.items()
+    )
+
+
+def _config(**overrides: object) -> GoalForceInverseConfig:
+    """Return an enabled fixture configuration."""
+
+    values: dict[str, object] = {
+        "enabled": True,
+        "expected_force_component_types": (
+            "social",
+            "obstacle",
+            "pedestrian_robot",
+            "group",
+            "adversarial",
+        ),
+        "preferred_speed_mps": 1.3,
+    }
+    values.update(overrides)
+    return GoalForceInverseConfig(**values)
+
+
+def _oracle_trace(
+    *,
+    exact_inverse_eligible: bool = True,
+    speed_cap_status: SpeedCapStatus = SpeedCapStatus.NOT_APPLIED,
+) -> OracleTransitionTraceV1:
+    """Build a compact exact/ineligible oracle transition for boundary tests."""
+
+    reasons = () if exact_inverse_eligible else (ExactInverseReason.SPEED_CAP_ACTIVE,)
+    applied_speed = 1.2 if speed_cap_status is not SpeedCapStatus.APPLIED else 1.0
+    max_speed = None if speed_cap_status is SpeedCapStatus.UNKNOWN else 1.2
+    return OracleTransitionTraceV1(
+        episode_id="episode-1",
+        transition_id="episode-1:t0",
+        transition_step_index=0,
+        simulator_pedestrian_id="sim-ped-1",
+        actor_track_id="track-1",
+        actor_tracking_epoch_id="epoch-1",
+        backend="synthetic_fixture",
+        pre_behavior=TransitionBoundary(
+            boundary=TransitionBoundaryKind.PRE_BEHAVIOR,
+            timestamp_s=0.0,
+            step_index=0,
+            position_xy=(0.0, 0.0),
+            velocity_xy=(1.0, 0.0),
+            active_goal_xy=(10.0, 0.0),
+        ),
+        post_behavior_pre_force=TransitionBoundary(
+            boundary=TransitionBoundaryKind.POST_BEHAVIOR_PRE_FORCE,
+            timestamp_s=0.0,
+            step_index=0,
+            position_xy=(0.0, 0.0),
+            velocity_xy=(1.0, 0.0),
+            active_goal_xy=(10.0, 0.0),
+            force_time_robot_state=ForceTimeRobotState(),
+            mutation_flags=ControllerMutationFlags(),
+        ),
+        post_integration=TransitionBoundary(
+            boundary=TransitionBoundaryKind.POST_INTEGRATION,
+            timestamp_s=0.1,
+            step_index=1,
+            position_xy=(0.11, 0.0),
+            velocity_xy=(1.2, 0.0),
+            active_goal_xy=(10.0, 0.0),
+        ),
+        force_components=ForceComponents(
+            social_force_xy=(0.5, 0.0),
+            goal_force_xy=(1.5, 0.0),
+            registry_total_force_xy=(2.0, 0.0),
+            final_pre_cap_force_xy=(2.0, 0.0),
+            uncapped_velocity_xy=(1.2, 0.0),
+            applied_velocity_xy=(applied_speed, 0.0),
+        ),
+        dynamics=DynamicsParameters(
+            preferred_speed_mps=1.3,
+            relaxation_time_s=0.5,
+            desired_force_factor=1.0,
+            goal_threshold_m=0.2,
+            goal_threshold_reached=False,
+        ),
+        speed_cap=SpeedCap(
+            status=speed_cap_status,
+            max_speed_mps=max_speed,
+            uncapped_speed_mps=1.2,
+            applied_speed_mps=applied_speed,
+        ),
+        goal_change_kind=GoalChangeKind.NONE,
+        exact_inverse_eligible=exact_inverse_eligible,
+        exact_inverse_reasons=reasons,
+    )
+
+
+def test_config_is_default_off_immutable_and_strict() -> None:
+    """The opt-in estimator cannot activate through an accidental mutation."""
+
+    config = GoalForceInverseConfig()
+    assert config.enabled is False
+    assert len(config.config_hash) == 64
+    with pytest.raises(FrozenInstanceError):
+        config.enabled = True  # type: ignore[misc]
+    with pytest.raises(ValueError):
+        GoalForceInverseConfig.from_mapping({"enabled": True, "unknown": 1})
+    parsed = GoalForceInverseConfig.from_mapping(
+        {"schema_version": "goal_force_inverse.v1", "enabled": True}
+    )
+    assert parsed.enabled is True
+
+
+def test_config_and_observation_boundaries_fail_closed() -> None:
+    """Reject ambiguous configuration and history rows before estimation."""
+
+    with pytest.raises(TypeError, match="config must be a mapping"):
+        GoalForceInverseConfig.from_mapping(())  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="schema_version"):
+        GoalForceInverseConfig.from_mapping({"schema_version": "future.v9"})
+    with pytest.raises(ValueError, match="history_length"):
+        GoalForceInverseConfig(history_length=4)
+    with pytest.raises(ValueError, match="acceleration_estimator"):
+        GoalForceInverseConfig(acceleration_estimator="future_fit")
+    with pytest.raises(ValueError, match="must be positive"):
+        GoalForceInverseConfig(min_dt_s=0.0)
+    with pytest.raises(ValueError, match="max_dt_s"):
+        GoalForceInverseConfig(min_dt_s=2.0, max_dt_s=1.0)
+    with pytest.raises(ValueError, match="max_history_gap_s"):
+        GoalForceInverseConfig(min_dt_s=2.0, max_dt_s=2.0, max_history_gap_s=1.0)
+    with pytest.raises(ValueError, match="relaxation_time_s"):
+        GoalForceInverseConfig(relaxation_time_s=0.0)
+    with pytest.raises(ValueError, match="covariance_ceiling"):
+        GoalForceInverseConfig(covariance_floor=2.0, covariance_ceiling=1.0)
+    with pytest.raises(ValueError, match="missing_force_policy"):
+        GoalForceInverseConfig(missing_force_policy="assume_zero")
+    with pytest.raises(ValueError, match="saturation_policy"):
+        GoalForceInverseConfig(saturation_policy="assume_clear")
+    with pytest.raises(ValueError, match="expected_force_component_types"):
+        GoalForceInverseConfig(expected_force_component_types=("social", "social"))
+
+    with pytest.raises(TypeError, match="coordinate_frame"):
+        GoalForceObservation(
+            track_id="track-1",
+            tracking_epoch_id="epoch-1",
+            timestamp_s=0.0,
+            step_index=0,
+            position_xy=(0.0, 0.0),
+            velocity_xy=(1.0, 0.0),
+            coordinate_frame="global_xy",  # type: ignore[arg-type]
+        )
+    with pytest.raises(ValueError, match="observed rows"):
+        GoalForceObservation(
+            track_id="track-1",
+            tracking_epoch_id="epoch-1",
+            timestamp_s=0.0,
+            step_index=0,
+            position_xy=(0.0, 0.0),
+            velocity_xy=None,
+        )
+    with pytest.raises(ValueError, match="invisible and padded"):
+        GoalForceObservation(
+            track_id="track-1",
+            tracking_epoch_id="epoch-1",
+            timestamp_s=0.0,
+            step_index=0,
+            position_xy=(0.0, 0.0),
+            velocity_xy=None,
+            mask=ObservationMask.INVISIBLE,
+        )
+    with pytest.raises(TypeError, match="blockers"):
+        _observation(0.0, 0, (1.0, 0.0), blockers="not-a-sequence")  # type: ignore[arg-type]
+
+
+def test_force_reconstruction_preserves_hidden_disabled_and_unavailable_states() -> None:
+    """Every omitted public force family remains distinguishable in diagnostics."""
+
+    reconstruction = reconstruct_observable_force(
+        (
+            ObservableForceComponent(
+                "hidden-social",
+                "social",
+                (0.2, 0.0),
+                actor_observable=False,
+                source_entity="hidden-producer",
+            ),
+            ObservableForceComponent("disabled-obstacle", "obstacle", (0.0, 0.0), enabled=False),
+            ObservableForceComponent(
+                "unavailable-social",
+                "social",
+                unavailable_reason="producer_not_enabled",
+            ),
+            ObservableForceComponent("unsupported", "future_force_family", (0.0, 0.0)),
+        ),
+        expected_component_types=("social", "obstacle"),
+    )
+
+    assert reconstruction.total_force_xy is None
+    assert reconstruction.mode is GoalForceInformationMode.PARTIAL_OBSERVATION
+    assert set(reconstruction.omitted_component_ids) == {
+        "disabled-obstacle",
+        "hidden-social",
+        "unavailable-social",
+        "unsupported",
+    }
+    assert set(reconstruction.missing_component_types) == {"obstacle", "social"}
+    statuses = {item.component_id: item.status for item in reconstruction.diagnostics}
+    assert statuses == {
+        "disabled-obstacle": "disabled",
+        "hidden-social": "hidden",
+        "unavailable-social": "unavailable",
+        "unsupported": "unsupported",
+    }
+    assert "force_component_not_actor_observable:hidden-social" in reconstruction.blockers
+    assert "force_component_disabled:disabled-obstacle" in reconstruction.blockers
+    assert "force_component_unavailable:unavailable-social" in reconstruction.blockers
+    assert "unsupported_force_component:future_force_family" in reconstruction.blockers
+
+    with pytest.raises(ValueError, match="available components"):
+        ObservableForceComponent(
+            "bad-available",
+            "social",
+            (0.0, 0.0),
+            unavailable_reason="contradictory",
+        )
+    with pytest.raises(ValueError, match="unavailable components"):
+        ObservableForceComponent("bad-unavailable", "social")
+    with pytest.raises(TypeError, match="enabled and actor_observable"):
+        ObservableForceComponent("bad-flags", "social", (0.0, 0.0), enabled=1)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="config_hash"):
+        ObservableForceComponent("bad-hash", "social", (0.0, 0.0), config_hash="not-a-digest")
+
+    with pytest.raises(ValueError, match="expected_component_types"):
+        reconstruct_observable_force((), expected_component_types=("social", "social"))
+    with pytest.raises(ValueError, match="unique component_id"):
+        reconstruct_observable_force(
+            (
+                ObservableForceComponent("duplicate", "social", (0.0, 0.0)),
+                ObservableForceComponent("duplicate", "obstacle", (0.0, 0.0)),
+            )
+        )
+
+
+def test_force_reconstruction_requires_explicit_zero_or_reports_missing() -> None:
+    """Omitted force families become partial uncertainty rather than zero force."""
+
+    complete = reconstruct_observable_force(
+        _complete_components((0.2, -0.1)),
+    )
+    assert complete.mode is GoalForceInformationMode.OBSERVATION_RECONSTRUCTED
+    assert complete.total_force_xy == pytest.approx((0.2, -0.1))
+    assert complete.blockers == ()
+
+    partial = reconstruct_observable_force(
+        (ObservableForceComponent("social", "social", (0.2, 0.0)),),
+    )
+    assert partial.mode is GoalForceInformationMode.PARTIAL_OBSERVATION
+    assert partial.total_force_xy == pytest.approx((0.2, 0.0))
+    assert "force_component_missing:obstacle" in partial.blockers
+    assert "non_goal_force_components_incomplete" in partial.blockers
+
+
+def test_h1_heading_baseline_is_observation_only_and_has_no_force_claim() -> None:
+    """One frame exposes heading evidence while explicitly withholding acceleration."""
+
+    candidate_set = GoalCandidateSet.from_points(
+        {"east": (10.0, 0.0), "north": (0.0, 10.0)},
+        source="public_fixture",
+    )
+    estimate = GoalForceInverseEstimator(_config(history_length=1)).estimate(
+        (_observation(0.0, 0, (1.0, 0.0)),),
+        candidate_set=candidate_set,
+    )
+
+    assert estimate.mode is GoalForceInformationMode.HEADING_BASELINE
+    assert estimate.force_estimate is None
+    assert estimate.desired_direction_rad == pytest.approx(0.0)
+    assert estimate.belief is not None
+    assert estimate.belief.source.value == "observation_only"
+    assert estimate.belief.force_estimate is None
+    assert estimate.belief.candidate_probabilities[0].probability > 0.0
+
+
+def test_finite_difference_variant_and_unavailable_history_paths() -> None:
+    """Exercise the alternate causal derivative and each history fail-closed path."""
+
+    history = (
+        _observation(0.0, 0, (1.0, 0.0)),
+        _observation(0.1, 1, (1.1, 0.0)),
+        _observation(0.2, 2, (1.2, 0.0)),
+    )
+    finite_difference = GoalForceInverseEstimator(
+        _config(history_length=3, acceleration_estimator="finite_difference")
+    ).estimate(history, known_force_components=_complete_components(), max_speed_mps=3.0)
+    assert finite_difference.estimator_variant == "h3_causal_finite_difference_mean"
+    assert finite_difference.acceleration_xy == pytest.approx((1.0, 0.0))
+
+    disabled = GoalForceInverseEstimator().estimate((_observation(0.0, 0, (1.0, 0.0)),))
+    assert disabled.mode is GoalForceInformationMode.UNAVAILABLE
+    assert "estimator_disabled" in disabled.blockers
+
+    estimator = GoalForceInverseEstimator(_config(history_length=2))
+    with pytest.raises(TypeError, match="history must be a sequence"):
+        estimator.estimate(object())  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="at least one"):
+        estimator.estimate(())
+
+    insufficient = estimator.estimate((_observation(0.0, 0, (1.0, 0.0)),))
+    assert insufficient.estimator_variant == "insufficient_history"
+
+    tiny_dt = estimator.estimate(
+        (_observation(0.0, 0, (1.0, 0.0)), _observation(1e-5, 1, (1.1, 0.0)))
+    )
+    assert tiny_dt.estimator_variant == "invalid_history"
+    assert "non_positive_or_tiny_dt" in tiny_dt.blockers
+
+    large_gap = estimator.estimate(
+        (_observation(0.0, 0, (1.0, 0.0)), _observation(3.0, 1, (1.1, 0.0)))
+    )
+    assert large_gap.estimator_variant == "invalid_history"
+    assert "history_gap_exceeds_configured_limit" in large_gap.blockers
+
+    invisible = GoalForceObservation(
+        track_id="track-1",
+        tracking_epoch_id="epoch-1",
+        timestamp_s=0.1,
+        step_index=1,
+        position_xy=None,
+        velocity_xy=None,
+        mask=ObservationMask.INVISIBLE,
+        status="lost",
+    )
+    unavailable_latest = estimator.estimate((_observation(0.0, 0, (1.0, 0.0)), invisible))
+    assert unavailable_latest.estimator_variant == "latest_observation_unavailable"
+    assert "latest_observation_unavailable" in unavailable_latest.blockers
+
+    missing_policy = GoalForceInverseEstimator(
+        _config(history_length=2, missing_force_policy="unavailable")
+    ).estimate(
+        history[:2],
+        known_force_components=(ObservableForceComponent("social", "social", (0.0, 0.0)),),
+    )
+    assert missing_policy.mode is GoalForceInformationMode.UNAVAILABLE
+    assert missing_policy.estimator_variant == "missing_force_components"
+    assert missing_policy.reconstruction is not None
+
+    saturation_policy = GoalForceInverseEstimator(
+        _config(history_length=2, saturation_policy="unavailable")
+    ).estimate(
+        history[:2],
+        known_force_components=_complete_components(),
+        max_speed_mps=1.15,
+    )
+    assert saturation_policy.mode is GoalForceInformationMode.UNAVAILABLE
+    assert saturation_policy.estimator_variant == "speed_cap_uncertain"
+    assert "saturation_policy_unavailable" in saturation_policy.blockers
+
+    no_speed_prior = GoalForceInverseEstimator(_config(history_length=2, preferred_speed_mps=None))
+    from_max_speed = no_speed_prior.estimate(
+        history[:2], known_force_components=_complete_components(), max_speed_mps=3.0
+    )
+    from_velocity = no_speed_prior.estimate(
+        history[:2], known_force_components=_complete_components()
+    )
+    assert from_max_speed.preferred_speed_mps == pytest.approx(3.0)
+    assert from_velocity.preferred_speed_mps == pytest.approx(1.1)
+
+    with pytest.raises(TypeError, match="candidate_set"):
+        estimator.estimate(history[:2], candidate_set=object())  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="oracle mode"):
+        GoalForceInverseEstimator(
+            _config(mode=GoalForceEstimatorMode.ORACLE_COMPONENT_UPPER_BOUND)
+        ).estimate(history[:2])
+
+
+def test_candidate_provider_result_is_narrowed_to_actor_candidate_set() -> None:
+    """The #8073 provenance envelope can feed H=2 without exposing oracle fields."""
+
+    provider = GoalCandidateProvider(
+        GoalCandidateProviderConfig(
+            enabled_sources=(GoalCandidateSource.MAP_DESTINATION_ZONE,),
+            unknown_enabled=True,
+        )
+    )
+    generation = provider.generate(
+        (
+            PublicGoalCandidateRecord(
+                source=GoalCandidateSource.MAP_DESTINATION_ZONE,
+                source_id="east-exit",
+                position=(10.0, 0.0),
+            ),
+        ),
+        observed_position_global=(0.0, 0.0),
+    )
+    estimate = GoalForceInverseEstimator(_config(history_length=2)).estimate(
+        (
+            _observation(0.0, 0, (1.0, 0.0)),
+            _observation(0.1, 1, (1.1, 0.0)),
+        ),
+        known_force_components=_complete_components(),
+        candidate_set=generation,
+        max_speed_mps=3.0,
+    )
+
+    assert estimate.belief is not None
+    assert estimate.belief.source.value == "observation_only"
+    provider_candidate_ids = {
+        candidate.id
+        for candidate in generation.candidate_set.candidates
+        if candidate.id != "unknown"
+    }
+    belief_candidate_ids = {item.candidate_id for item in estimate.belief.candidate_probabilities}
+    assert provider_candidate_ids & belief_candidate_ids
+    assert estimate.belief.unknown_candidate_probability > 0.0
+
+
+def test_oracle_upper_bound_is_separate_and_rejects_ineligible_traces() -> None:
+    """Exact simulator labels stay evaluator-only and preserve transition timing."""
+
+    estimator = GoalForceInverseEstimator(_config(history_length=2))
+    upper_bound = estimator.estimate_from_oracle_trace(_oracle_trace())
+
+    assert upper_bound.mode is GoalForceInformationMode.ORACLE_COMPONENT_UPPER_BOUND
+    assert upper_bound.belief is None
+    assert upper_bound.force_estimate is not None
+    assert upper_bound.force_estimate.mean_xy == pytest.approx((1.5, 0.0))
+    assert upper_bound.acceleration_xy == pytest.approx((2.0, 0.0))
+    assert upper_bound.desired_velocity_xy == pytest.approx((1.75, 0.0))
+    assert upper_bound.speed_cap_status is ActorSpeedCapStatus.CLEAR
+    assert upper_bound.censoring_state is CensoringState.NONE
+    with pytest.raises(ValueError, match="oracle or unavailable"):
+        upper_bound.to_actor_model_features()
+
+    functional = estimator.estimate_oracle_component_upper_bound(_oracle_trace())
+    assert functional.content_digest == upper_bound.content_digest
+
+    rejected = estimator.estimate_from_oracle_trace(
+        _oracle_trace(exact_inverse_eligible=False, speed_cap_status=SpeedCapStatus.APPLIED)
+    )
+    assert rejected.mode is GoalForceInformationMode.UNAVAILABLE
+    assert rejected.belief is None
+    assert rejected.force_estimate is None
+    assert "oracle_trace:speed_cap_active" in rejected.blockers
+    assert "oracle_trace_not_exact_inverse_eligible" in rejected.blockers
+
+    with pytest.raises(TypeError, match="OracleTransitionTraceV1"):
+        estimator.estimate_from_oracle_trace(object())  # type: ignore[arg-type]
+
+
+def test_h2_recovers_goal_force_after_explicit_non_goal_reconstruction() -> None:
+    """The finite-difference inverse follows the desired-force algebra."""
+
+    estimator = GoalForceInverseEstimator(
+        _config(history_length=2, relaxation_time_s=0.5, desired_force_factor=1.0)
+    )
+    estimate = estimator.estimate(
+        (
+            _observation(0.0, 0, (1.0, 0.0)),
+            _observation(0.1, 1, (1.2, 0.0)),
+        ),
+        known_force_components=_complete_components((0.5, 0.0)),
+        max_speed_mps=3.0,
+    )
+
+    assert estimate.mode is GoalForceInformationMode.OBSERVATION_RECONSTRUCTED
+    assert estimate.acceleration_xy == pytest.approx((2.0, 0.0))
+    assert estimate.force_estimate is not None
+    assert estimate.force_estimate.mean_xy == pytest.approx((1.5, 0.0))
+    assert estimate.desired_velocity_xy == pytest.approx((1.75, 0.0))
+    assert estimate.inferred_preferred_speed_mps == pytest.approx(1.75)
+    assert estimate.to_dict()["inferred_preferred_speed_mps"] == pytest.approx(1.75)
+    assert estimate.belief is not None
+    assert estimate.belief.mode.value == "nominal"
+    assert {term.name for term in estimate.covariance_terms} == {
+        "acceleration",
+        "known_force",
+        "model_mismatch",
+        "parameter",
+        "tracking",
+        "unmodeled_force",
+    }
+
+
+def test_h3_uses_causal_three_frame_fit_and_keeps_covariance_finite() -> None:
+    """Three ordered frames recover constant acceleration without future data."""
+
+    estimate = GoalForceInverseEstimator(_config(history_length=3)).estimate(
+        (
+            _observation(0.0, 0, (1.0, 0.0)),
+            _observation(0.1, 1, (1.1, 0.0)),
+            _observation(0.2, 2, (1.2, 0.0)),
+        ),
+        known_force_components=_complete_components(),
+        max_speed_mps=3.0,
+    )
+
+    assert estimate.mode is GoalForceInformationMode.OBSERVATION_RECONSTRUCTED
+    assert estimate.estimator_variant == "h3_causal_linear_fit"
+    assert estimate.acceleration_xy == pytest.approx((1.0, 0.0))
+    covariance = np.asarray(estimate.force_estimate.covariance_xy)
+    assert np.all(np.isfinite(covariance))
+    np.testing.assert_allclose(covariance, covariance.T, atol=1e-12)
+    assert np.linalg.eigvalsh(covariance).min() > 0.0
+
+
+def test_partial_force_and_low_confidence_increase_uncertainty() -> None:
+    """Missing force and weak tracking confidence are visible in covariance."""
+
+    history = (
+        _observation(0.0, 0, (1.0, 0.0)),
+        _observation(0.1, 1, (1.1, 0.0)),
+    )
+    complete = GoalForceInverseEstimator(_config(history_length=2)).estimate(
+        history,
+        known_force_components=_complete_components(),
+        max_speed_mps=3.0,
+    )
+    partial = GoalForceInverseEstimator(_config(history_length=2)).estimate(
+        history,
+        known_force_components=(ObservableForceComponent("social", "social", (0.0, 0.0)),),
+        max_speed_mps=3.0,
+    )
+    low_confidence = GoalForceInverseEstimator(_config(history_length=2)).estimate(
+        (
+            _observation(0.0, 0, (1.0, 0.0), confidence=0.2),
+            _observation(0.1, 1, (1.1, 0.0), confidence=0.2),
+        ),
+        known_force_components=_complete_components(),
+        max_speed_mps=3.0,
+    )
+
+    assert partial.mode is GoalForceInformationMode.PARTIAL_OBSERVATION
+    assert partial.belief is not None and partial.belief.mode.value == "censored"
+    assert partial.force_estimate.mean_xy == pytest.approx((1.0, 0.0))
+    assert partial.force_estimate.covariance_xy[0][0] > complete.force_estimate.covariance_xy[0][0]
+    assert (
+        low_confidence.force_estimate.covariance_xy[0][0]
+        > complete.force_estimate.covariance_xy[0][0]
+    )
+
+
+def test_speed_cap_is_actor_side_censoring_not_exact_cap_truth() -> None:
+    """A public max-speed proximity produces a possible, not exact, cap label."""
+
+    estimate = GoalForceInverseEstimator(_config(history_length=2)).estimate(
+        (
+            _observation(0.0, 0, (1.0, 0.0)),
+            _observation(0.1, 1, (1.2, 0.0)),
+        ),
+        known_force_components=_complete_components(),
+        max_speed_mps=1.2,
+    )
+
+    assert estimate.speed_cap_status.value == "possible"
+    assert estimate.censoring_state.value == "saturated"
+    assert "speed_cap_may_censor_transition" in estimate.blockers
+    assert estimate.belief is not None and estimate.belief.mode.value == "censored"
+
+
+def test_braking_residual_does_not_create_a_reversed_goal_direction() -> None:
+    """A strong opposite residual is retained as local braking evidence."""
+
+    estimate = GoalForceInverseEstimator(_config(history_length=2)).estimate(
+        (
+            _observation(0.0, 0, (1.0, 0.0)),
+            _observation(0.1, 1, (0.7, 0.0)),
+        ),
+        known_force_components=_complete_components(),
+        max_speed_mps=3.0,
+    )
+
+    assert estimate.braking_probability > 0.5
+    assert estimate.arrival_probability > 0.0
+    assert estimate.desired_velocity_xy == pytest.approx((0.0, 0.0))
+    assert estimate.desired_direction_rad == pytest.approx(0.0)
+    assert "braking_direction_preserved" in estimate.blockers
+
+
+def test_tracking_adapter_scopes_history_by_epoch_and_reset() -> None:
+    """The stateful bridge cannot carry a prior episode into a new identity epoch."""
+
+    tracker = PedestrianTracker(
+        PedestrianTrackingConfig(
+            enabled=True,
+            process_noise=0.0,
+            initial_position_covariance=0.1,
+            initial_velocity_covariance=0.1,
+            measurement_position_covariance=0.01,
+            measurement_velocity_covariance=0.01,
+            position_gate_threshold=100.0,
+            velocity_gate_threshold=100.0,
+            confirmation_steps=1,
+            max_missed_seconds=10.0,
+            history_capacity=4,
+        )
+    )
+    adapter = GoalForceTrackingAdapter(_config(history_length=2))
+    first = tracker.update(
+        PedestrianObservationSnapshot(
+            timestamp_s=0.0,
+            step_index=0,
+            coordinate_frame="global_xy",
+            positions=np.asarray([[0.0, 0.0]]),
+            velocities=np.asarray([[1.0, 0.0]]),
+            robot_pose_global=(0.0, 0.0, 0.0),
+            valid_mask=np.asarray([True]),
+            visible_mask=np.asarray([True]),
+        )
+    )
+    second = tracker.update(
+        PedestrianObservationSnapshot(
+            timestamp_s=0.1,
+            step_index=1,
+            coordinate_frame="global_xy",
+            positions=np.asarray([[0.1, 0.0]]),
+            velocities=np.asarray([[1.1, 0.0]]),
+            robot_pose_global=(0.0, 0.0, 0.0),
+            valid_mask=np.asarray([True]),
+            visible_mask=np.asarray([True]),
+        )
+    )
+    missed = tracker.update(
+        PedestrianObservationSnapshot(
+            timestamp_s=0.2,
+            step_index=2,
+            coordinate_frame="global_xy",
+            positions=np.asarray([[0.2, 0.0]]),
+            velocities=np.asarray([[1.2, 0.0]]),
+            robot_pose_global=(0.0, 0.0, 0.0),
+            valid_mask=np.asarray([True]),
+            visible_mask=np.asarray([False]),
+        )
+    )
+    reacquired = tracker.update(
+        PedestrianObservationSnapshot(
+            timestamp_s=0.3,
+            step_index=3,
+            coordinate_frame="global_xy",
+            positions=np.asarray([[0.3, 0.0]]),
+            velocities=np.asarray([[1.3, 0.0]]),
+            robot_pose_global=(0.0, 0.0, 0.0),
+            valid_mask=np.asarray([True]),
+            visible_mask=np.asarray([True]),
+        )
+    )
+
+    first_estimate = adapter.update(first)[0]
+    second_estimate = adapter.update(second)[0]
+    assert first_estimate.mode is GoalForceInformationMode.UNAVAILABLE
+    assert second_estimate.history_steps[-1].step_index == 1
+    assert second_estimate.track_id == "track-1"
+    missed_estimate = adapter.update(missed)[0]
+    reacquired_estimate = adapter.update(reacquired)[0]
+    assert missed_estimate.mode is GoalForceInformationMode.UNAVAILABLE
+    assert "latest_observation_unavailable" in missed_estimate.blockers
+    assert reacquired_estimate.mode is GoalForceInformationMode.PARTIAL_OBSERVATION
+    assert "track_reacquired_after_gap" in reacquired_estimate.blockers
+
+    adapter.reset("episode-2")
+    reset_estimate = adapter.update(first)[0]
+    assert reset_estimate.tracking_epoch_id == "1"
+    assert reset_estimate.mode is GoalForceInformationMode.UNAVAILABLE
+    assert reset_estimate.belief.tracking_epoch_id == "1"
+
+    disabled_tracker = PedestrianTracker(PedestrianTrackingConfig(enabled=False))
+    disabled_result = disabled_tracker.update(
+        PedestrianObservationSnapshot(
+            timestamp_s=0.0,
+            step_index=0,
+            coordinate_frame="global_xy",
+            positions=np.asarray([[0.0, 0.0]]),
+            velocities=np.asarray([[1.0, 0.0]]),
+            robot_pose_global=(0.0, 0.0, 0.0),
+            valid_mask=np.asarray([True]),
+            visible_mask=np.asarray([True]),
+        )
+    )
+    assert adapter.update(disabled_result) == ()
+    with pytest.raises(TypeError, match="PedestrianTrackingResult"):
+        adapter.update(object())  # type: ignore[arg-type]
+
+
+def test_actor_estimator_rejects_oracle_shaped_force_input() -> None:
+    """The actor API accepts only its public contribution type, never oracle records."""
+
+    estimator = GoalForceInverseEstimator(_config(history_length=2))
+    history = (_observation(0.0, 0, (1.0, 0.0)), _observation(0.1, 1, (1.1, 0.0)))
+    with pytest.raises(TypeError, match="known_force_components"):
+        estimator.estimate(history, known_force_components=object())  # type: ignore[arg-type]

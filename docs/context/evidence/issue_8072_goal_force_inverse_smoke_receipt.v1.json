@@ -1,0 +1,100 @@
+{
+  "schema": "goal_force_inverse_smoke_receipt.v1",
+  "issue": 8072,
+  "claim_boundary": "implementation_integrity_smoke",
+  "evidence_status": "diagnostic-only",
+  "result_classification": "implementation_integrity_smoke_pass",
+  "fixture_id": "constant_acceleration_with_public_force_roster",
+  "seed": 8072,
+  "command": "python scripts/validation/run_goal_force_inverse_smoke.py --config configs/validation/goal_force_inverse_smoke.yaml --output output/validation/goal_force_inverse_smoke.json",
+  "checker_command": "python scripts/validation/check_goal_force_inverse_smoke.py --input output/validation/goal_force_inverse_smoke.json",
+  "source_hashes": {
+    "robot_sf/prediction/goal_candidate_provider.py": "02acada6acabfa0f8ca3e8505effbdc9352a641a502fa5a4da756b2ab2e334d6",
+    "robot_sf/prediction/goal_force_inverse_dynamics.py": "8cb8f1b54ee4133b631ab3cb979f036c76b10ccaa3e0d3ebeb4c1cf659baf249",
+    "robot_sf/prediction/oracle_transition_trace.py": "5a271b8fb8fc97b887469c9169b0085bde4b3d24c8e962c3117fb689b8bf0a40",
+    "scripts/validation/run_goal_force_inverse_smoke.py": "0ed7bbc6f86179bbf482f816501fd17b55e0cd4e5cfe30cfecc5bb47a0aca73f"
+  },
+  "smoke_config_digest": "4464a3927e883eeaec9a0a5b520884aaf175cded2ce4836481ef7706dc43b884",
+  "estimator_config_hash": "40c83b15d65ba93e928ad383467bbeb2a1e60318f2191f4eb560e97153f30962",
+  "candidate_generation": {
+    "candidate_set_digest": "243753eac9e1dd9bd5412a3d44c751acd2ef338d279e5cd173485deb47495c95",
+    "config_hash": "f85d2bc70cd4e4e2b3086e95b8ec5c1bd38e74db4c13bd6a5809f8b569a27ca8",
+    "map_digest": "52a74abcb929afa34789c2871eb5f8b4eb1308b1ee7c31e75d34c5dee2425f9e",
+    "candidate_count": 3,
+    "claim_boundary": "candidate_generation_only"
+  },
+  "oracle_trace_digest": "43697150485240f8f0052d8eacaca3f00926a74ac670c6774f9e577c1779d354",
+  "leakage_canary": {
+    "status": "pass",
+    "actor_digest_before": "963ec9cd71d5aaff637ce261415f93ee1442845ed1cb9514e24681a81f17d951",
+    "actor_digest_after": "963ec9cd71d5aaff637ce261415f93ee1442845ed1cb9514e24681a81f17d951",
+    "actor_input_contract": "oracle_goal_route_and_trace_are_not_actor_inputs",
+    "randomized_oracle_trace_digest": "3dec47910728e2f122a7b9257d151be2674d94dcc71061ef53e03105cfbf39db"
+  },
+  "arms": {
+    "h1_heading_baseline": {
+      "history_length": 1,
+      "history_age_s": 0.0,
+      "mode": "heading_baseline",
+      "information_source": "actor_observation_only",
+      "force_mae": null,
+      "force_rmse": null,
+      "direction_error_rad": null,
+      "covariance_coverage_95": null,
+      "saturation_status": "clear",
+      "censoring_state": "unknown",
+      "runtime_ms": 0.5495420191437006,
+      "estimate_digest": "7e8367bd85128674c4fcd82b5b660aa7cfb14be2e53a45291109ed558060f391"
+    },
+    "h2_observation_reconstructed": {
+      "history_length": 2,
+      "history_age_s": 0.1,
+      "mode": "observation_reconstructed",
+      "information_source": "actor_observation_only",
+      "force_mae": 2.220446049250313e-16,
+      "force_rmse": 3.1401849173675503e-16,
+      "direction_error_rad": 0.0,
+      "covariance_coverage_95": true,
+      "saturation_status": "clear",
+      "censoring_state": "none",
+      "runtime_ms": 0.6663929671049118,
+      "estimate_digest": "963ec9cd71d5aaff637ce261415f93ee1442845ed1cb9514e24681a81f17d951"
+    },
+    "h3_observation_reconstructed": {
+      "history_length": 3,
+      "history_age_s": 0.2,
+      "mode": "observation_reconstructed",
+      "information_source": "actor_observation_only",
+      "force_mae": 1.3322676295501878e-15,
+      "force_rmse": 1.88411095042053e-15,
+      "direction_error_rad": 0.0,
+      "covariance_coverage_95": true,
+      "saturation_status": "clear",
+      "censoring_state": "none",
+      "runtime_ms": 0.6357717793434858,
+      "estimate_digest": "b9cdfb6ee0bd74602bbc10fb98b8e4f2d5e8cb3f0d0b63bd362bf9e312953c06"
+    },
+    "oracle_component_upper_bound": {
+      "history_length": 2,
+      "history_age_s": 0.1,
+      "mode": "oracle_component_upper_bound",
+      "information_source": "evaluator_oracle_component_upper_bound",
+      "force_mae": 0.0,
+      "force_rmse": 0.0,
+      "direction_error_rad": 0.0,
+      "covariance_coverage_95": true,
+      "saturation_status": "clear",
+      "censoring_state": "none",
+      "runtime_ms": 0.2217909786850214,
+      "estimate_digest": "df4716c7dc82f82285087492cc07b0d67211d06f76a19b6ab72b5ecc7d55ffee"
+    }
+  },
+  "full_report_digest": "4118c96e250e709b18ee994c3ad2d793aec2ce8a53dc8b2f7239ccd95d975851",
+  "full_report_pointer": "output/validation/goal_force_inverse_smoke.json",
+  "full_report_status": "ignored_worktree_local",
+  "limitations": [
+    "One deterministic synthetic fixture; no simulator campaign or held-out episode evaluation.",
+    "The result is implementation-integrity smoke evidence, not calibrated prediction or planner evidence.",
+    "H=1 force error is intentionally unavailable; oracle and actor arms use separate information sources and denominators."
+  ]
+}

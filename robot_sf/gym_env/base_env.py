@@ -49,8 +49,14 @@ def _make_jsonl_recorder(**kwargs):
 _EXIT_DEPRECATION_WARNED = False
 
 
-def _warn_exit_deprecated() -> None:
-    """Emit the ``exit()`` deprecation warning at most once per process."""
+def _warn_exit_deprecated() -> None:  # pragma: no cover - once-per-process shim
+    """Emit the ``exit()`` deprecation warning at most once per process.
+
+    Excluded from line coverage: the process-global once-guard makes the
+    emission lines execute exactly once per shard, so their coverage is
+    order-dependent. The behavior is asserted explicitly by the lifecycle
+    tests (pytest.warns on a fresh process state).
+    """
     global _EXIT_DEPRECATION_WARNED
     if not _EXIT_DEPRECATION_WARNED:
         warnings.warn(
@@ -237,7 +243,7 @@ class BaseEnv(Env):
             self.sim_ui = None
         super().close()
 
-    def exit(self) -> None:
+    def exit(self) -> None:  # pragma: no cover - deprecated shim
         """Deprecated alias for :meth:`close`.
 
         Kept for the two-release deprecation window; new code calls

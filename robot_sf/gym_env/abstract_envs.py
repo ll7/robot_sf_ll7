@@ -121,7 +121,7 @@ class BaseSimulationEnv(Env, ABC):
             self.sim_ui = None
         super().close()
 
-    def exit(self) -> None:
+    def exit(self) -> None:  # pragma: no cover - deprecated shim
         """Deprecated alias for :meth:`close`.
 
         Kept for the two-release deprecation window; new code calls

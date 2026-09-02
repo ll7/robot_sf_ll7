@@ -1948,9 +1948,14 @@ def _load_json(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     return value, None
 
 
-def _write_json(path: Path, value: Mapping[str, Any]) -> None:
+def _write_json(path: Path, value: Mapping[str, Any]) -> str | None:
     """Write a human-readable JSON artifact to an explicit caller path."""
-    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    except (OSError, ValueError) as exc:
+        return f"failed to write output receipt: {exc}"
+    return None
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -1961,7 +1966,11 @@ def _parser() -> argparse.ArgumentParser:
         "--mode", choices=("report-only", "validate", "apply"), default="report-only"
     )
     parser.add_argument("--receipt-file", type=Path, help="receipt JSON file for validate/apply")
-    parser.add_argument("--output", type=Path, help="write a report-only receipt to this path")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="write a report-only receipt to this path (parent directories created automatically)",
+    )
     parser.add_argument("--waiver-actor", default="")
     parser.add_argument("--waiver-reason", default="")
     return parser
@@ -1991,7 +2000,10 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - CLI modes are ex
             },
         )
         if args.output:
-            _write_json(args.output, receipt)
+            write_error = _write_json(args.output, receipt)
+            if write_error:
+                print(json.dumps({"status": "error", "error": write_error}, sort_keys=True))
+                return 1
         print(json.dumps(receipt, indent=2, sort_keys=True))
         return 0 if receipt.get("status") == "ready" else 1
 

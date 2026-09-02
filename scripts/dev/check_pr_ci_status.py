@@ -41,6 +41,7 @@ DEFAULT_QUEUE_STARVATION_SECONDS = 300.0
 _ACTIONS_JOB_URL_RE = re.compile(
     r"/actions/runs/(?P<run_id>[0-9]+)/job/(?P<job_id>[0-9]+)(?:$|[/?#])"
 )
+_ACTIONS_RUN_URL_RE = re.compile(r"/actions/runs/(?P<run_id>[0-9]+)(?:$|[/?#])")
 _TERMINAL_STEP_CONCLUSIONS = {"neutral", "skipped", "success"}
 _WORKFLOW_ID_BY_RUN_ID: dict[str, str] = {}
 STABILITY_SNAPSHOT_SCHEMA = "pr_stability_snapshot.v1"
@@ -255,6 +256,12 @@ def _actions_run_job_ids(details_url: str) -> tuple[int, int] | None:
     return int(match.group("run_id")), int(match.group("job_id"))
 
 
+def _actions_run_id(details_url: str) -> int | None:
+    """Extract an Actions workflow-run ID from a check or workflow-run URL."""
+    match = _ACTIONS_RUN_URL_RE.search(details_url)
+    return int(match.group("run_id")) if match is not None else None
+
+
 def _run_identity_evidence(check: dict[str, Any]) -> dict[str, Any]:
     """Return compact, URL-backed identity evidence for one check run."""
     details_url = _check_details_url(check)
@@ -270,6 +277,9 @@ def _run_identity_evidence(check: dict[str, Any]) -> dict[str, Any]:
     }
     if run_job_ids is not None:
         evidence["run_id"], evidence["job_id"] = run_job_ids
+    materialization = check.get("__replacement_materialization")
+    if isinstance(materialization, dict):
+        evidence["materialization"] = materialization
     return evidence
 
 
@@ -296,7 +306,11 @@ def _latest_check_runs_with_evidence(
             superseded = _run_identity_evidence(check)
             replacement = _run_identity_evidence(latest_by_identity[identity])
             superseded["replacement"] = replacement
-            superseded["reason"] = "newer_same_workflow_job"
+            superseded["reason"] = (
+                "newer_same_workflow_run_materialization"
+                if replacement.get("materialization") is not None
+                else "newer_same_workflow_job"
+            )
             superseded_runs.append(superseded)
             continue
         effective_rollup.append(check)
@@ -488,6 +502,11 @@ def _rest_check_runs_to_rollup(check_runs: list[dict[str, Any]]) -> list[dict[st
                 )
                 if isinstance(run, dict)
                 else ""
+            ),
+            **(
+                {"__replacement_materialization": run["__replacement_materialization"]}
+                if isinstance(run.get("__replacement_materialization"), dict)
+                else {}
             ),
         }
         for run in check_runs

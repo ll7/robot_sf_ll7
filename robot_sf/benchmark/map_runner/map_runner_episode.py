@@ -208,6 +208,7 @@ from robot_sf.robot.safety_wrapper import DeadlockRecoveryMonitor  # noqa: TC001
 # legacy plain-dict metadata to ``AlgoMeta`` after enrichment.
 PolicyBuilder = Callable[..., tuple[Any, AlgoMeta | dict[str, Any]]]
 PedestrianControlTraceLabelBuilder = Callable[[int], list[dict[str, Any]]]
+_OBSTACLE_FORCE_LAW_RUNTIME_RECORD_SCHEMA = "obstacle_force_law_runtime_record.v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -1750,6 +1751,7 @@ class _EpisodeStepLoopResult:
     simulation_step_trace: list[dict[str, Any]]
     view_integrity: dict[str, Any] | None
     planner_runtime_snapshot: dict[str, Any] | None
+    obstacle_force_law_metadata: dict[str, Any] | None
 
 
 @dataclass(slots=True)
@@ -1801,6 +1803,78 @@ class _StepLoopState:
     trace_actor_ids: list[str] | None = field(default_factory=list)
     initial_goal_distance: float = 0.0
     planner_runtime_snapshot: dict[str, Any] | None = None
+    simulator_obstacle_force_law_metadata: dict[str, Any] | None = None
+    planner_obstacle_force_law_metadata: dict[str, Any] | None = None
+
+
+def _read_obstacle_force_law_metadata(env: Any) -> dict[str, Any] | None:
+    """Read a serializable obstacle-law payload from the active simulator.
+
+    Returns:
+        Simulator metadata payload, or ``None`` when the simulator has no accessor.
+    """
+    simulator = getattr(env, "simulator", None)
+    metadata_fn = getattr(simulator, "obstacle_force_law_metadata", None)
+    if not callable(metadata_fn):
+        return None
+    payload = metadata_fn()
+    return dict(payload) if isinstance(payload, Mapping) else None
+
+
+def _read_policy_obstacle_force_law_metadata(policy_fn: Any) -> dict[str, Any] | None:
+    """Read obstacle-law metadata directly from a policy's planner adapter.
+
+    Returns:
+        Planner metadata payload, or ``None`` when the policy has no accessor.
+    """
+    adapter = getattr(policy_fn, "_planner_adapter", None)
+    metadata_fn = getattr(adapter, "obstacle_force_law_metadata", None)
+    if not callable(metadata_fn):
+        return None
+    payload = metadata_fn()
+    return dict(payload) if isinstance(payload, Mapping) else None
+
+
+def _obstacle_force_site_metadata(payload: Any) -> dict[str, Any] | None:
+    """Return one site payload when it carries an unambiguous site identifier."""
+    if not isinstance(payload, Mapping):
+        return None
+    site = payload.get("site")
+    if not isinstance(site, str) or not site.strip():
+        return None
+    return dict(payload)
+
+
+def _build_obstacle_force_runtime_record(
+    *,
+    simulator_metadata: Mapping[str, Any] | None,
+    planner_metadata: Mapping[str, Any] | None,
+    planner_runtime_snapshot: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Combine site-specific law metadata into the durable episode payload.
+
+    Returns:
+        Versioned runtime record, or ``None`` when no site payload is available.
+    """
+    sites: dict[str, dict[str, Any]] = {}
+    for candidate in (
+        _obstacle_force_site_metadata(simulator_metadata),
+        _obstacle_force_site_metadata(planner_metadata),
+        _obstacle_force_site_metadata(
+            planner_runtime_snapshot.get("obstacle_force_law")
+            if isinstance(planner_runtime_snapshot, Mapping)
+            else None
+        ),
+    ):
+        if candidate is not None:
+            sites[str(candidate["site"])] = candidate
+
+    if not sites:
+        return None
+    return {
+        "schema_version": _OBSTACLE_FORCE_LAW_RUNTIME_RECORD_SCHEMA,
+        "sites": sites,
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -2840,6 +2914,11 @@ def _build_step_loop_result(state: _StepLoopState) -> _EpisodeStepLoopResult:
         simulation_step_trace=state.simulation_step_trace,
         view_integrity=state.view_integrity,
         planner_runtime_snapshot=state.planner_runtime_snapshot,
+        obstacle_force_law_metadata=_build_obstacle_force_runtime_record(
+            simulator_metadata=state.simulator_obstacle_force_law_metadata,
+            planner_metadata=state.planner_obstacle_force_law_metadata,
+            planner_runtime_snapshot=state.planner_runtime_snapshot,
+        ),
     )
 
 
@@ -3032,7 +3111,11 @@ def _setup_and_run_step_loop(args: _StepLoopSetupArgs) -> _EpisodeStepLoopResult
             planner_stats=args.planner_runtime.planner_stats,
             horizon_val=args.horizon_val,
         )
+        state.planner_obstacle_force_law_metadata = _read_policy_obstacle_force_law_metadata(
+            args.planner_runtime.policy_fn
+        )
         if getattr(env, "simulator", None) is not None:
+            state.simulator_obstacle_force_law_metadata = _read_obstacle_force_law_metadata(env)
             state.map_def = env.simulator.map_def
             state.goal_vec = np.asarray(env.simulator.goal_pos[0], dtype=float)
     finally:
@@ -3725,6 +3808,8 @@ def _finalize_metadata_phase(
         benchmark_track=ctx.benchmark_track,
         track_schema_version=ctx.track_schema_version,
     )
+    if loop_result.obstacle_force_law_metadata is not None:
+        algo_meta["obstacle_force_law"] = deepcopy(loop_result.obstacle_force_law_metadata)
     return _finalize_metadata_outputs(
         algo_meta,
         ctx=ctx,

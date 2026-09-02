@@ -18,6 +18,7 @@ import numpy as np
 import pysocialforce as pysf
 from loguru import logger
 from pysocialforce import forces as pf_forces
+from pysocialforce.config import resolve_obstacle_force_law
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -61,6 +62,35 @@ class FastPysfWrapper:
             "fallback_reasons": {},
         }
         self._warned_fallback_reasons: set[str] = set()
+        self._obstacle_force_applied = False
+
+    def _resolve_obstacle_force_law(self) -> str:
+        """Resolve the configured law before entering numerical fallback paths.
+
+        Returns:
+            Canonical obstacle-force law identifier.
+        """
+        return resolve_obstacle_force_law(
+            getattr(self.sim.config.obstacle_force_config, "law_version", None)
+        )
+
+    def _obstacle_force_enabled(self) -> bool:
+        """Return whether the configured obstacle-force factor can contribute."""
+        try:
+            return float(self.sim.config.obstacle_force_config.factor) != 0.0
+        except (TypeError, ValueError):
+            return True
+
+    def obstacle_force_law_metadata(self) -> dict[str, Any]:
+        """Return the wrapper's resolved law and runtime application state."""
+        return pf_forces.obstacle_force_law_metadata(
+            self._resolve_obstacle_force_law(),
+            site="fast_pysf_wrapper",
+            geometry_convention="map_line_endpoints_orthogonal_vector",
+            radius_convention="agent_radius_direct",
+            enabled=self._obstacle_force_enabled(),
+            applied=bool(getattr(self, "_obstacle_force_applied", False)),
+        )
 
     def diagnostics(self) -> dict[str, Any]:
         """Return a JSON-safe copy of force-kernel fallback diagnostics.
@@ -75,12 +105,7 @@ class FastPysfWrapper:
         """
         payload = dict(self._diagnostics)
         payload["fallback_reasons"] = dict(self._diagnostics["fallback_reasons"])
-        payload["obstacle_force_law"] = pf_forces.obstacle_force_law_metadata(
-            getattr(self.sim.config.obstacle_force_config, "law_version", None),
-            site="fast_pysf_wrapper",
-            geometry_convention="map_line_endpoints_orthogonal_vector",
-            radius_convention="agent_radius_direct",
-        )
+        payload["obstacle_force_law"] = self.obstacle_force_law_metadata()
         return payload
 
     def _record_fallback(self, reason: str, exc: BaseException | None = None) -> None:
@@ -283,12 +308,13 @@ class FastPysfWrapper:
                 from all static obstacle line segments in the environment.
         """
         total = np.zeros(2, dtype=float)
+        law_version = self._resolve_obstacle_force_law()
         raw_obs = self._get_obstacles_raw()
         if raw_obs is None or len(raw_obs) == 0:
             return total
 
         ped_radius = float(self.sim.peds.agent_radius)
-        law_version = getattr(self.sim.config.obstacle_force_config, "law_version", None)
+        applied = False
         for row in raw_obs:
             line = tuple(map(float, row[:4]))
             ortho = tuple(map(float, row[4:6]))
@@ -299,8 +325,11 @@ class FastPysfWrapper:
                 total += np.array([fx, fy], dtype=float) * float(
                     self.sim.config.obstacle_force_config.factor,
                 )
-            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError) as exc:
+                applied = True
+            except (FloatingPointError, np.linalg.LinAlgError) as exc:
                 self._record_fallback("obstacle_force_dropped", exc)
+        if applied and self._obstacle_force_enabled():
+            self._obstacle_force_applied = True
         return total
 
     def _compute_obstacle_forces_at_points(self, points: np.ndarray) -> np.ndarray:
@@ -310,8 +339,11 @@ class FastPysfWrapper:
             Obstacle-force vectors with shape ``(N, 2)``.
         """
         forces = np.zeros((points.shape[0], 2), dtype=float)
+        law_version = self._resolve_obstacle_force_law()
         raw_obs = self._get_obstacles_raw()
         if raw_obs is None or len(raw_obs) == 0:
+            return forces
+        if points.size == 0:
             return forces
 
         try:
@@ -320,10 +352,12 @@ class FastPysfWrapper:
                 points.astype(float),
                 np.asarray(raw_obs, dtype=float),
                 float(self.sim.peds.agent_radius),
-                getattr(self.sim.config.obstacle_force_config, "law_version", None),
+                law_version,
             )
+            if self._obstacle_force_enabled():
+                self._obstacle_force_applied = True
             return forces * float(self.sim.config.obstacle_force_config.factor)
-        except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError) as exc:
+        except (FloatingPointError, np.linalg.LinAlgError) as exc:
             self._record_fallback("obstacle_force_batch_pointwise", exc)
             return np.asarray(
                 [self._compute_obstacle_force_at_point(point) for point in points],
@@ -373,6 +407,7 @@ class FastPysfWrapper:
             np.ndarray: 2D force vector [fx, fy] representing the combined force from
                 social interactions, obstacles, and optionally desired goal and robot repulsion.
         """
+        self._resolve_obstacle_force_law()
         p = np.asarray(point, dtype=float).reshape(2)
         total = np.zeros(2, dtype=float)
 
@@ -398,6 +433,7 @@ class FastPysfWrapper:
         Returns:
             Array of force vectors with shape ``(N, 2)``.
         """
+        self._resolve_obstacle_force_law()
         points_arr = np.asarray(points, dtype=float)
         if points_arr.size == 0:
             return np.zeros((0, 2), dtype=float)

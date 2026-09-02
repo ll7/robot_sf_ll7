@@ -1630,6 +1630,57 @@ def test_network_audit_rejects_renamed_channel_asset_before_download(tmp_path: P
     assert not any("bundle.zip" in url for url, _, _ in session.calls[2:])
 
 
+def test_network_audit_records_every_zenodo_download(tmp_path: Path) -> None:
+    """The durable receipt must enumerate every downloaded Zenodo asset."""
+    session, _, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    github_release_url = f"{github_base}/repos/ll7/robot_sf_ll7/releases/tags/{tag}"
+    zenodo_record_url = f"{zenodo_base}/records/1234567"
+    github_response = session.routes[github_release_url]
+    zenodo_response = session.routes[zenodo_record_url]
+    assert isinstance(github_response, _PublicResponse)
+    assert isinstance(zenodo_response, _PublicResponse)
+    github_payload = copy.deepcopy(github_response._payload)
+    zenodo_payload = copy.deepcopy(zenodo_response._payload)
+    note = b"public release note"
+    digest = hashlib.sha256(note).hexdigest()
+    github_note_url = "https://cdn.github.test/final/notes.txt"
+    zenodo_note_url = "https://zenodo.test/cdn/final/notes.txt"
+    github_payload["assets"].append(
+        {
+            "name": "notes.txt",
+            "size": len(note),
+            "digest": f"sha256:{digest}",
+            "browser_download_url": github_note_url,
+        }
+    )
+    zenodo_payload["files"].append(
+        {
+            "filename": "notes.txt",
+            "key": "notes.txt",
+            "size": len(note),
+            "links": {"self": zenodo_note_url},
+        }
+    )
+    github_response._payload = github_payload
+    zenodo_response._payload = zenodo_payload
+    session.routes[github_note_url] = _PublicResponse(chunks=(note,), url=github_note_url)
+    session.routes[zenodo_note_url] = _PublicResponse(chunks=(note,), url=zenodo_note_url)
+
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+
+    assert receipt["status"] == "pass"
+    assert [record["name"] for record in receipt["downloads"]["zenodo"]] == [
+        "bundle.zip",
+        "notes.txt",
+    ]
+
+
 @pytest.mark.parametrize("size", [None, 0])
 def test_network_audit_rejects_missing_or_empty_published_zenodo_size(
     tmp_path: Path, size: int | None

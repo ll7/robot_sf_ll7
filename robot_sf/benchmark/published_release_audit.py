@@ -2149,7 +2149,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     max_download_bytes=max_download_bytes,
                     downloaded_bytes=downloaded_bytes,
                 )
-            zenodo_downloads.append(record)
+                zenodo_downloads.append(record)
             if canonical_predecessor_tag is not None:
                 if (
                     predecessor_github is None

@@ -6,6 +6,8 @@ import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from scripts.dev.gh_pr_label_rest import (
     LABEL_PAGE_CEILING,
     LABEL_PAGE_SIZE,
@@ -14,6 +16,7 @@ from scripts.dev.gh_pr_label_rest import (
     get_label_names,
     main,
     remove_label,
+    validate_result_envelope,
 )
 
 
@@ -29,6 +32,43 @@ def _mock_labels_payload(*names: str) -> str:
 
 def _page_path(page: int) -> str:
     return f"repos/ll7/robot_sf_ll7/issues/5220/labels?per_page=100&page={page}"
+
+
+def test_validate_result_envelope_rejects_untrusted_success_payloads() -> None:
+    """Orchestrators must not trust a zero exit code without the exact result envelope."""
+    valid_list = {
+        "status": "ok",
+        "action": "list",
+        "number": 5220,
+        "repo": "ll7/robot_sf_ll7",
+        "labels": ["state:ready"],
+    }
+    invalid_results = [
+        {},
+        {**valid_list, "action": "remove"},
+        {**valid_list, "number": 5221},
+        {**valid_list, "repo": "other/repo"},
+        {**valid_list, "labels": ["state:ready", "state:ready"]},
+        {**valid_list, "labels": [""]},
+    ]
+
+    for result in invalid_results:
+        with pytest.raises(ValueError):
+            validate_result_envelope(
+                result,
+                action="list",
+                number=5220,
+                repo="ll7/robot_sf_ll7",
+            )
+
+    with pytest.raises(ValueError):
+        validate_result_envelope(
+            {"status": "ok", "action": "remove", "number": 5220, "repo": "ll7/robot_sf_ll7"},
+            action="remove",
+            number=5220,
+            repo="ll7/robot_sf_ll7",
+            label="state:ready",
+        )
 
 
 class TestLabelRead:

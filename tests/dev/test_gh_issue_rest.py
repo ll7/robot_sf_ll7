@@ -73,11 +73,59 @@ def test_fetch_issue_normalizes_rest_fields_to_gh_json_shape() -> None:
     assert payload["state"] == "OPEN"
     # url equals html_url, not the graphql url
     assert payload["url"] == "https://github.com/ll7/robot_sf_ll7/issues/5021"
+    assert payload["is_pull_request"] is False
     # labels/assignees flattened and sorted
     assert payload["labels"] == ["bug", "workflow"]
     assert payload["assignees"] == ["alice", "bob"]
     assert payload["user"] == "ll7"
     assert payload["author_association"] == "OWNER"
+
+
+def test_fetch_issue_preserves_and_validates_pull_request_identity() -> None:
+    """The explicit REST PR marker and canonical URL must agree."""
+    raw = _raw_issue()
+    raw["pull_request"] = {}
+    raw["html_url"] = "https://github.com/ll7/robot_sf_ll7/pull/5021"
+    with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
+        mock_api.return_value = _proc(stdout=json.dumps(raw))
+        payload = fetch_issue(5021)
+
+    assert payload["status"] == "ok"
+    assert payload["is_pull_request"] is True
+    assert payload["url"].endswith("/pull/5021")
+
+    raw["html_url"] = "https://github.com/ll7/robot_sf_ll7/issues/5021"
+    with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
+        mock_api.return_value = _proc(stdout=json.dumps(raw))
+        malformed = fetch_issue(5021)
+
+    assert malformed["status"] == "error"
+    assert "resource kind" in malformed["error"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("state", "BANANA", "state"),
+        ("html_url", "not-a-url", "canonical"),
+        ("html_url", "https://github.com/ll7/robot_sf_ll7/issues/999", "does not match"),
+    ],
+)
+def test_fetch_issue_rejects_unknown_or_malformed_identity(
+    field: str,
+    value: object,
+    message: str,
+) -> None:
+    """Unknown state and inconsistent resource identity must fail closed."""
+    raw = _raw_issue()
+    raw[field] = value
+    with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
+        mock_api.return_value = _proc(stdout=json.dumps(raw))
+        payload = fetch_issue(5021)
+
+    assert payload["status"] == "error"
+    assert "malformed" in payload["error"]
+    assert message in payload["error"]
 
 
 @pytest.mark.parametrize("raw_number", [None, 0, "5021", "not-an-integer"])
@@ -479,8 +527,11 @@ def test_cli_view_json_comments_returns_thread(capsys: pytest.CaptureFixture[str
 def test_cli_view_without_comments_does_not_read_the_comments_endpoint() -> None:
     """State-only workflow guards must not depend on a complete comments inventory."""
     with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
-        mock_api.return_value = _proc(stdout=json.dumps(_raw_issue()))
-        rc = main(["view", "5021", "--json", "state", "url"])
+        mock_api.side_effect = [
+            _proc(stdout=json.dumps(_raw_issue())),
+            _proc(returncode=1, stderr="comments endpoint must not be called"),
+        ]
+        rc = main(["view", "5021", "--json", "state", "url", "is_pull_request"])
 
     assert rc == 0
     mock_api.assert_called_once_with("repos/ll7/robot_sf_ll7/issues/5021")

@@ -58,6 +58,24 @@ def test_registered_helper_requires_policy_reference(tmp_path: Path) -> None:
     assert "missing_smoke_test" in kinds
 
 
+def test_label_helper_contract_requires_its_result_validator(tmp_path: Path) -> None:
+    """The label transport contract must name an executable result validator."""
+    helper = tmp_path / "scripts" / "dev" / "gh_pr_label_rest.py"
+    helper.parent.mkdir(parents=True)
+    helper.write_text(
+        "# github_transport_policy\n# deliberately missing the response checker\n",
+        encoding="utf-8",
+    )
+    smoke_test = tmp_path / "tests" / "dev" / "test_gh_pr_label_rest.py"
+    smoke_test.parent.mkdir(parents=True)
+    smoke_test.write_text("", encoding="utf-8")
+
+    result = check_helper("gh_pr_label_rest.py", root=tmp_path)
+
+    assert result["status"] == "error"
+    assert {finding["kind"] for finding in result["findings"]} == {"missing_result_validator"}
+
+
 def test_graphql_fallback_and_fail_closed_markers_are_disjoint() -> None:
     """Generic GraphQL fallback never masks an authentication or permission error."""
     assert not set(FALLBACK_ELIGIBLE_MARKERS) & set(FAIL_CLOSED_ERROR_MARKERS)
@@ -99,6 +117,9 @@ def test_label_helper_contract_covers_reads_and_verified_writes() -> None:
     assert contract.allowed_transports == ("rest",)
     assert "read" in contract.purpose
     assert "verify" in contract.purpose
+    assert contract.result_validator == "validate_result_envelope"
+    check = check_helper(contract.helper, root=REPOSITORY_ROOT)
+    assert check["status"] == "ok", check["findings"]
 
 
 def test_all_contracts_declare_help_and_smoke_paths() -> None:

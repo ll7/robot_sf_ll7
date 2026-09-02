@@ -62,6 +62,7 @@ class TransportContract:
     fallback_markers: tuple[str, ...]
     fail_closed_markers: tuple[str, ...]
     smoke_test: str
+    result_validator: str | None = None
     help_command: str = "--help"
     policy_reference: str = "github_transport_policy"
 
@@ -74,12 +75,19 @@ class TransportContract:
             "fallback_markers": list(self.fallback_markers),
             "fail_closed_markers": list(self.fail_closed_markers),
             "smoke_test": self.smoke_test,
+            "result_validator": self.result_validator,
             "help_command": self.help_command,
             "policy_reference": self.policy_reference,
         }
 
 
-def _rest_contract(helper: str, purpose: str, smoke_test: str) -> TransportContract:
+def _rest_contract(
+    helper: str,
+    purpose: str,
+    smoke_test: str,
+    *,
+    result_validator: str | None = None,
+) -> TransportContract:
     """Build the common pure-REST contract for one helper."""
     return TransportContract(
         helper=helper,
@@ -88,6 +96,7 @@ def _rest_contract(helper: str, purpose: str, smoke_test: str) -> TransportContr
         fallback_markers=(),
         fail_closed_markers=FAIL_CLOSED_ERROR_MARKERS,
         smoke_test=smoke_test,
+        result_validator=result_validator,
     )
 
 
@@ -127,6 +136,7 @@ TRANSPORT_CONTRACTS: dict[str, TransportContract] = {
         "gh_pr_label_rest.py",
         "read, add, or remove and verify issue or pull-request labels",
         "tests/dev/test_gh_pr_label_rest.py",
+        result_validator="validate_result_envelope",
     ),
     "gh_pr_merge.sh": TransportContract(
         helper="gh_pr_merge.sh",
@@ -255,6 +265,14 @@ def check_helper(helper: str | Path, *, root: Path = _REPOSITORY_ROOT) -> dict[s
                     "kind": "missing_policy_reference",
                     "helper": name,
                     "detail": f"source does not reference {contract.policy_reference}",
+                }
+            )
+        if contract.result_validator and contract.result_validator not in source:
+            findings.append(
+                {
+                    "kind": "missing_result_validator",
+                    "helper": name,
+                    "detail": f"source does not expose {contract.result_validator}",
                 }
             )
 

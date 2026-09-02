@@ -58,6 +58,7 @@ import os
 import subprocess
 import sys
 from typing import Any
+from urllib.parse import urlsplit
 
 from scripts.dev import github_transport_policy as _transport_policy
 from scripts.dev._gh_rest import as_str as _as_str
@@ -71,6 +72,7 @@ from scripts.dev.github_transport_policy import (
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_MAX_COMMENT_PAGES = 10
 COMMENTS_PAGE_SIZE = 100
+VALID_ISSUE_STATES = frozenset({"OPEN", "CLOSED"})
 PROJECT_CARDS_ERROR_MARKER = _transport_policy.PROJECT_CARDS_ERROR_MARKER
 FALLBACK_ELIGIBLE_MARKERS = _transport_policy.FALLBACK_ELIGIBLE_MARKERS
 FAIL_CLOSED_ERROR_MARKERS = _transport_policy.FAIL_CLOSED_ERROR_MARKERS
@@ -83,6 +85,7 @@ ISSUE_FIELDS = (
     "body",
     "state",
     "url",
+    "is_pull_request",
     "user",
     "author_association",
     "labels",
@@ -91,6 +94,59 @@ ISSUE_FIELDS = (
     "updated_at",
 )
 COMMENT_FIELDS = ("id", "user", "author_association", "created_at", "updated_at", "url", "body")
+
+
+def _repo_parts(repo: str) -> tuple[str, str]:
+    """Return the owner and repository name from a canonical owner/name value."""
+    if not isinstance(repo, str):
+        raise ValueError("repository must be a string in OWNER/REPO form")
+    parts = repo.split("/")
+    if len(parts) != 2 or any(not part for part in parts):
+        raise ValueError(f"repository must be in OWNER/REPO form, got {repo!r}")
+    return parts[0], parts[1]
+
+
+def validate_issue_identity(payload: object, *, repo: str, number: int) -> None:
+    """Validate normalized issue identity before a caller can skip or write.
+
+    The REST issues endpoint serves both issues and pull requests. Callers must
+    use the explicit is_pull_request discriminator and a canonical URL that
+    agrees with the requested repository, number, and resource kind; malformed
+    or unknown identity is never a safe no-op.
+    """
+    if not isinstance(payload, dict):
+        raise ValueError("issue result must be an object")
+    if "status" in payload and payload.get("status") != "ok":
+        raise ValueError(f"issue result status must be ok, got {payload.get('status')!r}")
+    if type(number) is not int or number < 1:
+        raise ValueError(f"requested issue number must be a positive integer, got {number!r}")
+
+    raw_number = payload.get("number")
+    if type(raw_number) is not int or raw_number != number:
+        raise ValueError(
+            f"issue identity number does not match requested issue ({raw_number!r} != {number})"
+        )
+    state = payload.get("state")
+    if not isinstance(state, str) or state not in VALID_ISSUE_STATES:
+        raise ValueError(f"issue identity state must be OPEN or CLOSED, got {state!r}")
+    is_pull_request = payload.get("is_pull_request")
+    if type(is_pull_request) is not bool:
+        raise ValueError("issue identity is_pull_request must be a boolean")
+    raw_url = payload.get("url")
+    if not isinstance(raw_url, str) or not raw_url:
+        raise ValueError("issue identity URL must be a non-empty string")
+
+    owner, repository = _repo_parts(repo)
+    parsed = urlsplit(raw_url)
+    if parsed.scheme != "https" or not parsed.netloc or parsed.query or parsed.fragment:
+        raise ValueError(f"issue identity URL is not canonical: {raw_url!r}")
+    resource = "pull" if is_pull_request else "issues"
+    expected_path = f"/{owner}/{repository}/{resource}/{number}"
+    if parsed.path.casefold() != expected_path.casefold():
+        raise ValueError(
+            "issue identity URL does not match requested repository, number, or resource kind: "
+            f"{raw_url!r}"
+        )
 
 
 def _gh_issue_view(
@@ -152,7 +208,7 @@ def _validate_issue_payload(raw: dict[str, Any]) -> None:
     state = raw.get("state")
     if not isinstance(state, str) or not state.strip():
         raise ValueError("issue payload state must be a non-empty string")
-    raw_url = raw.get("html_url", raw.get("url", ""))
+    raw_url = raw.get("html_url")
     if not isinstance(raw_url, str) or not raw_url:
         raise ValueError("issue payload html_url must be a non-empty string")
     _validate_named_objects(raw.get("labels"), field="labels", key="name")
@@ -160,6 +216,8 @@ def _validate_issue_payload(raw: dict[str, Any]) -> None:
     raw_user = raw.get("user")
     if raw_user is not None and not isinstance(raw_user, dict):
         raise ValueError("issue payload user must be an object or null")
+    if "pull_request" in raw and not isinstance(raw["pull_request"], dict):
+        raise ValueError("issue payload pull_request must be an object when present")
 
 
 def _normalize_issue(raw: dict[str, Any]) -> dict[str, Any]:
@@ -169,10 +227,11 @@ def _normalize_issue(raw: dict[str, Any]) -> dict[str, Any]:
     title = raw["title"]
     body = raw["body"]
     state = raw["state"]
-    raw_url = raw.get("html_url", raw.get("url", ""))
+    raw_url = raw["html_url"]
     raw_labels = raw["labels"]
     raw_assignees = raw["assignees"]
     raw_user = raw.get("user")
+    is_pull_request = "pull_request" in raw
     labels = sorted(label["name"] for label in raw_labels)
     assignees = sorted(user["login"] for user in raw_assignees)
     user = raw_user or {}
@@ -182,6 +241,7 @@ def _normalize_issue(raw: dict[str, Any]) -> dict[str, Any]:
         "body": _as_str(body),
         "state": _normalize_state(state),
         "url": raw_url,
+        "is_pull_request": is_pull_request,
         "user": _as_str(user.get("login") if isinstance(user, dict) else ""),
         "author_association": _as_str(raw.get("author_association")),
         "labels": labels,
@@ -223,6 +283,7 @@ def fetch_issue(number: int, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
         }
     try:
         payload = _normalize_issue(data)
+        validate_issue_identity(payload, repo=repo, number=number)
     except (TypeError, ValueError) as exc:
         return {
             "number": number,

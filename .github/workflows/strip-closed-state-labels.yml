@@ -37,9 +37,35 @@ jobs:
           # (scripts/dev/closed_state_label_hygiene.py::LIVE_STATE_LABELS) so this Action and the
           # CLI never drift. No second hard-coded label list lives here.
           if ! live_labels_output=$(
-            python -c 'import sys; sys.path.insert(0, "scripts/dev"); import closed_state_label_hygiene as h; print("\n".join(h.LIVE_STATE_LABELS))'
+            python -c '
+          import sys
+
+          sys.path.insert(0, "scripts/dev")
+          import closed_state_label_hygiene as h
+
+          labels = h.LIVE_STATE_LABELS
+          if not isinstance(labels, (tuple, list)) or not labels:
+              raise SystemExit("live state-label allowlist must be a non-empty list")
+          if any(type(label) is not str or not label.strip() for label in labels):
+              raise SystemExit("live state-label allowlist must contain non-empty strings")
+          if len(set(labels)) != len(labels):
+              raise SystemExit("live state-label allowlist must contain distinct labels")
+          print("\n".join(labels))
+          '
           ); then
             echo "Unable to load the live state-label allowlist; refusing cleanup." >&2
+            exit 1
+          fi
+          if ! python -c '
+          import sys
+
+          labels = sys.stdin.read().splitlines()
+          if not labels or any(not label.strip() for label in labels):
+              raise SystemExit("allowlist output must contain non-empty labels")
+          if len(set(labels)) != len(labels):
+              raise SystemExit("allowlist output must contain distinct labels")
+          ' <<<"$live_labels_output"; then
+            echo "The live state-label allowlist output is malformed; refusing cleanup." >&2
             exit 1
           fi
           LIVE_LABELS=()
@@ -49,31 +75,51 @@ jobs:
           echo "Live state labels: ${LIVE_LABELS[*]}"
 
           # Read-then-write (defense-in-depth): the trigger already implies the issue is closed,
-          # but re-confirm CLOSED and non-PR-shaped URL through the REST issue reader before any
+          # but re-confirm the closed issue identity through the REST issue reader before any
           # label write.
-          issue_payload=$(
-            python -m scripts.dev.gh_issue_rest view "$ISSUE_NUMBER" --repo "$REPO" --json state url
-          )
-          issue_state=$(
+          if ! issue_payload=$(
+            python -m scripts.dev.gh_issue_rest view "$ISSUE_NUMBER" --repo "$REPO" --json number state url is_pull_request
+          ); then
+            echo "REST issue read failed; refusing cleanup." >&2
+            exit 1
+          fi
+          if ! issue_identity=$(
             python -c '
           import json
           import sys
 
+          from scripts.dev.gh_issue_rest import validate_issue_identity
+
           payload = json.load(sys.stdin)
-          state = payload.get("state")
-          issue_url = payload.get("url")
-          if not isinstance(state, str) or not isinstance(issue_url, str):
-              raise SystemExit("REST issue read returned malformed state or URL")
-          print(state, issue_url)
-          ' <<<"$issue_payload"
+          if payload.get("status") != "ok":
+              raise SystemExit("REST issue read result did not report status=ok")
+          validate_issue_identity(
+              payload,
+              repo=sys.argv[1],
+              number=int(sys.argv[2]),
           )
-          read -r state issue_url <<<"$issue_state"
+          print(payload["state"])
+          print("true" if payload["is_pull_request"] else "false")
+          print(payload["url"])
+          ' "$REPO" "$ISSUE_NUMBER" <<<"$issue_payload"
+          ); then
+            echo "REST issue read returned malformed identity; refusing cleanup." >&2
+            exit 1
+          fi
+          mapfile -t ISSUE_IDENTITY <<<"$issue_identity"
+          if [ "${#ISSUE_IDENTITY[@]}" -ne 3 ]; then
+            echo "REST issue identity had an unexpected field count; refusing cleanup." >&2
+            exit 1
+          fi
+          state="${ISSUE_IDENTITY[0]}"
+          is_pull_request="${ISSUE_IDENTITY[1]}"
+          issue_url="${ISSUE_IDENTITY[2]}"
           echo "Issue #$ISSUE_NUMBER state: $state url: $issue_url"
           if [ "$state" != "CLOSED" ]; then
             echo "Issue #$ISSUE_NUMBER is not CLOSED ($state); skipping (no-op)."
             exit 0
           fi
-          if [[ "$issue_url" == */pull/* ]]; then
+          if [ "$is_pull_request" = "true" ]; then
             echo "Issue #$ISSUE_NUMBER has a pull request URL; skipping (no-op)."
             exit 0
           fi
@@ -81,21 +127,34 @@ jobs:
           # Fetch the issue's current labels once through the verified REST helper, then remove
           # only the live state labels that are actually present. Guarding on presence keeps the
           # step a no-op when nothing is stale.
-          label_payload=$(
-            python -m scripts.dev.gh_pr_label_rest list "$ISSUE_NUMBER" --repo "$REPO"
+          if ! label_payload=$(python -m scripts.dev.gh_pr_label_rest list "$ISSUE_NUMBER" --repo "$REPO"); then
+            echo "REST label inventory read failed; refusing cleanup." >&2
+            exit 1
+          fi
+          if ! python -c '
+          import json
+          import sys
+
+          from scripts.dev.gh_pr_label_rest import validate_result_envelope
+
+          payload = json.load(sys.stdin)
+          validate_result_envelope(
+              payload,
+              action="list",
+              number=int(sys.argv[2]),
+              repo=sys.argv[1],
           )
+          ' "$REPO" "$ISSUE_NUMBER" <<<"$label_payload"; then
+            echo "REST label inventory result was malformed; refusing cleanup." >&2
+            exit 1
+          fi
           current_label_names=$(
             python -c '
           import json
           import sys
 
           payload = json.load(sys.stdin)
-          labels = payload.get("labels")
-          if payload.get("status") != "ok":
-              raise SystemExit(payload.get("error", "REST label read failed"))
-          if not isinstance(labels, list) or any(not isinstance(label, str) for label in labels):
-              raise SystemExit("REST label read returned malformed labels")
-          print("\n".join(labels))
+          print("\n".join(payload["labels"]))
           ' <<<"$label_payload"
           )
           CURRENT_LABELS=()
@@ -108,8 +167,29 @@ jobs:
             for present in "${CURRENT_LABELS[@]:-}"; do
               if [ "$label" = "$present" ]; then
                 echo "Removing stale label '$label' from issue #$ISSUE_NUMBER"
-                python -m scripts.dev.gh_pr_label_rest remove "$ISSUE_NUMBER" \
-                  --repo "$REPO" --label "$label"
+                if ! remove_payload=$(python -m scripts.dev.gh_pr_label_rest remove "$ISSUE_NUMBER" \
+                  --repo "$REPO" --label "$label"); then
+                  echo "REST label removal failed; refusing cleanup." >&2
+                  exit 1
+                fi
+                if ! python -c '
+          import json
+          import sys
+
+          from scripts.dev.gh_pr_label_rest import validate_result_envelope
+
+          payload = json.load(sys.stdin)
+          validate_result_envelope(
+              payload,
+              action="remove",
+              number=int(sys.argv[2]),
+              repo=sys.argv[1],
+              label=sys.argv[3],
+          )
+          ' "$REPO" "$ISSUE_NUMBER" "$label" <<<"$remove_payload"; then
+                  echo "REST label removal result was malformed; refusing cleanup." >&2
+                  exit 1
+                fi
                 removed=$((removed + 1))
                 break
               fi

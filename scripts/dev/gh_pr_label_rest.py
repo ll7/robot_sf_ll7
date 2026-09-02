@@ -5,11 +5,12 @@ Why this exists
 ---------------
 ``gh pr edit --add-label`` and ``gh issue edit --label`` can fail on GitHub CLI
 versions that query the retired Projects Classic GraphQL field. This helper uses
-only ``POST /repos/{owner}/{repo}/issues/{number}/labels`` and
-``DELETE /repos/{owner}/{repo}/issues/{number}/labels/{label}``
-and verifies that GitHub actually applied or removed the requested label. It is
-deliberately REST-only: authentication, authorization, malformed responses, and
-verification mismatches fail closed.
+the paginated ``GET /repos/{owner}/{repo}/issues/{number}/labels`` route for
+inventory reads, ``POST /repos/{owner}/{repo}/issues/{number}/labels`` for adds,
+and ``DELETE /repos/{owner}/{repo}/issues/{number}/labels/{label}`` for removals;
+write operations verify that GitHub actually applied or removed the requested
+label. It is deliberately REST-only: authentication, authorization, malformed
+responses, and verification mismatches fail closed.
 
 The REST issues-labels endpoint works for both issues and PRs because GitHub
 treats PRs as issues for labeling. One helper covers ``gh pr edit --add-label``

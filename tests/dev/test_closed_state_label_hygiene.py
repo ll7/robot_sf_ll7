@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -206,6 +207,34 @@ def test_closure_workflow_routes_state_label_io_through_rest_helpers() -> None:
     assert "mapfile -t LIVE_LABELS < <(" not in code
     assert "gh issue view" not in code
     assert "gh issue edit" not in code
+
+
+def test_closure_workflow_allowlist_failure_stops_before_cleanup() -> None:
+    """The exact workflow guard must propagate a failing allowlist producer."""
+    workflow = (
+        Path(__file__).resolve().parents[2]
+        / ".github"
+        / "workflows"
+        / "strip-closed-state-labels.yml"
+    ).read_text(encoding="utf-8")
+    start = workflow.index("          if ! live_labels_output=$(")
+    end = workflow.index('          echo "Live state labels:', start)
+    guard = textwrap.dedent(workflow[start:end])
+    producer_lines = [
+        line for line in guard.splitlines() if "import closed_state_label_hygiene as h" in line
+    ]
+    assert len(producer_lines) == 1
+    failing_guard = guard.replace(producer_lines[0], "python -c 'raise SystemExit(7)'")
+
+    probe = subprocess.run(
+        ["bash", "-c", f"set -euo pipefail\n{failing_guard}\necho sentinel"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert probe.returncode == 1
+    assert "sentinel" not in probe.stdout
 
 
 def test_main_returns_nonzero_json_summary_without_live_github(

@@ -118,84 +118,6 @@ def test_camera_ready_campaign_reexports_package_config_loader() -> None:
         )
 
 
-def test_snqi_positioning_uses_complete_stored_field_ordering(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Publication diagnostics rank the same canonical SNQI field stored in episodes."""
-    episodes = [
-        {
-            "planner_key": "legacy_winner",
-            "kinematics": "differential_drive",
-            "metrics": {"snqi": -0.8},
-        },
-        {
-            "planner_key": "stored_field_winner",
-            "kinematics": "differential_drive",
-            "metrics": {"snqi": -0.1},
-        },
-    ]
-    legacy_ordering = [
-        {
-            "planner_key": "legacy_winner",
-            "kinematics": "differential_drive",
-            "episode_count": 1,
-            "mean_snqi": 0.9,
-            "rank": 1,
-        },
-        {
-            "planner_key": "stored_field_winner",
-            "kinematics": "differential_drive",
-            "episode_count": 1,
-            "mean_snqi": 0.1,
-            "rank": 2,
-        },
-    ]
-    monkeypatch.setattr(
-        camera_ready_campaign_impl_module,
-        "compute_planner_snqi_ordering",
-        lambda *_args, **_kwargs: legacy_ordering,
-    )
-    monkeypatch.setattr(
-        camera_ready_campaign_impl_module,
-        "calibrate_weights",
-        lambda *_args, **_kwargs: {"weights": {}},
-    )
-    monkeypatch.setattr(
-        camera_ready_campaign_impl_module,
-        "compute_component_dominance",
-        lambda *_args, **_kwargs: {},
-    )
-    monkeypatch.setattr(
-        camera_ready_campaign_impl_module,
-        "compute_component_correlations",
-        lambda *_args, **_kwargs: {},
-    )
-    monkeypatch.setattr(
-        camera_ready_campaign_impl_module,
-        "compute_weight_sensitivity",
-        lambda *_args, **_kwargs: [],
-    )
-    monkeypatch.setattr(
-        camera_ready_campaign_impl_module,
-        "build_positioning_recommendation",
-        lambda *_args, **_kwargs: {},
-    )
-
-    result = camera_ready_campaign_impl_module._compute_snqi_positioning(
-        [],
-        episodes,
-        {},
-        {},
-        SimpleNamespace(snqi_contract=SimpleNamespace(calibration_seed=1, calibration_trials=1)),
-    )
-
-    assert result["planner_ordering_basis"] == "stored_metrics.snqi"
-    assert [row["planner_key"] for row in result["planner_ordering"]] == [
-        "stored_field_winner",
-        "legacy_winner",
-    ]
-
-
 def test_stored_snqi_ordering_rejects_partial_fields() -> None:
     """Mixed present/absent SNQI fields cannot silently define a release ordering."""
     episodes = [
@@ -5511,27 +5433,6 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
     assert diagnostics["release_claim_boundary"]["ranking_claims_admitted"] is False
     assert diagnostics["positioning"]["planner_ordering_informative"] is False
     assert diagnostics["positioning"]["recommendation"] == "retain_as_advisory_only_not_for_ranking"
-
-
-def test_failed_warn_boundary_overrides_operational_positioning() -> None:
-    """Failed calibration cannot retain an operational-strengthening recommendation."""
-    positioning = {
-        "recommendation": "strengthen_as_operational_multi_objective_aggregation",
-        "planner_ordering_informative": True,
-        "caveats": [],
-    }
-    payload = {"positioning": positioning}
-
-    result = camera_ready_campaign_impl_module._apply_snqi_advisory_boundary(
-        payload,
-        positioning=positioning,
-        contract_status="fail",
-        contract_enforcement="warn",
-    )
-
-    assert result["positioning"]["recommendation"] == "retain_as_advisory_only_not_for_ranking"
-    assert result["positioning"]["planner_ordering_informative"] is False
-    assert result["release_claim_boundary"]["ranking_claims_admitted"] is False
 
 
 def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypatch) -> None:

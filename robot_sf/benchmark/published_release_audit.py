@@ -94,7 +94,7 @@ _ERRATUM_OPTIONAL_DOCUMENTS = (
     "run_meta.json",
 )
 
-_DOI_RE = re.compile(r"^10\.5281/zenodo\.\d+$")
+_DOI_RE = re.compile(r"^10\.5281/zenodo\.[1-9][0-9]*$")
 _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _SHA1_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
@@ -809,7 +809,7 @@ def _read_json_mapping(path: Path, *, label: str) -> Mapping[str, Any]:
         raise ValueError(f"{label} is missing or unsafe")
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, ValueError) as exc:
+    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise ValueError(f"{label} is not readable JSON") from exc
     if not isinstance(payload, Mapping):
         raise ValueError(f"{label} must be a JSON object")
@@ -1572,7 +1572,10 @@ def _verify_bundle(
             observations["erratum"] = proof["receipt"]
             observations["erratum_cold_documents"] = proof["cold_documents"]
             observations["erratum_custody"] = proof["custody"]
-    except (OSError, ValueError) as exc:
+    except RecursionError as exc:
+        detail = str(exc) or "recursion depth exceeded"
+        problems.append(f"erratum payload traversal exceeded the recursion limit: {detail}")
+    except (OSError, ValueError, ReleaseErratumError) as exc:
         problems.append(str(exc))
 
 

@@ -37,7 +37,9 @@ SCIENTIFIC_CANONICALIZATION_POLICY = MappingProxyType(
 ERRATUM_REPOSITORY_URL = "https://github.com/ll7/robot_sf_ll7"
 _SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-_DOI_RE = re.compile(r"^10\.5281/zenodo\.(\d+)$")
+# Zenodo record IDs are canonical positive decimal strings: zero and leading
+# zero spellings must not create alternate DOI coordinates for one record.
+_DOI_RE = re.compile(r"^10\.5281/zenodo\.([1-9][0-9]*)$")
 _TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]+$")
 _ARCHIVE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _EPISODE_MEMBER_RE = re.compile(r"^[^/]+/payload/runs/([^/]+)/episodes\.jsonl$")
@@ -45,8 +47,17 @@ _MAX_ARCHIVE_MEMBERS = 20_000
 _MAX_EXPANDED_BYTES = 4 * 1024**3
 _MAX_EPISODE_FILE_BYTES = 256 * 1024**2
 _MAX_EPISODE_ROW_BYTES = 16 * 1024**2
+_MAX_IDENTITY_TRAVERSAL_DEPTH = 128
+_MAX_IDENTITY_TRAVERSAL_NODES = 100_000
 _SCIENTIFIC_ROW_STATUSES = frozenset({"success", "collision", "failure"})
 _PUBLICATION_URL_ALIASES = frozenset({"release_url", "release_asset_url", "doi_url"})
+_PREDECESSOR_EXECUTION_KEYS = frozenset(
+    {
+        "scientific_execution_benchmark_release",
+        "scientific_execution_resolved_manifest",
+        "scientific_execution_release_identity",
+    }
+)
 
 
 class ReleaseErratumError(RuntimeError):
@@ -216,7 +227,9 @@ def _validate_contract_dois_and_tags(contract: ErratumContract) -> None:
         contract.concept_doi,
         contract.successor_version_doi,
     )
-    if any(_DOI_RE.fullmatch(value) is None for value in doi_values) or len(set(doi_values)) != 3:
+    if any(
+        not isinstance(value, str) or _DOI_RE.fullmatch(value) is None for value in doi_values
+    ) or len(set(doi_values)) != 3:
         raise ReleaseErratumError(
             "predecessor, concept, and successor DOIs must be valid and distinct"
         )
@@ -224,7 +237,12 @@ def _validate_contract_dois_and_tags(contract: ErratumContract) -> None:
     successor_tag = contract.successor_github_release_tag
     if not contract.correction_id.strip():
         raise ReleaseErratumError("erratum correction_id must be non-empty")
-    if not _TAG_RE.fullmatch(predecessor_tag) or not _TAG_RE.fullmatch(successor_tag):
+    if (
+        not isinstance(predecessor_tag, str)
+        or not isinstance(successor_tag, str)
+        or not _TAG_RE.fullmatch(predecessor_tag)
+        or not _TAG_RE.fullmatch(successor_tag)
+    ):
         raise ReleaseErratumError("erratum GitHub release tags are invalid")
     problems = check_canonical_source_tag(predecessor_tag, contract.source_sha)
     if problems or re.search(r"-erratum\.[1-9][0-9]*$", predecessor_tag):
@@ -325,22 +343,86 @@ def validate_erratum_identity_blocks(
     """Validate every nested ``erratum`` and ``publication_erratum`` block."""
     root = _require_mapping(payload, label=label)
 
-    def walk(value: Any, path: str) -> None:
+    for value, path, _ in _iter_payload_nodes(root, label=label):
+        if not isinstance(value, Mapping):
+            continue
+        for key, nested in value.items():
+            nested_path = f"{path}.{key}"
+            if key in {"erratum", "publication_erratum"}:
+                validate_erratum_identity_block(
+                    nested,
+                    contract=contract,
+                    label=nested_path,
+                )
+
+
+def _iter_payload_nodes(  # noqa: C901
+    payload: Any, *, label: str
+) -> Iterable[tuple[Any, str, bool]]:
+    """Iterate JSON-like payload nodes without recursion or unbounded work.
+
+    The final boolean marks nodes nested below an explicitly preserved
+    scientific-execution identity. Mapping/list identity tracking rejects
+    cycles while preserving each occurrence's publication context.
+
+    Yields:
+        ``(value, path, predecessor_context)`` tuples in depth-first order.
+    """
+    stack: list[tuple[Any, str, int, bool, bool]] = [(payload, label, 0, False, False)]
+    active_ids: set[int] = set()
+    visited_nodes = 0
+    while stack:
+        value, path, depth, predecessor_context, exiting = stack.pop()
+        if exiting:
+            active_ids.discard(id(value))
+            continue
+        if depth > _MAX_IDENTITY_TRAVERSAL_DEPTH:
+            raise ReleaseErratumError(
+                f"{path} exceeds the maximum identity traversal depth "
+                f"({_MAX_IDENTITY_TRAVERSAL_DEPTH})"
+            )
+        is_container = isinstance(value, (Mapping, list))
+        if is_container:
+            value_id = id(value)
+            if value_id in active_ids:
+                raise ReleaseErratumError(f"{path} contains a cyclic identity payload")
+            active_ids.add(value_id)
+        visited_nodes += 1
+        if visited_nodes > _MAX_IDENTITY_TRAVERSAL_NODES:
+            raise ReleaseErratumError(
+                f"{label} exceeds the identity traversal member budget "
+                f"({_MAX_IDENTITY_TRAVERSAL_NODES})"
+            )
+        yield value, path, predecessor_context
+        if not is_container:
+            continue
+        stack.append((value, path, depth, predecessor_context, True))
         if isinstance(value, Mapping):
             for key, nested in value.items():
                 nested_path = f"{path}.{key}"
-                if key in {"erratum", "publication_erratum"}:
-                    validate_erratum_identity_block(
+                nested_predecessor_context = predecessor_context or (
+                    isinstance(key, str) and key in _PREDECESSOR_EXECUTION_KEYS
+                )
+                stack.append(
+                    (
                         nested,
-                        contract=contract,
-                        label=nested_path,
+                        nested_path,
+                        depth + 1,
+                        nested_predecessor_context,
+                        False,
                     )
-                walk(nested, nested_path)
-        elif isinstance(value, list):
+                )
+        else:
             for index, nested in enumerate(value):
-                walk(nested, f"{path}[{index}]")
-
-    walk(root, label)
+                stack.append(
+                    (
+                        nested,
+                        f"{path}[{index}]",
+                        depth + 1,
+                        predecessor_context,
+                        False,
+                    )
+                )
 
 
 def _required_text(payload: Mapping[str, Any], key: str, *, label: str) -> str:
@@ -358,7 +440,7 @@ def _required_positive_int(payload: Mapping[str, Any], key: str, *, label: str) 
 
 
 def _doi_record_id(value: str, *, label: str) -> str:
-    match = _DOI_RE.fullmatch(value)
+    match = _DOI_RE.fullmatch(value) if isinstance(value, str) else None
     if match is None:
         raise ReleaseErratumError(f"{label} must be a Zenodo DOI")
     return match.group(1)
@@ -418,7 +500,7 @@ def _canonical_bytes(value: Any) -> bytes:
             allow_nan=False,
             separators=(",", ":"),
         ).encode("utf-8")
-    except (TypeError, ValueError) as exc:
+    except (RecursionError, TypeError, ValueError) as exc:
         raise ReleaseErratumError("scientific row is not canonical JSON") from exc
 
 
@@ -451,7 +533,7 @@ def _validate_metadata_file(
         raise ReleaseErratumError("erratum metadata SHA-256 does not match the contract")
     try:
         document = json.loads(metadata_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, ValueError) as exc:
+    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise ReleaseErratumError("erratum metadata is not readable JSON") from exc
     metadata = _require_mapping(document, label="erratum metadata").get("metadata")
     metadata = _require_mapping(metadata, label="erratum metadata.metadata")
@@ -506,7 +588,7 @@ def load_erratum_contract(  # noqa: C901, PLR0912, PLR0915
         raise ReleaseErratumError("erratum contract is outside the repository root")
     try:
         payload = json.loads(contract_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, ValueError) as exc:
+    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise ReleaseErratumError("erratum contract is not readable JSON") from exc
     payload = _require_mapping(payload, label="erratum contract")
     if payload.get("schema_version") != ERRATUM_CONTRACT_SCHEMA:
@@ -643,7 +725,7 @@ def _read_episode_rows(
             raise ReleaseErratumError(f"{arm} episodes.jsonl contains an empty row")
         try:
             row = json.loads(raw_line)
-        except (UnicodeError, ValueError) as exc:
+        except (RecursionError, UnicodeError, ValueError) as exc:
             raise ReleaseErratumError(
                 f"{arm} episodes.jsonl row {line_number} is invalid JSON"
             ) from exc
@@ -1028,7 +1110,7 @@ def _load_published_erratum_receipt(receipt_path: Path) -> tuple[Path, Mapping[s
     path = _safe_regular_file(receipt_path, label="published erratum receipt")
     try:
         receipt = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, ValueError) as exc:
+    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise ReleaseErratumError("published erratum receipt is not readable JSON") from exc
     receipt = _require_mapping(receipt, label="published erratum receipt")
     if receipt.get("schema_version") != ERRATUM_RECEIPT_SCHEMA:
@@ -1219,7 +1301,7 @@ def _load_publication_document(path: Path, *, label: str) -> Mapping[str, Any]:
     safe_path = _safe_regular_file(path, label=label)
     try:
         document = json.loads(safe_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, ValueError) as exc:
+    except (OSError, UnicodeError, ValueError, RecursionError) as exc:
         raise ReleaseErratumError(f"{label} is not readable JSON") from exc
     return _require_mapping(document, label=label)
 
@@ -1263,22 +1345,16 @@ def _assert_current_source_aliases(
 ) -> None:
     """Reject stale source aliases without changing legacy tag/DOI diagnostics."""
 
-    def walk(value: Any, path: str) -> None:
-        if isinstance(value, Mapping):
-            source_values = [
-                value[key]
-                for key in ("source_sha", "source_commit", "scientific_source_sha")
-                if key in value
-            ]
-            if any(source != contract.source_sha for source in source_values):
-                raise ReleaseErratumError(f"{path} contains a stale scientific source SHA")
-            for key, nested in value.items():
-                walk(nested, f"{path}.{key}")
-        elif isinstance(value, list):
-            for index, nested in enumerate(value):
-                walk(nested, f"{path}[{index}]")
-
-    walk(payload, label)
+    for value, path, _ in _iter_payload_nodes(payload, label=label):
+        if not isinstance(value, Mapping):
+            continue
+        source_values = [
+            value[key]
+            for key in ("source_sha", "source_commit", "scientific_source_sha")
+            if key in value
+        ]
+        if any(source != contract.source_sha for source in source_values):
+            raise ReleaseErratumError(f"{path} contains a stale scientific source SHA")
 
 
 def _validate_archive_name(archive_name: str | None) -> str | None:
@@ -1304,58 +1380,95 @@ def _assert_publication_url_aliases(  # noqa: C901
     contract: ErratumContract,
     label: str,
     archive_name: str | None,
-) -> None:
-    """Require every present publication URL alias to be the exact canonical URL."""
+    seen_aliases: set[str] | None = None,
+    require_aliases: bool = False,
+) -> set[str]:
+    """Require publication URL aliases to bind to the current or predecessor release.
+
+    Returns:
+        The current-publication aliases observed in the payload.
+    """
+    archive_name = _validate_archive_name(archive_name)
+    if archive_name is None:
+        raise ReleaseErratumError(
+            f"{label} cannot validate publication asset URLs without the actual archive filename"
+        )
     expected_urls = {
         "release_url": (
             f"{ERRATUM_REPOSITORY_URL}/releases/tag/{contract.successor_github_release_tag}"
         ),
         "doi_url": f"https://doi.org/{contract.successor_version_doi}",
-    }
-    if archive_name is not None:
-        expected_urls["release_asset_url"] = (
+        "release_asset_url": (
             f"{ERRATUM_REPOSITORY_URL}/releases/download/"
             f"{contract.successor_github_release_tag}/{archive_name}"
-        )
+        ),
+    }
+    predecessor_urls = {
+        "release_url": (
+            f"{ERRATUM_REPOSITORY_URL}/releases/tag/{contract.predecessor_github_release_tag}"
+        ),
+        "doi_url": f"https://doi.org/{contract.predecessor_version_doi}",
+    }
+    observed = seen_aliases if seen_aliases is not None else set()
 
-    def walk(value: Any, path: str) -> None:  # noqa: C901
-        if isinstance(value, Mapping):
-            for key, nested in value.items():
-                nested_path = f"{path}.{key}"
-                if key in _PUBLICATION_URL_ALIASES:
-                    if key == "release_asset_url" and archive_name is None:
-                        raise ReleaseErratumError(
-                            f"{nested_path} cannot be validated without the actual archive filename"
-                        )
-                    if not isinstance(nested, str):
-                        raise ReleaseErratumError(
-                            f"{nested_path} must be a canonical public URL string"
-                        )
-                    try:
-                        parsed = urlsplit(nested)
-                        has_credentials = parsed.username is not None or parsed.password is not None
-                    except ValueError as exc:
-                        raise ReleaseErratumError(
-                            f"{nested_path} is not a canonical public URL"
-                        ) from exc
+    for value, path, predecessor_context in _iter_payload_nodes(payload, label=label):
+        if not isinstance(value, Mapping):
+            continue
+        for key, nested in value.items():
+            nested_path = f"{path}.{key}"
+            if key not in _PUBLICATION_URL_ALIASES:
+                continue
+            if not isinstance(nested, str):
+                raise ReleaseErratumError(
+                    f"{nested_path} must be a canonical public URL string"
+                )
+            try:
+                parsed = urlsplit(nested)
+                has_credentials = parsed.username is not None or parsed.password is not None
+            except ValueError as exc:
+                raise ReleaseErratumError(
+                    f"{nested_path} is not a canonical public URL"
+                ) from exc
+            if (
+                has_credentials
+                or parsed.query
+                or parsed.fragment
+                or "%" in nested
+                or any(character.isspace() for character in nested)
+            ):
+                raise ReleaseErratumError(f"{nested_path} is not a canonical public URL")
+            if predecessor_context:
+                if key == "release_asset_url":
+                    predecessor_prefix = (
+                        f"{ERRATUM_REPOSITORY_URL}/releases/download/"
+                        f"{contract.predecessor_github_release_tag}/"
+                    )
+                    predecessor_asset_name = nested.removeprefix(predecessor_prefix)
                     if (
-                        has_credentials
-                        or parsed.query
-                        or parsed.fragment
-                        or "%" in nested
-                        or any(character.isspace() for character in nested)
+                        predecessor_asset_name == nested
+                        or _ARCHIVE_NAME_RE.fullmatch(predecessor_asset_name) is None
                     ):
-                        raise ReleaseErratumError(f"{nested_path} is not a canonical public URL")
-                    if nested != expected_urls[key]:
                         raise ReleaseErratumError(
-                            f"{nested_path} is not bound to the requested release"
+                            f"{nested_path} is not bound to the predecessor release"
                         )
-                walk(nested, nested_path)
-        elif isinstance(value, list):
-            for index, nested in enumerate(value):
-                walk(nested, f"{path}[{index}]")
+                elif nested != predecessor_urls[key]:
+                    raise ReleaseErratumError(
+                        f"{nested_path} is not bound to the predecessor release"
+                    )
+                continue
+            if nested != expected_urls[key]:
+                raise ReleaseErratumError(
+                    f"{nested_path} is not bound to the requested release"
+                )
+            observed.add(key)
 
-    walk(payload, label)
+    if require_aliases:
+        missing = sorted(_PUBLICATION_URL_ALIASES - observed)
+        if missing:
+            raise ReleaseErratumError(
+                f"{label} is missing canonical publication URL evidence: {', '.join(missing)}"
+            )
+    return observed
 
 
 def _assert_publication_aliases(
@@ -1458,7 +1571,8 @@ def _validate_published_erratum_identity_documents(
     result: Mapping[str, Any],
     summary: Mapping[str, Any],
     contract: ErratumContract,
-    archive_name: str | None,
+    archive_name: str,
+    seen_aliases: set[str] | None = None,
 ) -> None:
     """Validate emitted erratum blocks and copied-document source aliases."""
     optional_documents = {
@@ -1481,6 +1595,7 @@ def _validate_published_erratum_identity_documents(
             contract=contract,
             label=label,
             archive_name=archive_name,
+            seen_aliases=seen_aliases,
         )
     for relative, document in optional_documents.items():
         validate_erratum_identity_blocks(
@@ -1493,6 +1608,7 @@ def _validate_published_erratum_identity_documents(
             contract=contract,
             label=f"published {relative}",
             archive_name=archive_name,
+            seen_aliases=seen_aliases,
         )
 
     validate_erratum_identity_block(
@@ -1516,8 +1632,46 @@ def _validate_published_erratum_identity_documents(
         )
 
 
+def _validate_published_erratum_metadata_copy(
+    campaign_root: Path,
+    *,
+    contract: ErratumContract,
+    archive_name: str,
+    seen_aliases: set[str] | None = None,
+) -> None:
+    """Require the bundled release-metadata copy to match canonical erratum metadata."""
+    canonical_path = campaign_root / "release/zenodo_metadata.erratum.json"
+    copied_path = campaign_root / "release_metadata/zenodo_metadata.json"
+    canonical = _safe_regular_file(canonical_path, label="published erratum metadata")
+    copied = _safe_regular_file(copied_path, label="published erratum metadata copy")
+    try:
+        canonical_bytes = canonical.read_bytes()
+        copied_bytes = copied.read_bytes()
+    except OSError as exc:
+        raise ReleaseErratumError("published erratum metadata copy is not readable") from exc
+    if copied_bytes != canonical_bytes:
+        raise ReleaseErratumError(
+            "published erratum metadata copy differs from canonical erratum metadata"
+        )
+    copied_document = _load_publication_document(
+        copied,
+        label="published erratum metadata copy",
+    )
+    _assert_publication_url_aliases(
+        copied_document,
+        contract=contract,
+        label="published erratum metadata copy",
+        archive_name=archive_name,
+        seen_aliases=seen_aliases,
+    )
+
+
 def _validate_published_release_documents(
-    campaign_root: Path, *, contract: ErratumContract, archive_name: str | None = None
+    campaign_root: Path,
+    *,
+    contract: ErratumContract,
+    archive_name: str,
+    seen_aliases: set[str] | None = None,
 ) -> None:
     """Validate current-publication identities and verdicts in the downloaded payload."""
     manifest = _load_publication_document(
@@ -1539,6 +1693,14 @@ def _validate_published_release_documents(
         summary=summary,
         contract=contract,
         archive_name=archive_name,
+        seen_aliases=seen_aliases,
+    )
+
+    _validate_published_erratum_metadata_copy(
+        campaign_root,
+        contract=contract,
+        archive_name=archive_name,
+        seen_aliases=seen_aliases,
     )
 
     _assert_publication_aliases(manifest, contract=contract, label="published resolved manifest")
@@ -1588,6 +1750,13 @@ def _validate_published_release_documents(
     )
     summary_campaign = _require_mapping(
         summary.get("campaign"), label="published campaign summary.campaign"
+    )
+    _assert_publication_url_aliases(
+        summary_campaign,
+        contract=contract,
+        label="published campaign summary.campaign",
+        archive_name=archive_name,
+        require_aliases=True,
     )
     _assert_publication_aliases(
         summary_release,
@@ -1664,15 +1833,20 @@ def validate_erratum_receipt_against_campaign(
     digests. It rebuilds the successor snapshot from the downloaded bundle and
     independently opens, hashes, and snapshots the predecessor archive supplied
     by ``predecessor_evidence``. The evidence claims are bound to the receipt's
-    predecessor DOI, concept DOI, tag, size, and SHA-256 before comparison. If
-    ``archive_name`` is supplied, every publication asset URL is also bound to
-    that exact archive filename.
+    predecessor DOI, concept DOI, tag, size, and SHA-256 before comparison. The
+    exact downloaded archive filename is required so every publication asset URL
+    can be bound to that filename.
 
     Returns:
         Compact public observations for the cold audit receipt.
     """
     root = Path(campaign_root).resolve()
+    if archive_name is None:
+        raise ReleaseErratumError(
+            "published erratum archive filename is required for exact URL binding"
+        )
     archive_name = _validate_archive_name(archive_name)
+    assert archive_name is not None
     expected_receipt_path = root / "provenance/benchmark_release_erratum.json"
     expected_metadata_path = root / "release/zenodo_metadata.erratum.json"
     if Path(receipt_path).resolve() != expected_receipt_path:
@@ -1692,11 +1866,13 @@ def validate_erratum_receipt_against_campaign(
         expected_source_sha=expected_source_sha,
     )
     evidence = _validate_predecessor_evidence(predecessor_evidence, contract=contract)
+    seen_aliases: set[str] = set()
     _assert_publication_url_aliases(
         receipt,
         contract=contract,
         label="published erratum receipt",
         archive_name=archive_name,
+        seen_aliases=seen_aliases,
     )
     metadata_document = _load_publication_document(
         metadata_path,
@@ -1707,6 +1883,7 @@ def validate_erratum_receipt_against_campaign(
         contract=contract,
         label="published erratum metadata",
         archive_name=archive_name,
+        seen_aliases=seen_aliases,
     )
     predecessor = snapshot_predecessor_archive(evidence.archive_path, contract=contract)
     observed = snapshot_campaign(campaign_root, contract=contract)
@@ -1722,6 +1899,7 @@ def validate_erratum_receipt_against_campaign(
         root,
         contract=contract,
         archive_name=archive_name,
+        seen_aliases=seen_aliases,
     )
 
     return {

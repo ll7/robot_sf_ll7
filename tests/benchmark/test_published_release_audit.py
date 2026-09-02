@@ -277,6 +277,8 @@ def _full_erratum_payload(
         }
     }
     _write_bytes(metadata_path, json.dumps(metadata, sort_keys=True).encode())
+    copied_metadata_path = campaign / "release_metadata/zenodo_metadata.json"
+    _write_bytes(copied_metadata_path, metadata_path.read_bytes())
     predecessor = tmp_path / "immutable-predecessor.tar.gz"
     with tarfile.open(predecessor, "w:gz") as archive:
         archive.add(
@@ -395,6 +397,12 @@ def _full_erratum_payload(
             "doi": predecessor_doi,
             "source_sha": source_sha,
         },
+        "release_url": f"https://github.com/ll7/robot_sf_ll7/releases/tag/{successor_tag}",
+        "release_asset_url": (
+            "https://github.com/ll7/robot_sf_ll7/releases/download/"
+            f"{successor_tag}/bundle.zip"
+        ),
+        "doi_url": f"https://doi.org/{successor_doi}",
     }
     _write_bytes(
         campaign / "reports/campaign_summary.json",

@@ -11,9 +11,13 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import numpy as np
+from pysocialforce.config import SURFACE_DISTANCE_UNIT_NORMAL_V2
 
 from robot_sf.common.types import Line2D, Rect
-from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
+from robot_sf.gym_env.unified_config import (
+    PedestrianSimulationConfig,
+    RobotSimulationConfig,
+)
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import (
     MapDefinition,
@@ -166,6 +170,30 @@ def test_simulator_wires_computed_response_multipliers() -> None:
     )[0]
 
     assert isinstance(simulator.pedestrian_response_multipliers, np.ndarray)
+
+
+def test_simulator_wires_opt_in_obstacle_force_law_to_fast_pysf() -> None:
+    """SimulationSettings law selection reaches PySocialForce and its metadata seam."""
+    map_def = _minimal_map()
+    config = _zero_ped_sim_config(map_def)
+    config.sim_config = SimulationSettings(
+        difficulty=0,
+        ped_density_by_difficulty=[0.0],
+        obstacle_force_law=SURFACE_DISTANCE_UNIT_NORMAL_V2,
+    )
+
+    simulator = init_simulators(
+        config,
+        map_def,
+        num_robots=1,
+        random_start_pos=False,
+        peds_have_obstacle_forces=True,
+    )[0]
+
+    assert simulator.pysf_sim.config.obstacle_force_config.law_version == (
+        SURFACE_DISTANCE_UNIT_NORMAL_V2
+    )
+    assert simulator.obstacle_force_law_metadata()["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
 
 
 def test_ped_simulator_keeps_none_response_multipliers() -> None:

@@ -65,6 +65,7 @@ DEFAULT_MAX_MEMBER_EXPANDED_BYTES = 1 * 1024 * 1024 * 1024
 DEFAULT_MAX_ARCHIVE_EXPANDED_BYTES = 2 * 1024 * 1024 * 1024
 DEFAULT_EXTRACTION_CHUNK_SIZE = 1024 * 1024
 DEFAULT_MAX_ZIP_CENTRAL_DIRECTORY_BYTES = 64 * 1024 * 1024
+DEFAULT_MAX_PUBLIC_REDIRECTS = 4
 _ZIP_EOCD_SIGNATURE = b"PK\x05\x06"
 _ZIP64_EOCD_SIGNATURE = b"PK\x06\x06"
 _ZIP64_EOCD_LOCATOR_SIGNATURE = b"PK\x06\x07"
@@ -100,6 +101,14 @@ _SHA1_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
 _BODY_SHA_RE = re.compile(r"(?<![0-9a-f])([0-9a-f]{40})(?![0-9a-f])", re.IGNORECASE)
 _CANONICAL_ERRATUM_TAG_RE = re.compile(r"^(?P<predecessor>.+-[0-9a-f]{40})-erratum\.1$")
+_GITHUB_ASSET_REDIRECT_HOST = "release-assets.githubusercontent.com"
+_GITHUB_ASSET_ORIGINS = frozenset(
+    {
+        ("https", "github.com", 443),
+        ("https", _GITHUB_ASSET_REDIRECT_HOST, 443),
+    }
+)
+_ZENODO_ASSET_ORIGINS = frozenset({("https", "zenodo.org", 443)})
 
 
 class PublishedAuditUnavailable(RuntimeError):
@@ -1730,7 +1739,181 @@ def _require_https_url(url: str, *, label: str) -> str:
         or parsed.password is not None
     ):
         raise PublishedAuditInvalid(f"{label} URL must be HTTPS without embedded credentials")
+    try:
+        # Accessing ``port`` forces malformed values such as ``:not-a-port``
+        # through the same sanitized validation path as malformed hosts.
+        port = parsed.port
+    except ValueError as exc:
+        raise PublishedAuditInvalid(f"{label} URL is malformed") from exc
+    if port is not None and not 1 <= port <= 65535:
+        raise PublishedAuditInvalid(f"{label} URL is malformed")
     return candidate
+
+
+def _public_url_origin(url: str, *, label: str) -> tuple[str, str, int]:
+    """Return the normalized HTTPS origin for one public URL.
+
+    The effective default HTTPS port is included so a redirect to a different
+    port cannot silently cross an authority boundary.  URL paths and query
+    strings are intentionally excluded from the origin comparison; signed
+    GitHub asset URLs legitimately carry query parameters.
+    """
+    candidate = _require_https_url(url, label=label)
+    parsed = urlsplit(candidate)
+    hostname = parsed.hostname
+    if not hostname:
+        raise PublishedAuditInvalid(f"{label} URL is malformed")
+    try:
+        port = parsed.port or 443
+    except ValueError as exc:
+        raise PublishedAuditInvalid(f"{label} URL is malformed") from exc
+    return ("https", hostname.casefold(), port)
+
+
+def _approved_public_origins(
+    url: str,
+    *,
+    label: str,
+    stream: bool,
+    approved_initial_origins: frozenset[tuple[str, str, int]] | None = None,
+) -> set[tuple[str, str, int]]:
+    """Return the exact origins permitted for one public request.
+
+    API/document requests remain same-origin.  GitHub release assets are the
+    one documented exception: the public ``github.com`` download URL may
+    redirect to GitHub's signed asset host.  No other githubusercontent
+    subdomain or arbitrary CDN is trusted by this audit.  When supplied,
+    ``approved_initial_origins`` also constrains the URL advertised by the
+    public release metadata before any request is made.
+    """
+    origin = _public_url_origin(url, label=label)
+    if approved_initial_origins is not None and origin not in approved_initial_origins:
+        raise PublishedAuditInvalid(f"{label} URL origin is not approved")
+    approved = {origin}
+    if stream and origin == ("https", "github.com", 443):
+        approved.add(("https", _GITHUB_ASSET_REDIRECT_HOST, 443))
+    return approved
+
+
+def _response_header(response: Any, name: str) -> object:
+    """Read one response header without assuming a concrete HTTP library.
+
+    Returns:
+        The header value, or ``None`` when the response has no such header.
+    """
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+    if not isinstance(headers, Mapping):
+        raise PublishedAuditInvalid("public response headers are malformed")
+    for key, value in headers.items():
+        if str(key).casefold() == name.casefold():
+            return value
+    return None
+
+
+def _validate_public_redirect_history(
+    history: object,
+    *,
+    approved_origins: set[tuple[str, str, int]],
+    label: str,
+) -> None:
+    """Validate the bounded redirect history returned by an HTTP client."""
+    if history is None:
+        history = ()
+    if not isinstance(history, (list, tuple)):
+        raise PublishedAuditInvalid(f"{label} redirect history is malformed")
+    if len(history) > DEFAULT_MAX_PUBLIC_REDIRECTS:
+        raise PublishedAuditInvalid(f"{label} redirect chain is too long")
+    for redirect in history:
+        _validate_public_redirect_entry(
+            redirect,
+            approved_origins=approved_origins,
+            label=label,
+        )
+
+
+def _validate_public_redirect_entry(
+    redirect: Any,
+    *,
+    approved_origins: set[tuple[str, str, int]],
+    label: str,
+) -> None:
+    """Validate one redirect response and its absolute Location target."""
+    try:
+        status_code = int(redirect.status_code)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise PublishedAuditInvalid(f"{label} redirect response is malformed") from exc
+    if not 300 <= status_code < 400:
+        raise PublishedAuditInvalid(f"{label} redirect response is malformed")
+    redirect_url = getattr(redirect, "url", None)
+    if not isinstance(redirect_url, str) or not redirect_url.strip():
+        raise PublishedAuditInvalid(f"{label} redirect URL is malformed")
+    if _public_url_origin(redirect_url, label=f"{label} redirect") not in approved_origins:
+        raise PublishedAuditInvalid(f"{label} redirect crossed an unapproved origin")
+    location = _response_header(redirect, "Location")
+    if not isinstance(location, str) or not location.strip():
+        raise PublishedAuditInvalid(f"{label} redirect Location is malformed")
+    if _public_url_origin(location, label=f"{label} redirect Location") not in approved_origins:
+        raise PublishedAuditInvalid(f"{label} redirect crossed an unapproved origin")
+
+
+def _validate_public_redirect_response(
+    response: Any,
+    *,
+    approved_origins: set[tuple[str, str, int]],
+    label: str,
+) -> int:
+    """Validate a redirect response that was returned without following it.
+
+    Returns:
+        The validated integer HTTP status code.
+    """
+    try:
+        status_code = int(response.status_code)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise PublishedAuditInvalid(f"{label} response status is malformed") from exc
+    if 300 <= status_code < 400:
+        location = _response_header(response, "Location")
+        if not isinstance(location, str) or not location.strip():
+            raise PublishedAuditInvalid(f"{label} redirect Location is malformed")
+        if _public_url_origin(location, label=f"{label} redirect Location") not in approved_origins:
+            raise PublishedAuditInvalid(f"{label} redirect crossed an unapproved origin")
+    return status_code
+
+
+def _validate_public_redirects(
+    response: Any,
+    *,
+    requested_url: str,
+    approved_origins: set[tuple[str, str, int]],
+    label: str,
+) -> None:
+    """Validate every observed redirect hop and the final response origin.
+
+    ``requests`` follows redirects before returning a response, so the final
+    response alone is insufficient evidence.  Inspecting ``history`` keeps a
+    cross-origin hop from being hidden behind an otherwise trusted terminal
+    URL.  Missing or non-HTTPS ``Location`` values are malformed, even when a
+    test double or alternate HTTP client exposes them without following the
+    redirect.
+    """
+    _validate_public_redirect_history(
+        getattr(response, "history", ()),
+        approved_origins=approved_origins,
+        label=label,
+    )
+    _validate_public_redirect_response(
+        response,
+        approved_origins=approved_origins,
+        label=label,
+    )
+
+    final_url = getattr(response, "url", requested_url)
+    if not isinstance(final_url, str) or not final_url.strip():
+        raise PublishedAuditInvalid(f"{label} final URL is malformed")
+    if _public_url_origin(final_url, label=f"{label} final URL") not in approved_origins:
+        raise PublishedAuditInvalid(f"{label} redirect crossed an unapproved origin")
 
 
 def _api_base(value: str, *, label: str) -> str:
@@ -1910,26 +2093,41 @@ def _public_get(
     label: str,
     timeout: float,
     stream: bool = False,
+    approved_initial_origins: frozenset[tuple[str, str, int]] | None = None,
 ) -> _PublicResponse:
-    """Perform an HTTPS GET with redirects and no credential-bearing arguments.
+    """Perform an HTTPS GET with bounded trusted redirects.
+
+    API requests do not follow redirects.  Streamed release-asset requests
+    follow only a bounded chain whose every hop remains on the requested
+    origin, except for GitHub's documented ``github.com`` to
+    ``release-assets.githubusercontent.com`` hand-off.
 
     Returns:
         The open response; callers must close it.
     """
-    _require_https_url(url, label=label)
+    approved_origins = _approved_public_origins(
+        url,
+        label=label,
+        stream=stream,
+        approved_initial_origins=approved_initial_origins,
+    )
     try:
         response = session.get(
             url,
             timeout=timeout,
-            allow_redirects=True,
+            allow_redirects=stream,
             **({"stream": True} if stream else {}),
         )
     except Exception as exc:
         raise PublishedAuditUnavailable(f"{label} public request failed") from exc
     try:
+        _validate_public_redirects(
+            response,
+            requested_url=url,
+            approved_origins=approved_origins,
+            label=label,
+        )
         _http_status_error(int(response.status_code), label=label)
-        final_url = str(getattr(response, "url", url) or url)
-        _require_https_url(final_url, label=f"{label} redirect")
     except (PublishedAuditInvalid, PublishedAuditUnavailable):
         _close_public_response(response)
         raise
@@ -1979,6 +2177,8 @@ def _github_release_assets(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
             str(raw_asset.get("browser_download_url") or ""),
             label=f"GitHub asset {name}",
         )
+        if _public_url_origin(url, label=f"GitHub asset {name}") not in _GITHUB_ASSET_ORIGINS:
+            raise PublishedAuditInvalid(f"GitHub asset {name} URL origin is not approved")
         size = raw_asset.get("size")
         if size is not None and (isinstance(size, bool) or not isinstance(size, int) or size < 0):
             raise PublishedAuditInvalid(f"GitHub asset {name} has an invalid advertised size")
@@ -2106,6 +2306,8 @@ def _zenodo_file_assets(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
             str(links.get("self") or links.get("download") or ""),
             label=f"Zenodo file {name}",
         )
+        if _public_url_origin(url, label=f"Zenodo file {name}") not in _ZENODO_ASSET_ORIGINS:
+            raise PublishedAuditInvalid(f"Zenodo file {name} URL origin is not approved")
         size = raw_file.get("size")
         if isinstance(size, bool) or not isinstance(size, int) or size <= 0:
             raise PublishedAuditInvalid(
@@ -2291,6 +2493,7 @@ def _download_public_asset(  # noqa: C901
     asset: Mapping[str, Any],
     destination: Path,
     *,
+    approved_initial_origins: frozenset[tuple[str, str, int]],
     timeout: float,
     chunk_size: int,
     max_download_bytes: int,
@@ -2308,6 +2511,7 @@ def _download_public_asset(  # noqa: C901
         label=f"{name} download",
         timeout=timeout,
         stream=True,
+        approved_initial_origins=approved_initial_origins,
     )
     observed_size = 0
     digest = hashlib.sha256()
@@ -2656,6 +2860,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
         discovery["limits"] = {
             "max_download_bytes": max_download_bytes,
             "download_chunk_size": download_chunk_size,
+            "max_public_redirects": DEFAULT_MAX_PUBLIC_REDIRECTS,
         }
 
         with tempfile.TemporaryDirectory(prefix="robot-sf-published-audit-") as temp_root:
@@ -2671,6 +2876,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     public_session,
                     asset,
                     github_dir / asset["name"],
+                    approved_initial_origins=_GITHUB_ASSET_ORIGINS,
                     timeout=timeout,
                     chunk_size=download_chunk_size,
                     max_download_bytes=max_download_bytes,
@@ -2682,6 +2888,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     public_session,
                     asset,
                     zenodo_dir / asset["name"],
+                    approved_initial_origins=_ZENODO_ASSET_ORIGINS,
                     timeout=timeout,
                     chunk_size=download_chunk_size,
                     max_download_bytes=max_download_bytes,
@@ -2709,6 +2916,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     public_session,
                     predecessor_github_asset,
                     root / "predecessor-github" / predecessor_archive_name,
+                    approved_initial_origins=_GITHUB_ASSET_ORIGINS,
                     timeout=timeout,
                     chunk_size=download_chunk_size,
                     max_download_bytes=max_download_bytes,
@@ -2718,6 +2926,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     public_session,
                     predecessor_zenodo_asset,
                     root / "predecessor-zenodo" / predecessor_archive_name,
+                    approved_initial_origins=_ZENODO_ASSET_ORIGINS,
                     timeout=timeout,
                     chunk_size=download_chunk_size,
                     max_download_bytes=max_download_bytes,

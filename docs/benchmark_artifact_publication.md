@@ -251,6 +251,13 @@ placeholders before citing the bundle as paper-facing evidence.
    before recording the version DOI and parent concept DOI.
 7. Update paper references to the verified Zenodo DOI and benchmark-data asset URL.
 
+The doctor and post-publication checks observe the hook list read-only. Their
+receipt records an instantaneous disabled/absent state, but cannot prevent
+reactivation or another state change in the time-of-check/time-of-use interval
+around publication. Recheck immediately before publishing and preserve this
+residual boundary in the release record; never describe the snapshot as a
+permanent guarantee.
+
 Software/package tags and their DOI records remain separate. This documentation
 does not authorize publishing, credential use, webhook changes, or reusing an
 existing Zenodo concept.

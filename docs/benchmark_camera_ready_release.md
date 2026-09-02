@@ -68,6 +68,20 @@ publishing the GitHub Release and leave no active hook. Do not use the webhook
 to create or update this benchmark-data deposition: unrelated software or
 model releases must not contaminate the benchmark concept.
 
+The release doctor only records a read-only snapshot of the GitHub hook list;
+it cannot reserve that state or prevent a hook from being reactivated between
+the check and publication (the time-of-check/time-of-use boundary). Treat the
+snapshot as a publication gate at that instant, disable/remove the specific
+integration through the approved operator path, and recheck immediately before
+publishing. The release receipt must retain the observed hook state and must
+not claim that a read-only check proves future non-reactivation.
+
+The credential-free public audit follows same-origin HTTPS responses and bounds
+the redirect chain. GitHub release assets are allowed their documented
+`github.com` to `release-assets.githubusercontent.com` hand-off; API responses,
+Zenodo assets, arbitrary `githubusercontent.com` subdomains, userinfo, and
+non-default ports are not trusted.
+
 ## Exact-SHA Continuous Integration (CI) reconciliation
 
 The release doctor requires one completed successful run of each required

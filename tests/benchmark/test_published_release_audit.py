@@ -1595,11 +1595,15 @@ class _PublicResponse:
         chunks: tuple[bytes, ...] = (),
         url: str,
         status_code: int = 200,
+        headers: dict[str, str] | None = None,
+        history: tuple[object, ...] = (),
     ) -> None:
         self._payload = payload
         self._chunks = chunks
         self.url = url
         self.status_code = status_code
+        self.headers = headers or {}
+        self.history = history
         self.closed = False
 
     def json(self) -> object:
@@ -1658,9 +1662,9 @@ def _network_fixture(
     digest = hashlib.sha256(bundle).hexdigest()
     github_release_url = f"{github_base}/repos/ll7/robot_sf_ll7/releases/tags/{tag}"
     github_ref_url = f"{github_base}/repos/ll7/robot_sf_ll7/git/ref/tags/{tag}"
-    github_asset_url = f"https://cdn.github.test/{tag}/bundle.zip"
+    github_asset_url = f"https://github.com/ll7/robot_sf_ll7/releases/download/{tag}/bundle.zip"
     zenodo_record_url = f"{zenodo_base}/records/1234567"
-    zenodo_asset_url = "https://zenodo.test/api/records/1234567/files/bundle.zip/content"
+    zenodo_asset_url = "https://zenodo.org/api/records/1234567/files/bundle.zip/content"
     source_tag_url = f"https://github.com/ll7/robot_sf_ll7/releases/tag/{tag}"
     related_identifiers = [
         {
@@ -1728,11 +1732,14 @@ def _network_fixture(
         ),
         github_asset_url: _PublicResponse(
             chunks=(bundle[:3], bundle[3:]),
-            url="https://cdn.github.test/final/bundle.zip",
+            url=(
+                "https://release-assets.githubusercontent.com/github-production-release-asset/"
+                "fixture/bundle.zip?sig=redacted"
+            ),
         ),
         zenodo_asset_url: _PublicResponse(
             chunks=(bundle[:5], bundle[5:]),
-            url="https://zenodo.test/cdn/final/bundle.zip",
+            url="https://zenodo.org/api/files/final/bundle.zip",
         ),
     }
     if predecessor_doi is not None:
@@ -1745,9 +1752,12 @@ def _network_fixture(
         predecessor_ref_url = f"{github_base}/repos/ll7/robot_sf_ll7/git/ref/tags/{predecessor_tag}"
         predecessor_record_id = predecessor_doi.rsplit(".", 1)[-1]
         predecessor_record_url = f"{zenodo_base}/records/{predecessor_record_id}"
-        predecessor_github_asset_url = f"https://cdn.github.test/{predecessor_tag}/predecessor.zip"
+        predecessor_github_asset_url = (
+            f"https://github.com/ll7/robot_sf_ll7/releases/download/"
+            f"{predecessor_tag}/predecessor.zip"
+        )
         predecessor_zenodo_asset_url = (
-            f"https://zenodo.test/cdn/{predecessor_record_id}/predecessor.zip"
+            f"https://zenodo.org/api/records/{predecessor_record_id}/files/predecessor.zip/content"
         )
         predecessor_source_tag_url = (
             f"https://github.com/ll7/robot_sf_ll7/releases/tag/{predecessor_tag}"
@@ -1843,9 +1853,140 @@ def test_network_audit_discovers_and_streams_public_assets(tmp_path: Path) -> No
     assert session.params == {}
     assert session.proxies == {}
     assert session.trust_env is False
-    assert all(kwargs["allow_redirects"] is True for _, kwargs, _ in session.calls)
+    assert all(
+        kwargs["allow_redirects"] is ("bundle.zip" in url) for url, kwargs, _ in session.calls
+    )
     assert all("stream" in kwargs for url, kwargs, _ in session.calls if "bundle.zip" in url)
     assert "robot-sf-published-audit-" not in json.dumps(receipt)
+
+
+def test_network_audit_allows_only_the_documented_github_asset_redirect(
+    tmp_path: Path,
+) -> None:
+    """GitHub's signed asset hand-off is accepted without trusting arbitrary CDNs."""
+    session, _bundle, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    original_url = next(url for url in session.routes if "/releases/download/" in url)
+    github_asset_url = f"https://github.com/ll7/robot_sf_ll7/releases/download/{tag}/bundle.zip"
+    signed_asset_url = (
+        "https://release-assets.githubusercontent.com/github-production-release-asset/"
+        "signed/bundle.zip?sig=redacted"
+    )
+    response = session.routes.pop(original_url)
+    assert isinstance(response, _PublicResponse)
+    response.url = signed_asset_url
+    response.history = (
+        _PublicResponse(
+            status_code=302,
+            url=github_asset_url,
+            headers={"Location": signed_asset_url},
+        ),
+    )
+    release_url = f"{github_base}/repos/ll7/robot_sf_ll7/releases/tags/{tag}"
+    release_response = session.routes[release_url]
+    assert isinstance(release_response, _PublicResponse)
+    release_payload = copy.deepcopy(release_response._payload)
+    assert isinstance(release_payload, dict)
+    release_payload["assets"][0]["browser_download_url"] = github_asset_url
+    release_response._payload = release_payload
+    session.routes[github_asset_url] = response
+
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+
+    assert receipt["status"] == "pass"
+    assert receipt["ok"] is True
+
+
+@pytest.mark.parametrize(
+    "redirect_url",
+    [
+        "https://evil.example/steal?token=secret",
+        "https://objects.githubusercontent.com/signed/bundle.zip",
+        "https://release-assets.githubusercontent.com:444/signed/bundle.zip",
+        "http://cdn.github.test/final/bundle.zip",
+        "https://user:secret@cdn.github.test/final/bundle.zip",
+        "not-a-url",
+    ],
+)
+def test_network_audit_rejects_untrusted_or_malformed_asset_redirects(
+    tmp_path: Path, redirect_url: str
+) -> None:
+    """Asset redirects fail closed on origin, port, scheme, credential, or URL drift."""
+    session, _bundle, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    asset_url = next(url for url in session.routes if "/releases/download/" in url)
+    response = session.routes[asset_url]
+    assert isinstance(response, _PublicResponse)
+    response.url = redirect_url
+    response.history = (
+        _PublicResponse(
+            status_code=302,
+            url=asset_url,
+            headers={"Location": redirect_url},
+        ),
+    )
+
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+
+    assert receipt["status"] == "invalid"
+    assert receipt["ok"] is False
+    assert "secret" not in json.dumps(receipt)
+
+
+def test_network_audit_rejects_malformed_redirect_location(tmp_path: Path) -> None:
+    """A redirect without an absolute HTTPS Location is not accepted as a final asset."""
+    session, _bundle, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    asset_url = next(url for url in session.routes if "/releases/download/" in url)
+    response = session.routes[asset_url]
+    assert isinstance(response, _PublicResponse)
+    response.history = (_PublicResponse(status_code=302, url=asset_url, headers={}),)
+
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+
+    assert receipt["status"] == "invalid"
+    assert any("Location is malformed" in problem for problem in receipt["problems"])
+
+
+def test_network_audit_rejects_unapproved_advertised_asset_origin_before_download(
+    tmp_path: Path,
+) -> None:
+    """Release metadata cannot redirect the audit to an arbitrary initial host."""
+    session, _bundle, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    release_url = f"{github_base}/repos/ll7/robot_sf_ll7/releases/tags/{tag}"
+    release_response = session.routes[release_url]
+    assert isinstance(release_response, _PublicResponse)
+    release_payload = copy.deepcopy(release_response._payload)
+    assert isinstance(release_payload, dict)
+    release_payload["assets"][0]["browser_download_url"] = "https://evil.example/release/bundle.zip"
+    release_response._payload = release_payload
+
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+
+    assert receipt["status"] == "invalid"
+    assert any("URL origin is not approved" in problem for problem in receipt["problems"])
+    assert not any("evil.example" in url for url, _, _ in session.calls)
 
 
 def test_network_invalid_receipt_sanitizes_private_temp_paths(
@@ -1973,8 +2114,8 @@ def test_network_audit_records_every_zenodo_download(tmp_path: Path) -> None:
     zenodo_payload = copy.deepcopy(zenodo_response._payload)
     note = b"public release note"
     digest = hashlib.sha256(note).hexdigest()
-    github_note_url = "https://cdn.github.test/final/notes.txt"
-    zenodo_note_url = "https://zenodo.test/cdn/final/notes.txt"
+    github_note_url = f"https://github.com/ll7/robot_sf_ll7/releases/download/{tag}/notes.txt"
+    zenodo_note_url = "https://zenodo.org/api/files/final/notes.txt"
     github_payload["assets"].append(
         {
             "name": "notes.txt",
@@ -2055,7 +2196,7 @@ def test_network_audit_separates_transport_unavailability(tmp_path: Path) -> Non
 
 def test_network_audit_rejects_partial_stream(tmp_path: Path) -> None:
     session, _, tag, github_base, zenodo_base = _network_fixture(tmp_path)
-    asset_url = next(url for url in session.routes if "cdn.github.test" in url)
+    asset_url = next(url for url in session.routes if "/releases/download/" in url)
     response = session.routes[asset_url]
     assert isinstance(response, _PublicResponse)
     response._chunks = (b"partial",)
@@ -2239,7 +2380,9 @@ def test_network_erratum_requires_one_common_predecessor_archive(
         record_payload["files"][0]["filename"] = "predecessor.txt"
         record_payload["files"][0]["key"] = "predecessor.txt"
     else:
-        second_url = "https://cdn.github.test/predecessor/second.zip"
+        second_url = (
+            f"https://github.com/ll7/robot_sf_ll7/releases/download/{predecessor_tag}/second.zip"
+        )
         release_payload["assets"].append(
             {
                 "name": "second.zip",
@@ -2253,7 +2396,7 @@ def test_network_erratum_requires_one_common_predecessor_archive(
                 "filename": "second.zip",
                 "key": "second.zip",
                 "size": record_payload["files"][0]["size"],
-                "links": {"self": "https://zenodo.test/cdn/1234565/second.zip"},
+                "links": {"self": "https://zenodo.org/api/files/1234565/second.zip"},
             }
         )
     release_response._payload = release_payload
@@ -2324,7 +2467,7 @@ def test_network_erratum_reconciles_predecessor_archive_channels(
         release_tag=tag,
         predecessor_doi="10.5281/zenodo.1234565",
     )
-    predecessor_asset_url = "https://zenodo.test/cdn/1234565/predecessor.zip"
+    predecessor_asset_url = "https://zenodo.org/api/records/1234565/files/predecessor.zip/content"
     response = session.routes[predecessor_asset_url]
     assert isinstance(response, _PublicResponse)
     predecessor_bundle = bundle + b"-predecessor"

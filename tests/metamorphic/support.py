@@ -267,7 +267,14 @@ def assert_trace_equal(
             transform = transforms.get(field)
             if transform is not None:
                 actual_values = np.asarray(transform(actual_values))
-            if not np.allclose(expected_values, actual_values, rtol=0.0, atol=atol):
+            shapes_match = expected_values.shape == actual_values.shape
+            values_match = shapes_match and np.allclose(
+                expected_values,
+                actual_values,
+                rtol=0.0,
+                atol=atol,
+            )
+            if not values_match:
                 error = _max_abs_error(expected_values, actual_values)
                 raise AssertionError(
                     f"first divergence: step={step_index} field={field} max_abs_error={error:.9g}"

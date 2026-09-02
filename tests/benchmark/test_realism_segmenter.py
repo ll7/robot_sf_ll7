@@ -9,6 +9,7 @@ import numpy as np
 from robot_sf.benchmark.pedestrian_realism_validation import (
     INTERACTION_CLASSES,
     InteractionSegmentationConfig,
+    InteractionSegmentationResult,
     RealismInteractionContext,
     RealismMetricConfig,
     RealismObstacle,
@@ -18,7 +19,10 @@ from robot_sf.benchmark.pedestrian_realism_validation import (
     run_realism_validation_from_track_set,
     segment_interactions,
 )
-from robot_sf.benchmark.realism_validation_contract import load_realism_validation_contract
+from robot_sf.benchmark.realism_validation_contract import (
+    evaluate_synthetic_class_mix_recall,
+    load_realism_validation_contract,
+)
 from robot_sf.data.external.eth_ucy_trajectories import EthUcyTrack, EthUcyTrackSet
 
 
@@ -88,6 +92,213 @@ def test_segmenter_recovers_free_and_crossing_windows_from_synthetic_tracks() ->
     assert result.counts["free_walking"] >= 1
     crossing_windows = [window for window in result.windows if window.label == "crossing_conflict"]
     assert crossing_windows[0].track_ids == (1, 2)
+
+
+def test_known_synthetic_class_mix_meets_preregistered_per_class_recall() -> None:
+    """The declared seven-class fixture must recover at least one event per class."""
+
+    contract = load_realism_validation_contract(
+        Path(__file__).resolve().parents[2]
+        / "configs"
+        / "benchmark"
+        / "realism_validation_contract.v1.yaml"
+    )
+    observed_event_counts = dict.fromkeys(INTERACTION_CLASSES, 0)
+
+    def record_case(result: InteractionSegmentationResult) -> None:
+        """Accumulate independent events from one planted class scenario."""
+
+        for label, count in result.event_counts.items():
+            observed_event_counts[label] += count
+
+    times = np.arange(0.0, 4.01, 0.2)
+    record_case(
+        segment_interactions(
+            _track_set(
+                (
+                    EthUcyTrack(
+                        pedestrian_id=1,
+                        time_s=times,
+                        positions=np.column_stack((times, np.zeros_like(times))),
+                    ),
+                )
+            ),
+            context=_resolved_context(times),
+            config=InteractionSegmentationConfig(frame_window_s=0.8, frame_stride_s=0.8),
+        )
+    )
+
+    interaction_times = np.arange(0.0, 3.21, 0.2)
+    record_case(
+        segment_interactions(
+            _track_set(
+                (
+                    EthUcyTrack(
+                        pedestrian_id=2,
+                        time_s=interaction_times,
+                        positions=np.column_stack(
+                            (interaction_times, np.zeros_like(interaction_times))
+                        ),
+                    ),
+                    EthUcyTrack(
+                        pedestrian_id=3,
+                        time_s=interaction_times,
+                        positions=np.column_stack(
+                            (1.3 * interaction_times, np.ones_like(interaction_times))
+                        ),
+                    ),
+                )
+            ),
+            config=InteractionSegmentationConfig(
+                frame_window_s=0.8,
+                frame_stride_s=0.8,
+                ped_interaction_distance_m=1.5,
+                overtaking_distance_m=0.5,
+                group_distance_m=0.5,
+            ),
+        )
+    )
+
+    turn_x = np.where(times <= 1.0, times, 1.0 + 0.5 * (times - 1.0))
+    turn_y = np.where(times <= 1.0, 0.0, 0.5 * (times - 1.0))
+    record_case(
+        segment_interactions(
+            _track_set(
+                (
+                    EthUcyTrack(
+                        pedestrian_id=4,
+                        time_s=times,
+                        positions=np.column_stack((turn_x, turn_y)),
+                    ),
+                )
+            ),
+            context=RealismInteractionContext(
+                scene_geometry=RealismSceneGeometry(
+                    bounds_m=((-1.0, -1.0), (4.0, 4.0)),
+                    obstacles=(
+                        RealismObstacle(
+                            obstacle_id="class-mix-corner",
+                            polygon_m=((0.7, -0.2), (1.1, -0.2), (1.1, 0.2), (0.7, 0.2)),
+                        ),
+                    ),
+                )
+            ),
+            config=InteractionSegmentationConfig(
+                frame_window_s=0.8,
+                frame_stride_s=0.8,
+                obstacle_distance_m=0.75,
+                obstacle_turn_angle_deg=10.0,
+            ),
+        )
+    )
+
+    record_case(
+        segment_interactions(
+            _track_set(
+                (
+                    EthUcyTrack(
+                        pedestrian_id=5,
+                        time_s=interaction_times,
+                        positions=np.column_stack(
+                            (np.full_like(interaction_times, 2.0), np.zeros_like(interaction_times))
+                        ),
+                    ),
+                )
+            ),
+            context=RealismInteractionContext(
+                robot_time_s=interaction_times,
+                robot_positions=np.column_stack(
+                    (interaction_times, np.zeros_like(interaction_times))
+                ),
+            ),
+            config=InteractionSegmentationConfig(
+                frame_window_s=0.8,
+                frame_stride_s=0.8,
+                robot_distance_m=1.0,
+                robot_approach_min_speed_mps=0.1,
+            ),
+        )
+    )
+
+    record_case(
+        segment_interactions(
+            _track_set(
+                (
+                    EthUcyTrack(
+                        pedestrian_id=6,
+                        time_s=times,
+                        positions=np.column_stack((times - 2.0, np.zeros_like(times))),
+                    ),
+                    EthUcyTrack(
+                        pedestrian_id=7,
+                        time_s=times,
+                        positions=np.column_stack((np.zeros_like(times), times - 2.0)),
+                    ),
+                )
+            ),
+            context=_resolved_context(times),
+            config=InteractionSegmentationConfig(
+                frame_window_s=0.8,
+                frame_stride_s=0.8,
+                crossing_distance_m=0.8,
+                ped_interaction_distance_m=1.0,
+            ),
+        )
+    )
+
+    faster_times = np.arange(0.0, 3.21, 0.2)
+    record_case(
+        segment_interactions(
+            _track_set(
+                (
+                    EthUcyTrack(
+                        pedestrian_id=8,
+                        time_s=faster_times,
+                        positions=np.column_stack(
+                            (1.5 * faster_times - 2.25, np.zeros_like(faster_times))
+                        ),
+                    ),
+                    EthUcyTrack(
+                        pedestrian_id=9,
+                        time_s=faster_times,
+                        positions=np.column_stack((faster_times, np.zeros_like(faster_times))),
+                    ),
+                )
+            ),
+            config=InteractionSegmentationConfig(
+                frame_window_s=0.8,
+                frame_stride_s=0.8,
+                group_distance_m=1.0,
+                overtaking_distance_m=2.0,
+            ),
+        )
+    )
+
+    record_case(
+        segment_interactions(
+            _track_set(
+                tuple(
+                    EthUcyTrack(
+                        pedestrian_id=10 + index,
+                        time_s=faster_times,
+                        positions=np.column_stack(
+                            (faster_times, np.full_like(faster_times, 0.3 * index))
+                        ),
+                    )
+                    for index in (1, 2, 3)
+                )
+            ),
+            config=InteractionSegmentationConfig(frame_window_s=0.8, frame_stride_s=0.8),
+        )
+    )
+
+    report = evaluate_synthetic_class_mix_recall(
+        observed_event_counts,
+        contract.synthetic_class_mix,
+    )
+
+    assert report["status"] == "sufficient"
+    assert all(row["recall"] >= row["minimum_recall"] for row in report["rows"].values())
 
 
 def test_event_floors_deduplicate_overlapping_interaction_windows() -> None:

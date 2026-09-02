@@ -117,7 +117,7 @@ def run():
             ep_rewards = 0
             obs = env.reset()
             env.render()
-    env.exit()
+        env.close()
 
 
 def extract_info(meta: dict, reward: float) -> str:

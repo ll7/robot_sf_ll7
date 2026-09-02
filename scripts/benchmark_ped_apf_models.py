@@ -244,10 +244,7 @@ def run_condition(
                     num_episodes,
                 )
     finally:
-        if hasattr(env, "exit"):
-            env.exit()
-        else:
-            env.close()
+        env.close()
 
     wall_time = float(time.perf_counter() - t0)
     total_steps = int(sum(int(v) for v in episode_steps))

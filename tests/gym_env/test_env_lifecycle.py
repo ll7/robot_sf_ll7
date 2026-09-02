@@ -84,6 +84,7 @@ def test_close_finalizes_active_jsonl_recorder_once(tmp_path) -> None:
     metadata_path = tmp_path / "lifecycle_active_test_7_ep0000.meta.json"
     assert env.jsonl_recorder is None
     assert recorder.current_file is None
+    assert env.last_recorded_jsonl == episode_path
     assert episode_path.is_file()
     assert metadata_path.is_file()
     events = [json.loads(line)["event"] for line in episode_path.read_text().splitlines()]

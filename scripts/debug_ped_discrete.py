@@ -128,7 +128,7 @@ def run() -> None:
                 obs = env.reset()
                 env.render()
     finally:
-        env.exit()
+        env.close()
 
 
 if __name__ == "__main__":

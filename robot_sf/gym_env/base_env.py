@@ -341,7 +341,9 @@ class BaseEnv(SimulationUICloseMixin, Env):
     def close_recorder(self) -> None:
         """Close the recorder and clean up resources."""
         if self.jsonl_recorder is not None:
-            self.jsonl_recorder.close()
+            recorder = self.jsonl_recorder
+            recorder.close()
+            self.last_recorded_jsonl = recorder.last_episode_file
             self.jsonl_recorder = None
 
 

@@ -11,6 +11,13 @@ integration, reset-scoped tracking history, and a separate oracle upper bound. T
 fixture is implementation-integrity smoke only:
 [issue_8072_goal_force_inverse_dynamics.md](issue_8072_goal_force_inverse_dynamics.md).
 
+Issue #8243 additive `core_contract.v1` simulation-state boundary: identity aliases for existing
+frame, pose, observation, force, transition, and episode contracts plus frozen finite `SimTime`,
+`Twist2D`, and `ActorState` values. This is implementation-integrity evidence only; it does not
+migrate consumers or establish simulator, planner, benchmark, human-behaviour, or paper-facing
+claims:
+[core_contract_v1.md](core_contract_v1.md).
+
 Issue #8205 observation-derived tracker goal-belief adapter: a default-off, actor-safe bridge
 from `PedestrianTrackingResult` to `GoalBeliefV1`, with stable track ordering, global-frame
 timing, explicit visibility/history masks, reset provenance, and smoke-only evidence. It does not

@@ -456,6 +456,9 @@ _FAST_FILES = {
     # Inverse goal-force estimator tests are deterministic actor/oracle-boundary
     # contracts; keep their implementation-integrity coverage in PR fast shards.
     "test_goal_force_inverse_dynamics.py",
+    # Core simulation-state contract tests are deterministic alias, schema, and
+    # import-boundary coverage for the additive core package (issue #8243).
+    "test_contract_v1.py",
     # The pre-submit launch-manifest tests cover deterministic release-input
     # binding and the public Slurm preflight consumer contract.
     "test_generate_slurm_launch_manifest.py",

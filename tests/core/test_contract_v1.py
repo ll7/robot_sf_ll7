@@ -13,6 +13,7 @@ from robot_sf.adversarial.config import Pose2D as ExistingPose2D
 from robot_sf.benchmark.types import EpisodeRecord as ExistingEpisodeRecord
 from robot_sf.core import (
     CORE_CONTRACT_VERSION,
+    DT_DECOMPOSITION_STAGE_ORDER,
     ActorState,
     EpisodeRecord,
     ForceBreakdown,
@@ -70,6 +71,24 @@ def test_existing_contracts_are_re_exported_by_identity() -> None:
     assert TransitionRecord is OracleTransitionTraceV1
     assert EpisodeRecord is ExistingEpisodeRecord
     assert CORE_CONTRACT_VERSION == "core_contract.v1"
+
+
+def test_dt_decomposition_stage_order_is_frozen_and_type_only() -> None:
+    """Expose the documented fixed-step order without owning simulator wiring."""
+
+    assert isinstance(DT_DECOMPOSITION_STAGE_ORDER, tuple)
+    assert DT_DECOMPOSITION_STAGE_ORDER == (
+        "start_of_step_state",
+        "post_behaviour_pedestrian_state",
+        "force_evaluation_state",
+        "component_forces",
+        "final_pre_cap_force",
+        "uncapped_velocity",
+        "applied_capped_velocity",
+        "integrated_state",
+        "observation",
+        "recorded_transition",
+    )
 
 
 def test_sim_time_is_dt_derived_and_round_trips() -> None:

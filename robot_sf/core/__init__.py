@@ -14,6 +14,7 @@ CORE_CONTRACT_VERSION = "core_contract.v1"
 
 if TYPE_CHECKING:  # pragma: no cover - static typing only
     from .contract import (
+        DT_DECOMPOSITION_STAGE_ORDER,
         ActorId,
         ActorState,
         EpisodeRecord,
@@ -29,6 +30,7 @@ if TYPE_CHECKING:  # pragma: no cover - static typing only
 
 __all__ = [
     "CORE_CONTRACT_VERSION",
+    "DT_DECOMPOSITION_STAGE_ORDER",
     "ActorId",
     "ActorState",
     "EpisodeRecord",

@@ -23,6 +23,12 @@ keeps source identity, optional observation-track identity, coordinate frame,
 validity, pose, twist, and decision-point time separate and serializes them with
 strict versioned keys.
 
+The immutable `DT_DECOMPOSITION_STAGE_ORDER` tuple documents the fixed-step
+boundary order as types only: start-of-step state, post-behaviour pedestrian
+state, force-evaluation state, component forces, final pre-cap force, uncapped
+velocity, applied capped velocity, integrated state, observation, and recorded
+transition. It does not execute or wire simulator stages.
+
 ## Evidence boundary
 
 The focused tests prove import safety, alias identity, finite-value validation,

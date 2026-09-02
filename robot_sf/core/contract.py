@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, ClassVar, TypeAlias
+from typing import Any, ClassVar, Final, TypeAlias
 
 from robot_sf.adversarial.config import Pose2D
 from robot_sf.benchmark.types import EpisodeRecord
@@ -45,6 +45,22 @@ CORE_FIELD_UNITS: dict[str, str] = {
     "twist.omega": "rad/s",
     "time.seconds": "s",
 }
+
+# This is deliberately a tuple of stage names rather than a runtime pipeline.
+# Consumers can type and document fixed-step boundaries without implying that
+# this additive contract owns simulator execution or stage transitions.
+DT_DECOMPOSITION_STAGE_ORDER: Final[tuple[str, ...]] = (
+    "start_of_step_state",
+    "post_behaviour_pedestrian_state",
+    "force_evaluation_state",
+    "component_forces",
+    "final_pre_cap_force",
+    "uncapped_velocity",
+    "applied_capped_velocity",
+    "integrated_state",
+    "observation",
+    "recorded_transition",
+)
 
 
 def _finite_float(value: Any, field_name: str) -> float:
@@ -266,6 +282,7 @@ class ActorState:
 __all__ = [
     "CORE_CONTRACT_VERSION",
     "CORE_FIELD_UNITS",
+    "DT_DECOMPOSITION_STAGE_ORDER",
     "ActorId",
     "ActorState",
     "EpisodeRecord",

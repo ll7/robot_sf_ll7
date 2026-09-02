@@ -99,6 +99,18 @@ def test_simulator_emits_explicit_obstacle_force_law_metadata():
     assert corrected.obstacle_force_law_metadata()["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
 
 
+def test_default_simulator_config_is_isolated_between_instances():
+    """A caller's opt-in law must not mutate later default simulator instances."""
+    state = np.zeros((0, 7), dtype=float)
+    first = pysf.Simulator(state=state)
+    first.config.obstacle_force_config.law_version = SURFACE_DISTANCE_UNIT_NORMAL_V2
+
+    second = pysf.Simulator(state=state)
+
+    assert first.obstacle_force_law_metadata()["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
+    assert second.obstacle_force_law_metadata()["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
+
+
 def test_compute_force_components_evaluates_each_force_once_and_preserves_default_sum():
     """The diagnostic roster must be exact without changing aggregate force semantics."""
     state = np.array(

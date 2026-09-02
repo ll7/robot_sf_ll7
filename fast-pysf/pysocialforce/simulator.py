@@ -112,7 +112,7 @@ class Simulator_v2:
     def __init__(
         self,
         map_definition: MapDefinition = EMPTY_MAP,
-        config: SimulatorConfig = SimulatorConfig(),
+        config: SimulatorConfig | None = None,
         make_forces: ForceFactory = make_forces,
         populate: SimPopulator = lambda s, m: populate_simulation(
             s.scene_config.tau, s.ped_spawn_config, m.routes, m.crowded_zones
@@ -129,6 +129,8 @@ class Simulator_v2:
             populate (SimPopulator, optional): A function that populates the simulation with initial states, groupings, and behaviors. Defaults to a lambda function.
             on_step (Callable[[SimState], None], optional): A function that is called after each step. Defaults to a lambda function.
         """
+        if config is None:
+            config = SimulatorConfig()
         self.config = config
         self.on_step = on_step
         self.states, self.groupings, self.behaviors = populate(config, map_definition)
@@ -242,7 +244,7 @@ class Simulator:
         state: np.ndarray,
         groups: list[list[int]] | None = None,
         obstacles: list[Line2D] | None = None,
-        config: SimulatorConfig = SimulatorConfig(),
+        config: SimulatorConfig | None = None,
         make_forces: ForceFactory = make_forces,
         on_step: Callable[[int, SimState], None] = lambda t, s: None,
     ):
@@ -256,6 +258,8 @@ class Simulator:
             make_forces: Factory to build force components.
             on_step: Optional callback executed after each step.
         """
+        if config is None:
+            config = SimulatorConfig()
         self.config = config
         self.on_step = on_step
         resolution = self.config.scene_config.resolution

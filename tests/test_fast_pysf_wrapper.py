@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 from pysocialforce import Simulator
+from pysocialforce.config import SURFACE_DISTANCE_UNIT_NORMAL_V2
 
 from robot_sf.sim import fast_pysf_wrapper as wrapper_module
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
@@ -55,6 +56,50 @@ def test_get_forces_at_point():
     assert f.shape == (2,)
     # force should be finite numbers
     assert np.all(np.isfinite(f))
+
+
+def test_obstacle_wrapper_scalar_path_forwards_selected_law(monkeypatch):
+    """Scalar wrapper queries call the versioned obstacle-force dispatcher."""
+    sim = make_simple_sim()
+    sim.config.obstacle_force_config.law_version = SURFACE_DISTANCE_UNIT_NORMAL_V2
+    wrapper = FastPysfWrapper(sim)
+    calls = []
+
+    def fake_dispatch(obstacle, ortho_vec, ped_pos, ped_radius, law_version):
+        calls.append((obstacle, ortho_vec, ped_pos, ped_radius, law_version))
+        return 1.0, -2.0
+
+    monkeypatch.setattr(wrapper_module.pf_forces, "obstacle_force_for_law", fake_dispatch)
+
+    result = wrapper._compute_obstacle_force_at_point(np.array([0.5, 0.0]))
+
+    assert result == pytest.approx(np.array([10.0, -20.0]))
+    assert calls and calls[0][-1] == SURFACE_DISTANCE_UNIT_NORMAL_V2
+
+
+def test_obstacle_wrapper_batch_path_forwards_selected_law(monkeypatch):
+    """Batched wrapper queries call the versioned batched dispatcher."""
+    sim = make_simple_sim()
+    sim.config.obstacle_force_config.law_version = SURFACE_DISTANCE_UNIT_NORMAL_V2
+    wrapper = FastPysfWrapper(sim)
+    calls = []
+
+    def fake_dispatch(out_forces, points, obstacles, ped_radius, law_version):
+        calls.append((points, obstacles, ped_radius, law_version))
+        out_forces[:] = np.array([[1.0, -2.0], [3.0, -4.0]])
+
+    monkeypatch.setattr(
+        wrapper_module.pf_forces,
+        "all_obstacle_forces_for_law",
+        fake_dispatch,
+    )
+
+    result = wrapper._compute_obstacle_forces_at_points(
+        np.array([[0.5, 0.0], [1.5, 0.0]], dtype=float)
+    )
+
+    np.testing.assert_array_equal(result, np.array([[10.0, -20.0], [30.0, -40.0]]))
+    assert calls and calls[0][-1] == SURFACE_DISTANCE_UNIT_NORMAL_V2
 
 
 def test_get_forces_at_points_matches_pointwise_force_queries():
@@ -197,7 +242,7 @@ def test_obstacle_force_fallback_is_logged_and_recorded(monkeypatch):
         raise ValueError("forced obstacle-force failure")
 
     monkeypatch.setattr(wrapper_module.logger, "warning", warning)
-    monkeypatch.setattr(wrapper_module.pf_forces, "obstacle_force", fail)
+    monkeypatch.setattr(wrapper_module.pf_forces, "obstacle_force_for_law", fail)
 
     result = wrapper._compute_obstacle_force_at_point(np.array([0.5, 0.0]))
 
@@ -262,7 +307,7 @@ def test_batched_kernel_fallbacks_are_logged_and_recorded(monkeypatch):
 
     monkeypatch.setattr(wrapper_module.logger, "warning", warning)
     monkeypatch.setattr(wrapper_module.pf_forces, "social_force_single_ped", fail)
-    monkeypatch.setattr(wrapper_module.pf_forces, "all_obstacle_forces", fail)
+    monkeypatch.setattr(wrapper_module.pf_forces, "all_obstacle_forces_for_law", fail)
 
     result = wrapper.get_forces_at_points([[0.5, 0.0], [1.5, 0.0]])
 

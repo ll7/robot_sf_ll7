@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -258,16 +261,10 @@ def preflight_repo(tmp_path: Path) -> Path:
     return repo
 
 
-def _run_pr_ready(
-    repo: Path,
-    *,
-    env_overrides: dict[str, str] | None = None,
-    help_flag: bool = False,
-) -> subprocess.CompletedProcess[str]:
-    """Run ``pr_ready_check.sh`` and return the result."""
-    cmd = ["scripts/dev/pr_ready_check.sh"]
-    if help_flag:
-        cmd.append("--help")
+def _pr_ready_environment(
+    repo: Path, env_overrides: dict[str, str] | None = None
+) -> dict[str, str]:
+    """Build an isolated environment for a fake-repository readiness process."""
     env = {**os.environ, "PATH": f"{repo / 'bin'}{os.pathsep}{os.environ['PATH']}"}
     home = repo / ".home"
     home.mkdir(exist_ok=True)
@@ -290,15 +287,302 @@ def _run_pr_ready(
         env.pop(key, None)
     if env_overrides:
         env.update(env_overrides)
+    return env
+
+
+def _run_pr_ready(
+    repo: Path,
+    *,
+    env_overrides: dict[str, str] | None = None,
+    help_flag: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    """Run ``pr_ready_check.sh`` and return the result."""
+    cmd = ["scripts/dev/pr_ready_check.sh"]
+    if help_flag:
+        cmd.append("--help")
     return subprocess.run(
         cmd,
         cwd=repo,
-        env=env,
+        env=_pr_ready_environment(repo, env_overrides),
         capture_output=True,
         text=True,
         timeout=30,
         check=False,
     )
+
+
+def _start_pr_ready(repo: Path, *, env_overrides: dict[str, str]) -> subprocess.Popen[str]:
+    """Start readiness in its own process group so signal cleanup is testable."""
+    return subprocess.Popen(
+        ["scripts/dev/pr_ready_check.sh"],
+        cwd=repo,
+        env=_pr_ready_environment(repo, env_overrides),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+
+
+def _write_blocking_lane_stub(repo: Path) -> None:
+    """Make the core lane wait on external markers without running expensive tests."""
+    stub = repo / "scripts" / "dev" / "run_tests_parallel.sh"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'printf "invoked\\n" >> "$PR_READY_LOCK_TEST_LOG"\n'
+        ': > "$PR_READY_LOCK_TEST_READY"\n'
+        'while [[ ! -e "$PR_READY_LOCK_TEST_RELEASE" ]]; do sleep 0.05; done\n'
+        'exit "${PR_READY_LOCK_TEST_EXIT_CODE:-0}"\n',
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+
+
+def _wait_for_marker(
+    marker: Path, process: subprocess.Popen[str], *, timeout: float = 10.0
+) -> None:
+    """Wait for a controlled lane marker, reporting an early process failure."""
+    deadline = time.monotonic() + timeout
+    while not marker.exists():
+        if process.poll() is not None:
+            stdout, stderr = process.communicate()
+            raise AssertionError(
+                f"readiness exited before marker: rc={process.returncode}\n"
+                f"stdout={stdout}\nstderr={stderr}"
+            )
+        if time.monotonic() >= deadline:
+            _stop_process_group(process, signal.SIGKILL)
+            stdout, stderr = process.communicate()
+            raise AssertionError(
+                f"readiness did not reach marker within {timeout}s\n"
+                f"stdout={stdout}\nstderr={stderr}"
+            )
+        time.sleep(0.02)
+
+
+def _lock_test_environment(
+    tmp_path: Path, *, ready: Path, release: Path, log: Path
+) -> dict[str, str]:
+    """Return shared lock-root and marker settings for lock-process tests."""
+    temp_root = tmp_path / "lock-tmp"
+    temp_root.mkdir(exist_ok=True)
+    return {
+        "TMPDIR": str(temp_root),
+        "PR_READY_LOCK_DIR": str(temp_root / "robot-sf-pr-ready-locks"),
+        "PR_READY_MODE": "interim",
+        "PR_READY_LOCK_TEST_READY": str(ready),
+        "PR_READY_LOCK_TEST_RELEASE": str(release),
+        "PR_READY_LOCK_TEST_LOG": str(log),
+    }
+
+
+def _lock_anchor(tmp_path: Path, repo: Path) -> Path:
+    """Return the expected temporary lock anchor for a canonical worktree path."""
+    canonical = str(repo.resolve())
+    key = hashlib.sha256(os.fsencode(canonical)).hexdigest()
+    return tmp_path / "lock-tmp" / "robot-sf-pr-ready-locks" / f"{key}.lock"
+
+
+def _stop_process_group(process: subprocess.Popen[str], signum: signal.Signals) -> None:
+    """Terminate a controlled readiness process and any lane child it owns."""
+    if process.poll() is None:
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signum)
+            else:
+                process.send_signal(signum)
+        except ProcessLookupError:
+            pass
+
+
+def _collect_process(process: subprocess.Popen[str], *, timeout: float = 10.0) -> tuple[str, str]:
+    """Collect a controlled readiness process, failing without leaving a child behind."""
+    try:
+        return process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        _stop_process_group(process, signal.SIGKILL)
+        stdout, stderr = process.communicate()
+        raise AssertionError(
+            f"readiness did not exit within {timeout}s\nstdout={stdout}\nstderr={stderr}"
+        ) from exc
+
+
+def test_pr_ready_lock_acquires_and_rejects_same_worktree_contention(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """A first run acquires the lock and a same-worktree retry fails without entering a lane."""
+    ready = tmp_path / "first-ready"
+    release = tmp_path / "first-release"
+    log = tmp_path / "lane.log"
+    _write_blocking_lane_stub(preflight_repo)
+    env = _lock_test_environment(tmp_path, ready=ready, release=release, log=log)
+
+    first = _start_pr_ready(preflight_repo, env_overrides=env)
+    try:
+        _wait_for_marker(ready, first)
+        assert _lock_anchor(tmp_path, preflight_repo).is_file()
+
+        started_at = time.monotonic()
+        other_tmp = tmp_path / "different-tmp-root"
+        other_tmp.mkdir()
+        second = _start_pr_ready(
+            preflight_repo,
+            env_overrides={**env, "TMPDIR": str(other_tmp)},
+        )
+        second_stdout, second_stderr = _collect_process(second, timeout=3.0)
+        elapsed = time.monotonic() - started_at
+
+        assert elapsed < 3.0
+        assert second.returncode == 2, second_stdout + second_stderr
+        assert f"PR readiness is already running for worktree {preflight_repo.resolve()}" in (
+            second_stderr
+        )
+        assert "Wait for that run to finish, then retry: scripts/dev/pr_ready_check.sh" in (
+            second_stderr
+        )
+        assert log.read_text(encoding="utf-8").splitlines() == ["invoked"]
+
+        release.touch()
+        first_stdout, first_stderr = _collect_process(first)
+        assert first.returncode == 0, first_stdout + first_stderr
+    finally:
+        _stop_process_group(first, signal.SIGKILL)
+        _collect_process(first)
+
+
+def test_pr_ready_lock_releases_after_readiness_failure(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """A failing readiness lane releases its lock so the next run can acquire it."""
+    failure_marker = tmp_path / "failed-once"
+    stub = preflight_repo / "scripts" / "dev" / "run_tests_parallel.sh"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'if [[ ! -e "$PR_READY_LOCK_TEST_FAILURE" ]]; then\n'
+        '  : > "$PR_READY_LOCK_TEST_FAILURE"\n'
+        "  exit 37\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+    temp_root = tmp_path / "lock-tmp"
+    temp_root.mkdir()
+    env = {
+        "TMPDIR": str(temp_root),
+        "PR_READY_LOCK_DIR": str(temp_root / "robot-sf-pr-ready-locks"),
+        "PR_READY_MODE": "interim",
+        "PR_READY_LOCK_TEST_FAILURE": str(failure_marker),
+    }
+
+    first = _run_pr_ready(preflight_repo, env_overrides=env)
+    assert first.returncode == 37, first.stderr
+    second = _run_pr_ready(preflight_repo, env_overrides=env)
+    assert second.returncode == 0, second.stderr
+    assert "already running" not in second.stderr
+
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="signal and process-group semantics are POSIX-specific"
+)
+def test_pr_ready_lock_releases_after_signal(preflight_repo: Path, tmp_path: Path) -> None:
+    """A terminated readiness process does not leave a held lock behind."""
+    ready = tmp_path / "signal-ready"
+    release = tmp_path / "signal-release"
+    log = tmp_path / "signal-lane.log"
+    _write_blocking_lane_stub(preflight_repo)
+    env = _lock_test_environment(tmp_path, ready=ready, release=release, log=log)
+
+    first = _start_pr_ready(preflight_repo, env_overrides=env)
+    try:
+        _wait_for_marker(ready, first)
+        _stop_process_group(first, signal.SIGTERM)
+        _collect_process(first)
+        assert first.returncode != 0
+
+        ready.unlink()
+        second_release = tmp_path / "signal-second-release"
+        second_env = {**env, "PR_READY_LOCK_TEST_RELEASE": str(second_release)}
+        second = _start_pr_ready(preflight_repo, env_overrides=second_env)
+        try:
+            _wait_for_marker(ready, second)
+            second_release.touch()
+            stdout, stderr = _collect_process(second)
+            assert second.returncode == 0, stdout + stderr
+        finally:
+            _stop_process_group(second, signal.SIGKILL)
+            _collect_process(second)
+    finally:
+        _stop_process_group(first, signal.SIGKILL)
+        _collect_process(first)
+
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="linked-worktree process semantics are POSIX-specific"
+)
+def test_pr_ready_lock_allows_distinct_linked_worktrees(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """Linked worktrees sharing Git metadata can hold independent readiness locks."""
+    worktrees = [tmp_path / "worktree-one", tmp_path / "worktree-two"]
+    for worktree in worktrees:
+        subprocess.run(
+            ["git", "worktree", "add", "--detach", str(worktree), "HEAD"],
+            cwd=preflight_repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        _make_fake_bin(worktree, fail=True)
+        _write_blocking_lane_stub(worktree)
+
+    common_dirs = []
+    for worktree in worktrees:
+        raw_common_dir = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=worktree,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        common_dir = Path(raw_common_dir)
+        if not common_dir.is_absolute():
+            common_dir = worktree / common_dir
+        common_dirs.append(common_dir.resolve())
+    assert len(set(common_dirs)) == 1
+    assert worktrees[0].resolve() != worktrees[1].resolve()
+
+    ready_markers = [tmp_path / "worktree-one-ready", tmp_path / "worktree-two-ready"]
+    release_markers = [tmp_path / "worktree-one-release", tmp_path / "worktree-two-release"]
+    logs = [tmp_path / "worktree-one.log", tmp_path / "worktree-two.log"]
+    processes = [
+        _start_pr_ready(
+            worktree,
+            env_overrides=_lock_test_environment(tmp_path, ready=ready, release=release, log=log),
+        )
+        for worktree, ready, release, log in zip(
+            worktrees, ready_markers, release_markers, logs, strict=True
+        )
+    ]
+    try:
+        for process, ready in zip(processes, ready_markers, strict=True):
+            _wait_for_marker(ready, process)
+        assert all(process.poll() is None for process in processes)
+        assert _lock_anchor(tmp_path, worktrees[0]).is_file()
+        assert _lock_anchor(tmp_path, worktrees[1]).is_file()
+        assert _lock_anchor(tmp_path, worktrees[0]) != _lock_anchor(tmp_path, worktrees[1])
+
+        for release in release_markers:
+            release.touch()
+        for process in processes:
+            stdout, stderr = _collect_process(process)
+            assert process.returncode == 0, stdout + stderr
+    finally:
+        for process in processes:
+            _stop_process_group(process, signal.SIGKILL)
+            _collect_process(process)
 
 
 def test_help_bypasses_preflight(preflight_repo: Path) -> None:

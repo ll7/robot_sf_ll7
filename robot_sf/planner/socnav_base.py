@@ -17,6 +17,7 @@ from typing import Any
 
 import numpy as np
 from loguru import logger
+from pysocialforce.config import DEFAULT_OBSTACLE_FORCE_LAW, resolve_obstacle_force_law
 
 from robot_sf.common.math_utils import wrap_angle_pi_closed
 from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
@@ -194,6 +195,21 @@ class SocNavPlannerConfig:
     forecast_variant_horizons_s: tuple[float, ...] = (0.5, 1.0, 2.0)
     forecast_variant_dt_s: float = 0.1
     forecast_variant_risk_distance_m: float = 3.0
+    social_force_obstacle_law: str = DEFAULT_OBSTACLE_FORCE_LAW
+
+    def __post_init__(self) -> None:
+        """Resolve the obstacle law while retaining legacy defaults for old configs."""
+        self.social_force_obstacle_law = resolve_obstacle_force_law(self.social_force_obstacle_law)
+
+    @property
+    def social_force_obstacle_law_version(self) -> str:
+        """Return the obstacle law through the explicit versioned alias."""
+        return self.social_force_obstacle_law
+
+    @social_force_obstacle_law_version.setter
+    def social_force_obstacle_law_version(self, value: Any) -> None:
+        """Set the obstacle law through the explicit versioned alias."""
+        self.social_force_obstacle_law = resolve_obstacle_force_law(value)
 
 
 class TrivialReferencePlannerAdapter(OccupancyAwarePlannerMixin):

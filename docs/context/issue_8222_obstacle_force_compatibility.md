@@ -2,7 +2,8 @@
 
 > Status: current policy and implementation-context note. This records the bounded option-B
 > compatibility/documentation ruling for [Issue #8222](https://github.com/ll7/robot_sf_ll7/issues/8222)
-> at current-main SHA `578ab08b543b9370b4d7556971990d7751b0eba0`. It does not change runtime behavior.
+> at current-main SHA `6e15eab1c0013486daccef9c239737c292ec3ab4`. The runtime selector described
+> below is implemented by the separately scoped follow-up [Issue #8277](https://github.com/ll7/robot_sf_ll7/issues/8277).
 
 ## Decision
 
@@ -11,13 +12,19 @@ law may be implemented only as an explicit opt-in and remains domain-gated until
 follow-up acceptance boundary below is complete. No benchmark, safety, social-behavior, physical,
 or paper-facing claim follows from this note or from the current implementation inspection.
 
-The proposed identifiers are design names only until runtime work lands:
+The runtime identifiers are:
 
-- `legacy_shifted_gradient_v1` — proposed identifier for the preserved historical law.
-- `surface_distance_unit_normal_v2` — proposed identifier for a corrected surface-distance/unit-normal law.
+- `legacy_shifted_gradient_v1` — the preserved historical law and default for missing or unversioned inputs.
+- `surface_distance_unit_normal_v2` — the corrected surface-distance/unit-normal law, available only by explicit opt-in.
 
-These names must not be interpreted as existing runtime metadata, released versions, or evidence of
-validation.
+These names are runtime compatibility selectors, not released model versions and not evidence of
+physical, safety, social-behavior, benchmark, or paper-facing validation.
+
+The #8277 implementation resolves unknown explicit selectors fail-closed and emits
+`obstacle_force_law_metadata.v1` with the selected law, site, geometry convention, radius/offset
+convention, and compatibility mode. The fast-pysf map-segment site retains its point, endpoint,
+and segment branches; the planner site retains its occupancy-cell-center point geometry. The
+selectors therefore version dispatch without silently unifying the two sites.
 
 ## Current implementation boundary
 
@@ -57,17 +64,19 @@ as an implementation idea and remains opt-in and domain-gated; it must, at minim
 6. obtain domain review before any default-law change.
 
 The corrected behavior is opt-in only until all of these gates and the required review are complete.
-No campaign rerun is authorized by this note. The stop boundary is documentation and compatibility
-capture only: no runtime code, config default, test, benchmark artifact, release surface, or
-historical campaign is changed or rerun here.
+No campaign rerun, default-law change, benchmark artifact, release-surface change, or historical
+campaign change is authorized by this note. The child may implement opt-in compatibility selectors
+and targeted tests, but those checks do not establish benchmark, physical, safety, or social-behavior
+evidence.
 
 ## Evidence and handoff boundary
 
-Evidence in this slice is limited to source/config inspection at the stated current-main SHA and
-documentation validation. It establishes neither numerical correctness nor physical suitability.
-The runtime child in [Issue #8277](https://github.com/ll7/robot_sf_ll7/issues/8277) uses the canonical
-implementation archetype with `evidence_tier: idea` until executable parity and diagnostic evidence
-exist. Local preparation drafts are disposable and are not a durable dependency of this note.
+Evidence in this slice is limited to source/config inspection, executable parity/near-contact tests,
+and documentation validation at the stated current-main boundary. It establishes neither numerical
+correctness beyond those targeted checks nor physical suitability. The runtime child in
+[Issue #8277](https://github.com/ll7/robot_sf_ll7/issues/8277) uses the canonical implementation
+archetype with `evidence_tier: idea`; its targeted tests are diagnostic compatibility evidence only.
+Local preparation drafts are disposable and are not a durable dependency of this note.
 
 Validation for this note is limited to targeted reference inspection, `git diff --check`,
 `scripts/dev/check_docs_evidence_integrity.py --full`, and

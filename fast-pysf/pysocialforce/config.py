@@ -1,8 +1,103 @@
-"""Configuration dataclasses for the fast-pysf simulator."""
+"""Configuration dataclasses and version metadata for the fast-pysf simulator."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
 from pysocialforce.ped_population import PedSpawnConfig
+
+LEGACY_SHIFTED_GRADIENT_V1 = "legacy_shifted_gradient_v1"
+SURFACE_DISTANCE_UNIT_NORMAL_V2 = "surface_distance_unit_normal_v2"
+DEFAULT_OBSTACLE_FORCE_LAW = LEGACY_SHIFTED_GRADIENT_V1
+OBSTACLE_FORCE_LAW_VERSIONS = frozenset(
+    {LEGACY_SHIFTED_GRADIENT_V1, SURFACE_DISTANCE_UNIT_NORMAL_V2}
+)
+OBSTACLE_FORCE_LAW_METADATA_SCHEMA = "obstacle_force_law_metadata.v1"
+
+
+def resolve_obstacle_force_law(value: Any = None) -> str:
+    """Resolve an obstacle-force law identifier with legacy compatibility.
+
+    Missing, empty, and unversioned metadata intentionally resolve to the historical
+    law.  Unknown explicit identifiers fail closed so a caller cannot silently run a
+    different force law than the one recorded in its configuration.
+
+    Args:
+        value: Law identifier or a metadata mapping containing ``law_version`` (or
+            one of the compatibility keys ``obstacle_force_law_version``,
+            ``law_id``, ``obstacle_force_law``, ``social_force_obstacle_law``, or
+            ``law``).
+
+    Returns:
+        Canonical obstacle-force law identifier.
+
+    Raises:
+        TypeError: If an explicit value is not a string.
+        ValueError: If an explicit string is not a supported law identifier.
+    """
+    if isinstance(value, Mapping):
+        selected = None
+        for key in (
+            "law_version",
+            "obstacle_force_law_version",
+            "law_id",
+            "obstacle_force_law",
+            "social_force_obstacle_law",
+            "law",
+        ):
+            if key in value:
+                selected = value[key]
+                break
+        value = selected
+
+    if value is None:
+        return DEFAULT_OBSTACLE_FORCE_LAW
+    if not isinstance(value, str):
+        raise TypeError("obstacle-force law version must be a string or None")
+
+    resolved = value.strip()
+    if not resolved:
+        return DEFAULT_OBSTACLE_FORCE_LAW
+    if resolved not in OBSTACLE_FORCE_LAW_VERSIONS:
+        supported = ", ".join(sorted(OBSTACLE_FORCE_LAW_VERSIONS))
+        raise ValueError(
+            f"unsupported obstacle-force law {resolved!r}; expected one of {supported}"
+        )
+    return resolved
+
+
+def obstacle_force_law_metadata(
+    law_version: Any = None,
+    *,
+    site: str,
+    geometry_convention: str,
+    radius_convention: str,
+) -> dict[str, str]:
+    """Build explicit, JSON-safe metadata for one obstacle-force runtime site.
+
+    The metadata describes implementation dispatch and compatibility only.  It is
+    not a benchmark, physical, safety, or social-behavior evidence declaration.
+
+    Args:
+        law_version: Explicit law identifier or legacy-compatible metadata input.
+        site: Stable runtime site identifier.
+        geometry_convention: Site-specific obstacle geometry convention.
+        radius_convention: Site-specific radius/offset convention.
+
+    Returns:
+        Versioned metadata mapping suitable for configuration or episode diagnostics.
+    """
+    resolved = resolve_obstacle_force_law(law_version)
+    return {
+        "schema_version": OBSTACLE_FORCE_LAW_METADATA_SCHEMA,
+        "law_version": resolved,
+        "site": site,
+        "geometry_convention": geometry_convention,
+        "radius_convention": radius_convention,
+        "compatibility_mode": (
+            "legacy_compatible" if resolved == LEGACY_SHIFTED_GRADIENT_V1 else "corrected_opt_in"
+        ),
+    }
 
 
 @dataclass
@@ -134,11 +229,28 @@ class ObstacleForceConfig:
         threshold: Additive distance offset (m), subtracted like a radius from
             the pedestrian-obstacle distance. Negative values inflate the
             effective distance and soften near-wall repulsion.
+        law_version: Versioned obstacle-force law. Missing historical configuration
+            resolves to ``legacy_shifted_gradient_v1``; the corrected law is opt-in.
     """
 
     factor: float = 10.0
     sigma: float = 0.0
     threshold: float = -0.57
+    law_version: str = DEFAULT_OBSTACLE_FORCE_LAW
+
+    def __post_init__(self) -> None:
+        """Resolve explicit and unversioned configuration to a supported law."""
+        self.law_version = resolve_obstacle_force_law(self.law_version)
+
+    @property
+    def obstacle_force_law_version(self) -> str:
+        """Return the canonical law identifier using the descriptive alias."""
+        return self.law_version
+
+    @obstacle_force_law_version.setter
+    def obstacle_force_law_version(self, value: Any) -> None:
+        """Set the law through the descriptive compatibility alias."""
+        self.law_version = resolve_obstacle_force_law(value)
 
 
 @dataclass

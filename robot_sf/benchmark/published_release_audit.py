@@ -1000,6 +1000,7 @@ def _verify_canonical_erratum_bundle(
             campaign_root=bundle_root / "payload",
             metadata_path=metadata_path,
             predecessor_evidence=predecessor_evidence,
+            archive_name=bundle.name,
             expected_tag=tag,
             expected_doi=doi,
             expected_source_sha=source_sha,

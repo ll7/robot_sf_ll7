@@ -668,7 +668,7 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
         archive_sha256="0" * 64,
         archive_size_bytes=1,
     )
-    calls: list[tuple[Path, Path, Path, str, str, str | None]] = []
+    calls: list[tuple[Path, Path, Path, str, str, str, str | None]] = []
     evidence_seen: list[PredecessorEvidence | None] = []
 
     def fake_validate(
@@ -676,6 +676,7 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
         *,
         campaign_root: Path,
         metadata_path: Path,
+        archive_name: str,
         expected_tag: str,
         expected_doi: str,
         expected_source_sha: str | None,
@@ -687,6 +688,7 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
                 receipt_path,
                 campaign_root,
                 metadata_path,
+                archive_name,
                 expected_tag,
                 expected_doi,
                 expected_source_sha,
@@ -716,7 +718,7 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
     assert receipt["observations"]["erratum"]["episode_rows"] == 20_160
     assert calls[0][1].name == "payload"
     assert calls[0][2].name == "zenodo_metadata.erratum.json"
-    assert calls[0][3:] == (tag, doi, source_sha)
+    assert calls[0][3:] == ("bundle.zip", tag, doi, source_sha)
     assert evidence_seen == [predecessor_evidence]
 
 

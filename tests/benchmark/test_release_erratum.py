@@ -14,6 +14,7 @@ import pytest
 
 from robot_sf.benchmark.release_erratum import (
     SCIENTIFIC_CANONICALIZATION,
+    SCIENTIFIC_CANONICALIZATION_POLICY,
     ErratumContract,
     PredecessorEvidence,
     ReleaseErratumError,
@@ -251,6 +252,20 @@ def _with_bundle_metadata(campaign: Path, contract: ErratumContract) -> ErratumC
     return updated
 
 
+def _write_receipt(campaign: Path, contract: ErratumContract) -> Path:
+    """Write a self-equality receipt for the campaign fixture."""
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_text(
+        json.dumps(
+            build_erratum_receipt(contract=contract, predecessor=snapshot, successor=snapshot)
+        ),
+        encoding="utf-8",
+    )
+    return receipt_path
+
+
 def test_predecessor_and_successor_scientific_leaves_match(tmp_path: Path) -> None:
     campaign = tmp_path / "campaign"
     _write_campaign(campaign)
@@ -283,6 +298,220 @@ def test_predecessor_and_successor_scientific_leaves_match(tmp_path: Path) -> No
     }
     assert receipt["corrected_verdict"]["ranking_claims_admitted"] is False
     assert receipt["scientific_canonicalization"]["schema"] == SCIENTIFIC_CANONICALIZATION
+    assert receipt["scientific_canonicalization"] == dict(SCIENTIFIC_CANONICALIZATION_POLICY)
+
+
+def test_cold_erratum_accepts_exact_root_and_nested_publication_url_aliases(
+    tmp_path: Path,
+) -> None:
+    """Every exact current-publication URL alias may appear at any payload depth."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    predecessor_archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, predecessor_archive)
+    contract = _with_bundle_metadata(campaign, _contract(predecessor_archive))
+    receipt_path = _write_receipt(campaign, contract)
+    archive_name = "september-2026-publication-bundle.tar.gz"
+    urls = {
+        "release_url": (
+            "https://github.com/ll7/robot_sf_ll7/releases/tag/"
+            f"{contract.successor_github_release_tag}"
+        ),
+        "release_asset_url": (
+            "https://github.com/ll7/robot_sf_ll7/releases/download/"
+            f"{contract.successor_github_release_tag}/{archive_name}"
+        ),
+        "doi_url": f"https://doi.org/{contract.successor_version_doi}",
+    }
+
+    result_path = campaign / "release/release_result.json"
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    result.update(urls)
+    result["benchmark_release"]["publication_links"] = dict(urls)
+    result_path.write_text(json.dumps(result), encoding="utf-8")
+    summary_path = campaign / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["campaign"]["publication_links"] = dict(urls)
+    summary["publication_links"] = dict(urls)
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    observed = validate_erratum_receipt_against_campaign(
+        receipt_path,
+        campaign_root=campaign,
+        metadata_path=contract.metadata_path,
+        predecessor_evidence=_predecessor_evidence(predecessor_archive, contract),
+        archive_name=archive_name,
+        expected_tag=NEW_TAG,
+        expected_doi=contract.successor_version_doi,
+    )
+
+    assert observed["status"] == "pass"
+
+
+@pytest.mark.parametrize(
+    ("location", "key", "value"),
+    [
+        (
+            "root",
+            "release_url",
+            "https://github.com/attacker/robot_sf_ll7/releases/tag/decoy",
+        ),
+        (
+            "nested",
+            "release_url",
+            "https://github.com/ll7/robot_sf_ll7/releases%2Ftag/decoy",
+        ),
+        (
+            "root",
+            "release_asset_url",
+            "https://github.com/ll7/robot_sf_ll7/releases/download/decoy-bundle.tar.gz",
+        ),
+        (
+            "nested",
+            "release_asset_url",
+            "https://user@github.com/ll7/robot_sf_ll7/releases/download/decoy/bundle.tar.gz",
+        ),
+        (
+            "root",
+            "doi_url",
+            "https://doi.org/10.5281/zenodo.22229999?download=1",
+        ),
+        (
+            "nested",
+            "doi_url",
+            "https://doi.org/10.5281/zenodo.22229999#fragment",
+        ),
+    ],
+)
+def test_cold_erratum_rejects_decoy_or_ambiguous_publication_url_alias(
+    tmp_path: Path,
+    location: str,
+    key: str,
+    value: str,
+) -> None:
+    """URL aliases must not accept decoys, prefixes, credentials, or URL syntax tricks."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    predecessor_archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, predecessor_archive)
+    contract = _with_bundle_metadata(campaign, _contract(predecessor_archive))
+    receipt_path = _write_receipt(campaign, contract)
+    archive_name = "september-2026-publication-bundle.tar.gz"
+    urls = {
+        "release_url": (
+            "https://github.com/ll7/robot_sf_ll7/releases/tag/"
+            f"{contract.successor_github_release_tag}"
+        ),
+        "release_asset_url": (
+            "https://github.com/ll7/robot_sf_ll7/releases/download/"
+            f"{contract.successor_github_release_tag}/{archive_name}"
+        ),
+        "doi_url": f"https://doi.org/{contract.successor_version_doi}",
+    }
+    result_path = campaign / "release/release_result.json"
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    result.update(urls)
+    result["nested"] = dict(urls)
+    if location == "root":
+        result[key] = value
+    else:
+        result["nested"][key] = value
+    result_path.write_text(json.dumps(result), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match=key):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(predecessor_archive, contract),
+            archive_name=archive_name,
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+
+
+def test_cold_erratum_rejects_decoy_metadata_publication_url_alias(tmp_path: Path) -> None:
+    """The canonical Zenodo metadata payload is covered by URL-alias validation too."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    predecessor_archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, predecessor_archive)
+    contract = _with_bundle_metadata(campaign, _contract(predecessor_archive))
+    metadata = json.loads(contract.metadata_path.read_text(encoding="utf-8"))
+    metadata["metadata"]["release_url"] = "https://github.com/attacker/decoy"
+    contract.metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    contract = replace(
+        contract,
+        metadata_sha256=hashlib.sha256(contract.metadata_path.read_bytes()).hexdigest(),
+    )
+    for relative in (
+        "release/release_manifest.resolved.json",
+        "release/release_result.json",
+        "reports/campaign_summary.json",
+    ):
+        path = campaign / relative
+        payload = json.loads(path.read_text(encoding="utf-8"))
+
+        def refresh_digest(value: Any) -> None:
+            if isinstance(value, dict):
+                for key, nested in value.items():
+                    if key == "metadata_sha256":
+                        value[key] = contract.metadata_sha256
+                    else:
+                        refresh_digest(nested)
+            elif isinstance(value, list):
+                for nested in value:
+                    refresh_digest(nested)
+
+        refresh_digest(payload)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    receipt_path = _write_receipt(campaign, contract)
+
+    with pytest.raises(ReleaseErratumError, match="release_url"):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(predecessor_archive, contract),
+            archive_name="september-2026-publication-bundle.tar.gz",
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("nonfinite_float_policy", "drop_nonfinite"),
+        ("finite_float_policy", "decimal_string"),
+        ("unexpected_policy_claim", "accepted"),
+    ],
+)
+def test_cold_erratum_rejects_mutable_scientific_canonicalization_policy(
+    tmp_path: Path,
+    field: str,
+    value: str,
+) -> None:
+    """A matching canonicalization schema cannot hide a changed policy claim."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    predecessor_archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, predecessor_archive)
+    contract = _with_bundle_metadata(campaign, _contract(predecessor_archive))
+    receipt_path = _write_receipt(campaign, contract)
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["scientific_canonicalization"][field] = value
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match="canonicalization policy"):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(predecessor_archive, contract),
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
 
 
 def test_scientific_equality_rejects_byte_different_episode_file_with_same_rows(

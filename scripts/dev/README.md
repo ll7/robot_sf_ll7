@@ -142,5 +142,6 @@ regression coverage lives in `tests/dev/test_goal_autopilot_controller.py`.
 `worktree_receipt.py` is the opt-in pre-write boundary for repository-owned delegated workers.
 Pair `create_worktree.sh --receipt PATH --task-id ID` with `--exec`; creation writes an atomic
 receipt and checks it before launching the command. The check is read-only, fail-closed, and
-machine-readable. It validates the assigned absolute worktree, linked Git common directory,
-branch/ref, and base ancestry. Human callers that omit receipt options retain the ordinary path.
+machine-readable. It validates the current working directory, assigned absolute worktree, linked
+Git common directory, branch/ref, and base ancestry. Human callers that omit receipt options retain
+the ordinary path.

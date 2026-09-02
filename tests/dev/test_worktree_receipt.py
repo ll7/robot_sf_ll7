@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 from scripts.dev import worktree_receipt
@@ -29,15 +30,17 @@ def _fixture_repo(tmp_path: Path) -> tuple[Path, Path, Path]:
     return repo, assigned, wrong
 
 
-def test_receipt_passes_only_in_assigned_linked_worktree(tmp_path: Path) -> None:
+def test_receipt_passes_only_in_assigned_linked_worktree(tmp_path: Path, monkeypatch) -> None:
     """A receipt binds checkout, ref, common Git directory, and base."""
     _repo, assigned, wrong = _fixture_repo(tmp_path)
     receipt = worktree_receipt.create_receipt(assigned, task_id="issue-8310", base_ref="HEAD")
     receipt_path = tmp_path / "receipt.json"
     worktree_receipt._write_atomic(receipt_path, receipt)
 
-    good = worktree_receipt.check_receipt(receipt_path, assigned)
-    bad = worktree_receipt.check_receipt(receipt_path, wrong)
+    monkeypatch.chdir(assigned)
+    good = worktree_receipt.check_receipt(receipt_path)
+    monkeypatch.chdir(wrong)
+    bad = worktree_receipt.check_receipt(receipt_path)
 
     assert good.ok
     assert not bad.ok
@@ -48,25 +51,23 @@ def test_receipt_passes_only_in_assigned_linked_worktree(tmp_path: Path) -> None
 
 def test_wrong_worktree_fails_before_fixture_mutation(tmp_path: Path) -> None:
     """The delegated entry-point guard rejects the wrong worktree before a write."""
-    repo, assigned, wrong = _fixture_repo(tmp_path)
+    _repo, assigned, wrong = _fixture_repo(tmp_path)
     receipt_path = tmp_path / "receipt.json"
+    helper = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "worktree_receipt.py"
     worktree_receipt._write_atomic(
         receipt_path,
         worktree_receipt.create_receipt(assigned, task_id="task-8310", base_ref="HEAD"),
     )
     result = subprocess.run(
         [
-            "python",
-            "-m",
-            "scripts.dev.worktree_receipt",
+            sys.executable,
+            str(helper),
             "check",
             "--receipt",
             str(receipt_path),
-            "--worktree",
-            str(wrong),
             "--json",
         ],
-        cwd=repo,
+        cwd=wrong,
         capture_output=True,
         text=True,
         check=False,
@@ -105,7 +106,7 @@ def test_create_worktree_exec_checks_opt_in_receipt(tmp_path: Path) -> None:
     """The canonical creator emits and checks a receipt before ``--exec``."""
     repo, _assigned, _wrong = _fixture_repo(tmp_path)
     target = tmp_path / "created"
-    receipt_path = tmp_path / "created.receipt.json"
+    receipt_path = repo / "created.receipt.json"
     branch = "worker/issue-8310"
     script = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "create_worktree.sh"
     try:
@@ -121,7 +122,7 @@ def test_create_worktree_exec_checks_opt_in_receipt(tmp_path: Path) -> None:
                 "--minimum-free-bytes",
                 "0",
                 "--receipt",
-                str(receipt_path),
+                receipt_path.name,
                 "--task-id",
                 "task-8310",
                 "--exec",

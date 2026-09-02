@@ -112,7 +112,7 @@ def _write_atomic(path: Path, payload: dict[str, Any]) -> None:
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        os.replace(temporary, absolute)
     except BaseException:
         try:
             os.unlink(temporary)
@@ -150,7 +150,7 @@ def _load_receipt(path: str | Path) -> dict[str, Any]:
 
 
 def check_receipt(receipt: str | Path, worktree: str | Path = ".") -> CheckResult:
-    """Check the current checkout against a receipt without changing state."""
+    """Check the current checkout and process directory against a receipt."""
     values: dict[str, Any] = {
         "schema": SCHEMA_VERSION,
         "ok": False,
@@ -174,7 +174,15 @@ def check_receipt(receipt: str | Path, worktree: str | Path = ".") -> CheckResul
             expected_common_git_dir=expected["common_git_dir"],
             expected_base_commit=expected["base_commit"],
         )
-        current = _identity(_absolute_directory(worktree))
+        requested_worktree = _absolute_directory(worktree)
+        current_directory = Path.cwd().resolve()
+        values["current_worktree"] = str(current_directory)
+        if requested_worktree != current_directory:
+            raise ValueError(
+                "current working directory mismatch: "
+                f"expected {requested_worktree}, got {current_directory}"
+            )
+        current = _identity(current_directory)
         values.update(
             current_worktree=current["worktree"],
             current_ref=current["ref"],

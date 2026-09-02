@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 show_help() {
   cat <<'EOF'
@@ -115,6 +115,10 @@ fi
 if [[ -n "$task_id" && -z "$receipt_path" ]] || [[ -n "$receipt_path" && -z "$task_id" ]]; then
   echo "--receipt and --task-id must be supplied together" >&2
   exit 2
+fi
+
+if [[ -n "$receipt_path" ]]; then
+  receipt_path="$(python3 -c 'import os, sys; print(os.path.abspath(sys.argv[1]))' "$receipt_path")"
 fi
 
 if [[ -e "$worktree_path" || -L "$worktree_path" ]]; then

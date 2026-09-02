@@ -49,8 +49,9 @@ scripts/dev/create_worktree.sh \
 
 Creation writes the receipt atomically after the linked worktree exists. The `--exec` command is
 guarded before it starts; the read-only guard exits nonzero with one JSON result when the current
-top-level, shared Git directory, branch/ref, or base ancestry differs. Workers started separately
-must run the equivalent check explicitly with `python scripts/dev/worktree_receipt.py check`.
+working directory, top-level, shared Git directory, branch/ref, or base ancestry differs. Workers
+started separately must run the equivalent check from inside the assigned worktree with
+`python scripts/dev/worktree_receipt.py check`.
 Ordinary callers retain the existing behavior when receipt options are omitted.
 
 Bootstrap symlinks the local machine context and creates a worktree-local `.venv`. For a cheap

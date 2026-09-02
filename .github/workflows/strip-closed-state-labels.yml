@@ -91,8 +91,6 @@ jobs:
           from scripts.dev.gh_issue_rest import validate_issue_identity
 
           payload = json.load(sys.stdin)
-          if payload.get("status") != "ok":
-              raise SystemExit("REST issue read result did not report status=ok")
           validate_issue_identity(
               payload,
               repo=sys.argv[1],

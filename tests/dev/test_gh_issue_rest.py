@@ -537,6 +537,24 @@ def test_cli_view_without_comments_does_not_read_the_comments_endpoint() -> None
     mock_api.assert_called_once_with("repos/ll7/robot_sf_ll7/issues/5021")
 
 
+def test_cli_view_selected_issue_fields_omits_status_envelope() -> None:
+    """Selected JSON fields preserve the ``gh issue view --json`` projection contract."""
+    with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
+        mock_api.return_value = _proc(stdout=json.dumps(_raw_issue()))
+        with patch("sys.stdout.write") as mock_write:
+            rc = main(["view", "5021", "--json", "number", "state", "url", "is_pull_request"])
+
+    assert rc == 0
+    output = "".join(call.args[0] for call in mock_write.call_args_list)
+    payload = json.loads(output)
+    assert payload == {
+        "number": 5021,
+        "state": "OPEN",
+        "url": "https://github.com/ll7/robot_sf_ll7/issues/5021",
+        "is_pull_request": False,
+    }
+
+
 def test_fetch_issue_maps_null_body_to_empty_string() -> None:
     """A REST ``null`` body must normalize to ``""``, never the string ``"None"`` (gate #5049)."""
     raw = _raw_issue()

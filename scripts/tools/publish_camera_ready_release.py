@@ -85,27 +85,44 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _resolve_publication_path(publication: dict[str, object], key: str, repo_root: Path) -> Path:
-    """Resolve and validate one required publication path field."""
+def _resolve_publication_path(
+    publication: dict[str, object],
+    key: str,
+    *,
+    campaign_root: Path,
+    repo_root: Path,
+) -> Path:
+    """Resolve one publication path against its declared campaign or repository root."""
     raw_value = publication.get(key)
     if not isinstance(raw_value, str) or not raw_value.strip():
         raise ValueError(
             f"publication_bundle.{key} must be a non-empty string path in campaign_summary.json."
         )
     relative = raw_value.strip()
-    try:
-        return resolve_campaign_artifact_path(repo_root, relative)
-    except ValueError as exc:
-        # Preserve the command's established missing-artifact error while still
-        # routing every candidate through the fail-closed path validator first.
-        candidate = Path(repo_root).absolute() / relative
-        if (
-            "not a regular file" in str(exc)
-            and not candidate.exists()
-            and not candidate.is_symlink()
-        ):
-            raise FileNotFoundError(f"Missing required publication artifact: {candidate}") from exc
-        raise
+    roots = tuple(dict.fromkeys((Path(campaign_root).absolute(), Path(repo_root).absolute())))
+    matches: list[Path] = []
+    missing_candidates: list[Path] = []
+    for root in roots:
+        try:
+            matches.append(resolve_campaign_artifact_path(root, relative))
+        except ValueError as exc:
+            # An absent path may belong to the other supported root. Security
+            # violations are root-independent and must still fail immediately.
+            if "not a regular file" not in str(exc):
+                raise
+            candidate = root / relative
+            if candidate.exists() or candidate.is_symlink():
+                raise
+            missing_candidates.append(candidate)
+    distinct_matches = tuple(dict.fromkeys(matches))
+    if len(distinct_matches) > 1:
+        raise ValueError(
+            f"publication_bundle.{key} is ambiguous between campaign and repository roots"
+        )
+    if distinct_matches:
+        return distinct_matches[0]
+    candidate_text = ", ".join(str(path) for path in missing_candidates)
+    raise FileNotFoundError(f"Missing required publication artifact: {candidate_text}")
 
 
 def _validate_prerequisites(
@@ -123,9 +140,24 @@ def _validate_prerequisites(
         )
 
     repo_root = get_repository_root()
-    archive_path = _resolve_publication_path(publication, "archive_path", repo_root)
-    checksums_path = _resolve_publication_path(publication, "checksums_path", repo_root)
-    manifest_path = _resolve_publication_path(publication, "manifest_path", repo_root)
+    archive_path = _resolve_publication_path(
+        publication,
+        "archive_path",
+        campaign_root=campaign_root,
+        repo_root=repo_root,
+    )
+    checksums_path = _resolve_publication_path(
+        publication,
+        "checksums_path",
+        campaign_root=campaign_root,
+        repo_root=repo_root,
+    )
+    manifest_path = _resolve_publication_path(
+        publication,
+        "manifest_path",
+        campaign_root=campaign_root,
+        repo_root=repo_root,
+    )
     bundle_dir = manifest_path.parent
     if not bundle_dir.is_dir():
         raise ValueError("publication bundle path must name a regular directory")

@@ -33,7 +33,7 @@ def benchmark():
             logger.info(f"end of episode {episode}, total rewards {ep_rewards}")
             ep_rewards = 0
             _ = env.reset()
-    env.exit()
+    env.close()
 
     print("end of simulation")
 

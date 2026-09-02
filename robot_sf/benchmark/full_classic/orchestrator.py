@@ -800,17 +800,8 @@ def _rollout_episode(env, horizon: int, dt: float, replay_cap):
 def _close_env(env):
     """Best-effort environment cleanup."""
     try:
-        env.exit()
-    except (RuntimeError, AttributeError, TypeError, OSError):  # pragma: no cover
-        pass
-    try:
         env.close()
-    except (
-        RuntimeError,
-        AttributeError,
-        TypeError,
-        OSError,
-    ):  # pragma: no cover - gym close best-effort
+    except (RuntimeError, AttributeError, TypeError, OSError):  # pragma: no cover
         pass
 
 

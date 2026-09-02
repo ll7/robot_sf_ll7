@@ -97,7 +97,7 @@ def run_demo() -> None:
                 print("Episode ended on the custom map; resetting.")
                 env.reset()
     finally:
-        env.exit()
+        env.close()
 
     print(f"\nDemo complete. Total reward collected: {total_reward:.3f}")
 

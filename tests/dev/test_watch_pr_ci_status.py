@@ -103,6 +103,125 @@ def test_fetch_exact_commit_ci_status_suppresses_cancelled_replacement() -> None
     assert result["checks"]["by_conclusion"] == {"pending": 1}  # type: ignore[index]
 
 
+@pytest.mark.parametrize(
+    ("run_status", "run_conclusion"),
+    [("in_progress", None), ("completed", "success")],
+    ids=["running", "workflow-terminal-but-check-missing"],
+)
+def test_fetch_exact_commit_ci_status_waits_for_unmaterialized_replacement(
+    run_status: str, run_conclusion: str | None
+) -> None:
+    """A newer exact-SHA workflow run keeps a missing replacement check pending."""
+    fetch_check_runs = MagicMock(
+        return_value={
+            "check_runs": [
+                {
+                    "name": "coverage-gate",
+                    "status": "completed",
+                    "conclusion": "cancelled",
+                    "head_sha": "merge123",
+                    "started_at": "2026-09-02T05:57:24Z",
+                    "completed_at": "2026-09-02T06:05:23Z",
+                    "details_url": (
+                        "https://github.com/ll7/robot_sf_ll7/actions/runs/91001/job/92001"
+                    ),
+                }
+            ]
+        }
+    )
+    fetch_workflow_runs = MagicMock(
+        return_value={
+            "total_count": 2,
+            "workflow_runs": [
+                {
+                    "id": 91002,
+                    "workflow_id": 93001,
+                    "status": run_status,
+                    "conclusion": run_conclusion,
+                    "head_sha": "merge123",
+                    "created_at": "2026-09-02T06:05:03Z",
+                    "run_started_at": "2026-09-02T06:05:03Z",
+                    "html_url": "https://github.com/ll7/robot_sf_ll7/actions/runs/91002",
+                },
+            ],
+        }
+    )
+
+    with patch(
+        "scripts.dev.check_pr_ci_status._rest_api_get",
+        return_value={"workflow_id": 93001},
+    ):
+        result = fetch_exact_commit_ci_status(
+            "merge123",
+            fetch_check_runs=fetch_check_runs,
+            fetch_workflow_runs=fetch_workflow_runs,
+        )
+
+    assert result["checks"]["overall"] == "pending"  # type: ignore[index]
+    assert result["checks"]["total"] == 1  # type: ignore[index]
+    assert result["checks"]["superseded"] == 1  # type: ignore[index]
+    assert result["checks"]["by_conclusion"] == {"pending": 1}  # type: ignore[index]
+    assert result["checks"]["pending_reason"] == "replacement_check_materialization"  # type: ignore[index]
+    assert result["checks"]["replacement_materialization"][0]["replacement_run_id"] == 91002  # type: ignore[index]
+    assert (
+        result["checks"]["superseded_runs"][0]["reason"]
+        == "newer_same_workflow_run_materialization"
+    )  # type: ignore[index]
+    fetch_workflow_runs.assert_called_once_with("merge123")
+
+
+def test_fetch_exact_commit_ci_status_keeps_lone_cancellation_as_failure() -> None:
+    """Workflow metadata must not hide a cancellation without a newer exact-SHA run."""
+    fetch_check_runs = MagicMock(
+        return_value={
+            "check_runs": [
+                {
+                    "name": "coverage-gate",
+                    "status": "completed",
+                    "conclusion": "cancelled",
+                    "head_sha": "merge123",
+                    "started_at": "2026-09-02T05:57:24Z",
+                    "completed_at": "2026-09-02T06:05:23Z",
+                    "details_url": (
+                        "https://github.com/ll7/robot_sf_ll7/actions/runs/91001/job/92001"
+                    ),
+                }
+            ]
+        }
+    )
+    fetch_workflow_runs = MagicMock(
+        return_value={
+            "total_count": 1,
+            "workflow_runs": [
+                {
+                    "id": 91001,
+                    "workflow_id": 93001,
+                    "status": "completed",
+                    "conclusion": "cancelled",
+                    "head_sha": "merge123",
+                    "created_at": "2026-09-02T05:57:16Z",
+                    "run_started_at": "2026-09-02T05:57:16Z",
+                },
+            ],
+        }
+    )
+
+    with patch(
+        "scripts.dev.check_pr_ci_status._rest_api_get",
+        return_value={"workflow_id": 93001},
+    ):
+        result = fetch_exact_commit_ci_status(
+            "merge123",
+            fetch_check_runs=fetch_check_runs,
+            fetch_workflow_runs=fetch_workflow_runs,
+        )
+
+    assert result["checks"]["overall"] == "failure"  # type: ignore[index]
+    assert result["checks"]["superseded"] == 0  # type: ignore[index]
+    assert "replacement_materialization" not in result["checks"]  # type: ignore[index]
+    fetch_workflow_runs.assert_called_once_with("merge123")
+
+
 def test_fetch_exact_commit_ci_status_rejects_mismatched_check_run_sha() -> None:
     """A response containing another commit must never be treated as exact evidence."""
     result = fetch_exact_commit_ci_status(

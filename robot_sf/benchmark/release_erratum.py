@@ -277,9 +277,7 @@ def _require_mapping(value: Any, *, label: str) -> Mapping[str, Any]:
     return value
 
 
-def validate_erratum_identity_block(
-    payload: Any, *, contract: ErratumContract, label: str
-) -> None:
+def validate_erratum_identity_block(payload: Any, *, contract: ErratumContract, label: str) -> None:
     """Require one emitted erratum block to bind the complete identity."""
     block = _require_mapping(payload, label=label)
     expected = {
@@ -1301,9 +1299,7 @@ def _assert_publication_aliases(
             if key in publication
         ]
         if any(value != contract.source_sha for value in source_values):
-            raise ReleaseErratumError(
-                f"{label}.publication contains a stale scientific source SHA"
-            )
+            raise ReleaseErratumError(f"{label}.publication contains a stale scientific source SHA")
         expected = {
             "concept_doi": contract.concept_doi,
             "version_doi": contract.successor_version_doi,
@@ -1398,9 +1394,7 @@ def _validate_published_erratum_identity_documents(
         )
 
     validate_erratum_identity_block(
-        _require_mapping(
-            manifest.get("erratum"), label="published resolved manifest.erratum"
-        ),
+        _require_mapping(manifest.get("erratum"), label="published resolved manifest.erratum"),
         contract=contract,
         label="published resolved manifest.erratum",
     )

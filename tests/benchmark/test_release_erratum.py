@@ -829,7 +829,9 @@ def test_cold_erratum_receipt_rejects_stale_current_source_alias(
     snapshot = snapshot_campaign(campaign, contract=contract)
     receipt_path = campaign / "provenance/benchmark_release_erratum.json"
     receipt_path.write_text(
-        json.dumps(build_erratum_receipt(contract=contract, predecessor=snapshot, successor=snapshot)),
+        json.dumps(
+            build_erratum_receipt(contract=contract, predecessor=snapshot, successor=snapshot)
+        ),
         encoding="utf-8",
     )
     result_path = campaign / "release/release_result.json"
@@ -847,6 +849,7 @@ def test_cold_erratum_receipt_rejects_stale_current_source_alias(
             receipt_path,
             campaign_root=campaign,
             metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(archive, contract),
             expected_tag=NEW_TAG,
             expected_doi=contract.successor_version_doi,
         )
@@ -872,7 +875,9 @@ def test_cold_erratum_receipt_rejects_invalid_erratum_identity_block(
     snapshot = snapshot_campaign(campaign, contract=contract)
     receipt_path = campaign / "provenance/benchmark_release_erratum.json"
     receipt_path.write_text(
-        json.dumps(build_erratum_receipt(contract=contract, predecessor=snapshot, successor=snapshot)),
+        json.dumps(
+            build_erratum_receipt(contract=contract, predecessor=snapshot, successor=snapshot)
+        ),
         encoding="utf-8",
     )
     if document == "manifest":
@@ -890,6 +895,7 @@ def test_cold_erratum_receipt_rejects_invalid_erratum_identity_block(
             receipt_path,
             campaign_root=campaign,
             metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(archive, contract),
             expected_tag=NEW_TAG,
             expected_doi=contract.successor_version_doi,
         )

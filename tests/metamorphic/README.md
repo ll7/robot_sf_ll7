@@ -29,3 +29,27 @@ The suite is collected by the repository’s normal `tests/` discovery and
 If a base implementation violates a relation, the failure should be filed as a
 separate bug and linked to a strict `xfail` only after the defect is reproduced
 and its expected scope is documented.
+
+## Numeric tolerance versus exact representation identity
+
+Two comparison boundaries coexist in this package, and they are not
+interchangeable:
+
+- **Numeric metamorphic tolerance** (`assert_trace_equal`, `rtol=0`,
+  `atol=1e-5`): the default for the frame-transform, reset, render, replay, and
+  oracle-visibility relations. The absolute tolerance covers only float32
+  serialization and integration round-off; zero relative tolerance keeps
+  small-magnitude drift visible. It proves the *values* of a relation hold.
+- **Exact representation identity** (`assert_trace_byte_identical`): used by
+  the randomized simulator-identity relation (`test_oracle_isolation.py`).
+  Observation dtype, shape, and C-order byte sequence must match exactly, and
+  the JSON-serializable info payload must serialize identically (sorted keys,
+  compact separators, strict finite floats). Numeric closeness never
+  substitutes for representation identity here, because `allclose` can hide a
+  changed dtype, byte ordering, signed zero, or metadata representation while
+  values remain within tolerance.
+
+A relation may use both: the tolerant comparison reports the first numeric
+divergence with the maximum absolute error, and the byte-identity comparison
+reports the first representation divergence with dtype, shape, and the first
+differing byte offset.

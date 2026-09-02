@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -186,6 +187,23 @@ def test_build_search_command_uses_read_only_closed_issue_search() -> None:
     assert "isPullRequest" not in command[command.index("--json") + 1].split(",")
     assert "--project" not in command
     assert "edit" not in command
+
+
+def test_closure_workflow_routes_state_label_io_through_rest_helpers() -> None:
+    """The closure Action must not use native issue label commands."""
+    workflow = (
+        Path(__file__).resolve().parents[2]
+        / ".github"
+        / "workflows"
+        / "strip-closed-state-labels.yml"
+    ).read_text(encoding="utf-8")
+    code = "\n".join(line for line in workflow.splitlines() if not line.lstrip().startswith("#"))
+
+    assert "python -m scripts.dev.gh_issue_rest view" in code
+    assert "python -m scripts.dev.gh_pr_label_rest list" in code
+    assert "python -m scripts.dev.gh_pr_label_rest remove" in code
+    assert "gh issue view" not in code
+    assert "gh issue edit" not in code
 
 
 def test_main_returns_nonzero_json_summary_without_live_github(
@@ -700,12 +718,20 @@ def test_confirm_issue_closed_is_false_for_open_or_pr(monkeypatch: pytest.Monkey
 
 
 def test_remove_label_command_targets_only_one_label() -> None:
-    """The remove command edits a single issue and removes exactly one named label."""
+    """The command invokes the verified REST label helper for one named label."""
     command = closed_state_label_hygiene.build_remove_label_command(
         repo="ll7/robot_sf_ll7", number=12, label="state:ready"
     )
-    assert command[:3] == ["gh", "issue", "edit"]
-    assert command[command.index("--remove-label") + 1] == "state:ready"
+    assert command[:6] == [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "scripts.dev.gh_pr_label_rest",
+        "remove",
+    ]
+    assert command[command.index("--label") + 1] == "state:ready"
+    assert command[command.index("--repo") + 1] == "ll7/robot_sf_ll7"
 
 
 def test_main_fix_mode_strips_labels_and_reports(
@@ -746,7 +772,32 @@ def test_main_fix_mode_strips_labels_and_reports(
     assert payload["fix_applied"] is True
     assert payload["read_only"] is False
     assert payload["fix_actions"][0]["removed_labels"] == ["state:ready"]
-    assert any(cmd[:3] == ["gh", "issue", "edit"] for cmd in edits)
+    assert any(
+        cmd[:6] == ["uv", "run", "python", "-m", "scripts.dev.gh_pr_label_rest", "remove"]
+        for cmd in edits
+    )
+
+
+def test_fix_stale_issues_fails_closed_when_rest_helper_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A verified REST helper error must stop fix mode instead of reporting success."""
+
+    def fail_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=command,
+            stderr='{"error": "HTTP 403: forbidden", "status": "error"}',
+        )
+
+    monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fail_run)
+
+    with pytest.raises(RuntimeError, match="HTTP 403: forbidden"):
+        closed_state_label_hygiene.fix_stale_issues(
+            repo="ll7/robot_sf_ll7",
+            stale_issues=[_stale(12, ("state:ready",))],
+            confirm_closed=lambda *, repo, number: True,
+        )
 
 
 def test_main_fix_mode_rejects_labels_outside_live_state_allowlist(

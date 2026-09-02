@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add or remove issue/PR labels through GitHub's REST API.
+"""Read, add, or remove issue/PR labels through GitHub's REST API.
 
 Why this exists
 ---------------
@@ -18,6 +18,9 @@ and ``gh issue edit --label``.
 Usage
 -----
 ::
+
+    uv run python scripts/dev/gh_pr_label_rest.py list 5220 \\
+        --repo ll7/robot_sf_ll7
 
     uv run python scripts/dev/gh_pr_label_rest.py add 5220 \\
         --label cheap-lane --repo ll7/robot_sf_ll7
@@ -107,6 +110,27 @@ def _get_label_names(number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30
     }
 
 
+def get_label_names(number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30) -> dict[str, Any]:
+    """Read the complete current label inventory for an issue or pull request."""
+    if number < 1:
+        return {"status": "error", "error": f"issue/PR number must be positive, got {number}"}
+    return _get_label_names(number, repo=repo, timeout=timeout)
+
+
+def list_labels(number: int, *, repo: str = DEFAULT_REPO) -> dict[str, Any]:
+    """Return a compact CLI payload containing the verified current labels."""
+    result = get_label_names(number, repo=repo)
+    if result["status"] != "ok":
+        return result
+    return {
+        "status": "ok",
+        "number": number,
+        "action": "list",
+        "repo": repo,
+        "labels": result["labels"],
+    }
+
+
 def _guarded_merge_ready_write(
     number: int,
     *,
@@ -186,7 +210,7 @@ def add_label(
                 "error": f"label add returned invalid JSON: {exc}; stdout snippet: {snippet!r}",
             }
 
-        current = _get_label_names(number, repo=repo)
+        current = get_label_names(number, repo=repo)
         if current["status"] == "error":
             return current
         if label not in current["labels"]:
@@ -233,7 +257,7 @@ def remove_label(number: int, label: str, *, repo: str = DEFAULT_REPO) -> dict[s
         return {"status": "error", "error": f"label remove failed: {detail}"}
 
     # Verify the label was actually removed by re-reading labels.
-    current = _get_label_names(number, repo=repo)
+    current = get_label_names(number, repo=repo)
     if current["status"] == "error":
         return current
     if label in current["labels"]:
@@ -258,16 +282,19 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "action",
-        choices=("add", "remove"),
-        help="Whether to add or remove the label.",
+        choices=("list", "add", "remove"),
+        help="Whether to list, add, or remove labels.",
     )
-    parser.add_argument("number", type=int, help="Issue or PR number to update.")
+    parser.add_argument("number", type=int, help="Issue or PR number to inspect or update.")
     parser.add_argument(
         "--repo",
         default=DEFAULT_REPO,
         help=f"owner/repo to update (default: {DEFAULT_REPO}).",
     )
-    parser.add_argument("--label", required=True, help="Label name to add or remove.")
+    parser.add_argument(
+        "--label",
+        help="Label name to add or remove (required for add/remove).",
+    )
     parser.add_argument(
         "--expected-head-sha",
         help="Full PR head SHA required when adding merge-ready.",
@@ -281,8 +308,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """Run the label helper and emit one compact JSON result."""
-    args = _build_parser().parse_args(argv)
-    if args.action == "add":
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    if args.action == "list":
+        result = list_labels(args.number, repo=args.repo)
+    elif not args.label:
+        parser.error("--label is required for add/remove")
+    elif args.action == "add":
         result = add_label(
             args.number,
             args.label,

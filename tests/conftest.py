@@ -594,6 +594,13 @@ _FAST_FILES = {
     # coverage for the changed planner producer; keep them in the exact-head
     # fast lane for changed-coverage admission.
     "test_force_coupled_potential_field.py",
+    # Versioned obstacle-force dispatch tests are deterministic contract
+    # coverage for the planner, simulator, and wrapper seams; keep their
+    # top-level modules in PR shards so changed coverage cannot exclude them as
+    # auto-marked slow tests.
+    "test_socnav_planner_adapter.py",
+    "test_fast_pysf_wrapper.py",
+    "test_simulator_init_factory.py",
     # The evaluator-only oracle channel test is a one-step deterministic contract
     # for changed environment plumbing; keep it in PR fast shards so changed
     # coverage proves the info-only branch.

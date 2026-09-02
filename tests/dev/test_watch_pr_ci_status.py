@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from scripts.dev.check_pr_ci_status import _latest_check_runs_with_evidence
 from scripts.dev.watch_pr_ci_status import (
     DEFAULT_BASELINE_SECONDS,
     DEFAULT_MULTIPLIER,
@@ -168,6 +169,94 @@ def test_fetch_exact_commit_ci_status_waits_for_unmaterialized_replacement(
         == "newer_same_workflow_run_materialization"
     )  # type: ignore[index]
     fetch_workflow_runs.assert_called_once_with("merge123")
+
+
+def test_fetch_exact_commit_ci_status_orders_materialization_by_run_id_when_timestamps_skew() -> (
+    None
+):
+    """A newer replacement run must win when workflow and job timestamps are incomparable."""
+    fetch_check_runs = MagicMock(
+        return_value={
+            "check_runs": [
+                {
+                    "name": "coverage-gate",
+                    "status": "completed",
+                    "conclusion": "cancelled",
+                    "head_sha": "merge123",
+                    "started_at": "2026-09-02T05:57:24Z",
+                    "completed_at": "2026-09-02T06:05:23Z",
+                    "details_url": (
+                        "https://github.com/ll7/robot_sf_ll7/actions/runs/91001/job/92001"
+                    ),
+                }
+            ]
+        }
+    )
+    fetch_workflow_runs = MagicMock(
+        return_value={
+            "total_count": 2,
+            "workflow_runs": [
+                {
+                    "id": 91002,
+                    "workflow_id": 93001,
+                    "status": "in_progress",
+                    "conclusion": None,
+                    "head_sha": "merge123",
+                    "created_at": "2026-09-02T05:57:16Z",
+                    "run_started_at": "2026-09-02T05:57:16Z",
+                    "html_url": "https://github.com/ll7/robot_sf_ll7/actions/runs/91002",
+                },
+            ],
+        }
+    )
+
+    with patch(
+        "scripts.dev.check_pr_ci_status._rest_api_get",
+        return_value={"workflow_id": 93001},
+    ):
+        result = fetch_exact_commit_ci_status(
+            "merge123",
+            fetch_check_runs=fetch_check_runs,
+            fetch_workflow_runs=fetch_workflow_runs,
+        )
+
+    assert result["checks"]["overall"] == "pending"  # type: ignore[index]
+    assert result["checks"]["total"] == 1  # type: ignore[index]
+    assert result["checks"]["superseded"] == 1  # type: ignore[index]
+    assert result["checks"]["by_conclusion"] == {"pending": 1}  # type: ignore[index]
+    assert result["checks"]["replacement_materialization"][0]["replacement_run_id"] == 91002  # type: ignore[index]
+
+
+def test_invalid_materialization_identity_cannot_supersede_cancelled_check() -> None:
+    """Malformed synthetic evidence must leave the cancellation fail-closed."""
+    rollup = [
+        {
+            "__typename": "CheckRun",
+            "name": "coverage-gate",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "workflowId": "93001",
+            "startedAt": "2026-09-02T05:57:24Z",
+        },
+        {
+            "__typename": "CheckRun",
+            "name": "coverage-gate",
+            "status": "in_progress",
+            "conclusion": "",
+            "workflowId": "93001",
+            "startedAt": "2026-09-02T06:05:16Z",
+            "__replacement_materialization": {
+                "replacement_run_id": "not-a-run-id",
+                "workflow_id": "93001",
+            },
+        },
+    ]
+
+    effective, superseded, _ = _latest_check_runs_with_evidence(rollup)
+
+    assert len(effective) == 2
+    assert superseded == 0
+    assert [check["conclusion"] for check in effective] == ["cancelled", ""]
 
 
 def test_fetch_exact_commit_ci_status_keeps_lone_cancellation_as_failure() -> None:
@@ -687,8 +776,13 @@ def test_direct_invocation_import_without_pythonpath() -> None:
     for p in paths_to_remove:
         _sys.path.remove(p)
 
+    package = importlib.import_module("scripts.dev")
     saved_modules = {}
+    saved_package_attrs = {}
     for name in ("scripts.dev.watch_pr_ci_status", "scripts.dev.check_pr_ci_status"):
+        short_name = name.rsplit(".", maxsplit=1)[-1]
+        if hasattr(package, short_name):
+            saved_package_attrs[short_name] = getattr(package, short_name)
         if name in _sys.modules:
             saved_modules[name] = _sys.modules.pop(name)
 
@@ -698,6 +792,8 @@ def test_direct_invocation_import_without_pythonpath() -> None:
         assert mod._REPO_ROOT == repo_root
     finally:
         _sys.modules.update(saved_modules)
+        for name, module in saved_package_attrs.items():
+            setattr(package, name, module)
         for p in paths_to_remove:
             if p not in _sys.path:
                 _sys.path.insert(0, p)

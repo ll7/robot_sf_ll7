@@ -29,8 +29,10 @@ if _REPO_ROOT not in sys.path:
 
 from scripts.dev._gh_pagination import is_likely_truncated  # noqa: E402
 from scripts.dev.check_pr_ci_status import (  # noqa: E402
+    _enrich_rest_check_runs,
     _fetch_ci_status,
     _rest_api_get,
+    _rest_check_runs_to_rollup,
     _summarize_check_runs,
 )
 
@@ -258,9 +260,14 @@ def fetch_exact_commit_ci_status(
                 + ", ".join(mismatched_shas)
             ),
         }
-    checks, _ = _summarize_check_runs(
-        [check_run for check_run in check_runs if isinstance(check_run, dict)]
-    )
+    raw_check_runs = [check_run for check_run in check_runs if isinstance(check_run, dict)]
+    # The commit endpoint returns REST-shaped fields (for example ``workflow_id`` and
+    # ``started_at``), while the shared rerun reducer consumes the normalized rollup shape.
+    # Normalize and enrich before summarizing so an older cancelled run cannot override a newer
+    # exact-commit replacement.  Unknown workflow identities remain independent and fail closed.
+    enriched_check_runs = _enrich_rest_check_runs(raw_check_runs)
+    normalized_check_runs = _rest_check_runs_to_rollup(enriched_check_runs)
+    checks, _ = _summarize_check_runs(normalized_check_runs)
     return {
         "status": "ok",
         "head_sha": commit_sha,

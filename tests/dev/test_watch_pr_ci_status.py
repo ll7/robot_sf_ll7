@@ -63,6 +63,46 @@ def test_fetch_exact_commit_ci_status_summarizes_matching_check_runs() -> None:
     fetch_check_runs.assert_called_once_with("merge123")
 
 
+def test_fetch_exact_commit_ci_status_suppresses_cancelled_replacement() -> None:
+    """An older cancelled REST run must not override a newer exact-commit replacement."""
+    fetch_check_runs = MagicMock(
+        return_value={
+            "check_runs": [
+                {
+                    "name": "ci",
+                    "status": "completed",
+                    "conclusion": "cancelled",
+                    "head_sha": "merge123",
+                    "started_at": "2026-09-02T05:15:41Z",
+                    "completed_at": "2026-09-02T05:16:00Z",
+                    "details_url": "https://github.com/ll7/robot_sf_ll7/actions/runs/91001/job/92001",
+                },
+                {
+                    "name": "ci",
+                    "status": "in_progress",
+                    "conclusion": None,
+                    "head_sha": "merge123",
+                    "started_at": "2026-09-02T05:17:41Z",
+                    "completed_at": None,
+                    "details_url": "https://github.com/ll7/robot_sf_ll7/actions/runs/91002/job/92002",
+                },
+            ]
+        }
+    )
+
+    def fake_rest_api_get(path: str) -> dict[str, int] | None:
+        if path in {"actions/runs/91001", "actions/runs/91002"}:
+            return {"workflow_id": 93001}
+        return None
+
+    with patch("scripts.dev.check_pr_ci_status._rest_api_get", side_effect=fake_rest_api_get):
+        result = fetch_exact_commit_ci_status("merge123", fetch_check_runs=fetch_check_runs)
+
+    assert result["checks"]["overall"] == "pending"  # type: ignore[index]
+    assert result["checks"]["superseded"] == 1  # type: ignore[index]
+    assert result["checks"]["by_conclusion"] == {"pending": 1}  # type: ignore[index]
+
+
 def test_fetch_exact_commit_ci_status_rejects_mismatched_check_run_sha() -> None:
     """A response containing another commit must never be treated as exact evidence."""
     result = fetch_exact_commit_ci_status(

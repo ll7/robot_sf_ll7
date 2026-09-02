@@ -509,6 +509,9 @@ _FAST_FILES = {
     "test_release_cli_edge_cases.py",
     "test_release_doctor.py",
     "test_release_doctor_edge_cases.py",
+    # Erratum tests are deterministic publication/provenance contracts for the
+    # derived-only successor path and must contribute exact-head coverage.
+    "test_release_erratum.py",
     "test_release_protocol.py",
     "test_release_protocol_edge_cases.py",
     # Resolved release-identity tests are deterministic contract coverage for

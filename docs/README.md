@@ -55,6 +55,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 ### Quick Start
 
 * **[Complete Quickstart Guide](../specs/120-social-navigation-benchmark-plan/quickstart.md)** - Step-by-step experiment execution, visualization, and interpretation
+* **[Public API](public_api.md)** - The supported top-level facade (`make_env`, `load_scenario`, `run_episode`), lifecycle guarantees, and deprecation policy
 * **[CLI Reference](./dev/issues/social-navigation-benchmark/README.md)** - All 15 CLI subcommands with examples
 * **Implementation Status**: All major features complete, 108 tests passing
 

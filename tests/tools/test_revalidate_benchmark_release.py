@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import shutil
+import tarfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -14,6 +15,7 @@ import pytest
 
 from robot_sf.benchmark import release_acceptance
 from robot_sf.benchmark.metrics import snqi as curvature_aware_snqi
+from robot_sf.benchmark.published_release_audit import audit_published
 from robot_sf.benchmark.release_erratum import ErratumContract
 from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     load_baseline_mapping,
@@ -1814,3 +1816,450 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
     assert "derived_publication/publication_custody.json" in final_inventory
     assert not list(output_root.glob(".derived.staging-*"))
     assert boundary_calls == (["exclude"] if erratum else ["annotate"])
+
+
+def _make_real_erratum_publication_fixture(  # noqa: PLR0915
+    tmp_path: Path,
+) -> dict[str, object]:
+    """Build one complete one-cell producer, predecessor, and source fixture."""
+    source_sha = recovery.FROZEN_SOURCE_SHA
+    predecessor_doi = "10.5281/zenodo.7"
+    concept_doi = "10.5281/zenodo.6"
+    successor_doi = "10.5281/zenodo.8"
+    predecessor_tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}"
+    successor_tag = f"{predecessor_tag}-erratum.1"
+    builder_sha = "a" * 40
+    orchestration_sha = "b" * 40
+
+    source = tmp_path / "source"
+    validator = tmp_path / "validator"
+    orchestration = tmp_path / "orchestration"
+    producer = tmp_path / "producer"
+    acceptance = tmp_path / "acceptance"
+    for directory in (source, validator, orchestration, producer):
+        directory.mkdir()
+
+    repository_root = Path(__file__).resolve().parents[2]
+    source_assets = {
+        "CITATION.cff": repository_root / "CITATION.cff",
+        "configs/benchmarks/snqi_weights_camera_ready_v3.json": repository_root
+        / "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+        "configs/benchmarks/snqi_baseline_camera_ready_v3.json": repository_root
+        / "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+    }
+    for relative, original in source_assets.items():
+        destination = source / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(original, destination)
+    manifest_path = source / "fixture_manifest.yaml"
+    config_path = source / "fixture_config.yaml"
+    old_metadata_path = source / "old_zenodo_metadata.json"
+    _write(manifest_path, "fixture manifest\n")
+    _write(config_path, "fixture config\n")
+    _write(old_metadata_path, "{}\n")
+
+    weights_path = source / "configs/benchmarks/snqi_weights_camera_ready_v3.json"
+    baseline_path = source / "configs/benchmarks/snqi_baseline_camera_ready_v3.json"
+    manifest = SimpleNamespace(
+        path=manifest_path,
+        canonical_campaign_config_path=config_path,
+        citation_path=source / "CITATION.cff",
+        metadata_path=old_metadata_path,
+        metadata_sha256=_sha256(old_metadata_path),
+        snqi_weights_path=weights_path,
+        snqi_weights_sha256=_sha256(weights_path),
+        snqi_baseline_path=baseline_path,
+        snqi_baseline_sha256=_sha256(baseline_path),
+    )
+
+    metrics = _snqi_metrics(curvature_mean=0.05)
+    arm = "orca__differential_drive"
+    row = {
+        "algo": "orca",
+        "scenario_id": "crossing",
+        "seed": 111,
+        "episode_id": "crossing--111--fixture",
+        "status": "success",
+        "outcome": "goal_reached",
+        "git_hash": source_sha,
+        "provenance": {"git_hash": source_sha},
+        "result_provenance": {"repo_commit": source_sha},
+        "event_ledger": {
+            "software_commit": source_sha,
+            "exact_events": {"goal_reached": False, "timeout": False},
+        },
+        "metrics": metrics,
+    }
+    episode_bytes = (json.dumps(row, sort_keys=True) + "\n").encode()
+    episode_path = producer / "runs" / arm / "episodes.jsonl"
+    episode_path.parent.mkdir(parents=True, exist_ok=True)
+    episode_path.write_bytes(episode_bytes)
+    _write(
+        episode_path.with_name("episodes.jsonl.provenance.json"),
+        json.dumps(
+            {
+                "raw_artifacts": [
+                    {
+                        "kind": "episodes_jsonl",
+                        "path": f"runs/{arm}/episodes.jsonl",
+                        "sha256": _sha256(episode_path),
+                    }
+                ],
+                "rows": [
+                    {"episode_id": row["episode_id"], "raw_artifact": f"runs/{arm}/episodes.jsonl"}
+                ],
+                "derived_artifacts": [],
+            }
+        )
+        + "\n",
+    )
+
+    old_release = {
+        "release_id": predecessor_tag,
+        "release_tag": predecessor_tag,
+        "doi": predecessor_doi,
+        "version_doi": predecessor_doi,
+        "concept_doi": concept_doi,
+        "source_sha": source_sha,
+        "source_commit": source_sha,
+        "manifest_path": "release/release_manifest.resolved.json",
+        "metadata_path": "old_zenodo_metadata.json",
+        "metadata_sha256": _sha256(old_metadata_path),
+        "citation_path": "CITATION.cff",
+        "repository_url": "https://github.com/ll7/robot_sf_ll7",
+        "publication_channel": "direct_zenodo_benchmark_dataset",
+    }
+    initial_manifest = {
+        **old_release,
+        "provenance": {
+            **old_release,
+            "metadata_path": "old_zenodo_metadata.json",
+            "metadata_sha256": _sha256(old_metadata_path),
+        },
+        "metrics": {
+            "snqi_weights_path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+            "snqi_baseline_path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+        },
+    }
+    _write(
+        producer / "release/release_manifest.resolved.json",
+        json.dumps(initial_manifest, sort_keys=True) + "\n",
+    )
+    initial_result = {
+        "status": "full_release_acceptance_failed",
+        "evidence_status": "invalid",
+        "total_episodes": 1,
+        "successful_runs": 1,
+        **old_release,
+        "benchmark_release": old_release,
+        "resolved_manifest": initial_manifest,
+        "release_status": "full_release_acceptance_failed",
+        "publication_preflight_status": "fail",
+        "publication_preflight_violations": ["fixture rejection"],
+        "ranking_claims_admitted": False,
+    }
+    rejected_result_path = producer / "release/release_result.json"
+    _write(rejected_result_path, json.dumps(initial_result, sort_keys=True) + "\n")
+    summary_campaign = {
+        **old_release,
+        "status": "full_release_acceptance_failed",
+        "evidence_status": "invalid",
+        "total_episodes": 1,
+        "successful_runs": 1,
+        "release_url": f"https://github.com/ll7/robot_sf_ll7/releases/tag/{predecessor_tag}",
+        "release_asset_url": (
+            "https://github.com/ll7/robot_sf_ll7/releases/download/"
+            f"{predecessor_tag}/fixture.tar.gz"
+        ),
+        "doi_url": f"https://doi.org/{predecessor_doi}",
+    }
+    _write(
+        producer / "reports/campaign_summary.json",
+        json.dumps(
+            {
+                "benchmark_release": old_release,
+                "campaign": summary_campaign,
+                "artifacts": {
+                    "release_url": summary_campaign["release_url"],
+                    "release_asset_url": summary_campaign["release_asset_url"],
+                    "doi_url": summary_campaign["doi_url"],
+                },
+            },
+            sort_keys=True,
+        )
+        + "\n",
+    )
+    _write(producer / "reports/campaign_report.md", "# Fixture campaign\n")
+    diagnostics = {
+        "contract_enabled": True,
+        "contract_enforcement": "warn",
+        "contract_status": "fail",
+        "weights_sha256": _sha256(weights_path),
+        "baseline_sha256": _sha256(baseline_path),
+        "planner_ordering": [
+            {
+                "planner_key": "stale",
+                "kinematics": "differential_drive",
+                "episode_count": 1,
+                "mean_snqi": metrics["snqi"],
+                "rank": 1,
+            }
+        ],
+    }
+    _write(producer / "reports/snqi_diagnostics.json", json.dumps(diagnostics) + "\n")
+    _write(
+        producer / "run_meta.json",
+        json.dumps(
+            {
+                "repo": {
+                    "remote": "https://github.com/ll7/robot_sf_ll7",
+                    "branch": "fixture",
+                    "commit": source_sha,
+                },
+                "benchmark_release": old_release,
+            },
+            sort_keys=True,
+        )
+        + "\n",
+    )
+
+    predecessor_campaign = tmp_path / "predecessor_campaign"
+    predecessor_episode = predecessor_campaign / "payload/runs" / arm / "episodes.jsonl"
+    predecessor_episode.parent.mkdir(parents=True, exist_ok=True)
+    predecessor_episode.write_bytes(episode_bytes)
+    predecessor_archive = tmp_path / "predecessor.tar.gz"
+    with tarfile.open(predecessor_archive, "w:gz") as archive:
+        archive.add(predecessor_campaign, arcname="fixture_bundle")
+
+    listed = {
+        path.relative_to(producer).as_posix(): _sha256(path)
+        for path in producer.rglob("*")
+        if path.is_file()
+    }
+    _write(
+        producer / "SHA256SUMS",
+        "".join(f"{digest}  {relative}\n" for relative, digest in sorted(listed.items())),
+    )
+    producer_receipt = {
+        "status": "verified",
+        "file_count": len(listed),
+        "manifest_sha256": _sha256(producer / "SHA256SUMS"),
+        "files": [
+            {"path": relative, "sha256": digest} for relative, digest in sorted(listed.items())
+        ],
+        "verified_at": "2026-09-02T10:00:00Z",
+    }
+    _write(
+        producer / "artifact-verification-receipt.json",
+        json.dumps(producer_receipt, sort_keys=True) + "\n",
+    )
+    shutil.copytree(producer, acceptance)
+    (acceptance / "artifact-verification-receipt.json").unlink()
+
+    metadata = {
+        "metadata": {
+            "title": "Robot SF benchmark derived-metadata erratum",
+            "upload_type": "dataset",
+            "access_right": "open",
+            "license": "GPL-3.0-only",
+            "description": (
+                "Derived metadata erratum. All scientific rows are unchanged and no simulation "
+                "rerun occurred. SNQI remains advisory and supports no planner ranking claim."
+            ),
+            "creators": [{"name": "Luttkus, Lennart"}],
+            "related_identifiers": [
+                {
+                    "identifier": (
+                        "https://github.com/ll7/robot_sf_ll7/releases/tag/" + successor_tag
+                    ),
+                    "relation": "isSupplementTo",
+                    "scheme": "url",
+                },
+                {"identifier": predecessor_doi, "relation": "isNewVersionOf", "scheme": "doi"},
+            ],
+        }
+    }
+    metadata_path = orchestration / "zenodo_metadata.erratum.json"
+    _write(metadata_path, json.dumps(metadata, sort_keys=True) + "\n")
+    contract = ErratumContract(
+        correction_id="fixture-derived-metadata-erratum.1",
+        predecessor_version_doi=predecessor_doi,
+        predecessor_archive_sha256=_sha256(predecessor_archive),
+        predecessor_archive_size_bytes=predecessor_archive.stat().st_size,
+        predecessor_github_release_tag=predecessor_tag,
+        source_sha=source_sha,
+        planner_arms=1,
+        scenario_count=1,
+        seed_count=1,
+        episode_rows=1,
+        builder_sha=builder_sha,
+        validator_sha=builder_sha,
+        orchestration_sha=orchestration_sha,
+        concept_doi=concept_doi,
+        successor_version_doi=successor_doi,
+        successor_github_release_tag=successor_tag,
+        metadata_path=metadata_path,
+        metadata_sha256=_sha256(metadata_path),
+    )
+    recovery_contract = recovery.RecoveryContract(
+        source_sha=source_sha,
+        producer_sums_sha256=_sha256(producer / "SHA256SUMS"),
+        producer_receipt_sha256=_sha256(producer / "artifact-verification-receipt.json"),
+        rejected_result_sha256=_sha256(rejected_result_path),
+        producer_file_count=len(listed),
+        source_campaign_relative=Path("output/benchmarks/fixture"),
+        episode_rows=1,
+        arms=1,
+        goal_timeout_boundary_rows=frozenset(),
+    )
+    return {
+        "source": source,
+        "validator": validator,
+        "orchestration": orchestration,
+        "producer": producer,
+        "acceptance": acceptance,
+        "manifest_path": manifest_path,
+        "manifest": manifest,
+        "predecessor_archive": predecessor_archive,
+        "contract": contract,
+        "recovery_contract": recovery_contract,
+        "builder_sha": builder_sha,
+        "episode_bytes": episode_bytes,
+        "predecessor_doi": predecessor_doi,
+        "successor_tag": successor_tag,
+        "successor_doi": successor_doi,
+        "source_sha": source_sha,
+    }
+
+
+def test_erratum_build_exports_and_cold_audits_real_publication_path(  # noqa: PLR0915
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise real predecessor, derivation, export, custody, extraction, and audit paths."""
+    fixture = _make_real_erratum_publication_fixture(tmp_path)
+    source = fixture["source"]
+    validator = fixture["validator"]
+    orchestration = fixture["orchestration"]
+    producer = fixture["producer"]
+    acceptance = fixture["acceptance"]
+    manifest_path = fixture["manifest_path"]
+    erratum_contract = fixture["contract"]
+    recovery_contract = fixture["recovery_contract"]
+    assert isinstance(source, Path)
+    assert isinstance(validator, Path)
+    assert isinstance(orchestration, Path)
+    assert isinstance(producer, Path)
+    assert isinstance(acceptance, Path)
+    assert isinstance(manifest_path, Path)
+    assert isinstance(erratum_contract, ErratumContract)
+    assert isinstance(recovery_contract, recovery.RecoveryContract)
+
+    monkeypatch.setattr(recovery, "_assert_frozen_source_repository", lambda *_a, **_k: None)
+    monkeypatch.setattr(recovery, "_assert_exact_orchestration_checkout", lambda *_a, **_k: None)
+    monkeypatch.setattr(recovery, "load_release_manifest", lambda _path: fixture["manifest"])
+    monkeypatch.setattr(
+        recovery, "load_release_campaign_config", lambda *_a, **_k: SimpleNamespace()
+    )
+    monkeypatch.setattr(
+        recovery,
+        "validate_release_manifest",
+        lambda *_a, **_k: {"status": "valid", "problems": []},
+    )
+    monkeypatch.setattr(
+        recovery,
+        "_validator_provenance",
+        lambda *_a, **_k: {
+            "commit": fixture["builder_sha"],
+            "expected_reviewed_commit": fixture["builder_sha"],
+            "file": "robot_sf/benchmark/release_acceptance.py",
+            "file_sha256": "c" * 64,
+        },
+    )
+    monkeypatch.setattr(
+        recovery,
+        "_run_exact_validator",
+        lambda **_kwargs: {
+            "status": "valid",
+            "source_commits": [fixture["source_sha"]],
+            "episode_count": 1,
+        },
+    )
+
+    episode_before = (producer / "runs/orca__differential_drive/episodes.jsonl").read_bytes()
+    result = recovery.build_derived_release(
+        producer_root=producer,
+        acceptance_root=acceptance,
+        source_repository_root=source,
+        manifest_path=manifest_path,
+        output_root=tmp_path / "output",
+        derived_name="derived",
+        validator_repository_root=validator,
+        expected_validator_commit=fixture["builder_sha"],
+        recovery_contract=recovery_contract,
+        erratum_contract=erratum_contract,
+        predecessor_archive=fixture["predecessor_archive"],
+        orchestration_repository_root=orchestration,
+    )
+
+    final_campaign = result["campaign_root"]
+    publication_bundle = result["publication_bundle"]
+    publication_root = result["publication_root"]
+    assert isinstance(final_campaign, Path)
+    assert isinstance(publication_bundle, Path)
+    assert isinstance(publication_root, Path)
+    assert (
+        producer / "runs/orca__differential_drive/episodes.jsonl"
+    ).read_bytes() == episode_before
+    assert (
+        final_campaign / "runs/orca__differential_drive/episodes.jsonl"
+    ).read_bytes() == episode_before
+
+    boundary = json.loads((final_campaign / "run_meta.json").read_text())["goal_timeout_boundary"]
+    assert boundary["excluded_row_count"] == 0
+    assert boundary["raw_episode_rows_unchanged"] is True
+    assert boundary["timing_evidence_fabricated"] is False
+
+    release_result = json.loads(
+        (final_campaign / "release/release_result.json").read_text(encoding="utf-8")
+    )
+    assert release_result["publication_preflight_status"] == "pass"
+    assert release_result["publication_preflight_violations"] == []
+    assert release_result["release_status"] == "ok"
+    assert release_result["ranking_claims_admitted"] is False
+    assert (
+        release_result["scientific_execution_benchmark_release"]["version_doi"]
+        == (fixture["predecessor_doi"])
+    )
+    assert release_result["benchmark_release"]["version_doi"] == fixture["successor_doi"]
+    assert (final_campaign / recovery.ERRATUM_RECEIPT_RELATIVE).is_file()
+    assert result["erratum_receipt"]["scientific_equality"]["status"] == "identical"
+
+    preflight = recovery.verify_publication_bundle_preflight(publication_bundle)
+    assert preflight["status"] == "pass"
+
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    github.mkdir()
+    zenodo.mkdir()
+    assets = {
+        result["publication_archive"].name: result["publication_archive"],
+        "publication_manifest.json": publication_bundle / "publication_manifest.json",
+        "checksums.sha256": publication_bundle / "checksums.sha256",
+        "publication_custody.json": publication_root / "publication_custody.json",
+    }
+    for channel in (github, zenodo):
+        for name, path in assets.items():
+            shutil.copy2(path, channel / name)
+
+    audit = audit_published(
+        tag=fixture["successor_tag"],
+        doi=fixture["successor_doi"],
+        github_dir=github,
+        zenodo_dir=zenodo,
+        source_sha=fixture["source_sha"],
+    )
+    assert audit["status"] == "pass"
+    assert audit["problems"] == []
+    assert audit["observations"]["erratum_bundle_inventory"]["preflight_status"] == "pass"
+    assert audit["observations"]["erratum"]["episode_rows"] == 1
+    assert audit["observations"]["erratum_custody"]["status"] == "pass"

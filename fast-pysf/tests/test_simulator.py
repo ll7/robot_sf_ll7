@@ -97,6 +97,52 @@ def test_simulator_emits_explicit_obstacle_force_law_metadata():
 
     assert legacy.obstacle_force_law_metadata()["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
     assert corrected.obstacle_force_law_metadata()["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
+    assert legacy.obstacle_force_law_metadata()["enabled"] is True
+    assert legacy.obstacle_force_law_metadata()["applied"] is False
+
+
+def test_simulator_metadata_marks_zero_factor_as_inactive():
+    """Configured obstacle force with a zero factor is not reported as applied."""
+    state = np.zeros((0, 7), dtype=float)
+    simulator = pysf.Simulator(
+        state=state,
+        obstacles=[(1.0, 0.0, 1.0, 1.0)],
+        config=SimulatorConfig(obstacle_force_config=ObstacleForceConfig(factor=0.0)),
+    )
+
+    metadata = simulator.obstacle_force_law_metadata()
+
+    assert metadata["enabled"] is False
+    assert metadata["applied"] is False
+
+
+def test_invalid_obstacle_law_fails_before_empty_obstacle_short_circuit():
+    """An explicit invalid law is rejected even when no obstacles are present."""
+    state = np.zeros((0, 7), dtype=float)
+    simulator = pysf.Simulator(state=state)
+    simulator.config.obstacle_force_config.law_version = "unknown_obstacle_force_law"
+
+    with pytest.raises(ValueError, match="unsupported obstacle-force law"):
+        simulator.compute_forces()
+
+
+def test_default_simulator_configs_are_instance_local():
+    """Mutating one omitted config must not change later default simulators."""
+    default_v2 = pysf.Simulator_v2()
+    default_v2.config.obstacle_force_config.law_version = SURFACE_DISTANCE_UNIT_NORMAL_V2
+    fresh_v2 = pysf.Simulator_v2()
+
+    state = np.zeros((0, 7), dtype=float)
+    default = pysf.Simulator(state=state)
+    default.config.obstacle_force_config.law_version = SURFACE_DISTANCE_UNIT_NORMAL_V2
+    fresh = pysf.Simulator(state=state)
+
+    assert default_v2.obstacle_force_law_metadata()["law_version"] == (
+        SURFACE_DISTANCE_UNIT_NORMAL_V2
+    )
+    assert fresh_v2.obstacle_force_law_metadata()["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
+    assert default.obstacle_force_law_metadata()["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
+    assert fresh.obstacle_force_law_metadata()["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
 
 
 def test_default_simulator_config_is_isolated_between_instances():

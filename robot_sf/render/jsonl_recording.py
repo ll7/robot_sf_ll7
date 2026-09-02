@@ -49,6 +49,7 @@ class EpisodeMetadata:
     total_steps: int | None = None
     telemetry_path: str | None = None
     telemetry_episode_id: int | None = None
+    runtime_metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -307,6 +308,7 @@ class JSONLRecorder:
         *,
         telemetry_path: str | None = None,
         telemetry_episode_id: int | None = None,
+        runtime_metadata: dict[str, Any] | None = None,
     ) -> None:
         """Start recording a new episode.
 
@@ -314,6 +316,7 @@ class JSONLRecorder:
             config_hash: Hash of environment configuration
             telemetry_path: Optional telemetry JSONL file for analyzer replay.
             telemetry_episode_id: Optional episode identifier used to filter telemetry samples.
+            runtime_metadata: Optional serializable metadata captured at episode start.
         """
         # Close previous episode if open
         if self.current_file is not None:
@@ -332,6 +335,7 @@ class JSONLRecorder:
             start_time=time.time(),
             telemetry_path=telemetry_path,
             telemetry_episode_id=telemetry_episode_id,
+            runtime_metadata=dict(runtime_metadata) if runtime_metadata is not None else None,
         )
 
         # Open new episode file

@@ -220,8 +220,9 @@ def _validate_list_result(result: dict[str, Any]) -> None:
 
 def _validate_write_result(result: dict[str, Any], *, label: str | None) -> None:
     """Validate the requested label in a successful add/remove result."""
-    if not isinstance(label, str) or not label.strip():
-        raise ValueError("expected label must be a non-empty string for add/remove")
+    label_error = _label_name_error(label, context="expected label")
+    if label_error is not None:
+        raise ValueError(label_error)
     if result.get("label") != label:
         raise ValueError(
             f"label helper result label does not match request "
@@ -289,8 +290,9 @@ def add_label(
     """
     if type(number) is not int or number < 1:
         return {"status": "error", "error": f"issue/PR number must be positive, got {number}"}
-    if not isinstance(label, str) or not label.strip():
-        return {"status": "error", "error": "label must be a non-empty string"}
+    label_error = _label_name_error(label, context="label")
+    if label_error is not None:
+        return {"status": "error", "error": label_error}
 
     def _write() -> dict[str, Any]:
         """Apply and verify one label after any required PR preflight."""
@@ -344,8 +346,9 @@ def remove_label(number: int, label: str, *, repo: str = DEFAULT_REPO) -> dict[s
     """
     if type(number) is not int or number < 1:
         return {"status": "error", "error": f"issue/PR number must be positive, got {number}"}
-    if not isinstance(label, str) or not label.strip():
-        return {"status": "error", "error": "label must be a non-empty string"}
+    label_error = _label_name_error(label, context="label")
+    if label_error is not None:
+        return {"status": "error", "error": label_error}
 
     path = f"repos/{repo}/issues/{number}/labels/{quote(label, safe='')}"
     result = _gh_api_delete(path)

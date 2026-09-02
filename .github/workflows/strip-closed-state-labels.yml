@@ -46,8 +46,13 @@ jobs:
           labels = h.LIVE_STATE_LABELS
           if not isinstance(labels, (tuple, list)) or not labels:
               raise SystemExit("live state-label allowlist must be a non-empty list")
-          if any(type(label) is not str or not label.strip() for label in labels):
-              raise SystemExit("live state-label allowlist must contain non-empty strings")
+          if any(
+              type(label) is not str or not label.strip() or not label.isprintable()
+              for label in labels
+          ):
+              raise SystemExit(
+                  "live state-label allowlist must contain non-empty printable strings"
+              )
           if len(set(labels)) != len(labels):
               raise SystemExit("live state-label allowlist must contain distinct labels")
           print("\n".join(labels))
@@ -59,9 +64,10 @@ jobs:
           if ! python -c '
           import sys
 
-          labels = sys.stdin.read().splitlines()
-          if not labels or any(not label.strip() for label in labels):
-              raise SystemExit("allowlist output must contain non-empty labels")
+          labels_output = sys.stdin.read()
+          labels = labels_output.splitlines()
+          if not labels or any(not label.strip() or not label.isprintable() for label in labels):
+              raise SystemExit("allowlist output must contain non-empty printable labels")
           if len(set(labels)) != len(labels):
               raise SystemExit("allowlist output must contain distinct labels")
           ' <<<"$live_labels_output"; then

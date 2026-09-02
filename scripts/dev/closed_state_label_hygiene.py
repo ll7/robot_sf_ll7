@@ -111,7 +111,7 @@ def _is_pull_request_url(raw_url: object) -> bool:
     Callers that have a requested repository and number must use
     :func:`validate_issue_identity` for the authoritative check.
     """
-    if not isinstance(raw_url, str):
+    if not isinstance(raw_url, str) or not raw_url.isprintable():
         return False
 
     parsed = urlsplit(raw_url)

@@ -71,6 +71,21 @@ def test_validate_result_envelope_rejects_untrusted_success_payloads() -> None:
             label="state:ready",
         )
 
+    with pytest.raises(ValueError, match="printable"):
+        validate_result_envelope(
+            {
+                "status": "ok",
+                "action": "remove",
+                "number": 5220,
+                "repo": "ll7/robot_sf_ll7",
+                "label": "state:ready\nfoo",
+            },
+            action="remove",
+            number=5220,
+            repo="ll7/robot_sf_ll7",
+            label="state:ready\nfoo",
+        )
+
 
 class TestLabelRead:
     """Tests for complete and strict paginated label reads."""
@@ -352,6 +367,16 @@ class TestAddLabel:
         assert "non-empty" in result["error"]
         mock_post.assert_not_called()
 
+    @pytest.mark.parametrize("label", ["state:ready\nfoo", "state:\tready", "state:\x00ready"])
+    def test_fails_closed_for_non_printable_label(self, label: str) -> None:
+        """Control characters must be rejected before an add request is sent."""
+        with patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post:
+            result = add_label(5220, label)
+
+        assert result["status"] == "error"
+        assert "printable" in result["error"]
+        mock_post.assert_not_called()
+
 
 class TestRemoveLabel:
     """Tests for the remove_label helper function."""
@@ -479,6 +504,16 @@ class TestRemoveLabel:
         assert result["status"] == "error"
         assert "must be positive" in result["error"]
         mock_del.assert_not_called()
+
+    @pytest.mark.parametrize("label", ["state:ready\nfoo", "state:\tready", "state:\x00ready"])
+    def test_fails_closed_for_non_printable_label(self, label: str) -> None:
+        """Control characters must be rejected before a remove request is sent."""
+        with patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete:
+            result = remove_label(5220, label)
+
+        assert result["status"] == "error"
+        assert "printable" in result["error"]
+        mock_delete.assert_not_called()
 
 
 class TestCli:

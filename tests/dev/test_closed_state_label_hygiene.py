@@ -150,6 +150,7 @@ def test_reconcile_stale_issues_preserves_current_rest_live_labels() -> None:
         ("https://evil.example/ll7/robot_sf_ll7/pull/12", False),
         ("https://github.com:443/ll7/robot_sf_ll7/pull/12", False),
         ("https://github.com:/ll7/robot_sf_ll7/pull/12", False),
+        ("https://github.com/ll7/robot_sf_ll7/pull/12\n", False),
         ("https://user@github.com/ll7/robot_sf_ll7/pull/12", False),
         ("https://user:pass@github.com/ll7/robot_sf_ll7/pull/12", False),
         (None, False),
@@ -463,6 +464,20 @@ def test_closure_workflow_rejects_malformed_allowlist_output(tmp_path: Path) -> 
         list_stdout=_workflow_list("state:ready"),
         remove_stdout=_workflow_remove("state:ready"),
         environment_overrides={"FAKE_ALLOWLIST_OUTPUT": "state:ready\nstate:ready"},
+    )
+
+    assert probe.returncode != 0
+    assert remove_log.read_text(encoding="utf-8") == ""
+
+
+def test_closure_workflow_rejects_control_characters_in_allowlist_output(tmp_path: Path) -> None:
+    """Control characters must not become extra labels after line splitting."""
+    probe, _, _, remove_log = _run_closure_workflow(
+        tmp_path,
+        issue_payload=_workflow_issue(),
+        list_stdout=_workflow_list("state:ready"),
+        remove_stdout=_workflow_remove("state:ready"),
+        environment_overrides={"FAKE_ALLOWLIST_OUTPUT": "state:ready\nfoo\x01bar"},
     )
 
     assert probe.returncode != 0

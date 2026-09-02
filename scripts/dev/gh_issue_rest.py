@@ -106,6 +106,44 @@ def _repo_parts(repo: str) -> tuple[str, str]:
     return parts[0], parts[1]
 
 
+def _validate_issue_url(
+    raw_url: object,
+    *,
+    repo: str,
+    number: int,
+    is_pull_request: bool,
+) -> None:
+    """Validate the canonical URL portion of an issue identity payload."""
+    if not isinstance(raw_url, str) or not raw_url:
+        raise ValueError("issue identity URL must be a non-empty string")
+    if not raw_url.isprintable():
+        raise ValueError(f"issue identity URL is not canonical: {raw_url!r}")
+
+    owner, repository = _repo_parts(repo)
+    parsed = urlsplit(raw_url)
+    expected_host = (os.environ.get("GH_HOST") or "github.com").lower()
+    if (
+        parsed.scheme != "https"
+        or (parsed.hostname or "").lower() != expected_host
+        # ``urlsplit(...).port`` is None for an explicit empty port such as
+        # ``https://github.com:/...``; reject every authority colon instead.
+        or ":" in parsed.netloc
+        or parsed.port is not None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError(f"issue identity URL is not canonical: {raw_url!r}")
+    resource = "pull" if is_pull_request else "issues"
+    expected_path = f"/{owner}/{repository}/{resource}/{number}"
+    if parsed.path.casefold() != expected_path.casefold():
+        raise ValueError(
+            "issue identity URL does not match requested repository, number, or resource kind: "
+            f"{raw_url!r}"
+        )
+
+
 def validate_issue_identity(payload: object, *, repo: str, number: int) -> None:
     """Validate normalized issue identity before a caller can skip or write.
 
@@ -132,33 +170,12 @@ def validate_issue_identity(payload: object, *, repo: str, number: int) -> None:
     is_pull_request = payload.get("is_pull_request")
     if type(is_pull_request) is not bool:
         raise ValueError("issue identity is_pull_request must be a boolean")
-    raw_url = payload.get("url")
-    if not isinstance(raw_url, str) or not raw_url:
-        raise ValueError("issue identity URL must be a non-empty string")
-
-    owner, repository = _repo_parts(repo)
-    parsed = urlsplit(raw_url)
-    expected_host = (os.environ.get("GH_HOST") or "github.com").lower()
-    if (
-        parsed.scheme != "https"
-        or (parsed.hostname or "").lower() != expected_host
-        # ``urlsplit(...).port`` is None for an explicit empty port such as
-        # ``https://github.com:/...``; reject every authority colon instead.
-        or ":" in parsed.netloc
-        or parsed.port is not None
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.query
-        or parsed.fragment
-    ):
-        raise ValueError(f"issue identity URL is not canonical: {raw_url!r}")
-    resource = "pull" if is_pull_request else "issues"
-    expected_path = f"/{owner}/{repository}/{resource}/{number}"
-    if parsed.path.casefold() != expected_path.casefold():
-        raise ValueError(
-            "issue identity URL does not match requested repository, number, or resource kind: "
-            f"{raw_url!r}"
-        )
+    _validate_issue_url(
+        payload.get("url"),
+        repo=repo,
+        number=number,
+        is_pull_request=is_pull_request,
+    )
 
 
 def _gh_issue_view(

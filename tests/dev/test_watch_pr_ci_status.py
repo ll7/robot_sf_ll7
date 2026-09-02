@@ -227,6 +227,105 @@ def test_fetch_exact_commit_ci_status_orders_materialization_by_run_id_when_time
     assert result["checks"]["replacement_materialization"][0]["replacement_run_id"] == 91002  # type: ignore[index]
 
 
+@pytest.mark.parametrize(
+    ("check_status", "check_conclusion", "expected_overall"),
+    [
+        ("in_progress", None, "pending"),
+        ("completed", "success", "success"),
+        ("completed", "failure", "failure"),
+    ],
+    ids=["pending", "success", "failure"],
+)
+def test_fetch_exact_commit_ci_status_preserves_materialized_replacement_authority(
+    check_status: str, check_conclusion: str | None, expected_overall: str
+) -> None:
+    """A visible replacement keeps run-ID authority and its own terminal outcome."""
+    replacement_job_url = "https://github.com/ll7/robot_sf_ll7/actions/runs/91002/job/92002"
+    fetch_check_runs = MagicMock(
+        return_value={
+            "check_runs": [
+                {
+                    "name": "coverage-gate",
+                    "status": "completed",
+                    "conclusion": "cancelled",
+                    "head_sha": "merge123",
+                    "started_at": "2026-09-02T05:57:24Z",
+                    "completed_at": "2026-09-02T06:05:23Z",
+                    "details_url": (
+                        "https://github.com/ll7/robot_sf_ll7/actions/runs/91001/job/92001"
+                    ),
+                },
+                {
+                    "name": "coverage-gate",
+                    "status": check_status,
+                    "conclusion": check_conclusion,
+                    "head_sha": "merge123",
+                    "started_at": "2026-09-02T05:57:16Z",
+                    "completed_at": (
+                        "2026-09-02T06:06:00Z" if check_status == "completed" else None
+                    ),
+                    "details_url": replacement_job_url,
+                },
+            ]
+        }
+    )
+    fetch_workflow_runs = MagicMock(
+        return_value={
+            "total_count": 2,
+            "workflow_runs": [
+                {
+                    "id": 91002,
+                    "workflow_id": 93001,
+                    "status": check_status,
+                    "conclusion": check_conclusion,
+                    "head_sha": "merge123",
+                    "created_at": "2026-09-02T05:57:16Z",
+                    "run_started_at": "2026-09-02T05:57:16Z",
+                    "html_url": "https://github.com/ll7/robot_sf_ll7/actions/runs/91002",
+                },
+            ],
+        }
+    )
+
+    with patch(
+        "scripts.dev.check_pr_ci_status._rest_api_get",
+        return_value={"workflow_id": 93001},
+    ):
+        result = fetch_exact_commit_ci_status(
+            "merge123",
+            fetch_check_runs=fetch_check_runs,
+            fetch_workflow_runs=fetch_workflow_runs,
+        )
+
+    checks = result["checks"]
+    assert checks["overall"] == expected_overall  # type: ignore[index]
+    assert checks["total"] == 1  # type: ignore[index]
+    assert checks["superseded"] == 1  # type: ignore[index]
+    assert checks["details"] == [  # type: ignore[index]
+        {
+            "name": "coverage-gate",
+            "status": check_status,
+            "conclusion": expected_overall,
+            "details_url": replacement_job_url,
+        }
+    ]
+    assert "replacement_materialization" not in checks  # type: ignore[operator]
+    assert "pending_reason" not in checks  # type: ignore[operator]
+    replacement_evidence = checks["superseded_runs"][0]["replacement"]  # type: ignore[index]
+    assert replacement_evidence["details_url"] == replacement_job_url
+    assert replacement_evidence["materialization"] == {
+        "source": "actions_workflow_run_metadata",
+        "replacement_run_id": 91002,
+        "replacement_run_url": "https://github.com/ll7/robot_sf_ll7/actions/runs/91002",
+        "workflow_id": "93001",
+        "run_status": check_status,
+        "run_conclusion": check_conclusion,
+        "check_status": check_status,
+        "check_conclusion": check_conclusion,
+    }
+    fetch_workflow_runs.assert_called_once_with("merge123")
+
+
 def test_invalid_materialization_identity_cannot_supersede_cancelled_check() -> None:
     """Malformed synthetic evidence must leave the cancellation fail-closed."""
     rollup = [
@@ -257,6 +356,59 @@ def test_invalid_materialization_identity_cannot_supersede_cancelled_check() -> 
     assert len(effective) == 2
     assert superseded == 0
     assert [check["conclusion"] for check in effective] == ["cancelled", ""]
+
+
+@pytest.mark.parametrize(
+    ("details_url", "replacement_run_url"),
+    [
+        (
+            "https://github.com/ll7/robot_sf_ll7/actions/runs/91001/job/92002",
+            "https://github.com/ll7/robot_sf_ll7/actions/runs/91002",
+        ),
+        (
+            "https://github.com/ll7/robot_sf_ll7/actions/runs/91002/job/92002",
+            "https://github.com/ll7/robot_sf_ll7/actions/runs/91001",
+        ),
+    ],
+    ids=["check-url-mismatch", "marker-url-mismatch"],
+)
+def test_materialization_marker_requires_matching_actions_run_identity(
+    details_url: str, replacement_run_url: str
+) -> None:
+    """A marker cannot use a run ID when either bound Actions URL disagrees."""
+    rollup = [
+        {
+            "__typename": "CheckRun",
+            "name": "coverage-gate",
+            "status": "completed",
+            "conclusion": "cancelled",
+            "workflowId": "93001",
+            "startedAt": "2026-09-02T05:57:24Z",
+            "detailsUrl": "https://github.com/ll7/robot_sf_ll7/actions/runs/91001/job/92001",
+        },
+        {
+            "__typename": "CheckRun",
+            "name": "coverage-gate",
+            "status": "completed",
+            "conclusion": "success",
+            "workflowId": "93001",
+            "startedAt": "2026-09-02T05:57:16Z",
+            "detailsUrl": details_url,
+            "__replacement_materialization": {
+                "replacement_run_id": 91002,
+                "replacement_run_url": replacement_run_url,
+                "workflow_id": "93001",
+                "check_status": "completed",
+                "check_conclusion": "success",
+            },
+        },
+    ]
+
+    effective, superseded, _ = _latest_check_runs_with_evidence(rollup)
+
+    assert len(effective) == 2
+    assert superseded == 0
+    assert [check["conclusion"] for check in effective] == ["cancelled", "success"]
 
 
 def test_fetch_exact_commit_ci_status_keeps_lone_cancellation_as_failure() -> None:

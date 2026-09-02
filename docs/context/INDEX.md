@@ -1,5 +1,11 @@
 # Context Retrieval Index
 
+Issue #8222 obstacle-force compatibility boundary: preserves frozen/unversioned historical laws,
+separates the fast-pysf segment kernel from the vectorized planner point site, and defines the
+opt-in, domain-gated runtime correction boundary. This is a compatibility and implementation-context
+note only; it does not establish physical, safety, benchmark, or paper-facing evidence:
+[issue_8222_obstacle_force_compatibility.md](issue_8222_obstacle_force_compatibility.md).
+
 Public pedestrian goal and force prediction research: observation-only candidate generation,
 path-tangent/open-ray/unknown semantics, coverage-only evaluation, and the next held-out research
 directions. Current receipts are smoke evidence only:

@@ -46,10 +46,13 @@ from robot_sf.benchmark.artifact_publication import (
 from robot_sf.benchmark.camera_ready import _config as camera_config_module
 from robot_sf.benchmark.camera_ready import _run_state as camera_run_state_module
 from robot_sf.benchmark.camera_ready._artifacts import _write_snqi_diagnostics_artifacts
-from robot_sf.benchmark.camera_ready._config import load_campaign_config
 from robot_sf.benchmark.camera_ready_campaign import write_campaign_report
 from robot_sf.benchmark.identity.hash_utils import sha256_file
-from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
+from robot_sf.benchmark.release_protocol import (
+    load_release_campaign_config,
+    load_release_manifest,
+    validate_release_manifest,
+)
 
 FROZEN_SOURCE_SHA = "b1d5ab6de708385c0828c99501a9d1c29727ec11"
 EXPECTED_PRODUCER_SUMS_SHA256 = "2408431cef70bd7f7cf96fe0c42c44e84db89a841ea446e27fbb5650be713506"
@@ -1545,7 +1548,10 @@ protocol.get_repository_root = lambda: source_root
 config_module.get_repository_root = lambda: source_root
 run_state_module.get_repository_root = lambda: source_root
 manifest = protocol.load_release_manifest(manifest_path)
-campaign_config = config_module.load_campaign_config(manifest.canonical_campaign_config_path)
+campaign_config = protocol.load_release_campaign_config(
+    manifest,
+    repository_root=source_root,
+)
 result = acceptance_module.validate_full_benchmark_release_acceptance(
     acceptance_root,
     manifest=manifest,
@@ -2084,8 +2090,10 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     ):
         manifest = load_release_manifest(manifest_path)
         _assert_manifest_paths_from_source(manifest, source_repository_root)
-        config_path = manifest.canonical_campaign_config_path
-        campaign_config = load_campaign_config(config_path)
+        campaign_config = load_release_campaign_config(
+            manifest,
+            repository_root=source_repository_root,
+        )
         manifest_validation = validate_release_manifest(
             manifest,
             campaign_config=campaign_config,

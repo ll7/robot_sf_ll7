@@ -1038,7 +1038,9 @@ def test_build_derived_release_cleans_partial_stage_on_bundle_failure(
         "load_release_manifest",
         lambda _path: SimpleNamespace(canonical_campaign_config_path=config_path),
     )
-    monkeypatch.setattr(recovery, "load_campaign_config", lambda _path: SimpleNamespace())
+    monkeypatch.setattr(
+        recovery, "load_release_campaign_config", lambda *_a, **_k: SimpleNamespace()
+    )
     monkeypatch.setattr(
         recovery,
         "_run_exact_validator",
@@ -1175,7 +1177,9 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
         "load_release_manifest",
         lambda _path: SimpleNamespace(canonical_campaign_config_path=config_path),
     )
-    monkeypatch.setattr(recovery, "load_campaign_config", lambda _path: SimpleNamespace())
+    monkeypatch.setattr(
+        recovery, "load_release_campaign_config", lambda *_a, **_k: SimpleNamespace()
+    )
     monkeypatch.setattr(
         recovery,
         "validate_release_manifest",

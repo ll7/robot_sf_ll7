@@ -27,6 +27,7 @@ from robot_sf.benchmark.published_release_audit import (
 )
 from robot_sf.benchmark.release_erratum import (
     ErratumContract,
+    PredecessorEvidence,
     build_erratum_receipt,
     snapshot_campaign,
 )
@@ -216,7 +217,11 @@ def _full_erratum_payload(
     }
     _write_bytes(metadata_path, json.dumps(metadata, sort_keys=True).encode())
     predecessor = tmp_path / "immutable-predecessor.tar.gz"
-    predecessor.write_bytes(b"immutable predecessor fixture")
+    with tarfile.open(predecessor, "w:gz") as archive:
+        archive.add(
+            episodes,
+            arcname="fixture_bundle/payload/runs/orca__differential_drive/episodes.jsonl",
+        )
     contract = ErratumContract(
         correction_id="fixture-derived-metadata-erratum.1",
         predecessor_version_doi=predecessor_doi,
@@ -370,9 +375,25 @@ def _full_erratum_payload(
     return payload_files, receipt, successor_tag, successor_doi
 
 
+def _predecessor_evidence(tmp_path: Path, receipt: dict[str, object]) -> PredecessorEvidence:
+    """Build detached evidence for the complete erratum fixture."""
+    supersedes = receipt["supersedes"]
+    assert isinstance(supersedes, dict)
+    archive = tmp_path / "immutable-predecessor.tar.gz"
+    return PredecessorEvidence(
+        archive_path=archive,
+        version_doi=str(supersedes["version_doi"]),
+        concept_doi=str(receipt["successor"]["concept_doi"]),
+        github_release_tag=str(supersedes["github_release_tag"]),
+        archive_sha256=str(supersedes["archive_sha256"]),
+        archive_size_bytes=int(supersedes["archive_size_bytes"]),
+    )
+
+
 def test_erratum_audit_runs_real_preflight_and_cold_validation(tmp_path: Path) -> None:
     """The production validators authenticate one complete cold-start archive."""
     payload_files, correction_receipt, tag, doi = _full_erratum_payload(tmp_path)
+    predecessor_evidence = _predecessor_evidence(tmp_path, correction_receipt)
     github = tmp_path / "github"
     zenodo = tmp_path / "zenodo"
     _make_erratum_assets(
@@ -390,6 +411,7 @@ def test_erratum_audit_runs_real_preflight_and_cold_validation(tmp_path: Path) -
         github_dir=github,
         zenodo_dir=zenodo,
         source_sha="5" * 40,
+        predecessor_evidence=predecessor_evidence,
     )
 
     assert result["status"] == "pass"
@@ -424,6 +446,32 @@ def test_erratum_audit_requires_exact_tag_target_before_bundle_validation(tmp_pa
 
     assert result["status"] == "fail"
     assert any("exact GitHub tag target SHA" in problem for problem in result["problems"])
+
+
+def test_erratum_audit_requires_detached_predecessor_evidence(tmp_path: Path) -> None:
+    """A complete successor bundle cannot self-authenticate its predecessor."""
+    payload_files, _receipt, tag, doi = _full_erratum_payload(tmp_path)
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    _make_erratum_assets(
+        github,
+        zenodo,
+        source_sha="5" * 40,
+        tag=tag,
+        doi=doi,
+        payload_files=payload_files,
+    )
+
+    result = audit_published(
+        tag=tag,
+        doi=doi,
+        github_dir=github,
+        zenodo_dir=zenodo,
+        source_sha="5" * 40,
+    )
+
+    assert result["status"] == "fail"
+    assert any("predecessor evidence is required" in problem for problem in result["problems"])
 
 
 def test_erratum_audit_rejects_manifest_file_size_tampering(tmp_path: Path) -> None:
@@ -518,6 +566,7 @@ def test_erratum_audit_rejects_stale_optional_publication_document(
 ) -> None:
     """Copied optional metadata cannot retain predecessor tag or DOI aliases."""
     payload_files, receipt, tag, doi = _full_erratum_payload(tmp_path)
+    predecessor_evidence = _predecessor_evidence(tmp_path, receipt)
     predecessor = receipt["supersedes"]
     predecessor_tag = str(predecessor["github_release_tag"])
     predecessor_doi = str(predecessor["version_doi"])
@@ -545,6 +594,7 @@ def test_erratum_audit_rejects_stale_optional_publication_document(
         github_dir=github,
         zenodo_dir=zenodo,
         source_sha="5" * 40,
+        predecessor_evidence=predecessor_evidence,
     )
 
     assert result["status"] == "fail"
@@ -586,6 +636,8 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
         "correction_scope": "derived_publication_metadata_only",
         "supersedes": {
             "version_doi": "10.5281/zenodo.7",
+            "archive_sha256": "0" * 64,
+            "archive_size_bytes": 1,
             "github_release_tag": f"paper-matrix-v2-h600-s30-2026-09-{source_sha}",
         },
         "successor": {"version_doi": doi, "github_release_tag": tag},
@@ -606,7 +658,18 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
             "release/zenodo_metadata.erratum.json": metadata_bytes,
         },
     )
+    predecessor_archive = tmp_path / "predecessor.tar.gz"
+    predecessor_archive.write_bytes(b"fixture")
+    predecessor_evidence = PredecessorEvidence(
+        archive_path=predecessor_archive,
+        version_doi="10.5281/zenodo.7",
+        concept_doi="10.5281/zenodo.6",
+        github_release_tag=f"paper-matrix-v2-h600-s30-2026-09-{source_sha}",
+        archive_sha256="0" * 64,
+        archive_size_bytes=1,
+    )
     calls: list[tuple[Path, Path, Path, str, str, str | None]] = []
+    evidence_seen: list[PredecessorEvidence | None] = []
 
     def fake_validate(
         receipt_path: Path,
@@ -616,7 +679,9 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
         expected_tag: str,
         expected_doi: str,
         expected_source_sha: str | None,
+        predecessor_evidence: PredecessorEvidence | None,
     ) -> dict[str, object]:
+        evidence_seen.append(predecessor_evidence)
         calls.append(
             (
                 receipt_path,
@@ -644,6 +709,7 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
         github_dir=github,
         zenodo_dir=zenodo,
         source_sha=source_sha,
+        predecessor_evidence=predecessor_evidence,
     )
 
     assert receipt["status"] == "pass"
@@ -651,6 +717,7 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
     assert calls[0][1].name == "payload"
     assert calls[0][2].name == "zenodo_metadata.erratum.json"
     assert calls[0][3:] == (tag, doi, source_sha)
+    assert evidence_seen == [predecessor_evidence]
 
 
 def test_erratum_audit_rejects_bundle_without_correction_receipt(
@@ -1122,6 +1189,83 @@ def test_cli_main_passes(tmp_path: Path) -> None:
     assert receipt["ok"] is True
 
 
+def test_cli_main_requires_all_predecessor_arguments_together(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Standalone cold-audit predecessor inputs are an all-or-none contract."""
+    status = published_audit_module.main(
+        [
+            "--tag",
+            "tag",
+            "--doi",
+            "10.5281/zenodo.1",
+            "--github-dir",
+            str(tmp_path / "github"),
+            "--zenodo-dir",
+            str(tmp_path / "zenodo"),
+            "--predecessor-archive",
+            str(tmp_path / "predecessor.tar.gz"),
+        ]
+    )
+
+    assert status == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "error"
+    assert "must be provided together" in payload["error"]
+
+
+def test_cli_main_constructs_predecessor_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Standalone CLI forwards every supplied predecessor coordinate to the offline core."""
+    predecessor = tmp_path / "predecessor.tar.gz"
+    predecessor.write_bytes(b"fixture")
+    seen: dict[str, object] = {}
+
+    def fake_audit(**kwargs: object) -> dict[str, object]:
+        seen.update(kwargs)
+        return {"schema": SCHEMA, "ok": True, "status": "pass"}
+
+    monkeypatch.setattr(published_audit_module, "audit_published", fake_audit)
+    status = published_audit_module.main(
+        [
+            "--tag",
+            "tag",
+            "--doi",
+            "10.5281/zenodo.1",
+            "--github-dir",
+            str(tmp_path / "github"),
+            "--zenodo-dir",
+            str(tmp_path / "zenodo"),
+            "--source-sha",
+            "a" * 40,
+            "--predecessor-archive",
+            str(predecessor),
+            "--predecessor-doi",
+            "10.5281/zenodo.2",
+            "--predecessor-concept-doi",
+            "10.5281/zenodo.1",
+            "--predecessor-tag",
+            "predecessor-tag",
+            "--predecessor-sha256",
+            "b" * 64,
+            "--predecessor-size-bytes",
+            "7",
+        ]
+    )
+
+    assert status == 0
+    evidence = seen["predecessor_evidence"]
+    assert isinstance(evidence, PredecessorEvidence)
+    assert evidence.archive_path == predecessor
+    assert evidence.version_doi == "10.5281/zenodo.2"
+    assert evidence.concept_doi == "10.5281/zenodo.1"
+    assert evidence.github_release_tag == "predecessor-tag"
+    assert evidence.archive_sha256 == "b" * 64
+    assert evidence.archive_size_bytes == 7
+    assert json.loads(capsys.readouterr().out)["ok"] is True
+
+
 def test_cli_main_missing_channel_returns_one(tmp_path: Path) -> None:
     github = tmp_path / "github"
     github.mkdir()
@@ -1295,6 +1439,90 @@ def _network_fixture(
             url="https://zenodo.test/cdn/final/bundle.zip",
         ),
     }
+    if predecessor_doi is not None:
+        predecessor_tag = tag.removesuffix("-erratum.1")
+        predecessor_bundle = bundle + b"-predecessor"
+        predecessor_digest = hashlib.sha256(predecessor_bundle).hexdigest()
+        predecessor_release_url = (
+            f"{github_base}/repos/ll7/robot_sf_ll7/releases/tags/{predecessor_tag}"
+        )
+        predecessor_ref_url = f"{github_base}/repos/ll7/robot_sf_ll7/git/ref/tags/{predecessor_tag}"
+        predecessor_record_id = predecessor_doi.rsplit(".", 1)[-1]
+        predecessor_record_url = f"{zenodo_base}/records/{predecessor_record_id}"
+        predecessor_github_asset_url = f"https://cdn.github.test/{predecessor_tag}/predecessor.zip"
+        predecessor_zenodo_asset_url = (
+            f"https://zenodo.test/cdn/{predecessor_record_id}/predecessor.zip"
+        )
+        predecessor_source_tag_url = (
+            f"https://github.com/ll7/robot_sf_ll7/releases/tag/{predecessor_tag}"
+        )
+        predecessor_related_identifiers = [
+            {
+                "identifier": predecessor_source_tag_url,
+                "relation": "isSupplementTo",
+                "scheme": "url",
+            }
+        ]
+        routes.update(
+            {
+                predecessor_release_url: _PublicResponse(
+                    payload={
+                        "id": 7943,
+                        "tag_name": predecessor_tag,
+                        "draft": False,
+                        "prerelease": False,
+                        "body": f"Source SHA: {source_sha}",
+                        "assets": [
+                            {
+                                "name": "predecessor.zip",
+                                "size": len(predecessor_bundle),
+                                "digest": f"sha256:{predecessor_digest}",
+                                "browser_download_url": predecessor_github_asset_url,
+                            }
+                        ],
+                    },
+                    url=predecessor_release_url,
+                ),
+                predecessor_ref_url: _PublicResponse(
+                    payload={
+                        "ref": f"refs/tags/{predecessor_tag}",
+                        "object": {"type": "commit", "sha": source_sha},
+                    },
+                    url=predecessor_ref_url,
+                ),
+                predecessor_record_url: _PublicResponse(
+                    payload={
+                        "id": int(predecessor_record_id),
+                        "doi": predecessor_doi,
+                        "conceptdoi": "10.5281/zenodo.1234566",
+                        "state": "done",
+                        "status": "published",
+                        "metadata": {
+                            "doi": predecessor_doi,
+                            "conceptdoi": "10.5281/zenodo.1234566",
+                            "related_identifiers": predecessor_related_identifiers,
+                        },
+                        "files": [
+                            {
+                                "filename": "predecessor.zip",
+                                "key": "predecessor.zip",
+                                "size": len(predecessor_bundle),
+                                "links": {"self": predecessor_zenodo_asset_url},
+                            }
+                        ],
+                    },
+                    url=predecessor_record_url,
+                ),
+                predecessor_github_asset_url: _PublicResponse(
+                    chunks=(predecessor_bundle[:3], predecessor_bundle[3:]),
+                    url=predecessor_github_asset_url,
+                ),
+                predecessor_zenodo_asset_url: _PublicResponse(
+                    chunks=(predecessor_bundle[:5], predecessor_bundle[5:]),
+                    url=predecessor_zenodo_asset_url,
+                ),
+            }
+        )
     return _PublicSession(routes), bundle, tag, github_base, zenodo_base
 
 
@@ -1322,6 +1550,68 @@ def test_network_audit_discovers_and_streams_public_assets(tmp_path: Path) -> No
     assert all(kwargs["allow_redirects"] is True for _, kwargs, _ in session.calls)
     assert all("stream" in kwargs for url, kwargs, _ in session.calls if "bundle.zip" in url)
     assert "robot-sf-published-audit-" not in json.dumps(receipt)
+
+
+def test_network_erratum_resolves_and_authenticates_predecessor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A canonical successor binds a separately downloaded predecessor archive."""
+    predecessor_doi = "10.5281/zenodo.1234565"
+    session, bundle, tag, github_base, zenodo_base = _network_fixture(
+        tmp_path,
+        release_tag=f"paper-matrix-v2-h600-s30-2026-09-{'b' * 40}-erratum.1",
+        predecessor_doi=predecessor_doi,
+    )
+    seen: dict[str, object] = {}
+
+    def fake_audit(**kwargs: object) -> dict[str, object]:
+        seen.update(kwargs)
+        evidence = kwargs["predecessor_evidence"]
+        assert isinstance(evidence, PredecessorEvidence)
+        return {
+            "ok": True,
+            "status": "pass",
+            "problems": [],
+            "observations": {
+                "erratum": {
+                    "predecessor_version_doi": predecessor_doi,
+                    "concept_doi": "10.5281/zenodo.1234566",
+                }
+            },
+        }
+
+    monkeypatch.setattr(published_audit_module, "audit_published", fake_audit)
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+        download_chunk_size=7,
+    )
+
+    assert receipt["status"] == "pass"
+    assert receipt["ok"] is True
+    assert receipt["predecessor"] == {
+        "version_doi": predecessor_doi,
+        "concept_doi": "10.5281/zenodo.1234566",
+        "github_release_tag": tag.removesuffix("-erratum.1"),
+        "source_sha": "b" * 40,
+        "archive_sha256": hashlib.sha256(bundle + b"-predecessor").hexdigest(),
+        "archive_size_bytes": len(bundle) + len(b"-predecessor"),
+    }
+    assert seen["tag"] == tag
+    assert seen["doi"] == "10.5281/zenodo.1234567"
+    assert receipt["downloads"]["bytes"] == 2 * len(bundle) + 2 * (len(bundle) + 12)
+    assert [record["name"] for record in receipt["downloads"]["github"]] == [
+        "bundle.zip",
+        "predecessor.zip",
+    ]
+    assert [record["name"] for record in receipt["downloads"]["zenodo"]] == [
+        "bundle.zip",
+        "predecessor.zip",
+    ]
+    assert "archive_path" not in json.dumps(receipt)
 
 
 def test_network_audit_rejects_renamed_channel_asset_before_download(tmp_path: Path) -> None:
@@ -1447,6 +1737,7 @@ def test_network_audit_rejects_doi_drift_and_secret_headers(tmp_path: Path) -> N
     ("fault", "expected"),
     [
         ("source_scheme", "not related"),
+        ("missing_predecessor", "lacks one distinct predecessor version DOI"),
         ("predecessor_scheme", "predecessor-version relation is malformed"),
         ("duplicate_predecessor", "predecessor-version relation is malformed"),
     ],
@@ -1468,6 +1759,8 @@ def test_network_erratum_requires_exact_relation_schemes_and_cardinality(
     related = payload["metadata"]["related_identifiers"]
     if fault == "source_scheme":
         related[0]["scheme"] = "doi"
+    elif fault == "missing_predecessor":
+        payload["metadata"]["related_identifiers"] = related[:1]
     elif fault == "predecessor_scheme":
         related[1]["scheme"] = "url"
     else:
@@ -1484,6 +1777,223 @@ def test_network_erratum_requires_exact_relation_schemes_and_cardinality(
 
     assert result["status"] == "invalid"
     assert any(expected in problem for problem in result["problems"])
+
+
+@pytest.mark.parametrize(
+    ("fault", "expected"),
+    [
+        ("source", "predecessor GitHub tag source SHA differs"),
+        ("concept", "predecessor Zenodo concept DOI differs"),
+    ],
+)
+def test_network_erratum_requires_predecessor_source_and_concept_identity(
+    tmp_path: Path, fault: str, expected: str
+) -> None:
+    """The independently resolved predecessor must retain both identities."""
+    source_sha = "b" * 40
+    tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}-erratum.1"
+    session, _, _, github_base, zenodo_base = _network_fixture(
+        tmp_path,
+        release_tag=tag,
+        predecessor_doi="10.5281/zenodo.1234565",
+    )
+    predecessor_tag = tag.removesuffix("-erratum.1")
+    if fault == "source":
+        ref_url = f"{github_base}/repos/ll7/robot_sf_ll7/git/ref/tags/{predecessor_tag}"
+        release_url = f"{github_base}/repos/ll7/robot_sf_ll7/releases/tags/{predecessor_tag}"
+        ref_response = session.routes[ref_url]
+        release_response = session.routes[release_url]
+        assert isinstance(ref_response, _PublicResponse)
+        assert isinstance(release_response, _PublicResponse)
+        ref_payload = copy.deepcopy(ref_response._payload)
+        release_payload = copy.deepcopy(release_response._payload)
+        ref_payload["object"]["sha"] = "c" * 40
+        release_payload["body"] = f"Source SHA: {'c' * 40}"
+        ref_response._payload = ref_payload
+        release_response._payload = release_payload
+    else:
+        record_url = f"{zenodo_base}/records/1234565"
+        record_response = session.routes[record_url]
+        assert isinstance(record_response, _PublicResponse)
+        record_payload = copy.deepcopy(record_response._payload)
+        record_payload["conceptdoi"] = "10.5281/zenodo.9999999"
+        record_payload["metadata"]["conceptdoi"] = "10.5281/zenodo.9999999"
+        record_response._payload = record_payload
+
+    result = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+
+    assert result["status"] == "invalid"
+    assert any(expected in problem for problem in result["problems"])
+
+
+@pytest.mark.parametrize("variant", ["no_common", "ambiguous"])
+def test_network_erratum_requires_one_common_predecessor_archive(
+    tmp_path: Path, variant: str
+) -> None:
+    """Predecessor custody must identify exactly one shared archive before downloading."""
+    source_sha = "b" * 40
+    tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}-erratum.1"
+    session, _, _, github_base, zenodo_base = _network_fixture(
+        tmp_path,
+        release_tag=tag,
+        predecessor_doi="10.5281/zenodo.1234565",
+    )
+    predecessor_tag = tag.removesuffix("-erratum.1")
+    release_url = f"{github_base}/repos/ll7/robot_sf_ll7/releases/tags/{predecessor_tag}"
+    record_url = f"{zenodo_base}/records/1234565"
+    release_response = session.routes[release_url]
+    record_response = session.routes[record_url]
+    assert isinstance(release_response, _PublicResponse)
+    assert isinstance(record_response, _PublicResponse)
+    release_payload = copy.deepcopy(release_response._payload)
+    record_payload = copy.deepcopy(record_response._payload)
+    if variant == "no_common":
+        release_payload["assets"][0]["name"] = "predecessor.txt"
+        record_payload["files"][0]["filename"] = "predecessor.txt"
+        record_payload["files"][0]["key"] = "predecessor.txt"
+    else:
+        second_url = "https://cdn.github.test/predecessor/second.zip"
+        release_payload["assets"].append(
+            {
+                "name": "second.zip",
+                "size": release_payload["assets"][0]["size"],
+                "digest": release_payload["assets"][0]["digest"],
+                "browser_download_url": second_url,
+            }
+        )
+        record_payload["files"].append(
+            {
+                "filename": "second.zip",
+                "key": "second.zip",
+                "size": record_payload["files"][0]["size"],
+                "links": {"self": "https://zenodo.test/cdn/1234565/second.zip"},
+            }
+        )
+    release_response._payload = release_payload
+    record_response._payload = record_payload
+
+    result = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+
+    assert result["status"] == "invalid"
+    expected = "no common predecessor archive" if variant == "no_common" else "exactly one"
+    assert any(expected in problem for problem in result["problems"])
+    assert not any("predecessor.zip" in url for url, _, _ in session.calls)
+
+
+@pytest.mark.parametrize("channel", ["github", "zenodo"])
+@pytest.mark.parametrize("size", [None, 0])
+def test_network_erratum_requires_positive_predecessor_archive_size(
+    tmp_path: Path, channel: str, size: int | None
+) -> None:
+    """Both public predecessor channels must advertise a positive archive size."""
+    source_sha = "b" * 40
+    tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}-erratum.1"
+    session, _, _, github_base, zenodo_base = _network_fixture(
+        tmp_path,
+        release_tag=tag,
+        predecessor_doi="10.5281/zenodo.1234565",
+    )
+    predecessor_tag = tag.removesuffix("-erratum.1")
+    if channel == "github":
+        release_url = f"{github_base}/repos/ll7/robot_sf_ll7/releases/tags/{predecessor_tag}"
+        response = session.routes[release_url]
+        assert isinstance(response, _PublicResponse)
+        payload = copy.deepcopy(response._payload)
+        payload["assets"][0]["size"] = size
+    else:
+        response = session.routes[f"{zenodo_base}/records/1234565"]
+        assert isinstance(response, _PublicResponse)
+        payload = copy.deepcopy(response._payload)
+        payload["files"][0]["size"] = size
+    response._payload = payload
+
+    result = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+
+    assert result["status"] == "invalid"
+    assert any("positive advertised size" in problem for problem in result["problems"])
+
+
+@pytest.mark.parametrize("fault", ["size", "digest"])
+def test_network_erratum_reconciles_predecessor_archive_channels(
+    tmp_path: Path, fault: str
+) -> None:
+    """The two independently downloaded predecessor archives must be byte-identical."""
+    source_sha = "b" * 40
+    tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}-erratum.1"
+    session, bundle, _, github_base, zenodo_base = _network_fixture(
+        tmp_path,
+        release_tag=tag,
+        predecessor_doi="10.5281/zenodo.1234565",
+    )
+    predecessor_asset_url = "https://zenodo.test/cdn/1234565/predecessor.zip"
+    response = session.routes[predecessor_asset_url]
+    assert isinstance(response, _PublicResponse)
+    predecessor_bundle = bundle + b"-predecessor"
+    if fault == "size":
+        altered = predecessor_bundle + b"x"
+        response._chunks = (altered[:5], altered[5:])
+        record_response = session.routes[f"{zenodo_base}/records/1234565"]
+        assert isinstance(record_response, _PublicResponse)
+        record_payload = copy.deepcopy(record_response._payload)
+        record_payload["files"][0]["size"] = len(altered)
+        record_response._payload = record_payload
+    else:
+        altered = bytes([predecessor_bundle[0] ^ 1]) + predecessor_bundle[1:]
+        response._chunks = (altered[:5], altered[5:])
+
+    result = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+
+    assert result["status"] == "invalid"
+    expected = "size mismatch" if fault == "size" else "digest mismatch"
+    assert any(expected in problem for problem in result["problems"])
+
+
+def test_network_erratum_applies_cumulative_predecessor_byte_limit(tmp_path: Path) -> None:
+    """The predecessor pair shares the existing cumulative download cap."""
+    source_sha = "b" * 40
+    tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}-erratum.1"
+    session, bundle, _, github_base, zenodo_base = _network_fixture(
+        tmp_path,
+        release_tag=tag,
+        predecessor_doi="10.5281/zenodo.1234565",
+    )
+    total_advertised = 2 * len(bundle) + 2 * (len(bundle) + len(b"-predecessor"))
+    result = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+        max_download_bytes=total_advertised - 1,
+    )
+
+    assert result["status"] == "invalid"
+    assert any("advertised public assets exceed" in problem for problem in result["problems"])
+    assert not any("cdn." in url for url, _, _ in session.calls)
 
 
 def test_network_erratum_lineage_reconciliation_fails_closed() -> None:

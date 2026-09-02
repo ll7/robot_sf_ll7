@@ -40,6 +40,7 @@ from robot_sf.benchmark.artifact_publication import (
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.release_erratum import (
+    PredecessorEvidence,
     ReleaseErratumError,
     validate_erratum_receipt_against_campaign,
 )
@@ -54,6 +55,7 @@ ZENODO_API_BASE = "https://zenodo.org/api"
 DEFAULT_NETWORK_TIMEOUT = 60.0
 DEFAULT_DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 DEFAULT_MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024
+_ARCHIVE_SUFFIXES = (".zip", ".tar.gz", ".tgz")
 ERRATUM_CUSTODY_ASSET = "publication_custody.json"
 ERRATUM_MANIFEST_ASSET = "publication_manifest.json"
 ERRATUM_CHECKSUMS_ASSET = "checksums.sha256"
@@ -76,6 +78,7 @@ _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 _SHA1_RE = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
 _BODY_SHA_RE = re.compile(r"(?<![0-9a-f])([0-9a-f]{40})(?![0-9a-f])", re.IGNORECASE)
+_CANONICAL_ERRATUM_TAG_RE = re.compile(r"^(?P<predecessor>.+-[0-9a-f]{40})-erratum\.1$")
 
 
 class PublishedAuditUnavailable(RuntimeError):
@@ -972,6 +975,7 @@ def _verify_canonical_erratum_bundle(
     tag: str,
     doi: str,
     source_sha: str | None,
+    predecessor_evidence: PredecessorEvidence | None = None,
 ) -> dict[str, Any]:
     """Verify one complete canonical erratum archive and detached proof set.
 
@@ -995,6 +999,7 @@ def _verify_canonical_erratum_bundle(
             receipt_path,
             campaign_root=bundle_root / "payload",
             metadata_path=metadata_path,
+            predecessor_evidence=predecessor_evidence,
             expected_tag=tag,
             expected_doi=doi,
             expected_source_sha=source_sha,
@@ -1049,14 +1054,13 @@ def _verify_bundle(
     tag: str,
     doi: str,
     source_sha: str | None,
+    predecessor_evidence: PredecessorEvidence | None = None,
 ) -> None:
     """Extract the largest archive and verify internal checksums.
 
     Observations and problems are updated in place.
     """
-    bundle_candidates = [
-        path for path in github_assets if path.name.endswith((".zip", ".tar.gz", ".tgz"))
-    ]
+    bundle_candidates = [path for path in github_assets if path.name.endswith(_ARCHIVE_SUFFIXES)]
     if not bundle_candidates:
         problems.append("no bundle archive found on GitHub channel (unavailable)")
         return
@@ -1080,6 +1084,7 @@ def _verify_bundle(
                 tag=tag,
                 doi=doi,
                 source_sha=source_sha,
+                predecessor_evidence=predecessor_evidence,
             )
             observations["erratum_bundle_inventory"] = proof["inventory"]
             observations["erratum"] = proof["receipt"]
@@ -1122,7 +1127,7 @@ def _check_erratum_channel_assets(
             problems.append(
                 f"{channel} erratum assets lack manifest, checksums, or custody receipt"
             )
-        archives = [name for name in assets if name.endswith((".zip", ".tar.gz", ".tgz"))]
+        archives = [name for name in assets if name.endswith(_ARCHIVE_SUFFIXES)]
         if len(archives) != 1:
             problems.append(f"{channel} erratum assets must contain exactly one archive")
     return problems
@@ -1135,6 +1140,7 @@ def audit_published(
     github_dir: Path,
     zenodo_dir: Path,
     source_sha: str | None = None,
+    predecessor_evidence: PredecessorEvidence | None = None,
 ) -> dict[str, Any]:
     """Audit two downloaded asset directories for cross-channel identity.
 
@@ -1199,6 +1205,7 @@ def audit_published(
         tag=tag,
         doi=doi,
         source_sha=source_sha,
+        predecessor_evidence=predecessor_evidence,
     )
     doi_version = _validate_doi(doi, observations, problems)
 
@@ -1280,6 +1287,12 @@ def _normalise_version_doi(value: str) -> str:
     if _DOI_RE.fullmatch(doi) is None:
         raise PublishedAuditInvalid("version DOI must match 10.5281/zenodo.<record>")
     return doi
+
+
+def _canonical_erratum_predecessor_tag(tag: str) -> str | None:
+    """Return the predecessor tag encoded by an exact ``-erratum.1`` suffix."""
+    match = _CANONICAL_ERRATUM_TAG_RE.fullmatch(tag)
+    return match.group("predecessor") if match is not None else None
 
 
 def _close_public_response(response: Any) -> None:
@@ -1703,7 +1716,11 @@ def _resolve_zenodo_record(
         raise PublishedAuditInvalid("Zenodo record DOI does not match the requested version DOI")
     if str(metadata.get("doi") or "").strip() != doi:
         raise PublishedAuditInvalid("Zenodo metadata DOI does not match the requested version DOI")
-    concept_doi = str(payload.get("conceptdoi") or metadata.get("conceptdoi") or "").strip()
+    payload_concept_doi = str(payload.get("conceptdoi") or "").strip()
+    metadata_concept_doi = str(metadata.get("conceptdoi") or "").strip()
+    if payload_concept_doi and metadata_concept_doi and payload_concept_doi != metadata_concept_doi:
+        raise PublishedAuditInvalid("Zenodo record concept DOI differs between record and metadata")
+    concept_doi = payload_concept_doi or metadata_concept_doi
     if _DOI_RE.fullmatch(concept_doi) is None or concept_doi == doi:
         raise PublishedAuditInvalid("Zenodo record concept DOI is missing or incorrect")
     status = str(payload.get("status") or "").casefold()
@@ -1727,6 +1744,61 @@ def _resolve_zenodo_record(
         "status": status or state,
         "assets": _zenodo_file_assets(payload),
     }
+
+
+def _require_single_common_archive(
+    github_assets: list[dict[str, Any]],
+    zenodo_assets: list[dict[str, Any]],
+) -> str:
+    """Return the one archive shared by independently resolved channels."""
+    github_names = {asset["name"] for asset in github_assets}
+    zenodo_names = {asset["name"] for asset in zenodo_assets}
+    archive_names = sorted(
+        name for name in github_names & zenodo_names if name.endswith(_ARCHIVE_SUFFIXES)
+    )
+    if not archive_names:
+        raise PublishedAuditInvalid(
+            "predecessor GitHub and Zenodo have no common predecessor archive"
+        )
+    if len(archive_names) != 1:
+        raise PublishedAuditInvalid(
+            "predecessor GitHub and Zenodo must have exactly one common predecessor archive"
+        )
+    return archive_names[0]
+
+
+def _require_named_asset(assets: list[dict[str, Any]], *, name: str, label: str) -> dict[str, Any]:
+    """Return one normalized asset by name or fail with an invalid receipt."""
+    for asset in assets:
+        if asset.get("name") == name:
+            return asset
+    raise PublishedAuditInvalid(f"{label} asset {name} is missing")
+
+
+def _require_positive_advertised_size(asset: Mapping[str, Any], *, label: str) -> int:
+    """Require a positive public size before downloading one protected archive.
+
+    Returns:
+        The validated advertised byte count.
+    """
+    size = asset.get("size")
+    if isinstance(size, bool) or not isinstance(size, int) or size <= 0:
+        raise PublishedAuditInvalid(f"{label} requires a positive advertised size")
+    return size
+
+
+def _require_cross_channel_archive_identity(
+    github_download: Mapping[str, Any], zenodo_download: Mapping[str, Any]
+) -> None:
+    """Require matching observed size and digest for a predecessor archive."""
+    if github_download.get("bytes") != zenodo_download.get("bytes"):
+        raise PublishedAuditInvalid(
+            "predecessor archive size mismatch across GitHub and Zenodo channels"
+        )
+    if github_download.get("sha256") != zenodo_download.get("sha256"):
+        raise PublishedAuditInvalid(
+            "predecessor archive digest mismatch across GitHub and Zenodo channels"
+        )
 
 
 def _download_public_asset(  # noqa: C901
@@ -1812,6 +1884,7 @@ def _failure_network_receipt(
     status: str,
     problem: str,
     discovery: Mapping[str, Any] | None = None,
+    predecessor: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a stable credential-free receipt for a non-pass network audit.
 
@@ -1825,6 +1898,7 @@ def _failure_network_receipt(
         "tag": _receipt_identifier(tag, kind="tag"),
         "doi": _receipt_identifier(doi, kind="doi"),
         "source_sha": None,
+        "predecessor": dict(predecessor) if predecessor is not None else None,
         "problems": [problem],
         "discovery": dict(discovery or {}),
         "downloads": {"github": [], "zenodo": [], "bytes": 0},
@@ -1869,7 +1943,7 @@ def _reconcile_zenodo_erratum_lineage(
     core["status"] = "fail"
 
 
-def audit_published_network(  # noqa: C901, PLR0913
+def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
     *,
     tag: str,
     doi: str,
@@ -1892,6 +1966,7 @@ def audit_published_network(  # noqa: C901, PLR0913
     """
     requested_tag = str(tag or "").strip()
     requested_doi = str(doi or "").strip()
+    predecessor_receipt: dict[str, Any] | None = None
     try:
         if (
             not requested_tag
@@ -1903,6 +1978,7 @@ def audit_published_network(  # noqa: C901, PLR0913
         if _REPO_RE.fullmatch(repo or "") is None:
             raise PublishedAuditInvalid("GitHub repository must have the form owner/name")
         normalized_doi = _normalise_version_doi(requested_doi)
+        canonical_predecessor_tag = _canonical_erratum_predecessor_tag(requested_tag)
         if isinstance(max_download_bytes, bool) or max_download_bytes <= 0:
             raise PublishedAuditInvalid("max_download_bytes must be positive")
         if isinstance(download_chunk_size, bool) or download_chunk_size <= 0:
@@ -1943,20 +2019,98 @@ def audit_published_network(  # noqa: C901, PLR0913
             "predecessor_doi": zenodo["predecessor_doi"],
             "asset_names": sorted(asset["name"] for asset in zenodo["assets"]),
         }
+
+        predecessor_github: dict[str, Any] | None = None
+        predecessor_zenodo: dict[str, Any] | None = None
+        predecessor_archive_name: str | None = None
+        if canonical_predecessor_tag is not None:
+            predecessor_doi = zenodo.get("predecessor_doi")
+            if not isinstance(predecessor_doi, str) or not predecessor_doi:
+                raise PublishedAuditInvalid(
+                    "canonical erratum successor lacks its predecessor version DOI"
+                )
+            predecessor_source_tag_url = (
+                f"https://github.com/{repo}/releases/tag/{canonical_predecessor_tag}"
+            )
+            predecessor_github = _resolve_github_release(
+                public_session,
+                api_base=github_base,
+                repo=repo,
+                tag=canonical_predecessor_tag,
+                timeout=timeout,
+            )
+            if predecessor_github["source_sha"] != github["source_sha"]:
+                raise PublishedAuditInvalid(
+                    "predecessor GitHub tag source SHA differs from the successor source SHA"
+                )
+            predecessor_zenodo = _resolve_zenodo_record(
+                public_session,
+                api_base=zenodo_base,
+                doi=predecessor_doi,
+                source_tag_url=predecessor_source_tag_url,
+                timeout=timeout,
+            )
+            if predecessor_zenodo["concept_doi"] != zenodo["concept_doi"]:
+                raise PublishedAuditInvalid(
+                    "predecessor Zenodo concept DOI differs from the successor concept DOI"
+                )
+            predecessor_github_by_name = {
+                asset["name"]: asset for asset in predecessor_github["assets"]
+            }
+            predecessor_zenodo_by_name = {
+                asset["name"]: asset for asset in predecessor_zenodo["assets"]
+            }
+            if not set(predecessor_zenodo_by_name).issubset(predecessor_github_by_name):
+                raise PublishedAuditInvalid(
+                    "predecessor Zenodo files must be named public GitHub release assets"
+                )
+            predecessor_archive_name = _require_single_common_archive(
+                predecessor_github["assets"], predecessor_zenodo["assets"]
+            )
+            discovery["predecessor"] = {
+                "record_id": predecessor_zenodo["id"],
+                "doi": predecessor_zenodo["doi"],
+                "concept_doi": predecessor_zenodo["concept_doi"],
+                "tag": predecessor_github["tag"],
+                "source_sha": predecessor_github["source_sha"],
+                "asset_names": sorted(predecessor_github_by_name),
+                "archive_name": predecessor_archive_name,
+            }
         github_by_name = {asset["name"]: asset for asset in github["assets"]}
         zenodo_by_name = {asset["name"]: asset for asset in zenodo["assets"]}
         if not set(zenodo_by_name).issubset(github_by_name):
             raise PublishedAuditInvalid("Zenodo files must be named public GitHub release assets")
         common_names = sorted(set(github_by_name) & set(zenodo_by_name))
-        archive_names = [
-            name for name in common_names if name.endswith((".zip", ".tar.gz", ".tgz"))
-        ]
+        archive_names = [name for name in common_names if name.endswith(_ARCHIVE_SUFFIXES)]
         if not archive_names:
             raise PublishedAuditInvalid("GitHub and Zenodo have no common bundle archive")
+        advertised_assets = [*github["assets"], *zenodo["assets"]]
+        if canonical_predecessor_tag is not None:
+            if (
+                predecessor_github is None
+                or predecessor_zenodo is None
+                or predecessor_archive_name is None
+            ):
+                raise PublishedAuditInvalid("predecessor public identity is incomplete")
+            predecessor_github_asset = _require_named_asset(
+                predecessor_github["assets"],
+                name=predecessor_archive_name,
+                label="predecessor GitHub archive",
+            )
+            predecessor_zenodo_asset = _require_named_asset(
+                predecessor_zenodo["assets"],
+                name=predecessor_archive_name,
+                label="predecessor Zenodo archive",
+            )
+            _require_positive_advertised_size(
+                predecessor_github_asset, label="predecessor GitHub archive"
+            )
+            _require_positive_advertised_size(
+                predecessor_zenodo_asset, label="predecessor Zenodo archive"
+            )
+            advertised_assets.extend([predecessor_github_asset, predecessor_zenodo_asset])
         advertised_bytes = sum(
-            int(asset["size"] or 0)
-            for asset in [*github["assets"], *zenodo["assets"]]
-            if asset.get("size") is not None
+            int(asset["size"] or 0) for asset in advertised_assets if asset.get("size") is not None
         )
         if advertised_bytes > max_download_bytes:
             raise PublishedAuditInvalid("advertised public assets exceed the configured byte limit")
@@ -1995,13 +2149,72 @@ def audit_published_network(  # noqa: C901, PLR0913
                     max_download_bytes=max_download_bytes,
                     downloaded_bytes=downloaded_bytes,
                 )
-                zenodo_downloads.append(record)
+            zenodo_downloads.append(record)
+            if canonical_predecessor_tag is not None:
+                if (
+                    predecessor_github is None
+                    or predecessor_zenodo is None
+                    or predecessor_archive_name is None
+                ):
+                    raise PublishedAuditInvalid("predecessor public identity is incomplete")
+                predecessor_github_asset = _require_named_asset(
+                    predecessor_github["assets"],
+                    name=predecessor_archive_name,
+                    label="predecessor GitHub archive",
+                )
+                predecessor_zenodo_asset = _require_named_asset(
+                    predecessor_zenodo["assets"],
+                    name=predecessor_archive_name,
+                    label="predecessor Zenodo archive",
+                )
+                predecessor_github_record, downloaded_bytes = _download_public_asset(
+                    public_session,
+                    predecessor_github_asset,
+                    root / "predecessor-github" / predecessor_archive_name,
+                    timeout=timeout,
+                    chunk_size=download_chunk_size,
+                    max_download_bytes=max_download_bytes,
+                    downloaded_bytes=downloaded_bytes,
+                )
+                predecessor_zenodo_record, downloaded_bytes = _download_public_asset(
+                    public_session,
+                    predecessor_zenodo_asset,
+                    root / "predecessor-zenodo" / predecessor_archive_name,
+                    timeout=timeout,
+                    chunk_size=download_chunk_size,
+                    max_download_bytes=max_download_bytes,
+                    downloaded_bytes=downloaded_bytes,
+                )
+                github_downloads.append(predecessor_github_record)
+                zenodo_downloads.append(predecessor_zenodo_record)
+                _require_cross_channel_archive_identity(
+                    predecessor_github_record, predecessor_zenodo_record
+                )
+                predecessor_receipt = {
+                    "version_doi": predecessor_zenodo["doi"],
+                    "concept_doi": predecessor_zenodo["concept_doi"],
+                    "github_release_tag": predecessor_github["tag"],
+                    "source_sha": predecessor_github["source_sha"],
+                    "archive_sha256": predecessor_github_record["sha256"],
+                    "archive_size_bytes": predecessor_github_record["bytes"],
+                }
+                predecessor_evidence = PredecessorEvidence(
+                    archive_path=root / "predecessor-github" / predecessor_archive_name,
+                    version_doi=predecessor_receipt["version_doi"],
+                    concept_doi=predecessor_receipt["concept_doi"],
+                    github_release_tag=predecessor_receipt["github_release_tag"],
+                    archive_sha256=predecessor_receipt["archive_sha256"],
+                    archive_size_bytes=predecessor_receipt["archive_size_bytes"],
+                )
+            else:
+                predecessor_evidence = None
             core = audit_published(
                 tag=requested_tag,
                 doi=normalized_doi,
                 github_dir=github_dir,
                 zenodo_dir=zenodo_dir,
                 source_sha=github["source_sha"],
+                predecessor_evidence=predecessor_evidence,
             )
             _reconcile_zenodo_erratum_lineage(core, tag=requested_tag, zenodo=zenodo)
         status = "pass" if core["ok"] else "invalid"
@@ -2012,6 +2225,7 @@ def audit_published_network(  # noqa: C901, PLR0913
             "tag": requested_tag,
             "doi": normalized_doi,
             "source_sha": github["source_sha"],
+            "predecessor": predecessor_receipt,
             "problems": list(core["problems"]),
             "discovery": discovery,
             "downloads": {
@@ -2028,6 +2242,7 @@ def audit_published_network(  # noqa: C901, PLR0913
             status="unavailable",
             problem=str(exc),
             discovery=locals().get("discovery"),
+            predecessor=predecessor_receipt,
         )
     except PublishedAuditInvalid as exc:
         return _failure_network_receipt(
@@ -2036,6 +2251,7 @@ def audit_published_network(  # noqa: C901, PLR0913
             status="invalid",
             problem=str(exc),
             discovery=locals().get("discovery"),
+            predecessor=predecessor_receipt,
         )
     except (OSError, ValueError) as exc:
         return _failure_network_receipt(
@@ -2044,6 +2260,7 @@ def audit_published_network(  # noqa: C901, PLR0913
             status="invalid",
             problem=f"local audit preparation failed ({type(exc).__name__})",
             discovery=locals().get("discovery"),
+            predecessor=predecessor_receipt,
         )
     except Exception as exc:  # noqa: BLE001 - final fail-closed receipt boundary
         return _failure_network_receipt(
@@ -2052,6 +2269,7 @@ def audit_published_network(  # noqa: C901, PLR0913
             status="error",
             problem=f"unexpected audit failure ({type(exc).__name__})",
             discovery=locals().get("discovery"),
+            predecessor=predecessor_receipt,
         )
 
 
@@ -2088,16 +2306,85 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--github-dir", type=Path, required=True, help="downloaded GitHub assets")
     parser.add_argument("--zenodo-dir", type=Path, required=True, help="downloaded Zenodo assets")
     parser.add_argument("--source-sha", default=None, help="expected final source SHA")
+    parser.add_argument(
+        "--predecessor-archive",
+        type=Path,
+        default=None,
+        help="detached predecessor archive for a canonical erratum cold audit",
+    )
+    parser.add_argument(
+        "--predecessor-doi",
+        "--predecessor-version-doi",
+        dest="predecessor_doi",
+        default=None,
+        help="predecessor Zenodo version DOI (required with every predecessor argument)",
+    )
+    parser.add_argument(
+        "--predecessor-concept-doi",
+        dest="predecessor_concept_doi",
+        default=None,
+        help="predecessor Zenodo concept DOI (required with every predecessor argument)",
+    )
+    parser.add_argument(
+        "--predecessor-tag",
+        "--predecessor-github-release-tag",
+        dest="predecessor_tag",
+        default=None,
+        help="immutable predecessor GitHub release tag (required with every predecessor argument)",
+    )
+    parser.add_argument(
+        "--predecessor-sha256",
+        "--predecessor-archive-sha256",
+        dest="predecessor_sha256",
+        default=None,
+        help="predecessor archive SHA-256 (required with every predecessor argument)",
+    )
+    parser.add_argument(
+        "--predecessor-size-bytes",
+        "--predecessor-archive-size-bytes",
+        dest="predecessor_size_bytes",
+        type=int,
+        default=None,
+        help="predecessor archive byte count (required with every predecessor argument)",
+    )
     parser.add_argument("--output", type=Path, default=None, help="receipt output path")
     args = parser.parse_args(argv)
 
     try:
+        predecessor_values = (
+            args.predecessor_archive,
+            args.predecessor_doi,
+            args.predecessor_concept_doi,
+            args.predecessor_tag,
+            args.predecessor_sha256,
+            args.predecessor_size_bytes,
+        )
+        if any(value is not None for value in predecessor_values) and not all(
+            value is not None for value in predecessor_values
+        ):
+            raise ValueError(
+                "predecessor archive, DOI, concept DOI, tag, SHA-256, and size must be provided "
+                "together"
+            )
+        predecessor_evidence = (
+            PredecessorEvidence(
+                archive_path=args.predecessor_archive,
+                version_doi=args.predecessor_doi,
+                concept_doi=args.predecessor_concept_doi,
+                github_release_tag=args.predecessor_tag,
+                archive_sha256=args.predecessor_sha256,
+                archive_size_bytes=args.predecessor_size_bytes,
+            )
+            if all(value is not None for value in predecessor_values)
+            else None
+        )
         receipt = audit_published(
             tag=args.tag,
             doi=args.doi,
             github_dir=args.github_dir,
             zenodo_dir=args.zenodo_dir,
             source_sha=args.source_sha,
+            predecessor_evidence=predecessor_evidence,
         )
     except (OSError, ValueError) as exc:
         print(  # noqa: T201 - CLI output

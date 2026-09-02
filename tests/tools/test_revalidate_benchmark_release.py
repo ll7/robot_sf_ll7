@@ -16,7 +16,7 @@ import pytest
 from robot_sf.benchmark import release_acceptance
 from robot_sf.benchmark.metrics import snqi as curvature_aware_snqi
 from robot_sf.benchmark.published_release_audit import audit_published
-from robot_sf.benchmark.release_erratum import ErratumContract
+from robot_sf.benchmark.release_erratum import ErratumContract, PredecessorEvidence
 from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     load_baseline_mapping,
     load_weight_mapping,
@@ -2257,6 +2257,14 @@ def test_erratum_build_exports_and_cold_audits_real_publication_path(  # noqa: P
         github_dir=github,
         zenodo_dir=zenodo,
         source_sha=fixture["source_sha"],
+        predecessor_evidence=PredecessorEvidence(
+            archive_path=fixture["predecessor_archive"],
+            version_doi=erratum_contract.predecessor_version_doi,
+            concept_doi=erratum_contract.concept_doi,
+            github_release_tag=erratum_contract.predecessor_github_release_tag,
+            archive_sha256=erratum_contract.predecessor_archive_sha256,
+            archive_size_bytes=erratum_contract.predecessor_archive_size_bytes,
+        ),
     )
     assert audit["status"] == "pass"
     assert audit["problems"] == []

@@ -616,6 +616,9 @@ _FAST_FILES = {
     "test_pedestrian_realism_validation.py",
     "test_realism_validation_contract.py",
     "test_realism_segmenter.py",
+    # Public API facade tests must run in PR fast shards so their coverage
+    # proves the changed lazy exports, facade, and episode record round-trip.
+    "test_public_api.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

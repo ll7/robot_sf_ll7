@@ -373,6 +373,8 @@ def _write_snqi_diagnostics_artifacts(  # noqa: C901
         "",
         "## Planner Ordering",
         "",
+        f"- Score basis: `{payload.get('planner_ordering_basis', 'unspecified')}`",
+        "",
         "| Rank | Planner | Kinematics | Mean SNQI | Episodes |",
         "|---:|---|---|---:|---:|",
     ]

@@ -118,6 +118,129 @@ def test_camera_ready_campaign_reexports_package_config_loader() -> None:
         )
 
 
+def test_snqi_positioning_uses_complete_stored_field_ordering(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Publication diagnostics rank the same canonical SNQI field stored in episodes."""
+    episodes = [
+        {
+            "planner_key": "legacy_winner",
+            "kinematics": "differential_drive",
+            "metrics": {"snqi": -0.8},
+        },
+        {
+            "planner_key": "stored_field_winner",
+            "kinematics": "differential_drive",
+            "metrics": {"snqi": -0.1},
+        },
+    ]
+    legacy_ordering = [
+        {
+            "planner_key": "legacy_winner",
+            "kinematics": "differential_drive",
+            "episode_count": 1,
+            "mean_snqi": 0.9,
+            "rank": 1,
+        },
+        {
+            "planner_key": "stored_field_winner",
+            "kinematics": "differential_drive",
+            "episode_count": 1,
+            "mean_snqi": 0.1,
+            "rank": 2,
+        },
+    ]
+    monkeypatch.setattr(
+        camera_ready_campaign_impl_module,
+        "compute_planner_snqi_ordering",
+        lambda *_args, **_kwargs: legacy_ordering,
+    )
+    monkeypatch.setattr(
+        camera_ready_campaign_impl_module,
+        "calibrate_weights",
+        lambda *_args, **_kwargs: {"weights": {}},
+    )
+    monkeypatch.setattr(
+        camera_ready_campaign_impl_module,
+        "compute_component_dominance",
+        lambda *_args, **_kwargs: {},
+    )
+    monkeypatch.setattr(
+        camera_ready_campaign_impl_module,
+        "compute_component_correlations",
+        lambda *_args, **_kwargs: {},
+    )
+    monkeypatch.setattr(
+        camera_ready_campaign_impl_module,
+        "compute_weight_sensitivity",
+        lambda *_args, **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        camera_ready_campaign_impl_module,
+        "build_positioning_recommendation",
+        lambda *_args, **_kwargs: {},
+    )
+
+    result = camera_ready_campaign_impl_module._compute_snqi_positioning(
+        [],
+        episodes,
+        {},
+        {},
+        SimpleNamespace(snqi_contract=SimpleNamespace(calibration_seed=1, calibration_trials=1)),
+    )
+
+    assert result["planner_ordering_basis"] == "stored_metrics.snqi"
+    assert [row["planner_key"] for row in result["planner_ordering"]] == [
+        "stored_field_winner",
+        "legacy_winner",
+    ]
+
+
+def test_stored_snqi_ordering_rejects_partial_fields() -> None:
+    """Mixed present/absent SNQI fields cannot silently define a release ordering."""
+    episodes = [
+        {
+            "planner_key": "planner_a",
+            "kinematics": "differential_drive",
+            "metrics": {"snqi": 0.1},
+        },
+        {
+            "planner_key": "planner_b",
+            "kinematics": "differential_drive",
+            "metrics": {"success": True},
+        },
+    ]
+
+    with pytest.raises(ValueError, match="all episodes or no episodes"):
+        camera_ready_campaign_impl_module.compute_stored_snqi_ordering(episodes)
+
+
+@pytest.mark.parametrize("metrics", [{"snqi": None}, None, "invalid"])
+def test_stored_snqi_ordering_rejects_present_invalid_fields(metrics: object) -> None:
+    """A declared but invalid SNQI surface cannot trigger legacy-scalarizer fallback."""
+    episode = {
+        "planner_key": "planner_a",
+        "kinematics": "differential_drive",
+        "metrics": metrics,
+    }
+
+    with pytest.raises(ValueError, match="metrics"):
+        camera_ready_campaign_impl_module.compute_stored_snqi_ordering([episode])
+
+
+def test_stored_snqi_ordering_allows_campaigns_that_omit_field() -> None:
+    """Historical non-SNQI campaigns may continue to use diagnostic ordering."""
+    episodes = [
+        {
+            "planner_key": "planner_a",
+            "kinematics": "differential_drive",
+            "metrics": {"success": True},
+        }
+    ]
+
+    assert camera_ready_campaign_impl_module.compute_stored_snqi_ordering(episodes) is None
+
+
 def test_camera_ready_campaign_legacy_module_is_package_owned_facade() -> None:
     """Legacy campaign module resolves to the package-owned compatibility facade."""
     assert camera_ready_campaign_module is camera_ready_legacy_facade
@@ -5380,6 +5503,15 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
     # The soft contract warning must not change the process exit code (stays 0 on a completed run).
     assert result["exit_code"] == 0
     assert result["soft_contract_warning"] is True
+    diagnostics = json.loads(
+        (Path(result["summary_json"]).parent / "snqi_diagnostics.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert diagnostics["planner_ordering_basis"] == "diagnostic_scalarizer"
+    assert diagnostics["release_claim_boundary"]["ranking_authority"] is False
+    assert diagnostics["release_claim_boundary"]["ranking_claims_admitted"] is False
+    assert diagnostics["positioning"]["planner_ordering_informative"] is False
 
 
 def test_run_campaign_parity_table_includes_ci_columns(tmp_path: Path, monkeypatch) -> None:

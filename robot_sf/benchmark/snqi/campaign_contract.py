@@ -663,6 +663,72 @@ def compute_planner_snqi_ordering(
     return rows
 
 
+def compute_stored_snqi_ordering(  # noqa: C901
+    episodes: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]] | None:
+    """Order planner arms by canonical finite ``metrics.snqi`` episode fields.
+
+    Returns ``None`` only when every episode genuinely omits the field. A present but null,
+    non-numeric, or non-finite field and a partially populated campaign fail closed so callers
+    cannot silently fall back to a different scalarizer.
+
+    Returns:
+        Ranked planner rows, or ``None`` when every episode omits ``metrics.snqi``.
+    """
+    grouped: dict[tuple[str, str], list[float]] = {}
+    present = 0
+    missing = 0
+    for index, episode in enumerate(episodes):
+        metrics = episode.get("metrics")
+        if not isinstance(metrics, Mapping):
+            if "metrics" in episode:
+                raise ValueError(f"episode[{index}] metrics must be an object")
+            missing += 1
+            continue
+        if "snqi" not in metrics:
+            missing += 1
+            continue
+        present += 1
+        raw_value = metrics["snqi"]
+        if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
+            raise ValueError(f"episode[{index}] metrics.snqi must be a finite number")
+        value = float(raw_value)
+        if not math.isfinite(value):
+            raise ValueError(f"episode[{index}] metrics.snqi must be a finite number")
+        planner_key = episode.get("planner_key")
+        kinematics = episode.get("kinematics")
+        if not isinstance(planner_key, str) or not planner_key.strip():
+            raise ValueError(f"episode[{index}] planner_key must be a non-empty string")
+        if not isinstance(kinematics, str) or not kinematics.strip():
+            raise ValueError(f"episode[{index}] kinematics must be a non-empty string")
+        grouped.setdefault((planner_key, kinematics), []).append(value)
+
+    if present == 0:
+        return None
+    if missing:
+        raise ValueError("metrics.snqi must be present for all episodes or no episodes")
+
+    rows = [
+        {
+            "planner_key": planner_key,
+            "kinematics": kinematics,
+            "episode_count": len(values),
+            "mean_snqi": math.fsum(values) / len(values),
+        }
+        for (planner_key, kinematics), values in grouped.items()
+    ]
+    rows.sort(
+        key=lambda row: (
+            -float(row["mean_snqi"]),
+            str(row["planner_key"]),
+            str(row["kinematics"]),
+        )
+    )
+    for rank, row in enumerate(rows, start=1):
+        row["rank"] = rank
+    return rows
+
+
 def compute_weight_sensitivity(
     episodes: Sequence[Mapping[str, Any]],
     *,

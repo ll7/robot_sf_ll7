@@ -30,6 +30,7 @@ import tempfile
 import zlib
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -90,6 +91,36 @@ EXPECTED_RELEASE_EPISODE_ROWS = 20_160
 EXPECTED_RELEASE_ARMS = 14
 EXPECTED_SOURCE_CAMPAIGN_RELATIVE = Path(
     "output/benchmarks/camera_ready/issue7742_release_full-s30-h600-b1d5ab6de708-v1_20260825"
+)
+
+
+@dataclass(frozen=True)
+class RecoveryContract:
+    """Immutable identities required to derive one rejected producer campaign safely."""
+
+    source_sha: str
+    producer_sums_sha256: str
+    producer_receipt_sha256: str
+    rejected_result_sha256: str
+    producer_file_count: int
+    source_campaign_relative: Path
+    episode_rows: int
+    arms: int
+    goal_timeout_boundary_rows: frozenset[tuple[str, str]]
+    refreshed_producer_receipt_sha256: str | None = None
+
+
+DEFAULT_RECOVERY_CONTRACT = RecoveryContract(
+    source_sha=FROZEN_SOURCE_SHA,
+    producer_sums_sha256=EXPECTED_PRODUCER_SUMS_SHA256,
+    producer_receipt_sha256=EXPECTED_PRODUCER_RECEIPT_SHA256,
+    refreshed_producer_receipt_sha256=EXPECTED_REFRESHED_PRODUCER_RECEIPT_SHA256,
+    rejected_result_sha256=EXPECTED_REJECTED_RESULT_SHA256,
+    producer_file_count=EXPECTED_PRODUCER_FILE_COUNT,
+    source_campaign_relative=EXPECTED_SOURCE_CAMPAIGN_RELATIVE,
+    episode_rows=EXPECTED_RELEASE_EPISODE_ROWS,
+    arms=EXPECTED_RELEASE_ARMS,
+    goal_timeout_boundary_rows=EXPECTED_GOAL_TIMEOUT_BOUNDARY_ROWS,
 )
 
 _SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
@@ -174,6 +205,84 @@ def _validate_safe_component(value: str, *, label: str) -> str:
     if not _SAFE_COMPONENT_RE.fullmatch(value):
         raise DerivedReleaseError(f"{label} contains unsafe characters")
     return value
+
+
+def load_recovery_contract(path: Path) -> RecoveryContract:  # noqa: C901
+    """Load a checksum-pinned recovery identity without release-specific code edits."""
+    payload = _read_json(_assert_safe_file(path, label="recovery contract"))
+    if payload.get("schema_version") != "benchmark-derived-release-recovery.v1":
+        raise DerivedReleaseError("recovery contract schema_version is unsupported")
+
+    def required_text(name: str) -> str:
+        value = payload.get(name)
+        if not isinstance(value, str) or not value.strip():
+            raise DerivedReleaseError(f"recovery contract {name} must be a non-empty string")
+        return value.strip()
+
+    source_sha = required_text("source_sha").lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", source_sha):
+        raise DerivedReleaseError("recovery contract source_sha must be a full Git SHA")
+    digests: dict[str, str] = {}
+    for name in (
+        "producer_sums_sha256",
+        "producer_receipt_sha256",
+        "rejected_result_sha256",
+    ):
+        digest = required_text(name).lower()
+        if not _SHA256_RE.fullmatch(digest):
+            raise DerivedReleaseError(f"recovery contract {name} must be a SHA-256")
+        digests[name] = digest
+    refreshed = payload.get("refreshed_producer_receipt_sha256")
+    if refreshed is not None:
+        if not isinstance(refreshed, str) or not _SHA256_RE.fullmatch(refreshed.lower()):
+            raise DerivedReleaseError(
+                "recovery contract refreshed_producer_receipt_sha256 must be a SHA-256"
+            )
+        refreshed = refreshed.lower()
+
+    source_campaign_relative = Path(required_text("source_campaign_relative"))
+    if (
+        source_campaign_relative.is_absolute()
+        or source_campaign_relative == Path(".")
+        or ".." in source_campaign_relative.parts
+    ):
+        raise DerivedReleaseError("recovery contract source_campaign_relative must be safe")
+
+    integers: dict[str, int] = {}
+    for name in ("producer_file_count", "episode_rows", "arms"):
+        value = payload.get(name)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise DerivedReleaseError(f"recovery contract {name} must be a positive integer")
+        integers[name] = value
+
+    raw_boundaries = payload.get("goal_timeout_boundary_rows", [])
+    if not isinstance(raw_boundaries, list):
+        raise DerivedReleaseError("recovery contract goal_timeout_boundary_rows must be a list")
+    boundaries: set[tuple[str, str]] = set()
+    for index, row in enumerate(raw_boundaries):
+        if not isinstance(row, Mapping):
+            raise DerivedReleaseError(f"recovery contract boundary row {index} must be an object")
+        arm = row.get("arm")
+        episode_id = row.get("episode_id")
+        if not isinstance(arm, str) or not arm or not isinstance(episode_id, str) or not episode_id:
+            raise DerivedReleaseError(f"recovery contract boundary row {index} is malformed")
+        identity = (arm, episode_id)
+        if identity in boundaries:
+            raise DerivedReleaseError("recovery contract duplicates a boundary-row identity")
+        boundaries.add(identity)
+
+    return RecoveryContract(
+        source_sha=source_sha,
+        producer_sums_sha256=digests["producer_sums_sha256"],
+        producer_receipt_sha256=digests["producer_receipt_sha256"],
+        refreshed_producer_receipt_sha256=refreshed,
+        rejected_result_sha256=digests["rejected_result_sha256"],
+        producer_file_count=integers["producer_file_count"],
+        source_campaign_relative=source_campaign_relative,
+        episode_rows=integers["episode_rows"],
+        arms=integers["arms"],
+        goal_timeout_boundary_rows=frozenset(boundaries),
+    )
 
 
 def _assert_safe_directory(path: Path, *, label: str) -> Path:
@@ -449,6 +558,7 @@ def _verify_acceptance_campaign_subset(
     campaign_root: Path,
     *,
     producer_evidence: Mapping[str, Any],
+    expected_rejected_result_sha256: str | None = None,
 ) -> dict[str, Any]:
     """Bind the untouched acceptance tree to the checksummed producer superset.
 
@@ -475,7 +585,10 @@ def _verify_acceptance_campaign_subset(
     result_identity = file_map.get(REJECTED_RESULT_RELATIVE)
     if not isinstance(result_identity, Mapping):
         raise DerivedReleaseError("accepted campaign release_result is missing")
-    if result_identity.get("sha256") != EXPECTED_REJECTED_RESULT_SHA256:
+    expected_rejected_result_sha256 = (
+        expected_rejected_result_sha256 or EXPECTED_REJECTED_RESULT_SHA256
+    )
+    if result_identity.get("sha256") != expected_rejected_result_sha256:
         raise DerivedReleaseError("accepted campaign release_result is not the admitted rejection")
     return {
         "status": "verified",
@@ -977,10 +1090,11 @@ def _rebind_one_publication_sidecar(
     episodes_path: Path,
     source_file_map: Mapping[str, Mapping[str, Any]],
     boundary_files: Mapping[str, Mapping[str, Any]],
+    source_campaign_relative: Path = EXPECTED_SOURCE_CAMPAIGN_RELATIVE,
 ) -> dict[str, Any]:
     """Rebind one source-validated sidecar to its derived episode path."""
     relative_path = episodes_path.relative_to(campaign_root).as_posix()
-    source_relative_path = (EXPECTED_SOURCE_CAMPAIGN_RELATIVE / relative_path).as_posix()
+    source_relative_path = (source_campaign_relative / relative_path).as_posix()
     allowed_paths = {relative_path, source_relative_path}
     sidecar_path = episodes_path.with_name(f"{episodes_path.name}.provenance.json")
     sidecar_relative = sidecar_path.relative_to(campaign_root).as_posix()
@@ -1067,6 +1181,7 @@ def _rebind_publication_sidecars(
     boundary_reconciliation: Mapping[str, Any],
     expected_arm_count: int = EXPECTED_RELEASE_ARMS,
     expected_row_count: int = EXPECTED_RELEASE_EPISODE_ROWS,
+    source_campaign_relative: Path = EXPECTED_SOURCE_CAMPAIGN_RELATIVE,
 ) -> dict[str, Any]:
     """Rebind every copied sidecar to the derived tree after strict source-path validation."""
     raw_boundary_files = boundary_reconciliation.get("files")
@@ -1080,6 +1195,7 @@ def _rebind_publication_sidecars(
             episodes_path=episodes_path,
             source_file_map=source_file_map,
             boundary_files=boundary_files,
+            source_campaign_relative=source_campaign_relative,
         )
         for episodes_path in sorted(campaign_root.glob("runs/*/episodes.jsonl"))
     ]
@@ -1281,6 +1397,7 @@ def _reconcile_publication_snqi_diagnostics(
         expected_arm_count=expected_arm_count,
     )
     diagnostics["planner_ordering"] = _stored_snqi_ordering(campaign_root)
+    diagnostics["planner_ordering_basis"] = "stored_metrics.snqi"
     diagnostics["score_basis_reconciliation"] = {
         "status": "reconciled_from_verified_stored_fields",
         "canonical_formula": "robot_sf.benchmark.metrics.snqi",
@@ -1594,11 +1711,13 @@ def _assert_publication_inputs_from_manifest(
     return bound
 
 
-def _assert_frozen_source_repository(source_root: Path) -> None:
+def _assert_frozen_source_repository(
+    source_root: Path, expected_source_sha: str = FROZEN_SOURCE_SHA
+) -> None:
     """Require the supplied source checkout to be clean and the fixed release SHA."""
     _assert_safe_directory(source_root, label="source repository root")
     actual = _git_value(["rev-parse", "HEAD^{commit}"], cwd=source_root).lower()
-    if actual != FROZEN_SOURCE_SHA:
+    if actual != expected_source_sha:
         raise DerivedReleaseError("source repository checkout is not the frozen execution SHA")
     status = subprocess.run(
         ["git", "status", "--porcelain=v1", "--untracked-files=all"],
@@ -1890,6 +2009,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     expected_validator_commit: str,
     publication_name: str | None = None,
     preserved_receipt_source: Path | None = None,
+    recovery_contract: RecoveryContract = DEFAULT_RECOVERY_CONTRACT,
 ) -> dict[str, Any]:
     """Run the complete derived validation/build/promotion workflow.
 
@@ -1934,23 +2054,28 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     if final_campaign.exists():
         raise DerivedReleaseError("derived campaign or publication target already exists")
     _assert_distinct_validator_checkout(validator_repository_root, source_repository_root)
-    _assert_frozen_source_repository(source_repository_root)
+    _assert_frozen_source_repository(source_repository_root, recovery_contract.source_sha)
     validator = _validator_provenance(
         validator_repository_root,
         expected_commit=expected_validator_commit,
     )
     producer_evidence = verify_producer_artifacts(
         producer_root,
+        expected_sums_sha256=recovery_contract.producer_sums_sha256,
         expected_receipt_sha256=(
-            EXPECTED_REFRESHED_PRODUCER_RECEIPT_SHA256
+            recovery_contract.refreshed_producer_receipt_sha256
             if preserved_receipt_source is not None
-            else EXPECTED_PRODUCER_RECEIPT_SHA256
+            else recovery_contract.producer_receipt_sha256
         ),
         preserved_receipt_source=preserved_receipt_source,
+        expected_preserved_receipt_sha256=recovery_contract.producer_receipt_sha256,
+        expected_rejected_result_sha256=recovery_contract.rejected_result_sha256,
+        expected_file_count=recovery_contract.producer_file_count,
     )
     accepted_evidence = _verify_acceptance_campaign_subset(
         acceptance_root,
         producer_evidence=producer_evidence,
+        expected_rejected_result_sha256=recovery_contract.rejected_result_sha256,
     )
 
     with _source_repository_binding(
@@ -1986,7 +2111,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     if acceptance.get("status") != "valid":
         raise DerivedReleaseError("corrected full-release acceptance rejected preserved rows")
     source_commits = acceptance.get("source_commits")
-    if source_commits != [FROZEN_SOURCE_SHA]:
+    if source_commits != [recovery_contract.source_sha]:
         raise DerivedReleaseError("acceptance did not bind every row to the frozen source SHA")
 
     output_root.mkdir(parents=True, exist_ok=True)
@@ -2015,18 +2140,26 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             manifest, resolved_manifest, source_repository_root
         )
         goal_timeout_reconciliation = _annotate_publication_goal_timeout_boundaries(
-            staging_campaign
+            staging_campaign,
+            expected_rows=recovery_contract.goal_timeout_boundary_rows,
         )
         sidecar_reconciliation = _rebind_publication_sidecars(
             staging_campaign,
             source_file_map=producer_evidence["file_map"],
             boundary_reconciliation=goal_timeout_reconciliation,
+            expected_arm_count=recovery_contract.arms,
+            expected_row_count=recovery_contract.episode_rows,
+            source_campaign_relative=recovery_contract.source_campaign_relative,
         )
         with _source_repository_binding(
             source_repository_root,
             validator_root=validator_repository_root,
         ):
-            snqi_reconciliation = _reconcile_publication_snqi_diagnostics(staging_campaign)
+            snqi_reconciliation = _reconcile_publication_snqi_diagnostics(
+                staging_campaign,
+                expected_row_count=recovery_contract.episode_rows,
+                expected_arm_count=recovery_contract.arms,
+            )
             projection_acceptance = _run_exact_validator(
                 validator_root=validator_repository_root,
                 source_root=source_repository_root,
@@ -2035,7 +2168,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             )
         if projection_acceptance.get("status") != "valid":
             raise DerivedReleaseError("derived publication projection failed full acceptance")
-        if projection_acceptance.get("source_commits") != [FROZEN_SOURCE_SHA]:
+        if projection_acceptance.get("source_commits") != [recovery_contract.source_sha]:
             raise DerivedReleaseError("derived publication projection lost frozen source binding")
         publication_reconciliation = {
             "goal_timeout_boundary": goal_timeout_reconciliation,
@@ -2052,7 +2185,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             manifest_validation=manifest_validation,
             acceptance=acceptance,
             validator=validator,
-            source_sha=FROZEN_SOURCE_SHA,
+            source_sha=recovery_contract.source_sha,
             derived_checksums=derived_checksums,
             publication_inputs=publication_inputs,
             publication_reconciliation=publication_reconciliation,
@@ -2098,18 +2231,22 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             bundle_name=bundle_dir.name,
             archive_path=archive_path,
             bundle_dir=bundle_dir,
-            source_sha=FROZEN_SOURCE_SHA,
+            source_sha=recovery_contract.source_sha,
         )
         # Detect producer mutation before promotion.  This is deliberately the
         # same strict manifest check used before copying.
         producer_after = verify_producer_artifacts(
             producer_root,
+            expected_sums_sha256=recovery_contract.producer_sums_sha256,
             expected_receipt_sha256=(
-                EXPECTED_REFRESHED_PRODUCER_RECEIPT_SHA256
+                recovery_contract.refreshed_producer_receipt_sha256
                 if preserved_receipt_source is not None
-                else EXPECTED_PRODUCER_RECEIPT_SHA256
+                else recovery_contract.producer_receipt_sha256
             ),
             preserved_receipt_source=preserved_receipt_source,
+            expected_preserved_receipt_sha256=recovery_contract.producer_receipt_sha256,
+            expected_rejected_result_sha256=recovery_contract.rejected_result_sha256,
+            expected_file_count=recovery_contract.producer_file_count,
         )
         if producer_after["files"] != producer_evidence["files"]:
             raise DerivedReleaseError("producer tree changed during derived build")
@@ -2125,6 +2262,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         accepted_after = _verify_acceptance_campaign_subset(
             acceptance_root,
             producer_evidence=producer_after,
+            expected_rejected_result_sha256=recovery_contract.rejected_result_sha256,
         )
         if accepted_after.get("file_map") != accepted_evidence.get("file_map"):
             raise DerivedReleaseError("accepted campaign tree changed during derived build")
@@ -2178,6 +2316,14 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--derived-name", required=True)
     parser.add_argument("--publication-name")
     parser.add_argument(
+        "--recovery-contract",
+        type=Path,
+        help=(
+            "JSON benchmark-derived-release-recovery.v1 identity contract. "
+            "Omit only for the historical job-14890 recovery."
+        ),
+    )
+    parser.add_argument(
         "--preserved-receipt",
         type=Path,
         help="Single-member gzip containing the immutable pre-refresh receipt.",
@@ -2190,6 +2336,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     acceptance_root = args.acceptance_root or args.producer_root
     try:
+        recovery_contract = (
+            load_recovery_contract(args.recovery_contract)
+            if args.recovery_contract is not None
+            else DEFAULT_RECOVERY_CONTRACT
+        )
         result = build_derived_release(
             producer_root=args.producer_root,
             acceptance_root=acceptance_root,
@@ -2201,6 +2352,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             derived_name=args.derived_name,
             publication_name=args.publication_name,
             preserved_receipt_source=args.preserved_receipt,
+            recovery_contract=recovery_contract,
         )
     except (DerivedReleaseError, OSError, ValueError, PublicationPreflightError) as exc:
         print(json.dumps({"status": "rejected", "reason": str(exc)}, indent=2))

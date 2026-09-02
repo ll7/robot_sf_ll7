@@ -32,6 +32,48 @@ def _write(path: Path, value: str) -> None:
     path.write_text(value, encoding="utf-8")
 
 
+def test_load_recovery_contract_supports_new_checksum_pinned_campaign(tmp_path: Path) -> None:
+    contract_path = tmp_path / "recovery.json"
+    payload = {
+        "schema_version": "benchmark-derived-release-recovery.v1",
+        "source_sha": "5" * 40,
+        "producer_sums_sha256": "1" * 64,
+        "producer_receipt_sha256": "2" * 64,
+        "rejected_result_sha256": "3" * 64,
+        "producer_file_count": 110,
+        "source_campaign_relative": "output/benchmarks/camera_ready/campaign-v1",
+        "episode_rows": 20_160,
+        "arms": 14,
+        "goal_timeout_boundary_rows": [],
+    }
+    _write(contract_path, json.dumps(payload) + "\n")
+
+    contract = recovery.load_recovery_contract(contract_path)
+
+    assert contract.source_sha == "5" * 40
+    assert contract.producer_file_count == 110
+    assert contract.goal_timeout_boundary_rows == frozenset()
+
+
+def test_load_recovery_contract_rejects_unsafe_campaign_path(tmp_path: Path) -> None:
+    contract_path = tmp_path / "recovery.json"
+    payload = {
+        "schema_version": "benchmark-derived-release-recovery.v1",
+        "source_sha": "5" * 40,
+        "producer_sums_sha256": "1" * 64,
+        "producer_receipt_sha256": "2" * 64,
+        "rejected_result_sha256": "3" * 64,
+        "producer_file_count": 110,
+        "source_campaign_relative": "../campaign-v1",
+        "episode_rows": 20_160,
+        "arms": 14,
+    }
+    _write(contract_path, json.dumps(payload) + "\n")
+
+    with pytest.raises(recovery.DerivedReleaseError, match="source_campaign_relative"):
+        recovery.load_recovery_contract(contract_path)
+
+
 def _snqi_metrics(*, curvature_mean: float) -> dict[str, float]:
     """Return a minimal metric payload on the pinned curvature-aware basis."""
     root = Path(__file__).resolve().parents[2]
@@ -877,6 +919,7 @@ def test_publication_projection_reconciles_snqi_ordering_as_advisory(
         (campaign / "reports" / "snqi_diagnostics.json").read_text(encoding="utf-8")
     )
     assert [row["planner_key"] for row in reconciled["planner_ordering"]] == ["goal", "orca"]
+    assert reconciled["planner_ordering_basis"] == "stored_metrics.snqi"
     assert reconciled["contract_status"] == "fail"
     assert reconciled["contract_enforcement"] == "warn"
     assert reconciled["release_claim_boundary"]["ranking_authority"] is False

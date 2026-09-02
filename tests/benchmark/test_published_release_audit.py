@@ -63,6 +63,67 @@ def test_cross_channel_byte_identity_passes(tmp_path: Path) -> None:
     assert receipt["problems"] == []
 
 
+def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Erratum tags trigger cold scientific-receipt validation from the bundle payload."""
+    source_sha = "5" * 40
+    tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}-erratum.1"
+    doi = "10.5281/zenodo.8"
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    bundle = github / "bundle.zip"
+    bundle.parent.mkdir(parents=True)
+    with zipfile.ZipFile(bundle, "w") as archive:
+        archive.writestr(
+            "bundle/payload/provenance/benchmark_release_erratum.json",
+            json.dumps({"schema_version": "benchmark-release-erratum-receipt.v1"}),
+        )
+    _write_bytes(zenodo / "bundle.zip", bundle.read_bytes())
+    calls: list[tuple[Path, Path, str, str]] = []
+
+    def fake_validate(
+        receipt_path: Path, *, campaign_root: Path, expected_tag: str, expected_doi: str
+    ) -> dict[str, object]:
+        calls.append((receipt_path, campaign_root, expected_tag, expected_doi))
+        return {"status": "pass", "episode_rows": 20_160}
+
+    monkeypatch.setattr(
+        published_audit_module, "validate_erratum_receipt_against_campaign", fake_validate
+    )
+
+    receipt = audit_published(
+        tag=tag,
+        doi=doi,
+        github_dir=github,
+        zenodo_dir=zenodo,
+    )
+
+    assert receipt["status"] == "pass"
+    assert receipt["observations"]["erratum"]["episode_rows"] == 20_160
+    assert calls[0][1].name == "payload"
+    assert calls[0][2:] == (tag, doi)
+
+
+def test_erratum_audit_rejects_bundle_without_correction_receipt(tmp_path: Path) -> None:
+    """A matching two-channel archive is insufficient for an erratum without its proof."""
+    tag = f"paper-matrix-v2-h600-s30-2026-09-{'5' * 40}-erratum.1"
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    for channel in (github, zenodo):
+        _make_bundle(channel / "bundle.zip")
+
+    receipt = audit_published(
+        tag=tag,
+        doi="10.5281/zenodo.8",
+        github_dir=github,
+        zenodo_dir=zenodo,
+    )
+
+    assert receipt["status"] == "fail"
+    assert any("exactly one correction receipt" in problem for problem in receipt["problems"])
+
+
 def test_cross_channel_mismatch_fails(tmp_path: Path) -> None:
     github = tmp_path / "github"
     zenodo = tmp_path / "zenodo"

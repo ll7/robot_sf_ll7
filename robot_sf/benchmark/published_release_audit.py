@@ -33,6 +33,10 @@ from typing import Any, Protocol
 from urllib.parse import quote, urlsplit
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.release_erratum import (
+    ReleaseErratumError,
+    validate_erratum_receipt_against_campaign,
+)
 from robot_sf.common.optional_import import try_import
 
 _release_tag_identity = try_import("robot_sf.benchmark.release_tag_identity")
@@ -224,7 +228,13 @@ def _channel_assets(channel_dir: Path) -> list[Path]:
 
 
 def _verify_bundle(
-    github_assets: list[Path], github_dir: Path, observations: dict[str, Any], problems: list[str]
+    github_assets: list[Path],
+    github_dir: Path,
+    observations: dict[str, Any],
+    problems: list[str],
+    *,
+    tag: str,
+    doi: str,
 ) -> None:
     """Extract the largest archive and verify internal checksums.
 
@@ -243,6 +253,21 @@ def _verify_bundle(
         members = _extract_members(bundle, extracted)
         observations["bundle_member_count"] = len(members)
         problems.extend(_verify_internal_checksums(extracted, members))
+        if re.search(r"-erratum\.[1-9][0-9]*$", tag):
+            receipt_paths = sorted(extracted.rglob("benchmark_release_erratum.json"))
+            if len(receipt_paths) != 1:
+                problems.append("erratum bundle must contain exactly one correction receipt")
+            else:
+                receipt_path = receipt_paths[0]
+                try:
+                    observations["erratum"] = validate_erratum_receipt_against_campaign(
+                        receipt_path,
+                        campaign_root=receipt_path.parent.parent,
+                        expected_tag=tag,
+                        expected_doi=doi,
+                    )
+                except ReleaseErratumError as exc:
+                    problems.append(f"erratum receipt validation failed: {exc}")
     except ValueError as exc:
         problems.append(str(exc))
 
@@ -317,7 +342,14 @@ def audit_published(
                 f"cross-channel byte mismatch for {name}: github={gh_sha[:12]} zenodo={zn_sha[:12]}"
             )
 
-    _verify_bundle(github_assets, github_dir, observations, problems)
+    _verify_bundle(
+        github_assets,
+        github_dir,
+        observations,
+        problems,
+        tag=tag,
+        doi=doi,
+    )
     doi_version = _validate_doi(doi, observations, problems)
 
     # Source-SHA binding: prospective check (issue #7938 contract).

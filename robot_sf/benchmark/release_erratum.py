@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import tarfile
 from collections.abc import Iterable, Mapping
@@ -21,6 +22,7 @@ from typing import Any, BinaryIO
 ERRATUM_CONTRACT_SCHEMA = "benchmark-release-erratum.v1"
 ERRATUM_RECEIPT_SCHEMA = "benchmark-release-erratum-receipt.v1"
 ERRATUM_SCOPE = "derived_publication_metadata_only"
+SCIENTIFIC_CANONICALIZATION = "robot-sf-scientific-json.v1"
 _SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _DOI_RE = re.compile(r"^10\.5281/zenodo\.(\d+)$")
@@ -52,6 +54,8 @@ class ErratumContract:
     seed_count: int
     episode_rows: int
     builder_sha: str
+    validator_sha: str
+    orchestration_sha: str
     concept_doi: str
     successor_version_doi: str
     successor_github_release_tag: str
@@ -132,13 +136,50 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _canonical_scientific_value(value: Any) -> list[Any]:  # noqa: C901
+    """Return a type-tagged JSON value with deterministic non-finite floats.
+
+    Historical episode JSONL uses Python's explicit ``NaN`` and
+    ``Infinity`` tokens for unavailable diagnostics. They are scientific leaf
+    values and must compare exactly, but they cannot be emitted by strict
+    RFC-8259 JSON. A tagged representation also avoids collisions with literal
+    strings or user-provided objects that happen to resemble sentinel values.
+
+    Returns:
+        A strict-JSON-compatible, type-tagged canonical value.
+    """
+    if value is None:
+        return ["null"]
+    if isinstance(value, bool):
+        return ["bool", value]
+    if isinstance(value, int):
+        return ["int", str(value)]
+    if isinstance(value, float):
+        if math.isnan(value):
+            return ["float", "nan"]
+        if math.isinf(value):
+            return ["float", "+inf" if value > 0 else "-inf"]
+        return ["float", value.hex()]
+    if isinstance(value, str):
+        return ["str", value]
+    if isinstance(value, list):
+        return ["list", [_canonical_scientific_value(item) for item in value]]
+    if isinstance(value, Mapping):
+        if any(not isinstance(key, str) for key in value):
+            raise ReleaseErratumError("scientific row object keys must be strings")
+        return [
+            "object",
+            [[key, _canonical_scientific_value(value[key])] for key in sorted(value)],
+        ]
+    raise ReleaseErratumError("scientific row contains a non-JSON value")
+
+
 def _canonical_bytes(value: Any) -> bytes:
     try:
         return json.dumps(
-            value,
+            _canonical_scientific_value(value),
             ensure_ascii=False,
             allow_nan=False,
-            sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
     except (TypeError, ValueError) as exc:
@@ -239,6 +280,8 @@ def load_erratum_contract(  # noqa: C901, PLR0912, PLR0915
     predecessor_digest = _required_text(supersedes, "archive_sha256", label="supersedes").lower()
     source_sha = _required_text(scientific, "source_sha", label="scientific_identity").lower()
     builder_sha = _required_text(derivation, "builder_sha", label="derivation").lower()
+    validator_sha = _required_text(derivation, "validator_sha", label="derivation").lower()
+    orchestration_sha = _required_text(derivation, "orchestration_sha", label="derivation").lower()
     concept_doi = _required_text(successor, "concept_doi", label="successor")
     successor_doi = _required_text(successor, "version_doi", label="successor")
     successor_tag = _required_text(successor, "github_release_tag", label="successor")
@@ -255,8 +298,15 @@ def load_erratum_contract(  # noqa: C901, PLR0912, PLR0915
         raise ReleaseErratumError("supersedes.archive_sha256 must be a lowercase SHA-256")
     if _SHA256_RE.fullmatch(metadata_digest) is None:
         raise ReleaseErratumError("successor.metadata_sha256 must be a lowercase SHA-256")
-    if _SHA1_RE.fullmatch(source_sha) is None or _SHA1_RE.fullmatch(builder_sha) is None:
-        raise ReleaseErratumError("scientific source and builder SHAs must be full lowercase SHAs")
+    if any(
+        _SHA1_RE.fullmatch(value) is None
+        for value in (source_sha, builder_sha, validator_sha, orchestration_sha)
+    ):
+        raise ReleaseErratumError(
+            "scientific source, builder, validator, and orchestration SHAs must be full lowercase SHAs"
+        )
+    if source_sha in {builder_sha, validator_sha, orchestration_sha}:
+        raise ReleaseErratumError("erratum implementation SHAs must differ from scientific source")
     if not _TAG_RE.fullmatch(predecessor_tag) or not _TAG_RE.fullmatch(successor_tag):
         raise ReleaseErratumError("erratum GitHub release tags are invalid")
     if successor_tag != f"{predecessor_tag}-erratum.1":
@@ -312,6 +362,8 @@ def load_erratum_contract(  # noqa: C901, PLR0912, PLR0915
         seed_count=seed_count,
         episode_rows=episode_rows,
         builder_sha=builder_sha,
+        validator_sha=validator_sha,
+        orchestration_sha=orchestration_sha,
         concept_doi=concept_doi,
         successor_version_doi=successor_doi,
         successor_github_release_tag=successor_tag,
@@ -610,8 +662,15 @@ def build_erratum_receipt(
         },
         "scientific_identity": successor.public_dict(),
         "scientific_equality": equality,
+        "scientific_canonicalization": {
+            "schema": SCIENTIFIC_CANONICALIZATION,
+            "nonfinite_float_policy": "preserve_nan_positive_infinity_and_negative_infinity",
+            "finite_float_policy": "python_float_hex",
+        },
         "derivation": {
             "builder_sha": contract.builder_sha,
+            "validator_sha": contract.validator_sha,
+            "orchestration_sha": contract.orchestration_sha,
             "scientific_source_sha": contract.source_sha,
             "simulation_rerun": False,
         },
@@ -633,4 +692,220 @@ def build_erratum_receipt(
             "archive_container",
         ],
         "credentials": "not_recorded",
+    }
+
+
+def _load_published_erratum_receipt(receipt_path: Path) -> tuple[Path, Mapping[str, Any]]:
+    """Load the outer published receipt contract.
+
+    Returns:
+        The safe receipt path and parsed mapping.
+    """
+    path = _safe_regular_file(receipt_path, label="published erratum receipt")
+    try:
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise ReleaseErratumError("published erratum receipt is not readable JSON") from exc
+    receipt = _require_mapping(receipt, label="published erratum receipt")
+    if receipt.get("schema_version") != ERRATUM_RECEIPT_SCHEMA:
+        raise ReleaseErratumError("published erratum receipt schema is unsupported")
+    if receipt.get("correction_scope") != ERRATUM_SCOPE:
+        raise ReleaseErratumError("published erratum receipt scope is not metadata-only")
+    return path, receipt
+
+
+def _validate_published_erratum_verdict(receipt: Mapping[str, Any]) -> None:
+    """Require exact equality, advisory claims, and the canonicalization contract."""
+    verdict = _require_mapping(receipt.get("corrected_verdict"), label="receipt.corrected_verdict")
+    equality = _require_mapping(
+        receipt.get("scientific_equality"), label="receipt.scientific_equality"
+    )
+    canonicalization = _require_mapping(
+        receipt.get("scientific_canonicalization"),
+        label="receipt.scientific_canonicalization",
+    )
+    expected_verdict = {
+        "publication_preflight_status": "pass",
+        "publication_preflight_violations": [],
+        "release_status": "ok",
+        "ranking_authority": False,
+        "ranking_claims_admitted": False,
+    }
+    if any(verdict.get(key) != value for key, value in expected_verdict.items()):
+        raise ReleaseErratumError("published erratum receipt has a contradictory verdict")
+    expected_equality = {
+        "status": "identical",
+        "identity_set_equal": True,
+        "canonical_rows_equal": True,
+        "component_leaves_equal": True,
+        "simulation_rerun": False,
+    }
+    if any(equality.get(key) != value for key, value in expected_equality.items()):
+        raise ReleaseErratumError("published erratum receipt does not claim exact equality")
+    if canonicalization.get("schema") != SCIENTIFIC_CANONICALIZATION:
+        raise ReleaseErratumError("published erratum receipt canonicalization is unsupported")
+
+
+def _published_erratum_contract(  # noqa: C901
+    receipt: Mapping[str, Any],
+    *,
+    receipt_path: Path,
+    expected_tag: str,
+    expected_doi: str,
+) -> tuple[ErratumContract, Mapping[str, Any], Mapping[str, Any]]:
+    """Validate receipt identities.
+
+    Returns:
+        The snapshot contract, scientific identity, and equality mapping.
+    """
+
+    supersedes = _require_mapping(receipt.get("supersedes"), label="receipt.supersedes")
+    successor = _require_mapping(receipt.get("successor"), label="receipt.successor")
+    scientific = _require_mapping(
+        receipt.get("scientific_identity"), label="receipt.scientific_identity"
+    )
+    equality = _require_mapping(
+        receipt.get("scientific_equality"), label="receipt.scientific_equality"
+    )
+    derivation = _require_mapping(receipt.get("derivation"), label="receipt.derivation")
+    if successor.get("github_release_tag") != expected_tag:
+        raise ReleaseErratumError("published erratum receipt successor tag is incorrect")
+    if successor.get("version_doi") != expected_doi:
+        raise ReleaseErratumError("published erratum receipt successor DOI is incorrect")
+    if successor.get("relation") != "isNewVersionOf":
+        raise ReleaseErratumError("published erratum receipt relation is incorrect")
+    concept_doi = _required_text(successor, "concept_doi", label="receipt.successor")
+    if _DOI_RE.fullmatch(concept_doi) is None or concept_doi == expected_doi:
+        raise ReleaseErratumError("published erratum receipt concept DOI is invalid")
+    metadata_digest = _required_text(
+        successor, "metadata_sha256", label="receipt.successor"
+    ).lower()
+    if _SHA256_RE.fullmatch(metadata_digest) is None:
+        raise ReleaseErratumError("published erratum receipt metadata digest is invalid")
+    predecessor_doi = _required_text(supersedes, "version_doi", label="receipt.supersedes")
+    predecessor_digest = _required_text(
+        supersedes, "archive_sha256", label="receipt.supersedes"
+    ).lower()
+    predecessor_tag = _required_text(supersedes, "github_release_tag", label="receipt.supersedes")
+    if _DOI_RE.fullmatch(predecessor_doi) is None or predecessor_doi == expected_doi:
+        raise ReleaseErratumError("published erratum receipt predecessor DOI is invalid")
+    if _SHA256_RE.fullmatch(predecessor_digest) is None:
+        raise ReleaseErratumError("published erratum receipt predecessor digest is invalid")
+    predecessor_size = _required_positive_int(
+        supersedes, "archive_size_bytes", label="receipt.supersedes"
+    )
+    if supersedes.get("old_publication_retained") is not True:
+        raise ReleaseErratumError("published erratum receipt does not retain its predecessor")
+    if expected_tag != f"{predecessor_tag}-erratum.1":
+        raise ReleaseErratumError("published erratum receipt tag lineage is incorrect")
+
+    source_sha = _required_text(scientific, "source_sha", label="receipt.scientific_identity")
+    builder_sha = _required_text(derivation, "builder_sha", label="receipt.derivation")
+    validator_sha = _required_text(derivation, "validator_sha", label="receipt.derivation")
+    orchestration_sha = _required_text(derivation, "orchestration_sha", label="receipt.derivation")
+    if any(
+        _SHA1_RE.fullmatch(value) is None
+        for value in (source_sha, builder_sha, validator_sha, orchestration_sha)
+    ):
+        raise ReleaseErratumError("published erratum receipt contains an invalid Git SHA")
+    if source_sha in {builder_sha, validator_sha, orchestration_sha}:
+        raise ReleaseErratumError("published erratum receipt conflates source and implementation")
+    if derivation.get("simulation_rerun") is not False:
+        raise ReleaseErratumError("published erratum receipt claims a simulation rerun")
+    return (
+        ErratumContract(
+            correction_id=_required_text(
+                receipt, "correction_id", label="published erratum receipt"
+            ),
+            predecessor_version_doi=predecessor_doi,
+            predecessor_archive_sha256=predecessor_digest,
+            predecessor_archive_size_bytes=predecessor_size,
+            predecessor_github_release_tag=predecessor_tag,
+            source_sha=source_sha,
+            planner_arms=_required_positive_int(
+                scientific, "planner_arms", label="receipt.scientific_identity"
+            ),
+            scenario_count=_required_positive_int(
+                scientific, "scenario_count", label="receipt.scientific_identity"
+            ),
+            seed_count=_required_positive_int(
+                scientific, "seed_count", label="receipt.scientific_identity"
+            ),
+            episode_rows=_required_positive_int(
+                scientific, "episode_rows", label="receipt.scientific_identity"
+            ),
+            builder_sha=builder_sha,
+            validator_sha=validator_sha,
+            orchestration_sha=orchestration_sha,
+            concept_doi=concept_doi,
+            successor_version_doi=expected_doi,
+            successor_github_release_tag=expected_tag,
+            metadata_path=receipt_path,
+            metadata_sha256=metadata_digest,
+        ),
+        scientific,
+        equality,
+    )
+
+
+def _assert_published_equality_digests(
+    scientific: Mapping[str, Any], equality: Mapping[str, Any]
+) -> None:
+    """Require the equality summary to repeat the canonical scientific digests."""
+    keys = (
+        "episode_identity_manifest_sha256",
+        "component_leaf_manifest_sha256",
+        "canonical_row_manifest_sha256",
+        "episode_rows",
+        "planner_arms",
+    )
+    if any(equality.get(key) != scientific.get(key) for key in keys):
+        raise ReleaseErratumError("published erratum equality digest is inconsistent")
+
+
+def validate_erratum_receipt_against_campaign(
+    receipt_path: Path,
+    *,
+    campaign_root: Path,
+    expected_tag: str,
+    expected_doi: str,
+) -> dict[str, Any]:
+    """Validate an embedded receipt and recompute its successor scientific leaves.
+
+    This cold-audit helper does not trust the receipt's claimed successor
+    digests. It rebuilds them from the downloaded bundle. The predecessor
+    archive remains independently verified during derivation and is bound by
+    DOI, size, and SHA-256 in the receipt.
+
+    Returns:
+        Compact public observations for the cold audit receipt.
+    """
+    path, receipt = _load_published_erratum_receipt(receipt_path)
+    _validate_published_erratum_verdict(receipt)
+    contract, scientific, equality = _published_erratum_contract(
+        receipt,
+        receipt_path=path,
+        expected_tag=expected_tag,
+        expected_doi=expected_doi,
+    )
+    observed = snapshot_campaign(campaign_root, contract=contract)
+    if observed.public_dict() != dict(scientific):
+        raise ReleaseErratumError("published successor scientific leaves differ from its receipt")
+    _assert_published_equality_digests(scientific, equality)
+
+    return {
+        "status": "pass",
+        "source_sha": contract.source_sha,
+        "builder_sha": contract.builder_sha,
+        "validator_sha": contract.validator_sha,
+        "orchestration_sha": contract.orchestration_sha,
+        "predecessor_version_doi": contract.predecessor_version_doi,
+        "predecessor_archive_sha256": contract.predecessor_archive_sha256,
+        "successor_version_doi": expected_doi,
+        "episode_rows": observed.episode_rows,
+        "planner_arms": observed.planner_arms,
+        "episode_identity_manifest_sha256": observed.episode_identity_manifest_sha256,
+        "component_leaf_manifest_sha256": observed.component_leaf_manifest_sha256,
+        "canonical_row_manifest_sha256": observed.canonical_row_manifest_sha256,
+        "ranking_claims_admitted": False,
     }

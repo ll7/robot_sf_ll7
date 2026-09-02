@@ -99,11 +99,12 @@ def test_release_cli_dispatches_new_version_without_loading_existing_state(
     args.predecessor_deposition_id = 7
     args.expected_predecessor_doi = "10.5281/zenodo.7"
     args.expected_concept_doi = "10.5281/zenodo.6"
+    args.expected_successor_tag = "release-erratum.1"
     monkeypatch.setattr(release_cli.zenodo_publisher, "build_session", lambda path: object())
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
         "load_dataset_metadata",
-        lambda path: {"upload_type": "dataset"},
+        lambda path, **kwargs: calls.append(("metadata", kwargs)) or {"upload_type": "dataset"},
     )
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
@@ -123,16 +124,18 @@ def test_release_cli_dispatches_new_version_without_loading_existing_state(
     )
 
     assert release_cli.handle(args) == 0
-    assert calls[0] == (
+    assert calls[0] == ("metadata", {"expected_source_tag": "release-erratum.1"})
+    assert calls[1] == (
         "new-version",
         {
             "predecessor_deposition_id": 7,
             "expected_predecessor_doi": "10.5281/zenodo.7",
             "expected_concept_doi": "10.5281/zenodo.6",
+            "expected_source_tag": "release-erratum.1",
             "api_base": "https://example.test/api",
         },
     )
-    assert calls[1] == ("write_state", state)
+    assert calls[2] == ("write_state", state)
     assert "secret" not in capsys.readouterr().out
 
 
@@ -159,6 +162,8 @@ def test_release_cli_parser_exposes_new_version_identity_arguments() -> None:
             "10.5281/zenodo.7",
             "--expected-concept-doi",
             "10.5281/zenodo.6",
+            "--expected-successor-tag",
+            "release-erratum.1",
         ]
     )
 
@@ -166,6 +171,7 @@ def test_release_cli_parser_exposes_new_version_identity_arguments() -> None:
     assert args.predecessor_deposition_id == 7
     assert args.expected_predecessor_doi == "10.5281/zenodo.7"
     assert args.expected_concept_doi == "10.5281/zenodo.6"
+    assert args.expected_successor_tag == "release-erratum.1"
     assert args.manifest is None
 
 

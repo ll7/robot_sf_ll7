@@ -45,6 +45,11 @@ def build_subparser(subparsers: Any) -> None:
             parser.add_argument("--predecessor-deposition-id", type=int, required=True)
             parser.add_argument("--expected-predecessor-doi", required=True)
             parser.add_argument("--expected-concept-doi", required=True)
+            parser.add_argument(
+                "--expected-successor-tag",
+                required=True,
+                help="Exact GitHub source tag that the successor metadata must name.",
+            )
         if mode == "upload":
             parser.add_argument("files", nargs="+", type=Path)
     audit = modes.add_parser(
@@ -369,6 +374,7 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
                 if release_manifest is not None
                 else {}
             )
+            metadata_kwargs["expected_source_tag"] = args.expected_successor_tag
             metadata = zenodo_publisher.load_dataset_metadata(args.metadata, **metadata_kwargs)
             operation_kwargs = (
                 {"release_binding": release_binding} if release_binding is not None else {}
@@ -379,6 +385,7 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
                 predecessor_deposition_id=args.predecessor_deposition_id,
                 expected_predecessor_doi=args.expected_predecessor_doi,
                 expected_concept_doi=args.expected_concept_doi,
+                expected_source_tag=args.expected_successor_tag,
                 api_base=args.api_base,
                 **operation_kwargs,
             )

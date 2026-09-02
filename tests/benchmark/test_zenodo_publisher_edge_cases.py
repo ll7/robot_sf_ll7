@@ -199,6 +199,7 @@ def _new_version(session: _Session) -> dict[str, Any]:
         predecessor_deposition_id=7,
         expected_predecessor_doi="10.5281/zenodo.7",
         expected_concept_doi="10.5281/zenodo.6",
+        expected_source_tag="release",
         api_base="https://zenodo.test/api",
     )
 
@@ -330,6 +331,7 @@ def test_new_version_requires_exact_predecessor_relation_and_deposition_id() -> 
             predecessor_deposition_id=7,
             expected_predecessor_doi="10.5281/zenodo.7",
             expected_concept_doi="10.5281/zenodo.6",
+            expected_source_tag="release",
             api_base="https://zenodo.test/api",
         )
     assert session.urls == []
@@ -341,8 +343,27 @@ def test_new_version_requires_exact_predecessor_relation_and_deposition_id() -> 
             predecessor_deposition_id=9,
             expected_predecessor_doi="10.5281/zenodo.7",
             expected_concept_doi="10.5281/zenodo.6",
+            expected_source_tag="release",
             api_base="https://zenodo.test/api",
         )
+
+
+def test_new_version_rejects_wrong_successor_tag_before_remote_mutation() -> None:
+    """The exact successor GitHub tag is admitted before any authenticated request."""
+    session = _new_version_fixture()
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="expected successor tag"):
+        publisher.new_version(
+            session,
+            _new_version_metadata(),
+            predecessor_deposition_id=7,
+            expected_predecessor_doi="10.5281/zenodo.7",
+            expected_concept_doi="10.5281/zenodo.6",
+            expected_source_tag="different-erratum.1",
+            api_base="https://zenodo.test/api",
+        )
+
+    assert session.urls == []
 
 
 def test_token_file_missing_and_empty_are_rejected(tmp_path: Path) -> None:

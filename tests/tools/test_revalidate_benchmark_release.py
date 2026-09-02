@@ -149,6 +149,10 @@ def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
     old_release = {
         "release_id": old_tag,
         "release_tag": old_tag,
+        "doi": "10.5281/zenodo.22227035",
+        "version_doi": "10.5281/zenodo.22227035",
+        "concept_doi": "10.5281/zenodo.22227034",
+        "manifest_path": "output/release/identity/predecessor.json",
         "provenance": {
             "doi": "10.5281/zenodo.22227035",
             "version_doi": "10.5281/zenodo.22227035",
@@ -165,6 +169,8 @@ def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
                 "publication_preflight_status": "pass",
                 "publication_preflight_violations": ["stale"],
                 "release_status": "ok",
+                "benchmark_release": old_release,
+                "resolved_manifest": old_release,
             }
         ),
     )
@@ -174,6 +180,35 @@ def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
     launch = campaign / "launch_packet.json"
     _write(launch, json.dumps({"release_tag": old_tag, "source_sha": source_sha}))
     launch_before = launch.read_bytes()
+    _write(
+        campaign / "reports/campaign_summary.json",
+        json.dumps(
+            {
+                "benchmark_release": old_release,
+                "campaign": {
+                    "release_tag": old_tag,
+                    "benchmark_release_tag": old_tag,
+                    "benchmark_release_id": old_tag,
+                    "benchmark_release_manifest_path": "output/release/identity/predecessor.json",
+                    "doi": "10.5281/zenodo.22227035",
+                    "repository_url": "https://github.com/ll7/robot_sf_ll7",
+                    "release_url": f"https://github.com/ll7/robot_sf_ll7/releases/tag/{old_tag}",
+                    "release_asset_url": (
+                        "https://github.com/ll7/robot_sf_ll7/releases/download/"
+                        f"{old_tag}/predecessor.tar.gz"
+                    ),
+                },
+                "artifacts": {
+                    "doi_url": "https://doi.org/10.5281/zenodo.22227035",
+                    "release_url": f"https://github.com/ll7/robot_sf_ll7/releases/tag/{old_tag}",
+                    "release_asset_url": (
+                        "https://github.com/ll7/robot_sf_ll7/releases/download/"
+                        f"{old_tag}/predecessor.tar.gz"
+                    ),
+                },
+            }
+        ),
+    )
     contract = ErratumContract(
         correction_id="september-2026-derived-metadata-erratum.1",
         predecessor_version_doi="10.5281/zenodo.22227035",
@@ -186,6 +221,8 @@ def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
         seed_count=30,
         episode_rows=20160,
         builder_sha="a" * 40,
+        validator_sha="a" * 40,
+        orchestration_sha="b" * 40,
         concept_doi="10.5281/zenodo.22227034",
         successor_version_doi="10.5281/zenodo.22229999",
         successor_github_release_tag=new_tag,
@@ -203,6 +240,11 @@ def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
     assert result["publication_preflight_violations"] == []
     assert result["ranking_claims_admitted"] is False
     assert result["derivation"]["builder_sha"] == "a" * 40
+    assert result["benchmark_release"]["release_tag"] == new_tag
+    assert result["scientific_execution_benchmark_release"]["release_tag"] == old_tag
+    summary = json.loads((campaign / "reports/campaign_summary.json").read_text(encoding="utf-8"))
+    assert summary["campaign"]["release_tag"] == new_tag
+    assert summary["campaign"]["scientific_execution_release_identity"]["release_tag"] == old_tag
     assert launch.read_bytes() == launch_before
     assert (campaign / recovery.ERRATUM_METADATA_RELATIVE).read_bytes() == metadata.read_bytes()
 

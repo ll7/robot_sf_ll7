@@ -119,6 +119,25 @@ def _source_tag(metadata: Mapping[str, Any]) -> str:
     return matches[0]
 
 
+def _expected_source_tag_url(value: str, *, label: str) -> str:
+    """Normalize one exact GitHub release tag or URL.
+
+    Returns:
+        The validated canonical GitHub release URL.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise ZenodoPublisherError(f"{label} is invalid")
+    candidate = value.strip()
+    expected_url = (
+        candidate
+        if candidate.startswith("https://")
+        else f"https://github.com/ll7/robot_sf_ll7/releases/tag/{candidate}"
+    )
+    if _SOURCE_TAG_RE.fullmatch(expected_url) is None:
+        raise ZenodoPublisherError(f"{label} is invalid")
+    return expected_url
+
+
 def _metadata_contract(metadata: Mapping[str, Any]) -> dict[str, Any]:
     """Return caller-owned metadata fields, excluding Zenodo's reservation hint."""
     return {str(key): value for key, value in metadata.items() if key not in {"prereserve_doi"}}
@@ -907,6 +926,7 @@ def new_version(
     predecessor_deposition_id: int,
     expected_predecessor_doi: str,
     expected_concept_doi: str,
+    expected_source_tag: str,
     api_base: str = ZENODO_API_BASE,
     release_binding: Any | None = None,
 ) -> dict[str, Any]:
@@ -940,6 +960,13 @@ def new_version(
         )
 
     normalized_metadata = _validate_metadata(metadata)
+    expected_source_url = _expected_source_tag_url(
+        expected_source_tag, label="expected successor source tag"
+    )
+    if _source_tag(normalized_metadata) != expected_source_url:
+        raise ZenodoPublisherError(
+            "new-version metadata source tag does not match the expected successor tag"
+        )
     _validate_new_version_relation(
         normalized_metadata,
         expected_predecessor_doi=expected_predecessor_doi,
@@ -1016,6 +1043,7 @@ def new_version(
             "concept_doi": expected_concept_doi,
             "predecessor_deposition_id": predecessor_id,
             "predecessor_doi": expected_predecessor_doi,
+            "source_tag": expected_source_url,
             "predecessor": {
                 "deposition_id": predecessor_id,
                 "doi": expected_predecessor_doi,

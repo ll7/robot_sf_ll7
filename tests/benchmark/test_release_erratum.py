@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 
 from robot_sf.benchmark.release_erratum import (
+    SCIENTIFIC_CANONICALIZATION,
     ErratumContract,
     ReleaseErratumError,
     build_erratum_receipt,
@@ -20,10 +21,12 @@ from robot_sf.benchmark.release_erratum import (
     load_erratum_contract,
     snapshot_campaign,
     snapshot_predecessor_archive,
+    validate_erratum_receipt_against_campaign,
 )
 
 SOURCE_SHA = "59577bad289dd692ba3580e1600c4a649ae27880"
 BUILDER_SHA = "a4aaf1f06860cf632d0173c5a13e11ad855b6df2"
+ORCHESTRATION_SHA = "b" * 40
 OLD_TAG = f"paper-matrix-v2-h600-s30-2026-09-{SOURCE_SHA}"
 NEW_TAG = f"{OLD_TAG}-erratum.1"
 
@@ -47,7 +50,13 @@ def _row(arm: str, scenario: str, seed: int) -> dict[str, Any]:
         "git_hash": SOURCE_SHA,
         "provenance": {"git_hash": SOURCE_SHA},
         "result_provenance": {"repo_commit": SOURCE_SHA},
-        "metrics": {"collisions": 0, "snqi": seed / 100.0},
+        "metrics": {
+            "collisions": 0,
+            "snqi": seed / 100.0,
+            "unavailable_nan": float("nan"),
+            "unbounded_positive": float("inf"),
+            "unbounded_negative": float("-inf"),
+        },
     }
 
 
@@ -85,6 +94,8 @@ def _contract(archive: Path) -> ErratumContract:
         seed_count=2,
         episode_rows=8,
         builder_sha=BUILDER_SHA,
+        validator_sha=BUILDER_SHA,
+        orchestration_sha=ORCHESTRATION_SHA,
         concept_doi="10.5281/zenodo.22227034",
         successor_version_doi="10.5281/zenodo.22229999",
         successor_github_release_tag=NEW_TAG,
@@ -114,10 +125,95 @@ def test_predecessor_and_successor_scientific_leaves_match(tmp_path: Path) -> No
     assert receipt["scientific_identity"]["component_leaf_manifest_sha256"]
     assert receipt["derivation"] == {
         "builder_sha": BUILDER_SHA,
+        "validator_sha": BUILDER_SHA,
+        "orchestration_sha": ORCHESTRATION_SHA,
         "scientific_source_sha": SOURCE_SHA,
         "simulation_rerun": False,
     }
     assert receipt["corrected_verdict"]["ranking_claims_admitted"] is False
+    assert receipt["scientific_canonicalization"]["schema"] == SCIENTIFIC_CANONICALIZATION
+
+
+def test_scientific_equality_distinguishes_nonfinite_float_categories(tmp_path: Path) -> None:
+    """NaN and signed infinities are retained as distinct scientific leaf values."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _contract(archive)
+    predecessor = snapshot_predecessor_archive(archive, contract=contract)
+
+    path = campaign / "runs" / "goal__differential_drive" / "episodes.jsonl"
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    rows[0]["metrics"]["unbounded_positive"] = float("-inf")
+    path.write_text("".join(f"{_canonical_json(row)}\n" for row in rows), encoding="utf-8")
+    successor = snapshot_campaign(campaign, contract=contract)
+
+    with pytest.raises(ReleaseErratumError, match="scientific leaves differ"):
+        compare_scientific_snapshots(predecessor, successor)
+
+
+def test_cold_erratum_receipt_recomputes_successor_leaves(tmp_path: Path) -> None:
+    """A downloaded successor must reproduce every scientific digest in its receipt."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _contract(archive)
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt = build_erratum_receipt(
+        contract=contract,
+        predecessor=snapshot,
+        successor=snapshot,
+    )
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.parent.mkdir(parents=True)
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    observed = validate_erratum_receipt_against_campaign(
+        receipt_path,
+        campaign_root=campaign,
+        expected_tag=NEW_TAG,
+        expected_doi=contract.successor_version_doi,
+    )
+
+    assert observed["status"] == "pass"
+    assert observed["episode_rows"] == 8
+    assert observed["canonical_row_manifest_sha256"] == snapshot.canonical_row_manifest_sha256
+
+
+def test_cold_erratum_receipt_rejects_tampered_successor_row(tmp_path: Path) -> None:
+    """A valid-looking receipt cannot mask a changed downloaded component leaf."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _contract(archive)
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.parent.mkdir(parents=True)
+    receipt_path.write_text(
+        json.dumps(
+            build_erratum_receipt(
+                contract=contract,
+                predecessor=snapshot,
+                successor=snapshot,
+            )
+        ),
+        encoding="utf-8",
+    )
+    episodes = campaign / "runs/goal__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in episodes.read_text(encoding="utf-8").splitlines()]
+    rows[0]["metrics"]["collisions"] = 99
+    episodes.write_text("".join(f"{_canonical_json(row)}\n" for row in rows), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match="differ from its receipt"):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
 
 
 def test_scientific_equality_rejects_changed_component_metric(tmp_path: Path) -> None:
@@ -246,7 +342,12 @@ def test_erratum_contract_loads_exact_linked_identity(tmp_path: Path) -> None:
                     "seed_count": 30,
                     "episode_rows": 20160,
                 },
-                "derivation": {"builder_sha": BUILDER_SHA, "simulation_rerun": False},
+                "derivation": {
+                    "builder_sha": BUILDER_SHA,
+                    "validator_sha": BUILDER_SHA,
+                    "orchestration_sha": ORCHESTRATION_SHA,
+                    "simulation_rerun": False,
+                },
                 "successor": {
                     "concept_doi": "10.5281/zenodo.22227034",
                     "version_doi": "10.5281/zenodo.22229999",
@@ -301,7 +402,12 @@ def test_erratum_contract_rejects_missing_predecessor_relation(tmp_path: Path) -
             "seed_count": 30,
             "episode_rows": 20160,
         },
-        "derivation": {"builder_sha": BUILDER_SHA, "simulation_rerun": False},
+        "derivation": {
+            "builder_sha": BUILDER_SHA,
+            "validator_sha": BUILDER_SHA,
+            "orchestration_sha": ORCHESTRATION_SHA,
+            "simulation_rerun": False,
+        },
         "successor": {
             "concept_doi": "10.5281/zenodo.22227034",
             "version_doi": "10.5281/zenodo.22229999",

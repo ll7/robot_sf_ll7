@@ -94,3 +94,46 @@ def test_warn_exit_deprecated_helper_warns_exactly_once(
         warnings.simplefilter("always")
         _warn_exit_deprecated()
     assert not [w for w in caught if issubclass(w.category, DeprecationWarning)]
+
+
+def _simulation_env() -> Any:
+    """A BaseSimulationEnv stub created without the config machinery.
+
+    The module itself uses the same ``__new__`` pattern for its recording
+    helper, so lifecycle tests can exercise the shared teardown directly.
+    Requires pygame (an optional extra) via the render import chain.
+    """
+    pytest.importorskip("pygame")
+    from robot_sf.gym_env.abstract_envs import BaseSimulationEnv
+
+    env = BaseSimulationEnv.__new__(BaseSimulationEnv)
+    env.sim_ui = None
+    env.recorded_states = []
+    return env
+
+
+def test_simulation_env_close_releases_sim_ui_and_is_idempotent() -> None:
+    env = _simulation_env()
+    sim_ui = _FakeSimUi()
+    env.sim_ui = sim_ui
+
+    env.close()
+    assert sim_ui.exit_calls == 1
+    assert env.sim_ui is None
+
+    env.close()
+    assert sim_ui.exit_calls == 1
+
+
+def test_simulation_env_exit_alias_warns_and_tears_down(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(base_env_module, "_EXIT_DEPRECATION_WARNED", False)
+    env = _simulation_env()
+    sim_ui = _FakeSimUi()
+    env.sim_ui = sim_ui
+
+    with pytest.warns(DeprecationWarning, match="use env.close()"):
+        env.exit()
+    assert sim_ui.exit_calls == 1
+    assert env.sim_ui is None

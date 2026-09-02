@@ -13,6 +13,10 @@ from robot_sf import release_cli
 if TYPE_CHECKING:
     from pathlib import Path
 
+SOURCE_SHA = "5" * 40
+PREDECESSOR_TAG = f"paper-matrix-v2-h600-s30-2026-09-{SOURCE_SHA}"
+SUCCESSOR_TAG = f"{PREDECESSOR_TAG}-erratum.1"
+
 
 def _args(mode: str, tmp_path: Path) -> argparse.Namespace:
     """Build the common namespace consumed by ``release_cli.handle``."""
@@ -99,7 +103,9 @@ def test_release_cli_dispatches_new_version_without_loading_existing_state(
     args.predecessor_deposition_id = 7
     args.expected_predecessor_doi = "10.5281/zenodo.7"
     args.expected_concept_doi = "10.5281/zenodo.6"
-    args.expected_successor_tag = "release-erratum.1"
+    args.expected_predecessor_tag = PREDECESSOR_TAG
+    args.expected_source_sha = SOURCE_SHA
+    args.expected_successor_tag = SUCCESSOR_TAG
     monkeypatch.setattr(release_cli.zenodo_publisher, "build_session", lambda path: object())
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
@@ -124,14 +130,16 @@ def test_release_cli_dispatches_new_version_without_loading_existing_state(
     )
 
     assert release_cli.handle(args) == 0
-    assert calls[0] == ("metadata", {"expected_source_tag": "release-erratum.1"})
+    assert calls[0] == ("metadata", {"expected_source_tag": SUCCESSOR_TAG})
     assert calls[1] == (
         "new-version",
         {
             "predecessor_deposition_id": 7,
             "expected_predecessor_doi": "10.5281/zenodo.7",
             "expected_concept_doi": "10.5281/zenodo.6",
-            "expected_source_tag": "release-erratum.1",
+            "expected_predecessor_tag": PREDECESSOR_TAG,
+            "expected_source_sha": SOURCE_SHA,
+            "expected_successor_tag": SUCCESSOR_TAG,
             "api_base": "https://example.test/api",
         },
     )
@@ -162,8 +170,12 @@ def test_release_cli_parser_exposes_new_version_identity_arguments() -> None:
             "10.5281/zenodo.7",
             "--expected-concept-doi",
             "10.5281/zenodo.6",
+            "--expected-predecessor-tag",
+            PREDECESSOR_TAG,
+            "--expected-source-sha",
+            SOURCE_SHA,
             "--expected-successor-tag",
-            "release-erratum.1",
+            SUCCESSOR_TAG,
         ]
     )
 
@@ -171,7 +183,9 @@ def test_release_cli_parser_exposes_new_version_identity_arguments() -> None:
     assert args.predecessor_deposition_id == 7
     assert args.expected_predecessor_doi == "10.5281/zenodo.7"
     assert args.expected_concept_doi == "10.5281/zenodo.6"
-    assert args.expected_successor_tag == "release-erratum.1"
+    assert args.expected_predecessor_tag == PREDECESSOR_TAG
+    assert args.expected_source_sha == SOURCE_SHA
+    assert args.expected_successor_tag == SUCCESSOR_TAG
     assert args.manifest is None
 
 

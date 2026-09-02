@@ -6,6 +6,7 @@ import copy
 import hashlib
 import io
 import json
+import stat
 import subprocess
 import sys
 import tarfile
@@ -74,18 +75,43 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
     zenodo = tmp_path / "zenodo"
     bundle = github / "bundle.zip"
     bundle.parent.mkdir(parents=True)
+    receipt_bytes = json.dumps({"schema_version": "benchmark-release-erratum-receipt.v1"}).encode()
+    metadata_bytes = b"{}"
+    checksums = (
+        f"{hashlib.sha256(receipt_bytes).hexdigest()}  "
+        "payload/provenance/benchmark_release_erratum.json\n"
+        f"{hashlib.sha256(metadata_bytes).hexdigest()}  "
+        "payload/release/zenodo_metadata.erratum.json\n"
+    )
     with zipfile.ZipFile(bundle, "w") as archive:
         archive.writestr(
             "bundle/payload/provenance/benchmark_release_erratum.json",
-            json.dumps({"schema_version": "benchmark-release-erratum-receipt.v1"}),
+            receipt_bytes,
         )
+        archive.writestr("bundle/payload/release/zenodo_metadata.erratum.json", metadata_bytes)
+        archive.writestr("bundle/checksums.sha256", checksums)
     _write_bytes(zenodo / "bundle.zip", bundle.read_bytes())
-    calls: list[tuple[Path, Path, str, str]] = []
+    calls: list[tuple[Path, Path, Path, str, str, str | None]] = []
 
     def fake_validate(
-        receipt_path: Path, *, campaign_root: Path, expected_tag: str, expected_doi: str
+        receipt_path: Path,
+        *,
+        campaign_root: Path,
+        metadata_path: Path,
+        expected_tag: str,
+        expected_doi: str,
+        expected_source_sha: str | None,
     ) -> dict[str, object]:
-        calls.append((receipt_path, campaign_root, expected_tag, expected_doi))
+        calls.append(
+            (
+                receipt_path,
+                campaign_root,
+                metadata_path,
+                expected_tag,
+                expected_doi,
+                expected_source_sha,
+            )
+        )
         return {"status": "pass", "episode_rows": 20_160}
 
     monkeypatch.setattr(
@@ -97,12 +123,14 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
         doi=doi,
         github_dir=github,
         zenodo_dir=zenodo,
+        source_sha=source_sha,
     )
 
     assert receipt["status"] == "pass"
     assert receipt["observations"]["erratum"]["episode_rows"] == 20_160
     assert calls[0][1].name == "payload"
-    assert calls[0][2:] == (tag, doi)
+    assert calls[0][2].name == "zenodo_metadata.erratum.json"
+    assert calls[0][3:] == (tag, doi, source_sha)
 
 
 def test_erratum_audit_rejects_bundle_without_correction_receipt(tmp_path: Path) -> None:
@@ -121,7 +149,62 @@ def test_erratum_audit_rejects_bundle_without_correction_receipt(tmp_path: Path)
     )
 
     assert receipt["status"] == "fail"
-    assert any("exactly one correction receipt" in problem for problem in receipt["problems"])
+    assert any("canonical receipt or metadata" in problem for problem in receipt["problems"])
+
+
+@pytest.mark.parametrize("suffix", ["-erratum.01", "-Erratum.1"])
+def test_erratum_audit_rejects_malformed_suffix(tmp_path: Path, suffix: str) -> None:
+    source_sha = "5" * 40
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    for channel in (github, zenodo):
+        _make_bundle(channel / "bundle.zip")
+
+    result = audit_published(
+        tag=f"paper-matrix-v2-h600-s30-2026-09-{source_sha}{suffix}",
+        doi="10.5281/zenodo.8",
+        github_dir=github,
+        zenodo_dir=zenodo,
+        source_sha=source_sha,
+    )
+
+    assert result["status"] == "fail"
+    assert any("erratum tag is malformed" in problem for problem in result["problems"])
+
+
+def test_erratum_audit_rejects_decoy_correction_receipt_path(tmp_path: Path) -> None:
+    """A second lookalike receipt cannot broaden the canonical proof boundary."""
+    source_sha = "5" * 40
+    tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}-erratum.1"
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    bundle = github / "bundle.zip"
+    bundle.parent.mkdir(parents=True)
+    receipt = b"{}"
+    metadata = b"{}"
+    checksums = (
+        f"{hashlib.sha256(receipt).hexdigest()}  "
+        "payload/provenance/benchmark_release_erratum.json\n"
+        f"{hashlib.sha256(metadata).hexdigest()}  "
+        "payload/release/zenodo_metadata.erratum.json\n"
+    )
+    with zipfile.ZipFile(bundle, "w") as archive:
+        archive.writestr("bundle/payload/provenance/benchmark_release_erratum.json", receipt)
+        archive.writestr("bundle/payload/release/zenodo_metadata.erratum.json", metadata)
+        archive.writestr("bundle/decoy/benchmark_release_erratum.json", receipt)
+        archive.writestr("bundle/checksums.sha256", checksums)
+    _write_bytes(zenodo / "bundle.zip", bundle.read_bytes())
+
+    result = audit_published(
+        tag=tag,
+        doi="10.5281/zenodo.8",
+        github_dir=github,
+        zenodo_dir=zenodo,
+        source_sha=source_sha,
+    )
+
+    assert result["status"] == "fail"
+    assert any("canonical receipt or metadata" in problem for problem in result["problems"])
 
 
 def test_cross_channel_mismatch_fails(tmp_path: Path) -> None:
@@ -142,6 +225,23 @@ def test_missing_channel_reports_unavailable(tmp_path: Path) -> None:
     )
     assert receipt["ok"] is False
     assert any("Zenodo channel has no assets" in problem for problem in receipt["problems"])
+
+
+def test_channel_symlink_asset_fails_closed(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.zip"
+    _make_bundle(outside)
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    github.mkdir()
+    (github / "bundle.zip").symlink_to(outside)
+    _write_bytes(zenodo / "bundle.zip", outside.read_bytes())
+
+    receipt = audit_published(
+        tag="release", doi="10.5281/zenodo.1", github_dir=github, zenodo_dir=zenodo
+    )
+
+    assert receipt["ok"] is False
+    assert any("must not be a symlink" in problem for problem in receipt["problems"])
 
 
 def test_doi_validation(tmp_path: Path) -> None:
@@ -182,6 +282,55 @@ def test_path_escape_fails_closed(tmp_path: Path) -> None:
         _extract_members(evil, tmp_path / "dest")
 
 
+@pytest.mark.parametrize("archive_kind", ["zip", "tar"])
+def test_sibling_prefix_escape_fails_closed(tmp_path: Path, archive_kind: str) -> None:
+    """A sibling whose name begins with the destination prefix is still outside it."""
+    archive_path = tmp_path / f"evil.{archive_kind}"
+    member_name = "../dest_evil/file.txt"
+    if archive_kind == "zip":
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            archive.writestr(member_name, b"x")
+    else:
+        with tarfile.open(archive_path, "w") as archive:
+            info = tarfile.TarInfo(member_name)
+            info.size = 1
+            archive.addfile(info, io.BytesIO(b"x"))
+    with pytest.raises(ValueError, match="path escape"):
+        _extract_members(archive_path, tmp_path / "dest")
+
+
+def test_zip_duplicate_and_symlink_members_fail_closed(tmp_path: Path) -> None:
+    duplicate = tmp_path / "duplicate.zip"
+    with pytest.warns(UserWarning, match="Duplicate name"):
+        with zipfile.ZipFile(duplicate, "w") as archive:
+            archive.writestr("same.txt", b"one")
+            archive.writestr("same.txt", b"two")
+    with pytest.raises(ValueError, match="duplicate"):
+        _extract_members(duplicate, tmp_path / "duplicate-dest")
+
+    symlink = tmp_path / "symlink.zip"
+    info = zipfile.ZipInfo("link")
+    info.create_system = 3
+    info.external_attr = (stat.S_IFLNK | 0o777) << 16
+    with zipfile.ZipFile(symlink, "w") as archive:
+        archive.writestr(info, "target")
+    with pytest.raises(ValueError, match="symbolic link"):
+        _extract_members(symlink, tmp_path / "symlink-dest")
+
+
+@pytest.mark.parametrize("member_type", [tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.FIFOTYPE])
+def test_tar_link_and_device_like_members_fail_closed(tmp_path: Path, member_type: bytes) -> None:
+    archive_path = tmp_path / "unsafe.tar"
+    with tarfile.open(archive_path, "w") as archive:
+        member = tarfile.TarInfo("unsafe-member")
+        member.type = member_type
+        member.linkname = "target"
+        archive.addfile(member)
+
+    with pytest.raises(ValueError, match="non-regular member"):
+        _extract_members(archive_path, tmp_path / "unsafe-dest")
+
+
 def test_unsupported_archive_fails_closed(tmp_path: Path) -> None:
     bogus = tmp_path / "bogus.zip"
     bogus.write_bytes(b"not-a-real-archive")
@@ -212,6 +361,22 @@ def test_source_sha_tag_binding_enforced(tmp_path: Path) -> None:
     )
     assert receipt["ok"] is False
     assert any("disagrees with" in problem for problem in receipt["problems"])
+
+
+def test_historical_precontract_tag_retains_exact_read_only_exception(tmp_path: Path) -> None:
+    """The one documented August tag remains auditable at its known immutable source."""
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    for channel in (github, zenodo):
+        _make_bundle(channel / "bundle.zip")
+    receipt = audit_published(
+        tag="paper-matrix-v2-h600-s30-2026-08-cd831d7582c1",
+        doi="10.5281/zenodo.1",
+        github_dir=github,
+        zenodo_dir=zenodo,
+        source_sha="b1d5ab6de708385c0828c99501a9d1c29727ec11",
+    )
+    assert receipt["ok"] is True
 
 
 def test_receipt_is_deterministic(tmp_path: Path) -> None:

@@ -1978,6 +1978,38 @@ def _write_derivation_receipt(  # noqa: PLR0913
     _write_json(campaign_root / DERIVATION_RECEIPT_RELATIVE, receipt)
 
 
+def _rewrite_publication_provenance(
+    payload: Mapping[str, Any] | None, *, contract: ErratumContract
+) -> dict[str, Any]:
+    """Rewrite one current-publication provenance mapping to successor coordinates."""
+    provenance = dict(payload) if isinstance(payload, Mapping) else {}
+    execution_metadata_path = provenance.get("metadata_path")
+    execution_metadata_sha256 = provenance.get("metadata_sha256")
+    if isinstance(execution_metadata_path, str) and execution_metadata_path:
+        provenance.setdefault("scientific_execution_metadata_path", execution_metadata_path)
+    if isinstance(execution_metadata_sha256, str) and execution_metadata_sha256:
+        provenance.setdefault("scientific_execution_metadata_sha256", execution_metadata_sha256)
+    provenance.update(
+        {
+            "release_tag": contract.successor_github_release_tag,
+            "release_id": contract.successor_github_release_tag,
+            "doi": contract.successor_version_doi,
+            "version_doi": contract.successor_version_doi,
+            "concept_doi": contract.concept_doi,
+            "version_record_id": contract.successor_version_doi.rsplit(".", 1)[-1],
+            "concept_record_id": contract.concept_doi.rsplit(".", 1)[-1],
+            "bundle_zenodo_metadata_path": ERRATUM_METADATA_RELATIVE,
+            "metadata_path": ERRATUM_METADATA_RELATIVE,
+            "metadata_sha256": contract.metadata_sha256,
+            "scientific_source_sha": contract.source_sha,
+            "erratum_builder_sha": contract.builder_sha,
+            "erratum_validator_sha": contract.validator_sha,
+            "erratum_orchestration_sha": contract.orchestration_sha,
+        }
+    )
+    return provenance
+
+
 def _rewrite_embedded_publication_identity(
     payload: Mapping[str, Any], *, contract: ErratumContract
 ) -> dict[str, Any]:
@@ -1994,6 +2026,7 @@ def _rewrite_embedded_publication_identity(
     updated.update(
         {
             "release_tag": contract.successor_github_release_tag,
+            "release_id": contract.successor_github_release_tag,
             "doi": contract.successor_version_doi,
             "concept_doi": contract.concept_doi,
             "version_doi": contract.successor_version_doi,
@@ -2001,6 +2034,10 @@ def _rewrite_embedded_publication_identity(
             "metadata_sha256": contract.metadata_sha256,
         }
     )
+    if isinstance(updated.get("provenance"), Mapping):
+        updated["provenance"] = _rewrite_publication_provenance(
+            updated["provenance"], contract=contract
+        )
     return updated
 
 
@@ -2017,23 +2054,7 @@ def _rewrite_resolved_manifest_publication_identity(
         resolved["version_doi"] = contract.successor_version_doi
     if "concept_doi" in resolved:
         resolved["concept_doi"] = contract.concept_doi
-    provenance = resolved.get("provenance")
-    provenance = dict(provenance) if isinstance(provenance, Mapping) else {}
-    provenance.update(
-        {
-            "doi": contract.successor_version_doi,
-            "version_doi": contract.successor_version_doi,
-            "concept_doi": contract.concept_doi,
-            "version_record_id": contract.successor_version_doi.rsplit(".", 1)[-1],
-            "concept_record_id": contract.concept_doi.rsplit(".", 1)[-1],
-            "bundle_zenodo_metadata_path": ERRATUM_METADATA_RELATIVE,
-            "metadata_sha256": contract.metadata_sha256,
-            "scientific_source_sha": contract.source_sha,
-            "erratum_builder_sha": contract.builder_sha,
-            "erratum_validator_sha": contract.validator_sha,
-            "erratum_orchestration_sha": contract.orchestration_sha,
-        }
-    )
+    provenance = _rewrite_publication_provenance(resolved.get("provenance"), contract=contract)
     resolved["provenance"] = provenance
     resolved["publication"] = {
         "channel": provenance.get("publication_channel", "direct_zenodo_benchmark_dataset"),
@@ -2061,32 +2082,45 @@ def _assert_successor_identity_fields(
     payload: Mapping[str, Any], *, contract: ErratumContract, label: str
 ) -> None:
     """Require one current-publication mapping to name only successor coordinates."""
-    tag = payload.get("release_tag", payload.get("release_id"))
-    doi = payload.get("version_doi", payload.get("doi"))
-    concept_doi = payload.get("concept_doi")
+    tag_keys = ("release_tag", "release_id", "benchmark_release_tag", "benchmark_release_id")
+    tag_values = [payload[key] for key in tag_keys if key in payload]
+    doi_values = [payload[key] for key in ("version_doi", "doi") if key in payload]
+    concept_values = [payload["concept_doi"]] if "concept_doi" in payload else []
     provenance = payload.get("provenance")
     if isinstance(provenance, Mapping):
-        doi = doi or provenance.get("version_doi") or provenance.get("doi")
-        concept_doi = concept_doi or provenance.get("concept_doi")
-    if tag != contract.successor_github_release_tag:
+        tag_values.extend(provenance[key] for key in tag_keys if key in provenance)
+        doi_values.extend(provenance[key] for key in ("version_doi", "doi") if key in provenance)
+        if "concept_doi" in provenance:
+            concept_values.append(provenance["concept_doi"])
+    if not tag_values or any(
+        value != contract.successor_github_release_tag for value in tag_values
+    ):
         raise DerivedReleaseError(f"{label} does not name the successor release tag")
-    if doi != contract.successor_version_doi:
+    if not doi_values or any(value != contract.successor_version_doi for value in doi_values):
         raise DerivedReleaseError(f"{label} does not name the successor version DOI")
-    if concept_doi != contract.concept_doi:
+    if not concept_values or any(value != contract.concept_doi for value in concept_values):
         raise DerivedReleaseError(f"{label} does not name the successor concept DOI")
 
 
-def _assert_erratum_manifest_identities(campaign_root: Path, *, contract: ErratumContract) -> None:
-    """Check the resolved and copied manifest identity separations."""
-    resolved = _read_json(campaign_root / "release" / "release_manifest.resolved.json")
-    _assert_successor_identity_fields(resolved, contract=contract, label="resolved manifest")
-    provenance = resolved.get("provenance")
+def _assert_resolved_erratum_provenance(provenance: Any, *, contract: ErratumContract) -> None:
+    """Require one resolved manifest's provenance to use successor coordinates."""
     if not isinstance(provenance, Mapping):
         raise DerivedReleaseError("resolved manifest lacks successor provenance")
     if provenance.get("version_doi") != contract.successor_version_doi:
         raise DerivedReleaseError("resolved provenance does not name the successor version DOI")
     if provenance.get("concept_doi") != contract.concept_doi:
         raise DerivedReleaseError("resolved provenance does not name the successor concept DOI")
+    if provenance.get("metadata_path") != ERRATUM_METADATA_RELATIVE:
+        raise DerivedReleaseError("resolved provenance metadata path is not bundle-local")
+    if provenance.get("metadata_sha256") != contract.metadata_sha256:
+        raise DerivedReleaseError("resolved provenance metadata digest is stale")
+
+
+def _assert_erratum_manifest_identities(campaign_root: Path, *, contract: ErratumContract) -> None:
+    """Check the resolved and copied manifest identity separations."""
+    resolved = _read_json(campaign_root / "release" / "release_manifest.resolved.json")
+    _assert_successor_identity_fields(resolved, contract=contract, label="resolved manifest")
+    _assert_resolved_erratum_provenance(resolved.get("provenance"), contract=contract)
 
     for relative in ("campaign_manifest.json", "manifest.json", "run_meta.json"):
         path = campaign_root / relative
@@ -2203,10 +2237,13 @@ def _rewrite_erratum_campaign_summary(campaign_root: Path, *, contract: ErratumC
     campaign.update(
         {
             "release_tag": contract.successor_github_release_tag,
+            "release_id": contract.successor_github_release_tag,
             "benchmark_release_tag": contract.successor_github_release_tag,
             "benchmark_release_id": contract.successor_github_release_tag,
             "benchmark_release_manifest_path": "release/release_manifest.resolved.json",
             "doi": contract.successor_version_doi,
+            "version_doi": contract.successor_version_doi,
+            "concept_doi": contract.concept_doi,
             "doi_url": f"https://doi.org/{contract.successor_version_doi}",
             "release_url": (
                 "https://github.com/ll7/robot_sf_ll7/releases/tag/"
@@ -2278,7 +2315,9 @@ def _apply_erratum_publication_identity(
             continue
         payload = _read_json(path)
         payload["release_tag"] = contract.successor_github_release_tag
+        payload["release_id"] = contract.successor_github_release_tag
         payload["doi"] = contract.successor_version_doi
+        payload["version_doi"] = contract.successor_version_doi
         payload["concept_doi"] = contract.concept_doi
         benchmark_release = payload.get("benchmark_release")
         if isinstance(benchmark_release, Mapping):
@@ -2314,6 +2353,7 @@ def _apply_erratum_publication_identity(
     result.update(
         {
             "release_tag": contract.successor_github_release_tag,
+            "release_id": contract.successor_github_release_tag,
             "doi": contract.successor_version_doi,
             "version_doi": contract.successor_version_doi,
             "concept_doi": contract.concept_doi,

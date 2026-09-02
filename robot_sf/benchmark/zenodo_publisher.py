@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import quote, urlsplit
 
+from robot_sf.benchmark.release_tag_identity import check_canonical_source_tag
 from robot_sf.common.optional_import import try_import
 
 ZENODO_API_BASE = "https://zenodo.org/api"
@@ -438,6 +439,7 @@ def _validate_predecessor_payload(
     predecessor_deposition_id: int,
     expected_predecessor_doi: str,
     expected_concept_doi: str,
+    expected_predecessor_source_url: str,
 ) -> None:
     """Bind the mutating new-version action to one exact published predecessor."""
     deposition_id = _positive_deposition_id(payload.get("id"), "predecessor deposition response ID")
@@ -453,6 +455,11 @@ def _validate_predecessor_payload(
     )
     if payload.get("submitted") is not True or payload.get("state") != "done":
         raise ZenodoPublisherError("Zenodo predecessor must be a published deposition")
+    predecessor_metadata = payload.get("metadata")
+    if not isinstance(predecessor_metadata, Mapping):
+        raise ZenodoPublisherError("Zenodo predecessor metadata is malformed")
+    if _source_tag(predecessor_metadata) != expected_predecessor_source_url:
+        raise ZenodoPublisherError("Zenodo predecessor source tag does not match the expected tag")
 
 
 def _binding_value(binding: Any, key: str) -> Any:
@@ -919,14 +926,41 @@ def reserve(
     return _seal_state(state)
 
 
-def new_version(
+def _validate_new_version_tag_lineage(
+    *, predecessor_tag: str, source_sha: str, successor_tag: str
+) -> tuple[str, str]:
+    """Validate the complete local tag lineage.
+
+    Returns:
+        The canonical predecessor and successor GitHub release URLs.
+    """
+    predecessor_tag_problems = check_canonical_source_tag(predecessor_tag, source_sha)
+    if predecessor_tag_problems or re.search(r"-erratum\.[1-9][0-9]*$", predecessor_tag):
+        raise ZenodoPublisherError(
+            "expected predecessor tag must end in the exact lowercase scientific source SHA"
+        )
+    if successor_tag != f"{predecessor_tag}-erratum.1":
+        raise ZenodoPublisherError(
+            "expected successor tag must be the exact predecessor tag plus -erratum.1"
+        )
+    if check_canonical_source_tag(successor_tag, source_sha):
+        raise ZenodoPublisherError("expected successor tag has invalid source-SHA lineage")
+    return (
+        _expected_source_tag_url(predecessor_tag, label="expected predecessor source tag"),
+        _expected_source_tag_url(successor_tag, label="expected successor source tag"),
+    )
+
+
+def new_version(  # noqa: PLR0913
     session: _Session,
     metadata: Mapping[str, Any],
     *,
     predecessor_deposition_id: int,
     expected_predecessor_doi: str,
     expected_concept_doi: str,
-    expected_source_tag: str,
+    expected_predecessor_tag: str,
+    expected_source_sha: str,
+    expected_successor_tag: str,
     api_base: str = ZENODO_API_BASE,
     release_binding: Any | None = None,
 ) -> dict[str, Any]:
@@ -942,6 +976,11 @@ def new_version(
         Credential-free sealed state for the unpublished successor draft.
     """
     predecessor_id = _positive_deposition_id(predecessor_deposition_id, "predecessor deposition ID")
+    expected_predecessor_source_url, expected_source_url = _validate_new_version_tag_lineage(
+        predecessor_tag=expected_predecessor_tag,
+        source_sha=expected_source_sha,
+        successor_tag=expected_successor_tag,
+    )
     if (
         not isinstance(expected_predecessor_doi, str)
         or _ZENODO_DOI_RE.fullmatch(expected_predecessor_doi) is None
@@ -960,9 +999,6 @@ def new_version(
         )
 
     normalized_metadata = _validate_metadata(metadata)
-    expected_source_url = _expected_source_tag_url(
-        expected_source_tag, label="expected successor source tag"
-    )
     if _source_tag(normalized_metadata) != expected_source_url:
         raise ZenodoPublisherError(
             "new-version metadata source tag does not match the expected successor tag"
@@ -994,6 +1030,7 @@ def new_version(
         predecessor_deposition_id=predecessor_id,
         expected_predecessor_doi=expected_predecessor_doi,
         expected_concept_doi=expected_concept_doi,
+        expected_predecessor_source_url=expected_predecessor_source_url,
     )
 
     created = _json_object(

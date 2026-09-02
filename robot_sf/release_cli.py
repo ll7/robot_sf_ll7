@@ -20,6 +20,28 @@ if TYPE_CHECKING:
     import argparse
 
 
+def _add_new_version_arguments(parser: Any) -> None:
+    """Register the identity inputs required before a Zenodo successor mutation."""
+    parser.add_argument("--predecessor-deposition-id", type=int, required=True)
+    parser.add_argument("--expected-predecessor-doi", required=True)
+    parser.add_argument("--expected-concept-doi", required=True)
+    parser.add_argument(
+        "--expected-predecessor-tag",
+        required=True,
+        help="Exact immutable GitHub tag of the published predecessor.",
+    )
+    parser.add_argument(
+        "--expected-source-sha",
+        required=True,
+        help="Exact 40-character scientific source commit.",
+    )
+    parser.add_argument(
+        "--expected-successor-tag",
+        required=True,
+        help="Exact GitHub source tag that the successor metadata must name.",
+    )
+
+
 def build_subparser(subparsers: Any) -> None:
     """Register the ``robot-sf release`` command tree."""
     release = subparsers.add_parser("release", help="Benchmark-data release operations.")
@@ -42,14 +64,7 @@ def build_subparser(subparsers: Any) -> None:
         if mode == "recover":
             parser.add_argument("--deposition-id", type=int, required=True)
         if mode == "new-version":
-            parser.add_argument("--predecessor-deposition-id", type=int, required=True)
-            parser.add_argument("--expected-predecessor-doi", required=True)
-            parser.add_argument("--expected-concept-doi", required=True)
-            parser.add_argument(
-                "--expected-successor-tag",
-                required=True,
-                help="Exact GitHub source tag that the successor metadata must name.",
-            )
+            _add_new_version_arguments(parser)
         if mode == "upload":
             parser.add_argument("files", nargs="+", type=Path)
     audit = modes.add_parser(
@@ -385,7 +400,9 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
                 predecessor_deposition_id=args.predecessor_deposition_id,
                 expected_predecessor_doi=args.expected_predecessor_doi,
                 expected_concept_doi=args.expected_concept_doi,
-                expected_source_tag=args.expected_successor_tag,
+                expected_predecessor_tag=args.expected_predecessor_tag,
+                expected_source_sha=args.expected_source_sha,
+                expected_successor_tag=args.expected_successor_tag,
                 api_base=args.api_base,
                 **operation_kwargs,
             )

@@ -13,6 +13,10 @@ from robot_sf.benchmark import zenodo_publisher as publisher
 if TYPE_CHECKING:
     from pathlib import Path
 
+SOURCE_SHA = "5" * 40
+PREDECESSOR_TAG = f"paper-matrix-v2-h600-s30-2026-09-{SOURCE_SHA}"
+SUCCESSOR_TAG = f"{PREDECESSOR_TAG}-erratum.1"
+
 
 class _Response:
     """Small requests-like response fixture."""
@@ -140,7 +144,10 @@ def _new_version_metadata() -> dict[str, Any]:
     """Return benchmark metadata explicitly related to the predecessor version."""
     metadata = _metadata()
     metadata["related_identifiers"] = [
-        *metadata["related_identifiers"],
+        {
+            "identifier": ("https://github.com/ll7/robot_sf_ll7/releases/tag/" + SUCCESSOR_TAG),
+            "relation": "isSupplementTo",
+        },
         {
             "identifier": "10.5281/zenodo.7",
             "relation": "isNewVersionOf",
@@ -152,6 +159,13 @@ def _new_version_metadata() -> dict[str, Any]:
 
 def _predecessor_deposition(**updates: Any) -> dict[str, Any]:
     """Return the exact published predecessor required before mutation."""
+    metadata = _metadata()
+    metadata["related_identifiers"] = [
+        {
+            "identifier": ("https://github.com/ll7/robot_sf_ll7/releases/tag/" + PREDECESSOR_TAG),
+            "relation": "isSupplementTo",
+        }
+    ]
     payload = {
         "id": 7,
         "record_id": 7,
@@ -160,7 +174,7 @@ def _predecessor_deposition(**updates: Any) -> dict[str, Any]:
         "doi": "10.5281/zenodo.7",
         "state": "done",
         "submitted": True,
-        "metadata": _metadata(),
+        "metadata": metadata,
     }
     payload.update(updates)
     return payload
@@ -199,7 +213,9 @@ def _new_version(session: _Session) -> dict[str, Any]:
         predecessor_deposition_id=7,
         expected_predecessor_doi="10.5281/zenodo.7",
         expected_concept_doi="10.5281/zenodo.6",
-        expected_source_tag="release",
+        expected_predecessor_tag=PREDECESSOR_TAG,
+        expected_source_sha=SOURCE_SHA,
+        expected_successor_tag=SUCCESSOR_TAG,
         api_base="https://zenodo.test/api",
     )
 
@@ -305,6 +321,7 @@ def test_new_version_rejects_metadata_readback_mismatch() -> None:
         (_predecessor_deposition(conceptrecid="99"), "concept ID"),
         (_predecessor_deposition(submitted=False, state="unsubmitted"), "published"),
         (_predecessor_deposition(record_id=9), "changed the requested identity"),
+        (_predecessor_deposition(metadata=_metadata()), "source tag"),
     ],
 )
 def test_new_version_rejects_wrong_or_unpublished_predecessor(
@@ -317,21 +334,28 @@ def test_new_version_rejects_wrong_or_unpublished_predecessor(
     with pytest.raises(publisher.ZenodoPublisherError, match=match):
         _new_version(session)
 
-    assert session.posts
-    assert len(session.posts) == 1
+    assert session.urls == ["https://zenodo.test/api/deposit/depositions/7"]
 
 
 def test_new_version_requires_exact_predecessor_relation_and_deposition_id() -> None:
     """A generic dataset deposition cannot silently become an erratum successor."""
     session = _new_version_fixture()
+    metadata_without_predecessor = _new_version_metadata()
+    metadata_without_predecessor["related_identifiers"] = [
+        item
+        for item in metadata_without_predecessor["related_identifiers"]
+        if item.get("relation") != "isNewVersionOf"
+    ]
     with pytest.raises(publisher.ZenodoPublisherError, match="isNewVersionOf"):
         publisher.new_version(
             session,
-            _metadata(),
+            metadata_without_predecessor,
             predecessor_deposition_id=7,
             expected_predecessor_doi="10.5281/zenodo.7",
             expected_concept_doi="10.5281/zenodo.6",
-            expected_source_tag="release",
+            expected_predecessor_tag=PREDECESSOR_TAG,
+            expected_source_sha=SOURCE_SHA,
+            expected_successor_tag=SUCCESSOR_TAG,
             api_base="https://zenodo.test/api",
         )
     assert session.urls == []
@@ -343,7 +367,9 @@ def test_new_version_requires_exact_predecessor_relation_and_deposition_id() -> 
             predecessor_deposition_id=9,
             expected_predecessor_doi="10.5281/zenodo.7",
             expected_concept_doi="10.5281/zenodo.6",
-            expected_source_tag="release",
+            expected_predecessor_tag=PREDECESSOR_TAG,
+            expected_source_sha=SOURCE_SHA,
+            expected_successor_tag=SUCCESSOR_TAG,
             api_base="https://zenodo.test/api",
         )
 
@@ -359,7 +385,42 @@ def test_new_version_rejects_wrong_successor_tag_before_remote_mutation() -> Non
             predecessor_deposition_id=7,
             expected_predecessor_doi="10.5281/zenodo.7",
             expected_concept_doi="10.5281/zenodo.6",
-            expected_source_tag="different-erratum.1",
+            expected_predecessor_tag=PREDECESSOR_TAG,
+            expected_source_sha=SOURCE_SHA,
+            expected_successor_tag="different-erratum.1",
+            api_base="https://zenodo.test/api",
+        )
+
+    assert session.urls == []
+
+
+@pytest.mark.parametrize(
+    ("predecessor_tag", "source_sha", "successor_tag"),
+    [
+        (PREDECESSOR_TAG, "0" * 40, SUCCESSOR_TAG),
+        ("semantic-release", SOURCE_SHA, "semantic-release-erratum.1"),
+        (PREDECESSOR_TAG.upper(), SOURCE_SHA, f"{PREDECESSOR_TAG.upper()}-erratum.1"),
+        (PREDECESSOR_TAG, SOURCE_SHA, f"{PREDECESSOR_TAG}-erratum.01"),
+        (PREDECESSOR_TAG, SOURCE_SHA, f"{PREDECESSOR_TAG}-erratum.2"),
+    ],
+)
+def test_new_version_rejects_noncanonical_lineage_before_remote_mutation(
+    predecessor_tag: str, source_sha: str, successor_tag: str
+) -> None:
+    session = _new_version_fixture()
+
+    with pytest.raises(
+        publisher.ZenodoPublisherError, match="expected (predecessor|successor) tag"
+    ):
+        publisher.new_version(
+            session,
+            _new_version_metadata(),
+            predecessor_deposition_id=7,
+            expected_predecessor_doi="10.5281/zenodo.7",
+            expected_concept_doi="10.5281/zenodo.6",
+            expected_predecessor_tag=predecessor_tag,
+            expected_source_sha=source_sha,
+            expected_successor_tag=successor_tag,
             api_base="https://zenodo.test/api",
         )
 

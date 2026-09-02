@@ -22,6 +22,7 @@ import argparse
 import hashlib
 import json
 import re
+import stat
 import sys
 import tarfile
 import tempfile
@@ -104,6 +105,61 @@ def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _safe_extraction_target(dest: Path, member_name: str, *, kind: str) -> Path:
+    """Return a member target only when its lexical and resolved paths are safe."""
+    path = Path(member_name)
+    if (
+        path.is_absolute()
+        or not path.parts
+        or any(part in {"", ".", ".."} for part in path.parts)
+        or "\\" in member_name
+        or "\x00" in member_name
+    ):
+        raise ValueError(f"{kind} path escape: {member_name}")
+    target = (dest / member_name).resolve()
+    if not target.is_relative_to(dest):
+        raise ValueError(f"{kind} path escape: {member_name}")
+    return target
+
+
+def _extract_zip_members(archive_path: Path, dest: Path) -> list[str]:
+    """Validate and extract one ZIP archive.
+
+    Returns:
+        The validated member names.
+    """
+    with zipfile.ZipFile(archive_path) as archive:
+        seen: set[str] = set()
+        for info in archive.infolist():
+            if info.filename in seen:
+                raise ValueError(f"zip contains duplicate member: {info.filename}")
+            seen.add(info.filename)
+            _safe_extraction_target(dest, info.filename, kind="zip")
+            if stat.S_IFMT(info.external_attr >> 16) == stat.S_IFLNK:
+                raise ValueError(f"zip contains symbolic link: {info.filename}")
+        archive.extractall(dest)
+        return archive.namelist()
+
+
+def _extract_tar_members(archive_path: Path, dest: Path) -> list[str]:
+    """Validate and extract one TAR archive.
+
+    Returns:
+        The validated member names.
+    """
+    with tarfile.open(archive_path) as archive:
+        seen: set[str] = set()
+        for member in archive.getmembers():
+            if member.name in seen:
+                raise ValueError(f"tar contains duplicate member: {member.name}")
+            seen.add(member.name)
+            _safe_extraction_target(dest, member.name, kind="tar")
+            if not (member.isdir() or member.isreg()):
+                raise ValueError(f"tar contains non-regular member: {member.name}")
+        archive.extractall(dest, filter="data")
+        return archive.getnames()
+
+
 def _extract_members(archive_path: Path, dest: Path) -> list[str]:
     """Defensively extract an archive and return the member names.
 
@@ -115,29 +171,14 @@ def _extract_members(archive_path: Path, dest: Path) -> list[str]:
     """
     dest = dest.resolve()
     dest.mkdir(parents=True, exist_ok=True)
-    members: list[str] = []
     try:
         if zipfile.is_zipfile(archive_path):
-            with zipfile.ZipFile(archive_path) as zf:
-                for info in zf.infolist():
-                    target = (dest / info.filename).resolve()
-                    if not str(target).startswith(str(dest)):
-                        raise ValueError(f"zip path escape: {info.filename}")
-                zf.extractall(dest)
-                members = zf.namelist()
-        elif tarfile.is_tarfile(archive_path):
-            with tarfile.open(archive_path) as tf:
-                for member in tf.getmembers():
-                    target = (dest / member.name).resolve()
-                    if not str(target).startswith(str(dest)):
-                        raise ValueError(f"tar path escape: {member.name}")
-                tf.extractall(dest, filter="data")
-                members = tf.getnames()
-        else:
-            raise ValueError(f"unsupported archive format: {archive_path.name}")
+            return _extract_zip_members(archive_path, dest)
+        if tarfile.is_tarfile(archive_path):
+            return _extract_tar_members(archive_path, dest)
+        raise ValueError(f"unsupported archive format: {archive_path.name}")
     except (OSError, tarfile.TarError, zipfile.BadZipFile) as exc:
         raise ValueError(f"extraction failed for {archive_path.name}: {exc}") from exc
-    return members
 
 
 def _load_checksum_map(extracted_dir: Path, problems: list[str]) -> dict[str, str]:
@@ -206,6 +247,11 @@ def _check_tag_source(tag: str, source_sha: str) -> list[str]:
         Problem strings; empty when the tag is consistent.
     """
     if _release_tag_identity is not None:
+        if (
+            _release_tag_identity.is_historical_release_tag(tag)
+            and source_sha == _release_tag_identity.HISTORICAL_RELEASE_SOURCE_SHA
+        ):
+            return []
         return _release_tag_identity.check_tag_source_consistency(tag, source_sha)
     suffix_match = re.search(r"[_-](?P<sha>[0-9a-f]{40})$", tag)
     if suffix_match and suffix_match.group("sha") != source_sha:
@@ -216,15 +262,24 @@ def _check_tag_source(tag: str, source_sha: str) -> list[str]:
     return []
 
 
-def _channel_assets(channel_dir: Path) -> list[Path]:
+def _channel_assets(channel_dir: Path, *, channel: str, problems: list[str]) -> list[Path]:
     """Return the asset files of a channel, or [] when the channel is absent.
 
     Returns:
         Sorted asset file paths; empty when the channel directory is absent.
     """
+    if channel_dir.is_symlink():
+        problems.append(f"{channel} channel directory must not be a symlink")
+        return []
     if not channel_dir.is_dir():
         return []
-    return sorted(path for path in channel_dir.iterdir() if path.is_file())
+    assets: list[Path] = []
+    for path in sorted(channel_dir.iterdir()):
+        if path.is_symlink():
+            problems.append(f"{channel} channel asset {path.name} must not be a symlink")
+        elif path.is_file():
+            assets.append(path)
+    return assets
 
 
 def _verify_bundle(
@@ -235,6 +290,7 @@ def _verify_bundle(
     *,
     tag: str,
     doi: str,
+    source_sha: str | None,
 ) -> None:
     """Extract the largest archive and verify internal checksums.
 
@@ -253,21 +309,51 @@ def _verify_bundle(
         members = _extract_members(bundle, extracted)
         observations["bundle_member_count"] = len(members)
         problems.extend(_verify_internal_checksums(extracted, members))
-        if re.search(r"-erratum\.[1-9][0-9]*$", tag):
-            receipt_paths = sorted(extracted.rglob("benchmark_release_erratum.json"))
-            if len(receipt_paths) != 1:
-                problems.append("erratum bundle must contain exactly one correction receipt")
-            else:
-                receipt_path = receipt_paths[0]
-                try:
-                    observations["erratum"] = validate_erratum_receipt_against_campaign(
-                        receipt_path,
-                        campaign_root=receipt_path.parent.parent,
-                        expected_tag=tag,
-                        expected_doi=doi,
-                    )
-                except ReleaseErratumError as exc:
-                    problems.append(f"erratum receipt validation failed: {exc}")
+        erratum_marker = "-erratum." in tag.casefold()
+        canonical_erratum = re.fullmatch(r".+-[0-9a-f]{40}-erratum\.[1-9][0-9]*", tag)
+        if erratum_marker and canonical_erratum is None:
+            problems.append("erratum tag is malformed or does not carry one lowercase source SHA")
+        elif canonical_erratum is not None:
+            member_parts = [Path(name).parts for name in members if Path(name).parts]
+            roots = {parts[0] for parts in member_parts}
+            if len(roots) != 1:
+                problems.append("erratum bundle must contain exactly one archive root")
+                return
+            root_name = next(iter(roots))
+            bundle_root = extracted / root_name
+            relative_members = [
+                Path(*parts[1:]).as_posix() for parts in member_parts if len(parts) > 1
+            ]
+            problems.extend(_verify_internal_checksums(bundle_root, relative_members))
+            checksum_map = _load_checksum_map(bundle_root, problems)
+            receipt_relative = "payload/provenance/benchmark_release_erratum.json"
+            metadata_relative = "payload/release/zenodo_metadata.erratum.json"
+            required_members = {receipt_relative, metadata_relative}
+            identity_members = {
+                name
+                for name in relative_members
+                if Path(name).name
+                in {"benchmark_release_erratum.json", "zenodo_metadata.erratum.json"}
+            }
+            if identity_members != required_members:
+                problems.append("erratum bundle lacks the canonical receipt or metadata path")
+                return
+            if not required_members.issubset(checksum_map):
+                problems.append("erratum receipt and metadata must be listed in checksums.sha256")
+                return
+            receipt_path = bundle_root / receipt_relative
+            metadata_path = bundle_root / metadata_relative
+            try:
+                observations["erratum"] = validate_erratum_receipt_against_campaign(
+                    receipt_path,
+                    campaign_root=bundle_root / "payload",
+                    metadata_path=metadata_path,
+                    expected_tag=tag,
+                    expected_doi=doi,
+                    expected_source_sha=source_sha,
+                )
+            except ReleaseErratumError as exc:
+                problems.append(f"erratum receipt validation failed: {exc}")
     except ValueError as exc:
         problems.append(str(exc))
 
@@ -303,8 +389,8 @@ def audit_published(
     problems: list[str] = []
     observations: dict[str, Any] = {}
 
-    github_assets = _channel_assets(github_dir)
-    zenodo_assets = _channel_assets(zenodo_dir)
+    github_assets = _channel_assets(github_dir, channel="GitHub", problems=problems)
+    zenodo_assets = _channel_assets(zenodo_dir, channel="Zenodo", problems=problems)
     if not github_assets:
         problems.append("GitHub channel has no assets (unavailable)")
     if not zenodo_assets:
@@ -349,6 +435,7 @@ def audit_published(
         problems,
         tag=tag,
         doi=doi,
+        source_sha=source_sha,
     )
     doi_version = _validate_doi(doi, observations, problems)
 
@@ -1071,10 +1158,7 @@ def audit_published_network(  # noqa: C901, PLR0913
                 doi=normalized_doi,
                 github_dir=github_dir,
                 zenodo_dir=zenodo_dir,
-                # The network layer binds the resolved tag ref and release body
-                # directly. This also supports the immutable historical release
-                # whose descriptive tag suffix predates its final source SHA.
-                source_sha=None,
+                source_sha=github["source_sha"],
             )
         status = "pass" if core["ok"] else "invalid"
         return {

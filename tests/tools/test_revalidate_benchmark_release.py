@@ -159,6 +159,8 @@ def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
             "concept_doi": "10.5281/zenodo.22227034",
             "source_sha": source_sha,
             "publication_channel": "direct_zenodo_benchmark_dataset",
+            "metadata_path": "release_metadata/zenodo_metadata.json",
+            "metadata_sha256": "c" * 64,
         },
     }
     _write(campaign / "release/release_manifest.resolved.json", json.dumps(old_release))
@@ -233,20 +235,67 @@ def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
     resolved = recovery._apply_erratum_publication_identity(campaign, contract=contract)
 
     assert resolved["release_tag"] == new_tag
+    assert resolved["release_id"] == new_tag
     assert resolved["provenance"]["version_doi"] == "10.5281/zenodo.22229999"
     assert resolved["provenance"]["scientific_source_sha"] == source_sha
+    assert resolved["provenance"]["metadata_path"] == recovery.ERRATUM_METADATA_RELATIVE
+    assert resolved["provenance"]["metadata_sha256"] == _sha256(metadata)
+    assert (
+        resolved["provenance"]["scientific_execution_metadata_path"]
+        == "release_metadata/zenodo_metadata.json"
+    )
+    assert resolved["provenance"]["scientific_execution_metadata_sha256"] == "c" * 64
     result = json.loads((campaign / "release/release_result.json").read_text(encoding="utf-8"))
     assert result["publication_preflight_status"] == "pass"
     assert result["publication_preflight_violations"] == []
     assert result["ranking_claims_admitted"] is False
     assert result["derivation"]["builder_sha"] == "a" * 40
     assert result["benchmark_release"]["release_tag"] == new_tag
+    assert result["benchmark_release"]["release_id"] == new_tag
     assert result["scientific_execution_benchmark_release"]["release_tag"] == old_tag
     summary = json.loads((campaign / "reports/campaign_summary.json").read_text(encoding="utf-8"))
     assert summary["campaign"]["release_tag"] == new_tag
     assert summary["campaign"]["scientific_execution_release_identity"]["release_tag"] == old_tag
     assert launch.read_bytes() == launch_before
     assert (campaign / recovery.ERRATUM_METADATA_RELATIVE).read_bytes() == metadata.read_bytes()
+
+
+def test_successor_identity_assertion_rejects_stale_release_id_alias(tmp_path: Path) -> None:
+    source_sha = "5" * 40
+    old_tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}"
+    new_tag = f"{old_tag}-erratum.1"
+    metadata = tmp_path / "metadata.json"
+    _write(metadata, "{}\n")
+    contract = ErratumContract(
+        correction_id="september-2026-derived-metadata-erratum.1",
+        predecessor_version_doi="10.5281/zenodo.22227035",
+        predecessor_archive_sha256="e" * 64,
+        predecessor_archive_size_bytes=54_219_004,
+        predecessor_github_release_tag=old_tag,
+        source_sha=source_sha,
+        planner_arms=14,
+        scenario_count=48,
+        seed_count=30,
+        episode_rows=20_160,
+        builder_sha="a" * 40,
+        validator_sha="a" * 40,
+        orchestration_sha="b" * 40,
+        concept_doi="10.5281/zenodo.22227034",
+        successor_version_doi="10.5281/zenodo.22229999",
+        successor_github_release_tag=new_tag,
+        metadata_path=metadata,
+        metadata_sha256=_sha256(metadata),
+    )
+    payload = {
+        "release_tag": new_tag,
+        "release_id": old_tag,
+        "doi": contract.successor_version_doi,
+        "version_doi": contract.successor_version_doi,
+        "concept_doi": contract.concept_doi,
+    }
+
+    with pytest.raises(recovery.DerivedReleaseError, match="successor release tag"):
+        recovery._assert_successor_identity_fields(payload, contract=contract, label="fixture")
 
 
 def test_load_recovery_contract_supports_new_checksum_pinned_campaign(tmp_path: Path) -> None:

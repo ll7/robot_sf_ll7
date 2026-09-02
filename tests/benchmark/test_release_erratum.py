@@ -50,6 +50,7 @@ def _row(arm: str, scenario: str, seed: int) -> dict[str, Any]:
         "git_hash": SOURCE_SHA,
         "provenance": {"git_hash": SOURCE_SHA},
         "result_provenance": {"repo_commit": SOURCE_SHA},
+        "event_ledger": {"software_commit": SOURCE_SHA},
         "metrics": {
             "collisions": 0,
             "snqi": seed / 100.0,
@@ -104,12 +105,64 @@ def _contract(archive: Path) -> ErratumContract:
     )
 
 
+def _with_bundle_metadata(campaign: Path, contract: ErratumContract) -> ErratumContract:
+    metadata = campaign / "release/zenodo_metadata.erratum.json"
+    metadata.parent.mkdir(parents=True, exist_ok=True)
+    metadata.write_text(json.dumps(_metadata()), encoding="utf-8")
+    updated = replace(
+        contract,
+        metadata_path=metadata,
+        metadata_sha256=hashlib.sha256(metadata.read_bytes()).hexdigest(),
+    )
+    provenance = {
+        "release_tag": updated.successor_github_release_tag,
+        "release_id": updated.successor_github_release_tag,
+        "doi": updated.successor_version_doi,
+        "version_doi": updated.successor_version_doi,
+        "concept_doi": updated.concept_doi,
+        "metadata_path": "release/zenodo_metadata.erratum.json",
+        "metadata_sha256": updated.metadata_sha256,
+        "scientific_source_sha": updated.source_sha,
+    }
+    current = {
+        "release_tag": updated.successor_github_release_tag,
+        "release_id": updated.successor_github_release_tag,
+        "doi": updated.successor_version_doi,
+        "version_doi": updated.successor_version_doi,
+        "concept_doi": updated.concept_doi,
+        "provenance": provenance,
+    }
+    (campaign / "release/release_manifest.resolved.json").write_text(
+        json.dumps(current), encoding="utf-8"
+    )
+    (campaign / "release/release_result.json").write_text(
+        json.dumps(
+            {
+                **current,
+                "benchmark_release": current,
+                "resolved_manifest": current,
+                "publication_preflight_status": "pass",
+                "publication_preflight_violations": [],
+                "release_status": "ok",
+                "ranking_claims_admitted": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+    summary = campaign / "reports/campaign_summary.json"
+    summary.parent.mkdir(parents=True, exist_ok=True)
+    summary.write_text(
+        json.dumps({"benchmark_release": current, "campaign": current}), encoding="utf-8"
+    )
+    return updated
+
+
 def test_predecessor_and_successor_scientific_leaves_match(tmp_path: Path) -> None:
     campaign = tmp_path / "campaign"
     _write_campaign(campaign)
     archive = tmp_path / "old.tar.gz"
     _archive_campaign(campaign, archive)
-    contract = _contract(archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
 
     predecessor = snapshot_predecessor_archive(archive, contract=contract)
     successor = snapshot_campaign(campaign, contract=contract)
@@ -159,7 +212,7 @@ def test_cold_erratum_receipt_recomputes_successor_leaves(tmp_path: Path) -> Non
     _write_campaign(campaign)
     archive = tmp_path / "old.tar.gz"
     _archive_campaign(campaign, archive)
-    contract = _contract(archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
     snapshot = snapshot_campaign(campaign, contract=contract)
     receipt = build_erratum_receipt(
         contract=contract,
@@ -173,6 +226,7 @@ def test_cold_erratum_receipt_recomputes_successor_leaves(tmp_path: Path) -> Non
     observed = validate_erratum_receipt_against_campaign(
         receipt_path,
         campaign_root=campaign,
+        metadata_path=contract.metadata_path,
         expected_tag=NEW_TAG,
         expected_doi=contract.successor_version_doi,
     )
@@ -188,7 +242,7 @@ def test_cold_erratum_receipt_rejects_tampered_successor_row(tmp_path: Path) -> 
     _write_campaign(campaign)
     archive = tmp_path / "old.tar.gz"
     _archive_campaign(campaign, archive)
-    contract = _contract(archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
     snapshot = snapshot_campaign(campaign, contract=contract)
     receipt_path = campaign / "provenance/benchmark_release_erratum.json"
     receipt_path.parent.mkdir(parents=True)
@@ -211,6 +265,123 @@ def test_cold_erratum_receipt_rejects_tampered_successor_row(tmp_path: Path) -> 
         validate_erratum_receipt_against_campaign(
             receipt_path,
             campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+
+
+@pytest.mark.parametrize(
+    ("fault", "match"),
+    [
+        ("github_source", "GitHub tag target"),
+        ("derivation_source", "derivation source"),
+        ("metadata", "metadata SHA-256"),
+    ],
+)
+def test_cold_erratum_receipt_rejects_identity_or_metadata_drift(
+    tmp_path: Path, fault: str, match: str
+) -> None:
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt = build_erratum_receipt(
+        contract=contract,
+        predecessor=snapshot,
+        successor=snapshot,
+    )
+    expected_source_sha = SOURCE_SHA
+    if fault == "github_source":
+        expected_source_sha = "0" * 40
+    elif fault == "derivation_source":
+        receipt["derivation"]["scientific_source_sha"] = "0" * 40
+    else:
+        contract.metadata_path.write_text("{}\n", encoding="utf-8")
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.parent.mkdir(parents=True)
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match=match):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+            expected_source_sha=expected_source_sha,
+        )
+
+
+def test_cold_erratum_helper_requires_canonical_payload_paths(tmp_path: Path) -> None:
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt = build_erratum_receipt(
+        contract=contract,
+        predecessor=snapshot,
+        successor=snapshot,
+    )
+    canonical_receipt = campaign / "provenance/benchmark_release_erratum.json"
+    canonical_receipt.parent.mkdir(parents=True)
+    canonical_receipt.write_text(json.dumps(receipt), encoding="utf-8")
+    external_receipt = tmp_path / "benchmark_release_erratum.json"
+    external_receipt.write_bytes(canonical_receipt.read_bytes())
+    external_metadata = tmp_path / "zenodo_metadata.erratum.json"
+    external_metadata.write_bytes(contract.metadata_path.read_bytes())
+
+    with pytest.raises(ReleaseErratumError, match="receipt is outside"):
+        validate_erratum_receipt_against_campaign(
+            external_receipt,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+    with pytest.raises(ReleaseErratumError, match="metadata is outside"):
+        validate_erratum_receipt_against_campaign(
+            canonical_receipt,
+            campaign_root=campaign,
+            metadata_path=external_metadata,
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+
+
+def test_cold_erratum_receipt_rejects_stale_release_document_alias(tmp_path: Path) -> None:
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.parent.mkdir(parents=True)
+    receipt_path.write_text(
+        json.dumps(
+            build_erratum_receipt(
+                contract=contract,
+                predecessor=snapshot,
+                successor=snapshot,
+            )
+        ),
+        encoding="utf-8",
+    )
+    result_path = campaign / "release/release_result.json"
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    result["version_doi"] = contract.predecessor_version_doi
+    result_path.write_text(json.dumps(result), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match="stale version-DOI alias"):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
             expected_tag=NEW_TAG,
             expected_doi=contract.successor_version_doi,
         )
@@ -257,6 +428,64 @@ def test_scientific_snapshot_rejects_invalid_matrix(tmp_path: Path, fault: str) 
         snapshot_campaign(campaign, contract=contract)
 
 
+def test_scientific_snapshot_rejects_nested_episode_file_and_ledger_mismatch(
+    tmp_path: Path,
+) -> None:
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _contract(archive)
+
+    nested = campaign / "runs/goal__differential_drive/nested/episodes.jsonl"
+    nested.parent.mkdir()
+    nested.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(ReleaseErratumError, match="outside runs/<arm>"):
+        snapshot_campaign(campaign, contract=contract)
+    nested.unlink()
+
+    episodes = campaign / "runs/goal__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in episodes.read_text(encoding="utf-8").splitlines()]
+    rows[0]["event_ledger"]["software_commit"] = "0" * 40
+    episodes.write_text("".join(f"{_canonical_json(row)}\n" for row in rows), encoding="utf-8")
+    with pytest.raises(ReleaseErratumError, match="event_ledger.software_commit"):
+        snapshot_campaign(campaign, contract=contract)
+
+
+@pytest.mark.parametrize(
+    ("contract_updates", "match"),
+    [
+        ({"source_sha": "0" * 40}, "predecessor tag"),
+        (
+            {
+                "predecessor_github_release_tag": "semantic-release",
+                "successor_github_release_tag": "semantic-release-erratum.1",
+            },
+            "predecessor tag",
+        ),
+        (
+            {
+                "predecessor_github_release_tag": OLD_TAG.upper(),
+                "successor_github_release_tag": f"{OLD_TAG.upper()}-erratum.1",
+            },
+            "predecessor tag",
+        ),
+        ({"successor_github_release_tag": f"{OLD_TAG}-erratum.01"}, "successor tag"),
+    ],
+)
+def test_direct_contract_rejects_noncanonical_tag_lineage(
+    tmp_path: Path, contract_updates: dict[str, object], match: str
+) -> None:
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = replace(_contract(archive), **contract_updates)
+
+    with pytest.raises(ReleaseErratumError, match=match):
+        snapshot_campaign(campaign, contract=contract)
+
+
 def test_predecessor_archive_rejects_hash_size_and_unsafe_members(tmp_path: Path) -> None:
     campaign = tmp_path / "campaign"
     _write_campaign(campaign)
@@ -288,6 +517,42 @@ def test_predecessor_archive_rejects_hash_size_and_unsafe_members(tmp_path: Path
     )
     with pytest.raises(ReleaseErratumError, match="non-regular"):
         snapshot_predecessor_archive(unsafe, contract=unsafe_contract)
+
+
+def test_predecessor_archive_rejects_episode_file_outside_canonical_arm_path(
+    tmp_path: Path,
+) -> None:
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "extra.tar.gz"
+    with tarfile.open(archive, mode="w:gz") as bundle:
+        for path in sorted((campaign / "runs").glob("*/episodes.jsonl")):
+            bundle.add(
+                path,
+                arcname=f"fixture_bundle/payload/runs/{path.parent.name}/episodes.jsonl",
+            )
+        data = b"{}\n"
+        member = tarfile.TarInfo("fixture_bundle/payload/runs/arm/nested/episodes.jsonl")
+        member.size = len(data)
+        bundle.addfile(member, io.BytesIO(data))
+    contract = _contract(archive)
+
+    with pytest.raises(ReleaseErratumError, match="outside payload/runs/<arm>"):
+        snapshot_predecessor_archive(archive, contract=contract)
+
+
+def test_predecessor_archive_rejects_event_ledger_source_mismatch(tmp_path: Path) -> None:
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    episodes = campaign / "runs/goal__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in episodes.read_text(encoding="utf-8").splitlines()]
+    rows[0]["event_ledger"]["software_commit"] = "0" * 40
+    episodes.write_text("".join(f"{_canonical_json(row)}\n" for row in rows), encoding="utf-8")
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+
+    with pytest.raises(ReleaseErratumError, match="event_ledger.software_commit"):
+        snapshot_predecessor_archive(archive, contract=_contract(archive))
 
 
 def _metadata() -> dict[str, Any]:

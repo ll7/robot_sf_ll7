@@ -399,12 +399,16 @@ same Zenodo concept instead:
      --predecessor-deposition-id <predecessor-version-record-id> \
      --expected-predecessor-doi <predecessor-version-doi> \
      --expected-concept-doi <unchanged-concept-doi> \
+     --expected-predecessor-tag <exact-published-predecessor-tag> \
+     --expected-source-sha <exact-40-character-scientific-source-sha> \
      --expected-successor-tag <exact-new-github-tag>
    ```
 
    The command reads and validates the published predecessor before invoking
-   Zenodo's new-version action. The exact successor tag is checked before any
-   authenticated request. The command then checks the new draft's distinct DOI,
+   Zenodo's new-version action. The predecessor and successor tags are first
+   bound to the exact scientific source SHA, and the successor must equal the
+   predecessor plus `-erratum.1`; all of this is checked before any authenticated
+   request. The command then checks the new draft's distinct DOI,
    unchanged concept, unpublished state, and metadata readback. It never
    records the token.
 4. Freeze the returned version DOI, successor tag, predecessor archive digest,

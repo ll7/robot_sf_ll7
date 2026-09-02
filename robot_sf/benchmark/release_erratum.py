@@ -19,6 +19,8 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO
 
+from robot_sf.benchmark.release_tag_identity import check_canonical_source_tag
+
 ERRATUM_CONTRACT_SCHEMA = "benchmark-release-erratum.v1"
 ERRATUM_RECEIPT_SCHEMA = "benchmark-release-erratum-receipt.v1"
 ERRATUM_SCOPE = "derived_publication_metadata_only"
@@ -99,6 +101,88 @@ class ScientificSnapshot:
             "canonical_row_manifest_sha256": self.canonical_row_manifest_sha256,
             "per_arm": dict(self.per_arm),
         }
+
+
+def _validate_contract_sha_and_matrix(contract: ErratumContract) -> None:
+    """Validate immutable SHAs, sizes, digests, and cardinality."""
+    sha_values = (
+        contract.source_sha,
+        contract.builder_sha,
+        contract.validator_sha,
+        contract.orchestration_sha,
+    )
+    if any(_SHA1_RE.fullmatch(value) is None for value in sha_values):
+        raise ReleaseErratumError(
+            "scientific source, builder, validator, and orchestration SHAs must be "
+            "full lowercase SHAs"
+        )
+    if contract.source_sha in {
+        contract.builder_sha,
+        contract.validator_sha,
+        contract.orchestration_sha,
+    }:
+        raise ReleaseErratumError("erratum implementation SHAs must differ from scientific source")
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value <= 0
+        for value in (
+            contract.predecessor_archive_size_bytes,
+            contract.planner_arms,
+            contract.scenario_count,
+            contract.seed_count,
+            contract.episode_rows,
+        )
+    ):
+        raise ReleaseErratumError(
+            "erratum sizes and matrix cardinalities must be positive integers"
+        )
+    if (
+        contract.planner_arms * contract.scenario_count * contract.seed_count
+        != contract.episode_rows
+    ):
+        raise ReleaseErratumError("scientific matrix cardinality does not equal episode_rows")
+    if _SHA256_RE.fullmatch(contract.predecessor_archive_sha256) is None:
+        raise ReleaseErratumError("predecessor archive digest must be a lowercase SHA-256")
+    if _SHA256_RE.fullmatch(contract.metadata_sha256) is None:
+        raise ReleaseErratumError("successor metadata digest must be a lowercase SHA-256")
+
+
+def _validate_contract_dois_and_tags(contract: ErratumContract) -> None:
+    """Validate distinct DOI coordinates and canonical source-tag lineage."""
+    doi_values = (
+        contract.predecessor_version_doi,
+        contract.concept_doi,
+        contract.successor_version_doi,
+    )
+    if any(_DOI_RE.fullmatch(value) is None for value in doi_values) or len(set(doi_values)) != 3:
+        raise ReleaseErratumError(
+            "predecessor, concept, and successor DOIs must be valid and distinct"
+        )
+    predecessor_tag = contract.predecessor_github_release_tag
+    successor_tag = contract.successor_github_release_tag
+    if not contract.correction_id.strip():
+        raise ReleaseErratumError("erratum correction_id must be non-empty")
+    if not _TAG_RE.fullmatch(predecessor_tag) or not _TAG_RE.fullmatch(successor_tag):
+        raise ReleaseErratumError("erratum GitHub release tags are invalid")
+    problems = check_canonical_source_tag(predecessor_tag, contract.source_sha)
+    if problems or re.search(r"-erratum\.[1-9][0-9]*$", predecessor_tag):
+        raise ReleaseErratumError(
+            "predecessor tag must end in the exact scientific source SHA without an erratum suffix"
+        )
+    if successor_tag != f"{predecessor_tag}-erratum.1":
+        raise ReleaseErratumError("successor tag must be the predecessor tag plus -erratum.1")
+    if check_canonical_source_tag(successor_tag, contract.source_sha):
+        raise ReleaseErratumError("successor tag does not carry the exact scientific source SHA")
+
+
+def validate_erratum_contract_identity(contract: ErratumContract) -> None:
+    """Validate identities needed by every direct or file-backed caller.
+
+    Loading a checked-in contract additionally validates its metadata file.
+    This boundary covers the immutable identity rules that must also apply to
+    direct dataclass callers used by the derivation and cold-audit paths.
+    """
+    _validate_contract_sha_and_matrix(contract)
+    _validate_contract_dois_and_tags(contract)
 
 
 def _require_mapping(value: Any, *, label: str) -> Mapping[str, Any]:
@@ -309,8 +393,6 @@ def load_erratum_contract(  # noqa: C901, PLR0912, PLR0915
         raise ReleaseErratumError("erratum implementation SHAs must differ from scientific source")
     if not _TAG_RE.fullmatch(predecessor_tag) or not _TAG_RE.fullmatch(successor_tag):
         raise ReleaseErratumError("erratum GitHub release tags are invalid")
-    if successor_tag != f"{predecessor_tag}-erratum.1":
-        raise ReleaseErratumError("successor tag must be the predecessor tag plus -erratum.1")
     if derivation.get("simulation_rerun") is not False:
         raise ReleaseErratumError("erratum derivation must record simulation_rerun=false")
     if supersedes.get("old_publication_retained") is not True:
@@ -348,7 +430,7 @@ def load_erratum_contract(  # noqa: C901, PLR0912, PLR0915
         predecessor_doi=predecessor_doi,
     )
 
-    return ErratumContract(
+    contract = ErratumContract(
         correction_id=_required_text(payload, "correction_id", label="erratum contract"),
         predecessor_version_doi=predecessor_doi,
         predecessor_archive_sha256=predecessor_digest,
@@ -370,6 +452,8 @@ def load_erratum_contract(  # noqa: C901, PLR0912, PLR0915
         metadata_path=metadata_path,
         metadata_sha256=metadata_digest,
     )
+    validate_erratum_contract_identity(contract)
+    return contract
 
 
 def _validate_archive_member(member: tarfile.TarInfo) -> None:
@@ -402,6 +486,7 @@ def _read_episode_rows(stream: BinaryIO, *, arm: str) -> Iterable[Mapping[str, A
 def _snapshot_from_arm_rows(  # noqa: C901
     arm_rows: Mapping[str, Iterable[Mapping[str, Any]]], *, contract: ErratumContract
 ) -> ScientificSnapshot:
+    validate_erratum_contract_identity(contract)
     rows: dict[tuple[str, str, int, str], _RowDigests] = {}
     scenarios: set[str] = set()
     seeds: set[int] = set()
@@ -432,6 +517,12 @@ def _snapshot_from_arm_rows(  # noqa: C901
                     "result_provenance.repo_commit",
                     _require_mapping(row.get("result_provenance"), label="result_provenance").get(
                         "repo_commit"
+                    ),
+                ),
+                (
+                    "event_ledger.software_commit",
+                    _require_mapping(row.get("event_ledger"), label="event_ledger").get(
+                        "software_commit"
                     ),
                 ),
             ):
@@ -508,6 +599,11 @@ def snapshot_campaign(campaign_root: Path, *, contract: ErratumContract) -> Scie
     if not runs.is_dir() or runs.is_symlink():
         raise ReleaseErratumError("successor campaign runs directory is missing or unsafe")
     episode_files = sorted(runs.glob("*/episodes.jsonl"))
+    discovered_episode_files = sorted(runs.rglob("episodes.jsonl"))
+    if discovered_episode_files != episode_files:
+        raise ReleaseErratumError(
+            "successor campaign contains episode files outside runs/<arm>/episodes.jsonl"
+        )
     arm_rows: dict[str, Iterable[Mapping[str, Any]]] = {}
     open_streams: list[BinaryIO] = []
     try:
@@ -525,7 +621,7 @@ def snapshot_campaign(campaign_root: Path, *, contract: ErratumContract) -> Scie
             stream.close()
 
 
-def snapshot_predecessor_archive(  # noqa: C901
+def snapshot_predecessor_archive(  # noqa: C901, PLR0912
     archive_path: Path, *, contract: ErratumContract
 ) -> ScientificSnapshot:
     """Verify the immutable predecessor archive and compute its scientific leaves.
@@ -548,15 +644,23 @@ def snapshot_predecessor_archive(  # noqa: C901
             raise ReleaseErratumError("predecessor archive member count is invalid")
         expanded_bytes = 0
         episode_members: dict[str, tarfile.TarInfo] = {}
+        member_names: set[str] = set()
         roots: set[str] = set()
         for member in members:
             _validate_archive_member(member)
+            if member.name in member_names:
+                raise ReleaseErratumError("predecessor archive contains duplicate member names")
+            member_names.add(member.name)
             expanded_bytes += member.size
             if expanded_bytes > _MAX_EXPANDED_BYTES:
                 raise ReleaseErratumError("predecessor archive expands beyond the safety limit")
             parts = PurePosixPath(member.name).parts
             roots.add(parts[0])
             match = _EPISODE_MEMBER_RE.fullmatch(member.name)
+            if PurePosixPath(member.name).name == "episodes.jsonl" and match is None:
+                raise ReleaseErratumError(
+                    "predecessor archive contains episode files outside payload/runs/<arm>"
+                )
             if match is not None:
                 arm = match.group(1)
                 if member.size > _MAX_EPISODE_FILE_BYTES:
@@ -640,6 +744,13 @@ def build_erratum_receipt(
     Returns:
         A JSON-ready correction receipt.
     """
+    validate_erratum_contract_identity(contract)
+    _validate_metadata_file(
+        contract.metadata_path,
+        digest=contract.metadata_sha256,
+        successor_tag=contract.successor_github_release_tag,
+        predecessor_doi=contract.predecessor_version_doi,
+    )
     equality = compare_scientific_snapshots(predecessor, successor)
     return {
         "schema_version": ERRATUM_RECEIPT_SCHEMA,
@@ -750,8 +861,10 @@ def _published_erratum_contract(  # noqa: C901
     receipt: Mapping[str, Any],
     *,
     receipt_path: Path,
+    metadata_path: Path,
     expected_tag: str,
     expected_doi: str,
+    expected_source_sha: str | None,
 ) -> tuple[ErratumContract, Mapping[str, Any], Mapping[str, Any]]:
     """Validate receipt identities.
 
@@ -810,39 +923,53 @@ def _published_erratum_contract(  # noqa: C901
         raise ReleaseErratumError("published erratum receipt contains an invalid Git SHA")
     if source_sha in {builder_sha, validator_sha, orchestration_sha}:
         raise ReleaseErratumError("published erratum receipt conflates source and implementation")
+    if derivation.get("scientific_source_sha") != source_sha:
+        raise ReleaseErratumError(
+            "published erratum receipt derivation source differs from scientific identity"
+        )
+    if expected_source_sha is not None and source_sha != expected_source_sha:
+        raise ReleaseErratumError(
+            "published erratum receipt source differs from the GitHub tag target"
+        )
     if derivation.get("simulation_rerun") is not False:
         raise ReleaseErratumError("published erratum receipt claims a simulation rerun")
-    return (
-        ErratumContract(
-            correction_id=_required_text(
-                receipt, "correction_id", label="published erratum receipt"
-            ),
-            predecessor_version_doi=predecessor_doi,
-            predecessor_archive_sha256=predecessor_digest,
-            predecessor_archive_size_bytes=predecessor_size,
-            predecessor_github_release_tag=predecessor_tag,
-            source_sha=source_sha,
-            planner_arms=_required_positive_int(
-                scientific, "planner_arms", label="receipt.scientific_identity"
-            ),
-            scenario_count=_required_positive_int(
-                scientific, "scenario_count", label="receipt.scientific_identity"
-            ),
-            seed_count=_required_positive_int(
-                scientific, "seed_count", label="receipt.scientific_identity"
-            ),
-            episode_rows=_required_positive_int(
-                scientific, "episode_rows", label="receipt.scientific_identity"
-            ),
-            builder_sha=builder_sha,
-            validator_sha=validator_sha,
-            orchestration_sha=orchestration_sha,
-            concept_doi=concept_doi,
-            successor_version_doi=expected_doi,
-            successor_github_release_tag=expected_tag,
-            metadata_path=receipt_path,
-            metadata_sha256=metadata_digest,
+    contract = ErratumContract(
+        correction_id=_required_text(receipt, "correction_id", label="published erratum receipt"),
+        predecessor_version_doi=predecessor_doi,
+        predecessor_archive_sha256=predecessor_digest,
+        predecessor_archive_size_bytes=predecessor_size,
+        predecessor_github_release_tag=predecessor_tag,
+        source_sha=source_sha,
+        planner_arms=_required_positive_int(
+            scientific, "planner_arms", label="receipt.scientific_identity"
         ),
+        scenario_count=_required_positive_int(
+            scientific, "scenario_count", label="receipt.scientific_identity"
+        ),
+        seed_count=_required_positive_int(
+            scientific, "seed_count", label="receipt.scientific_identity"
+        ),
+        episode_rows=_required_positive_int(
+            scientific, "episode_rows", label="receipt.scientific_identity"
+        ),
+        builder_sha=builder_sha,
+        validator_sha=validator_sha,
+        orchestration_sha=orchestration_sha,
+        concept_doi=concept_doi,
+        successor_version_doi=expected_doi,
+        successor_github_release_tag=expected_tag,
+        metadata_path=metadata_path,
+        metadata_sha256=metadata_digest,
+    )
+    validate_erratum_contract_identity(contract)
+    _validate_metadata_file(
+        metadata_path,
+        digest=metadata_digest,
+        successor_tag=expected_tag,
+        predecessor_doi=predecessor_doi,
+    )
+    return (
+        contract,
         scientific,
         equality,
     )
@@ -863,12 +990,112 @@ def _assert_published_equality_digests(
         raise ReleaseErratumError("published erratum equality digest is inconsistent")
 
 
+def _load_publication_document(path: Path, *, label: str) -> Mapping[str, Any]:
+    """Load one required bundle-local publication document.
+
+    Returns:
+        The parsed mapping.
+    """
+    safe_path = _safe_regular_file(path, label=label)
+    try:
+        document = json.loads(safe_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise ReleaseErratumError(f"{label} is not readable JSON") from exc
+    return _require_mapping(document, label=label)
+
+
+def _assert_publication_aliases(
+    payload: Mapping[str, Any], *, contract: ErratumContract, label: str
+) -> None:
+    """Reject any present current-publication alias that remains stale."""
+    tag_keys = ("release_tag", "release_id", "benchmark_release_tag", "benchmark_release_id")
+    doi_keys = ("doi", "version_doi")
+    tag_values = [payload[key] for key in tag_keys if key in payload]
+    doi_values = [payload[key] for key in doi_keys if key in payload]
+    concept_values = [payload["concept_doi"]] if "concept_doi" in payload else []
+    if not tag_values or any(
+        value != contract.successor_github_release_tag for value in tag_values
+    ):
+        raise ReleaseErratumError(f"{label} contains a stale release-tag alias")
+    if not doi_values or any(value != contract.successor_version_doi for value in doi_values):
+        raise ReleaseErratumError(f"{label} contains a stale version-DOI alias")
+    if not concept_values or any(value != contract.concept_doi for value in concept_values):
+        raise ReleaseErratumError(f"{label} contains a stale concept-DOI alias")
+    provenance = payload.get("provenance")
+    if isinstance(provenance, Mapping):
+        for key in tag_keys:
+            if key in provenance and provenance[key] != contract.successor_github_release_tag:
+                raise ReleaseErratumError(f"{label}.provenance contains a stale release-tag alias")
+        for key in doi_keys:
+            if key in provenance and provenance[key] != contract.successor_version_doi:
+                raise ReleaseErratumError(f"{label}.provenance contains a stale version-DOI alias")
+        if "concept_doi" in provenance and provenance["concept_doi"] != contract.concept_doi:
+            raise ReleaseErratumError(f"{label}.provenance contains a stale concept-DOI alias")
+
+
+def _validate_published_release_documents(
+    campaign_root: Path, *, contract: ErratumContract
+) -> None:
+    """Validate current-publication identities and verdicts in the downloaded payload."""
+    manifest = _load_publication_document(
+        campaign_root / "release/release_manifest.resolved.json",
+        label="published resolved manifest",
+    )
+    result = _load_publication_document(
+        campaign_root / "release/release_result.json",
+        label="published release result",
+    )
+    summary = _load_publication_document(
+        campaign_root / "reports/campaign_summary.json",
+        label="published campaign summary",
+    )
+    _assert_publication_aliases(manifest, contract=contract, label="published resolved manifest")
+    _assert_publication_aliases(result, contract=contract, label="published release result")
+    for key in ("benchmark_release", "resolved_manifest"):
+        nested = _require_mapping(result.get(key), label=f"published release result.{key}")
+        _assert_publication_aliases(
+            nested,
+            contract=contract,
+            label=f"published release result.{key}",
+        )
+    summary_release = _require_mapping(
+        summary.get("benchmark_release"), label="published campaign summary.benchmark_release"
+    )
+    summary_campaign = _require_mapping(
+        summary.get("campaign"), label="published campaign summary.campaign"
+    )
+    _assert_publication_aliases(
+        summary_release,
+        contract=contract,
+        label="published campaign summary.benchmark_release",
+    )
+    _assert_publication_aliases(
+        summary_campaign,
+        contract=contract,
+        label="published campaign summary.campaign",
+    )
+    if (
+        result.get("publication_preflight_status") != "pass"
+        or result.get("publication_preflight_violations") != []
+        or result.get("release_status") != "ok"
+        or result.get("ranking_claims_admitted") is not False
+    ):
+        raise ReleaseErratumError("published release result has a contradictory verdict")
+    manifest_provenance = _require_mapping(
+        manifest.get("provenance"), label="published resolved manifest.provenance"
+    )
+    if manifest_provenance.get("scientific_source_sha") != contract.source_sha:
+        raise ReleaseErratumError("published resolved manifest lost the scientific source SHA")
+
+
 def validate_erratum_receipt_against_campaign(
     receipt_path: Path,
     *,
     campaign_root: Path,
+    metadata_path: Path,
     expected_tag: str,
     expected_doi: str,
+    expected_source_sha: str | None = None,
 ) -> dict[str, Any]:
     """Validate an embedded receipt and recompute its successor scientific leaves.
 
@@ -880,18 +1107,30 @@ def validate_erratum_receipt_against_campaign(
     Returns:
         Compact public observations for the cold audit receipt.
     """
+    root = Path(campaign_root).resolve()
+    expected_receipt_path = root / "provenance/benchmark_release_erratum.json"
+    expected_metadata_path = root / "release/zenodo_metadata.erratum.json"
+    if Path(receipt_path).resolve() != expected_receipt_path:
+        raise ReleaseErratumError("published erratum receipt is outside its canonical payload path")
+    if Path(metadata_path).resolve() != expected_metadata_path:
+        raise ReleaseErratumError(
+            "published erratum metadata is outside its canonical payload path"
+        )
     path, receipt = _load_published_erratum_receipt(receipt_path)
     _validate_published_erratum_verdict(receipt)
     contract, scientific, equality = _published_erratum_contract(
         receipt,
         receipt_path=path,
+        metadata_path=metadata_path,
         expected_tag=expected_tag,
         expected_doi=expected_doi,
+        expected_source_sha=expected_source_sha,
     )
     observed = snapshot_campaign(campaign_root, contract=contract)
     if observed.public_dict() != dict(scientific):
         raise ReleaseErratumError("published successor scientific leaves differ from its receipt")
     _assert_published_equality_digests(scientific, equality)
+    _validate_published_release_documents(root, contract=contract)
 
     return {
         "status": "pass",

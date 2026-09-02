@@ -2778,6 +2778,21 @@ def _copy_diagnostic_tree(
     return copied
 
 
+def _load_optional_diagnostic_json(
+    path: Path,
+    *,
+    label: str,
+) -> tuple[Any | None, str | None]:
+    """Load optional report JSON while preserving malformed evidence for classification."""
+    try:
+        return _load_json(path, label=label), None
+    except CandidateError as exc:
+        # Filesystem/read failures are not malformed evidence and remain fatal.
+        if isinstance(exc.__cause__, OSError):
+            raise
+        return None, f"{label} failed strict UTF-8 JSON parsing"
+
+
 def _diagnostic_embedded_binding(
     path: Path | None,
     *,
@@ -2786,6 +2801,7 @@ def _diagnostic_embedded_binding(
     workflow_run_id: str,
     workflow_run_attempt: int,
     require_workflow: bool,
+    optional: bool = False,
 ) -> dict[str, Any]:
     """Classify source/run identity embedded in one preserved JSON report.
 
@@ -2797,7 +2813,12 @@ def _diagnostic_embedded_binding(
     if path is None or not path.exists():
         return {"status": "not_present"}
     _diagnostic_source_file(path, label=label)
-    payload = _load_json(path, label=label)
+    if optional:
+        payload, parse_reason = _load_optional_diagnostic_json(path, label=label)
+        if parse_reason is not None:
+            return {"status": "unverified", "reason": parse_reason}
+    else:
+        payload = _load_json(path, label=label)
     return _diagnostic_binding_payload(
         payload,
         label=label,
@@ -2842,9 +2863,17 @@ def _diagnostic_binding_payload(
             "status": "unverified",
             "reason": f"{label} workflow binding is not an object",
         }
+    embedded_attempt = embedded_workflow.get("run_attempt")
+    if (
+        not isinstance(embedded_attempt, int)
+        or isinstance(embedded_attempt, bool)
+        or embedded_attempt < 1
+    ):
+        raise CandidateError(f"{label} workflow run_attempt is invalid")
+
     if (
         embedded_workflow.get("run_id") != workflow_run_id
-        or embedded_workflow.get("run_attempt") != workflow_run_attempt
+        or embedded_attempt != workflow_run_attempt
     ):
         raise CandidateError(
             f"{label} workflow identity does not match rejected diagnostic workflow"
@@ -2868,7 +2897,10 @@ def _diagnostic_dependency_binding(
     if path is None or not path.exists():
         return {"status": "not_present"}
     _diagnostic_source_file(path, label="diagnostic dependency report")
-    payload = _load_json(path, label="diagnostic dependency report")
+    label = "diagnostic dependency report"
+    payload, parse_reason = _load_optional_diagnostic_json(path, label=label)
+    if parse_reason is not None:
+        return {"status": "unverified", "reason": parse_reason}
     if not isinstance(payload, dict):
         return {"status": "unverified", "reason": "dependency report is not a JSON object"}
     binding = payload.get("candidate_binding")
@@ -3046,42 +3078,6 @@ def _rejected_diagnostic(  # noqa: C901, PLR0912, PLR0915 - closed packet contra
             except RuntimeError as exc:
                 raise CandidateError(f"diagnostic input path is ambiguous: {input_path}") from exc
 
-    embedded_provenance = {
-        "candidate-manifest": {"status": "not_present"},
-        "candidate-provenance": {"status": "not_present"},
-        "materialization-report": _diagnostic_embedded_binding(
-            materialization_report,
-            label="materialization report",
-            source_sha=args.source_sha,
-            workflow_run_id=args.workflow_run_id,
-            workflow_run_attempt=args.workflow_run_attempt,
-            require_workflow=False,
-        ),
-        "dependency-report": _diagnostic_dependency_binding(
-            dependency_report,
-            source_sha=args.source_sha,
-            workflow_run_id=args.workflow_run_id,
-            workflow_run_attempt=args.workflow_run_attempt,
-        ),
-    }
-    if candidate_bundle is not None:
-        embedded_provenance["candidate-manifest"] = _diagnostic_embedded_binding(
-            candidate_bundle / MANIFEST_NAME,
-            label="candidate manifest",
-            source_sha=args.source_sha,
-            workflow_run_id=args.workflow_run_id,
-            workflow_run_attempt=args.workflow_run_attempt,
-            require_workflow=True,
-        )
-        embedded_provenance["candidate-provenance"] = _diagnostic_embedded_binding(
-            candidate_bundle / PROVENANCE_NAME,
-            label="candidate provenance",
-            source_sha=args.source_sha,
-            workflow_run_id=args.workflow_run_id,
-            workflow_run_attempt=args.workflow_run_attempt,
-            require_workflow=True,
-        )
-
     source_tree_sha = _candidate_tree_sha1(repo_root, args.source_sha)
     staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent))
     try:
@@ -3135,6 +3131,42 @@ def _rejected_diagnostic(  # noqa: C901, PLR0912, PLR0915 - closed packet contra
             )
             copied_inputs[relative] = destination
             payload_paths.append(destination)
+        embedded_provenance = {
+            "candidate-manifest": {"status": "not_present"},
+            "candidate-provenance": {"status": "not_present"},
+            "materialization-report": _diagnostic_embedded_binding(
+                copied_inputs.get("reports/materialization.json"),
+                label="materialization report",
+                source_sha=args.source_sha,
+                workflow_run_id=args.workflow_run_id,
+                workflow_run_attempt=args.workflow_run_attempt,
+                require_workflow=False,
+                optional=True,
+            ),
+            "dependency-report": _diagnostic_dependency_binding(
+                copied_inputs.get("reports/dependency-license-inventory.json"),
+                source_sha=args.source_sha,
+                workflow_run_id=args.workflow_run_id,
+                workflow_run_attempt=args.workflow_run_attempt,
+            ),
+        }
+        if candidate_bundle is not None:
+            embedded_provenance["candidate-manifest"] = _diagnostic_embedded_binding(
+                staging / "candidate-bundle" / MANIFEST_NAME,
+                label="candidate manifest",
+                source_sha=args.source_sha,
+                workflow_run_id=args.workflow_run_id,
+                workflow_run_attempt=args.workflow_run_attempt,
+                require_workflow=True,
+            )
+            embedded_provenance["candidate-provenance"] = _diagnostic_embedded_binding(
+                staging / "candidate-bundle" / PROVENANCE_NAME,
+                label="candidate provenance",
+                source_sha=args.source_sha,
+                workflow_run_id=args.workflow_run_id,
+                workflow_run_attempt=args.workflow_run_attempt,
+                require_workflow=True,
+            )
         payload_paths = sorted(
             set(payload_paths), key=lambda path: path.relative_to(staging).as_posix()
         )

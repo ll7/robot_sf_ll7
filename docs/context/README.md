@@ -39,6 +39,11 @@ The post-rollout stale-base observation contract is documented in
 [issue_7261_stale_base_observation.md](issue_7261_stale_base_observation.md); it measures only
 SHA-pinned workflow records and keeps missing or unknown attribution unavailable.
 
+The interaction-conditioned realism validation preregistration is documented in
+[issue_8246_realism_validation_preregistration.md](issue_8246_realism_validation_preregistration.md);
+its current evidence is synthetic implementation-integrity proof and the external-data lane remains
+blocked.
+
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.
 

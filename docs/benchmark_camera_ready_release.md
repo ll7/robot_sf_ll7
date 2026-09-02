@@ -63,10 +63,10 @@ required predecessor custody, scientific-leaf equality, `zenodo new-version`,
 and two-channel draft checks.
 
 The direct Zenodo path is deliberately separate from the GitHub release path.
-Disable the repository's GitHub-to-Zenodo webhook immediately before publishing
-the GitHub Release and leave it disabled. Do not use the webhook to create or
-update this benchmark-data deposition: unrelated software or model releases
-must not contaminate the benchmark concept.
+Disable or remove the repository's GitHub-to-Zenodo webhook immediately before
+publishing the GitHub Release and leave no active hook. Do not use the webhook
+to create or update this benchmark-data deposition: unrelated software or
+model releases must not contaminate the benchmark concept.
 
 ## Exact-SHA Continuous Integration (CI) reconciliation
 
@@ -239,10 +239,12 @@ the title, dataset type, GPL-3.0-only license, creator union, exact source tag,
 and concept/version DOI distinction. `publish` is irreversible; never run it
 for a draft with missing files, unaccepted rows, or an unresolved DOI.
 
-Disable the specific GitHub-to-Zenodo webhook through repository settings or
-the approved GitHub API operation immediately before GitHub publication. Confirm
-its effective state with the release doctor and retain only webhook id/state in
-the operator receipt; never put a token or authorization header in that receipt.
+Disable or remove the specific GitHub-to-Zenodo webhook through repository
+settings or the approved GitHub API operation immediately before GitHub
+publication. Confirm that no hook is active with the release doctor and retain
+only webhook id/state in the operator receipt. Treat the hook configuration URL
+as credential-bearing: never print or retain it, a token, or an authorization
+header in a receipt or log.
 
 ## Validation Checklist
 

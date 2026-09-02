@@ -12,7 +12,8 @@ Serialization: writing to JSONL will typically convert instances to
 
 from __future__ import annotations
 
-from collections.abc import (  # noqa: TC003 - runtime annotation resolution.
+import json
+from collections.abc import (
     Callable,
     Mapping,
 )
@@ -24,7 +25,7 @@ from datetime import (
 from multiprocessing.context import (  # noqa: TC003 - runtime annotation resolution.
     BaseContext,
 )
-from pathlib import Path  # noqa: TC003 - runtime annotation resolution.
+from pathlib import Path
 from typing import Any, TypedDict
 
 import numpy as np  # noqa: TC002 - runtime type-hint consumers resolve fields.
@@ -362,6 +363,67 @@ class EpisodeRecord:
         # flatten metrics bundle for JSON writing
         d["metrics"] = self.metrics.to_dict()
         return d
+
+    def save(self, path: Path | str) -> Path:
+        """Persist this episode record as JSON.
+
+        Args:
+            path: Destination file path.
+
+        Returns:
+            Resolved Path written.
+        """
+        dest = Path(path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with dest.open("w", encoding="utf-8") as f:
+            json.dump(self.to_dict(), f, indent=2)
+        return dest
+
+    @classmethod
+    def load(cls, path: Path | str) -> EpisodeRecord:
+        """Load an EpisodeRecord from a persisted JSON file.
+
+        Args:
+            path: Path to the JSON file.
+
+        Returns:
+            Constructed EpisodeRecord instance.
+        """
+        src = Path(path)
+        with src.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        return cls.from_dict(data)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> EpisodeRecord:
+        """Reconstruct an EpisodeRecord from a dictionary.
+
+        Args:
+            data: Mapping containing serialized episode record fields.
+
+        Returns:
+            Constructed EpisodeRecord instance.
+        """
+        metrics_raw = data.get("metrics", {})
+        if isinstance(metrics_raw, MetricsBundle):
+            metrics = metrics_raw
+        elif isinstance(metrics_raw, Mapping):
+            metrics = MetricsBundle(values={str(k): float(v) for k, v in metrics_raw.items()})
+        else:
+            metrics = MetricsBundle(values={})
+        return cls(
+            version=str(data.get("version", "v1")),
+            episode_id=str(data.get("episode_id", "")),
+            scenario_id=str(data.get("scenario_id", "")),
+            seed=int(data.get("seed", 0)),
+            metrics=metrics,
+            algo=data.get("algo"),
+            horizon=data.get("horizon"),
+            timing=data.get("timing"),
+            tags=data.get("tags"),
+            identity=data.get("identity"),
+            raw=data.get("raw"),
+        )
 
 
 @dataclass(slots=True)

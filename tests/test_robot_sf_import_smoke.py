@@ -21,10 +21,17 @@ def test_robot_sf_import_does_not_mutate_sys_path():
 
         assert list(sys.path) == before
         assert robot_sf.__all__ == [
+            "EpisodeRecord",
             "ManifestWriter",
+            "PlannerProtocol",
             "RunRegistry",
             "RunTrackerConfig",
+            "ScenarioSpec",
+            "api",
             "generate_run_id",
+            "load_scenario",
+            "make_env",
+            "run_episode",
             "telemetry",
         ]
     finally:

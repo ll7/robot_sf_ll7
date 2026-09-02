@@ -22,6 +22,7 @@ from robot_sf.benchmark.snqi.campaign_contract import (
     compute_component_correlations,
     compute_component_dominance,
     compute_planner_snqi_ordering,
+    compute_stored_snqi_ordering,
     compute_weight_sensitivity,
     evaluate_snqi_contract,
     resolve_weight_mapping,
@@ -109,6 +110,8 @@ def _write_markdown(path: Path, payload: dict[str, Any]) -> None:
         f"- Aligned variable metrics: `{positioning.get('aligned_metric_count', 0)}` / `{positioning.get('variable_metric_count', 0)}`",
         "",
         "## Planner Ordering",
+        "",
+        f"- Score basis: `{payload.get('planner_ordering_basis', 'unspecified')}`",
         "",
         "| Rank | Planner | Kinematics | Mean SNQI | Episodes |",
         "|---:|---|---|---:|---:|",
@@ -284,10 +287,15 @@ def main(argv: list[str] | None = None) -> int:
         weights=configured_weights,
         baseline=baseline,
     )
-    planner_ordering = compute_planner_snqi_ordering(
+    diagnostic_ordering = compute_planner_snqi_ordering(
         episodes,
         weights=configured_weights,
         baseline=baseline,
+    )
+    stored_ordering = compute_stored_snqi_ordering(episodes)
+    planner_ordering = stored_ordering or diagnostic_ordering
+    planner_ordering_basis = (
+        "stored_metrics.snqi" if stored_ordering is not None else "diagnostic_scalarizer"
     )
     weight_sensitivity = compute_weight_sensitivity(
         episodes,
@@ -346,6 +354,7 @@ def main(argv: list[str] | None = None) -> int:
         "component_dominance": dominance,
         "component_correlations": component_correlations,
         "planner_ordering": planner_ordering,
+        "planner_ordering_basis": planner_ordering_basis,
         "weight_sensitivity": weight_sensitivity,
         "positioning": positioning,
     }

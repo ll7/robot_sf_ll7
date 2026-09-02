@@ -299,6 +299,20 @@ def test_verify_accepts_zenodo_license_and_creator_normalization(tmp_path: Path)
     assert not any(problem.startswith("metadata.") for problem in report["problems"])
 
 
+def test_verify_accepts_draft_without_advertised_size_when_download_matches(
+    tmp_path: Path,
+) -> None:
+    """Zenodo drafts may omit size; streamed bytes and SHA-256 remain authoritative."""
+    session, state, remote = _metadata_verification_fixture(tmp_path)
+    remote["files"][0].pop("size")
+
+    report = verify(session, state, _metadata())
+
+    assert report["status"] == "pass"
+    assert report["publication_state"] == "draft"
+    assert report["problem_count"] == 0
+
+
 @pytest.mark.parametrize(
     ("field", "remote_value"),
     [

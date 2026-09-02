@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _SOURCE_SHA = "a" * 40
+_TAG = "v0.0.1"
 
 
 def _summary_payload(*, tag: str = "v0.0.1") -> dict[str, object]:
@@ -110,10 +111,10 @@ def test_create_draft_then_upload_order(tmp_path: Path) -> None:
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout="[[]]", stderr="")
         if cmd[:2] == ["gh", "api"]:
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
-        if cmd[:3] == ["gh", "release", "view"]:
-            raise subprocess.CalledProcessError(1, cmd, output="", stderr="not found")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     with patch("subprocess.run", side_effect=_fake_run):
@@ -128,11 +129,11 @@ def test_create_draft_then_upload_order(tmp_path: Path) -> None:
 def test_collision_with_existing_release_on_different_sha_fails_closed(tmp_path: Path) -> None:
     """An existing release at a different target SHA blocks creation and upload."""
     existing = json.dumps(
-        {"isDraft": True, "targetCommitish": "b" * 40},
+        [[{"tag_name": _TAG, "draft": True, "target_commitish": "b" * 40}]],
     )
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        if cmd[:3] == ["gh", "release", "view"]:
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
             return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
         raise AssertionError(f"unexpected command: {cmd}")
 
@@ -144,11 +145,11 @@ def test_collision_with_existing_release_on_different_sha_fails_closed(tmp_path:
 def test_collision_with_public_release_fails_closed(tmp_path: Path) -> None:
     """A non-draft existing release is never mutated."""
     existing = json.dumps(
-        {"isDraft": False, "targetCommitish": _SOURCE_SHA},
+        [[{"tag_name": _TAG, "draft": False, "target_commitish": _SOURCE_SHA}]],
     )
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        if cmd[:3] == ["gh", "release", "view"]:
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
             return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
         raise AssertionError(f"unexpected command: {cmd}")
 
@@ -160,15 +161,13 @@ def test_collision_with_public_release_fails_closed(tmp_path: Path) -> None:
 def test_existing_exact_sha_draft_allows_upload(tmp_path: Path) -> None:
     """An exact-SHA draft is not a blocker; upload proceeds without creation."""
     existing = json.dumps(
-        {"isDraft": True, "targetCommitish": _SOURCE_SHA},
+        [[{"tag_name": _TAG, "draft": True, "target_commitish": _SOURCE_SHA}]],
     )
     calls: list[list[str]] = []
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(list(cmd))
-        if cmd[:2] == ["gh", "api"]:
-            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
-        if cmd[:3] == ["gh", "release", "view"]:
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
             return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
@@ -180,16 +179,43 @@ def test_existing_exact_sha_draft_allows_upload(tmp_path: Path) -> None:
     assert len(upload_calls) == 1
 
 
+@pytest.mark.parametrize(
+    ("release", "message"),
+    [
+        ({"tag_name": _TAG, "draft": True}, "exact target commit"),
+        (
+            {"tag_name": _TAG, "draft": "true", "target_commitish": _SOURCE_SHA},
+            "malformed draft flag",
+        ),
+    ],
+)
+def test_malformed_existing_draft_blocks_upload(
+    tmp_path: Path,
+    release: dict[str, object],
+    message: str,
+) -> None:
+    """Draft reuse requires strict typed state bound to the exact source SHA."""
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps([[release]]), stderr="")
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    with patch("subprocess.run", side_effect=_fake_run), pytest.raises(SystemExit) as exc_info:
+        _run(tmp_path, "--create-draft", "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    assert message in str(exc_info.value)
+
+
 def test_missing_release_creates_draft(tmp_path: Path) -> None:
-    """When `gh release view` finds nothing, draft creation is planned."""
+    """When the REST release lookup finds nothing, draft creation is planned."""
     calls: list[list[str]] = []
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout="[[]]", stderr="")
         if cmd[:2] == ["gh", "api"]:
             return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
-        if cmd[:3] == ["gh", "release", "view"]:
-            raise subprocess.CalledProcessError(1, cmd, output="", stderr="not found")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     with patch("subprocess.run", side_effect=_fake_run):
@@ -202,13 +228,17 @@ def test_missing_release_creates_draft(tmp_path: Path) -> None:
 
 def test_existing_git_tag_blocks_draft_creation(tmp_path: Path) -> None:
     """A Git tag collision is never silently adopted by draft creation."""
-    existing = json.dumps({"isDraft": True, "targetCommitish": _SOURCE_SHA})
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        if cmd[:3] == ["gh", "release", "view"]:
-            raise subprocess.CalledProcessError(1, cmd, output="", stderr="release not found")
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout="[[]]", stderr="")
         if cmd[:2] == ["gh", "api"]:
-            return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
+            return subprocess.CompletedProcess(
+                cmd,
+                0,
+                stdout=json.dumps({"object": {"sha": _SOURCE_SHA}}),
+                stderr="",
+            )
         raise AssertionError(f"unexpected command: {cmd}")
 
     with patch("subprocess.run", side_effect=_fake_run), pytest.raises(SystemExit) as exc_info:
@@ -221,13 +251,43 @@ def test_ambiguous_release_lookup_blocks_draft_creation(tmp_path: Path) -> None:
     """An authentication/transport error is not interpreted as release absence."""
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        if cmd[:3] == ["gh", "release", "view"]:
-            raise subprocess.CalledProcessError(1, cmd, output="", stderr="authentication failed")
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="authentication failed")
         raise AssertionError(f"unexpected command: {cmd}")
 
     with patch("subprocess.run", side_effect=_fake_run), pytest.raises(SystemExit) as exc_info:
         _run(tmp_path, "--create-draft", "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
     assert "cannot determine whether release" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("payload", ("{}", "[[null]]", "not-json"))
+def test_malformed_release_listing_blocks_draft_creation(tmp_path: Path, payload: str) -> None:
+    """Malformed paginated REST output is never interpreted as release absence."""
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout=payload, stderr="")
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    with patch("subprocess.run", side_effect=_fake_run), pytest.raises(SystemExit) as exc_info:
+        _run(tmp_path, "--create-draft", "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    assert "release lookup" in str(exc_info.value)
+
+
+def test_duplicate_release_listing_blocks_draft_creation(tmp_path: Path) -> None:
+    """Multiple release records for one tag are ambiguous and fail closed."""
+    release = {"tag_name": _TAG, "draft": True, "target_commitish": _SOURCE_SHA}
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=json.dumps([[release], [release]]), stderr=""
+            )
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    with patch("subprocess.run", side_effect=_fake_run), pytest.raises(SystemExit) as exc_info:
+        _run(tmp_path, "--create-draft", "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    assert "multiple releases" in str(exc_info.value)
 
 
 def test_release_identity_derives_title_and_notes() -> None:

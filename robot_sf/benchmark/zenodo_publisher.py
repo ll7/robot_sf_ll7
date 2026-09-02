@@ -964,7 +964,13 @@ def verify(  # noqa: C901, PLR0912, PLR0915
         if remote_file is None:
             continue
         remote_size = remote_file.get("size")
-        if not isinstance(remote_size, int) or isinstance(remote_size, bool):
+        # Zenodo's legacy deposit/depositions draft response may omit size even
+        # after a completed bucket upload. The streamed cold download below is
+        # still authoritative for exact bytes and SHA-256. Published records,
+        # and any draft that does advertise size, remain fail-closed.
+        if remote_size is None and remote_submitted is False:
+            pass
+        elif not isinstance(remote_size, int) or isinstance(remote_size, bool):
             problems.append(f"remote file {name} has an invalid size")
         elif remote_size <= 0:
             problems.append(f"remote file {name} is empty")

@@ -33,7 +33,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from robot_sf.benchmark import artifact_publication as artifact_publication_module
 from robot_sf.benchmark import release_acceptance as release_acceptance_module
@@ -105,6 +105,8 @@ EXPECTED_GOAL_TIMEOUT_BOUNDARY_ROWS = frozenset(
 )
 EXPECTED_RELEASE_EPISODE_ROWS = 20_160
 EXPECTED_RELEASE_ARMS = 14
+MAX_PRESERVED_RECEIPT_EXPANDED_BYTES = 8 * 1024 * 1024
+_GZIP_INPUT_CHUNK_BYTES = 64 * 1024
 EXPECTED_SOURCE_CAMPAIGN_RELATIVE = Path(
     "output/benchmarks/camera_ready/issue7742_release_full-s30-h600-b1d5ab6de708-v1_20260825"
 )
@@ -414,26 +416,49 @@ def _read_json_bytes(data: bytes, *, label: str) -> dict[str, Any]:
     return payload
 
 
-def _read_single_gzip_member(path: Path) -> bytes:
-    """Read exactly one gzip member and reject truncation or trailing data."""
-    path = _assert_safe_file(path, label="preserved receipt source")
-    try:
-        compressed = path.read_bytes()
-    except OSError as exc:
-        raise DerivedReleaseError("preserved receipt source cannot be read") from exc
+def _read_bounded_single_gzip_payload(handle: BinaryIO) -> bytes:
+    """Stream one gzip member from ``handle`` within the expanded-byte budget."""
     decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
-    try:
-        payload = decompressor.decompress(compressed)
-        payload += decompressor.flush()
-    except zlib.error as exc:
-        raise DerivedReleaseError("preserved receipt gzip is invalid") from exc
+    payload = bytearray()
+    while compressed_chunk := handle.read(_GZIP_INPUT_CHUNK_BYTES):
+        remaining = MAX_PRESERVED_RECEIPT_EXPANDED_BYTES - len(payload)
+        payload.extend(decompressor.decompress(compressed_chunk, remaining + 1))
+        if len(payload) > MAX_PRESERVED_RECEIPT_EXPANDED_BYTES:
+            raise DerivedReleaseError(
+                "preserved receipt gzip expanded payload exceeds the safety limit"
+            )
+        if decompressor.eof:
+            if decompressor.unused_data or handle.read(1):
+                raise DerivedReleaseError("preserved receipt gzip has trailing data or members")
+            break
     if not decompressor.eof:
         raise DerivedReleaseError("preserved receipt gzip is truncated")
     if decompressor.unused_data or decompressor.unconsumed_tail:
         raise DerivedReleaseError("preserved receipt gzip has trailing data or members")
+    try:
+        remaining = MAX_PRESERVED_RECEIPT_EXPANDED_BYTES - len(payload)
+        payload.extend(decompressor.flush(remaining + 1))
+    except zlib.error as exc:
+        raise DerivedReleaseError("preserved receipt gzip is invalid") from exc
+    if len(payload) > MAX_PRESERVED_RECEIPT_EXPANDED_BYTES:
+        raise DerivedReleaseError(
+            "preserved receipt gzip expanded payload exceeds the safety limit"
+        )
     if not payload:
         raise DerivedReleaseError("preserved receipt gzip is empty")
-    return payload
+    return bytes(payload)
+
+
+def _read_single_gzip_member(path: Path) -> bytes:
+    """Read one bounded gzip member and reject truncation or trailing data."""
+    path = _assert_safe_file(path, label="preserved receipt source")
+    try:
+        with path.open("rb") as handle:
+            return _read_bounded_single_gzip_payload(handle)
+    except OSError as exc:
+        raise DerivedReleaseError("preserved receipt source cannot be read") from exc
+    except zlib.error as exc:
+        raise DerivedReleaseError("preserved receipt gzip is invalid") from exc
 
 
 def _sha256_bytes(data: bytes) -> str:

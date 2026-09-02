@@ -554,6 +554,31 @@ def test_verify_producer_artifacts_rejects_invalid_preserved_gzip(
         )
 
 
+def test_preserved_receipt_gzip_rejects_expansion_over_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A small compressed receipt cannot expand beyond the in-memory safety budget."""
+    limit = 256
+    monkeypatch.setattr(recovery, "MAX_PRESERVED_RECEIPT_EXPANDED_BYTES", limit)
+    preserved = tmp_path / "expansion-bomb.json.gz"
+    preserved.write_bytes(gzip.compress(b"x" * (limit + 1), mtime=0))
+
+    with pytest.raises(recovery.DerivedReleaseError, match="expanded payload exceeds"):
+        recovery._read_single_gzip_member(preserved)
+
+
+def test_preserved_receipt_gzip_accepts_payload_at_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The expansion guard admits an exact-boundary single-member payload."""
+    payload = b"x" * 256
+    monkeypatch.setattr(recovery, "MAX_PRESERVED_RECEIPT_EXPANDED_BYTES", len(payload))
+    preserved = tmp_path / "bounded.json.gz"
+    preserved.write_bytes(gzip.compress(payload, mtime=0))
+
+    assert recovery._read_single_gzip_member(preserved) == payload
+
+
 def test_verify_producer_artifacts_rejects_tamper_and_unlisted_file(tmp_path: Path) -> None:
     """Mutation and inventory drift fail before a derived copy can start."""
     root, _ = _make_verified_retrieval(tmp_path)

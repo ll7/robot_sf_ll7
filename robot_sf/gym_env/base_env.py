@@ -68,7 +68,43 @@ def _warn_exit_deprecated() -> None:  # pragma: no cover - once-per-process shim
         _EXIT_DEPRECATION_WARNED = True
 
 
-class BaseEnv(Env):
+class SimulationUICloseMixin:
+    """Shared sim-UI lifecycle for the Gymnasium environment base classes.
+
+    The mixin owns the ``close()``/deprecated ``exit()`` contract so the two
+    parallel environment hierarchies (``BaseEnv`` and ``BaseSimulationEnv``)
+    cannot drift: ``close()`` releases the simulation UI and closes the
+    Gymnasium environment (idempotent), and ``exit()`` stays as a deprecated
+    alias during the two-release migration window.
+    """
+
+    sim_ui: Any = None
+
+    def _release_sim_ui(self) -> None:
+        """Tear down the simulation UI, if one is attached."""
+        if self.sim_ui:
+            self.sim_ui.exit_simulation()
+            self.sim_ui = None
+
+    def close(self) -> None:
+        """Release the simulation UI and close the Gymnasium environment.
+
+        Idempotent: calling it more than once is safe.
+        """
+        self._release_sim_ui()
+        super().close()
+
+    def exit(self) -> None:  # pragma: no cover - deprecated shim
+        """Deprecated alias for :meth:`close`.
+
+        Kept for the two-release deprecation window; new code calls
+        :meth:`close`.
+        """
+        _warn_exit_deprecated()
+        self.close()
+
+
+class BaseEnv(SimulationUICloseMixin, Env):
     """Base environment class that handles common functionality."""
 
     def __init__(  # noqa: PLR0913
@@ -232,25 +268,6 @@ class BaseEnv(Env):
             action: Action to apply (type depends on action space)
         """
         raise NotImplementedError
-
-    def close(self) -> None:
-        """Release the simulation UI and close the Gymnasium environment.
-
-        Idempotent: calling it more than once is safe.
-        """
-        if self.sim_ui:
-            self.sim_ui.exit_simulation()
-            self.sim_ui = None
-        super().close()
-
-    def exit(self) -> None:  # pragma: no cover - deprecated shim
-        """Deprecated alias for :meth:`close`.
-
-        Kept for the two-release deprecation window; new code calls
-        :meth:`close`.
-        """
-        _warn_exit_deprecated()
-        self.close()
 
     def save_recording(self, filename: str | None = None) -> None:
         """

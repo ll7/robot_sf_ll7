@@ -10,14 +10,14 @@ from typing import Any
 
 from gymnasium import Env, spaces
 
-from robot_sf.gym_env.base_env import BaseEnv, _warn_exit_deprecated
+from robot_sf.gym_env.base_env import BaseEnv, SimulationUICloseMixin
 from robot_sf.gym_env.unified_config import BaseSimulationConfig
 from robot_sf.render.sim_view import VisualizableSimState
 
 __all__ = ["BaseSimulationEnv", "MultiAgentEnv", "SingleAgentEnv"]
 
 
-class BaseSimulationEnv(Env, ABC):
+class BaseSimulationEnv(SimulationUICloseMixin, Env, ABC):
     """
     Abstract base class for all simulation environments.
 
@@ -110,27 +110,6 @@ class BaseSimulationEnv(Env, ABC):
     def render(self, **kwargs) -> None:
         """Render the environment."""
         pass
-
-    def close(self) -> None:
-        """Release the simulation UI and close the Gymnasium environment.
-
-        Idempotent: calling it more than once is safe. The sim-UI-present
-        branch requires the optional viz extra; the identical BaseEnv.close()
-        logic is fully covered there.
-        """
-        if self.sim_ui:
-            self.sim_ui.exit_simulation()  # pragma: no cover - viz extra
-            self.sim_ui = None  # pragma: no cover - viz extra
-        super().close()
-
-    def exit(self) -> None:  # pragma: no cover - deprecated shim
-        """Deprecated alias for :meth:`close`.
-
-        Kept for the two-release deprecation window; new code calls
-        :meth:`close`.
-        """
-        _warn_exit_deprecated()
-        self.close()
 
     def save_recording(self, filename: str | None = None) -> None:
         """Save recorded states to file."""

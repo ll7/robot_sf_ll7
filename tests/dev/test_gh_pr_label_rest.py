@@ -11,6 +11,7 @@ from scripts.dev.gh_pr_label_rest import (
     LABEL_PAGE_SIZE,
     _get_label_names,
     add_label,
+    get_label_names,
     main,
     remove_label,
 )
@@ -97,6 +98,14 @@ class TestLabelRead:
         assert str(LABEL_PAGE_CEILING) in result["error"]
         assert "labels" not in result
         assert mock_get.call_count == LABEL_PAGE_CEILING
+
+    def test_public_read_api_rejects_nonpositive_number(self) -> None:
+        with patch("scripts.dev.gh_pr_label_rest._gh_api_get") as mock_get:
+            result = get_label_names(0)
+
+        assert result["status"] == "error"
+        assert "must be positive" in result["error"]
+        mock_get.assert_not_called()
 
 
 class TestAddLabel:
@@ -403,6 +412,38 @@ class TestRemoveLabel:
 
 class TestCli:
     """Tests for the CLI entry point."""
+
+    def test_cli_list_prints_compact_label_inventory(self, capsys) -> None:
+        """The list command exposes the strict REST read for shell workflows."""
+        with patch(
+            "scripts.dev.gh_pr_label_rest._gh_api_get",
+            return_value=_proc(stdout=_mock_labels_payload("state:ready", "bug")),
+        ):
+            rc = main(["list", "5220", "--repo", "ll7/robot_sf_ll7"])
+
+        captured = capsys.readouterr()
+        assert rc == 0
+        assert json.loads(captured.out) == {
+            "action": "list",
+            "labels": ["state:ready", "bug"],
+            "number": 5220,
+            "repo": "ll7/robot_sf_ll7",
+            "status": "ok",
+        }
+
+    def test_cli_list_prints_read_error_to_stderr(self, capsys) -> None:
+        """A failed label read remains an observable nonzero CLI result."""
+        with patch(
+            "scripts.dev.gh_pr_label_rest._gh_api_get",
+            return_value=_proc(returncode=1, stderr="HTTP 403: forbidden"),
+        ):
+            rc = main(["list", "5220"])
+
+        captured = capsys.readouterr()
+        assert rc == 1
+        payload = json.loads(captured.err)
+        assert payload["status"] == "error"
+        assert "forbidden" in payload["error"]
 
     def test_cli_add_prints_compact_success_json(self) -> None:
         """The command-line contract is a single machine-readable success result."""

@@ -1324,6 +1324,32 @@ def test_network_audit_rejects_renamed_channel_asset_before_download(tmp_path: P
     assert not any("bundle.zip" in url for url, _, _ in session.calls[2:])
 
 
+@pytest.mark.parametrize("size", [None, 0])
+def test_network_audit_rejects_missing_or_empty_published_zenodo_size(
+    tmp_path: Path, size: int | None
+) -> None:
+    """Published Zenodo records must advertise a positive file size."""
+    session, _, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    record_url = f"{zenodo_base}/records/1234567"
+    response = session.routes[record_url]
+    assert isinstance(response, _PublicResponse)
+    payload = copy.deepcopy(response._payload)
+    payload["files"][0]["size"] = size
+    response._payload = payload
+
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+
+    assert receipt["status"] == "invalid"
+    assert any("positive advertised size" in problem for problem in receipt["problems"])
+    assert not any("bundle.zip" in url for url, _, _ in session.calls[2:])
+
+
 def test_network_audit_separates_transport_unavailability(tmp_path: Path) -> None:
     session, _, tag, github_base, zenodo_base = _network_fixture(tmp_path)
     first_url = next(iter(session.routes))

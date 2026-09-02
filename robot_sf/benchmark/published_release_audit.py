@@ -1609,8 +1609,10 @@ def _zenodo_file_assets(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
             label=f"Zenodo file {name}",
         )
         size = raw_file.get("size")
-        if size is not None and (isinstance(size, bool) or not isinstance(size, int) or size < 0):
-            raise PublishedAuditInvalid(f"Zenodo file {name} has an invalid advertised size")
+        if isinstance(size, bool) or not isinstance(size, int) or size <= 0:
+            raise PublishedAuditInvalid(
+                f"published Zenodo file {name} requires a positive advertised size"
+            )
         assets.append({"name": name, "url": url, "size": size, "digest": None})
     return assets
 

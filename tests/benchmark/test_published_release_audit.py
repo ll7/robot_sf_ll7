@@ -237,6 +237,16 @@ def _full_erratum_payload(
         metadata_path=metadata_path,
         metadata_sha256=sha256_file(metadata_path),
     )
+    erratum_block = {
+        "correction_id": contract.correction_id,
+        "correction_scope": "derived_publication_metadata_only",
+        "predecessor_version_doi": predecessor_doi,
+        "predecessor_github_release_tag": predecessor_tag,
+        "concept_doi": concept_doi,
+        "source_sha": source_sha,
+        "scientific_source_unchanged": True,
+        "simulation_rerun": False,
+    }
     publication = {
         "release_tag": successor_tag,
         "release_id": successor_tag,
@@ -267,6 +277,7 @@ def _full_erratum_payload(
         "concept_doi": concept_doi,
         "publication": publication,
         "provenance": provenance,
+        "erratum": erratum_block,
     }
     execution = {
         "release_tag": predecessor_tag,
@@ -322,7 +333,12 @@ def _full_erratum_payload(
     _write_bytes(
         campaign / "reports/campaign_summary.json",
         json.dumps(
-            {"benchmark_release": current, "campaign": summary_campaign}, sort_keys=True
+            {
+                "benchmark_release": current,
+                "campaign": summary_campaign,
+                "publication_erratum": erratum_block,
+            },
+            sort_keys=True,
         ).encode(),
     )
     _write_bytes(

@@ -277,6 +277,62 @@ def _require_mapping(value: Any, *, label: str) -> Mapping[str, Any]:
     return value
 
 
+def validate_erratum_identity_block(
+    payload: Any, *, contract: ErratumContract, label: str
+) -> None:
+    """Require one emitted erratum block to bind the complete identity."""
+    block = _require_mapping(payload, label=label)
+    expected = {
+        "correction_id": contract.correction_id,
+        "correction_scope": ERRATUM_SCOPE,
+        "predecessor_version_doi": contract.predecessor_version_doi,
+        "predecessor_github_release_tag": contract.predecessor_github_release_tag,
+        "concept_doi": contract.concept_doi,
+        "source_sha": contract.source_sha,
+    }
+    for key, expected_value in expected.items():
+        if block.get(key) != expected_value:
+            raise ReleaseErratumError(f"{label}.{key} is stale or invalid")
+    if block.get("scientific_source_unchanged") is not True:
+        raise ReleaseErratumError(f"{label}.scientific_source_unchanged must be true")
+    if block.get("simulation_rerun") is not False:
+        raise ReleaseErratumError(f"{label}.simulation_rerun must be false")
+    for key in ("source_commit", "scientific_source_sha"):
+        if key in block and block[key] != contract.source_sha:
+            raise ReleaseErratumError(f"{label}.{key} contains a stale scientific source SHA")
+    for key, expected_value in (
+        ("builder_sha", contract.builder_sha),
+        ("validator_sha", contract.validator_sha),
+        ("orchestration_sha", contract.orchestration_sha),
+    ):
+        if key in block and block[key] != expected_value:
+            raise ReleaseErratumError(f"{label}.{key} contains a stale implementation SHA")
+
+
+def validate_erratum_identity_blocks(
+    payload: Any, *, contract: ErratumContract, label: str
+) -> None:
+    """Validate every nested ``erratum`` and ``publication_erratum`` block."""
+    root = _require_mapping(payload, label=label)
+
+    def walk(value: Any, path: str) -> None:
+        if isinstance(value, Mapping):
+            for key, nested in value.items():
+                nested_path = f"{path}.{key}"
+                if key in {"erratum", "publication_erratum"}:
+                    validate_erratum_identity_block(
+                        nested,
+                        contract=contract,
+                        label=nested_path,
+                    )
+                walk(nested, nested_path)
+        elif isinstance(value, list):
+            for index, nested in enumerate(value):
+                walk(nested, f"{path}[{index}]")
+
+    walk(root, label)
+
+
 def _required_text(payload: Mapping[str, Any], key: str, *, label: str) -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value.strip():
@@ -1183,17 +1239,51 @@ def _assert_current_alias_values(
         value != contract.concept_doi for value in concept_values
     ):
         raise ReleaseErratumError(f"{label} contains a stale concept-DOI alias")
+    source_values = [
+        payload[key]
+        for key in ("source_sha", "source_commit", "scientific_source_sha")
+        if key in payload
+    ]
+    if any(value != contract.source_sha for value in source_values):
+        raise ReleaseErratumError(f"{label} contains a stale scientific source SHA")
+
+
+def _assert_current_source_aliases(
+    payload: Mapping[str, Any], *, contract: ErratumContract, label: str
+) -> None:
+    """Reject stale source aliases without changing legacy tag/DOI diagnostics."""
+
+    def walk(value: Any, path: str) -> None:
+        if isinstance(value, Mapping):
+            source_values = [
+                value[key]
+                for key in ("source_sha", "source_commit", "scientific_source_sha")
+                if key in value
+            ]
+            if any(source != contract.source_sha for source in source_values):
+                raise ReleaseErratumError(f"{path} contains a stale scientific source SHA")
+            for key, nested in value.items():
+                walk(nested, f"{path}.{key}")
+        elif isinstance(value, list):
+            for index, nested in enumerate(value):
+                walk(nested, f"{path}[{index}]")
+
+    walk(payload, label)
 
 
 def _assert_publication_aliases(
-    payload: Mapping[str, Any], *, contract: ErratumContract, label: str
+    payload: Mapping[str, Any],
+    *,
+    contract: ErratumContract,
+    label: str,
+    required: bool = True,
 ) -> None:
     """Reject any present current-publication alias that remains stale."""
     _assert_current_alias_values(
         payload,
         contract=contract,
         label=label,
-        required=True,
+        required=required,
     )
     provenance = payload.get("provenance")
     if isinstance(provenance, Mapping):
@@ -1205,6 +1295,15 @@ def _assert_publication_aliases(
         )
     publication = payload.get("publication")
     if isinstance(publication, Mapping):
+        source_values = [
+            publication[key]
+            for key in ("source_sha", "source_commit", "scientific_source_sha")
+            if key in publication
+        ]
+        if any(value != contract.source_sha for value in source_values):
+            raise ReleaseErratumError(
+                f"{label}.publication contains a stale scientific source SHA"
+            )
         expected = {
             "concept_doi": contract.concept_doi,
             "version_doi": contract.successor_version_doi,
@@ -1267,6 +1366,60 @@ def _assert_predecessor_execution_aliases(
         )
 
 
+def _validate_published_erratum_identity_documents(
+    campaign_root: Path,
+    *,
+    manifest: Mapping[str, Any],
+    result: Mapping[str, Any],
+    summary: Mapping[str, Any],
+    contract: ErratumContract,
+) -> None:
+    """Validate emitted erratum blocks and copied-document source aliases."""
+    optional_documents = {
+        relative: _load_publication_document(
+            campaign_root / relative,
+            label=f"published {relative}",
+        )
+        for relative in ("campaign_manifest.json", "manifest.json", "run_meta.json")
+        if (campaign_root / relative).is_file()
+    }
+    for document, label in (
+        (manifest, "published resolved manifest"),
+        (result, "published release result"),
+        (summary, "published campaign summary"),
+    ):
+        validate_erratum_identity_blocks(document, contract=contract, label=label)
+        _assert_current_source_aliases(document, contract=contract, label=label)
+    for relative, document in optional_documents.items():
+        validate_erratum_identity_blocks(
+            document,
+            contract=contract,
+            label=f"published {relative}",
+        )
+
+    validate_erratum_identity_block(
+        _require_mapping(
+            manifest.get("erratum"), label="published resolved manifest.erratum"
+        ),
+        contract=contract,
+        label="published resolved manifest.erratum",
+    )
+    validate_erratum_identity_block(
+        _require_mapping(
+            summary.get("publication_erratum"),
+            label="published campaign summary.publication_erratum",
+        ),
+        contract=contract,
+        label="published campaign summary.publication_erratum",
+    )
+    for relative, document in optional_documents.items():
+        _assert_current_source_aliases(
+            document,
+            contract=contract,
+            label=f"published {relative}",
+        )
+
+
 def _validate_published_release_documents(
     campaign_root: Path, *, contract: ErratumContract
 ) -> None:
@@ -1283,6 +1436,14 @@ def _validate_published_release_documents(
         campaign_root / "reports/campaign_summary.json",
         label="published campaign summary",
     )
+    _validate_published_erratum_identity_documents(
+        campaign_root,
+        manifest=manifest,
+        result=result,
+        summary=summary,
+        contract=contract,
+    )
+
     _assert_publication_aliases(manifest, contract=contract, label="published resolved manifest")
     _assert_publication_aliases(result, contract=contract, label="published release result")
     publication = _require_mapping(

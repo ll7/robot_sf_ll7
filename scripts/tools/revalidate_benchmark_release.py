@@ -49,12 +49,14 @@ from robot_sf.benchmark.camera_ready._artifacts import _write_snqi_diagnostics_a
 from robot_sf.benchmark.camera_ready_campaign import write_campaign_report
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.release_erratum import (
+    ERRATUM_SCOPE,
     ErratumContract,
     ReleaseErratumError,
     build_erratum_receipt,
     load_erratum_contract,
     snapshot_campaign,
     snapshot_predecessor_archive,
+    validate_erratum_identity_blocks,
 )
 from robot_sf.benchmark.release_protocol import (
     load_release_campaign_config,
@@ -2072,6 +2074,23 @@ def _write_derivation_receipt(  # noqa: PLR0913
     _write_json(campaign_root / DERIVATION_RECEIPT_RELATIVE, receipt)
 
 
+def _erratum_identity_block(contract: ErratumContract) -> dict[str, Any]:
+    """Build the complete identity block emitted in derived documents."""
+    return {
+        "correction_id": contract.correction_id,
+        "correction_scope": ERRATUM_SCOPE,
+        "predecessor_version_doi": contract.predecessor_version_doi,
+        "predecessor_github_release_tag": contract.predecessor_github_release_tag,
+        "concept_doi": contract.concept_doi,
+        "source_sha": contract.source_sha,
+        "builder_sha": contract.builder_sha,
+        "validator_sha": contract.validator_sha,
+        "orchestration_sha": contract.orchestration_sha,
+        "scientific_source_unchanged": True,
+        "simulation_rerun": False,
+    }
+
+
 def _rewrite_publication_provenance(
     payload: Mapping[str, Any] | None, *, contract: ErratumContract
 ) -> dict[str, Any]:
@@ -2196,14 +2215,7 @@ def _rewrite_resolved_manifest_publication_identity(
         }
     )
     resolved["publication"] = publication
-    resolved["erratum"] = {
-        "correction_id": contract.correction_id,
-        "correction_scope": "derived_publication_metadata_only",
-        "predecessor_version_doi": contract.predecessor_version_doi,
-        "predecessor_github_release_tag": contract.predecessor_github_release_tag,
-        "scientific_source_unchanged": True,
-        "simulation_rerun": False,
-    }
+    resolved["erratum"] = _erratum_identity_block(contract)
     return resolved
 
 
@@ -2229,6 +2241,13 @@ def _assert_successor_identity_fields(
         raise DerivedReleaseError(f"{label} does not name the successor version DOI")
     if not concept_values or any(value != contract.concept_doi for value in concept_values):
         raise DerivedReleaseError(f"{label} does not name the successor concept DOI")
+    source_values = [
+        payload[key]
+        for key in ("source_sha", "source_commit", "scientific_source_sha")
+        if key in payload
+    ]
+    if any(value != contract.source_sha for value in source_values):
+        raise DerivedReleaseError(f"{label} contains a stale scientific source SHA")
 
 
 def _assert_publication_identity_mapping(
@@ -2267,6 +2286,14 @@ def _assert_resolved_erratum_provenance(provenance: Any, *, contract: ErratumCon
 def _assert_erratum_manifest_identities(campaign_root: Path, *, contract: ErratumContract) -> None:
     """Check the resolved and copied manifest identity separations."""
     resolved = _read_json(campaign_root / "release" / "release_manifest.resolved.json")
+    try:
+        validate_erratum_identity_blocks(
+            resolved,
+            contract=contract,
+            label="resolved manifest",
+        )
+    except ReleaseErratumError as exc:
+        raise DerivedReleaseError(str(exc)) from exc
     _assert_successor_identity_fields(resolved, contract=contract, label="resolved manifest")
     _assert_publication_identity_mapping(resolved, contract=contract, label="resolved manifest")
     _assert_resolved_erratum_provenance(resolved.get("provenance"), contract=contract)
@@ -2276,6 +2303,14 @@ def _assert_erratum_manifest_identities(campaign_root: Path, *, contract: Erratu
         if not path.is_file():
             continue
         payload = _read_json(path)
+        try:
+            validate_erratum_identity_blocks(
+                payload,
+                contract=contract,
+                label=relative,
+            )
+        except ReleaseErratumError as exc:
+            raise DerivedReleaseError(str(exc)) from exc
         _assert_successor_identity_fields(payload, contract=contract, label=relative)
         _assert_publication_identity_mapping(payload, contract=contract, label=relative)
         benchmark_release = payload.get("benchmark_release")
@@ -2299,6 +2334,14 @@ def _assert_erratum_manifest_identities(campaign_root: Path, *, contract: Erratu
 def _assert_erratum_release_result(campaign_root: Path, *, contract: ErratumContract) -> None:
     """Check the successor result verdict and retained execution identity."""
     result = _read_json(campaign_root / "release" / "release_result.json")
+    try:
+        validate_erratum_identity_blocks(
+            result,
+            contract=contract,
+            label="release result",
+        )
+    except ReleaseErratumError as exc:
+        raise DerivedReleaseError(str(exc)) from exc
     _assert_successor_identity_fields(result, contract=contract, label="release result")
     _assert_publication_identity_mapping(result, contract=contract, label="release result")
     for current_key, execution_key in (
@@ -2349,6 +2392,14 @@ def _assert_erratum_release_result(campaign_root: Path, *, contract: ErratumCont
 def _assert_erratum_summary(campaign_root: Path, *, contract: ErratumContract) -> None:
     """Check all current campaign-summary DOI, tag, and asset coordinates."""
     summary = _read_json(campaign_root / "reports" / "campaign_summary.json")
+    try:
+        validate_erratum_identity_blocks(
+            summary,
+            contract=contract,
+            label="campaign summary",
+        )
+    except ReleaseErratumError as exc:
+        raise DerivedReleaseError(str(exc)) from exc
     summary_release = summary.get("benchmark_release")
     campaign = summary.get("campaign")
     artifacts = summary.get("artifacts")
@@ -2475,16 +2526,7 @@ def _rewrite_erratum_campaign_summary(campaign_root: Path, *, contract: ErratumC
     if isinstance(campaign.get("release_asset_url"), str):
         artifacts["release_asset_url"] = campaign["release_asset_url"]
     summary["artifacts"] = artifacts
-    summary["publication_erratum"] = {
-        "correction_id": contract.correction_id,
-        "predecessor_version_doi": contract.predecessor_version_doi,
-        "predecessor_github_release_tag": contract.predecessor_github_release_tag,
-        "builder_sha": contract.builder_sha,
-        "validator_sha": contract.validator_sha,
-        "orchestration_sha": contract.orchestration_sha,
-        "source_sha": contract.source_sha,
-        "simulation_rerun": False,
-    }
+    summary["publication_erratum"] = _erratum_identity_block(contract)
     _write_json(summary_path, summary)
 
 
@@ -2529,15 +2571,7 @@ def _apply_erratum_publication_identity(
             payload["benchmark_release"] = _rewrite_embedded_publication_identity(
                 benchmark_release, contract=contract
             )
-        payload["publication_erratum"] = {
-            "correction_id": contract.correction_id,
-            "predecessor_version_doi": contract.predecessor_version_doi,
-            "source_sha": contract.source_sha,
-            "builder_sha": contract.builder_sha,
-            "validator_sha": contract.validator_sha,
-            "orchestration_sha": contract.orchestration_sha,
-            "simulation_rerun": False,
-        }
+        payload["publication_erratum"] = _erratum_identity_block(contract)
         _write_json(path, payload)
 
     result_path = campaign_root / "release" / "release_result.json"

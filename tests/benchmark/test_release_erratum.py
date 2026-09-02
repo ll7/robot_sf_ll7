@@ -135,6 +135,8 @@ def _with_bundle_metadata(campaign: Path, contract: ErratumContract) -> ErratumC
         "metadata_path": "release/zenodo_metadata.erratum.json",
         "metadata_sha256": updated.metadata_sha256,
         "scientific_source_sha": updated.source_sha,
+        "source_sha": updated.source_sha,
+        "source_commit": updated.source_sha,
         "erratum_builder_sha": updated.builder_sha,
         "erratum_validator_sha": updated.validator_sha,
         "erratum_orchestration_sha": updated.orchestration_sha,
@@ -152,14 +154,30 @@ def _with_bundle_metadata(campaign: Path, contract: ErratumContract) -> ErratumC
         "doi": updated.successor_version_doi,
         "version_doi": updated.successor_version_doi,
         "concept_doi": updated.concept_doi,
+        "source_sha": updated.source_sha,
+        "source_commit": updated.source_sha,
+        "scientific_source_sha": updated.source_sha,
         "provenance": provenance,
         "publication": {
+            "source_sha": updated.source_sha,
+            "source_commit": updated.source_sha,
+            "scientific_source_sha": updated.source_sha,
             "concept_doi": updated.concept_doi,
             "version_doi": updated.successor_version_doi,
             "predecessor_version_doi": updated.predecessor_version_doi,
             "bundle_metadata_path": "release/zenodo_metadata.erratum.json",
             "metadata_sha256": updated.metadata_sha256,
             "correction_scope": "derived_publication_metadata_only",
+        },
+        "erratum": {
+            "correction_id": updated.correction_id,
+            "correction_scope": "derived_publication_metadata_only",
+            "predecessor_version_doi": updated.predecessor_version_doi,
+            "predecessor_github_release_tag": updated.predecessor_github_release_tag,
+            "concept_doi": updated.concept_doi,
+            "source_sha": updated.source_sha,
+            "scientific_source_unchanged": True,
+            "simulation_rerun": False,
         },
     }
     (campaign / "release/release_manifest.resolved.json").write_text(
@@ -203,6 +221,16 @@ def _with_bundle_metadata(campaign: Path, contract: ErratumContract) -> ErratumC
                         "doi": updated.predecessor_version_doi,
                         "source_sha": updated.source_sha,
                     },
+                },
+                "publication_erratum": {
+                    "correction_id": updated.correction_id,
+                    "correction_scope": "derived_publication_metadata_only",
+                    "predecessor_version_doi": updated.predecessor_version_doi,
+                    "predecessor_github_release_tag": updated.predecessor_github_release_tag,
+                    "concept_doi": updated.concept_doi,
+                    "source_sha": updated.source_sha,
+                    "scientific_source_unchanged": True,
+                    "simulation_rerun": False,
                 },
             }
         ),
@@ -783,6 +811,85 @@ def test_cold_erratum_receipt_rejects_nested_identity_drift(
             campaign_root=campaign,
             metadata_path=contract.metadata_path,
             predecessor_evidence=_predecessor_evidence(archive, contract),
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+
+
+@pytest.mark.parametrize("location", ["root", "provenance", "publication"])
+def test_cold_erratum_receipt_rejects_stale_current_source_alias(
+    tmp_path: Path, location: str
+) -> None:
+    """Every current-publication source alias remains bound to the source SHA."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.write_text(
+        json.dumps(build_erratum_receipt(contract=contract, predecessor=snapshot, successor=snapshot)),
+        encoding="utf-8",
+    )
+    result_path = campaign / "release/release_result.json"
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    if location == "root":
+        result["source_commit"] = "0" * 40
+    elif location == "provenance":
+        result["benchmark_release"]["provenance"]["scientific_source_sha"] = "0" * 40
+    else:
+        result["resolved_manifest"]["publication"]["source_sha"] = "0" * 40
+    result_path.write_text(json.dumps(result), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match="stale scientific source SHA"):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+
+
+@pytest.mark.parametrize(
+    ("document", "field", "value", "match"),
+    [
+        ("manifest", "correction_scope", "simulation_rows_changed", "erratum.correction_scope"),
+        ("summary", "concept_doi", "10.5281/zenodo.99999999", "publication_erratum.concept_doi"),
+        ("summary", "simulation_rerun", True, "publication_erratum.simulation_rerun"),
+    ],
+)
+def test_cold_erratum_receipt_rejects_invalid_erratum_identity_block(
+    tmp_path: Path, document: str, field: str, value: object, match: str
+) -> None:
+    """Correction blocks cannot contradict the immutable erratum contract."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.write_text(
+        json.dumps(build_erratum_receipt(contract=contract, predecessor=snapshot, successor=snapshot)),
+        encoding="utf-8",
+    )
+    if document == "manifest":
+        path = campaign / "release/release_manifest.resolved.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["erratum"][field] = value
+    else:
+        path = campaign / "reports/campaign_summary.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["publication_erratum"][field] = value
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match=match):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
             expected_tag=NEW_TAG,
             expected_doi=contract.successor_version_doi,
         )

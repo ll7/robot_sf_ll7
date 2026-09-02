@@ -63,8 +63,9 @@ def _pedestrians(
     transform: PointTransform | None = None,
     *,
     order: Sequence[int] | None = None,
+    identity_suffix: str = "",
 ) -> list[SinglePedestrianDefinition]:
-    """Build explicit pedestrians, optionally transforming and reordering rows."""
+    """Build explicit pedestrians, optionally transforming, reordering, or relabeling rows."""
     point_transform = transform or (lambda point: point)
     indices = tuple(range(len(_BASE_PEDESTRIANS))) if order is None else tuple(order)
     result = []
@@ -72,7 +73,7 @@ def _pedestrians(
         pedestrian_id, start, goal = _BASE_PEDESTRIANS[index]
         result.append(
             SinglePedestrianDefinition(
-                id=pedestrian_id,
+                id=f"{pedestrian_id}{identity_suffix}",
                 start=point_transform(start),
                 goal=point_transform(goal),
                 speed_m_s=1.0,
@@ -93,6 +94,7 @@ def _build_map(
     transform: PointTransform | None = None,
     *,
     order: Sequence[int] | None = None,
+    identity_suffix: str = "",
 ) -> MapDefinition:
     """Build the synthetic map used by all environment-level relations."""
     point_transform = transform or (lambda point: point)
@@ -108,7 +110,11 @@ def _build_map(
         ped_goal_zones=[],
         ped_crowded_zones=[],
         ped_routes=[],
-        single_pedestrians=_pedestrians(point_transform, order=order),
+        single_pedestrians=_pedestrians(
+            point_transform,
+            order=order,
+            identity_suffix=identity_suffix,
+        ),
     )
 
 
@@ -141,6 +147,11 @@ def rotated_map() -> MapDefinition:
 def permuted_map() -> MapDefinition:
     """Return the fixture with its declared pedestrian rows reversed."""
     return _build_map(order=tuple(reversed(range(len(_BASE_PEDESTRIANS)))))
+
+
+def relabeled_map() -> MapDefinition:
+    """Return the fixture with simulator-only pedestrian labels randomized."""
+    return _build_map(identity_suffix="-randomized")
 
 
 def _settings(*, oracle_enabled: bool) -> SimulationSettings:

@@ -7,6 +7,7 @@ from tests.metamorphic.support import (
     assert_trace_equal,
     capture_episode,
     make_env,
+    relabeled_map,
     run_episode,
 )
 
@@ -26,3 +27,27 @@ def test_oracle_trace_is_invisible_to_actor_observations() -> None:
 
     assert all("oracle_transition_trace" not in info for info in privileged.infos)
     assert_trace_equal(baseline, privileged)
+
+
+def test_randomized_simulator_identity_labels_do_not_change_actor_trace() -> None:
+    """Simulator-only labels must not become actor-visible state or alter dynamics."""
+    baseline_env = make_env(BASE_MAP, oracle_enabled=True)
+    relabeled = relabeled_map()
+    relabeled_env = make_env(relabeled, oracle_enabled=True)
+    try:
+        baseline = capture_episode(
+            baseline_env,
+            row_keys=tuple(pedestrian.id for pedestrian in BASE_MAP.single_pedestrians),
+        )
+        randomized = capture_episode(
+            relabeled_env,
+            row_keys=tuple(pedestrian.id for pedestrian in relabeled.single_pedestrians),
+        )
+        baseline_ids = {pedestrian.id for pedestrian in BASE_MAP.single_pedestrians}
+        randomized_ids = {pedestrian.id for pedestrian in relabeled.single_pedestrians}
+    finally:
+        baseline_env.close()
+        relabeled_env.close()
+
+    assert baseline_ids.isdisjoint(randomized_ids)
+    assert_trace_equal(baseline, randomized)

@@ -19,6 +19,7 @@ from robot_sf.benchmark.artifact_publication import (
     PUBLICATION_BUNDLE_SCHEMA_VERSION,
     SIZE_REPORT_SCHEMA_VERSION,
     _build_rights_provenance_statement,
+    _check_goal_timeout_boundary,
     _compute_and_emit_badging_artifacts,
     _find_release_sha,
     _preflight_check_release_metadata,
@@ -65,6 +66,79 @@ def test_list_publication_files_respects_video_toggle(tmp_path: Path) -> None:
 
     assert any(path.as_posix().startswith("videos/") for path in with_videos)
     assert not any(path.as_posix().startswith("videos/") for path in without_videos)
+
+
+def test_goal_timeout_boundary_accepts_exact_signed_provenance_exclusion(
+    tmp_path: Path,
+) -> None:
+    """A complete signed exclusion permits unchanged ambiguous scientific rows."""
+    payload = tmp_path / "payload"
+    arm = "guarded_ppo__differential_drive"
+    episode_id = "scenario--132--identity"
+    row = {
+        "episode_id": episode_id,
+        "event_ledger": {"exact_events": {"goal_reached": True, "timeout": True}},
+    }
+    _write(payload / "runs" / arm / "episodes.jsonl", json.dumps(row) + "\n")
+    _write(
+        payload / "run_meta.json",
+        json.dumps(
+            {
+                "goal_timeout_boundary": {
+                    "status": "excluded_from_timing_interpretation",
+                    "excluded_row_count": 1,
+                    "excluded_rows": [{"arm": arm, "episode_id": episode_id}],
+                    "raw_episode_rows_unchanged": True,
+                    "timing_evidence_fabricated": False,
+                    "note": "Exact event ordering is unavailable.",
+                    "policy": "Exclude this reviewed row from timing interpretation.",
+                }
+            }
+        ),
+    )
+
+    count, rejections = _check_goal_timeout_boundary(payload)
+
+    assert count == 1
+    assert rejections == []
+
+
+@pytest.mark.parametrize("drift", ["missing", "extra", "mutated"])
+def test_goal_timeout_boundary_rejects_incomplete_or_mutating_exclusion(
+    tmp_path: Path, drift: str
+) -> None:
+    """Signed provenance cannot omit, invent, or claim mutation of scientific rows."""
+    payload = tmp_path / "payload"
+    arm = "guarded_ppo__differential_drive"
+    episode_id = "scenario--132--identity"
+    row = {
+        "episode_id": episode_id,
+        "event_ledger": {"exact_events": {"goal_reached": True, "timeout": True}},
+    }
+    _write(payload / "runs" / arm / "episodes.jsonl", json.dumps(row) + "\n")
+    declared = [] if drift == "missing" else [{"arm": arm, "episode_id": episode_id}]
+    if drift == "extra":
+        declared.append({"arm": arm, "episode_id": "not-ambiguous"})
+    _write(
+        payload / "run_meta.json",
+        json.dumps(
+            {
+                "goal_timeout_boundary": {
+                    "status": "excluded_from_timing_interpretation",
+                    "excluded_row_count": len(declared),
+                    "excluded_rows": declared,
+                    "raw_episode_rows_unchanged": drift != "mutated",
+                    "timing_evidence_fabricated": False,
+                    "note": "Exact event ordering is unavailable.",
+                    "policy": "Exclude reviewed rows from timing interpretation.",
+                }
+            }
+        ),
+    )
+
+    _count, rejections = _check_goal_timeout_boundary(payload)
+
+    assert rejections
 
 
 def test_discover_run_directories_returns_leaf_runs(tmp_path: Path) -> None:

@@ -122,6 +122,10 @@ def _validate_contract_sha_and_matrix(contract: ErratumContract) -> None:
         contract.orchestration_sha,
     }:
         raise ReleaseErratumError("erratum implementation SHAs must differ from scientific source")
+    if contract.builder_sha != contract.validator_sha:
+        raise ReleaseErratumError(
+            "erratum correction builder and validator must name the same accepted commit"
+        )
     if any(
         isinstance(value, bool) or not isinstance(value, int) or value <= 0
         for value in (
@@ -317,13 +321,15 @@ def _validate_metadata_file(
     predecessor_matches = [
         item
         for item in related
-        if isinstance(item, Mapping)
-        and item.get("identifier") == predecessor_doi
-        and item.get("relation") == "isNewVersionOf"
+        if isinstance(item, Mapping) and item.get("relation") == "isNewVersionOf"
     ]
-    if len(source_matches) != 1:
+    if len(source_matches) != 1 or source_matches[0].get("scheme") != "url":
         raise ReleaseErratumError("erratum metadata must bind exactly one successor GitHub tag")
-    if len(predecessor_matches) != 1:
+    if (
+        len(predecessor_matches) != 1
+        or predecessor_matches[0].get("identifier") != predecessor_doi
+        or predecessor_matches[0].get("scheme") != "doi"
+    ):
         raise ReleaseErratumError("erratum metadata must bind exactly one predecessor version DOI")
     description = str(metadata.get("description", "")).casefold()
     required_terms = ("erratum", "no simulation", "unchanged", "snqi", "advisory", "ranking")
@@ -342,7 +348,14 @@ def load_erratum_contract(  # noqa: C901, PLR0912, PLR0915
     Returns:
         The validated immutable erratum contract.
     """
+    root = Path(repository_root.absolute())
+    if root.is_symlink() or any(parent.is_symlink() for parent in root.parents):
+        raise ReleaseErratumError("erratum repository root contains a symlink")
+    if not root.is_dir():
+        raise ReleaseErratumError("erratum repository root is missing")
     contract_path = _safe_regular_file(path, label="erratum contract")
+    if not contract_path.resolve().is_relative_to(root.resolve()):
+        raise ReleaseErratumError("erratum contract is outside the repository root")
     try:
         payload = json.loads(contract_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, ValueError) as exc:
@@ -419,9 +432,13 @@ def load_erratum_contract(  # noqa: C901, PLR0912, PLR0915
     metadata_relative = Path(raw_metadata_path)
     if metadata_relative.is_absolute() or ".." in metadata_relative.parts:
         raise ReleaseErratumError("successor.metadata_path must be repository-relative")
-    root = Path(repository_root).resolve()
-    metadata_path = (root / metadata_relative).resolve()
-    if not metadata_path.is_relative_to(root):
+    metadata_candidate = Path((root / metadata_relative).absolute())
+    if metadata_candidate.is_symlink() or any(
+        parent.is_symlink() for parent in metadata_candidate.parents
+    ):
+        raise ReleaseErratumError("successor.metadata_path contains a symlink")
+    metadata_path = metadata_candidate.resolve()
+    if not metadata_path.is_relative_to(root.resolve()):
         raise ReleaseErratumError("successor.metadata_path escapes the repository")
     _validate_metadata_file(
         metadata_path,
@@ -1004,33 +1021,113 @@ def _load_publication_document(path: Path, *, label: str) -> Mapping[str, Any]:
     return _require_mapping(document, label=label)
 
 
-def _assert_publication_aliases(
-    payload: Mapping[str, Any], *, contract: ErratumContract, label: str
+def _assert_current_alias_values(
+    payload: Mapping[str, Any],
+    *,
+    contract: ErratumContract,
+    label: str,
+    required: bool,
 ) -> None:
-    """Reject any present current-publication alias that remains stale."""
+    """Validate one level of current-publication aliases."""
     tag_keys = ("release_tag", "release_id", "benchmark_release_tag", "benchmark_release_id")
     doi_keys = ("doi", "version_doi")
     tag_values = [payload[key] for key in tag_keys if key in payload]
     doi_values = [payload[key] for key in doi_keys if key in payload]
     concept_values = [payload["concept_doi"]] if "concept_doi" in payload else []
-    if not tag_values or any(
+    if (required and not tag_values) or any(
         value != contract.successor_github_release_tag for value in tag_values
     ):
         raise ReleaseErratumError(f"{label} contains a stale release-tag alias")
-    if not doi_values or any(value != contract.successor_version_doi for value in doi_values):
+    if (required and not doi_values) or any(
+        value != contract.successor_version_doi for value in doi_values
+    ):
         raise ReleaseErratumError(f"{label} contains a stale version-DOI alias")
-    if not concept_values or any(value != contract.concept_doi for value in concept_values):
+    if (required and not concept_values) or any(
+        value != contract.concept_doi for value in concept_values
+    ):
         raise ReleaseErratumError(f"{label} contains a stale concept-DOI alias")
+
+
+def _assert_publication_aliases(
+    payload: Mapping[str, Any], *, contract: ErratumContract, label: str
+) -> None:
+    """Reject any present current-publication alias that remains stale."""
+    _assert_current_alias_values(
+        payload,
+        contract=contract,
+        label=label,
+        required=True,
+    )
     provenance = payload.get("provenance")
     if isinstance(provenance, Mapping):
-        for key in tag_keys:
-            if key in provenance and provenance[key] != contract.successor_github_release_tag:
-                raise ReleaseErratumError(f"{label}.provenance contains a stale release-tag alias")
-        for key in doi_keys:
-            if key in provenance and provenance[key] != contract.successor_version_doi:
-                raise ReleaseErratumError(f"{label}.provenance contains a stale version-DOI alias")
-        if "concept_doi" in provenance and provenance["concept_doi"] != contract.concept_doi:
-            raise ReleaseErratumError(f"{label}.provenance contains a stale concept-DOI alias")
+        _assert_current_alias_values(
+            provenance,
+            contract=contract,
+            label=f"{label}.provenance",
+            required=False,
+        )
+    publication = payload.get("publication")
+    if isinstance(publication, Mapping):
+        expected = {
+            "concept_doi": contract.concept_doi,
+            "version_doi": contract.successor_version_doi,
+            "predecessor_version_doi": contract.predecessor_version_doi,
+        }
+        if any(publication.get(key) != value for key, value in expected.items()):
+            raise ReleaseErratumError(f"{label}.publication contains a stale DOI alias")
+
+
+def _assert_predecessor_alias_values(
+    payload: Mapping[str, Any],
+    *,
+    contract: ErratumContract,
+    label: str,
+    required: bool,
+) -> None:
+    """Validate one level of predecessor execution aliases."""
+    tag_values = [
+        payload[key]
+        for key in ("release_tag", "release_id", "benchmark_release_tag", "benchmark_release_id")
+        if key in payload
+    ]
+    doi_values = [payload[key] for key in ("doi", "version_doi") if key in payload]
+    if (required and not tag_values) or any(
+        value != contract.predecessor_github_release_tag for value in tag_values
+    ):
+        raise ReleaseErratumError(f"{label} contains a stale predecessor tag alias")
+    if (required and not doi_values) or any(
+        value != contract.predecessor_version_doi for value in doi_values
+    ):
+        raise ReleaseErratumError(f"{label} contains a stale predecessor DOI alias")
+    if "concept_doi" in payload and payload["concept_doi"] != contract.concept_doi:
+        raise ReleaseErratumError(f"{label} contains a stale predecessor concept DOI")
+    source_values = [
+        payload[key]
+        for key in ("source_sha", "source_commit", "scientific_source_sha")
+        if key in payload
+    ]
+    if any(value != contract.source_sha for value in source_values):
+        raise ReleaseErratumError(f"{label} contains a stale scientific source SHA")
+
+
+def _assert_predecessor_execution_aliases(
+    payload: Mapping[str, Any], *, contract: ErratumContract, label: str
+) -> None:
+    """Require preserved execution coordinates to name only the predecessor."""
+    _assert_predecessor_alias_values(
+        payload,
+        contract=contract,
+        label=label,
+        required=True,
+    )
+    provenance = payload.get("provenance")
+    if isinstance(provenance, Mapping):
+        _assert_predecessor_alias_values(
+            provenance,
+            contract=contract,
+            label=f"{label}.provenance",
+            required=False,
+        )
 
 
 def _validate_published_release_documents(
@@ -1051,6 +1148,18 @@ def _validate_published_release_documents(
     )
     _assert_publication_aliases(manifest, contract=contract, label="published resolved manifest")
     _assert_publication_aliases(result, contract=contract, label="published release result")
+    publication = _require_mapping(
+        manifest.get("publication"), label="published resolved manifest.publication"
+    )
+    if (
+        publication.get("concept_doi") != contract.concept_doi
+        or publication.get("version_doi") != contract.successor_version_doi
+        or publication.get("predecessor_version_doi") != contract.predecessor_version_doi
+        or publication.get("bundle_metadata_path") != "release/zenodo_metadata.erratum.json"
+        or publication.get("metadata_sha256") != contract.metadata_sha256
+        or publication.get("correction_scope") != ERRATUM_SCOPE
+    ):
+        raise ReleaseErratumError("published resolved manifest publication identity is stale")
     for key in ("benchmark_release", "resolved_manifest"):
         nested = _require_mapping(result.get(key), label=f"published release result.{key}")
         _assert_publication_aliases(
@@ -1058,6 +1167,27 @@ def _validate_published_release_documents(
             contract=contract,
             label=f"published release result.{key}",
         )
+    for key in ("scientific_execution_benchmark_release", "scientific_execution_resolved_manifest"):
+        execution = _require_mapping(result.get(key), label=f"published release result.{key}")
+        _assert_predecessor_execution_aliases(
+            execution,
+            contract=contract,
+            label=f"published release result.{key}",
+        )
+    result_derivation = _require_mapping(
+        result.get("derivation"), label="published release result.derivation"
+    )
+    expected_derivation = {
+        "builder_sha": contract.builder_sha,
+        "validator_sha": contract.validator_sha,
+        "orchestration_sha": contract.orchestration_sha,
+        "scientific_source_sha": contract.source_sha,
+        "simulation_rerun": False,
+        "correction_id": contract.correction_id,
+        "predecessor_version_doi": contract.predecessor_version_doi,
+    }
+    if any(result_derivation.get(key) != value for key, value in expected_derivation.items()):
+        raise ReleaseErratumError("published release result derivation identity is stale")
     summary_release = _require_mapping(
         summary.get("benchmark_release"), label="published campaign summary.benchmark_release"
     )
@@ -1074,6 +1204,15 @@ def _validate_published_release_documents(
         contract=contract,
         label="published campaign summary.campaign",
     )
+    summary_execution = _require_mapping(
+        summary_campaign.get("scientific_execution_release_identity"),
+        label="published campaign summary.campaign.scientific_execution_release_identity",
+    )
+    _assert_predecessor_execution_aliases(
+        summary_execution,
+        contract=contract,
+        label="published campaign summary.campaign.scientific_execution_release_identity",
+    )
     if (
         result.get("publication_preflight_status") != "pass"
         or result.get("publication_preflight_violations") != []
@@ -1086,6 +1225,31 @@ def _validate_published_release_documents(
     )
     if manifest_provenance.get("scientific_source_sha") != contract.source_sha:
         raise ReleaseErratumError("published resolved manifest lost the scientific source SHA")
+    if (
+        manifest_provenance.get("erratum_builder_sha") != contract.builder_sha
+        or manifest_provenance.get("erratum_validator_sha") != contract.validator_sha
+        or manifest_provenance.get("erratum_orchestration_sha") != contract.orchestration_sha
+    ):
+        raise ReleaseErratumError("published resolved manifest implementation identity is stale")
+
+    derived_receipt = _load_publication_document(
+        campaign_root / "provenance/derived_revalidation_receipt.json",
+        label="published derived revalidation receipt",
+    )
+    if derived_receipt.get("schema_version") != "benchmark-derived-revalidation.v1":
+        raise ReleaseErratumError("published derived revalidation receipt schema is unsupported")
+    derived_source = _require_mapping(
+        derived_receipt.get("source"), label="published derived revalidation receipt.source"
+    )
+    derived_validator = _require_mapping(
+        derived_receipt.get("validator"),
+        label="published derived revalidation receipt.validator",
+    )
+    if (
+        derived_source.get("execution_commit") != contract.source_sha
+        or derived_validator.get("commit") != contract.validator_sha
+    ):
+        raise ReleaseErratumError("published derived revalidation receipt identity is stale")
 
 
 def validate_erratum_receipt_against_campaign(
@@ -1140,6 +1304,7 @@ def validate_erratum_receipt_against_campaign(
         "orchestration_sha": contract.orchestration_sha,
         "predecessor_version_doi": contract.predecessor_version_doi,
         "predecessor_archive_sha256": contract.predecessor_archive_sha256,
+        "concept_doi": contract.concept_doi,
         "successor_version_doi": expected_doi,
         "episode_rows": observed.episode_rows,
         "planner_arms": observed.planner_arms,

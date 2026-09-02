@@ -1747,28 +1747,172 @@ def _goal_timeout_row_rejection(episodes_path: Path, line_number: int, line: str
     )
 
 
-def _check_goal_timeout_boundary(payload_dir: Path) -> tuple[int, list[str]]:
-    """Find ambiguous goal-reached + timeout rows lacking timing evidence or a note.
+def _goal_timeout_exclusion_header_errors(block: Mapping[str, Any]) -> list[str]:
+    """Return validation errors for the signed exclusion header."""
+    errors: list[str] = []
+    if block.get("status") != "excluded_from_timing_interpretation":
+        errors.append("run_meta goal-timeout exclusion status is invalid")
+    if block.get("raw_episode_rows_unchanged") is not True:
+        errors.append("run_meta goal-timeout exclusion must preserve raw episode rows")
+    if block.get("timing_evidence_fabricated") is not False:
+        errors.append("run_meta goal-timeout exclusion must not fabricate timing evidence")
+    for key in ("note", "policy"):
+        value = block.get(key)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"run_meta goal-timeout exclusion {key} is required")
+    return errors
+
+
+def _goal_timeout_exclusion_identity(
+    item: object,
+    *,
+    index: int,
+) -> tuple[tuple[str, str] | None, str | None]:
+    """Parse one exact ``(arm, episode_id)`` exclusion identity.
 
     Returns:
-        Tuple of (count of ambiguous rows, list of rejection messages).
+        The parsed identity and no error, or no identity and one error.
     """
-    ambiguous = 0
+    if not isinstance(item, Mapping):
+        return None, f"run_meta goal-timeout exclusion row {index} is invalid"
+    arm = item.get("arm")
+    episode_id = item.get("episode_id")
+    if not isinstance(arm, str) or not arm or "/" in arm:
+        return None, f"run_meta goal-timeout exclusion row {index} has an invalid arm"
+    if not isinstance(episode_id, str) or not episode_id:
+        return None, f"run_meta goal-timeout exclusion row {index} has an invalid episode_id"
+    return (arm, episode_id), None
+
+
+def _parse_goal_timeout_exclusion_rows(
+    block: Mapping[str, Any],
+) -> tuple[set[tuple[str, str]], list[str]]:
+    """Parse the exact signed exclusion identities and count.
+
+    Returns:
+        The unique identities and validation errors.
+    """
+    errors: list[str] = []
+    declared: set[tuple[str, str]] = set()
+
+    rows = block.get("excluded_rows")
+    if not isinstance(rows, list):
+        errors.append("run_meta goal-timeout exclusion rows must be a list")
+    else:
+        for index, item in enumerate(rows):
+            identity, error = _goal_timeout_exclusion_identity(item, index=index)
+            if error is not None:
+                errors.append(error)
+                continue
+            assert identity is not None
+            if identity in declared:
+                errors.append("run_meta goal-timeout exclusion contains a duplicate identity")
+            declared.add(identity)
+    declared_count = block.get("excluded_row_count")
+    if (
+        isinstance(declared_count, bool)
+        or not isinstance(declared_count, int)
+        or declared_count != len(declared)
+    ):
+        errors.append("run_meta goal-timeout exclusion count is inconsistent")
+    return declared, errors
+
+
+def _goal_timeout_exclusions_from_run_meta(
+    payload_dir: Path,
+) -> tuple[set[tuple[str, str]], list[str], bool]:
+    """Load one exact signed-provenance exclusion set when declared.
+
+    Returns:
+        Declared ``(arm, episode_id)`` identities, validation errors, and a
+        boolean indicating whether an exclusion block was present.
+    """
+    run_meta_path = payload_dir / "run_meta.json"
+    if not run_meta_path.is_file():
+        return set(), [], False
+    try:
+        run_meta = _read_json_file(run_meta_path)
+    except ValueError as exc:
+        return set(), [f"goal-timeout exclusion metadata is invalid: {exc}"], True
+    block = run_meta.get("goal_timeout_boundary")
+    if block is None:
+        return set(), [], False
+    if not isinstance(block, Mapping):
+        return set(), ["run_meta.goal_timeout_boundary must be an object"], True
+    exclusion_keys = {
+        "status",
+        "excluded_rows",
+        "excluded_row_count",
+        "raw_episode_rows_unchanged",
+    }
+    if exclusion_keys.isdisjoint(block):
+        # The ordinary recovery annotator records aggregate annotation
+        # provenance here; its episode rows carry their own signed notes.
+        return set(), [], False
+    declared, errors = _parse_goal_timeout_exclusion_rows(block)
+    errors[:0] = _goal_timeout_exclusion_header_errors(block)
+    return declared, errors, True
+
+
+def _ambiguous_goal_timeout_rows(
+    payload_dir: Path,
+) -> tuple[set[tuple[str, str]], list[str], list[str]]:
+    """Collect unannotated ambiguous rows and any identity errors.
+
+    Returns:
+        The identities, row rejection messages, and identity errors.
+    """
+    observed: set[tuple[str, str]] = set()
     rejections: list[str] = []
+    identity_errors: list[str] = []
     for episodes_path in sorted(payload_dir.glob("runs/*/episodes.jsonl")):
         try:
             lines = episodes_path.read_text(encoding="utf-8").splitlines()
         except OSError:
             continue
         for line_number, line in enumerate(lines, start=1):
-            line = line.strip()
-            if not line:
+            stripped = line.strip()
+            if not stripped:
                 continue
-            message = _goal_timeout_row_rejection(episodes_path, line_number, line)
-            if message is not None:
-                ambiguous += 1
-                rejections.append(message)
-    return ambiguous, rejections
+            message = _goal_timeout_row_rejection(episodes_path, line_number, stripped)
+            if message is None:
+                continue
+            rejections.append(message)
+            record = json.loads(stripped)
+            episode_id = record.get("episode_id") if isinstance(record, Mapping) else None
+            if not isinstance(episode_id, str) or not episode_id:
+                identity_errors.append(
+                    f"{episodes_path}:{line_number}: ambiguous row lacks episode_id"
+                )
+                continue
+            observed.add((episodes_path.parent.name, episode_id))
+    return observed, rejections, identity_errors
+
+
+def _check_goal_timeout_boundary(payload_dir: Path) -> tuple[int, list[str]]:
+    """Validate ambiguous goal+timeout rows against row notes or signed exclusions.
+
+    Returns:
+        Tuple of (count of ambiguous rows, list of rejection messages).
+    """
+    declared, declaration_errors, declaration_present = _goal_timeout_exclusions_from_run_meta(
+        payload_dir
+    )
+    observed, row_rejections, identity_errors = _ambiguous_goal_timeout_rows(payload_dir)
+    declaration_errors.extend(identity_errors)
+
+    if not declaration_present:
+        return len(observed), row_rejections
+    rejections = list(declaration_errors)
+    missing = sorted(observed - declared)
+    unexpected = sorted(declared - observed)
+    if missing:
+        rejections.append(f"run_meta goal-timeout exclusion misses {len(missing)} ambiguous row(s)")
+    if unexpected:
+        rejections.append(
+            f"run_meta goal-timeout exclusion names {len(unexpected)} non-ambiguous row(s)"
+        )
+    return len(observed), rejections
 
 
 def _snqi_planner_key(arm: str) -> str:

@@ -33,10 +33,16 @@ def _write(path: Path, value: str) -> None:
     path.write_text(value, encoding="utf-8")
 
 
-def test_main_resolves_erratum_metadata_from_explicit_orchestration_checkout(
+def _make_dirs(*paths: Path) -> None:
+    """Create fixture directories."""
+    for path in paths:
+        path.mkdir()
+
+
+def test_main_separates_erratum_identity_and_orchestration_checkouts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Erratum metadata must not be resolved from the older exact validator checkout."""
+    """Identity metadata and the executing orchestration checkout remain distinct."""
     source = tmp_path / "source"
     validator = tmp_path / "validator"
     orchestration = tmp_path / "orchestration"
@@ -103,6 +109,7 @@ def test_main_resolves_erratum_metadata_from_explicit_orchestration_checkout(
     assert isinstance(build, dict)
     assert build["validator_repository_root"] == validator
     assert build["erratum_contract"] is sentinel_contract
+    assert build["orchestration_repository_root"] == Path(recovery.__file__).resolve().parents[2]
 
 
 def test_main_rejects_partial_erratum_identity_inputs(
@@ -742,8 +749,7 @@ def test_source_binding_redirects_all_relative_asset_resolvers(tmp_path: Path) -
     """Protocol, config, acceptance, and publication resolvers share frozen roots."""
     source = tmp_path / "source"
     validator = tmp_path / "validator"
-    source.mkdir()
-    validator.mkdir()
+    _make_dirs(source, validator)
     from robot_sf.benchmark import artifact_publication, release_acceptance
 
     with recovery._source_repository_binding(source, validator_root=validator):
@@ -1113,6 +1119,86 @@ def test_publication_projection_annotates_only_pinned_goal_timeout_boundary(
     assert run_meta["goal_timeout_boundary"]["unresolved_rows"] == 0
 
 
+def test_erratum_records_goal_timeout_boundary_without_mutating_episode_bytes(
+    tmp_path: Path,
+) -> None:
+    """A metadata-only erratum keeps the complete scientific row byte-identical."""
+    campaign = tmp_path / "campaign"
+    arm = "guarded_ppo__differential_drive"
+    episode_id = "francis2023_parallel_traffic--132--2bf83ad03db6559e"
+    episodes = campaign / "runs" / arm / "episodes.jsonl"
+    row = {
+        "episode_id": episode_id,
+        "status": "success",
+        "termination_reason": "success",
+        "metrics": {"success": 1.0, "time_to_goal": 39.9},
+        "outcome": {"route_complete": True, "timeout_event": True},
+        "event_ledger": {
+            "software_commit": recovery.FROZEN_SOURCE_SHA,
+            "exact_events": {"goal_reached": True, "timeout": True},
+        },
+    }
+    original = json.dumps(row, sort_keys=True) + "\n"
+    _write(episodes, original)
+    original_digest = _sha256(episodes)
+    sidecar = episodes.with_name("episodes.jsonl.provenance.json")
+    _write(
+        sidecar,
+        json.dumps(
+            {
+                "raw_artifacts": [
+                    {
+                        "kind": "episodes_jsonl",
+                        "path": f"runs/{arm}/episodes.jsonl",
+                        "sha256": original_digest,
+                    }
+                ],
+                "derived_artifacts": [],
+                "rows": [{"raw_artifact": f"runs/{arm}/episodes.jsonl"}],
+            }
+        )
+        + "\n",
+    )
+    sidecar_digest = _sha256(sidecar)
+    _write(campaign / "run_meta.json", json.dumps({"repo": {"commit": recovery.FROZEN_SOURCE_SHA}}))
+
+    evidence = recovery._record_publication_goal_timeout_boundaries_without_row_mutation(
+        campaign,
+        expected_rows={(arm, episode_id)},
+    )
+    recovery._rebind_publication_sidecars(
+        campaign,
+        source_file_map={
+            f"runs/{arm}/episodes.jsonl": {
+                "sha256": original_digest,
+                "bytes": len(original.encode()),
+            },
+            f"runs/{arm}/episodes.jsonl.provenance.json": {
+                "sha256": sidecar_digest,
+                "bytes": sidecar.stat().st_size,
+            },
+        },
+        boundary_reconciliation=evidence,
+        expected_arm_count=1,
+        expected_row_count=1,
+    )
+
+    assert episodes.read_text(encoding="utf-8") == original
+    assert _sha256(episodes) == original_digest
+    assert evidence["status"] == "recorded_without_row_mutation"
+    assert evidence["annotated_row_count"] == 0
+    assert evidence["excluded_row_count"] == 1
+    run_meta = json.loads((campaign / "run_meta.json").read_text(encoding="utf-8"))
+    boundary = run_meta["goal_timeout_boundary"]
+    assert boundary["status"] == "excluded_from_timing_interpretation"
+    assert boundary["raw_episode_rows_unchanged"] is True
+    assert boundary["excluded_rows"] == [{"arm": arm, "episode_id": episode_id}]
+    rebound = json.loads(sidecar.read_text(encoding="utf-8"))
+    exclusion = rebound["derived_artifacts"][-1]["goal_timeout_boundary_exclusion"]
+    assert exclusion["source_sha256"] == original_digest
+    assert exclusion["derived_sha256"] == original_digest
+
+
 def test_publication_projection_rejects_unexpected_goal_timeout_row_before_writing(
     tmp_path: Path,
 ) -> None:
@@ -1434,15 +1520,100 @@ def test_build_derived_release_cleans_partial_stage_on_bundle_failure(
     assert not list(output_root.glob(".derived.staging-*"))
 
 
+def _configure_erratum_build_fixture(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[ErratumContract, Path, Path]:
+    """Configure the full builder's erratum-specific seams for a routing test.
+
+    Returns:
+        The erratum contract, predecessor archive, and orchestration root.
+    """
+    orchestration_root = tmp_path / "orchestration"
+    orchestration_root.mkdir()
+    metadata = orchestration_root / "metadata.json"
+    _write(metadata, "{}\n")
+    predecessor_archive = tmp_path / "predecessor.tar.gz"
+    predecessor_archive.write_bytes(b"predecessor")
+    source_sha = recovery.FROZEN_SOURCE_SHA
+    predecessor_tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}"
+    contract = ErratumContract(
+        correction_id="fixture-derived-metadata-erratum.1",
+        predecessor_version_doi="10.5281/zenodo.22227035",
+        predecessor_archive_sha256=_sha256(predecessor_archive),
+        predecessor_archive_size_bytes=predecessor_archive.stat().st_size,
+        predecessor_github_release_tag=predecessor_tag,
+        source_sha=source_sha,
+        planner_arms=recovery.DEFAULT_RECOVERY_CONTRACT.arms,
+        scenario_count=48,
+        seed_count=30,
+        episode_rows=recovery.DEFAULT_RECOVERY_CONTRACT.episode_rows,
+        builder_sha="d" * 40,
+        validator_sha="d" * 40,
+        orchestration_sha="e" * 40,
+        concept_doi="10.5281/zenodo.22227034",
+        successor_version_doi="10.5281/zenodo.22229999",
+        successor_github_release_tag=f"{predecessor_tag}-erratum.1",
+        metadata_path=metadata,
+        metadata_sha256=_sha256(metadata),
+    )
+    monkeypatch.setattr(recovery, "_assert_exact_orchestration_checkout", lambda *_a: None)
+    monkeypatch.setattr(recovery, "snapshot_predecessor_archive", lambda *_a, **_k: object())
+    monkeypatch.setattr(
+        recovery,
+        "_apply_erratum_publication_identity",
+        lambda campaign, **_k: json.loads(
+            (campaign / "release/release_manifest.resolved.json").read_text(encoding="utf-8")
+        ),
+    )
+    monkeypatch.setattr(
+        recovery,
+        "_write_erratum_receipt",
+        lambda *_a, **_k: {"correction_scope": "derived_publication_metadata_only"},
+    )
+    monkeypatch.setattr(recovery, "_assert_erratum_publication_identity", lambda *_a, **_k: None)
+
+    def fake_custody(publication_dir: Path, **_kwargs: object) -> None:
+        _write(publication_dir / recovery.PUBLICATION_CUSTODY_NAME, "{}\n")
+
+    monkeypatch.setattr(recovery, "_write_custody_receipt", fake_custody)
+    return contract, predecessor_archive, orchestration_root
+
+
+def _configure_boundary_build_routes(monkeypatch: pytest.MonkeyPatch, calls: list[str]) -> None:
+    """Install observable ordinary and erratum boundary handlers."""
+
+    def annotate_boundary(*_args: object, **_kwargs: object) -> dict[str, object]:
+        calls.append("annotate")
+        return {"annotated_row_count": 1}
+
+    def exclude_boundary(*_args: object, **_kwargs: object) -> dict[str, object]:
+        calls.append("exclude")
+        return {
+            "annotated_row_count": 0,
+            "excluded_row_count": 1,
+            "raw_episode_rows_unchanged": True,
+        }
+
+    monkeypatch.setattr(
+        recovery, "_annotate_publication_goal_timeout_boundaries", annotate_boundary
+    )
+    monkeypatch.setattr(
+        recovery,
+        "_record_publication_goal_timeout_boundaries_without_row_mutation",
+        exclude_boundary,
+    )
+
+
+@pytest.mark.parametrize("erratum", [False, True])
 def test_build_derived_release_successfully_promotes_complete_inventory(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, erratum: bool
 ) -> None:
     """The build path promotes one complete campaign/publication snapshot atomically."""
     producer, _ = _make_verified_retrieval(tmp_path)
     source = tmp_path / "source"
     validator = tmp_path / "validator"
-    source.mkdir()
-    validator.mkdir()
+    _make_dirs(source, validator)
     manifest = source / "manifest.yaml"
     config_path = source / "config.yaml"
     _write(manifest, "manifest\n")
@@ -1530,11 +1701,8 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
         "_assert_publication_inputs_from_manifest",
         lambda *_a, **_k: {},
     )
-    monkeypatch.setattr(
-        recovery,
-        "_annotate_publication_goal_timeout_boundaries",
-        lambda *_a, **_k: {"annotated_row_count": 1},
-    )
+    boundary_calls: list[str] = []
+    _configure_boundary_build_routes(monkeypatch, boundary_calls)
     monkeypatch.setattr(
         recovery,
         "_rebind_publication_sidecars",
@@ -1564,6 +1732,13 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
         )
 
     monkeypatch.setattr(recovery, "export_publication_bundle", fake_export)
+    erratum_contract = None
+    predecessor_archive = None
+    orchestration_root = None
+    if erratum:
+        erratum_contract, predecessor_archive, orchestration_root = (
+            _configure_erratum_build_fixture(tmp_path, monkeypatch)
+        )
     output_root = tmp_path / "output"
     result = recovery.build_derived_release(
         producer_root=producer,
@@ -1574,6 +1749,9 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
         manifest_path=manifest,
         output_root=output_root,
         derived_name="derived",
+        erratum_contract=erratum_contract,
+        predecessor_archive=predecessor_archive,
+        orchestration_repository_root=orchestration_root,
     )
     final_campaign = output_root / "derived"
     assert result["status"] == "published_to_staging"
@@ -1589,3 +1767,4 @@ def test_build_derived_release_successfully_promotes_complete_inventory(
     assert "derived_publication/derived_publication_bundle.tar.gz" in final_inventory
     assert "derived_publication/publication_custody.json" in final_inventory
     assert not list(output_root.glob(".derived.staging-*"))
+    assert boundary_calls == (["exclude"] if erratum else ["annotate"])

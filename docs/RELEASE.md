@@ -416,10 +416,12 @@ same Zenodo concept instead:
    erratum-orchestration SHA in a reviewed
    `benchmark-release-erratum.v1` contract. Regenerate the publication layer
    with `scripts/tools/revalidate_benchmark_release.py --erratum-contract ...
-   --erratum-repository-root <exact-orchestration-checkout> --predecessor-archive ...`.
-   The orchestration checkout owns the new contract and metadata; it is deliberately
-   separate from both the frozen scientific-source checkout and the exact historical
-   validator/builder checkout.
+   --erratum-repository-root <reviewed-identity-checkout> --predecessor-archive ...`.
+   The identity checkout owns the new contract and metadata. Run that command
+   from a separate clean checkout at the exact `orchestration_sha` named by the
+   contract; this avoids an impossible Git self-reference in which a file tries
+   to contain the SHA of its own commit. Both remain separate from the frozen
+   scientific-source checkout and exact historical validator/builder checkout.
    These identities have different meanings: the scientific source produced
    the rows, the correction builder/validator accepted the recovered derived
    verdict, and the orchestration commit implements this successor workflow.
@@ -430,11 +432,14 @@ same Zenodo concept instead:
    values. The detached publication
    custody receipt binds the complete successor archive digest because an
    archive cannot contain its own digest without a checksum cycle.
-6. Stage both channels as drafts, verify byte-identical archives from empty
-   directories, and only then publish. The cold audit must also recompute the
-   successor's scientific digests from the downloaded archive and match the
-   embedded correction receipt. Leave the predecessor DOI, tag, files, and
-   checksum unchanged.
+6. Upload the archive plus the detached `publication_manifest.json`,
+   `checksums.sha256`, and `publication_custody.json` assets to both draft
+   channels. Their file-name inventories and bytes must be identical. Verify
+   both drafts from empty directories, and only then publish. The cold audit
+   must run the publication preflight, authenticate the exact archive member
+   inventory against the manifest/checksums/custody chain, recompute the
+   successor's scientific digests, and match the embedded correction receipt.
+   Leave the predecessor DOI, tag, files, and checksum unchanged.
 
 An erratum tag may append `-erratum.<positive integer>` after the exact
 40-character scientific source SHA. The suffix creates a new publication

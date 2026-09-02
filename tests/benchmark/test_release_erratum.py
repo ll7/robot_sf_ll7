@@ -123,6 +123,16 @@ def _with_bundle_metadata(campaign: Path, contract: ErratumContract) -> ErratumC
         "metadata_path": "release/zenodo_metadata.erratum.json",
         "metadata_sha256": updated.metadata_sha256,
         "scientific_source_sha": updated.source_sha,
+        "erratum_builder_sha": updated.builder_sha,
+        "erratum_validator_sha": updated.validator_sha,
+        "erratum_orchestration_sha": updated.orchestration_sha,
+    }
+    execution = {
+        "release_tag": updated.predecessor_github_release_tag,
+        "release_id": updated.predecessor_github_release_tag,
+        "doi": updated.predecessor_version_doi,
+        "version_doi": updated.predecessor_version_doi,
+        "concept_doi": updated.concept_doi,
     }
     current = {
         "release_tag": updated.successor_github_release_tag,
@@ -131,6 +141,14 @@ def _with_bundle_metadata(campaign: Path, contract: ErratumContract) -> ErratumC
         "version_doi": updated.successor_version_doi,
         "concept_doi": updated.concept_doi,
         "provenance": provenance,
+        "publication": {
+            "concept_doi": updated.concept_doi,
+            "version_doi": updated.successor_version_doi,
+            "predecessor_version_doi": updated.predecessor_version_doi,
+            "bundle_metadata_path": "release/zenodo_metadata.erratum.json",
+            "metadata_sha256": updated.metadata_sha256,
+            "correction_scope": "derived_publication_metadata_only",
+        },
     }
     (campaign / "release/release_manifest.resolved.json").write_text(
         json.dumps(current), encoding="utf-8"
@@ -141,6 +159,17 @@ def _with_bundle_metadata(campaign: Path, contract: ErratumContract) -> ErratumC
                 **current,
                 "benchmark_release": current,
                 "resolved_manifest": current,
+                "scientific_execution_benchmark_release": execution,
+                "scientific_execution_resolved_manifest": execution,
+                "derivation": {
+                    "builder_sha": updated.builder_sha,
+                    "validator_sha": updated.validator_sha,
+                    "orchestration_sha": updated.orchestration_sha,
+                    "scientific_source_sha": updated.source_sha,
+                    "simulation_rerun": False,
+                    "correction_id": updated.correction_id,
+                    "predecessor_version_doi": updated.predecessor_version_doi,
+                },
                 "publication_preflight_status": "pass",
                 "publication_preflight_violations": [],
                 "release_status": "ok",
@@ -152,7 +181,32 @@ def _with_bundle_metadata(campaign: Path, contract: ErratumContract) -> ErratumC
     summary = campaign / "reports/campaign_summary.json"
     summary.parent.mkdir(parents=True, exist_ok=True)
     summary.write_text(
-        json.dumps({"benchmark_release": current, "campaign": current}), encoding="utf-8"
+        json.dumps(
+            {
+                "benchmark_release": current,
+                "campaign": {
+                    **current,
+                    "scientific_execution_release_identity": {
+                        "release_tag": updated.predecessor_github_release_tag,
+                        "doi": updated.predecessor_version_doi,
+                        "source_sha": updated.source_sha,
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    derived_receipt = campaign / "provenance/derived_revalidation_receipt.json"
+    derived_receipt.parent.mkdir(parents=True, exist_ok=True)
+    derived_receipt.write_text(
+        json.dumps(
+            {
+                "schema_version": "benchmark-derived-revalidation.v1",
+                "source": {"execution_commit": updated.source_sha},
+                "validator": {"commit": updated.validator_sha},
+            }
+        ),
+        encoding="utf-8",
     )
     return updated
 
@@ -220,7 +274,7 @@ def test_cold_erratum_receipt_recomputes_successor_leaves(tmp_path: Path) -> Non
         successor=snapshot,
     )
     receipt_path = campaign / "provenance/benchmark_release_erratum.json"
-    receipt_path.parent.mkdir(parents=True)
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
     receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
 
     observed = validate_erratum_receipt_against_campaign(
@@ -245,7 +299,7 @@ def test_cold_erratum_receipt_rejects_tampered_successor_row(tmp_path: Path) -> 
     contract = _with_bundle_metadata(campaign, _contract(archive))
     snapshot = snapshot_campaign(campaign, contract=contract)
     receipt_path = campaign / "provenance/benchmark_release_erratum.json"
-    receipt_path.parent.mkdir(parents=True)
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
     receipt_path.write_text(
         json.dumps(
             build_erratum_receipt(
@@ -301,7 +355,7 @@ def test_cold_erratum_receipt_rejects_identity_or_metadata_drift(
     else:
         contract.metadata_path.write_text("{}\n", encoding="utf-8")
     receipt_path = campaign / "provenance/benchmark_release_erratum.json"
-    receipt_path.parent.mkdir(parents=True)
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
     receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
 
     with pytest.raises(ReleaseErratumError, match=match):
@@ -328,7 +382,7 @@ def test_cold_erratum_helper_requires_canonical_payload_paths(tmp_path: Path) ->
         successor=snapshot,
     )
     canonical_receipt = campaign / "provenance/benchmark_release_erratum.json"
-    canonical_receipt.parent.mkdir(parents=True)
+    canonical_receipt.parent.mkdir(parents=True, exist_ok=True)
     canonical_receipt.write_text(json.dumps(receipt), encoding="utf-8")
     external_receipt = tmp_path / "benchmark_release_erratum.json"
     external_receipt.write_bytes(canonical_receipt.read_bytes())
@@ -361,7 +415,7 @@ def test_cold_erratum_receipt_rejects_stale_release_document_alias(tmp_path: Pat
     contract = _with_bundle_metadata(campaign, _contract(archive))
     snapshot = snapshot_campaign(campaign, contract=contract)
     receipt_path = campaign / "provenance/benchmark_release_erratum.json"
-    receipt_path.parent.mkdir(parents=True)
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
     receipt_path.write_text(
         json.dumps(
             build_erratum_receipt(
@@ -378,6 +432,69 @@ def test_cold_erratum_receipt_rejects_stale_release_document_alias(tmp_path: Pat
     result_path.write_text(json.dumps(result), encoding="utf-8")
 
     with pytest.raises(ReleaseErratumError, match="stale version-DOI alias"):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+
+
+@pytest.mark.parametrize(
+    ("fault", "match"),
+    [
+        ("nested_publication", "publication contains a stale DOI alias"),
+        ("execution_provenance", "provenance contains a stale predecessor DOI"),
+        ("derived_validator", "derived revalidation receipt identity is stale"),
+        ("summary_source", "stale scientific source SHA"),
+    ],
+)
+def test_cold_erratum_receipt_rejects_nested_identity_drift(
+    tmp_path: Path, fault: str, match: str
+) -> None:
+    """Cold intake checks nested publication, execution, and builder identities."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.write_text(
+        json.dumps(
+            build_erratum_receipt(
+                contract=contract,
+                predecessor=snapshot,
+                successor=snapshot,
+            )
+        ),
+        encoding="utf-8",
+    )
+    if fault in {"nested_publication", "execution_provenance"}:
+        result_path = campaign / "release/release_result.json"
+        result = json.loads(result_path.read_text(encoding="utf-8"))
+        if fault == "nested_publication":
+            result["benchmark_release"]["publication"]["version_doi"] = (
+                contract.predecessor_version_doi
+            )
+        else:
+            result["scientific_execution_benchmark_release"]["provenance"] = {
+                "version_doi": contract.successor_version_doi
+            }
+        result_path.write_text(json.dumps(result), encoding="utf-8")
+    elif fault == "derived_validator":
+        derived_path = campaign / "provenance/derived_revalidation_receipt.json"
+        derived = json.loads(derived_path.read_text(encoding="utf-8"))
+        derived["validator"]["commit"] = "0" * 40
+        derived_path.write_text(json.dumps(derived), encoding="utf-8")
+    else:
+        summary_path = campaign / "reports/campaign_summary.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary["campaign"]["scientific_execution_release_identity"]["source_sha"] = "0" * 40
+        summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match=match):
         validate_erratum_receipt_against_campaign(
             receipt_path,
             campaign_root=campaign,
@@ -581,6 +698,127 @@ def _metadata() -> dict[str, Any]:
             ],
         }
     }
+
+
+def _contract_document(
+    metadata_path: Path,
+    *,
+    builder_sha: str = BUILDER_SHA,
+    validator_sha: str = BUILDER_SHA,
+) -> dict[str, Any]:
+    """Return a checked-in contract payload for file-boundary tests."""
+    return {
+        "schema_version": "benchmark-release-erratum.v1",
+        "correction_id": "september-2026-derived-metadata-erratum.1",
+        "correction_scope": "derived_publication_metadata_only",
+        "supersedes": {
+            "version_doi": "10.5281/zenodo.22227035",
+            "archive_sha256": "e" * 64,
+            "archive_size_bytes": 54_219_004,
+            "github_release_tag": OLD_TAG,
+            "old_publication_retained": True,
+        },
+        "scientific_identity": {
+            "source_sha": SOURCE_SHA,
+            "planner_arms": 14,
+            "scenario_count": 48,
+            "seed_count": 30,
+            "episode_rows": 20_160,
+        },
+        "derivation": {
+            "builder_sha": builder_sha,
+            "validator_sha": validator_sha,
+            "orchestration_sha": ORCHESTRATION_SHA,
+            "simulation_rerun": False,
+        },
+        "successor": {
+            "concept_doi": "10.5281/zenodo.22227034",
+            "version_doi": "10.5281/zenodo.22229999",
+            "github_release_tag": NEW_TAG,
+            "metadata_path": metadata_path.name,
+            "metadata_sha256": hashlib.sha256(metadata_path.read_bytes()).hexdigest(),
+        },
+        "corrected_verdict": {
+            "publication_preflight_status": "pass",
+            "publication_preflight_violations": [],
+            "release_status": "ok",
+            "ranking_claims_admitted": False,
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("relation_index", "scheme", "match"),
+    [
+        (0, "doi", "successor GitHub tag"),
+        (1, "url", "predecessor version DOI"),
+    ],
+)
+def test_erratum_contract_requires_exact_relation_schemes(
+    tmp_path: Path, relation_index: int, scheme: str, match: str
+) -> None:
+    metadata_payload = _metadata()
+    metadata_payload["metadata"]["related_identifiers"][relation_index]["scheme"] = scheme
+    metadata = tmp_path / "metadata.json"
+    metadata.write_text(json.dumps(metadata_payload), encoding="utf-8")
+    contract_path = tmp_path / "contract.json"
+    contract_path.write_text(json.dumps(_contract_document(metadata)), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match=match):
+        load_erratum_contract(contract_path, repository_root=tmp_path)
+
+
+def test_erratum_contract_rejects_multiple_predecessor_relations(tmp_path: Path) -> None:
+    metadata_payload = _metadata()
+    predecessor = metadata_payload["metadata"]["related_identifiers"][1]
+    metadata_payload["metadata"]["related_identifiers"].append(dict(predecessor))
+    metadata = tmp_path / "metadata.json"
+    metadata.write_text(json.dumps(metadata_payload), encoding="utf-8")
+    contract_path = tmp_path / "contract.json"
+    contract_path.write_text(json.dumps(_contract_document(metadata)), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match="exactly one predecessor version DOI"):
+        load_erratum_contract(contract_path, repository_root=tmp_path)
+
+
+def test_erratum_contract_requires_one_accepted_builder_validator_commit(tmp_path: Path) -> None:
+    metadata = tmp_path / "metadata.json"
+    metadata.write_text(json.dumps(_metadata()), encoding="utf-8")
+    contract_path = tmp_path / "contract.json"
+    contract_path.write_text(
+        json.dumps(_contract_document(metadata, validator_sha="c" * 40)), encoding="utf-8"
+    )
+
+    with pytest.raises(ReleaseErratumError, match="same accepted commit"):
+        load_erratum_contract(contract_path, repository_root=tmp_path)
+
+
+def test_erratum_contract_rejects_contract_outside_repository_root(tmp_path: Path) -> None:
+    repository_root = tmp_path / "repository"
+    repository_root.mkdir()
+    metadata = tmp_path / "metadata.json"
+    metadata.write_text(json.dumps(_metadata()), encoding="utf-8")
+    contract_path = tmp_path / "contract.json"
+    contract_path.write_text(json.dumps(_contract_document(metadata)), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match="outside the repository root"):
+        load_erratum_contract(contract_path, repository_root=repository_root)
+
+
+def test_erratum_contract_rejects_symlinked_metadata(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    outside_metadata = outside / "metadata.json"
+    outside_metadata.write_text(json.dumps(_metadata()), encoding="utf-8")
+    repository_root = tmp_path / "repository"
+    repository_root.mkdir()
+    metadata_link = repository_root / "metadata.json"
+    metadata_link.symlink_to(outside_metadata)
+    contract_path = repository_root / "contract.json"
+    contract_path.write_text(json.dumps(_contract_document(metadata_link)), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match="metadata_path contains a symlink"):
+        load_erratum_contract(contract_path, repository_root=repository_root)
 
 
 def test_erratum_contract_loads_exact_linked_identity(tmp_path: Path) -> None:

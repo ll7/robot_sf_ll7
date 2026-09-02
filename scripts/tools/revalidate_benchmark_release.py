@@ -1188,13 +1188,24 @@ def _rebind_one_publication_sidecar(
     }
     boundary = boundary_files.get(relative_path)
     if isinstance(boundary, Mapping):
-        projection_record["goal_timeout_boundary_annotation"] = {
-            "pre_annotation_projection_sha256": boundary.get("source_sha256"),
-            "annotation_count": len(boundary.get("episode_ids", [])),
-            "episode_ids": boundary.get("episode_ids", []),
-            "timing_evidence_fabricated": False,
-            "scientific_fields_changed": False,
-        }
+        if boundary.get("mode") == "excluded_without_row_mutation":
+            projection_record["goal_timeout_boundary_exclusion"] = {
+                "source_sha256": boundary.get("source_sha256"),
+                "derived_sha256": boundary.get("derived_sha256"),
+                "excluded_row_count": len(boundary.get("episode_ids", [])),
+                "episode_ids": boundary.get("episode_ids", []),
+                "raw_episode_rows_unchanged": True,
+                "timing_evidence_fabricated": False,
+                "scientific_fields_changed": False,
+            }
+        else:
+            projection_record["goal_timeout_boundary_annotation"] = {
+                "pre_annotation_projection_sha256": boundary.get("source_sha256"),
+                "annotation_count": len(boundary.get("episode_ids", [])),
+                "episode_ids": boundary.get("episode_ids", []),
+                "timing_evidence_fabricated": False,
+                "scientific_fields_changed": False,
+            }
     derived_artifacts.append(projection_record)
     _write_json(sidecar_path, sidecar)
     return {
@@ -1332,6 +1343,78 @@ def _annotate_publication_goal_timeout_boundaries(
         "annotated_row_count": len(observed),
         "rows": [{"arm": arm, "episode_id": episode_id} for arm, episode_id in sorted(observed)],
         "files": file_evidence,
+        "timing_evidence_fabricated": False,
+        "scientific_fields_changed": False,
+    }
+
+
+def _record_publication_goal_timeout_boundaries_without_row_mutation(
+    campaign_root: Path,
+    *,
+    expected_rows: set[tuple[str, str]] | frozenset[tuple[str, str]] = (
+        EXPECTED_GOAL_TIMEOUT_BOUNDARY_ROWS
+    ),
+) -> dict[str, Any]:
+    """Record reviewed timing exclusions while preserving every episode byte.
+
+    A derived-metadata erratum compares complete scientific rows with its
+    immutable predecessor.  It therefore cannot add even an explanatory field
+    to an episode row.  This path validates the same reviewed identities and
+    terminal semantics as the ordinary recovery annotator, then records the
+    interpretation boundary only in signed run metadata and provenance.
+
+    Returns:
+        Machine-readable reconciliation evidence with unchanged file digests.
+    """
+    planned, observed = _find_unresolved_goal_timeout_rows(campaign_root)
+    if observed != set(expected_rows):
+        raise DerivedReleaseError(
+            "unresolved goal+timeout rows differ from reviewed boundary-row set"
+        )
+
+    file_evidence: list[dict[str, Any]] = []
+    for episodes_path, rows in sorted(planned.items(), key=lambda item: item[0].as_posix()):
+        source_sha256 = sha256_file(episodes_path).lower()
+        episode_ids: list[str] = []
+        for _line_index, _original_line, record in rows:
+            _validate_goal_timeout_annotation_candidate(record)
+            episode_ids.append(str(record["episode_id"]))
+        if sha256_file(episodes_path).lower() != source_sha256:
+            raise DerivedReleaseError("episode projection changed during boundary review")
+        file_evidence.append(
+            {
+                "path": episodes_path.relative_to(campaign_root).as_posix(),
+                "source_sha256": source_sha256,
+                "derived_sha256": source_sha256,
+                "episode_ids": sorted(episode_ids),
+                "mode": "excluded_without_row_mutation",
+            }
+        )
+
+    excluded_rows = [{"arm": arm, "episode_id": episode_id} for arm, episode_id in sorted(observed)]
+    run_meta_path = campaign_root / "run_meta.json"
+    run_meta = _read_json(run_meta_path)
+    run_meta["goal_timeout_boundary"] = {
+        "status": "excluded_from_timing_interpretation",
+        "excluded_row_count": len(observed),
+        "excluded_rows": excluded_rows,
+        "raw_episode_rows_unchanged": True,
+        "timing_evidence_fabricated": False,
+        "note": GOAL_TIMEOUT_BOUNDARY_NOTE,
+        "policy": (
+            "Frozen rows lacking a reached-goal step are excluded from timing-boundary "
+            "interpretation through publication provenance; no episode field or event timing "
+            "is changed or inferred."
+        ),
+    }
+    _write_json(run_meta_path, run_meta)
+    return {
+        "status": "recorded_without_row_mutation",
+        "annotated_row_count": 0,
+        "excluded_row_count": len(observed),
+        "rows": excluded_rows,
+        "files": file_evidence,
+        "raw_episode_rows_unchanged": True,
         "timing_evidence_fabricated": False,
         "scientific_fields_changed": False,
     }
@@ -1547,15 +1630,20 @@ def _assert_distinct_validator_checkout(validator_root: Path, source_root: Path)
         )
 
 
-def _assert_exact_orchestration_checkout(expected_commit: str) -> None:
+def _assert_exact_orchestration_checkout(repo_root: Path, expected_commit: str) -> None:
     """Bind the erratum workflow implementation to one clean exact checkout."""
+    root = _assert_safe_directory(repo_root, label="orchestration repository root")
     helper = Path(__file__).resolve().parents[2]
-    actual = _git_value(["rev-parse", "HEAD^{commit}"], cwd=helper).lower()
+    if root.resolve() != helper:
+        raise DerivedReleaseError(
+            "erratum orchestration root differs from the executing tooling checkout"
+        )
+    actual = _git_value(["rev-parse", "HEAD^{commit}"], cwd=root).lower()
     if actual != expected_commit:
         raise DerivedReleaseError("erratum orchestration checkout is not the contracted commit")
     status = subprocess.run(
         ["git", "status", "--porcelain=v1", "--untracked-files=all"],
-        cwd=helper,
+        cwd=root,
         capture_output=True,
         text=True,
         check=False,
@@ -2121,6 +2209,19 @@ def _assert_erratum_manifest_identities(campaign_root: Path, *, contract: Erratu
     resolved = _read_json(campaign_root / "release" / "release_manifest.resolved.json")
     _assert_successor_identity_fields(resolved, contract=contract, label="resolved manifest")
     _assert_resolved_erratum_provenance(resolved.get("provenance"), contract=contract)
+    publication = resolved.get("publication")
+    if not isinstance(publication, Mapping) or any(
+        publication.get(key) != value
+        for key, value in {
+            "concept_doi": contract.concept_doi,
+            "version_doi": contract.successor_version_doi,
+            "predecessor_version_doi": contract.predecessor_version_doi,
+            "bundle_metadata_path": ERRATUM_METADATA_RELATIVE,
+            "metadata_sha256": contract.metadata_sha256,
+            "correction_scope": "derived_publication_metadata_only",
+        }.items()
+    ):
+        raise DerivedReleaseError("resolved manifest publication identity is stale")
 
     for relative in ("campaign_manifest.json", "manifest.json", "run_meta.json"):
         path = campaign_root / relative
@@ -2138,6 +2239,8 @@ def _assert_erratum_manifest_identities(campaign_root: Path, *, contract: Erratu
             raise DerivedReleaseError(f"{relative} lost the predecessor execution tag")
         if execution_release.get("version_doi") != contract.predecessor_version_doi:
             raise DerivedReleaseError(f"{relative} lost the predecessor execution DOI")
+        if execution_release.get("concept_doi") != contract.concept_doi:
+            raise DerivedReleaseError(f"{relative} lost the predecessor concept DOI")
 
 
 def _assert_erratum_release_result(campaign_root: Path, *, contract: ErratumContract) -> None:
@@ -2157,6 +2260,26 @@ def _assert_erratum_release_result(campaign_root: Path, *, contract: ErratumCont
         )
         if execution.get("release_tag") != contract.predecessor_github_release_tag:
             raise DerivedReleaseError(f"release result {execution_key} lost predecessor identity")
+        if execution.get("version_doi") != contract.predecessor_version_doi:
+            raise DerivedReleaseError(f"release result {execution_key} lost predecessor DOI")
+        if execution.get("concept_doi") != contract.concept_doi:
+            raise DerivedReleaseError(
+                f"release result {execution_key} lost predecessor concept DOI"
+            )
+    derivation = result.get("derivation")
+    expected_derivation = {
+        "builder_sha": contract.builder_sha,
+        "validator_sha": contract.validator_sha,
+        "orchestration_sha": contract.orchestration_sha,
+        "scientific_source_sha": contract.source_sha,
+        "simulation_rerun": False,
+        "correction_id": contract.correction_id,
+        "predecessor_version_doi": contract.predecessor_version_doi,
+    }
+    if not isinstance(derivation, Mapping) or any(
+        derivation.get(key) != value for key, value in expected_derivation.items()
+    ):
+        raise DerivedReleaseError("erratum release result derivation identity is stale")
     if (
         result.get("publication_preflight_status") != "pass"
         or result.get("publication_preflight_violations") != []
@@ -2187,6 +2310,14 @@ def _assert_erratum_summary(campaign_root: Path, *, contract: ErratumContract) -
         raise DerivedReleaseError("campaign summary campaign tag is stale")
     if campaign.get("doi") != contract.successor_version_doi:
         raise DerivedReleaseError("campaign summary campaign DOI is stale")
+    execution = campaign.get("scientific_execution_release_identity")
+    if (
+        not isinstance(execution, Mapping)
+        or execution.get("release_tag") != contract.predecessor_github_release_tag
+        or execution.get("doi") != contract.predecessor_version_doi
+        or execution.get("source_sha") != contract.source_sha
+    ):
+        raise DerivedReleaseError("campaign summary lost predecessor execution identity")
     for label, current in (("campaign", campaign), ("artifacts", artifacts)):
         if current.get("release_url") != expected_release_url:
             raise DerivedReleaseError(f"campaign summary {label} release URL is stale")
@@ -2544,6 +2675,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     recovery_contract: RecoveryContract = DEFAULT_RECOVERY_CONTRACT,
     erratum_contract: ErratumContract | None = None,
     predecessor_archive: Path | None = None,
+    orchestration_repository_root: Path | None = None,
 ) -> dict[str, Any]:
     """Run the complete derived validation/build/promotion workflow.
 
@@ -2563,6 +2695,10 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         raise DerivedReleaseError(
             "erratum contract and predecessor archive must be supplied together"
         )
+    if (erratum_contract is None) != (orchestration_repository_root is None):
+        raise DerivedReleaseError(
+            "erratum contract and orchestration repository root must be supplied together"
+        )
     predecessor_snapshot = None
     if erratum_contract is not None:
         if erratum_contract.source_sha != recovery_contract.source_sha:
@@ -2579,7 +2715,10 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             raise DerivedReleaseError(
                 "erratum validator SHA differs from the exact validator commit"
             )
-        _assert_exact_orchestration_checkout(erratum_contract.orchestration_sha)
+        _assert_exact_orchestration_checkout(
+            orchestration_repository_root,  # type: ignore[arg-type]
+            erratum_contract.orchestration_sha,
+        )
         try:
             predecessor_snapshot = snapshot_predecessor_archive(
                 predecessor_archive,  # type: ignore[arg-type]
@@ -2702,7 +2841,12 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         publication_inputs = _assert_publication_inputs_from_manifest(
             manifest, resolved_manifest, source_repository_root
         )
-        goal_timeout_reconciliation = _annotate_publication_goal_timeout_boundaries(
+        boundary_reconciler = (
+            _record_publication_goal_timeout_boundaries_without_row_mutation
+            if erratum_contract is not None
+            else _annotate_publication_goal_timeout_boundaries
+        )
+        goal_timeout_reconciliation = boundary_reconciler(
             staging_campaign,
             expected_rows=recovery_contract.goal_timeout_boundary_rows,
         )
@@ -2922,9 +3066,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "--erratum-repository-root",
         type=Path,
         help=(
-            "Exact checkout containing the erratum contract's repository-relative metadata. "
-            "This is intentionally distinct from the frozen scientific-source and exact "
-            "validator checkouts."
+            "Reviewed identity checkout containing the erratum contract and its "
+            "repository-relative metadata. The executing tooling checkout is separate and "
+            "must equal the contract's orchestration_sha."
         ),
     )
     parser.add_argument(
@@ -2979,6 +3123,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             recovery_contract=recovery_contract,
             erratum_contract=erratum_contract,
             predecessor_archive=args.predecessor_archive,
+            orchestration_repository_root=Path(__file__).resolve().parents[2],
         )
     except (
         DerivedReleaseError,

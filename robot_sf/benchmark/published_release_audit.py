@@ -33,6 +33,11 @@ from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import quote, urlsplit
 
+from robot_sf.benchmark.artifact_publication import (
+    PUBLICATION_BUNDLE_SCHEMA_VERSION,
+    PublicationPreflightError,
+    verify_publication_bundle_preflight,
+)
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.release_erratum import (
     ReleaseErratumError,
@@ -49,6 +54,9 @@ ZENODO_API_BASE = "https://zenodo.org/api"
 DEFAULT_NETWORK_TIMEOUT = 60.0
 DEFAULT_DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 DEFAULT_MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024
+ERRATUM_CUSTODY_ASSET = "publication_custody.json"
+ERRATUM_MANIFEST_ASSET = "publication_manifest.json"
+ERRATUM_CHECKSUMS_ASSET = "checksums.sha256"
 
 _DOI_RE = re.compile(r"^10\.5281/zenodo\.\d+$")
 _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
@@ -237,6 +245,184 @@ def _verify_internal_checksums(extracted_dir: Path, members: list[str]) -> list[
     return problems
 
 
+def _strict_erratum_checksum_map(bundle_root: Path) -> dict[str, str]:
+    """Parse the canonical erratum checksum sidecar without permissive fallbacks.
+
+    Returns:
+        Exact bundle-root-relative payload paths and lowercase SHA-256 values.
+    """
+    path = bundle_root / ERRATUM_CHECKSUMS_ASSET
+    if not path.is_file() or path.is_symlink():
+        raise ValueError("erratum bundle lacks a safe checksums.sha256")
+    entries: dict[str, str] = {}
+    for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not raw_line.strip():
+            continue
+        parts = raw_line.split(maxsplit=1)
+        if len(parts) != 2 or _SHA256_RE.fullmatch(parts[0]) is None:
+            raise ValueError(f"erratum checksums.sha256:{line_number} is malformed")
+        relative = parts[1].lstrip("*")
+        relative_path = Path(relative)
+        if (
+            relative_path.is_absolute()
+            or not relative_path.parts
+            or relative_path.parts[0] != "payload"
+            or any(part in {"", ".", ".."} for part in relative_path.parts)
+            or "\\" in relative
+            or "\x00" in relative
+        ):
+            raise ValueError(f"erratum checksums.sha256:{line_number} has an unsafe path")
+        if relative in entries:
+            raise ValueError(f"erratum checksums.sha256:{line_number} repeats {relative!r}")
+        entries[relative] = parts[0].lower()
+    if not entries:
+        raise ValueError("erratum checksums.sha256 is empty")
+    return entries
+
+
+def _read_json_mapping(path: Path, *, label: str) -> Mapping[str, Any]:
+    """Load a safe JSON object used by the public erratum proof.
+
+    Returns:
+        The parsed mapping.
+    """
+    if not path.is_file() or path.is_symlink():
+        raise ValueError(f"{label} is missing or unsafe")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError) as exc:
+        raise ValueError(f"{label} is not readable JSON") from exc
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"{label} must be a JSON object")
+    return payload
+
+
+def _verify_erratum_bundle_inventory(bundle_root: Path) -> dict[str, Any]:
+    """Authenticate the exact manifest/checksum/payload member inventory.
+
+    Returns:
+        Compact inventory evidence for the public audit receipt.
+    """
+    try:
+        preflight = verify_publication_bundle_preflight(bundle_root)
+    except PublicationPreflightError as exc:
+        raise ValueError(f"erratum publication preflight failed: {exc}") from exc
+    manifest_path = bundle_root / ERRATUM_MANIFEST_ASSET
+    manifest = _read_json_mapping(manifest_path, label="erratum publication manifest")
+    if manifest.get("schema_version") != PUBLICATION_BUNDLE_SCHEMA_VERSION:
+        raise ValueError("erratum publication manifest schema is unsupported")
+    checksums = _strict_erratum_checksum_map(bundle_root)
+
+    payload_root = bundle_root / "payload"
+    if not payload_root.is_dir() or payload_root.is_symlink():
+        raise ValueError("erratum bundle payload directory is missing or unsafe")
+    payload_files = {
+        path.relative_to(bundle_root).as_posix()
+        for path in payload_root.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    }
+    if set(checksums) != payload_files:
+        missing = sorted(payload_files - set(checksums))
+        unexpected = sorted(set(checksums) - payload_files)
+        raise ValueError(
+            "erratum payload/checksum inventory differs "
+            f"(unsigned={len(missing)}, missing={len(unexpected)})"
+        )
+
+    allowed_root_files = {
+        ERRATUM_MANIFEST_ASSET,
+        ERRATUM_CHECKSUMS_ASSET,
+        "README.md",
+    }
+    actual_files = {
+        path.relative_to(bundle_root).as_posix()
+        for path in bundle_root.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    }
+    expected_files = payload_files | allowed_root_files
+    if actual_files != expected_files:
+        raise ValueError("erratum archive contains an unlisted or missing bundle member")
+
+    manifest_files = manifest.get("files")
+    if not isinstance(manifest_files, list):
+        raise ValueError("erratum publication manifest files must be a list")
+    totals = manifest.get("totals")
+    if not isinstance(totals, Mapping):
+        raise ValueError("erratum publication manifest totals must be an object")
+    payload_bytes = sum((bundle_root / path).stat().st_size for path in payload_files)
+    if totals.get("file_count") != len(payload_files) or totals.get("total_bytes") != payload_bytes:
+        raise ValueError("erratum publication manifest totals disagree with the payload")
+    return {
+        "status": "pass",
+        "preflight_status": preflight.get("status"),
+        "payload_file_count": len(payload_files),
+        "payload_bytes": payload_bytes,
+        "publication_manifest_sha256": sha256_file(manifest_path),
+        "checksums_sha256": sha256_file(bundle_root / ERRATUM_CHECKSUMS_ASSET),
+    }
+
+
+def _verify_erratum_custody(
+    *,
+    custody_path: Path,
+    bundle: Path,
+    bundle_root: Path,
+    receipt_path: Path,
+    source_sha: str,
+) -> dict[str, Any]:
+    """Validate the detached receipt that binds archive and internal sidecars.
+
+    Returns:
+        Compact custody evidence for the public audit receipt.
+    """
+    custody = _read_json_mapping(custody_path, label="erratum publication custody receipt")
+    if custody.get("schema_version") != "benchmark-publication-custody.v1":
+        raise ValueError("erratum publication custody schema is unsupported")
+    if custody.get("source_execution_commit") != source_sha:
+        raise ValueError("erratum custody source commit differs from the GitHub tag target")
+    if custody.get("credentials") != "not_recorded":
+        raise ValueError("erratum custody receipt has an invalid credential policy")
+
+    archive = custody.get("archive")
+    bundle_block = custody.get("bundle")
+    erratum = custody.get("erratum")
+    if not all(isinstance(value, Mapping) for value in (archive, bundle_block, erratum)):
+        raise ValueError("erratum custody receipt is incomplete")
+    if (
+        archive.get("path") != bundle.name
+        or archive.get("sha256") != sha256_file(bundle)
+        or archive.get("size_bytes") != bundle.stat().st_size
+    ):
+        raise ValueError("erratum custody archive identity is stale")
+    if (
+        bundle_block.get("path") != bundle_root.name
+        or bundle_block.get("publication_manifest_sha256")
+        != sha256_file(bundle_root / ERRATUM_MANIFEST_ASSET)
+        or bundle_block.get("checksums_sha256")
+        != sha256_file(bundle_root / ERRATUM_CHECKSUMS_ASSET)
+    ):
+        raise ValueError("erratum custody bundle identity is stale")
+
+    receipt = _read_json_mapping(receipt_path, label="embedded erratum receipt")
+    expected_receipt_path = f"{bundle_root.name}/payload/provenance/benchmark_release_erratum.json"
+    if (
+        erratum.get("embedded_receipt_path") != expected_receipt_path
+        or erratum.get("embedded_receipt_sha256") != sha256_file(receipt_path)
+        or erratum.get("correction_id") != receipt.get("correction_id")
+        or erratum.get("correction_scope") != receipt.get("correction_scope")
+        or erratum.get("supersedes") != receipt.get("supersedes")
+        or erratum.get("successor") != receipt.get("successor")
+        or erratum.get("scientific_equality") != receipt.get("scientific_equality")
+    ):
+        raise ValueError("erratum custody receipt does not bind the embedded correction proof")
+    return {
+        "status": "pass",
+        "archive_sha256": archive["sha256"],
+        "archive_size_bytes": archive["size_bytes"],
+        "custody_sha256": sha256_file(custody_path),
+    }
+
+
 def _check_tag_source(tag: str, source_sha: str) -> list[str]:
     """Enforce the prospective tag/source-SHA contract (issue #7938).
 
@@ -282,6 +468,120 @@ def _channel_assets(channel_dir: Path, *, channel: str, problems: list[str]) -> 
     return assets
 
 
+def _erratum_bundle_root(extracted: Path, members: list[str]) -> tuple[Path, list[str]]:
+    """Return the sole canonical archive root and its relative members."""
+    member_parts = [Path(name).parts for name in members if Path(name).parts]
+    roots = {parts[0] for parts in member_parts}
+    if len(roots) != 1:
+        raise ValueError("erratum bundle must contain exactly one archive root")
+    root_name = next(iter(roots))
+    return extracted / root_name, [
+        Path(*parts[1:]).as_posix() for parts in member_parts if len(parts) > 1
+    ]
+
+
+def _erratum_external_assets(
+    github_assets: list[Path], *, source_sha: str | None
+) -> dict[str, Path]:
+    """Require the detached erratum sidecars and exact tag target.
+
+    Returns:
+        The external assets keyed by file name.
+    """
+    assets_by_name = {path.name: path for path in github_assets}
+    required_sidecars = {
+        ERRATUM_MANIFEST_ASSET,
+        ERRATUM_CHECKSUMS_ASSET,
+        ERRATUM_CUSTODY_ASSET,
+    }
+    if not required_sidecars.issubset(assets_by_name):
+        raise ValueError(
+            "erratum publication requires external manifest, checksums, and custody assets"
+        )
+    if source_sha is None:
+        raise ValueError("erratum publication requires the exact GitHub tag target SHA")
+    return assets_by_name
+
+
+def _compare_erratum_sidecars(bundle_root: Path, assets_by_name: Mapping[str, Path]) -> None:
+    """Require public manifest/checksum sidecars to match archive bytes."""
+    for sidecar_name in (ERRATUM_MANIFEST_ASSET, ERRATUM_CHECKSUMS_ASSET):
+        internal = bundle_root / sidecar_name
+        try:
+            matches = internal.read_bytes() == assets_by_name[sidecar_name].read_bytes()
+        except OSError as exc:
+            raise ValueError(f"cannot compare erratum {sidecar_name}: {exc}") from exc
+        if not matches:
+            raise ValueError(f"external {sidecar_name} differs from the archived sidecar")
+
+
+def _erratum_identity_paths(bundle_root: Path, relative_members: list[str]) -> tuple[Path, Path]:
+    """Require unique canonical receipt and metadata paths in the signed payload.
+
+    Returns:
+        The canonical receipt and Zenodo metadata paths.
+    """
+    receipt_relative = "payload/provenance/benchmark_release_erratum.json"
+    metadata_relative = "payload/release/zenodo_metadata.erratum.json"
+    required_members = {receipt_relative, metadata_relative}
+    identity_members = {
+        name
+        for name in relative_members
+        if Path(name).name in {"benchmark_release_erratum.json", "zenodo_metadata.erratum.json"}
+    }
+    if identity_members != required_members:
+        raise ValueError("erratum bundle lacks the canonical receipt or metadata path")
+    checksum_map = _strict_erratum_checksum_map(bundle_root)
+    if not required_members.issubset(checksum_map):
+        raise ValueError("erratum receipt and metadata must be listed in checksums.sha256")
+    return bundle_root / receipt_relative, bundle_root / metadata_relative
+
+
+def _verify_canonical_erratum_bundle(
+    *,
+    bundle: Path,
+    extracted: Path,
+    members: list[str],
+    github_assets: list[Path],
+    tag: str,
+    doi: str,
+    source_sha: str | None,
+) -> dict[str, Any]:
+    """Verify one complete canonical erratum archive and detached proof set.
+
+    Returns:
+        The authenticated inventory, correction receipt, and custody evidence.
+    """
+    bundle_root, relative_members = _erratum_bundle_root(extracted, members)
+    internal_problems = _verify_internal_checksums(bundle_root, relative_members)
+    if internal_problems:
+        raise ValueError("; ".join(internal_problems))
+    assets_by_name = _erratum_external_assets(github_assets, source_sha=source_sha)
+    assert source_sha is not None
+    _compare_erratum_sidecars(bundle_root, assets_by_name)
+    inventory = _verify_erratum_bundle_inventory(bundle_root)
+    receipt_path, metadata_path = _erratum_identity_paths(bundle_root, relative_members)
+    try:
+        receipt = validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=bundle_root / "payload",
+            metadata_path=metadata_path,
+            expected_tag=tag,
+            expected_doi=doi,
+            expected_source_sha=source_sha,
+        )
+    except ReleaseErratumError as exc:
+        raise ValueError(f"erratum receipt validation failed: {exc}") from exc
+    custody = _verify_erratum_custody(
+        custody_path=assets_by_name[ERRATUM_CUSTODY_ASSET],
+        bundle=bundle,
+        bundle_root=bundle_root,
+        receipt_path=receipt_path,
+        source_sha=source_sha,
+    )
+    return {"inventory": inventory, "receipt": receipt, "custody": custody}
+
+
 def _verify_bundle(
     github_assets: list[Path],
     github_dir: Path,
@@ -314,47 +614,19 @@ def _verify_bundle(
         if erratum_marker and canonical_erratum is None:
             problems.append("erratum tag is malformed or does not carry one lowercase source SHA")
         elif canonical_erratum is not None:
-            member_parts = [Path(name).parts for name in members if Path(name).parts]
-            roots = {parts[0] for parts in member_parts}
-            if len(roots) != 1:
-                problems.append("erratum bundle must contain exactly one archive root")
-                return
-            root_name = next(iter(roots))
-            bundle_root = extracted / root_name
-            relative_members = [
-                Path(*parts[1:]).as_posix() for parts in member_parts if len(parts) > 1
-            ]
-            problems.extend(_verify_internal_checksums(bundle_root, relative_members))
-            checksum_map = _load_checksum_map(bundle_root, problems)
-            receipt_relative = "payload/provenance/benchmark_release_erratum.json"
-            metadata_relative = "payload/release/zenodo_metadata.erratum.json"
-            required_members = {receipt_relative, metadata_relative}
-            identity_members = {
-                name
-                for name in relative_members
-                if Path(name).name
-                in {"benchmark_release_erratum.json", "zenodo_metadata.erratum.json"}
-            }
-            if identity_members != required_members:
-                problems.append("erratum bundle lacks the canonical receipt or metadata path")
-                return
-            if not required_members.issubset(checksum_map):
-                problems.append("erratum receipt and metadata must be listed in checksums.sha256")
-                return
-            receipt_path = bundle_root / receipt_relative
-            metadata_path = bundle_root / metadata_relative
-            try:
-                observations["erratum"] = validate_erratum_receipt_against_campaign(
-                    receipt_path,
-                    campaign_root=bundle_root / "payload",
-                    metadata_path=metadata_path,
-                    expected_tag=tag,
-                    expected_doi=doi,
-                    expected_source_sha=source_sha,
-                )
-            except ReleaseErratumError as exc:
-                problems.append(f"erratum receipt validation failed: {exc}")
-    except ValueError as exc:
+            proof = _verify_canonical_erratum_bundle(
+                bundle=bundle,
+                extracted=extracted,
+                members=members,
+                github_assets=github_assets,
+                tag=tag,
+                doi=doi,
+                source_sha=source_sha,
+            )
+            observations["erratum_bundle_inventory"] = proof["inventory"]
+            observations["erratum"] = proof["receipt"]
+            observations["erratum_custody"] = proof["custody"]
+    except (OSError, ValueError) as exc:
         problems.append(str(exc))
 
 
@@ -371,6 +643,30 @@ def _validate_doi(doi: str, observations: dict[str, Any], problems: list[str]) -
     elif "/" not in doi_version:
         problems.append("version DOI is malformed (expected owner/record format)")
     return doi_version
+
+
+def _check_erratum_channel_assets(
+    *,
+    tag: str,
+    github_by_name: Mapping[str, Path],
+    zenodo_by_name: Mapping[str, Path],
+) -> list[str]:
+    """Return fail-closed two-channel inventory problems for canonical errata."""
+    if re.fullmatch(r".+-[0-9a-f]{40}-erratum\.[1-9][0-9]*", tag) is None:
+        return []
+    problems: list[str] = []
+    if set(github_by_name) != set(zenodo_by_name):
+        problems.append("erratum GitHub and Zenodo asset inventories must be identical")
+    required = {ERRATUM_MANIFEST_ASSET, ERRATUM_CHECKSUMS_ASSET, ERRATUM_CUSTODY_ASSET}
+    for channel, assets in (("GitHub", github_by_name), ("Zenodo", zenodo_by_name)):
+        if not required.issubset(assets):
+            problems.append(
+                f"{channel} erratum assets lack manifest, checksums, or custody receipt"
+            )
+        archives = [name for name in assets if name.endswith((".zip", ".tar.gz", ".tgz"))]
+        if len(archives) != 1:
+            problems.append(f"{channel} erratum assets must contain exactly one archive")
+    return problems
 
 
 def audit_published(
@@ -402,6 +698,14 @@ def audit_published(
     observations["common_asset_names"] = common_names
     observations["github_only"] = sorted(set(github_by_name) - set(zenodo_by_name))
     observations["zenodo_only"] = sorted(set(zenodo_by_name) - set(github_by_name))
+
+    problems.extend(
+        _check_erratum_channel_assets(
+            tag=tag,
+            github_by_name=github_by_name,
+            zenodo_by_name=zenodo_by_name,
+        )
+    )
 
     channel_artifacts: list[ChannelArtifact] = []
     for name in common_names:
@@ -852,6 +1156,63 @@ def _zenodo_file_assets(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
     return assets
 
 
+def _require_zenodo_source_relation(related: object, *, source_tag_url: str) -> list[object]:
+    """Require one exact URL-scheme relation to the GitHub release tag.
+
+    Returns:
+        The validated related-identifier list.
+    """
+    if not isinstance(related, list):
+        raise PublishedAuditInvalid("Zenodo record is not related to the requested GitHub release")
+    source_matches = [
+        item
+        for item in related
+        if isinstance(item, Mapping)
+        and item.get("relation") == "isSupplementTo"
+        and item.get("identifier") == source_tag_url
+    ]
+    if len(source_matches) != 1 or source_matches[0].get("scheme") != "url":
+        raise PublishedAuditInvalid("Zenodo record is not related to the requested GitHub release")
+    return related
+
+
+def _zenodo_predecessor_relation(
+    related: list[object],
+    *,
+    source_tag_url: str,
+    doi: str,
+    concept_doi: str,
+) -> str | None:
+    """Validate and return the sole predecessor version relation, when present.
+
+    Returns:
+        The predecessor DOI, or ``None`` for a non-erratum without that relation.
+    """
+    relations = [
+        item
+        for item in related
+        if isinstance(item, Mapping) and item.get("relation") == "isNewVersionOf"
+    ]
+    predecessor_doi = None
+    if relations:
+        candidate = relations[0]
+        identifier = str(candidate.get("identifier") or "")
+        if (
+            len(relations) != 1
+            or candidate.get("scheme") != "doi"
+            or _DOI_RE.fullmatch(identifier) is None
+        ):
+            raise PublishedAuditInvalid("Zenodo predecessor-version relation is malformed")
+        predecessor_doi = identifier
+    if "-erratum." in source_tag_url and (
+        predecessor_doi is None or predecessor_doi in {doi, concept_doi}
+    ):
+        raise PublishedAuditInvalid(
+            "Zenodo erratum metadata lacks one distinct predecessor version DOI"
+        )
+    return predecessor_doi
+
+
 def _resolve_zenodo_record(
     session: _PublicSession,
     *,
@@ -888,18 +1249,20 @@ def _resolve_zenodo_record(
     state = str(payload.get("state") or "").casefold()
     if (status and status != "published") or (not status and state != "done"):
         raise PublishedAuditInvalid("Zenodo record is not a published version")
-    related = metadata.get("related_identifiers")
-    if not isinstance(related, list) or not any(
-        isinstance(item, Mapping)
-        and item.get("relation") == "isSupplementTo"
-        and item.get("identifier") == source_tag_url
-        for item in related
-    ):
-        raise PublishedAuditInvalid("Zenodo record is not related to the requested GitHub release")
+    related = _require_zenodo_source_relation(
+        metadata.get("related_identifiers"), source_tag_url=source_tag_url
+    )
+    predecessor_doi = _zenodo_predecessor_relation(
+        related,
+        source_tag_url=source_tag_url,
+        doi=doi,
+        concept_doi=concept_doi,
+    )
     return {
         "id": payload.get("id") or record_id,
         "doi": doi,
         "concept_doi": concept_doi,
+        "predecessor_doi": predecessor_doi,
         "status": status or state,
         "assets": _zenodo_file_assets(payload),
     }
@@ -1027,6 +1390,24 @@ def _receipt_identifier(value: str, *, kind: str) -> str:
     return "<invalid-tag>"
 
 
+def _reconcile_zenodo_erratum_lineage(
+    core: dict[str, Any], *, tag: str, zenodo: Mapping[str, Any]
+) -> None:
+    """Fail the core audit when public lineage and embedded proof disagree."""
+    if "-erratum." not in tag:
+        return
+    observations = core.get("observations")
+    erratum = observations.get("erratum") if isinstance(observations, Mapping) else None
+    if isinstance(erratum, Mapping) and (
+        erratum.get("predecessor_version_doi") == zenodo.get("predecessor_doi")
+        and erratum.get("concept_doi") == zenodo.get("concept_doi")
+    ):
+        return
+    core["problems"].append("Zenodo API lineage differs from the embedded erratum receipt")
+    core["ok"] = False
+    core["status"] = "fail"
+
+
 def audit_published_network(  # noqa: C901, PLR0913
     *,
     tag: str,
@@ -1098,6 +1479,7 @@ def audit_published_network(  # noqa: C901, PLR0913
             "record_id": zenodo["id"],
             "doi": zenodo["doi"],
             "concept_doi": zenodo["concept_doi"],
+            "predecessor_doi": zenodo["predecessor_doi"],
             "asset_names": sorted(asset["name"] for asset in zenodo["assets"]),
         }
         github_by_name = {asset["name"]: asset for asset in github["assets"]}
@@ -1160,6 +1542,7 @@ def audit_published_network(  # noqa: C901, PLR0913
                 zenodo_dir=zenodo_dir,
                 source_sha=github["source_sha"],
             )
+            _reconcile_zenodo_erratum_lineage(core, tag=requested_tag, zenodo=zenodo)
         status = "pass" if core["ok"] else "invalid"
         return {
             "schema": NETWORK_SCHEMA,

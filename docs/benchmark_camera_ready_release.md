@@ -277,8 +277,12 @@ identity/download check, not full benchmark evidence and does not authorize
 publication. The command cannot reserve, upload, edit, publish, or rename a
 release.
 
-1. Download the GitHub Release archive and its checksum/manifest assets. Extract
-   the archive and run `sha256sum -c checksums.sha256` from the bundle root.
+1. Download the GitHub Release archive and its checksum/manifest assets. For a
+   derived-metadata erratum, also require the detached
+   `publication_custody.json`; the archive, `publication_manifest.json`,
+   `checksums.sha256`, and custody receipt must have byte-identical counterparts
+   on Zenodo. Extract the archive and run `sha256sum -c checksums.sha256` from
+   the bundle root.
 2. Confirm that `payload/release/release_manifest.resolved.json` and
    `payload/release/release_result.json` agree on release id, tag, source SHA,
    acceptance status, and 20,160 episode identities. No fallback, degraded,

@@ -49,6 +49,13 @@ Export bundles are produced by
 - `checksums.sha256`: SHA-256 checksums for payload files.
 - `<bundle_name>.tar.gz`: archive for release upload.
 
+A derived-metadata erratum additionally publishes the bundle-local
+`publication_manifest.json` and `checksums.sha256` as detached assets alongside
+`publication_custody.json`. The custody receipt binds the complete archive
+digest and the embedded erratum receipt without creating a self-checksum cycle.
+All four assets must be uploaded under the same names and with identical bytes
+to the GitHub and Zenodo successor drafts.
+
 When the source campaign contains both
 `release/release_manifest.resolved.json` and `release/release_result.json`, the
 exporter also fails closed on missing release metadata and adds a

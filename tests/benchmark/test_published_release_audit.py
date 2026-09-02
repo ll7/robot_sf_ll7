@@ -25,6 +25,11 @@ from robot_sf.benchmark.published_release_audit import (
     audit_published,
     audit_published_network,
 )
+from robot_sf.benchmark.release_erratum import (
+    ErratumContract,
+    build_erratum_receipt,
+    snapshot_campaign,
+)
 
 _CLI_SCRIPT = (
     Path(__file__).resolve().parents[2] / "scripts" / "benchmark" / "published_release_audit.py"
@@ -43,6 +48,337 @@ def _make_bundle(
     path.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(path, "w") as zf:
         zf.writestr(member, data)
+
+
+def _make_erratum_assets(
+    github: Path,
+    zenodo: Path,
+    *,
+    source_sha: str,
+    tag: str,
+    doi: str,
+    payload_files: dict[str, bytes],
+    root_extra: dict[str, bytes] | None = None,
+    manifest_overrides: dict[str, object] | None = None,
+) -> Path:
+    """Write matching archive/manifest/checksum/custody assets for an erratum fixture."""
+    receipt_data = payload_files.get("provenance/benchmark_release_erratum.json", b"{}")
+    parsed_receipt = json.loads(receipt_data)
+    receipt = parsed_receipt if isinstance(parsed_receipt, dict) else {}
+    root_name = "bundle"
+    entries = []
+    checksum_lines = []
+    for relative, data in sorted(payload_files.items()):
+        digest = hashlib.sha256(data).hexdigest()
+        entries.append(
+            {
+                "path": relative,
+                "size_bytes": len(data),
+                "sha256": digest,
+                "kind": "provenance",
+            }
+        )
+        checksum_lines.append(f"{digest}  payload/{relative}\n")
+    checksums = "".join(checksum_lines).encode()
+    manifest_payload: dict[str, object] = {
+        "schema_version": "benchmark-publication-bundle.v2",
+        "bundle_name": root_name,
+        "publication_channels": {
+            "repository_url": "https://github.com/ll7/robot_sf_ll7",
+            "release_tag": tag,
+            "release_url": f"https://github.com/ll7/robot_sf_ll7/releases/tag/{tag}",
+            "doi": doi,
+        },
+        "provenance": {"repository": {"commit": source_sha}},
+        "totals": {
+            "file_count": len(entries),
+            "total_bytes": sum(len(data) for data in payload_files.values()),
+        },
+        "files": entries,
+    }
+    manifest_payload.update(manifest_overrides or {})
+    manifest = json.dumps(manifest_payload, sort_keys=True).encode()
+    readme = b"# Erratum fixture\n"
+    bundle = github / "bundle.zip"
+    bundle.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(bundle, "w") as archive:
+        for relative, data in sorted(payload_files.items()):
+            archive.writestr(f"{root_name}/payload/{relative}", data)
+        archive.writestr(f"{root_name}/checksums.sha256", checksums)
+        archive.writestr(f"{root_name}/publication_manifest.json", manifest)
+        archive.writestr(f"{root_name}/README.md", readme)
+        for relative, data in sorted((root_extra or {}).items()):
+            archive.writestr(f"{root_name}/{relative}", data)
+
+    custody = {
+        "schema_version": "benchmark-publication-custody.v1",
+        "source_execution_commit": source_sha,
+        "archive": {
+            "path": bundle.name,
+            "sha256": sha256_file(bundle),
+            "size_bytes": bundle.stat().st_size,
+        },
+        "bundle": {
+            "path": root_name,
+            "publication_manifest_sha256": hashlib.sha256(manifest).hexdigest(),
+            "checksums_sha256": hashlib.sha256(checksums).hexdigest(),
+        },
+        "archive_self_digest_policy": "archive digest is external to the bundle; no cycle",
+        "credentials": "not_recorded",
+        "erratum": {
+            "correction_id": receipt.get("correction_id"),
+            "correction_scope": receipt.get("correction_scope"),
+            "supersedes": receipt.get("supersedes"),
+            "successor": receipt.get("successor"),
+            "scientific_equality": receipt.get("scientific_equality"),
+            "embedded_receipt_path": (
+                f"{root_name}/payload/provenance/benchmark_release_erratum.json"
+            ),
+            "embedded_receipt_sha256": hashlib.sha256(
+                payload_files.get("provenance/benchmark_release_erratum.json", b"")
+            ).hexdigest(),
+        },
+    }
+    sidecars = {
+        bundle.name: bundle.read_bytes(),
+        "publication_manifest.json": manifest,
+        "checksums.sha256": checksums,
+        "publication_custody.json": json.dumps(custody, sort_keys=True).encode(),
+    }
+    for channel in (github, zenodo):
+        for name, data in sidecars.items():
+            _write_bytes(channel / name, data)
+    return bundle
+
+
+def _full_erratum_payload(
+    tmp_path: Path,
+) -> tuple[dict[str, bytes], dict[str, object], str, str]:
+    """Build a one-cell payload that passes the real preflight and cold validator.
+
+    Returns:
+        Payload bytes, correction receipt, successor tag, and successor DOI.
+    """
+    source_sha = "5" * 40
+    builder_sha = "a" * 40
+    orchestration_sha = "b" * 40
+    predecessor_doi = "10.5281/zenodo.7"
+    concept_doi = "10.5281/zenodo.6"
+    successor_doi = "10.5281/zenodo.8"
+    predecessor_tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}"
+    successor_tag = f"{predecessor_tag}-erratum.1"
+    campaign = tmp_path / "cold-campaign"
+    episodes = campaign / "runs/orca__differential_drive/episodes.jsonl"
+    row = {
+        "algo": "orca",
+        "scenario_id": "crossing",
+        "seed": 111,
+        "episode_id": "crossing--111--fixture",
+        "status": "success",
+        "outcome": "goal_reached",
+        "git_hash": source_sha,
+        "provenance": {"git_hash": source_sha},
+        "result_provenance": {"repo_commit": source_sha},
+        "event_ledger": {
+            "software_commit": source_sha,
+            "exact_events": {"goal_reached": True, "timeout": False},
+        },
+        "metrics": {"collisions": 0, "snqi": 0.5},
+    }
+    _write_bytes(episodes, (json.dumps(row, sort_keys=True) + "\n").encode())
+    metadata_path = campaign / "release/zenodo_metadata.erratum.json"
+    metadata = {
+        "metadata": {
+            "title": "Robot SF benchmark erratum",
+            "upload_type": "dataset",
+            "access_right": "open",
+            "license": "GPL-3.0-only",
+            "description": (
+                "Derived metadata erratum. All scientific rows are unchanged and no simulation "
+                "rerun occurred. SNQI remains advisory and supports no planner ranking claim."
+            ),
+            "creators": [{"name": "Luttkus, Lennart"}],
+            "related_identifiers": [
+                {
+                    "identifier": (
+                        "https://github.com/ll7/robot_sf_ll7/releases/tag/" + successor_tag
+                    ),
+                    "relation": "isSupplementTo",
+                    "scheme": "url",
+                },
+                {
+                    "identifier": predecessor_doi,
+                    "relation": "isNewVersionOf",
+                    "scheme": "doi",
+                },
+            ],
+        }
+    }
+    _write_bytes(metadata_path, json.dumps(metadata, sort_keys=True).encode())
+    predecessor = tmp_path / "immutable-predecessor.tar.gz"
+    predecessor.write_bytes(b"immutable predecessor fixture")
+    contract = ErratumContract(
+        correction_id="fixture-derived-metadata-erratum.1",
+        predecessor_version_doi=predecessor_doi,
+        predecessor_archive_sha256=sha256_file(predecessor),
+        predecessor_archive_size_bytes=predecessor.stat().st_size,
+        predecessor_github_release_tag=predecessor_tag,
+        source_sha=source_sha,
+        planner_arms=1,
+        scenario_count=1,
+        seed_count=1,
+        episode_rows=1,
+        builder_sha=builder_sha,
+        validator_sha=builder_sha,
+        orchestration_sha=orchestration_sha,
+        concept_doi=concept_doi,
+        successor_version_doi=successor_doi,
+        successor_github_release_tag=successor_tag,
+        metadata_path=metadata_path,
+        metadata_sha256=sha256_file(metadata_path),
+    )
+    publication = {
+        "concept_doi": concept_doi,
+        "version_doi": successor_doi,
+        "predecessor_version_doi": predecessor_doi,
+        "bundle_metadata_path": "release/zenodo_metadata.erratum.json",
+        "metadata_sha256": contract.metadata_sha256,
+        "correction_scope": "derived_publication_metadata_only",
+    }
+    provenance = {
+        "release_tag": successor_tag,
+        "release_id": successor_tag,
+        "doi": successor_doi,
+        "version_doi": successor_doi,
+        "concept_doi": concept_doi,
+        "scientific_source_sha": source_sha,
+        "erratum_builder_sha": builder_sha,
+        "erratum_validator_sha": builder_sha,
+        "erratum_orchestration_sha": orchestration_sha,
+    }
+    current = {
+        "release_tag": successor_tag,
+        "release_id": successor_tag,
+        "doi": successor_doi,
+        "version_doi": successor_doi,
+        "concept_doi": concept_doi,
+        "publication": publication,
+        "provenance": provenance,
+    }
+    execution = {
+        "release_tag": predecessor_tag,
+        "release_id": predecessor_tag,
+        "doi": predecessor_doi,
+        "version_doi": predecessor_doi,
+        "concept_doi": concept_doi,
+    }
+    _write_bytes(
+        campaign / "release/release_manifest.resolved.json",
+        json.dumps(current, sort_keys=True).encode(),
+    )
+    release_result = {
+        **current,
+        "benchmark_release": current,
+        "resolved_manifest": current,
+        "scientific_execution_benchmark_release": execution,
+        "scientific_execution_resolved_manifest": execution,
+        "derivation": {
+            "builder_sha": builder_sha,
+            "validator_sha": builder_sha,
+            "orchestration_sha": orchestration_sha,
+            "scientific_source_sha": source_sha,
+            "simulation_rerun": False,
+            "correction_id": contract.correction_id,
+            "predecessor_version_doi": predecessor_doi,
+        },
+        "status": "accepted",
+        "evidence_status": "valid",
+        "total_episodes": 1,
+        "successful_runs": 1,
+        "publication_preflight_status": "pass",
+        "publication_preflight_violations": [],
+        "release_status": "ok",
+        "ranking_claims_admitted": False,
+    }
+    _write_bytes(
+        campaign / "release/release_result.json",
+        json.dumps(release_result, sort_keys=True).encode(),
+    )
+    summary_campaign = {
+        **current,
+        "status": "accepted",
+        "evidence_status": "valid",
+        "total_episodes": 1,
+        "successful_runs": 1,
+        "scientific_execution_release_identity": {
+            "release_tag": predecessor_tag,
+            "doi": predecessor_doi,
+            "source_sha": source_sha,
+        },
+    }
+    _write_bytes(
+        campaign / "reports/campaign_summary.json",
+        json.dumps(
+            {"benchmark_release": current, "campaign": summary_campaign}, sort_keys=True
+        ).encode(),
+    )
+    _write_bytes(
+        campaign / "provenance/derived_revalidation_receipt.json",
+        json.dumps(
+            {
+                "schema_version": "benchmark-derived-revalidation.v1",
+                "source": {"execution_commit": source_sha},
+                "validator": {"commit": builder_sha},
+            },
+            sort_keys=True,
+        ).encode(),
+    )
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt = build_erratum_receipt(
+        contract=contract,
+        predecessor=snapshot,
+        successor=snapshot,
+    )
+    _write_bytes(
+        campaign / "provenance/benchmark_release_erratum.json",
+        json.dumps(receipt, sort_keys=True).encode(),
+    )
+    payload_files = {
+        path.relative_to(campaign).as_posix(): path.read_bytes()
+        for path in campaign.rglob("*")
+        if path.is_file()
+    }
+    return payload_files, receipt, successor_tag, successor_doi
+
+
+def test_erratum_audit_runs_real_preflight_and_cold_validation(tmp_path: Path) -> None:
+    """The production validators authenticate one complete cold-start archive."""
+    payload_files, correction_receipt, tag, doi = _full_erratum_payload(tmp_path)
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    _make_erratum_assets(
+        github,
+        zenodo,
+        source_sha="5" * 40,
+        tag=tag,
+        doi=doi,
+        payload_files=payload_files,
+    )
+
+    result = audit_published(
+        tag=tag,
+        doi=doi,
+        github_dir=github,
+        zenodo_dir=zenodo,
+        source_sha="5" * 40,
+    )
+
+    assert result["status"] == "pass"
+    assert result["problems"] == []
+    assert result["observations"]["erratum_bundle_inventory"]["preflight_status"] == "pass"
+    assert result["observations"]["erratum"]["episode_rows"] == 1
+    assert result["observations"]["erratum_custody"]["status"] == "pass"
+    assert correction_receipt["scientific_equality"]["status"] == "identical"
 
 
 def test_cross_channel_byte_identity_passes(tmp_path: Path) -> None:
@@ -73,24 +409,27 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
     doi = "10.5281/zenodo.8"
     github = tmp_path / "github"
     zenodo = tmp_path / "zenodo"
-    bundle = github / "bundle.zip"
-    bundle.parent.mkdir(parents=True)
-    receipt_bytes = json.dumps({"schema_version": "benchmark-release-erratum-receipt.v1"}).encode()
+    correction_receipt = {
+        "schema_version": "benchmark-release-erratum-receipt.v1",
+        "correction_id": "fixture-erratum.1",
+        "correction_scope": "derived_publication_metadata_only",
+        "supersedes": {"version_doi": "10.5281/zenodo.7"},
+        "successor": {"version_doi": doi},
+        "scientific_equality": {"status": "identical"},
+    }
+    receipt_bytes = json.dumps(correction_receipt, sort_keys=True).encode()
     metadata_bytes = b"{}"
-    checksums = (
-        f"{hashlib.sha256(receipt_bytes).hexdigest()}  "
-        "payload/provenance/benchmark_release_erratum.json\n"
-        f"{hashlib.sha256(metadata_bytes).hexdigest()}  "
-        "payload/release/zenodo_metadata.erratum.json\n"
+    _make_erratum_assets(
+        github,
+        zenodo,
+        source_sha=source_sha,
+        tag=tag,
+        doi=doi,
+        payload_files={
+            "provenance/benchmark_release_erratum.json": receipt_bytes,
+            "release/zenodo_metadata.erratum.json": metadata_bytes,
+        },
     )
-    with zipfile.ZipFile(bundle, "w") as archive:
-        archive.writestr(
-            "bundle/payload/provenance/benchmark_release_erratum.json",
-            receipt_bytes,
-        )
-        archive.writestr("bundle/payload/release/zenodo_metadata.erratum.json", metadata_bytes)
-        archive.writestr("bundle/checksums.sha256", checksums)
-    _write_bytes(zenodo / "bundle.zip", bundle.read_bytes())
     calls: list[tuple[Path, Path, Path, str, str, str | None]] = []
 
     def fake_validate(
@@ -117,6 +456,11 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
     monkeypatch.setattr(
         published_audit_module, "validate_erratum_receipt_against_campaign", fake_validate
     )
+    monkeypatch.setattr(
+        published_audit_module,
+        "verify_publication_bundle_preflight",
+        lambda *_args, **_kwargs: {"status": "pass"},
+    )
 
     receipt = audit_published(
         tag=tag,
@@ -133,19 +477,33 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
     assert calls[0][3:] == (tag, doi, source_sha)
 
 
-def test_erratum_audit_rejects_bundle_without_correction_receipt(tmp_path: Path) -> None:
+def test_erratum_audit_rejects_bundle_without_correction_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A matching two-channel archive is insufficient for an erratum without its proof."""
     tag = f"paper-matrix-v2-h600-s30-2026-09-{'5' * 40}-erratum.1"
     github = tmp_path / "github"
     zenodo = tmp_path / "zenodo"
-    for channel in (github, zenodo):
-        _make_bundle(channel / "bundle.zip")
+    _make_erratum_assets(
+        github,
+        zenodo,
+        source_sha="5" * 40,
+        tag=tag,
+        doi="10.5281/zenodo.8",
+        payload_files={"release/zenodo_metadata.erratum.json": b"{}"},
+    )
+    monkeypatch.setattr(
+        published_audit_module,
+        "verify_publication_bundle_preflight",
+        lambda *_args, **_kwargs: {"status": "pass"},
+    )
 
     receipt = audit_published(
         tag=tag,
         doi="10.5281/zenodo.8",
         github_dir=github,
         zenodo_dir=zenodo,
+        source_sha="5" * 40,
     )
 
     assert receipt["status"] == "fail"
@@ -172,28 +530,40 @@ def test_erratum_audit_rejects_malformed_suffix(tmp_path: Path, suffix: str) -> 
     assert any("erratum tag is malformed" in problem for problem in result["problems"])
 
 
-def test_erratum_audit_rejects_decoy_correction_receipt_path(tmp_path: Path) -> None:
+def test_erratum_audit_rejects_decoy_correction_receipt_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A second lookalike receipt cannot broaden the canonical proof boundary."""
     source_sha = "5" * 40
     tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}-erratum.1"
     github = tmp_path / "github"
     zenodo = tmp_path / "zenodo"
-    bundle = github / "bundle.zip"
-    bundle.parent.mkdir(parents=True)
-    receipt = b"{}"
+    correction_receipt = {
+        "correction_id": "fixture-erratum.1",
+        "correction_scope": "derived_publication_metadata_only",
+        "supersedes": {},
+        "successor": {},
+        "scientific_equality": {},
+    }
+    receipt = json.dumps(correction_receipt).encode()
     metadata = b"{}"
-    checksums = (
-        f"{hashlib.sha256(receipt).hexdigest()}  "
-        "payload/provenance/benchmark_release_erratum.json\n"
-        f"{hashlib.sha256(metadata).hexdigest()}  "
-        "payload/release/zenodo_metadata.erratum.json\n"
+    _make_erratum_assets(
+        github,
+        zenodo,
+        source_sha=source_sha,
+        tag=tag,
+        doi="10.5281/zenodo.8",
+        payload_files={
+            "provenance/benchmark_release_erratum.json": receipt,
+            "release/zenodo_metadata.erratum.json": metadata,
+        },
+        root_extra={"decoy/benchmark_release_erratum.json": receipt},
     )
-    with zipfile.ZipFile(bundle, "w") as archive:
-        archive.writestr("bundle/payload/provenance/benchmark_release_erratum.json", receipt)
-        archive.writestr("bundle/payload/release/zenodo_metadata.erratum.json", metadata)
-        archive.writestr("bundle/decoy/benchmark_release_erratum.json", receipt)
-        archive.writestr("bundle/checksums.sha256", checksums)
-    _write_bytes(zenodo / "bundle.zip", bundle.read_bytes())
+    monkeypatch.setattr(
+        published_audit_module,
+        "verify_publication_bundle_preflight",
+        lambda *_args, **_kwargs: {"status": "pass"},
+    )
 
     result = audit_published(
         tag=tag,
@@ -204,7 +574,84 @@ def test_erratum_audit_rejects_decoy_correction_receipt_path(tmp_path: Path) -> 
     )
 
     assert result["status"] == "fail"
-    assert any("canonical receipt or metadata" in problem for problem in result["problems"])
+    assert any("unlisted or missing bundle member" in problem for problem in result["problems"])
+
+
+@pytest.mark.parametrize(
+    ("tamper", "expected"),
+    [
+        ("manifest_schema", "manifest schema"),
+        ("unsigned_payload", "payload/checksum inventory"),
+        ("external_manifest", "differs from the archived sidecar"),
+        ("stale_custody", "custody archive identity is stale"),
+    ],
+)
+def test_erratum_audit_rejects_incomplete_bundle_authentication(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tamper: str,
+    expected: str,
+) -> None:
+    """Manifest, payload inventory, public sidecars, and custody all fail closed."""
+    source_sha = "5" * 40
+    tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}-erratum.1"
+    doi = "10.5281/zenodo.8"
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    correction_receipt = {
+        "correction_id": "fixture-erratum.1",
+        "correction_scope": "derived_publication_metadata_only",
+        "supersedes": {},
+        "successor": {},
+        "scientific_equality": {},
+    }
+    receipt_bytes = json.dumps(correction_receipt).encode()
+    _make_erratum_assets(
+        github,
+        zenodo,
+        source_sha=source_sha,
+        tag=tag,
+        doi=doi,
+        payload_files={
+            "provenance/benchmark_release_erratum.json": receipt_bytes,
+            "release/zenodo_metadata.erratum.json": b"{}",
+        },
+        root_extra=({"payload/unlisted.json": b"{}"} if tamper == "unsigned_payload" else None),
+        manifest_overrides=(
+            {"schema_version": "unsupported"} if tamper == "manifest_schema" else None
+        ),
+    )
+    if tamper == "external_manifest":
+        for channel in (github, zenodo):
+            (channel / "publication_manifest.json").write_bytes(b"{}")
+    if tamper == "stale_custody":
+        for channel in (github, zenodo):
+            path = channel / "publication_custody.json"
+            custody = json.loads(path.read_text(encoding="utf-8"))
+            custody["archive"]["sha256"] = "0" * 64
+            path.write_text(json.dumps(custody), encoding="utf-8")
+
+    monkeypatch.setattr(
+        published_audit_module,
+        "verify_publication_bundle_preflight",
+        lambda *_args, **_kwargs: {"status": "pass"},
+    )
+    monkeypatch.setattr(
+        published_audit_module,
+        "validate_erratum_receipt_against_campaign",
+        lambda *_args, **_kwargs: {"status": "pass"},
+    )
+
+    result = audit_published(
+        tag=tag,
+        doi=doi,
+        github_dir=github,
+        zenodo_dir=zenodo,
+        source_sha=source_sha,
+    )
+
+    assert result["status"] == "fail"
+    assert any(expected in problem for problem in result["problems"])
 
 
 def test_cross_channel_mismatch_fails(tmp_path: Path) -> None:
@@ -541,12 +988,14 @@ def _network_fixture(
     *,
     zenodo_name: str = "bundle.zip",
     zenodo_doi: str = "10.5281/zenodo.1234567",
+    release_tag: str = "paper-matrix-v2-h600-s30",
+    predecessor_doi: str | None = None,
 ) -> tuple[_PublicSession, bytes, str, str, str]:
     """Build a complete mocked GitHub/Zenodo public response set."""
     del tmp_path
     github_base = "https://github.test"
     zenodo_base = "https://zenodo.test/api"
-    tag = "paper-matrix-v2-h600-s30"
+    tag = release_tag
     source_sha = "b" * 40
     bundle_buffer = io.BytesIO()
     with zipfile.ZipFile(bundle_buffer, "w") as archive:
@@ -559,6 +1008,21 @@ def _network_fixture(
     zenodo_record_url = f"{zenodo_base}/records/1234567"
     zenodo_asset_url = "https://zenodo.test/api/records/1234567/files/bundle.zip/content"
     source_tag_url = f"https://github.com/ll7/robot_sf_ll7/releases/tag/{tag}"
+    related_identifiers = [
+        {
+            "identifier": source_tag_url,
+            "relation": "isSupplementTo",
+            "scheme": "url",
+        }
+    ]
+    if predecessor_doi is not None:
+        related_identifiers.append(
+            {
+                "identifier": predecessor_doi,
+                "relation": "isNewVersionOf",
+                "scheme": "doi",
+            }
+        )
     routes: dict[str, _PublicResponse | Exception] = {
         github_release_url: _PublicResponse(
             payload={
@@ -595,9 +1059,7 @@ def _network_fixture(
                 "metadata": {
                     "doi": zenodo_doi,
                     "conceptdoi": "10.5281/zenodo.1234566",
-                    "related_identifiers": [
-                        {"identifier": source_tag_url, "relation": "isSupplementTo"}
-                    ],
+                    "related_identifiers": related_identifiers,
                 },
                 "files": [
                     {
@@ -739,6 +1201,73 @@ def test_network_audit_rejects_doi_drift_and_secret_headers(tmp_path: Path) -> N
     assert any("DOI does not match" in problem for problem in receipt["problems"])
     assert all("Authorization" not in json.dumps(headers) for _, _, headers in session.calls)
     assert "secret" not in json.dumps(receipt)
+
+
+@pytest.mark.parametrize(
+    ("fault", "expected"),
+    [
+        ("source_scheme", "not related"),
+        ("predecessor_scheme", "predecessor-version relation is malformed"),
+        ("duplicate_predecessor", "predecessor-version relation is malformed"),
+    ],
+)
+def test_network_erratum_requires_exact_relation_schemes_and_cardinality(
+    tmp_path: Path, fault: str, expected: str
+) -> None:
+    source_sha = "b" * 40
+    tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}-erratum.1"
+    session, _, _, github_base, zenodo_base = _network_fixture(
+        tmp_path,
+        release_tag=tag,
+        predecessor_doi="10.5281/zenodo.1234565",
+    )
+    record_url = f"{zenodo_base}/records/1234567"
+    response = session.routes[record_url]
+    assert isinstance(response, _PublicResponse)
+    payload = copy.deepcopy(response._payload)
+    related = payload["metadata"]["related_identifiers"]
+    if fault == "source_scheme":
+        related[0]["scheme"] = "doi"
+    elif fault == "predecessor_scheme":
+        related[1]["scheme"] = "url"
+    else:
+        related.append(copy.deepcopy(related[1]))
+    response._payload = payload
+
+    result = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+
+    assert result["status"] == "invalid"
+    assert any(expected in problem for problem in result["problems"])
+
+
+def test_network_erratum_lineage_reconciliation_fails_closed() -> None:
+    core = {
+        "ok": True,
+        "status": "pass",
+        "problems": [],
+        "observations": {
+            "erratum": {
+                "predecessor_version_doi": "10.5281/zenodo.7",
+                "concept_doi": "10.5281/zenodo.6",
+            }
+        },
+    }
+
+    published_audit_module._reconcile_zenodo_erratum_lineage(
+        core,
+        tag=f"release-{'b' * 40}-erratum.1",
+        zenodo={"predecessor_doi": "10.5281/zenodo.9", "concept_doi": "10.5281/zenodo.6"},
+    )
+
+    assert core["ok"] is False
+    assert core["status"] == "fail"
+    assert core["problems"] == ["Zenodo API lineage differs from the embedded erratum receipt"]
 
 
 @pytest.mark.parametrize(

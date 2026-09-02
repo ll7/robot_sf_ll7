@@ -5504,9 +5504,7 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
     assert result["exit_code"] == 0
     assert result["soft_contract_warning"] is True
     diagnostics = json.loads(
-        (Path(result["summary_json"]).parent / "snqi_diagnostics.json").read_text(
-            encoding="utf-8"
-        )
+        (Path(result["summary_json"]).parent / "snqi_diagnostics.json").read_text(encoding="utf-8")
     )
     assert diagnostics["planner_ordering_basis"] == "diagnostic_scalarizer"
     assert diagnostics["release_claim_boundary"]["ranking_authority"] is False

@@ -24,6 +24,7 @@ from robot_sf.benchmark.artifact_publication import (
     _preflight_check_release_metadata,
     _resolve_release_publication_metadata,
     _resolve_repo_file,
+    _resolve_run_file,
     _snqi_load_canonical_basis,
     discover_run_directories,
     export_publication_bundle,
@@ -614,6 +615,23 @@ def test_release_metadata_path_and_source_helpers_fail_closed(tmp_path: Path) ->
     assert _resolve_repo_file("metadata.json", repo_root=repo) == tracked
     assert _find_release_sha([{"nested": [{"public_source_commit": "A" * 40}]}]) == "a" * 40
     assert _find_release_sha([{"commit": "short"}, ["not-a-mapping"]]) is None
+
+
+def test_release_bundle_metadata_path_is_strictly_run_local(tmp_path: Path) -> None:
+    """Derived erratum metadata may be run-local but cannot escape or use symlinks."""
+    run_root = tmp_path / "run"
+    metadata = run_root / "release" / "zenodo_metadata.erratum.json"
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text("{}\n", encoding="utf-8")
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}\n", encoding="utf-8")
+    linked = run_root / "release" / "linked.json"
+    linked.symlink_to(outside)
+
+    assert _resolve_run_file("release/zenodo_metadata.erratum.json", run_root=run_root) == metadata
+    assert _resolve_run_file("../outside.json", run_root=run_root) is None
+    assert _resolve_run_file(str(outside), run_root=run_root) is None
+    assert _resolve_run_file("release/linked.json", run_root=run_root) is None
 
 
 def test_release_rights_statement_uses_safe_defaults() -> None:

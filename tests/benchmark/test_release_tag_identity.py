@@ -125,3 +125,17 @@ def test_canonical_source_tag_rejects_ambiguous_or_nonfinal_representations(tag:
 def test_canonical_source_tag_accepts_one_full_final_sha_suffix() -> None:
     tag = derive_sha_tag("paper-matrix-v2-h600-s30", SOURCE_SHA)
     assert check_canonical_source_tag(tag, SOURCE_SHA) == []
+
+
+def test_canonical_source_tag_accepts_versioned_erratum_after_source_sha() -> None:
+    tag = f"paper-matrix-v2-h600-s30-{SOURCE_SHA}-erratum.1"
+    assert check_canonical_source_tag(tag, SOURCE_SHA) == []
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    ["-erratum.0", "-erratum.-1", "-erratum", "-erratum.one", "-erratum.01"],
+)
+def test_canonical_source_tag_rejects_malformed_erratum_suffix(suffix: str) -> None:
+    tag = f"paper-matrix-v2-h600-s30-{SOURCE_SHA}{suffix}"
+    assert check_canonical_source_tag(tag, SOURCE_SHA)

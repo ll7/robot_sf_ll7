@@ -14,6 +14,7 @@ import pytest
 
 from robot_sf.benchmark import release_acceptance
 from robot_sf.benchmark.metrics import snqi as curvature_aware_snqi
+from robot_sf.benchmark.release_erratum import ErratumContract
 from robot_sf.benchmark.snqi_scalarization_sensitivity import (
     load_baseline_mapping,
     load_weight_mapping,
@@ -30,6 +31,77 @@ def _write(path: Path, value: str) -> None:
     """Write a UTF-8 fixture file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(value, encoding="utf-8")
+
+
+def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
+    tmp_path: Path,
+) -> None:
+    """Successor coordinates are self-consistent without relabeling the executed source."""
+    source_sha = "5" * 40
+    old_tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}"
+    new_tag = f"{old_tag}-erratum.1"
+    campaign = tmp_path / "campaign"
+    metadata = tmp_path / "metadata.json"
+    _write(metadata, '{"metadata":{"title":"erratum"}}\n')
+    old_release = {
+        "release_id": old_tag,
+        "release_tag": old_tag,
+        "provenance": {
+            "doi": "10.5281/zenodo.22227035",
+            "version_doi": "10.5281/zenodo.22227035",
+            "concept_doi": "10.5281/zenodo.22227034",
+            "source_sha": source_sha,
+            "publication_channel": "direct_zenodo_benchmark_dataset",
+        },
+    }
+    _write(campaign / "release/release_manifest.resolved.json", json.dumps(old_release))
+    _write(
+        campaign / "release/release_result.json",
+        json.dumps(
+            {
+                "publication_preflight_status": "pass",
+                "publication_preflight_violations": ["stale"],
+                "release_status": "ok",
+            }
+        ),
+    )
+    for relative in ("campaign_manifest.json", "manifest.json", "run_meta.json"):
+        _write(relative_path := campaign / relative, json.dumps({"benchmark_release": old_release}))
+        assert relative_path.is_file()
+    launch = campaign / "launch_packet.json"
+    _write(launch, json.dumps({"release_tag": old_tag, "source_sha": source_sha}))
+    launch_before = launch.read_bytes()
+    contract = ErratumContract(
+        correction_id="september-2026-derived-metadata-erratum.1",
+        predecessor_version_doi="10.5281/zenodo.22227035",
+        predecessor_archive_sha256="e" * 64,
+        predecessor_archive_size_bytes=54219004,
+        predecessor_github_release_tag=old_tag,
+        source_sha=source_sha,
+        planner_arms=14,
+        scenario_count=48,
+        seed_count=30,
+        episode_rows=20160,
+        builder_sha="a" * 40,
+        concept_doi="10.5281/zenodo.22227034",
+        successor_version_doi="10.5281/zenodo.22229999",
+        successor_github_release_tag=new_tag,
+        metadata_path=metadata,
+        metadata_sha256=_sha256(metadata),
+    )
+
+    resolved = recovery._apply_erratum_publication_identity(campaign, contract=contract)
+
+    assert resolved["release_tag"] == new_tag
+    assert resolved["provenance"]["version_doi"] == "10.5281/zenodo.22229999"
+    assert resolved["provenance"]["scientific_source_sha"] == source_sha
+    result = json.loads((campaign / "release/release_result.json").read_text(encoding="utf-8"))
+    assert result["publication_preflight_status"] == "pass"
+    assert result["publication_preflight_violations"] == []
+    assert result["ranking_claims_admitted"] is False
+    assert result["derivation"]["builder_sha"] == "a" * 40
+    assert launch.read_bytes() == launch_before
+    assert (campaign / recovery.ERRATUM_METADATA_RELATIVE).read_bytes() == metadata.read_bytes()
 
 
 def test_load_recovery_contract_supports_new_checksum_pinned_campaign(tmp_path: Path) -> None:

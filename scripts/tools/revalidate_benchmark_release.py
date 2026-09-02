@@ -48,6 +48,14 @@ from robot_sf.benchmark.camera_ready import _run_state as camera_run_state_modul
 from robot_sf.benchmark.camera_ready._artifacts import _write_snqi_diagnostics_artifacts
 from robot_sf.benchmark.camera_ready_campaign import write_campaign_report
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.release_erratum import (
+    ErratumContract,
+    ReleaseErratumError,
+    build_erratum_receipt,
+    load_erratum_contract,
+    snapshot_campaign,
+    snapshot_predecessor_archive,
+)
 from robot_sf.benchmark.release_protocol import (
     load_release_campaign_config,
     load_release_manifest,
@@ -72,6 +80,8 @@ PRODUCER_SUMS_NAME = "SHA256SUMS"
 PRODUCER_RECEIPT_NAME = "artifact-verification-receipt.json"
 REJECTED_RESULT_RELATIVE = "release/release_result.json"
 DERIVATION_RECEIPT_RELATIVE = "provenance/derived_revalidation_receipt.json"
+ERRATUM_RECEIPT_RELATIVE = "provenance/benchmark_release_erratum.json"
+ERRATUM_METADATA_RELATIVE = "release/zenodo_metadata.erratum.json"
 PUBLICATION_CUSTODY_NAME = "publication_custody.json"
 SNQI_ADVISORY_BOUNDARY = (
     "SNQI calibration failed under warn and remains advisory only; it is not a planner-ranking "
@@ -1790,6 +1800,18 @@ def _set_accepted_release_metadata(
     """Turn only the copied release metadata into an accepted derived result."""
     result_path = campaign_root / "release" / "release_result.json"
     result = dict(_read_json(result_path))
+    derivation = result.get("derivation")
+    derivation = dict(derivation) if isinstance(derivation, Mapping) else {}
+    derivation.update(
+        {
+            "mode": "preserved_rows_corrected_validator",
+            "producer_release_result_sha256": sha256_file(
+                campaign_root / "release" / "producer_release_result.rejected.json"
+            ),
+            "producer_release_status": producer_result.get("release_status"),
+            "snqi_claim_boundary": SNQI_ADVISORY_BOUNDARY,
+        }
+    )
     result.update(
         {
             "status": "benchmark_success",
@@ -1807,14 +1829,7 @@ def _set_accepted_release_metadata(
             "publication_bundle": dict(publication_descriptor),
             "release_acceptance": dict(acceptance),
             "full_release_acceptance": dict(acceptance),
-            "derivation": {
-                "mode": "preserved_rows_corrected_validator",
-                "producer_release_result_sha256": sha256_file(
-                    campaign_root / "release" / "producer_release_result.rejected.json"
-                ),
-                "producer_release_status": producer_result.get("release_status"),
-                "snqi_claim_boundary": SNQI_ADVISORY_BOUNDARY,
-            },
+            "derivation": derivation,
         }
     )
     _write_json(result_path, result)
@@ -1921,6 +1936,159 @@ def _write_derivation_receipt(  # noqa: PLR0913
     _write_json(campaign_root / DERIVATION_RECEIPT_RELATIVE, receipt)
 
 
+def _rewrite_embedded_publication_identity(
+    payload: Mapping[str, Any], *, contract: ErratumContract
+) -> dict[str, Any]:
+    """Rewrite only publication coordinates in one copied metadata object.
+
+    Returns:
+        A new mapping retaining execution provenance and scientific-manifest hashes.
+    """
+    updated = dict(payload)
+    updated.update(
+        {
+            "release_tag": contract.successor_github_release_tag,
+            "doi": contract.successor_version_doi,
+            "concept_doi": contract.concept_doi,
+            "version_doi": contract.successor_version_doi,
+            "metadata_path": ERRATUM_METADATA_RELATIVE,
+            "metadata_sha256": contract.metadata_sha256,
+        }
+    )
+    return updated
+
+
+def _apply_erratum_publication_identity(
+    campaign_root: Path,
+    *,
+    contract: ErratumContract,
+) -> dict[str, Any]:
+    """Materialize a successor identity without changing execution provenance.
+
+    Returns:
+        The rewritten resolved manifest used for publication export.
+    """
+    metadata_target = campaign_root / ERRATUM_METADATA_RELATIVE
+    metadata_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(contract.metadata_path, metadata_target)
+    if sha256_file(metadata_target).lower() != contract.metadata_sha256:
+        raise DerivedReleaseError("copied erratum metadata does not match its contract")
+
+    resolved_path = campaign_root / "release" / "release_manifest.resolved.json"
+    resolved = _read_json(resolved_path)
+    resolved["release_tag"] = contract.successor_github_release_tag
+    resolved["release_id"] = contract.successor_github_release_tag
+    provenance = resolved.get("provenance")
+    provenance = dict(provenance) if isinstance(provenance, Mapping) else {}
+    provenance.update(
+        {
+            "doi": contract.successor_version_doi,
+            "version_doi": contract.successor_version_doi,
+            "concept_doi": contract.concept_doi,
+            "version_record_id": contract.successor_version_doi.rsplit(".", 1)[-1],
+            "concept_record_id": contract.concept_doi.rsplit(".", 1)[-1],
+            "bundle_zenodo_metadata_path": ERRATUM_METADATA_RELATIVE,
+            "metadata_sha256": contract.metadata_sha256,
+            "scientific_source_sha": contract.source_sha,
+            "erratum_builder_sha": contract.builder_sha,
+        }
+    )
+    resolved["provenance"] = provenance
+    resolved["publication"] = {
+        "channel": provenance.get("publication_channel", "direct_zenodo_benchmark_dataset"),
+        "concept_doi": contract.concept_doi,
+        "version_doi": contract.successor_version_doi,
+        "concept_record_id": contract.concept_doi.rsplit(".", 1)[-1],
+        "version_record_id": contract.successor_version_doi.rsplit(".", 1)[-1],
+        "bundle_metadata_path": ERRATUM_METADATA_RELATIVE,
+        "metadata_sha256": contract.metadata_sha256,
+        "correction_scope": "derived_publication_metadata_only",
+        "predecessor_version_doi": contract.predecessor_version_doi,
+    }
+    resolved["erratum"] = {
+        "correction_id": contract.correction_id,
+        "correction_scope": "derived_publication_metadata_only",
+        "predecessor_version_doi": contract.predecessor_version_doi,
+        "predecessor_github_release_tag": contract.predecessor_github_release_tag,
+        "scientific_source_unchanged": True,
+        "simulation_rerun": False,
+    }
+    _write_json(resolved_path, resolved)
+
+    for relative in ("campaign_manifest.json", "manifest.json", "run_meta.json"):
+        path = campaign_root / relative
+        if not path.is_file():
+            continue
+        payload = _read_json(path)
+        payload["release_tag"] = contract.successor_github_release_tag
+        payload["doi"] = contract.successor_version_doi
+        payload["concept_doi"] = contract.concept_doi
+        benchmark_release = payload.get("benchmark_release")
+        if isinstance(benchmark_release, Mapping):
+            payload["benchmark_release"] = _rewrite_embedded_publication_identity(
+                benchmark_release, contract=contract
+            )
+        payload["publication_erratum"] = {
+            "correction_id": contract.correction_id,
+            "predecessor_version_doi": contract.predecessor_version_doi,
+            "source_sha": contract.source_sha,
+            "builder_sha": contract.builder_sha,
+            "simulation_rerun": False,
+        }
+        _write_json(path, payload)
+
+    result_path = campaign_root / "release" / "release_result.json"
+    result = _read_json(result_path)
+    result.update(
+        {
+            "release_tag": contract.successor_github_release_tag,
+            "doi": contract.successor_version_doi,
+            "version_doi": contract.successor_version_doi,
+            "concept_doi": contract.concept_doi,
+            "source_commit": contract.source_sha,
+            "publication_preflight_status": "pass",
+            "publication_preflight_violations": [],
+            "release_status": "ok",
+            "ranking_claims_admitted": False,
+        }
+    )
+    derivation = result.get("derivation")
+    derivation = dict(derivation) if isinstance(derivation, Mapping) else {}
+    derivation.update(
+        {
+            "builder_sha": contract.builder_sha,
+            "scientific_source_sha": contract.source_sha,
+            "simulation_rerun": False,
+            "correction_id": contract.correction_id,
+            "predecessor_version_doi": contract.predecessor_version_doi,
+        }
+    )
+    result["derivation"] = derivation
+    _write_json(result_path, result)
+    return resolved
+
+
+def _write_erratum_receipt(
+    campaign_root: Path,
+    *,
+    contract: ErratumContract,
+    predecessor_snapshot: Any,
+) -> dict[str, Any]:
+    """Write scientific-equality proof before the successor archive is built.
+
+    Returns:
+        The self-contained receipt payload.
+    """
+    successor_snapshot = snapshot_campaign(campaign_root, contract=contract)
+    receipt = build_erratum_receipt(
+        contract=contract,
+        predecessor=predecessor_snapshot,
+        successor=successor_snapshot,
+    )
+    _write_json(campaign_root / ERRATUM_RECEIPT_RELATIVE, receipt)
+    return receipt
+
+
 def _write_custody_receipt(
     publication_dir: Path,
     *,
@@ -1928,6 +2096,7 @@ def _write_custody_receipt(
     archive_path: Path,
     bundle_dir: Path,
     source_sha: str,
+    erratum_receipt: Mapping[str, Any] | None = None,
 ) -> None:
     """Bind the final archive outside the bundle, avoiding a checksum cycle."""
     payload = {
@@ -1948,6 +2117,22 @@ def _write_custody_receipt(
         "archive_self_digest_policy": "archive digest is external to the bundle; no cycle",
         "credentials": "not_recorded",
     }
+    if erratum_receipt is not None:
+        payload["erratum"] = {
+            "correction_id": erratum_receipt.get("correction_id"),
+            "correction_scope": erratum_receipt.get("correction_scope"),
+            "supersedes": erratum_receipt.get("supersedes"),
+            "successor": erratum_receipt.get("successor"),
+            "scientific_equality": erratum_receipt.get("scientific_equality"),
+            "embedded_receipt_path": (f"{bundle_name}/payload/{ERRATUM_RECEIPT_RELATIVE}"),
+            "embedded_receipt_sha256": sha256_file(
+                bundle_dir / "payload" / ERRATUM_RECEIPT_RELATIVE
+            ),
+            "archive_digest_scope": (
+                "detached custody receipt binds the complete archive; the embedded erratum "
+                "receipt cannot self-hash its containing archive"
+            ),
+        }
     _write_json(publication_dir / PUBLICATION_CUSTODY_NAME, payload)
 
 
@@ -2041,6 +2226,8 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     publication_name: str | None = None,
     preserved_receipt_source: Path | None = None,
     recovery_contract: RecoveryContract = DEFAULT_RECOVERY_CONTRACT,
+    erratum_contract: ErratumContract | None = None,
+    predecessor_archive: Path | None = None,
 ) -> dict[str, Any]:
     """Run the complete derived validation/build/promotion workflow.
 
@@ -2056,6 +2243,27 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     validator_repository_root = _assert_safe_directory(
         validator_repository_root, label="validator repository root"
     )
+    if (erratum_contract is None) != (predecessor_archive is None):
+        raise DerivedReleaseError(
+            "erratum contract and predecessor archive must be supplied together"
+        )
+    predecessor_snapshot = None
+    if erratum_contract is not None:
+        if erratum_contract.source_sha != recovery_contract.source_sha:
+            raise DerivedReleaseError("erratum and recovery source SHAs differ")
+        if erratum_contract.planner_arms != recovery_contract.arms:
+            raise DerivedReleaseError("erratum and recovery planner-arm counts differ")
+        if erratum_contract.episode_rows != recovery_contract.episode_rows:
+            raise DerivedReleaseError("erratum and recovery episode-row counts differ")
+        if erratum_contract.builder_sha != expected_validator_commit:
+            raise DerivedReleaseError("erratum builder SHA differs from the exact validator commit")
+        try:
+            predecessor_snapshot = snapshot_predecessor_archive(
+                predecessor_archive,  # type: ignore[arg-type]
+                contract=erratum_contract,
+            )
+        except ReleaseErratumError as exc:
+            raise DerivedReleaseError(str(exc)) from exc
     manifest_path = Path(manifest_path)
     if not manifest_path.is_absolute():
         manifest_path = source_repository_root / manifest_path
@@ -2209,6 +2417,24 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             "scientific_execution_changed": False,
             "simulation_rerun": False,
         }
+        erratum_receipt = None
+        if erratum_contract is not None:
+            resolved_manifest = _apply_erratum_publication_identity(
+                staging_campaign,
+                contract=erratum_contract,
+            )
+            publication_inputs["erratum_zenodo_metadata"] = {
+                "path": ERRATUM_METADATA_RELATIVE,
+                "sha256": erratum_contract.metadata_sha256,
+            }
+            try:
+                erratum_receipt = _write_erratum_receipt(
+                    staging_campaign,
+                    contract=erratum_contract,
+                    predecessor_snapshot=predecessor_snapshot,
+                )
+            except ReleaseErratumError as exc:
+                raise DerivedReleaseError(str(exc)) from exc
         derived_checksums = _write_derived_checksums(staging_campaign)
         _write_derivation_receipt(
             staging_campaign,
@@ -2264,6 +2490,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             archive_path=archive_path,
             bundle_dir=bundle_dir,
             source_sha=recovery_contract.source_sha,
+            erratum_receipt=erratum_receipt,
         )
         # Detect producer mutation before promotion.  This is deliberately the
         # same strict manifest check used before copying.
@@ -2327,6 +2554,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         "publication_reconciliation": publication_reconciliation,
         "validator": validator,
         "publication_inputs": publication_inputs,
+        "erratum_receipt": erratum_receipt,
     }
 
 
@@ -2359,6 +2587,16 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Single-member gzip containing the immutable pre-refresh receipt.",
     )
+    parser.add_argument(
+        "--erratum-contract",
+        type=Path,
+        help="Exact benchmark-release-erratum.v1 successor identity contract.",
+    )
+    parser.add_argument(
+        "--predecessor-archive",
+        type=Path,
+        help="Cold-downloaded immutable predecessor publication archive.",
+    )
     return parser
 
 
@@ -2372,6 +2610,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.recovery_contract is not None
             else DEFAULT_RECOVERY_CONTRACT
         )
+        if (args.erratum_contract is None) != (args.predecessor_archive is None):
+            raise DerivedReleaseError(
+                "--erratum-contract and --predecessor-archive must be supplied together"
+            )
+        erratum_contract = (
+            load_erratum_contract(
+                args.erratum_contract,
+                repository_root=args.validator_repository_root,
+            )
+            if args.erratum_contract is not None
+            else None
+        )
         result = build_derived_release(
             producer_root=args.producer_root,
             acceptance_root=acceptance_root,
@@ -2384,8 +2634,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             publication_name=args.publication_name,
             preserved_receipt_source=args.preserved_receipt,
             recovery_contract=recovery_contract,
+            erratum_contract=erratum_contract,
+            predecessor_archive=args.predecessor_archive,
         )
-    except (DerivedReleaseError, OSError, ValueError, PublicationPreflightError) as exc:
+    except (
+        DerivedReleaseError,
+        OSError,
+        ValueError,
+        PublicationPreflightError,
+        ReleaseErratumError,
+    ) as exc:
         print(json.dumps({"status": "rejected", "reason": str(exc)}, indent=2))
         return 2
     # Do not print absolute paths: publication output can live on a private

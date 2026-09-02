@@ -489,6 +489,28 @@ def _resolve_repo_file(value: object, *, repo_root: Path) -> Path | None:
     return resolved
 
 
+def _resolve_run_file(value: object, *, run_root: Path) -> Path | None:
+    """Resolve one explicitly run-local release input without following symlinks.
+
+    Returns:
+        A regular file beneath ``run_root``, or ``None`` when the value is absent
+        or unsafe.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    candidate = Path(value.strip())
+    if candidate.is_absolute() or ".." in candidate.parts:
+        return None
+    lexical = Path(run_root.absolute()) / candidate
+    if lexical.is_symlink() or any(parent.is_symlink() for parent in lexical.parents):
+        return None
+    resolved_root = run_root.resolve()
+    resolved = lexical.resolve()
+    if not resolved.is_relative_to(resolved_root) or not resolved.is_file():
+        return None
+    return resolved
+
+
 def _find_release_sha(payloads: list[object]) -> str | None:  # noqa: C901
     """Find an explicitly named 40-character source SHA in release metadata.
 
@@ -603,7 +625,7 @@ evidence.
 """
 
 
-def _resolve_release_publication_metadata(  # noqa: C901
+def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
     run_root: Path,
 ) -> _ReleasePublicationMetadata | None:
     """Resolve the metadata needed to make a benchmark bundle cold-verifiable.
@@ -637,10 +659,15 @@ def _resolve_release_publication_metadata(  # noqa: C901
     if citation_path is None:
         citation_path = _resolve_repo_file("CITATION.cff", repo_root=repo_root)
 
-    metadata_path = _resolve_repo_file(
-        provenance.get("zenodo_metadata_path") or provenance.get("metadata_path"),
-        repo_root=repo_root,
-    )
+    bundle_metadata_value = provenance.get("bundle_zenodo_metadata_path")
+    metadata_path = _resolve_run_file(bundle_metadata_value, run_root=run_root)
+    if bundle_metadata_value is not None and metadata_path is None:
+        raise ValueError("Release bundle-local Zenodo metadata path is unsafe or missing")
+    if metadata_path is None:
+        metadata_path = _resolve_repo_file(
+            provenance.get("zenodo_metadata_path") or provenance.get("metadata_path"),
+            repo_root=repo_root,
+        )
     if metadata_path is None:
         publication = resolved_manifest.get("publication")
         if isinstance(publication, Mapping):

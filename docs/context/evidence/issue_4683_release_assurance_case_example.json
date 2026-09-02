@@ -202,7 +202,7 @@
       "kind": "file",
       "manifest_field": "release_checklist_path",
       "path": "docs/RELEASE.md",
-      "sha256": "f09e933def169bc367bb3dd68a5854b0e7c361dbcdf05fe53859fbaa2379631c"
+      "sha256": "d0fdf5b717bffb5f541ff45499bf5f823e4f7ab56ea114750cee38b500786fc6"
     },
     {
       "description": "Citation metadata referenced by the release manifest.",

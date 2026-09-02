@@ -15,7 +15,7 @@ from typing import Any
 
 import numpy as np
 
-from robot_sf.baselines.interface import PlannerProtocol
+from robot_sf.baselines.interface import Observation, PlannerProtocol
 from robot_sf.benchmark.types import EpisodeRecord, MetricsBundle, ScenarioSpec
 
 
@@ -59,6 +59,13 @@ def _resolve_scenario_path(scenario_id: str | Path) -> Path:
     for match in scenarios_root.glob("**/*.yaml"):
         if match.stem == stem_query or match.name == str(candidate_path):
             return match.resolve()
+
+    if not scenarios_root.is_dir():
+        raise FileNotFoundError(
+            f"Scenario {scenario_id!r} could not be resolved: the installed package does "
+            "not ship the configs/scenarios asset tree. Install from a source checkout "
+            "or pass an explicit scenario file path."
+        )
 
     raise FileNotFoundError(
         f"Scenario {scenario_id!r} could not be resolved to a valid scenario YAML file."
@@ -343,6 +350,105 @@ def _planner_action_to_env_action(action: Any, planner: Any, env: Any) -> Any:
     )
 
 
+def _benchmark_observation_from_env(
+    env: Any,
+    previous_position: np.ndarray | None,
+) -> Observation | None:
+    """Build the canonical benchmark Observation from the env's simulator state.
+
+    Built-in baseline planners (``robot_sf.baselines``) consume the world-frame
+    ``Observation`` payload, not the learned-policy feature dictionary that
+    ``RobotEnv`` observations carry. Returns ``None`` when the environment does
+    not expose the simulator contract.
+
+    Returns:
+        The planner-facing canonical Observation payload, or ``None``.
+    """
+    simulator = getattr(env, "simulator", None)
+    if simulator is None:
+        return None
+    try:
+        robot_pose = simulator.robot_poses[0]
+        goal = simulator.goal_pos[0]
+        ped_positions = np.asarray(simulator.ped_pos, dtype=float)
+        ped_velocities = np.asarray(simulator.ped_vel, dtype=float)
+        dt = float(env.env_config.sim_config.time_per_step_in_secs)
+        radius = float(simulator.robots[0].config.radius)
+    except (AttributeError, IndexError, TypeError):
+        return None
+
+    position = np.asarray(robot_pose[0], dtype=float)
+    if previous_position is None:
+        velocity = np.zeros(2, dtype=float)
+    else:
+        velocity = (position - previous_position) / max(dt, 1e-9)
+
+    agents = [
+        {
+            "position": [float(x), float(y)],
+            "velocity": [float(vx), float(vy)],
+        }
+        for (x, y), (vx, vy) in zip(ped_positions, ped_velocities, strict=False)
+    ]
+    return Observation(
+        dt=dt,
+        robot={
+            "position": [float(position[0]), float(position[1])],
+            "velocity": [float(velocity[0]), float(velocity[1])],
+            "goal": [float(goal[0]), float(goal[1])],
+            "radius": radius,
+        },
+        agents=agents,
+        obstacles=_benchmark_obstacles_from_simulator(simulator),
+    )
+
+
+def _benchmark_obstacles_from_simulator(simulator: Any) -> list[list[float]]:
+    """Return static obstacle segments in the canonical PySocialForce format.
+
+    ``MapDefinition.obstacles_pysf`` stores segments as ``[x1, x2, y1, y2]``
+    and includes the map bounds.  Passing that representation through keeps
+    the built-in SocialForce planner's obstacle forces aligned with the
+    environment's pedestrian simulator.
+
+    Returns:
+        A JSON-friendly list of obstacle segments, or an empty list when the
+        simulator does not expose a map obstacle contract.
+    """
+    map_def = getattr(simulator, "map_def", None)
+    raw_obstacles = getattr(map_def, "obstacles_pysf", None)
+    if raw_obstacles is None:
+        return []
+    try:
+        obstacles: list[list[float]] = []
+        for segment in raw_obstacles:
+            values = np.asarray(segment, dtype=float).reshape(-1)
+            if values.size != 4:
+                return []
+            obstacles.append([float(value) for value in values])
+    except (TypeError, ValueError):
+        return []
+    return obstacles
+
+
+def _planner_uses_benchmark_observation(planner: Any) -> bool:
+    """Return whether a planner declares the built-in baseline observation contract.
+
+    The public facade keeps custom and dict-native step-method planners on the
+    raw environment observation path.  Baseline planner classes live under
+    ``robot_sf.baselines``; their optional ``obs_mode=dict`` configuration is
+    an explicit exception for native dictionary policies.
+    """
+    planner_module = getattr(type(planner), "__module__", "")
+    if not planner_module.startswith("robot_sf.baselines."):
+        return False
+    config = getattr(planner, "config", None)
+    configured_mode = (
+        config.get("obs_mode") if isinstance(config, Mapping) else getattr(config, "obs_mode", None)
+    )
+    return str(configured_mode).strip().lower() not in {"dict", "native_dict", "multi_input"}
+
+
 def _extract_action(planner: Any, obs: Any, env: Any) -> Any:
     """Generate and normalize an action from a planner, callable, or zeros.
 
@@ -398,7 +504,10 @@ def run_episode(
 
     Args:
         env: The Gymnasium simulation environment.
-        planner: Optional planner implementing :class:`PlannerProtocol` or a callable action generator.
+        planner: Optional planner implementing :class:`PlannerProtocol` or a callable action
+            generator. Step-method planners receive the canonical world-frame
+            :class:`~robot_sf.baselines.interface.Observation` built from the environment's
+            simulator state; callable planners receive the raw environment observation.
         max_steps: Maximum step limit before truncating the episode.
         seed: Seed to pass to ``env.reset()``. Defaults to ``env.applied_seed`` or 0.
 
@@ -421,15 +530,30 @@ def run_episode(
     done = False
     start_time = time.perf_counter()
     last_info = info or {}
+    previous_position: np.ndarray | None = None
+    use_benchmark_observation = planner is not None and _planner_uses_benchmark_observation(planner)
 
     while not done:
-        action = _extract_action(planner, obs, env)
+        # Explicit facade contract: canonical built-in baseline planners receive
+        # a world-frame Observation built from simulator state; callable-only,
+        # custom step-method, and dict-native planners receive the raw
+        # environment observation (learned-policy dictionaries).
+        planner_obs: Any = obs
+        benchmark_obs: Observation | None = None
+        if use_benchmark_observation:
+            benchmark_obs = _benchmark_observation_from_env(env, previous_position)
+            if benchmark_obs is not None:
+                planner_obs = benchmark_obs
+                robot_position = np.asarray(benchmark_obs.robot["position"], dtype=float)
+        action = _extract_action(planner, planner_obs, env)
         obs, reward, terminated, truncated, last_info = env.step(action)
         total_reward += float(reward)
         steps += 1
         if max_steps is not None and steps >= max_steps:
             truncated = True
         done = terminated or truncated
+        if use_benchmark_observation and benchmark_obs is not None:
+            previous_position = robot_position.copy()
 
     duration = time.perf_counter() - start_time
     metrics_values = _extract_metrics(last_info, steps, total_reward, duration)

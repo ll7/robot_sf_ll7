@@ -237,3 +237,60 @@ def test_make_env_invalid_scenario_type():
     """Verify make_env rejects unsupported scenario types."""
     with pytest.raises(TypeError, match="scenario must be a str, Path, or Mapping"):
         robot_sf.make_env(scenario=12345)
+
+
+def test_run_episode_adapts_builtin_planner_observations():
+    """Built-in baselines receive the canonical Observation (issue #8297)."""
+    from robot_sf.baselines.random_policy import RandomPlanner
+    from robot_sf.baselines.social_force import SocialForcePlanner
+
+    for planner in (RandomPlanner({}, seed=123), SocialForcePlanner({}, seed=456)):
+        env = robot_sf.make_env(seed=123)
+        try:
+            record = robot_sf.run_episode(env, planner=planner, max_steps=2, seed=123)
+            assert record.horizon <= 2
+        finally:
+            env.close()
+
+
+def test_run_episode_keeps_raw_observation_for_custom_step_planner():
+    """Custom step-method planners retain the raw Gymnasium observation contract."""
+    import numpy as np
+
+    class CustomPlanner:
+        received = None
+
+        def step(self, obs):
+            self.received = obs
+            return np.zeros(2, dtype=np.float32)
+
+    planner = CustomPlanner()
+    env = robot_sf.make_env(seed=123)
+    try:
+        robot_sf.run_episode(env, planner=planner, max_steps=1, seed=123)
+        assert isinstance(planner.received, dict)
+    finally:
+        env.close()
+
+
+def test_benchmark_observation_preserves_static_obstacles():
+    """Canonical baseline observations carry the simulator's obstacle segments."""
+    env = robot_sf.make_env(seed=123)
+    try:
+        env.reset(seed=123)
+        observation = robot_sf.api._benchmark_observation_from_env(env, None)
+        expected = [
+            [float(value) for value in segment] for segment in env.simulator.map_def.obstacles_pysf
+        ]
+        assert observation is not None
+        assert observation.obstacles == expected
+    finally:
+        env.close()
+
+
+def test_load_scenario_fails_closed_without_source_asset_tree(tmp_path, monkeypatch):
+    """The installed-package boundary fails closed with an actionable error."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(robot_sf.api, "_find_repo_root", lambda: tmp_path)
+    with pytest.raises(FileNotFoundError, match="source checkout"):
+        robot_sf.load_scenario("quickstart_demo")

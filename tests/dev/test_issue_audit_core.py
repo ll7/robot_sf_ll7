@@ -674,6 +674,26 @@ def test_blocked_triage_block_binds_reason_to_blocked_label() -> None:
     assert blocked_mutation["blocked_reason"] == ["blocked-triage-v1 reason block present"]
 
 
+def test_needs_triage_label_blocks_ready_promotion() -> None:
+    """An issue with needs-triage must never be promoted to state:ready."""
+    classification = classify_issue(
+        _issue(
+            200,
+            labels=["needs-triage"],
+            body="## Acceptance Criteria\n- [ ] Works correctly\n## Validation\n- Run tests",
+        ),
+        available_labels={"state:ready", "needs-triage"},
+    )
+
+    assert classification.classification == "blocked"
+    assert classification.blocker_evidence
+    assert not any(
+        mutation["operation"] == "add_label" and mutation["value"] == "state:ready"
+        for mutation in classification.mutations
+    )
+    assert any(item["kind"] == "triage" for item in classification.blocker_evidence)
+
+
 def test_audit_plan_reports_blocked_label_decision() -> None:
     """The plan exposes whether a blocked-label write was applied or declined."""
     plan = build_audit_plan(

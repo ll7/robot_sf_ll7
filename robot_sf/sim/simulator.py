@@ -33,6 +33,7 @@ import numpy as np
 from loguru import logger
 from pysocialforce import Simulator as PySFSimulator
 from pysocialforce.config import SimulatorConfig as PySFSimConfig
+from pysocialforce.config import obstacle_force_law_metadata
 from pysocialforce.force_trace import (
     ForceComputationResult,
     annotate_force_component,
@@ -47,8 +48,15 @@ if TYPE_CHECKING:
     from pysocialforce.scene import PedestrianStepDiagnostics
 
     from robot_sf.common.types import Line2D, PedPose, RobotAction, RobotPose, Vec2D
-    from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, SimulationSettings
-    from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
+    from robot_sf.gym_env.env_config import (
+        EnvSettings,
+        PedEnvSettings,
+        SimulationSettings,
+    )
+    from robot_sf.gym_env.unified_config import (
+        PedestrianSimulationConfig,
+        RobotSimulationConfig,
+    )
     from robot_sf.ped_ego.unicycle_drive import UnicycleAction, UnicycleDrivePedestrian
     from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
     from robot_sf.robot.robot_state import Robot
@@ -404,6 +412,7 @@ def _build_pysf_simulation(  # noqa: PLR0913
     pysf_config = PySFSimConfig()
     pysf_config.scene_config.dt_secs = config.time_per_step_in_secs
     pysf_config.scene_config.integration_scheme = config.pedestrian_integration_scheme
+    pysf_config.obstacle_force_config.law_version = getattr(config, "obstacle_force_law", None)
     _apply_ped_desired_speed_config(pysf_config, config)
     spawn_config = PedSpawnConfig(
         config.peds_per_area_m2,
@@ -614,6 +623,18 @@ class Simulator:
     def _oracle_trace_enabled(self) -> bool:
         """Return whether privileged force-transition capture is explicitly enabled."""
         return bool(getattr(self.config, "oracle_force_trace_enabled", False))
+
+    def obstacle_force_law_metadata(self) -> dict[str, Any]:
+        """Return the active fast-pysf obstacle-law metadata for this simulator."""
+        metadata_fn = getattr(self.pysf_sim, "obstacle_force_law_metadata", None)
+        if not callable(metadata_fn):
+            return obstacle_force_law_metadata(
+                getattr(self.config, "obstacle_force_law", None),
+                site="fast_pysf",
+                geometry_convention="map_line_endpoints_orthogonal_vector",
+                radius_convention="threshold_plus_agent_radius_sigma",
+            )
+        return dict(metadata_fn())
 
     def _oracle_route_indices(self) -> tuple[int | None, ...]:
         """Return best-effort route indices aligned with simulator pedestrian rows."""

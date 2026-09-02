@@ -1,9 +1,14 @@
 """Tests for SocNavBench-inspired planner adapters."""
 
+from itertools import pairwise
 from pathlib import Path
 
 import numpy as np
 import pytest
+from pysocialforce.config import (
+    LEGACY_SHIFTED_GRADIENT_V1,
+    SURFACE_DISTANCE_UNIT_NORMAL_V2,
+)
 
 from robot_sf.planner import socnav as _socnav_module
 from robot_sf.planner.socnav import (
@@ -264,6 +269,15 @@ def test_social_force_adapter():
     obs = _make_obs(goal=(2.0, 0.0), heading=0.0)
     v, _w = adapter.plan(obs)
     assert v >= 0.0
+
+
+def test_social_force_diagnostics_defaults_before_initialization():
+    """Diagnostics remain safe for protocol fixtures that bypass ``__init__``."""
+    adapter = SocialForcePlannerAdapter.__new__(SocialForcePlannerAdapter)
+
+    diagnostics = adapter.diagnostics()
+
+    assert diagnostics["obstacle_force_law"]["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
 
 
 def test_social_force_adapter_responds_to_pedestrian():
@@ -1599,3 +1613,81 @@ def test_social_force_obstacle_no_grid_returns_zero():
     robot_pos = np.array([0.0, 0.0])
     got = adapter._compute_obstacle_force(obs, robot_pos, 0.0, np.array([1.0, 0.0]), obs["robot"])
     assert np.array_equal(got, np.zeros(2))
+
+
+@_sf_available
+def test_social_force_obstacle_law_dispatch_preserves_legacy_before_corrected_comparison():
+    """The planner keeps its legacy point formula while the corrected law is opt-in."""
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(8.0, 0.0)),
+        obstacle_cells=[(0, 3)],
+        resolution=1.0,
+        origin=(-0.5, -0.5),
+    )
+    obs["occupancy_grid_meta_use_ego_frame"] = np.array([0.0], dtype=np.float32)
+    robot_pos = np.array([0.0, 0.0])
+    robot_vel = np.zeros(2, dtype=float)
+
+    legacy_adapter = SocialForcePlannerAdapter(SocNavPlannerConfig())
+    centers, radii = legacy_adapter._extract_obstacles_from_grid(obs, robot_pos, 0.0)
+    raw_distance = np.linalg.norm(robot_pos[np.newaxis, :] - centers, axis=1)
+    effective_offset = float(obs["robot"]["radius"][0]) + radii
+    shifted_distance = np.maximum(raw_distance - effective_offset, 1e-5)
+    legacy_expected = (
+        np.sum(
+            (robot_pos[np.newaxis, :] - centers) / shifted_distance[:, np.newaxis] ** 4,
+            axis=0,
+        )
+        * legacy_adapter.config.social_force_obstacle_factor
+    )
+    legacy_force = legacy_adapter._compute_obstacle_force(
+        obs, robot_pos, 0.0, robot_vel, obs["robot"]
+    )
+
+    np.testing.assert_allclose(legacy_force, legacy_expected, rtol=1e-12, atol=1e-12)
+    assert legacy_adapter.diagnostics()["obstacle_force_law"]["law_version"] == (
+        LEGACY_SHIFTED_GRADIENT_V1
+    )
+
+    corrected_adapter = SocialForcePlannerAdapter(
+        SocNavPlannerConfig(social_force_obstacle_law=SURFACE_DISTANCE_UNIT_NORMAL_V2)
+    )
+    corrected_force = corrected_adapter._compute_obstacle_force(
+        obs, robot_pos, 0.0, robot_vel, obs["robot"]
+    )
+    normal = (robot_pos[None, :] - centers) / raw_distance[:, None]
+    corrected_expected = np.sum(normal / shifted_distance[:, None] ** 3, axis=0) * (
+        corrected_adapter.config.social_force_obstacle_factor
+    )
+
+    np.testing.assert_allclose(corrected_force, corrected_expected, rtol=1e-12, atol=1e-12)
+    assert corrected_adapter.diagnostics()["obstacle_force_law"]["law_version"] == (
+        SURFACE_DISTANCE_UNIT_NORMAL_V2
+    )
+    assert not np.allclose(legacy_force, corrected_force)
+
+
+@_sf_available
+def test_social_force_corrected_obstacle_force_is_finite_and_monotonic_near_contact():
+    """Fixed cell geometry yields finite corrected forces that grow toward contact."""
+    adapter = SocialForcePlannerAdapter(
+        SocNavPlannerConfig(social_force_obstacle_law=SURFACE_DISTANCE_UNIT_NORMAL_V2)
+    )
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(8.0, 0.0)),
+        obstacle_cells=[(0, 3)],
+        resolution=1.0,
+        origin=(-0.5, -0.5),
+    )
+    obs["occupancy_grid_meta_use_ego_frame"] = np.array([0.0], dtype=np.float32)
+    magnitudes = []
+    for robot_x in (0.0, 0.5, 1.0, 1.5):
+        robot_pos = np.array([robot_x, 0.0])
+        obs["robot"]["position"] = robot_pos.astype(np.float32)
+        force = adapter._compute_obstacle_force(
+            obs, robot_pos, 0.0, np.zeros(2, dtype=float), obs["robot"]
+        )
+        assert np.all(np.isfinite(force))
+        magnitudes.append(float(np.linalg.norm(force)))
+
+    assert all(left < right for left, right in pairwise(magnitudes))

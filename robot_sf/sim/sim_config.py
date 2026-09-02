@@ -4,6 +4,7 @@ from dataclasses import dataclass, field, replace
 from math import ceil, isfinite, pi
 from typing import Any
 
+from pysocialforce.config import DEFAULT_OBSTACLE_FORCE_LAW, resolve_obstacle_force_law
 from pysocialforce.scene import normalize_integration_scheme
 
 from robot_sf.ped_npc.adversial_ped_force import AdversarialPedForceConfig
@@ -400,6 +401,9 @@ class SimulationSettings:
     debug_without_robot_movement: bool = False
     """Whether to disable robot movement in the simulator for debugging purposes"""
 
+    obstacle_force_law: str = DEFAULT_OBSTACLE_FORCE_LAW
+    """Versioned pedestrian obstacle-force law; defaults to the historical law."""
+
     @property
     def resolved_action_latency_steps(self) -> int:
         """Return the whole-step delay enforced by the environment action queue."""
@@ -422,6 +426,16 @@ class SimulationSettings:
                 12,
             ),
         }
+
+    @property
+    def obstacle_force_law_version(self) -> str:
+        """Return the configured obstacle law through the versioned alias."""
+        return self.obstacle_force_law
+
+    @obstacle_force_law_version.setter
+    def obstacle_force_law_version(self, value: Any) -> None:
+        """Set the obstacle law through the versioned alias."""
+        self.obstacle_force_law = resolve_obstacle_force_law(value)
 
     def _validate_action_latency_config(self) -> None:
         """Reject ambiguous or non-realizable action-latency configuration values."""
@@ -463,6 +477,7 @@ class SimulationSettings:
         self.pedestrian_integration_scheme = normalize_integration_scheme(
             self.pedestrian_integration_scheme
         )
+        self.obstacle_force_law = resolve_obstacle_force_law(self.obstacle_force_law)
         # Check that the pedestrian speed multiplier is positive
         if self.peds_speed_mult <= 0:
             raise ValueError("Pedestrian speed mustn't be negative or zero!")

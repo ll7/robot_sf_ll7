@@ -4,6 +4,11 @@ from math import atan2, pi
 from typing import Any
 
 import numpy as np
+from pysocialforce.config import (
+    LEGACY_SHIFTED_GRADIENT_V1,
+    obstacle_force_law_metadata,
+    resolve_obstacle_force_law,
+)
 
 from robot_sf.planner import socnav as _socnav
 from robot_sf.sim.pedestrian_model_variants import _pairwise_social_force_kernel
@@ -197,6 +202,9 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             return np.zeros(2, dtype=float)
 
         robot_radius = float(self._as_1d_float(robot_state.get("radius", [0.0]), pad=1)[0])
+        law_version = resolve_obstacle_force_law(
+            getattr(self.config, "social_force_obstacle_law", None)
+        )
         # Vectorized point-obstacle force broadcast (issue #5412). The scalar loop
         # built a degenerate single-point line ``(cx, cy, cx, cy)`` per obstacle
         # and called ``sf_forces.obstacle_force``. That degenerate line exercises
@@ -211,6 +219,10 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         # kernel, which the degenerate point line never reaches, so it is dropped.
         ped_radius = robot_radius + np.asarray(radii, dtype=float)  # (M,)
         diff = (robot_pos[np.newaxis, :] - centers).astype(float)  # (M, 2)
+        if law_version != LEGACY_SHIFTED_GRADIENT_V1:
+            force = sf_forces.surface_distance_unit_normal_force_vectors(diff, ped_radius)
+            return np.sum(force, axis=0) * float(self.config.social_force_obstacle_factor)
+
         raw_dist = np.sqrt(diff[:, 0] ** 2 + diff[:, 1] ** 2)
         obst_dist = np.maximum(raw_dist - ped_radius, 1e-5)
         finite = np.isfinite(obst_dist)
@@ -425,7 +437,19 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
 
     def diagnostics(self) -> dict[str, Any]:
         """Return execution diagnostics."""
-        return {"planner_type": "SocialForcePlannerAdapter"}
+        return {
+            "planner_type": "SocialForcePlannerAdapter",
+            "obstacle_force_law": self.obstacle_force_law_metadata(),
+        }
+
+    def obstacle_force_law_metadata(self) -> dict[str, str]:
+        """Return planner obstacle-law metadata without making an evidence claim."""
+        return obstacle_force_law_metadata(
+            getattr(getattr(self, "config", None), "social_force_obstacle_law", None),
+            site="socnav_social_force",
+            geometry_convention="occupancy_cell_centers",
+            radius_convention="cell_derived_radius_plus_robot_radius",
+        )
 
 
 def make_social_force_policy(config: SocNavPlannerConfig | None = None) -> SocNavPlannerPolicy:

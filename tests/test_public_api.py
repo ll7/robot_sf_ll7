@@ -237,3 +237,25 @@ def test_make_env_invalid_scenario_type():
     """Verify make_env rejects unsupported scenario types."""
     with pytest.raises(TypeError, match="scenario must be a str, Path, or Mapping"):
         robot_sf.make_env(scenario=12345)
+
+
+def test_run_episode_adapts_builtin_planner_observations():
+    """Built-in baselines receive the canonical Observation (issue #8297)."""
+    from robot_sf.baselines.random_policy import RandomPlanner
+    from robot_sf.baselines.social_force import SocialForcePlanner
+
+    for planner in (RandomPlanner({}, seed=123), SocialForcePlanner({}, seed=456)):
+        env = robot_sf.make_env(seed=123)
+        try:
+            record = robot_sf.run_episode(env, planner=planner, max_steps=2, seed=123)
+            assert record.horizon <= 2
+        finally:
+            env.close()
+
+
+def test_load_scenario_fails_closed_without_source_asset_tree(tmp_path, monkeypatch):
+    """The installed-package boundary fails closed with an actionable error."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(robot_sf.api, "_find_repo_root", lambda: tmp_path)
+    with pytest.raises(FileNotFoundError, match="source checkout"):
+        robot_sf.load_scenario("quickstart_demo")

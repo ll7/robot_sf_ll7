@@ -19,7 +19,7 @@ The `robot_sf` package provides lightweight, lazily resolved top-level exports f
 ### Episode Execution
 
 - **`robot_sf.run_episode(env, *, planner=None, max_steps=None, seed=None)`**:
-  Executes a single seeded episode on the provided Gymnasium environment, stepping the optional planner (conforming to `PlannerProtocol`) or default actions, and returns an `EpisodeRecord`. Planners with a `step()` method receive the canonical world-frame `Observation`; callable-only planners receive the raw environment observation. `max_steps`, when supplied, must be a positive integer. Planner objects must provide a callable `step()` method or themselves be callable; invalid objects are rejected rather than replaced with random actions. Episode IDs follow the repository's stable `<scenario>--<seed>` identity convention.
+  Executes a single seeded episode on the provided Gymnasium environment, stepping the optional planner (conforming to `PlannerProtocol`) or default actions, and returns an `EpisodeRecord`. Built-in baseline planners with the canonical observation contract receive a world-frame `Observation` including static obstacle segments; callable-only, custom step-method, and explicitly dict-native planners receive the raw environment observation. `max_steps`, when supplied, must be a positive integer. Planner objects must provide a callable `step()` method or themselves be callable; invalid objects are rejected rather than replaced with random actions. Episode IDs follow the repository's stable `<scenario>--<seed>` identity convention.
 
 ### Core Data Structures and Protocols
 

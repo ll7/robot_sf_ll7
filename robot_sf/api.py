@@ -399,7 +399,54 @@ def _benchmark_observation_from_env(
             "radius": radius,
         },
         agents=agents,
+        obstacles=_benchmark_obstacles_from_simulator(simulator),
     )
+
+
+def _benchmark_obstacles_from_simulator(simulator: Any) -> list[list[float]]:
+    """Return static obstacle segments in the canonical PySocialForce format.
+
+    ``MapDefinition.obstacles_pysf`` stores segments as ``[x1, x2, y1, y2]``
+    and includes the map bounds.  Passing that representation through keeps
+    the built-in SocialForce planner's obstacle forces aligned with the
+    environment's pedestrian simulator.
+
+    Returns:
+        A JSON-friendly list of obstacle segments, or an empty list when the
+        simulator does not expose a map obstacle contract.
+    """
+    map_def = getattr(simulator, "map_def", None)
+    raw_obstacles = getattr(map_def, "obstacles_pysf", None)
+    if raw_obstacles is None:
+        return []
+    try:
+        obstacles: list[list[float]] = []
+        for segment in raw_obstacles:
+            values = np.asarray(segment, dtype=float).reshape(-1)
+            if values.size != 4:
+                return []
+            obstacles.append([float(value) for value in values])
+    except (TypeError, ValueError):
+        return []
+    return obstacles
+
+
+def _planner_uses_benchmark_observation(planner: Any) -> bool:
+    """Return whether a planner declares the built-in baseline observation contract.
+
+    The public facade keeps custom and dict-native step-method planners on the
+    raw environment observation path.  Baseline planner classes live under
+    ``robot_sf.baselines``; their optional ``obs_mode=dict`` configuration is
+    an explicit exception for native dictionary policies.
+    """
+    planner_module = getattr(type(planner), "__module__", "")
+    if not planner_module.startswith("robot_sf.baselines."):
+        return False
+    config = getattr(planner, "config", None)
+    configured_mode = (
+        config.get("obs_mode") if isinstance(config, Mapping) else getattr(config, "obs_mode", None)
+    )
+    return str(configured_mode).strip().lower() not in {"dict", "native_dict", "multi_input"}
 
 
 def _extract_action(planner: Any, obs: Any, env: Any) -> Any:
@@ -484,15 +531,16 @@ def run_episode(
     start_time = time.perf_counter()
     last_info = info or {}
     previous_position: np.ndarray | None = None
+    use_benchmark_observation = planner is not None and _planner_uses_benchmark_observation(planner)
 
     while not done:
-        # Explicit facade contract: planners with a step() method (the
-        # PlannerProtocol shape used by the built-in baselines) receive the
-        # canonical world-frame Observation built from the environment's
-        # simulator state; callable planners receive the raw environment
-        # observation (learned-policy dictionaries).
+        # Explicit facade contract: canonical built-in baseline planners receive
+        # a world-frame Observation built from simulator state; callable-only,
+        # custom step-method, and dict-native planners receive the raw
+        # environment observation (learned-policy dictionaries).
         planner_obs: Any = obs
-        if planner is not None and hasattr(planner, "step"):
+        benchmark_obs: Observation | None = None
+        if use_benchmark_observation:
             benchmark_obs = _benchmark_observation_from_env(env, previous_position)
             if benchmark_obs is not None:
                 planner_obs = benchmark_obs
@@ -504,7 +552,7 @@ def run_episode(
         if max_steps is not None and steps >= max_steps:
             truncated = True
         done = terminated or truncated
-        if planner is not None and hasattr(planner, "step") and benchmark_obs is not None:
+        if use_benchmark_observation and benchmark_obs is not None:
             previous_position = robot_position.copy()
 
     duration = time.perf_counter() - start_time

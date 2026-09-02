@@ -103,6 +103,48 @@ def test_goal_timeout_boundary_accepts_exact_signed_provenance_exclusion(
     assert rejections == []
 
 
+@pytest.mark.parametrize("varying_field", ["scenario_id", "seed"])
+def test_goal_timeout_boundary_rejects_duplicate_identity_rows(
+    tmp_path: Path, varying_field: str
+) -> None:
+    """One exclusion cannot collapse two rows sharing an arm and episode ID."""
+    payload = tmp_path / "payload"
+    arm = "guarded_ppo__differential_drive"
+    episode_id = "scenario--132--identity"
+    first = {
+        "episode_id": episode_id,
+        "scenario_id": "scenario-a",
+        "seed": 1,
+        "event_ledger": {"exact_events": {"goal_reached": True, "timeout": True}},
+    }
+    second = dict(first)
+    second[varying_field] = "scenario-b" if varying_field == "scenario_id" else 2
+    _write(
+        payload / "runs" / arm / "episodes.jsonl",
+        json.dumps(first) + "\n" + json.dumps(second) + "\n",
+    )
+    _write(
+        payload / "run_meta.json",
+        json.dumps(
+            {
+                "goal_timeout_boundary": {
+                    "status": "excluded_from_timing_interpretation",
+                    "excluded_row_count": 1,
+                    "excluded_rows": [{"arm": arm, "episode_id": episode_id}],
+                    "raw_episode_rows_unchanged": True,
+                    "timing_evidence_fabricated": False,
+                    "note": "Exact event ordering is unavailable.",
+                    "policy": "Exclude reviewed rows from timing interpretation.",
+                }
+            }
+        ),
+    )
+
+    _count, rejections = _check_goal_timeout_boundary(payload)
+
+    assert any("duplicate ambiguous goal+timeout identity" in item for item in rejections)
+
+
 @pytest.mark.parametrize("drift", ["missing", "extra", "mutated"])
 def test_goal_timeout_boundary_rejects_incomplete_or_mutating_exclusion(
     tmp_path: Path, drift: str

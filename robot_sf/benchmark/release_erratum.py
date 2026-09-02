@@ -85,6 +85,8 @@ class ScientificSnapshot:
     episode_identity_manifest_sha256: str
     component_leaf_manifest_sha256: str
     canonical_row_manifest_sha256: str
+    episode_file_sha256: Mapping[str, str]
+    episode_file_manifest_sha256: str
     per_arm: Mapping[str, Mapping[str, Any]]
     _rows: Mapping[tuple[str, str, int, str], _RowDigests] = field(repr=False, compare=False)
 
@@ -99,6 +101,8 @@ class ScientificSnapshot:
             "episode_identity_manifest_sha256": self.episode_identity_manifest_sha256,
             "component_leaf_manifest_sha256": self.component_leaf_manifest_sha256,
             "canonical_row_manifest_sha256": self.canonical_row_manifest_sha256,
+            "episode_file_sha256": dict(self.episode_file_sha256),
+            "episode_file_manifest_sha256": self.episode_file_manifest_sha256,
             "per_arm": dict(self.per_arm),
         }
 
@@ -483,8 +487,12 @@ def _validate_archive_member(member: tarfile.TarInfo) -> None:
         raise ReleaseErratumError("predecessor archive contains a negative member size")
 
 
-def _read_episode_rows(stream: BinaryIO, *, arm: str) -> Iterable[Mapping[str, Any]]:
+def _read_episode_rows(
+    stream: BinaryIO, *, arm: str, digest: Any | None = None
+) -> Iterable[Mapping[str, Any]]:
     for line_number, raw_line in enumerate(stream, start=1):
+        if digest is not None:
+            digest.update(raw_line)
         if len(raw_line) > _MAX_EPISODE_ROW_BYTES:
             raise ReleaseErratumError(f"{arm} episodes.jsonl contains an oversized row")
         if not raw_line.strip():
@@ -500,8 +508,11 @@ def _read_episode_rows(stream: BinaryIO, *, arm: str) -> Iterable[Mapping[str, A
         yield row
 
 
-def _snapshot_from_arm_rows(  # noqa: C901
-    arm_rows: Mapping[str, Iterable[Mapping[str, Any]]], *, contract: ErratumContract
+def _snapshot_from_arm_rows(  # noqa: C901, PLR0912
+    arm_rows: Mapping[str, Iterable[Mapping[str, Any]]],
+    *,
+    contract: ErratumContract,
+    episode_file_hashers: Mapping[str, Any],
 ) -> ScientificSnapshot:
     validate_erratum_contract_identity(contract)
     rows: dict[tuple[str, str, int, str], _RowDigests] = {}
@@ -563,6 +574,11 @@ def _snapshot_from_arm_rows(  # noqa: C901
 
     if len(per_arm_rows) != contract.planner_arms:
         raise ReleaseErratumError("scientific snapshot planner-arm count is incorrect")
+    if set(episode_file_hashers) != set(per_arm_rows):
+        raise ReleaseErratumError("scientific snapshot episode-file digest set is incorrect")
+    episode_file_sha256 = {arm: hasher.hexdigest() for arm, hasher in episode_file_hashers.items()}
+    if any(_SHA256_RE.fullmatch(digest) is None for digest in episode_file_sha256.values()):
+        raise ReleaseErratumError("scientific snapshot episode-file digest is invalid")
     if len(rows) != contract.episode_rows:
         raise ReleaseErratumError("scientific snapshot episode-row count is incorrect")
     if len(scenarios) != contract.scenario_count or len(seeds) != contract.seed_count:
@@ -600,6 +616,10 @@ def _snapshot_from_arm_rows(  # noqa: C901
         canonical_row_manifest_sha256=_manifest_digest(
             [list(identity) + [digests.row_sha256] for identity, digests in ordered_rows]
         ),
+        episode_file_sha256={arm: episode_file_sha256[arm] for arm in sorted(episode_file_sha256)},
+        episode_file_manifest_sha256=_manifest_digest(
+            [[arm, episode_file_sha256[arm]] for arm in sorted(episode_file_sha256)]
+        ),
         per_arm=per_arm,
         _rows=rows,
     )
@@ -622,6 +642,7 @@ def snapshot_campaign(campaign_root: Path, *, contract: ErratumContract) -> Scie
             "successor campaign contains episode files outside runs/<arm>/episodes.jsonl"
         )
     arm_rows: dict[str, Iterable[Mapping[str, Any]]] = {}
+    episode_file_hashers: dict[str, Any] = {}
     open_streams: list[BinaryIO] = []
     try:
         for path in episode_files:
@@ -631,8 +652,15 @@ def snapshot_campaign(campaign_root: Path, *, contract: ErratumContract) -> Scie
             arm = safe_path.parent.name
             stream = safe_path.open("rb")
             open_streams.append(stream)
-            arm_rows[arm] = _read_episode_rows(stream, arm=arm)
-        return _snapshot_from_arm_rows(arm_rows, contract=contract)
+            hasher = hashlib.sha256()
+            episode_file_hashers[arm] = hasher
+            arm_rows[arm] = _read_episode_rows(stream, arm=arm, digest=hasher)
+        snapshot = _snapshot_from_arm_rows(
+            arm_rows,
+            contract=contract,
+            episode_file_hashers=episode_file_hashers,
+        )
+        return snapshot
     finally:
         for stream in open_streams:
             stream.close()
@@ -688,6 +716,7 @@ def snapshot_predecessor_archive(  # noqa: C901, PLR0912
         if len(roots) != 1:
             raise ReleaseErratumError("predecessor archive must have exactly one bundle root")
         arm_rows: dict[str, Iterable[Mapping[str, Any]]] = {}
+        episode_file_hashers: dict[str, Any] = {}
         streams: list[BinaryIO] = []
         try:
             for arm, member in sorted(episode_members.items()):
@@ -695,8 +724,14 @@ def snapshot_predecessor_archive(  # noqa: C901, PLR0912
                 if stream is None:
                     raise ReleaseErratumError("predecessor episode member is unreadable")
                 streams.append(stream)
-                arm_rows[arm] = _read_episode_rows(stream, arm=arm)
-            return _snapshot_from_arm_rows(arm_rows, contract=contract)
+                hasher = hashlib.sha256()
+                episode_file_hashers[arm] = hasher
+                arm_rows[arm] = _read_episode_rows(stream, arm=arm, digest=hasher)
+            return _snapshot_from_arm_rows(
+                arm_rows,
+                contract=contract,
+                episode_file_hashers=episode_file_hashers,
+            )
         finally:
             for stream in streams:
                 stream.close()
@@ -724,12 +759,24 @@ def compare_scientific_snapshots(
         for key in predecessor_keys & successor_keys
         if predecessor._rows[key].component_sha256 != successor._rows[key].component_sha256
     )
-    if missing or unexpected or changed_rows or changed_components:
+    changed_episode_files = sorted(
+        arm
+        for arm in set(predecessor.episode_file_sha256) & set(successor.episode_file_sha256)
+        if predecessor.episode_file_sha256[arm] != successor.episode_file_sha256[arm]
+    )
+    if (
+        missing
+        or unexpected
+        or changed_rows
+        or changed_components
+        or predecessor.episode_file_sha256 != successor.episode_file_sha256
+    ):
         summary = {
             "missing": [list(item) for item in missing[:10]],
             "unexpected": [list(item) for item in unexpected[:10]],
             "changed_rows": [list(item) for item in changed_rows[:10]],
             "changed_components": [list(item) for item in changed_components[:10]],
+            "changed_episode_files": changed_episode_files[:10],
         }
         raise ReleaseErratumError(
             "predecessor/successor scientific leaves differ: " + json.dumps(summary, sort_keys=True)
@@ -741,12 +788,15 @@ def compare_scientific_snapshots(
         "identity_set_equal": True,
         "canonical_rows_equal": True,
         "component_leaves_equal": True,
+        "episode_file_bytes_equal": True,
         "simulation_rerun": False,
         "episode_rows": predecessor.episode_rows,
         "planner_arms": predecessor.planner_arms,
         "episode_identity_manifest_sha256": predecessor.episode_identity_manifest_sha256,
         "component_leaf_manifest_sha256": predecessor.component_leaf_manifest_sha256,
         "canonical_row_manifest_sha256": predecessor.canonical_row_manifest_sha256,
+        "episode_file_sha256": dict(predecessor.episode_file_sha256),
+        "episode_file_manifest_sha256": predecessor.episode_file_manifest_sha256,
     }
 
 
@@ -866,6 +916,7 @@ def _validate_published_erratum_verdict(receipt: Mapping[str, Any]) -> None:
         "identity_set_equal": True,
         "canonical_rows_equal": True,
         "component_leaves_equal": True,
+        "episode_file_bytes_equal": True,
         "simulation_rerun": False,
     }
     if any(equality.get(key) != value for key, value in expected_equality.items()):
@@ -995,11 +1046,13 @@ def _published_erratum_contract(  # noqa: C901
 def _assert_published_equality_digests(
     scientific: Mapping[str, Any], equality: Mapping[str, Any]
 ) -> None:
-    """Require the equality summary to repeat the canonical scientific digests."""
+    """Require equality evidence to repeat all scientific leaf digests."""
     keys = (
         "episode_identity_manifest_sha256",
         "component_leaf_manifest_sha256",
         "canonical_row_manifest_sha256",
+        "episode_file_manifest_sha256",
+        "episode_file_sha256",
         "episode_rows",
         "planner_arms",
     )
@@ -1311,5 +1364,7 @@ def validate_erratum_receipt_against_campaign(
         "episode_identity_manifest_sha256": observed.episode_identity_manifest_sha256,
         "component_leaf_manifest_sha256": observed.component_leaf_manifest_sha256,
         "canonical_row_manifest_sha256": observed.canonical_row_manifest_sha256,
+        "episode_file_sha256": dict(observed.episode_file_sha256),
+        "episode_file_manifest_sha256": observed.episode_file_manifest_sha256,
         "ranking_claims_admitted": False,
     }

@@ -230,6 +230,10 @@ def test_predecessor_and_successor_scientific_leaves_match(tmp_path: Path) -> No
     assert equality["status"] == "identical"
     assert equality["episode_rows"] == 8
     assert receipt["scientific_identity"]["component_leaf_manifest_sha256"]
+    assert receipt["scientific_identity"]["episode_file_sha256"] == dict(
+        successor.episode_file_sha256
+    )
+    assert receipt["scientific_equality"]["episode_file_bytes_equal"] is True
     assert receipt["derivation"] == {
         "builder_sha": BUILDER_SHA,
         "validator_sha": BUILDER_SHA,
@@ -239,6 +243,31 @@ def test_predecessor_and_successor_scientific_leaves_match(tmp_path: Path) -> No
     }
     assert receipt["corrected_verdict"]["ranking_claims_admitted"] is False
     assert receipt["scientific_canonicalization"]["schema"] == SCIENTIFIC_CANONICALIZATION
+
+
+def test_scientific_equality_rejects_byte_different_episode_file_with_same_rows(
+    tmp_path: Path,
+) -> None:
+    """Whitespace-only JSONL rewrites cannot pass a metadata-only erratum."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _contract(archive)
+    predecessor = snapshot_predecessor_archive(archive, contract=contract)
+
+    path = campaign / "runs" / "goal__differential_drive" / "episodes.jsonl"
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    path.write_text(
+        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    successor = snapshot_campaign(campaign, contract=contract)
+
+    assert predecessor.canonical_row_manifest_sha256 == successor.canonical_row_manifest_sha256
+    assert predecessor.episode_file_sha256 != successor.episode_file_sha256
+    with pytest.raises(ReleaseErratumError, match="scientific leaves differ"):
+        compare_scientific_snapshots(predecessor, successor)
 
 
 def test_scientific_equality_distinguishes_nonfinite_float_categories(tmp_path: Path) -> None:
@@ -314,6 +343,46 @@ def test_cold_erratum_receipt_rejects_tampered_successor_row(tmp_path: Path) -> 
     rows = [json.loads(line) for line in episodes.read_text(encoding="utf-8").splitlines()]
     rows[0]["metrics"]["collisions"] = 99
     episodes.write_text("".join(f"{_canonical_json(row)}\n" for row in rows), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match="differ from its receipt"):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+
+
+def test_cold_erratum_receipt_rejects_byte_different_successor_episode_file(
+    tmp_path: Path,
+) -> None:
+    """Cold intake rejects formatting drift even when canonical rows still match."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_text(
+        json.dumps(
+            build_erratum_receipt(
+                contract=contract,
+                predecessor=snapshot,
+                successor=snapshot,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    episodes = campaign / "runs/goal__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in episodes.read_text(encoding="utf-8").splitlines()]
+    episodes.write_text(
+        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
+        encoding="utf-8",
+    )
 
     with pytest.raises(ReleaseErratumError, match="differ from its receipt"):
         validate_erratum_receipt_against_campaign(

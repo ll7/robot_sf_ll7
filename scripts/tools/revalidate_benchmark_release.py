@@ -1283,7 +1283,13 @@ def _find_unresolved_goal_timeout_rows(
             episode_id = record.get("episode_id")
             if not isinstance(episode_id, str) or not episode_id.strip():
                 raise DerivedReleaseError("goal+timeout row is missing an episode identity")
-            observed.add((episodes_path.parent.name, episode_id.strip()))
+            identity = (episodes_path.parent.name, episode_id.strip())
+            if identity in observed:
+                raise DerivedReleaseError(
+                    "publication episode projection contains duplicate unresolved "
+                    f"goal+timeout identity {identity!r}"
+                )
+            observed.add(identity)
             planned[episodes_path].append((line_index, line, record))
     return planned, observed
 

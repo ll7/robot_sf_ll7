@@ -1885,7 +1885,14 @@ def _ambiguous_goal_timeout_rows(
                     f"{episodes_path}:{line_number}: ambiguous row lacks episode_id"
                 )
                 continue
-            observed.add((episodes_path.parent.name, episode_id))
+            identity = (episodes_path.parent.name, episode_id)
+            if identity in observed:
+                identity_errors.append(
+                    f"{episodes_path}:{line_number}: duplicate ambiguous goal+timeout "
+                    f"identity {identity!r}"
+                )
+            else:
+                observed.add(identity)
     return observed, rejections, identity_errors
 
 
@@ -1902,7 +1909,7 @@ def _check_goal_timeout_boundary(payload_dir: Path) -> tuple[int, list[str]]:
     declaration_errors.extend(identity_errors)
 
     if not declaration_present:
-        return len(observed), row_rejections
+        return len(observed), row_rejections + declaration_errors
     rejections = list(declaration_errors)
     missing = sorted(observed - declared)
     unexpected = sorted(declared - observed)

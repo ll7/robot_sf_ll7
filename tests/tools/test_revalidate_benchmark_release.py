@@ -1229,6 +1229,39 @@ def test_publication_projection_rejects_unexpected_goal_timeout_row_before_writi
     assert episodes.read_text(encoding="utf-8") == original
 
 
+@pytest.mark.parametrize("varying_field", ["scenario_id", "seed"])
+def test_publication_projection_rejects_duplicate_boundary_identity_rows(
+    tmp_path: Path, varying_field: str
+) -> None:
+    """Recovery must reject duplicate boundary identities before any exclusion is written."""
+    campaign = tmp_path / "campaign"
+    arm = "guarded_ppo__differential_drive"
+    episode_id = "francis2023_parallel_traffic--132--2bf83ad03db6559e"
+    first = {
+        "episode_id": episode_id,
+        "scenario_id": "scenario-a",
+        "seed": 1,
+        "status": "success",
+        "termination_reason": "success",
+        "metrics": {"success": 1.0},
+        "outcome": {"route_complete": True, "timeout_event": True},
+        "event_ledger": {"exact_events": {"goal_reached": True, "timeout": True}},
+    }
+    second = dict(first)
+    second[varying_field] = "scenario-b" if varying_field == "scenario_id" else 2
+    episodes = campaign / "runs" / arm / "episodes.jsonl"
+    original = json.dumps(first, sort_keys=True) + "\n" + json.dumps(second, sort_keys=True) + "\n"
+    _write(episodes, original)
+
+    with pytest.raises(recovery.DerivedReleaseError, match="duplicate unresolved"):
+        recovery._record_publication_goal_timeout_boundaries_without_row_mutation(
+            campaign,
+            expected_rows={(arm, episode_id)},
+        )
+    assert episodes.read_text(encoding="utf-8") == original
+    assert not (campaign / "run_meta.json").exists()
+
+
 def test_publication_projection_rejects_inconsistent_goal_timeout_semantics(
     tmp_path: Path,
 ) -> None:

@@ -248,7 +248,7 @@ def evaluate_interaction_event_counts(
     counts: Mapping[str, int],
     minimum_event_counts: Mapping[str, int],
 ) -> dict[str, Any]:
-    """Classify each interaction denominator against its preregistered floor.
+    """Classify independent interaction-episode counts against preregistered floors.
 
     Returns:
         Overall status and one observed/minimum row per interaction class.

@@ -37,6 +37,16 @@ def _track_set(tracks: tuple[EthUcyTrack, ...]) -> EthUcyTrackSet:
     )
 
 
+def _resolved_context(times: np.ndarray) -> RealismInteractionContext:
+    """Build explicit empty-scene context for a no-robot-interaction fixture."""
+
+    return RealismInteractionContext(
+        robot_time_s=times,
+        robot_positions=np.column_stack((np.full_like(times, -10.0), np.full_like(times, -10.0))),
+        scene_geometry=RealismSceneGeometry(bounds_m=((-20.0, -20.0), (20.0, 20.0))),
+    )
+
+
 def test_segmenter_recovers_free_and_crossing_windows_from_synthetic_tracks() -> None:
     """A planted perpendicular encounter is counted separately from free walking."""
 
@@ -63,6 +73,7 @@ def test_segmenter_recovers_free_and_crossing_windows_from_synthetic_tracks() ->
 
     result = segment_interactions(
         tracks,
+        context=_resolved_context(times),
         config=InteractionSegmentationConfig(
             frame_window_s=0.8,
             frame_stride_s=0.8,
@@ -77,6 +88,163 @@ def test_segmenter_recovers_free_and_crossing_windows_from_synthetic_tracks() ->
     assert result.counts["free_walking"] >= 1
     crossing_windows = [window for window in result.windows if window.label == "crossing_conflict"]
     assert crossing_windows[0].track_ids == (1, 2)
+
+
+def test_event_floors_deduplicate_overlapping_interaction_windows() -> None:
+    """Overlapping windows from one encounter count as one independent event."""
+
+    times = np.arange(0.0, 4.01, 0.2)
+    track_set = _track_set(
+        (
+            EthUcyTrack(
+                pedestrian_id=1,
+                time_s=times,
+                positions=np.column_stack((times - 2.0, np.zeros_like(times))),
+            ),
+            EthUcyTrack(
+                pedestrian_id=2,
+                time_s=times,
+                positions=np.column_stack((np.zeros_like(times), times - 2.0)),
+            ),
+        )
+    )
+    segmentation = segment_interactions(
+        track_set,
+        config=InteractionSegmentationConfig(
+            frame_window_s=0.8,
+            frame_stride_s=0.4,
+            crossing_distance_m=0.8,
+            ped_interaction_distance_m=0.5,
+        ),
+    )
+    minimums = dict.fromkeys(INTERACTION_CLASSES, 0)
+    minimums["crossing_conflict"] = 2
+
+    scorecard = build_dataset_scorecard(
+        dataset_id="fixture/known-mix",
+        config=RealismMetricConfig(),
+        rmse_metrics=None,
+        fundamental_diagram=None,
+        lane_formation=None,
+        reference_source="synthetic fixture only",
+        interaction_segmentation=segmentation,
+        interaction_minimum_event_counts=minimums,
+    )
+
+    interaction = scorecard.metrics["interaction_conditioned_segmentation"]
+    assert segmentation.counts["crossing_conflict"] > 1
+    assert segmentation.event_counts["crossing_conflict"] == 1
+    assert interaction["event_count_status"]["rows"]["crossing_conflict"] == {
+        "observed": 1,
+        "minimum": 2,
+        "status": "insufficient_events",
+    }
+
+
+def test_stationary_windows_are_excluded_instead_of_free_walking() -> None:
+    """A stationary track lacks the motion evidence required for free walking."""
+
+    times = np.arange(0.0, 3.21, 0.2)
+    result = segment_interactions(
+        _track_set(
+            (
+                EthUcyTrack(
+                    pedestrian_id=1,
+                    time_s=times,
+                    positions=np.zeros((times.shape[0], 2)),
+                ),
+            )
+        ),
+        config=InteractionSegmentationConfig(frame_window_s=0.8, frame_stride_s=0.4),
+    )
+
+    assert result.status == "empty"
+    assert result.counts["free_walking"] == 0
+    assert result.excluded_window_counts["insufficient_motion_evidence"] > 0
+
+
+def test_context_unresolvable_windows_are_excluded_instead_of_free_walking() -> None:
+    """A moving track without robot/scene context cannot prove free walking."""
+
+    times = np.arange(0.0, 3.21, 0.2)
+    result = segment_interactions(
+        _track_set(
+            (
+                EthUcyTrack(
+                    pedestrian_id=1,
+                    time_s=times,
+                    positions=np.column_stack((times, np.zeros_like(times))),
+                ),
+            )
+        ),
+        config=InteractionSegmentationConfig(frame_window_s=0.8, frame_stride_s=0.4),
+    )
+
+    assert result.status == "empty"
+    assert result.counts["free_walking"] == 0
+    assert result.excluded_window_counts["insufficient_context"] > 0
+
+
+def test_incomplete_track_windows_cannot_form_interaction_events() -> None:
+    """A center sample is not enough to admit a track into a complete window."""
+
+    full_times = np.arange(0.0, 4.01, 0.2)
+    partial_times = np.arange(1.8, 2.21, 0.2)
+    result = segment_interactions(
+        _track_set(
+            (
+                EthUcyTrack(
+                    pedestrian_id=1,
+                    time_s=full_times,
+                    positions=np.column_stack((full_times - 2.0, np.zeros_like(full_times))),
+                ),
+                EthUcyTrack(
+                    pedestrian_id=2,
+                    time_s=partial_times,
+                    positions=np.column_stack((np.zeros_like(partial_times), partial_times - 2.0)),
+                ),
+            )
+        ),
+        config=InteractionSegmentationConfig(
+            frame_window_s=0.8,
+            frame_stride_s=0.8,
+            crossing_distance_m=0.8,
+            ped_interaction_distance_m=0.5,
+        ),
+    )
+
+    assert result.counts["crossing_conflict"] == 0
+    assert all(2 not in window.track_ids for window in result.windows)
+
+
+def test_separating_opposing_tracks_are_not_crossing_conflicts() -> None:
+    """Opposing headings with increasing separation are not crossing encounters."""
+
+    times = np.arange(1.0, 3.01, 0.2)
+    result = segment_interactions(
+        _track_set(
+            (
+                EthUcyTrack(
+                    pedestrian_id=1,
+                    time_s=times,
+                    positions=np.column_stack((0.5 - times, np.zeros_like(times))),
+                ),
+                EthUcyTrack(
+                    pedestrian_id=2,
+                    time_s=times,
+                    positions=np.column_stack((-0.5 + times, np.zeros_like(times))),
+                ),
+            )
+        ),
+        config=InteractionSegmentationConfig(
+            frame_window_s=0.8,
+            frame_stride_s=0.8,
+            crossing_distance_m=2.0,
+            ped_interaction_distance_m=0.5,
+        ),
+    )
+
+    assert result.counts["crossing_conflict"] == 0
 
 
 def test_segmenter_labels_a_co_moving_cluster_as_group() -> None:
@@ -236,6 +404,7 @@ def test_scorecard_exposes_per_class_rows_and_event_floor_status() -> None:
     )
     segmentation = segment_interactions(
         track_set,
+        context=_resolved_context(times),
         config=InteractionSegmentationConfig(frame_window_s=0.8, frame_stride_s=0.8),
     )
     contract = load_realism_validation_contract(
@@ -283,6 +452,7 @@ def test_track_set_scorecard_runs_segmentation_without_external_side_effects() -
     scorecard = run_realism_validation_from_track_set(
         dataset_id="fixture/known-mix",
         track_set=track_set,
+        interaction_context=_resolved_context(times),
         interaction_minimum_event_counts=dict.fromkeys(INTERACTION_CLASSES, 1),
     )
 

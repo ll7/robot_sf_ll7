@@ -20,16 +20,20 @@ explicit before any real-data result can influence a research direction.
 - Versioned metadata contract: `configs/benchmark/realism_validation_contract.v1.yaml`.
 - Interaction-window segmenter and typed context/result records:
   `robot_sf/benchmark/pedestrian_realism_validation.py`.
-- Per-class rows, pooled counts, and event-floor status in the existing realism scorecard and
-  Markdown renderer.
+- Per-class rows, diagnostic window counts, independent event counts, and event-floor status in
+  the existing realism scorecard and Markdown renderer. Overlapping or touching windows with the
+  same label and participant tracks count as one event episode for floor evaluation.
 - Synthetic tests with planted free-walking, pedestrian-pedestrian, obstacle-avoidance,
   robot-approach, crossing-conflict, overtaking, and group fixtures where the relevant context is
   available. Missing robot or trusted obstacle context remains explicitly non-inferable.
 
 The seven labels are `free_walking`, `ped_ped_interaction`, `obstacle_avoidance`, `robot_approach`,
 `crossing_conflict`, `overtaking`, and `group`. A deterministic precedence order resolves windows
-that satisfy more than one predicate. The segmenter is descriptive trajectory-window analysis; it
-does not infer human intent or establish model quality.
+that satisfy more than one predicate. Only tracks covering the complete window are considered;
+windows without sufficient movement or caller-supplied robot/scene context are excluded instead of
+being labeled `free_walking`. Crossing requires opposing tracks that are closing or at their
+predicted closest approach. The segmenter is descriptive trajectory-window analysis; it does not
+infer human intent or establish model quality.
 
 ## Frozen validation contract
 
@@ -40,8 +44,8 @@ The shipped YAML declares:
 - constant velocity, `social_force_default`, and the registered HSF model variants as baseline arms;
 - trajectory RMSE, fundamental-diagram, lane-formation, speed-distribution, and proxemic-
   distribution metric families;
-- per-class minimum event counts, with sparse classes reported as `insufficient_events` rather than
-  pooled into an apparent success;
+- per-class minimum independent event counts, with sparse classes reported as
+  `insufficient_events` rather than pooled into an apparent success;
 - a held-out-only promotion rule compared with `social_force_default`, including a maximum allowed
   free-walking regression and required interaction classes.
 

@@ -470,8 +470,8 @@ class InteractionSegmentationConfig:
     The segmenter is intentionally conservative.  A frame window is assigned one
     primary class using the fixed precedence in ``_INTERACTION_LABEL_PRECEDENCE``;
     the evidence fields preserve the participating track ids.  Missing robot or
-    obstacle context never causes an inferred ``robot_approach`` or
-    ``obstacle_avoidance`` label.
+    obstacle context never causes an inferred context-dependent label, and it
+    prevents an otherwise unclassified window from being called ``free_walking``.
     """
 
     frame_window_s: float = 0.8
@@ -622,7 +622,12 @@ class InteractionWindow:
 
 @dataclass(frozen=True, slots=True)
 class InteractionSegmentationResult:
-    """Fail-closed segmentation result with explicit per-class denominators."""
+    """Fail-closed segmentation result with window and event denominators.
+
+    ``counts`` retains the diagnostic number of labeled windows.  ``event_counts``
+    deduplicates overlapping or touching windows with the same label and participant
+    tracks, and is the denominator used for preregistered event floors.
+    """
 
     scene_id: str
     status: str
@@ -630,6 +635,13 @@ class InteractionSegmentationResult:
     counts: dict[str, int]
     config: dict[str, float | int]
     blockers: tuple[str, ...] = ()
+    excluded_window_counts: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def event_counts(self) -> dict[str, int]:
+        """Return independent interaction-episode counts derived from the windows."""
+
+        return _independent_interaction_event_counts(self.windows)
 
     def to_dict(self) -> dict[str, Any]:
         """Return the scorecard-facing JSON representation."""
@@ -637,15 +649,20 @@ class InteractionSegmentationResult:
         return {
             "schema_version": "interaction_conditioned_segmentation.v1",
             "claim_boundary": (
-                "synthetic/real trajectory-window labels for descriptive realism stratification; "
-                "no human-behavior or benchmark-ranking claim"
+                "complete moving synthetic/real trajectory-window labels for descriptive realism "
+                "stratification; insufficient-context windows are excluded; no human-behavior or "
+                "benchmark-ranking claim"
             ),
             "scene_id": self.scene_id,
             "status": self.status,
             "window_count": len(self.windows),
             "counts": {label: int(self.counts.get(label, 0)) for label in INTERACTION_CLASSES},
+            "event_counts": {
+                label: int(self.event_counts.get(label, 0)) for label in INTERACTION_CLASSES
+            },
             "config": dict(self.config),
             "blockers": list(self.blockers),
+            "excluded_window_counts": dict(self.excluded_window_counts),
             "windows": [window.to_dict() for window in self.windows],
         }
 
@@ -669,7 +686,7 @@ def segment_interactions(
     context: RealismInteractionContext | None = None,
     scene_id: str | None = None,
 ) -> InteractionSegmentationResult:
-    """Assign one conservative interaction label to each complete track window.
+    """Assign one conservative interaction label to each complete moving track window.
 
     The segmenter consumes any parsed ETH/UCY or SDD-like track set exposing a
     ``tracks`` sequence with ``pedestrian_id``, ``time_s``, and ``positions``.
@@ -679,8 +696,10 @@ def segment_interactions(
 
     Returns:
         A deterministic, denominator-aware segmentation result.  ``not_available``
-        is returned for an absent track set and ``empty`` when no complete windows
-        can be formed.
+        is returned for an absent track set and ``empty`` when no complete moving
+        windows can be formed.  Incomplete or insufficient-motion windows are
+        excluded and reported in ``excluded_window_counts`` rather than labeled
+        ``free_walking``.
     """
 
     cfg = config or InteractionSegmentationConfig()
@@ -713,6 +732,11 @@ def segment_interactions(
     global_end = max(float(times[-1]) for times, _positions, _track_id in track_arrays)
     starts = _segmentation_window_starts(global_start, global_end, cfg)
     windows: list[InteractionWindow] = []
+    excluded_window_counts = {
+        "incomplete_track_coverage": 0,
+        "insufficient_motion_evidence": 0,
+        "insufficient_context": 0,
+    }
     for start_time_s in starts:
         end_time_s = start_time_s + cfg.frame_window_s
         center_time_s = start_time_s + 0.5 * cfg.frame_window_s
@@ -729,13 +753,21 @@ def segment_interactions(
         ]
         active_states = [state for state in states if state is not None]
         if not active_states:
+            excluded_window_counts["incomplete_track_coverage"] += 1
             continue
-        label, track_ids, evidence = _classify_interaction_window(
+        classified = _classify_interaction_window(
             active_states,
             config=cfg,
             context=context,
             horizon_s=cfg.frame_window_s,
         )
+        if classified is None:
+            if not _states_have_observed_motion(active_states, config=cfg):
+                excluded_window_counts["insufficient_motion_evidence"] += 1
+            else:
+                excluded_window_counts["insufficient_context"] += 1
+            continue
+        label, track_ids, evidence = classified
         window = InteractionWindow(
             scene_id=resolved_scene_id,
             start_time_s=start_time_s,
@@ -754,6 +786,7 @@ def segment_interactions(
         counts=counts,
         config=cfg.to_dict(),
         blockers=tuple(blockers),
+        excluded_window_counts=excluded_window_counts,
     )
 
 
@@ -771,7 +804,7 @@ def _segmentation_scene_id(track_set: TrackSet | None) -> str:
 def _segmentation_context_blockers(
     context: RealismInteractionContext | None,
 ) -> list[str]:
-    """Describe unavailable optional context without changing labels.
+    """Describe unavailable context required for conservative classification.
 
     Returns:
         Human-readable blockers for context-dependent labels.
@@ -780,7 +813,7 @@ def _segmentation_context_blockers(
     blockers: list[str] = []
     if context is None or context.robot_positions is None:
         blockers.append("robot_approach requires a caller-supplied robot trajectory")
-    if context is None or context.scene_geometry is None or not context.scene_geometry.obstacles:
+    if context is None or context.scene_geometry is None:
         blockers.append("obstacle_avoidance requires caller-supplied static obstacle geometry")
     return blockers
 
@@ -845,26 +878,19 @@ def _interpolate_segmentation_state(
     center_time_s: float,
     end_time_s: float,
 ) -> _InteractionTrackState | None:
-    """Interpolate one track when it is present at the window centre.
+    """Interpolate one track only when it covers the complete window.
 
     Returns:
-        The interpolated state, or ``None`` when the track is absent at centre time.
+        The interpolated state, or ``None`` when the track does not cover both
+        window endpoints.
     """
 
-    if center_time_s < times[0] or center_time_s > times[-1]:
+    if start_time_s < times[0] or end_time_s > times[-1]:
         return None
     position = _interpolate_position(times, positions, center_time_s)
     velocity = _track_velocity_at(times, positions, center_time_s)
-    start_position = (
-        _interpolate_position(times, positions, start_time_s)
-        if times[0] <= start_time_s <= times[-1]
-        else None
-    )
-    end_position = (
-        _interpolate_position(times, positions, end_time_s)
-        if times[0] <= end_time_s <= times[-1]
-        else None
-    )
+    start_position = _interpolate_position(times, positions, start_time_s)
+    end_position = _interpolate_position(times, positions, end_time_s)
     return _InteractionTrackState(
         track_id=track_id,
         center_time_s=float(center_time_s),
@@ -914,11 +940,13 @@ def _classify_interaction_window(
     config: InteractionSegmentationConfig,
     context: RealismInteractionContext | None,
     horizon_s: float,
-) -> tuple[str, tuple[int, ...], tuple[str, ...]]:
+) -> tuple[str, tuple[int, ...], tuple[str, ...]] | None:
     """Apply the fixed primary-label precedence to one time window.
 
     Returns:
-        The primary label, participating track ids, and evidence notes.
+        The primary label, participating track ids, and evidence notes, or
+        ``None`` when the window lacks sufficient motion evidence for a positive
+        label.
     """
 
     robot_ids = _robot_approach_ids(states, context, config=config, horizon_s=horizon_s)
@@ -942,7 +970,7 @@ def _classify_interaction_window(
         return (
             "crossing_conflict",
             crossing_pair,
-            ("opposing headings with predicted close approach",),
+            ("opposing headings closing or at predicted closest approach",),
         )
 
     overtaking_pair = _first_overtaking_pair(states, config=config)
@@ -965,7 +993,72 @@ def _classify_interaction_window(
             ("close pedestrian pair with relative motion",),
         )
 
+    if not _states_have_observed_motion(states, config=config):
+        return None
+    if not _free_walking_context_available(context):
+        return None
     return "free_walking", tuple(state.track_id for state in states), ()
+
+
+def _state_has_observed_motion(
+    state: _InteractionTrackState,
+    *,
+    config: InteractionSegmentationConfig,
+) -> bool:
+    """Return whether one state has enough finite motion for free walking."""
+
+    speed = float(np.linalg.norm(state.velocity))
+    return speed > 1e-12 and speed >= config.minimum_speed_mps
+
+
+def _states_have_observed_motion(
+    states: Sequence[_InteractionTrackState],
+    *,
+    config: InteractionSegmentationConfig,
+) -> bool:
+    """Return whether every state has enough motion evidence."""
+
+    return all(_state_has_observed_motion(state, config=config) for state in states)
+
+
+def _free_walking_context_available(context: RealismInteractionContext | None) -> bool:
+    """Return whether context can rule out unobserved robot/obstacle interactions."""
+
+    return (
+        context is not None
+        and context.robot_time_s is not None
+        and context.robot_positions is not None
+        and context.scene_geometry is not None
+    )
+
+
+def _independent_interaction_event_counts(
+    windows: Sequence[InteractionWindow],
+) -> dict[str, int]:
+    """Count connected runs of same-label, same-participant windows.
+
+    Consecutive windows may overlap because the segmentation stride can be shorter
+    than the frame window.  A connected run of overlapping or touching windows is
+    one descriptive event episode; a temporal gap starts a new episode.
+
+    Returns:
+        One independent event count per interaction class.
+    """
+
+    counts = dict.fromkeys(INTERACTION_CLASSES, 0)
+    grouped: dict[tuple[str, tuple[int, ...]], list[InteractionWindow]] = {}
+    for window in windows:
+        signature = (window.label, tuple(sorted(window.track_ids)))
+        grouped.setdefault(signature, []).append(window)
+    for (label, _track_ids), group in grouped.items():
+        previous_end: float | None = None
+        for window in sorted(group, key=lambda candidate: candidate.start_time_s):
+            if previous_end is None or window.start_time_s > previous_end + 1e-9:
+                counts[label] += 1
+            previous_end = (
+                window.end_time_s if previous_end is None else max(previous_end, window.end_time_s)
+            )
+    return counts
 
 
 def _pairwise_states(
@@ -1040,14 +1133,21 @@ def _first_crossing_pair(
 
     minimum_cosine = math.cos(math.radians(config.crossing_heading_min_deg))
     for first, second in _pairwise_states(states):
-        distance, closest_distance, _time, heading_cosine, first_speed, second_speed, _closing = (
-            _pair_geometry(first, second, horizon_s=horizon_s)
-        )
+        (
+            distance,
+            closest_distance,
+            _time,
+            heading_cosine,
+            first_speed,
+            second_speed,
+            closing_dot,
+        ) = _pair_geometry(first, second, horizon_s=horizon_s)
         if (
             heading_cosine is not None
             and heading_cosine <= minimum_cosine
             and max(first_speed, second_speed) >= config.minimum_speed_mps
             and min(distance, closest_distance) <= config.crossing_distance_m
+            and closing_dot <= 0.0
         ):
             return first.track_id, second.track_id
     return None
@@ -1987,7 +2087,8 @@ def build_dataset_scorecard(  # noqa: PLR0913 - explicit metric families are con
         speed_distribution: Speed-distribution distance mapping (or ``None``).
         proxemic_distribution: Proxemic-distribution distance mapping (or ``None``).
         interaction_segmentation: Optional interaction-window result or serialized mapping.
-        interaction_minimum_event_counts: Optional contract floors used to mark sparse classes.
+        interaction_minimum_event_counts: Optional independent-event floors used to mark sparse
+            classes.  The segmentation result must provide ``event_counts`` when floors are used.
 
     Returns:
         A :class:`RealismScorecard` with aggregated statistics.
@@ -2049,8 +2150,8 @@ def build_dataset_scorecard(  # noqa: PLR0913 - explicit metric families are con
         if not isinstance(counts, Mapping):
             raise ValueError("interaction_segmentation must contain a counts mapping")
         if interaction_minimum_event_counts is not None:
-            interaction_metric["event_count_status"] = _interaction_event_count_status(
-                counts,
+            _set_interaction_event_count_status(
+                interaction_metric,
                 interaction_minimum_event_counts,
             )
         metrics["interaction_conditioned_segmentation"] = interaction_metric
@@ -2827,22 +2928,28 @@ def render_scorecard_markdown(scorecard: RealismScorecard) -> str:
         ]
     interaction = sc["metrics"].get("interaction_conditioned_segmentation")
     if isinstance(interaction, dict):
+        excluded_counts = interaction.get("excluded_window_counts", {})
+        excluded_window_count = (
+            sum(excluded_counts.values()) if isinstance(excluded_counts, Mapping) else 0
+        )
         lines += [
             "## Interaction-Conditioned Segmentation",
             "",
             f"- status: `{interaction.get('status', 'empty')}`",
             f"- windows: {interaction.get('window_count', 0)}",
-            "- labels are primary window classes; sparse classes remain explicit:",
+            f"- excluded windows: {excluded_window_count}",
+            "- counts are diagnostic windows; floors use independent event episodes:",
             "",
-            "| class | observed windows | minimum | status |",
+            "| class | observed events | minimum | status |",
             "| --- | ---: | ---: | --- |",
         ]
         counts = interaction.get("counts", {})
+        event_counts = interaction.get("event_counts", counts)
         floor_status = interaction.get("event_count_status", {})
         floor_rows = floor_status.get("rows", {}) if isinstance(floor_status, dict) else {}
         for label in INTERACTION_CLASSES:
             row = floor_rows.get(label, {})
-            observed = row.get("observed", counts.get(label, 0))
+            observed = row.get("observed", event_counts.get(label, counts.get(label, 0)))
             minimum = row.get("minimum", "—")
             row_status = row.get("status", "not_evaluated")
             lines.append(f"| `{label}` | {observed} | {minimum} | `{row_status}` |")
@@ -2995,6 +3102,24 @@ def _interaction_event_count_status(
         else "insufficient_events"
     )
     return {"status": status, "rows": rows}
+
+
+def _set_interaction_event_count_status(
+    interaction_metric: dict[str, Any],
+    minimum_event_counts: Mapping[str, int],
+) -> None:
+    """Attach floor status using independent event counts to a scorecard mapping."""
+
+    event_counts = interaction_metric.get("event_counts")
+    if not isinstance(event_counts, Mapping):
+        raise ValueError(
+            "interaction_segmentation must contain an event_counts mapping when "
+            "interaction floors are evaluated"
+        )
+    interaction_metric["event_count_status"] = _interaction_event_count_status(
+        event_counts,
+        minimum_event_counts,
+    )
 
 
 def _gridded_crowd_from_tracks(

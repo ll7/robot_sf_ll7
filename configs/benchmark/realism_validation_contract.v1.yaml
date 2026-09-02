@@ -34,6 +34,7 @@ metric_families:
   - proxemic_distribution_distance
 
 minimum_event_counts:
+  # Floors use independent event episodes, not overlapping segmentation windows.
   free_walking: 20
   ped_ped_interaction: 10
   obstacle_avoidance: 10

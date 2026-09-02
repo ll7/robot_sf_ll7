@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from tests.metamorphic.support import (
     BASE_MAP,
+    assert_trace_byte_identical,
     assert_trace_equal,
     capture_episode,
     make_env,
@@ -51,3 +52,4 @@ def test_randomized_simulator_identity_labels_do_not_change_actor_trace() -> Non
 
     assert baseline_ids.isdisjoint(randomized_ids)
     assert_trace_equal(baseline, randomized)
+    assert_trace_byte_identical(baseline, randomized)

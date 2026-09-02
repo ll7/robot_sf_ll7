@@ -7,6 +7,7 @@ without making a benchmark or changing simulator behavior.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -290,6 +291,123 @@ def assert_trace_equal(
                 raise AssertionError(
                     f"first divergence: step={step_index} field={field} max_abs_error={error:.9g}"
                 )
+
+
+def _canonical_json(value: Any) -> Any:
+    """Return a strictly JSON-encodable structure with sorted, typed containers."""
+    if isinstance(value, dict):
+        return {str(key): _canonical_json(value[key]) for key in sorted(value, key=str)}
+    if isinstance(value, (list, tuple)):
+        return [_canonical_json(item) for item in value]
+    if isinstance(value, np.ndarray):
+        array = np.ascontiguousarray(value)
+        return {
+            "__ndarray__": {
+                "dtype": array.dtype.str,
+                "shape": list(array.shape),
+                "sha256_c_order": hashlib.sha256(array.tobytes(order="C")).hexdigest(),
+            }
+        }
+    if isinstance(value, np.generic):
+        return _canonical_json(value.item())
+    if value is None or isinstance(value, (str, bool, int, float)):
+        return value
+    raise TypeError(f"info value {type(value).__name__} is not canonically encodable")
+
+
+def _array_identity(array: np.ndarray) -> tuple[str, tuple[int, ...], bytes]:
+    """Return dtype string, shape, and C-order raw bytes of one array."""
+    contiguous = np.ascontiguousarray(np.asarray(array))
+    return contiguous.dtype.str, tuple(contiguous.shape), contiguous.tobytes(order="C")
+
+
+def _first_byte_mismatch(expected_bytes: bytes, actual_bytes: bytes) -> int | None:
+    """Return the first differing byte offset, or None when identical."""
+    for offset, (expected_byte, actual_byte) in enumerate(
+        zip(expected_bytes, actual_bytes, strict=False)
+    ):
+        if expected_byte != actual_byte:
+            return offset
+    if len(expected_bytes) != len(actual_bytes):
+        return min(len(expected_bytes), len(actual_bytes))
+    return None
+
+
+def assert_trace_byte_identical(
+    expected: EpisodeTrace,
+    actual: EpisodeTrace,
+    *,
+    compare_infos: bool = True,
+) -> None:
+    """Require exact representation identity of actor-visible outputs.
+
+    Unlike :func:`assert_trace_equal`, this comparison is byte-exact: the
+    observation dtype, shape, and C-order byte sequence must match, and the
+    JSON-serializable info payload must serialize identically. Numeric
+    closeness never substitutes for representation identity here.
+    """
+    if len(expected.observations) != len(actual.observations):
+        raise AssertionError("byte identity divergence: trace_length differs")
+    for step_index, (expected_obs, actual_obs) in enumerate(
+        zip(expected.observations, actual.observations, strict=True)
+    ):
+        expected_fields = set(expected_obs)
+        actual_fields = set(actual_obs)
+        if expected_fields != actual_fields:
+            raise AssertionError(
+                "byte identity divergence: "
+                f"step={step_index} "
+                f"fields_expected={sorted(expected_fields)} "
+                f"fields_actual={sorted(actual_fields)}"
+            )
+        for field in sorted(expected_fields):
+            expected_dtype, expected_shape, expected_bytes = _array_identity(expected_obs[field])
+            actual_dtype, actual_shape, actual_bytes = _array_identity(actual_obs[field])
+            mismatch = (
+                expected_dtype != actual_dtype
+                or expected_shape != actual_shape
+                or _first_byte_mismatch(expected_bytes, actual_bytes) is not None
+            )
+            if mismatch:
+                offset = (
+                    _first_byte_mismatch(expected_bytes, actual_bytes)
+                    if expected_dtype == actual_dtype and expected_shape == actual_shape
+                    else None
+                )
+                raise AssertionError(
+                    "byte identity divergence: "
+                    f"step={step_index} field={field} "
+                    f"dtype_expected={expected_dtype} dtype_actual={actual_dtype} "
+                    f"shape_expected={expected_shape} shape_actual={actual_shape} "
+                    f"first_differing_byte={offset}"
+                )
+        if not compare_infos:
+            continue
+        expected_info = expected.infos[step_index]
+        actual_info = actual.infos[step_index]
+        try:
+            expected_payload = json.dumps(
+                _canonical_json(dict(expected_info)),
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            actual_payload = json.dumps(
+                _canonical_json(dict(actual_info)),
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+        except (TypeError, ValueError) as exc:
+            raise AssertionError(
+                f"byte identity divergence: step={step_index} info not canonically encodable: {exc}"
+            ) from exc
+        if expected_payload != actual_payload:
+            raise AssertionError(
+                "byte identity divergence: "
+                f"step={step_index} field=info "
+                f"expected={expected_payload[:200]} actual={actual_payload[:200]}"
+            )
 
 
 def read_recording(path: Path, *, row_keys: Sequence[str]) -> tuple[list[str], EpisodeTrace]:

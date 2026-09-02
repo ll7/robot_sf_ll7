@@ -55,14 +55,20 @@ and downstream tooling.
 | `robot.radius` | `(1,)` | Robot radius |
 | `goal.current` | `(2,)` | Current goal position |
 | `goal.next` | `(2,)` | Next goal position (or zeros if none) |
-| `pedestrians.positions` | `(max_pedestrians, 2)` | Ped positions, sorted by distance |
+| `pedestrians.positions` | `(max_pedestrians, 2)` | Pedestrian positions, sorted by distance |
 | `pedestrians.velocities` | `(max_pedestrians, 2)` | Ped velocities in robot frame |
 | `pedestrians.radius` | `(1,)` | Ped radius |
 | `pedestrians.count` | `(1,)` | Count of visible pedestrians |
+| `pedestrians.track_id` | `(max_pedestrians,)` | Optional episode-local observation-derived IDs; `-1` means padded or unavailable |
 | `map.size` | `(2,)` | Map width/height capped to 50m |
 | `sim.timestep` | `(1,)` | Simulation step duration in seconds |
 
 `max_pedestrians` is derived from `SimulationSettings.max_total_pedestrians` or defaults to 64.
+The default ordering remains the legacy closest-first order.  Set
+`RobotSimulationConfig.observation_visibility.ordering_tie_break` to `"stable"` to use a
+stable distance/content-key order with the source index as the final tie-break.  Set
+`include_track_ids=True` to declare and emit `pedestrians.track_id`; the channel is absent
+when disabled, so existing observations and learned checkpoints keep their original shape.
 
 ### Frame Semantics
 
@@ -84,8 +90,9 @@ by `robot_sf/gym_env/robot_env.py`. Example: `robot.position` becomes `robot_pos
 ## Opt-in Observation-Derived Pedestrian Tracking
 
 `robot_sf/sensor/pedestrian_tracking.py` provides a default-off tracking side channel for
-prediction experiments. It does not change `DEFAULT_GYM` or `SOCNAV_STRUCT` observations.
-Callers provide a `PedestrianObservationSnapshot` containing only observed positions,
+prediction experiments.  SOCNAV can opt into this channel through
+`ObservationVisibilitySettings.include_track_ids`; the tracker remains observation-derived
+and does not read simulator identities.  Callers provide a `PedestrianObservationSnapshot` containing only observed positions,
 optional velocities/covariances/radii, valid/visible masks, a causal timestamp and step index,
 and the same-step global robot pose. The snapshot contains no simulator object, route, goal,
 simulator identity, or PySocialForce state.
@@ -105,7 +112,10 @@ path: simulator identities may be supplied there for continuity checks, but neve
 actor-side tracker. The module's tests are implementation-integrity and smoke evidence only;
 they do not establish tracking quality, goal-force inference, calibration, forecast benefit, or
 benchmark performance. Runtime latency diagnostics are measured wall-clock values and are not
-part of deterministic identity/state comparisons.
+part of deterministic identity/state comparisons.  IDs reset with the observation fusion cache;
+they are not simulator IDs or evidence of scientific tracking quality.  Existing
+`memory_for_lost_pedestrians` remains presentation memory for temporary visibility gaps, while
+the tracker owns identity and estimator lost state; an ambiguous remembered row stays `-1`.
 
 ## Occupancy Grid Augmentation
 
@@ -137,6 +147,8 @@ Sources: `robot_sf/nav/occupancy_grid.py`, `robot_sf/gym_env/robot_env.py`.
 - Observation mode: `RobotSimulationConfig.observation_mode`
 - Stacking: `RobotSimulationConfig.observation_stack.stack_steps`
 - Grid: `RobotSimulationConfig.grid_config`, `use_occupancy_grid`, `include_grid_in_observation`
+- SocNav identity options: `RobotSimulationConfig.observation_visibility.ordering_tie_break`,
+  `include_track_ids`, and `tracking_config`
 
 ## Benchmark Observation Levels
 

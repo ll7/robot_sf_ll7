@@ -7,8 +7,9 @@ duplication and provides clear separation of concerns.
 
 import importlib
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -104,8 +105,24 @@ class ObservationVisibilitySettings:
     tracking_noise_std_m: float = 0.0
     memory_for_lost_pedestrians: bool = False
     lost_pedestrian_memory_horizon_s: float = 0.0
+    ordering_tie_break: str = "legacy"
+    include_track_ids: bool = False
+    tracking_config: dict[str, Any] | None = None
 
-    def to_metadata(self) -> dict[str, bool | float | None]:
+    def __post_init__(self) -> None:
+        """Validate opt-in SocNav ordering and observation-derived identity settings."""
+        ordering = str(self.ordering_tie_break).strip().lower()
+        if ordering not in {"legacy", "stable"}:
+            raise ValueError("ordering_tie_break must be 'legacy' or 'stable'")
+        self.ordering_tie_break = ordering
+        if type(self.include_track_ids) is not bool:
+            raise TypeError("include_track_ids must be a bool")
+        if self.tracking_config is not None:
+            if not isinstance(self.tracking_config, Mapping):
+                raise TypeError("tracking_config must be a mapping or None")
+            self.tracking_config = dict(self.tracking_config)
+
+    def to_metadata(self) -> dict[str, Any]:
         """Return JSON-safe visibility settings metadata."""
         return {
             "enabled": bool(self.enabled),
@@ -116,6 +133,11 @@ class ObservationVisibilitySettings:
             "tracking_noise_std_m": float(self.tracking_noise_std_m),
             "memory_for_lost_pedestrians": bool(self.memory_for_lost_pedestrians),
             "lost_pedestrian_memory_horizon_s": float(self.lost_pedestrian_memory_horizon_s),
+            "ordering_tie_break": self.ordering_tie_break,
+            "include_track_ids": bool(self.include_track_ids),
+            "tracking_config": (
+                None if self.tracking_config is None else dict(self.tracking_config)
+            ),
         }
 
 

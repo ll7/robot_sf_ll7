@@ -5,7 +5,8 @@ Provides a lightweight, in-process equivalent of SocNavBench's sense payload so
 planners can be reused without socket I/O.
 """
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from math import pi
 from typing import Any
 
@@ -22,6 +23,12 @@ from robot_sf.planner.predictive_foresight import (
     PredictiveForesightEncoder,
     predictive_foresight_config_from_source,
     predictive_foresight_spaces,
+)
+from robot_sf.sensor.pedestrian_tracking import (
+    PedestrianObservationSnapshot,
+    PedestrianTracker,
+    PedestrianTrackingResult,
+    TrackStatus,
 )
 from robot_sf.sim.simulator import Simulator
 
@@ -180,6 +187,10 @@ def socnav_observation_space(
     ped_positions_low = np.broadcast_to(pos_low, (max_pedestrians, 2)).astype(np.float32)
     ped_vel_low = np.broadcast_to(-speed_bounds, (max_pedestrians, 2)).astype(np.float32)
     ped_vel_high = np.broadcast_to(speed_bounds, (max_pedestrians, 2)).astype(np.float32)
+    ped_track_id_low = np.full((max_pedestrians,), -1, dtype=np.int64)
+    ped_track_id_high = np.full((max_pedestrians,), np.iinfo(np.int32).max, dtype=np.int64)
+    visibility_settings = getattr(env_config, "observation_visibility", None)
+    include_track_ids = bool(getattr(visibility_settings, "include_track_ids", False))
 
     return spaces.Dict(
         {
@@ -236,6 +247,17 @@ def socnav_observation_space(
                         low=np.array([0.0], dtype=np.float32),
                         high=np.array([float(max_pedestrians)], dtype=np.float32),
                         dtype=np.float32,
+                    ),
+                    **(
+                        {
+                            "track_id": spaces.Box(
+                                low=ped_track_id_low,
+                                high=ped_track_id_high,
+                                dtype=np.int64,
+                            )
+                        }
+                        if include_track_ids
+                        else {}
                     ),
                 },
             ),
@@ -295,9 +317,25 @@ class SocNavObservationFusion:
     truncation_warned: bool = False
     _predictive_foresight: PredictiveForesightEncoder | None = None
     _last_heading: float | None = None
+    _pedestrian_tracker: PedestrianTracker | None = field(init=False, default=None, repr=False)
+    _tracking_step_index: int = field(init=False, default=0, repr=False)
+    _buf_ped_track_ids: np.ndarray | None = field(init=False, default=None, repr=False)
 
     def __post_init__(self) -> None:
         """Initialize optional predictive foresight encoder and reusable buffers."""
+        visibility_settings = getattr(self.env_config, "observation_visibility", None)
+        if bool(getattr(visibility_settings, "include_track_ids", False)):
+            tracking_spec = getattr(visibility_settings, "tracking_config", None)
+            if tracking_spec is not None and not isinstance(tracking_spec, Mapping):
+                raise TypeError("observation_visibility.tracking_config must be a mapping or None")
+            tracking_mapping = {} if tracking_spec is None else dict(tracking_spec)
+            if tracking_mapping.get("enabled") is False:
+                raise ValueError(
+                    "observation_visibility.include_track_ids requires tracking_config.enabled"
+                )
+            tracking_mapping["enabled"] = True
+            self._pedestrian_tracker = PedestrianTracker(tracking_mapping)
+            self._buf_ped_track_ids = np.full((self.max_pedestrians,), -1, dtype=np.int64)
         if bool(getattr(self.env_config, "predictive_foresight_enabled", False)):
             self._predictive_foresight = PredictiveForesightEncoder(
                 predictive_foresight_config_from_source(
@@ -327,6 +365,11 @@ class SocNavObservationFusion:
         self._cache_position_cap_width = None
         self._cache_position_cap_height = None
         self._lost_pedestrian_memory.clear()
+        self._tracking_step_index = 0
+        if self._pedestrian_tracker is not None:
+            self._pedestrian_tracker.reset()
+        if self._buf_ped_track_ids is not None:
+            self._buf_ped_track_ids.fill(-1)
 
     def _position_cap(self) -> np.ndarray:
         """Return cached map position cap, refreshing when map_def identity or dimensions change.
@@ -446,19 +489,26 @@ class SocNavObservationFusion:
         ped_positions: np.ndarray,
         ped_velocities: np.ndarray,
         visibility_mask: np.ndarray,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """Return visible pedestrians plus short-horizon constant-velocity memories."""
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return visible pedestrians plus memories and their source-row indices.
+
+        This is presentation memory only.  When track IDs are enabled, the
+        observation-derived tracker owns identity and this helper merely keeps
+        the existing short-horizon display behavior for invisible rows.
+        """
         settings = getattr(self.env_config, "observation_visibility", None)
         memory_enabled = bool(getattr(settings, "memory_for_lost_pedestrians", False))
         horizon_s = float(getattr(settings, "lost_pedestrian_memory_horizon_s", 0.0) or 0.0)
         if not memory_enabled or horizon_s <= 0.0:
             self._lost_pedestrian_memory.clear()
-            return ped_positions[visibility_mask], ped_velocities[visibility_mask]
+            source_indices = np.flatnonzero(visibility_mask).astype(np.int64, copy=False)
+            return ped_positions[source_indices], ped_velocities[source_indices], source_indices
 
         dt = float(getattr(self.simulator.config, "time_per_step_in_secs", 0.0) or 0.0)
         step_s = max(dt, 0.0)
         keep_positions: list[np.ndarray] = []
         keep_velocities: list[np.ndarray] = []
+        keep_source_indices: list[int] = []
         live_ids = set(range(ped_positions.shape[0]))
 
         for ped_idx, (position, velocity, visible) in enumerate(
@@ -470,6 +520,7 @@ class SocNavObservationFusion:
                 self._lost_pedestrian_memory[ped_idx] = (position_copy, velocity_copy, 0.0)
                 keep_positions.append(position_copy)
                 keep_velocities.append(velocity_copy)
+                keep_source_indices.append(ped_idx)
                 continue
 
             remembered = self._lost_pedestrian_memory.get(ped_idx)
@@ -489,6 +540,7 @@ class SocNavObservationFusion:
             )
             keep_positions.append(predicted_position)
             keep_velocities.append(velocity_copy)
+            keep_source_indices.append(ped_idx)
 
         for stale_idx in set(self._lost_pedestrian_memory) - live_ids:
             self._lost_pedestrian_memory.pop(stale_idx, None)
@@ -497,11 +549,153 @@ class SocNavObservationFusion:
             return (
                 np.zeros((0, 2), dtype=np.float32),
                 np.zeros((0, 2), dtype=np.float32),
+                np.zeros((0,), dtype=np.int64),
             )
         return (
             np.stack(keep_positions).astype(np.float32, copy=False),
             np.stack(keep_velocities).astype(np.float32, copy=False),
+            np.asarray(keep_source_indices, dtype=np.int64),
         )
+
+    def _pedestrian_order(
+        self,
+        ped_positions: np.ndarray,
+        ped_velocities: np.ndarray,
+        *,
+        robot_pos: np.ndarray,
+    ) -> np.ndarray:
+        """Return the configured closest-first order for pedestrian rows."""
+        rel = ped_positions - robot_pos
+        dists = np.linalg.norm(rel, axis=1)
+        settings = getattr(self.env_config, "observation_visibility", None)
+        tie_break = str(getattr(settings, "ordering_tie_break", "legacy")).strip().lower()
+        if tie_break == "legacy":
+            # Preserve NumPy's historical default quicksort path when the option is disabled.
+            return np.argsort(dists)
+        if tie_break != "stable":
+            raise ValueError("ordering_tie_break must be 'legacy' or 'stable'")
+
+        # ``kind='stable'`` makes the final source index an explicit, deterministic key.
+        # All preceding fields are observation content, so non-identical ties do not depend
+        # on the simulator's row order.
+        sort_keys = np.empty(
+            (ped_positions.shape[0],),
+            dtype=[
+                ("distance", np.float64),
+                ("relative_x", np.float64),
+                ("relative_y", np.float64),
+                ("velocity_x", np.float64),
+                ("velocity_y", np.float64),
+                ("source_index", np.int64),
+            ],
+        )
+        sort_keys["distance"] = dists
+        sort_keys["relative_x"] = rel[:, 0]
+        sort_keys["relative_y"] = rel[:, 1]
+        sort_keys["velocity_x"] = ped_velocities[:, 0]
+        sort_keys["velocity_y"] = ped_velocities[:, 1]
+        sort_keys["source_index"] = np.arange(ped_positions.shape[0], dtype=np.int64)
+        return np.argsort(sort_keys, order=sort_keys.dtype.names, kind="stable")
+
+    def _update_pedestrian_tracking(
+        self,
+        *,
+        ped_positions: np.ndarray,
+        ped_velocities: np.ndarray,
+        visibility_mask: np.ndarray,
+        robot_pos: np.ndarray,
+        heading: float,
+    ) -> tuple[np.ndarray, PedestrianTrackingResult | None]:
+        """Update the opt-in observation-derived tracker and map IDs to source rows.
+
+        Returns:
+            Tuple of source-row track IDs and the immutable tracker result.  IDs
+            are ``-1`` for rows without an accepted visible association.
+        """
+        source_track_ids = np.full((ped_positions.shape[0],), -1, dtype=np.int64)
+        if self._pedestrian_tracker is None:
+            return source_track_ids, None
+
+        tracking_velocities = ped_velocities
+        if tracking_velocities.shape != ped_positions.shape:
+            tracking_velocities = np.zeros_like(ped_positions, dtype=np.float32)
+        valid_mask = np.all(np.isfinite(ped_positions), axis=1)
+        visible_mask = np.asarray(visibility_mask, dtype=bool) & valid_mask
+        velocity_valid_mask = visible_mask & np.all(np.isfinite(tracking_velocities), axis=1)
+        snapshot = PedestrianObservationSnapshot(
+            timestamp_s=self._tracking_step_index
+            * max(float(getattr(self.simulator.config, "time_per_step_in_secs", 0.0) or 0.0), 0.0),
+            step_index=self._tracking_step_index,
+            coordinate_frame="global_xy",
+            robot_pose_global=np.array([robot_pos[0], robot_pos[1], heading], dtype=float),
+            positions=ped_positions,
+            velocities=tracking_velocities,
+            valid_mask=valid_mask,
+            visible_mask=visible_mask,
+            velocity_valid_mask=velocity_valid_mask,
+            radius=float(getattr(self.env_config.sim_config, "ped_radius", 0.0) or 0.0),
+        )
+        result = self._pedestrian_tracker.update(snapshot)
+        self._tracking_step_index += 1
+        for association in result.associations:
+            if 0 <= association.observation_slot < source_track_ids.shape[0]:
+                source_track_ids[association.observation_slot] = association.track_id
+        for track in result.tracks:
+            observation_slot = track.last_observation_slot
+            if (
+                observation_slot is not None
+                and 0 <= observation_slot < source_track_ids.shape[0]
+                and visible_mask[observation_slot]
+                and track.step_index == result.step_index
+                and TrackStatus(track.status) in {TrackStatus.TENTATIVE, TrackStatus.CONFIRMED}
+            ):
+                source_track_ids[observation_slot] = track.track_id
+        return source_track_ids, result
+
+    def _track_ids_for_presentation_rows(
+        self,
+        *,
+        source_indices: np.ndarray,
+        source_track_ids: np.ndarray,
+        tracking_result: PedestrianTrackingResult | None,
+    ) -> np.ndarray | None:
+        """Map tracker IDs onto visible and presentation-memory rows.
+
+        Visible rows use their source-slot associations.  A remembered row may
+        also receive its tracker's lost ID when the source slot is unambiguous;
+        otherwise ``-1`` is retained instead of inventing identity.
+
+        Returns:
+            Aligned int64 track IDs, or ``None`` when tracking is disabled.
+        """
+        if self._pedestrian_tracker is None:
+            return None
+        track_ids = np.full((source_indices.shape[0],), -1, dtype=np.int64)
+        for output_index, source_index in enumerate(source_indices.tolist()):
+            if 0 <= source_index < source_track_ids.shape[0]:
+                track_ids[output_index] = source_track_ids[source_index]
+        if tracking_result is None:
+            return track_ids
+
+        lost_tracks = {
+            track.track_id: track
+            for track in tracking_result.tracks
+            if TrackStatus(track.status) is TrackStatus.LOST
+        }
+        used_track_ids = {int(track_id) for track_id in track_ids if track_id > 0}
+        for output_index, source_index in enumerate(source_indices.tolist()):
+            if track_ids[output_index] > 0:
+                continue
+            matches = [
+                track
+                for track in lost_tracks.values()
+                if track.track_id not in used_track_ids
+                and track.last_observation_slot == source_index
+            ]
+            if len(matches) == 1:
+                track_ids[output_index] = matches[0].track_id
+                used_track_ids.add(matches[0].track_id)
+        return track_ids
 
     def _rebuild_static_occlusion_cache(self) -> None:
         """Build prepared-geometry cache from current simulator obstacle polygons."""
@@ -618,6 +812,60 @@ class SocNavObservationFusion:
         wp_with_robot = np.clip(wp_with_robot, 0.0, position_cap)
         return wp_with_robot[:MAX_ROUTE_WAYPOINTS]
 
+    def _prepare_pedestrian_rows(
+        self,
+        *,
+        ped_positions: np.ndarray,
+        ped_velocities: np.ndarray,
+        robot_pos: np.ndarray,
+        heading: float,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+        """Filter, track, order, and cap pedestrian rows for the public observation.
+
+        Returns:
+            Tuple of capped positions, capped world-frame velocities, and optional
+            aligned track IDs.  The ID array is ``None`` when the channel is disabled.
+        """
+        visibility_mask = self._visible_pedestrian_mask(
+            ped_positions,
+            robot_pos=robot_pos,
+            robot_heading=heading,
+        )
+        source_track_ids, tracking_result = self._update_pedestrian_tracking(
+            ped_positions=ped_positions,
+            ped_velocities=ped_velocities,
+            visibility_mask=visibility_mask,
+            robot_pos=robot_pos,
+            heading=heading,
+        )
+        ped_positions, ped_velocities, source_indices = self._pedestrians_with_lost_memory(
+            ped_positions=ped_positions,
+            ped_velocities=ped_velocities,
+            visibility_mask=visibility_mask,
+        )
+        ped_track_ids = self._track_ids_for_presentation_rows(
+            source_indices=source_indices,
+            source_track_ids=source_track_ids,
+            tracking_result=tracking_result,
+        )
+
+        if ped_positions.size > 0:
+            order = self._pedestrian_order(
+                ped_positions,
+                ped_velocities,
+                robot_pos=robot_pos,
+            )
+            ped_positions = ped_positions[order]
+            ped_velocities = ped_velocities[order]
+            if ped_track_ids is not None:
+                ped_track_ids = ped_track_ids[order]
+
+        ped_positions = ped_positions[: self.max_pedestrians]
+        ped_velocities = ped_velocities[: self.max_pedestrians]
+        if ped_track_ids is not None:
+            ped_track_ids = ped_track_ids[: self.max_pedestrians]
+        return ped_positions, ped_velocities, ped_track_ids
+
     def next_obs(self) -> dict[str, Any]:
         """Return the latest structured observation aligned to the declared space."""
         ped_positions = np.asarray(self.simulator.ped_pos, dtype=np.float32)
@@ -638,34 +886,20 @@ class SocNavObservationFusion:
         robot_pose = self.simulator.robots[self.robot_index].pose
         robot_pos = np.asarray(robot_pose[0], dtype=np.float32)
         heading = float(robot_pose[1])
-        visibility_mask = self._visible_pedestrian_mask(
-            ped_positions,
+        ped_positions, ped_velocities, ped_track_ids = self._prepare_pedestrian_rows(
+            ped_positions=ped_positions,
+            ped_velocities=ped_velocities,
             robot_pos=robot_pos,
-            robot_heading=heading,
+            heading=heading,
         )
-        if visibility_mask.size > 0:
-            ped_positions, ped_velocities = self._pedestrians_with_lost_memory(
-                ped_positions=ped_positions,
-                ped_velocities=ped_velocities,
-                visibility_mask=visibility_mask,
-            )
-        else:
-            self._lost_pedestrian_memory.clear()
-
-        # Order pedestrians by distance to robot (closest-first)
-        if ped_positions.size > 0:
-            rel = ped_positions - robot_pos
-            dists = np.linalg.norm(rel, axis=1)
-            order = np.argsort(dists)
-            ped_positions = ped_positions[order]
-            ped_velocities = ped_velocities[order]
-
-        ped_positions = ped_positions[: self.max_pedestrians]
-        ped_velocities = ped_velocities[: self.max_pedestrians]
         self._buf_ped_positions.fill(0.0)
         self._buf_ped_velocities.fill(0.0)
+        if self._buf_ped_track_ids is not None:
+            self._buf_ped_track_ids.fill(-1)
         if ped_positions.size > 0:
             self._buf_ped_positions[: ped_positions.shape[0]] = ped_positions
+            if self._buf_ped_track_ids is not None and ped_track_ids is not None:
+                self._buf_ped_track_ids[: ped_track_ids.shape[0]] = ped_track_ids
         if ped_velocities.size > 0:
             # Convert pedestrian velocities to ego frame (rotate by -heading)
             cos_h = np.cos(heading)
@@ -736,6 +970,11 @@ class SocNavObservationFusion:
                 ),
                 "count": np.array(
                     [float(min(len(ped_positions), self.max_pedestrians))], dtype=np.float32
+                ),
+                **(
+                    {"track_id": self._buf_ped_track_ids.copy()}
+                    if self._buf_ped_track_ids is not None
+                    else {}
                 ),
             },
             "map": {

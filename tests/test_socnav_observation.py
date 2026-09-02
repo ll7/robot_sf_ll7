@@ -46,6 +46,34 @@ def _build_map_def(width: float, height: float) -> MapDefinition:
     )
 
 
+def _build_socnav_simulator(
+    ped_positions: list[list[float]],
+    ped_velocities: list[list[float]] | None = None,
+) -> SimpleNamespace:
+    """Build a minimal simulator fixture for ordering and tracker tests."""
+    positions = np.asarray(ped_positions, dtype=np.float32)
+    velocities = (
+        np.zeros_like(positions)
+        if ped_velocities is None
+        else np.asarray(ped_velocities, dtype=np.float32)
+    )
+    return SimpleNamespace(
+        ped_pos=positions,
+        ped_vel=velocities,
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.0), 0.0),
+                current_speed=np.array([0.0, 0.0], dtype=np.float32),
+                config=SimpleNamespace(radius=1.0),
+            )
+        ],
+        goal_pos=[np.array([5.0, 0.0], dtype=np.float32)],
+        next_goal_pos=[None],
+        map_def=SimpleNamespace(width=10.0, height=10.0, obstacles=[]),
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+
+
 def test_socnav_observation_space_uses_map_aware_cap() -> None:
     """SocNav observation space should preserve coordinates on maps larger than 50 m."""
     map_def = _build_map_def(120.0, 80.0)
@@ -161,6 +189,122 @@ def test_socnav_default_ordering_preserves_legacy_exact_tie_behavior() -> None:
             max_pedestrians=4,
         )["pedestrians"]
     )
+
+
+def test_socnav_stable_ordering_is_permutation_invariant_for_ties() -> None:
+    """The opt-in content-key order should survive simulator row permutations."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        ordering_tie_break="stable",
+        include_track_ids=True,
+        tracking_config={"confirmation_steps": 1},
+    )
+    positions = [[2.0, 0.0], [0.0, 2.0], [1.0, 1.0]]
+    velocities = [[0.2, 0.0], [0.0, 0.4], [0.1, 0.1]]
+    simulator_a = _build_socnav_simulator(positions, velocities)
+    simulator_b = _build_socnav_simulator(
+        [positions[2], positions[0], positions[1]],
+        [velocities[2], velocities[0], velocities[1]],
+    )
+
+    obs_a = SocNavObservationFusion(
+        simulator=simulator_a,
+        env_config=env_config,
+        max_pedestrians=4,
+    ).next_obs()
+    obs_b = SocNavObservationFusion(
+        simulator=simulator_b,
+        env_config=env_config,
+        max_pedestrians=4,
+    ).next_obs()
+
+    np.testing.assert_array_equal(
+        obs_a["pedestrians"]["positions"],
+        obs_b["pedestrians"]["positions"],
+    )
+    np.testing.assert_array_equal(
+        obs_a["pedestrians"]["velocities"],
+        obs_b["pedestrians"]["velocities"],
+    )
+    np.testing.assert_array_equal(
+        obs_a["pedestrians"]["track_id"],
+        obs_b["pedestrians"]["track_id"],
+    )
+    np.testing.assert_array_equal(
+        obs_a["pedestrians"]["positions"][:3],
+        np.array([[1.0, 1.0], [0.0, 2.0], [2.0, 0.0]], dtype=np.float32),
+    )
+
+
+def test_socnav_track_id_channel_is_declared_and_padded() -> None:
+    """Opt-in track IDs have a fixed int64 channel and ``-1`` padding."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        ordering_tie_break="stable",
+        include_track_ids=True,
+        tracking_config={"confirmation_steps": 1},
+    )
+    simulator = _build_socnav_simulator([[1.0, 0.0], [3.0, 0.0]])
+    fusion = SocNavObservationFusion(simulator=simulator, env_config=env_config, max_pedestrians=4)
+    space = socnav_observation_space(simulator.map_def, env_config, max_pedestrians=4)
+    obs = fusion.next_obs()
+
+    track_space = space["pedestrians"]["track_id"]
+    assert track_space.dtype == np.dtype(np.int64)
+    np.testing.assert_array_equal(obs["pedestrians"]["track_id"], [1, 2, -1, -1])
+    assert space.contains(obs)
+
+    fusion.reset_cache()
+    reset_obs = fusion.next_obs()
+    np.testing.assert_array_equal(reset_obs["pedestrians"]["track_id"], [1, 2, -1, -1])
+    assert space.contains(reset_obs)
+
+
+def test_socnav_track_ids_follow_physical_rows_after_nearest_rank_swap() -> None:
+    """Stable sorting and tracker association should preserve IDs across a rank swap."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        ordering_tie_break="stable",
+        include_track_ids=True,
+        tracking_config={"confirmation_steps": 1},
+    )
+    simulator = _build_socnav_simulator([[1.0, 0.0], [3.0, 0.0]])
+    fusion = SocNavObservationFusion(simulator=simulator, env_config=env_config, max_pedestrians=4)
+
+    first = fusion.next_obs()
+    first_ids = first["pedestrians"]["track_id"][:2].copy()
+    simulator.ped_pos = np.array([[3.1, 0.0], [0.9, 0.0]], dtype=np.float32)
+    second = fusion.next_obs()
+    np.testing.assert_allclose(
+        second["pedestrians"]["positions"][:2],
+        np.array([[0.9, 0.0], [3.1, 0.0]], dtype=np.float32),
+    )
+    np.testing.assert_array_equal(second["pedestrians"]["track_id"][:2], first_ids)
+
+
+def test_socnav_track_ids_survive_short_visibility_occlusion() -> None:
+    """A temporarily out-of-range pedestrian should reacquire its episode-local ID."""
+    env_config = RobotSimulationConfig()
+    env_config.observation_visibility = ObservationVisibilitySettings(
+        enabled=True,
+        max_range_m=2.5,
+        ordering_tie_break="stable",
+        include_track_ids=True,
+        tracking_config={"confirmation_steps": 1},
+    )
+    simulator = _build_socnav_simulator([[1.0, 0.0], [2.0, 0.0]])
+    fusion = SocNavObservationFusion(simulator=simulator, env_config=env_config, max_pedestrians=4)
+
+    first = fusion.next_obs()
+    first_ids = first["pedestrians"]["track_id"][:2].copy()
+    simulator.ped_pos = np.array([[1.0, 0.0], [3.0, 0.0]], dtype=np.float32)
+    occluded = fusion.next_obs()
+    assert occluded["pedestrians"]["count"][0] == pytest.approx(1.0)
+    assert int(occluded["pedestrians"]["track_id"][0]) == int(first_ids[0])
+
+    simulator.ped_pos = np.array([[1.0, 0.0], [2.0, 0.0]], dtype=np.float32)
+    reacquired = fusion.next_obs()
+    np.testing.assert_array_equal(reacquired["pedestrians"]["track_id"][:2], first_ids)
 
 
 def test_socnav_observation_visibility_filters_fov_without_mutating_ground_truth() -> None:

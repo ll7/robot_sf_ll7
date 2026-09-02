@@ -81,6 +81,25 @@ def test_build_robot_config_parses_observation_visibility_settings(tmp_path: Pat
     assert config.observation_visibility.dynamic_occlusion is True
 
 
+def test_build_robot_config_parses_socnav_ordering_and_tracking_options(tmp_path: Path) -> None:
+    """Scenario YAML should expose the opt-in stable order and tracker configuration."""
+    config = build_robot_config_from_scenario(
+        {
+            "name": "identity_case",
+            "observation_visibility": {
+                "ordering_tie_break": "stable",
+                "include_track_ids": True,
+                "tracking_config": {"confirmation_steps": 1},
+            },
+        },
+        scenario_path=tmp_path / "scenario.yaml",
+    )
+
+    assert config.observation_visibility.ordering_tie_break == "stable"
+    assert config.observation_visibility.include_track_ids is True
+    assert config.observation_visibility.tracking_config == {"confirmation_steps": 1}
+
+
 def test_build_robot_config_rejects_invalid_observation_visibility(tmp_path: Path) -> None:
     """Visibility config validation should fail closed for unsupported sensor settings."""
     with pytest.raises(ValueError, match="fov_degrees must be <= 360"):

@@ -440,18 +440,24 @@ same Zenodo concept instead:
    `isNewVersionOf` relation and exact `-erratum.1` tag lineage. It downloads
    the predecessor archive from both GitHub and Zenodo, requires positive
    advertised sizes and byte-identical SHA-256 values, opens that detached
-   archive, and compares its complete scientific snapshot with the successor.
+   archive within member-count, per-file, and cumulative expanded-byte budgets,
+   and compares its complete scientific snapshot with the successor. Invalid
+   network receipts retain useful bundle-relative diagnostics without exposing
+   the audit host's temporary filesystem paths.
    It must also run the publication preflight, authenticate the exact successor
    archive inventory against the manifest/checksums/custody chain, recompute
    both scientific digests, and match the embedded correction receipt. A
    successor receipt cannot authenticate its own predecessor. Leave the
    predecessor DOI, tag, files, and checksum unchanged.
 
-An erratum tag may append `-erratum.<positive integer>` after the exact
-40-character scientific source SHA. The suffix creates a new publication
-identity; it does not change or replace the scientific source commit. A row,
-component metric, source, matrix, or claim-boundary change is not a
-derived-metadata erratum and requires a new scientific campaign decision.
+This first-successor workflow requires `-erratum.1` after the predecessor tag,
+which already ends in the exact 40-character scientific source SHA. The cold
+auditor recognizes a positive-integer erratum suffix for future format evolution,
+but creating a later successor requires an explicit supported contract update;
+do not improvise a tag chain. The suffix creates a new publication identity; it
+does not change or replace the scientific source commit. A row, component
+metric, source, matrix, or claim-boundary change is not a derived-metadata
+erratum and requires a new scientific campaign decision.
 
 Upload and verify the generated bundle using:
 

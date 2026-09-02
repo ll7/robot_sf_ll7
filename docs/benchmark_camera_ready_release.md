@@ -271,13 +271,15 @@ uv run robot-sf release audit-published \
 ```
 
 The command uses only unauthenticated HTTPS `GET` requests, bounds streamed
-downloads, and writes no release or Zenodo state. It checks the exact public
-tag/release and Zenodo version record before passing both channel directories
-to the offline audit core. A receipt with `status: unavailable` is a transport
-or service condition, not a failed release; retry it. A `pass` is a repeatable
-identity/download check, not full benchmark evidence and does not authorize
-publication. The command cannot reserve, upload, edit, publish, or rename a
-release.
+downloads and archive extraction by member count, per-file expanded bytes, and
+cumulative expanded bytes, and writes no release or Zenodo state. It checks the
+exact public tag/release and Zenodo version record before passing both channel
+directories to the offline audit core. Invalid receipts use bundle-relative
+diagnostics rather than audit-host temporary paths. A receipt with
+`status: unavailable` is a transport or service condition, not a failed
+release; retry it. A `pass` is a repeatable identity/download check, not full
+benchmark evidence and does not authorize publication. The command cannot
+reserve, upload, edit, publish, or rename a release.
 
 For a canonical `-erratum.1` release, the same command also resolves the
 predecessor tag and the sole Zenodo `isNewVersionOf` relation independently. It

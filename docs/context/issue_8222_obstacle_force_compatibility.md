@@ -44,9 +44,9 @@ validation.
 
 ## Runtime follow-up acceptance boundary
 
-The separately scoped runtime correction issue is pending until the parent creates it; the pending
-follow-up is tracked from [parent Issue #8222](https://github.com/ll7/robot_sf_ll7/issues/8222), and
-no child issue number is assigned here. A future implementation child must, at minimum:
+The separately scoped runtime correction is tracked in [Issue #8277](https://github.com/ll7/robot_sf_ll7/issues/8277),
+the child of [parent Issue #8222](https://github.com/ll7/robot_sf_ll7/issues/8222). The child starts
+as an implementation idea and remains opt-in and domain-gated; it must, at minimum:
 
 1. carry explicit law metadata and resolve historical frozen/unversioned inputs to
    `legacy_shifted_gradient_v1`;
@@ -65,10 +65,9 @@ historical campaign is changed or rerun here.
 
 Evidence in this slice is limited to source/config inspection at the stated current-main SHA and
 documentation validation. It establishes neither numerical correctness nor physical suitability.
-The future runtime child should use the canonical implementation archetype with `evidence_tier: idea`
-until executable parity and diagnostic evidence exist. Its prepared body is retained outside all
-worktrees at `/home/luttkule/git/robot_sf_ll7/.git/codex-agent-runs/artifacts/issue-8222-20260902/runtime-followup-body.md` in the
-agent handoff environment; it is not published by this task.
+The runtime child in [Issue #8277](https://github.com/ll7/robot_sf_ll7/issues/8277) uses the canonical
+implementation archetype with `evidence_tier: idea` until executable parity and diagnostic evidence
+exist. Local preparation drafts are disposable and are not a durable dependency of this note.
 
 Validation for this note is limited to targeted reference inspection, `git diff --check`,
 `scripts/dev/check_docs_evidence_integrity.py --full`, and

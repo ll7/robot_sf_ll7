@@ -691,6 +691,7 @@ def test_validate_issue_identity_accepts_canonical_issue_and_pull() -> None:
     [
         "https://evil.example/ll7/robot_sf_ll7/issues/12",
         "https://github.com:443/ll7/robot_sf_ll7/issues/12",
+        "https://github.com:/ll7/robot_sf_ll7/issues/12",
         "https://user@github.com/ll7/robot_sf_ll7/issues/12",
         "https://user:pass@github.com/ll7/robot_sf_ll7/issues/12",
         "http://github.com/ll7/robot_sf_ll7/issues/12",

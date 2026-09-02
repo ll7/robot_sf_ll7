@@ -50,6 +50,7 @@ def test_validate_result_envelope_rejects_untrusted_success_payloads() -> None:
         {**valid_list, "repo": "other/repo"},
         {**valid_list, "labels": ["state:ready", "state:ready"]},
         {**valid_list, "labels": [""]},
+        {**valid_list, "labels": ["state:ready\nfoo"]},
     ]
 
     for result in invalid_results:
@@ -98,6 +99,7 @@ class TestLabelRead:
             [{"name": ""}],
             [{"name": None}],
             [{"name": 42}],
+            [{"name": "state:ready\nfoo"}],
             ["not-a-row"],
         ):
             with patch(

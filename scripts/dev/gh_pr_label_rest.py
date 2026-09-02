@@ -59,6 +59,15 @@ LABEL_PAGE_CEILING = 10
 TRANSPORT_CONTRACT = get_transport_contract("gh_pr_label_rest.py")
 
 
+def _label_name_error(raw_name: object, *, context: str) -> str | None:
+    """Return a validation error for a label name, or ``None`` when it is safe to transport."""
+    if not isinstance(raw_name, str) or not raw_name.strip():
+        return f"{context} must be non-empty text"
+    if not raw_name.isprintable():
+        return f"{context} must be printable text"
+    return None
+
+
 def _is_absent_label_delete(result: subprocess.CompletedProcess[str]) -> bool:
     """Recognize only GitHub's idempotent missing-label DELETE response."""
     if result.returncode == 0:
@@ -97,12 +106,18 @@ def _get_label_names(number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30
                     "status": "error",
                     "error": f"malformed label row on page {page}: expected an object",
                 }
-            name = row.get("name")
-            if not isinstance(name, str) or not name.strip():
+            raw_name = row.get("name")
+            if (
+                name_error := _label_name_error(
+                    raw_name, context=f"malformed label row on page {page}: name"
+                )
+            ) is not None:
                 return {
                     "status": "error",
-                    "error": f"malformed label row on page {page}: name must be non-empty text",
+                    "error": name_error,
                 }
+            assert isinstance(raw_name, str)
+            name = raw_name
             if name in seen_names:
                 return {
                     "status": "error",
@@ -194,8 +209,11 @@ def _validate_list_result(result: dict[str, Any]) -> None:
     labels = result.get("labels")
     if not isinstance(labels, list):
         raise ValueError("label helper list result labels must be a list")
-    if any(type(name) is not str or not name.strip() for name in labels):
-        raise ValueError("label helper list result labels must be non-empty strings")
+    for name in labels:
+        if (
+            name_error := _label_name_error(name, context="label helper list result labels")
+        ) is not None:
+            raise ValueError(name_error)
     if len(set(labels)) != len(labels):
         raise ValueError("label helper list result labels must be distinct")
 

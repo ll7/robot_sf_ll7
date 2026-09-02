@@ -142,6 +142,9 @@ def validate_issue_identity(payload: object, *, repo: str, number: int) -> None:
     if (
         parsed.scheme != "https"
         or (parsed.hostname or "").lower() != expected_host
+        # ``urlsplit(...).port`` is None for an explicit empty port such as
+        # ``https://github.com:/...``; reject every authority colon instead.
+        or ":" in parsed.netloc
         or parsed.port is not None
         or parsed.username is not None
         or parsed.password is not None

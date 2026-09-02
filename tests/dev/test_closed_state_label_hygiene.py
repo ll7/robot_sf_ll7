@@ -149,6 +149,7 @@ def test_reconcile_stale_issues_preserves_current_rest_live_labels() -> None:
         ("http://github.com/ll7/robot_sf_ll7/pull/12", False),
         ("https://evil.example/ll7/robot_sf_ll7/pull/12", False),
         ("https://github.com:443/ll7/robot_sf_ll7/pull/12", False),
+        ("https://github.com:/ll7/robot_sf_ll7/pull/12", False),
         ("https://user@github.com/ll7/robot_sf_ll7/pull/12", False),
         ("https://user:pass@github.com/ll7/robot_sf_ll7/pull/12", False),
         (None, False),
@@ -532,6 +533,7 @@ def test_closure_workflow_skips_a_valid_pull_request_identity(tmp_path: Path) ->
         json.dumps([]),
         json.dumps({"status": "ok"}),
         _workflow_list("state:ready", "state:ready"),
+        _workflow_list("state:ready\nfoo"),
     ],
 )
 def test_closure_workflow_rejects_empty_or_malformed_label_inventory(
@@ -782,6 +784,7 @@ def _rest_issue(number: int, title: str, labels: list[str]) -> dict[str, object]
         ({**_rest_issue(12, "candidate", ["state:ready"]), "pull_request": None}, "pull_request"),
         ({**_rest_issue(12, "candidate", ["state:ready"]), "html_url": "not-a-url"}, "canonical"),
         ({**_rest_issue(12, "candidate", ["state:ready"]), "state": "banana"}, "OPEN or CLOSED"),
+        ({**_rest_issue(12, "candidate", ["state:ready\nfoo"])}, "printable"),
     ],
 )
 def test_fetch_closed_issues_by_label_rest_rejects_malformed_candidate_rows(

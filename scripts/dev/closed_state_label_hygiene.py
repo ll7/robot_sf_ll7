@@ -97,6 +97,8 @@ def _label_names(raw_labels: object) -> set[str]:
             raise ValueError(f"candidate label row {index} must contain a name string")
         if not name.strip():
             raise ValueError(f"candidate label row {index} must contain a non-empty name")
+        if not name.isprintable():
+            raise ValueError(f"candidate label row {index} must contain printable text")
         if name in names:
             raise ValueError(f"candidate label row {index} duplicates label {name!r}")
         names.add(name)
@@ -117,6 +119,9 @@ def _is_pull_request_url(raw_url: object) -> bool:
     if (
         parsed.scheme != "https"
         or (parsed.hostname or "").lower() != expected_host
+        # ``urlsplit(...).port`` is None for an explicit empty port; reject every
+        # authority colon so the syntactic companion matches the identity validator.
+        or ":" in parsed.netloc
         or parsed.port is not None
         or parsed.username is not None
         or parsed.password is not None

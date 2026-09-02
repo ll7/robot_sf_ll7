@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import warnings
 from typing import Any
@@ -10,6 +11,7 @@ import pytest
 
 import robot_sf.gym_env.base_env as base_env_module
 from robot_sf.gym_env.base_env import BaseEnv, _warn_exit_deprecated
+from robot_sf.render.jsonl_recording import JSONLRecorder
 
 
 class _FakeSimUi:
@@ -62,6 +64,35 @@ def test_close_without_sim_ui_is_safe() -> None:
     env = _MinimalEnv()
     env.close()
     assert env.sim_ui is None
+
+
+def test_close_finalizes_active_jsonl_recorder_once(tmp_path) -> None:
+    env = _MinimalEnv()
+    recorder = JSONLRecorder(
+        output_dir=str(tmp_path),
+        suite="lifecycle",
+        scenario="active",
+        algorithm="test",
+        seed=7,
+    )
+    recorder.start_episode(config_hash="lifecycle-test")
+    env.jsonl_recorder = recorder
+
+    env.close()
+
+    episode_path = tmp_path / "lifecycle_active_test_7_ep0000.jsonl"
+    metadata_path = tmp_path / "lifecycle_active_test_7_ep0000.meta.json"
+    assert env.jsonl_recorder is None
+    assert recorder.current_file is None
+    assert episode_path.is_file()
+    assert metadata_path.is_file()
+    events = [json.loads(line)["event"] for line in episode_path.read_text().splitlines()]
+    assert events == ["episode_start", "episode_end"]
+
+    env.close()
+
+    assert env.jsonl_recorder is None
+    assert [json.loads(line)["event"] for line in episode_path.read_text().splitlines()] == events
 
 
 def test_exit_alias_still_tears_down_and_warns_once(monkeypatch: pytest.MonkeyPatch) -> None:

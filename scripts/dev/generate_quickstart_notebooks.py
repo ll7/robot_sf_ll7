@@ -13,10 +13,14 @@ and add no new simulation logic.
 
 Regenerate with:
     uv run python scripts/dev/generate_quickstart_notebooks.py
+    uv run python scripts/dev/generate_quickstart_notebooks.py --only \
+        01_run_first_episode.ipynb 03_visualize_trace.ipynb
 """
 
 from __future__ import annotations
 
+import argparse
+import hashlib
 import textwrap
 from pathlib import Path
 
@@ -207,7 +211,7 @@ def build_notebook_01() -> nbf.notebooknode:
         _code(
             """
             # Always release the environment's resources when finished.
-            env.exit()
+            env.close()
             print("Environment closed. Notebook 01 complete.")
             """
         ),
@@ -573,8 +577,7 @@ def build_notebook_03() -> nbf.notebooknode:
                     break
 
             env.end_episode_recording()
-            env.close_recorder()
-            env.exit()
+            env.close()
             print(f"Episode finished after {steps} steps.")
             """
         ),
@@ -700,17 +703,69 @@ def build_notebook_03() -> nbf.notebooknode:
     return nb
 
 
-def main() -> int:
-    """Generate the three notebooks into ``notebooks/``."""
+NOTEBOOK_BUILDERS = {
+    "01_run_first_episode.ipynb": build_notebook_01,
+    "02_compare_two_planners.ipynb": build_notebook_02,
+    "03_visualize_trace.ipynb": build_notebook_03,
+}
+
+
+def _cell_source(cell: nbf.notebooknode) -> str:
+    """Return a cell's source as a string for stable identity matching."""
+    source = cell.get("source", "")
+    return "".join(source) if isinstance(source, list) else source
+
+
+def _assign_stable_cell_ids(nb: nbf.notebooknode, path: Path) -> None:
+    """Keep existing IDs and deterministically assign IDs to new cells.
+
+    ``nbformat`` generates random IDs for new cells. Preserving matching IDs
+    keeps regeneration focused on intentional source changes, while the hash
+    fallback makes generation into a fresh directory reproducible.
+    """
+    existing_ids: dict[tuple[str, str], list[str]] = {}
+    existing_cells: list[nbf.notebooknode] = []
+    if path.is_file():
+        existing = nbf.read(path, as_version=4)
+        existing_cells = list(existing.cells)
+        for cell in existing.cells:
+            cell_id = cell.get("id")
+            if cell_id:
+                key = (cell.cell_type, _cell_source(cell))
+                existing_ids.setdefault(key, []).append(cell_id)
+
+    used_ids: set[str] = set()
+    for index, cell in enumerate(nb.cells):
+        key = (cell.cell_type, _cell_source(cell))
+        matching_ids = existing_ids.get(key, [])
+        cell_id = matching_ids.pop(0) if matching_ids else None
+        if cell_id is None and index < len(existing_cells):
+            previous_cell = existing_cells[index]
+            previous_id = previous_cell.get("id")
+            if previous_cell.cell_type == cell.cell_type and previous_id not in used_ids:
+                cell_id = previous_id
+        if cell_id is None or cell_id in used_ids:
+            digest_input = f"{index}\0{cell.cell_type}\0{_cell_source(cell)}"
+            cell_id = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()[:16]
+            while cell_id in used_ids:
+                digest_input += "\0"
+                cell_id = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()[:16]
+        cell.id = cell_id
+        used_ids.add(cell_id)
+
+
+def main(notebook_names: tuple[str, ...] | None = None) -> int:
+    """Generate selected notebooks into ``notebooks/``.
+
+    When ``notebook_names`` is omitted, all canonical notebooks are generated.
+    """
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    builders = {
-        "01_run_first_episode.ipynb": build_notebook_01,
-        "02_compare_two_planners.ipynb": build_notebook_02,
-        "03_visualize_trace.ipynb": build_notebook_03,
-    }
-    for name, builder in builders.items():
+    names = notebook_names or tuple(NOTEBOOK_BUILDERS)
+    for name in names:
+        builder = NOTEBOOK_BUILDERS[name]
         nb = builder()
         path = OUT_DIR / name
+        _assign_stable_cell_ids(nb, path)
         nbf.write(nb, path)
         try:
             display = path.relative_to(ROOT)
@@ -726,4 +781,13 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--only",
+        nargs="+",
+        choices=tuple(NOTEBOOK_BUILDERS),
+        metavar="NOTEBOOK",
+        help="Regenerate only the named canonical notebook(s).",
+    )
+    args = parser.parse_args()
+    raise SystemExit(main(tuple(args.only) if args.only else None))

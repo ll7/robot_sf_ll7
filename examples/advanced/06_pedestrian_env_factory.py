@@ -121,7 +121,7 @@ def run(filename: str, map_name: str, robot_model: str, use_new_pattern: bool = 
         if done:
             obs, _ = env.reset()
             env.render()
-    env.exit()
+    env.close()
 
 
 if __name__ == "__main__":

@@ -234,14 +234,17 @@ class BaseEnv(Env):
         raise NotImplementedError
 
     def close(self) -> None:
-        """Release the simulation UI and close the Gymnasium environment.
+        """Release the simulation UI, recorder, and Gymnasium environment.
 
         Idempotent: calling it more than once is safe.
         """
-        if self.sim_ui:
-            self.sim_ui.exit_simulation()
-            self.sim_ui = None
-        super().close()
+        try:
+            if self.sim_ui:
+                self.sim_ui.exit_simulation()
+                self.sim_ui = None
+        finally:
+            self.close_recorder()
+            super().close()
 
     def exit(self) -> None:  # pragma: no cover - deprecated shim
         """Deprecated alias for :meth:`close`.

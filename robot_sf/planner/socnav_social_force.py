@@ -445,7 +445,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
     def obstacle_force_law_metadata(self) -> dict[str, str]:
         """Return planner obstacle-law metadata without making an evidence claim."""
         return obstacle_force_law_metadata(
-            getattr(self.config, "social_force_obstacle_law", None),
+            getattr(getattr(self, "config", None), "social_force_obstacle_law", None),
             site="socnav_social_force",
             geometry_convention="occupancy_cell_centers",
             radius_convention="cell_derived_radius_plus_robot_radius",

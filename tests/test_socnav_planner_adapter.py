@@ -271,6 +271,15 @@ def test_social_force_adapter():
     assert v >= 0.0
 
 
+def test_social_force_diagnostics_defaults_before_initialization():
+    """Diagnostics remain safe for protocol fixtures that bypass ``__init__``."""
+    adapter = SocialForcePlannerAdapter.__new__(SocialForcePlannerAdapter)
+
+    diagnostics = adapter.diagnostics()
+
+    assert diagnostics["obstacle_force_law"]["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
+
+
 def test_social_force_adapter_responds_to_pedestrian():
     """Social-force adapter slows or turns when pedestrians are in the path."""
     cfg = SocNavPlannerConfig(social_force_repulsion_weight=2.0)

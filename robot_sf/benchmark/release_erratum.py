@@ -1836,12 +1836,12 @@ def validate_erratum_receipt_against_campaign(
         Compact public observations for the cold audit receipt.
     """
     root = Path(campaign_root).resolve()
-    if archive_name is None:
+    validated_archive_name = _validate_archive_name(archive_name)
+    if validated_archive_name is None:
         raise ReleaseErratumError(
             "published erratum archive filename is required for exact URL binding"
         )
-    archive_name = _validate_archive_name(archive_name)
-    assert archive_name is not None
+    archive_name = validated_archive_name
     expected_receipt_path = root / "provenance/benchmark_release_erratum.json"
     expected_metadata_path = root / "release/zenodo_metadata.erratum.json"
     if Path(receipt_path).resolve() != expected_receipt_path:

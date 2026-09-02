@@ -150,6 +150,31 @@ def test_make_env_with_mapping_and_planner():
         env.close()
 
 
+@pytest.mark.parametrize(
+    "planner_action",
+    [{"v": 0.0, "omega": 0.0}, {"vx": 0.0, "vy": 0.0}],
+)
+def test_run_episode_converts_protocol_action(planner_action):
+    """Verify baseline protocol mappings are projected into the env action space."""
+    env = robot_sf.make_env(seed=123)
+    try:
+
+        class DictPlanner:
+            def step(self, obs):
+                return planner_action
+
+        record = robot_sf.run_episode(env, planner=DictPlanner(), max_steps=1)
+        assert record.horizon == 1
+    finally:
+        env.close()
+
+
+def test_load_scenario_resolves_entry_name():
+    """Verify lookup by the scenario entry name, not only the manifest filename."""
+    scenario = robot_sf.load_scenario("quickstart_demo_crossing_basic")
+    assert scenario["name"] == "quickstart_demo_crossing_basic"
+
+
 def test_make_env_invalid_scenario_type():
     """Verify make_env rejects unsupported scenario types."""
     with pytest.raises(TypeError, match="scenario must be a str, Path, or Mapping"):

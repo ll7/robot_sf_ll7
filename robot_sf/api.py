@@ -6,6 +6,7 @@ environment construction, and episode execution.
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Mapping
 from pathlib import Path
@@ -63,6 +64,57 @@ def _resolve_scenario_path(scenario_id: str | Path) -> Path:
     )
 
 
+def _scenario_query_values(scenario_id: str | Path) -> set[str]:
+    """Return normalized identifier spellings accepted for scenario lookup."""
+    query = str(scenario_id).strip()
+    values = {query.casefold()}
+    if Path(query).suffix.lower() in {".yaml", ".yml"}:
+        values.add(Path(query).stem.casefold())
+    return values
+
+
+def _scenario_matches(scenario: Mapping[str, Any], query_values: set[str]) -> bool:
+    """Return whether a loaded scenario carries one of the requested identifiers."""
+    for key in ("name", "scenario_id", "id"):
+        value = scenario.get(key)
+        if isinstance(value, str) and value.strip().casefold() in query_values:
+            return True
+    return False
+
+
+def _find_scenario_in_manifests(
+    scenario_id: str | Path,
+    scenarios_root: Path,
+) -> tuple[Path, Mapping[str, Any], list[Mapping[str, Any]]] | None:
+    """Find a named scenario entry when no manifest filename matches the query.
+
+    Returns:
+        A tuple containing the manifest path, matching entry, and all entries
+        loaded from that manifest; ``None`` when no manifest contains a match.
+    """
+    from robot_sf.training.scenario_loader import load_scenarios  # noqa: PLC0415
+
+    query_values = _scenario_query_values(scenario_id)
+    manifest_paths = sorted({*scenarios_root.glob("**/*.yaml"), *scenarios_root.glob("**/*.yml")})
+    matches: list[tuple[Path, Mapping[str, Any], list[Mapping[str, Any]]]] = []
+    for manifest_path in manifest_paths:
+        try:
+            loaded = load_scenarios(manifest_path)
+        except (OSError, ValueError):
+            # The directory also contains auxiliary YAML files and manifests
+            # whose includes may be unavailable in a partial checkout. They
+            # cannot satisfy this lookup, so continue searching usable files.
+            continue
+        for scenario in loaded:
+            if _scenario_matches(scenario, query_values):
+                matches.append((manifest_path.resolve(), scenario, loaded))
+
+    if len(matches) > 1:
+        locations = ", ".join(str(path) for path, _entry, _loaded in matches)
+        raise ValueError(f"Scenario {scenario_id!r} is ambiguous; found matches in {locations}")
+    return matches[0] if matches else None
+
+
 def load_scenario(scenario_id: str | Path) -> dict[str, Any]:
     """Resolve and load a scenario definition from configs/scenarios/*.yaml.
 
@@ -79,17 +131,27 @@ def load_scenario(scenario_id: str | Path) -> dict[str, Any]:
     """
     from robot_sf.training.scenario_loader import load_scenarios  # noqa: PLC0415
 
-    resolved_path = _resolve_scenario_path(scenario_id)
-    loaded = load_scenarios(resolved_path)
+    scenarios_root = _find_repo_root() / "configs" / "scenarios"
+    selected: dict[str, Any] | None = None
+    try:
+        resolved_path = _resolve_scenario_path(scenario_id)
+    except FileNotFoundError:
+        manifest_match = _find_scenario_in_manifests(scenario_id, scenarios_root)
+        if manifest_match is None:
+            raise
+        resolved_path, matching_scenario, loaded = manifest_match
+        selected = dict(matching_scenario)
+    else:
+        loaded = load_scenarios(resolved_path)
     if not loaded:
         raise ValueError(f"No scenarios found in {resolved_path}")
 
-    target_id = Path(scenario_id).stem
-    selected: dict[str, Any] | None = None
-    for sc in loaded:
-        if sc.get("id") == target_id or sc.get("name") == target_id:
-            selected = dict(sc)
-            break
+    if selected is None:
+        query_values = _scenario_query_values(scenario_id)
+        for scenario in loaded:
+            if _scenario_matches(scenario, query_values):
+                selected = dict(scenario)
+                break
     if selected is None:
         selected = dict(loaded[0])
 
@@ -150,19 +212,69 @@ def make_env(
     return env
 
 
+def _planner_action_to_env_action(action: Any, planner: Any, env: Any) -> Any:
+    """Convert a protocol action mapping into the environment action array.
+
+    Baseline planners expose velocity commands as ``{"v", "omega"}`` or
+    ``{"vx", "vy"}``, while :class:`RobotEnv` consumes its configured native
+    action vector (often an acceleration command). The shared map-runner
+    converter owns that kinematics projection; raw arrays and other array-like
+    callable outputs remain compatible with Gymnasium environments.
+
+    Returns:
+        Action compatible with the environment's action space.
+    """
+    if not isinstance(action, Mapping):
+        return action
+
+    planner_type = type(planner).__name__
+    if "v" in action and "omega" in action:
+        command: tuple[float, float] | dict[str, Any] = (
+            float(action["v"]),
+            float(action["omega"]),
+        )
+    elif "vx" in action and "vy" in action:
+        command = {
+            "command_kind": "holonomic_vxy_world",
+            "vx": float(action["vx"]),
+            "vy": float(action["vy"]),
+        }
+    else:
+        raise ValueError(
+            f"{planner_type}.step() action must contain v/omega or vx/vy keys; got {dict(action)!r}"
+        )
+
+    values = (command["vx"], command["vy"]) if isinstance(command, dict) else command
+    if not all(math.isfinite(float(value)) for value in values):
+        raise ValueError(f"{planner_type}.step() action values must be finite; got {action!r}")
+
+    from robot_sf.benchmark.map_runner_policies.map_runner_actions import (  # noqa: PLC0415
+        policy_command_to_env_action,
+    )
+
+    return policy_command_to_env_action(
+        env=env,
+        config=getattr(env, "config", None),
+        command=command,
+    )
+
+
 def _extract_action(planner: Any, obs: Any, env: Any) -> Any:
-    """Generate an action from planner, callable, or default zeros.
+    """Generate and normalize an action from a planner, callable, or zeros.
 
     Returns:
         Action compatible with the environment's action space.
     """
     if planner is not None:
         if hasattr(planner, "step"):
-            return planner.step(obs)
-        if callable(planner):
-            return planner(obs)
-        return env.action_space.sample()
-    return np.zeros(2, dtype=np.float32)
+            raw_action = planner.step(obs)
+        elif callable(planner):
+            raw_action = planner(obs)
+        else:
+            raw_action = env.action_space.sample()
+    else:
+        raw_action = np.zeros(2, dtype=np.float32)
+    return _planner_action_to_env_action(raw_action, planner, env)
 
 
 def _extract_metrics(

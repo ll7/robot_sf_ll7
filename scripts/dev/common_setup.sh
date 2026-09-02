@@ -127,9 +127,9 @@ PY
   fi
 }
 
-# The threaded rollout path imports a context manager added to the vendored
-# fast-pysf package.  A stale force-included install otherwise fails during
-# pytest collection with an opaque ImportError (issue #5665).
+# The threaded rollout path imports APIs added to the vendored fast-pysf package.
+# A stale or partially refreshed force-included install otherwise fails during
+# pytest collection with an opaque ImportError (issues #5665 and #8302).
 preflight_check_fast_pysf() {
   if [ "${PR_READY_SKIP_PREFLIGHT:-0}" = "1" ]; then
     return 0

@@ -104,21 +104,28 @@ def _write_atomic(path: Path, payload: dict[str, Any]) -> None:
     parent.mkdir(parents=True, exist_ok=True)
     if parent.is_symlink():
         raise ValueError("receipt parent must not be a symlink")
-    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=parent)
+    fd, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=parent)
+    temporary: Path | None = Path(temporary_name)
     try:
         os.fchmod(fd, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            fd = -1
             json.dump(payload, handle, sort_keys=True, separators=(",", ":"))
             handle.write("\n")
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, absolute)
-    except BaseException:
-        try:
-            os.unlink(temporary)
-        except FileNotFoundError:
-            pass
-        raise
+        temporary = None
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        if temporary is not None:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                pass
 
 
 def create_receipt(worktree: str | Path, *, task_id: str, base_ref: str) -> dict[str, str]:

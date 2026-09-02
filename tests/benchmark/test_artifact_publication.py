@@ -18,6 +18,7 @@ from robot_sf.benchmark.artifact_publication import (
     _SNQI_DEFAULT_BASELINE_NAME,
     _SNQI_DEFAULT_WEIGHTS_NAME,
     PUBLICATION_BUNDLE_SCHEMA_VERSION,
+    RELEASE_PUBLICATION_METADATA_SCHEMA_VERSION,
     SIZE_REPORT_SCHEMA_VERSION,
     _build_rights_provenance_statement,
     _check_goal_timeout_boundary,
@@ -691,7 +692,12 @@ def test_release_bundle_stages_cold_verification_metadata_and_raw_policy(tmp_pat
     }
     assert metadata["raw_artifact_policy"]["campaign_output"] == "durable-required"
     assert metadata["cold_verification"]["credentials"] == "not_recorded"
-    assert (result.bundle_dir / "payload" / "release_metadata" / "CITATION.cff").is_file()
+    citation = result.bundle_dir / "payload" / "release_metadata" / "CITATION.cff"
+    assert citation.is_file()
+    assert (
+        citation.read_bytes()
+        == (artifact_publication_module.get_repository_root() / "CITATION.cff").read_bytes()
+    )
     assert (result.bundle_dir / "payload" / "release_metadata" / "zenodo_metadata.json").is_file()
     rights = result.bundle_dir / "payload" / "release_metadata" / "rights_provenance.md"
     assert "SNQI" in rights.read_text(encoding="utf-8")
@@ -705,6 +711,43 @@ def test_release_bundle_stages_cold_verification_metadata_and_raw_policy(tmp_pat
     # Raw episode rows are retained even when optional videos are excluded.
     assert (result.bundle_dir / "payload" / "episodes" / "episodes.jsonl").is_file()
     assert not (result.bundle_dir / "payload" / "videos").exists()
+
+    violations: list[str] = []
+    _preflight_check_release_metadata(
+        result.bundle_dir / "payload",
+        manifest,
+        violations=violations,
+    )
+    assert violations == []
+
+
+def test_release_bundle_rejects_run_local_reserved_metadata_namespace(tmp_path: Path) -> None:
+    """A run-local ``release_metadata/*`` file cannot replace authoritative metadata."""
+    run_dir = tmp_path / "benchmarks" / "release_metadata_collision"
+    _make_run(run_dir, with_video=False)
+    _write(
+        run_dir / "release" / "release_manifest.resolved.json",
+        json.dumps(
+            {
+                "metrics": {
+                    "snqi_weights_path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+                    "snqi_baseline_path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+                }
+            }
+        ),
+    )
+    _write(run_dir / "release" / "release_result.json", "{}\n")
+    _write(run_dir / "release_metadata" / "CITATION.cff", "ATTACKER\n")
+
+    with pytest.raises(ValueError, match="Run-local release_metadata paths are reserved"):
+        export_publication_bundle(
+            run_dir,
+            tmp_path / "publication",
+            bundle_name="release_metadata_collision_bundle",
+            include_videos=False,
+        )
+
+    assert not (tmp_path / "publication").exists()
 
 
 def test_release_bundle_snqi_basis_prefers_pinned_payload_assets(
@@ -847,3 +890,38 @@ def test_release_metadata_preflight_reports_schema_roles_and_policy(tmp_path: Pa
         violations=violations,
     )
     assert any("invalid payload path" in item for item in violations)
+
+
+def test_release_metadata_preflight_rejects_generic_reserved_namespace_entry(
+    tmp_path: Path,
+) -> None:
+    """Preflight must not admit a run-selected file as authoritative metadata."""
+    payload_dir = tmp_path / "bundle" / "payload"
+    citation = payload_dir / "release_metadata" / "CITATION.cff"
+    citation.parent.mkdir(parents=True)
+    citation.write_text("ATTACKER\n", encoding="utf-8")
+    digest = artifact_publication_module._sha256_file(citation)
+    manifest = {
+        "files": [
+            {
+                "path": "release_metadata/CITATION.cff",
+                "size_bytes": citation.stat().st_size,
+                "sha256": digest,
+                "kind": "misc",
+            }
+        ],
+        "release_metadata": {
+            "schema_version": RELEASE_PUBLICATION_METADATA_SCHEMA_VERSION,
+            "files": {
+                "citation": {
+                    "path": "payload/release_metadata/CITATION.cff",
+                    "sha256": digest,
+                }
+            },
+        },
+    }
+
+    violations: list[str] = []
+    _preflight_check_release_metadata(payload_dir, manifest, violations=violations)
+
+    assert any("not marked as authoritative provenance" in item for item in violations)

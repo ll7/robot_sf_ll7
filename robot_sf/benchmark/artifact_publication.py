@@ -63,6 +63,7 @@ _DEFAULT_ZENODO_METADATA_RELATIVE = Path(
 )
 _BUNDLED_SNQI_WEIGHTS_RELATIVE = Path("release_metadata/snqi/snqi_weights_camera_ready_v3.json")
 _BUNDLED_SNQI_BASELINE_RELATIVE = Path("release_metadata/snqi/snqi_baseline_camera_ready_v3.json")
+_RELEASE_METADATA_NAMESPACE = "release_metadata"
 _REQUIRED_RELEASE_METADATA_ROLES = (
     "release_manifest",
     "release_result",
@@ -72,6 +73,15 @@ _REQUIRED_RELEASE_METADATA_ROLES = (
     "snqi_weights",
     "snqi_baseline",
 )
+_RELEASE_METADATA_PAYLOAD_PATHS = {
+    "release_manifest": "payload/release/release_manifest.resolved.json",
+    "release_result": "payload/release/release_result.json",
+    "citation": "payload/release_metadata/CITATION.cff",
+    "zenodo_metadata": "payload/release_metadata/zenodo_metadata.json",
+    "rights_provenance": "payload/release_metadata/rights_provenance.md",
+    "snqi_weights": "payload/release_metadata/snqi/snqi_weights_camera_ready_v3.json",
+    "snqi_baseline": "payload/release_metadata/snqi/snqi_baseline_camera_ready_v3.json",
+}
 _SNQI_RECOMPUTE_RTOL = 1e-9
 _SNQI_RECOMPUTE_ATOL = 1e-9
 _RECOMMENDED_MANUSCRIPT_USES = {
@@ -740,6 +750,28 @@ def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
     )
 
 
+def _reject_run_local_release_metadata_paths(selected_files: list[Path]) -> None:
+    """Reject run files that could shadow the authoritative release namespace.
+
+    Release bundles materialize ``payload/release_metadata/`` from repository-
+    or explicitly contract-bound sources.  A recursively selected run file at
+    that prefix is therefore ambiguous: the exporter cannot safely distinguish
+    an authoritative copy from an attacker-controlled replacement.  The
+    release contract does not need run-local files in this namespace, so reject
+    the entire namespace instead of trying to establish byte identity here.
+    """
+    reserved = sorted(
+        path.as_posix()
+        for path in selected_files
+        if path.parts and path.parts[0].casefold() == _RELEASE_METADATA_NAMESPACE
+    )
+    if reserved:
+        raise ValueError(
+            "Run-local release_metadata paths are reserved for authoritative publication "
+            "metadata: " + ", ".join(reserved)
+        )
+
+
 def _validate_publication_requirements(run_root: Path, selected_files: list[Path]) -> None:
     """Validate bundle completeness requirements for publication-critical runs."""
     selected_set = {path.as_posix() for path in selected_files}
@@ -1399,6 +1431,8 @@ def export_publication_bundle(  # noqa: C901, PLR0913, PLR0915
         raise ValueError(f"No eligible files found under {run_root}")
     _validate_publication_requirements(run_root, selected_files)
     release_metadata = _resolve_release_publication_metadata(run_root)
+    if release_metadata is not None:
+        _reject_run_local_release_metadata_paths(selected_files)
 
     target_name = bundle_name.strip() if bundle_name else f"{run_root.name}_publication_bundle"
     _validate_bundle_name(target_name)
@@ -2403,7 +2437,7 @@ def _preflight_check_channels(
         warnings.append("publication_manifest.json omits publication_channels")
 
 
-def _preflight_check_release_metadata(  # noqa: C901
+def _preflight_check_release_metadata(  # noqa: C901, PLR0912
     payload_dir: Path,
     manifest: Mapping[str, Any],
     *,
@@ -2423,6 +2457,17 @@ def _preflight_check_release_metadata(  # noqa: C901
     if not isinstance(files, Mapping):
         violations.append("publication_manifest.release_metadata.files must be an object")
         return
+    manifest_entries = manifest.get("files")
+    manifest_entries_by_path: dict[str, Mapping[str, Any]] = {}
+    if isinstance(manifest_entries, list):
+        for raw_entry in manifest_entries:
+            if not isinstance(raw_entry, Mapping):
+                continue
+            raw_manifest_path = raw_entry.get("path")
+            if not isinstance(raw_manifest_path, str) or not raw_manifest_path.strip():
+                continue
+            normalized_path = raw_manifest_path.removeprefix("payload/")
+            manifest_entries_by_path.setdefault(f"payload/{normalized_path}", raw_entry)
     required_roles = _REQUIRED_RELEASE_METADATA_ROLES if required else tuple(files)
     for role in required_roles:
         entry = files.get(role)
@@ -2434,6 +2479,25 @@ def _preflight_check_release_metadata(  # noqa: C901
         if not isinstance(raw_path, str) or not raw_path.startswith("payload/"):
             violations.append(f"release metadata role {role!r} has an invalid payload path")
             continue
+        expected_path = _RELEASE_METADATA_PAYLOAD_PATHS.get(role)
+        if expected_path is not None and raw_path != expected_path:
+            violations.append(
+                f"release metadata role {role!r} is not at its canonical payload path"
+            )
+        manifest_entry = manifest_entries_by_path.get(raw_path)
+        if manifest_entry is None:
+            violations.append(
+                f"release metadata role {role!r} is not represented in publication manifest files"
+            )
+        elif (
+            raw_path.removeprefix("payload/")
+            .casefold()
+            .startswith(f"{_RELEASE_METADATA_NAMESPACE}/")
+            and manifest_entry.get("kind") != "provenance"
+        ):
+            violations.append(
+                f"release metadata role {role!r} is not marked as authoritative provenance"
+            )
         candidate = (payload_dir.parent / raw_path).resolve()
         if not candidate.is_relative_to(payload_dir.parent) or not candidate.is_file():
             violations.append(f"release metadata role {role!r} payload is missing")
@@ -2441,6 +2505,25 @@ def _preflight_check_release_metadata(  # noqa: C901
         actual_sha = _sha256_file(candidate)
         if not isinstance(declared_sha, str) or declared_sha.lower() != actual_sha:
             violations.append(f"release metadata role {role!r} checksum does not match payload")
+
+    if required and manifest_entries_by_path:
+        reserved_prefix = f"payload/{_RELEASE_METADATA_NAMESPACE}/"
+        declared_reserved_paths = {
+            entry.get("path")
+            for entry in files.values()
+            if isinstance(entry, Mapping)
+            and isinstance(entry.get("path"), str)
+            and entry["path"].startswith(reserved_prefix)
+        }
+        for raw_path in sorted(manifest_entries_by_path):
+            if (
+                raw_path.casefold().startswith(reserved_prefix)
+                and raw_path not in declared_reserved_paths
+            ):
+                violations.append(
+                    "publication manifest contains an unbound file in the reserved "
+                    f"release metadata namespace: {raw_path}"
+                )
 
     if required:
         raw_policy = block.get("raw_artifact_policy")

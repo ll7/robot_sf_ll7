@@ -339,6 +339,94 @@ def test_segmenter_requires_explicit_robot_context_for_robot_approach() -> None:
     assert all("obstacle_avoidance" in blocker for blocker in result.blockers)
 
 
+def test_partial_robot_context_excludes_context_dependent_windows() -> None:
+    """A robot trace must cover the window before it can support a positive label."""
+
+    track_times = np.arange(0.0, 4.01, 0.2)
+    result = segment_interactions(
+        _track_set(
+            (
+                EthUcyTrack(
+                    pedestrian_id=8,
+                    time_s=track_times,
+                    positions=np.column_stack((track_times, np.zeros_like(track_times))),
+                ),
+            )
+        ),
+        context=RealismInteractionContext(
+            robot_time_s=np.asarray([0.0, 1.0]),
+            robot_positions=np.asarray([[-10.0, -10.0], [-9.0, -10.0]]),
+            scene_geometry=RealismSceneGeometry(
+                bounds_m=((-20.0, -20.0), (20.0, 20.0)),
+            ),
+        ),
+        config=InteractionSegmentationConfig(frame_window_s=0.8, frame_stride_s=0.8),
+    )
+
+    assert result.counts["free_walking"] == 0
+    assert result.counts["robot_approach"] == 0
+    assert result.excluded_window_counts["insufficient_context"] > 0
+
+
+def test_partial_robot_context_does_not_admit_robot_approach() -> None:
+    """A nearby pedestrian cannot be labeled from a robot trace ending mid-window."""
+
+    track_times = np.arange(0.0, 4.01, 0.2)
+    result = segment_interactions(
+        _track_set(
+            (
+                EthUcyTrack(
+                    pedestrian_id=9,
+                    time_s=track_times,
+                    positions=np.column_stack(
+                        (np.ones_like(track_times), np.zeros_like(track_times))
+                    ),
+                ),
+            )
+        ),
+        context=RealismInteractionContext(
+            robot_time_s=np.asarray([0.0, 1.0]),
+            robot_positions=np.asarray([[0.0, 0.0], [1.0, 0.0]]),
+        ),
+        config=InteractionSegmentationConfig(
+            frame_window_s=0.8,
+            frame_stride_s=0.8,
+            robot_distance_m=1.2,
+            robot_approach_min_speed_mps=0.1,
+        ),
+    )
+
+    assert result.counts["robot_approach"] == 0
+
+
+def test_free_walking_excludes_track_positions_outside_scene_bounds() -> None:
+    """A supplied scene contract cannot certify an out-of-bounds free-walking track."""
+
+    track_times = np.arange(0.0, 3.21, 0.2)
+    result = segment_interactions(
+        _track_set(
+            (
+                EthUcyTrack(
+                    pedestrian_id=10,
+                    time_s=track_times,
+                    positions=np.column_stack((10.0 + track_times, np.zeros_like(track_times))),
+                ),
+            )
+        ),
+        context=RealismInteractionContext(
+            robot_time_s=track_times,
+            robot_positions=np.column_stack(
+                (np.full_like(track_times, -10.0), np.full_like(track_times, -10.0))
+            ),
+            scene_geometry=RealismSceneGeometry(bounds_m=((-1.0, -1.0), (1.0, 1.0))),
+        ),
+        config=InteractionSegmentationConfig(frame_window_s=0.8, frame_stride_s=0.8),
+    )
+
+    assert result.counts["free_walking"] == 0
+    assert result.excluded_window_counts["insufficient_context"] > 0
+
+
 def test_segmenter_labels_a_turn_near_a_trusted_obstacle() -> None:
     """Obstacle labels require supplied geometry and a measurable trajectory turn."""
 

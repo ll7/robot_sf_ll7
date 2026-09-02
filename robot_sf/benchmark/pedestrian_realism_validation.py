@@ -472,6 +472,8 @@ class InteractionSegmentationConfig:
     the evidence fields preserve the participating track ids.  Missing robot or
     obstacle context never causes an inferred context-dependent label, and it
     prevents an otherwise unclassified window from being called ``free_walking``.
+    Supplied robot context must cover the complete admitted window and its
+    prediction horizon.
     """
 
     frame_window_s: float = 0.8
@@ -692,7 +694,9 @@ def segment_interactions(
     ``tracks`` sequence with ``pedestrian_id``, ``time_s``, and ``positions``.
     Pedestrian-only labels are inferred from geometry and finite differences;
     robot and obstacle labels require explicit caller-supplied context.  No
-    external data is loaded and no missing context is treated as a positive event.
+    external data is loaded and no missing or temporally partial context is treated as a
+    positive event.  Supplied scene bounds are checked for active tracks before context-dependent
+    labels are admitted.
 
     Returns:
         A deterministic, denominator-aware segmentation result.  ``not_available``
@@ -755,11 +759,21 @@ def segment_interactions(
         if not active_states:
             excluded_window_counts["incomplete_track_coverage"] += 1
             continue
+        track_positions_in_scene = _active_track_positions_within_scene_bounds(
+            active_states,
+            track_arrays,
+            scene_geometry=context.scene_geometry if context is not None else None,
+            start_time_s=float(start_time_s),
+            end_time_s=float(end_time_s),
+        )
         classified = _classify_interaction_window(
             active_states,
             config=cfg,
             context=context,
+            window_start_s=float(start_time_s),
+            window_end_s=float(end_time_s),
             horizon_s=cfg.frame_window_s,
+            track_positions_in_scene=track_positions_in_scene,
         )
         if classified is None:
             if not _states_have_observed_motion(active_states, config=cfg):
@@ -845,6 +859,47 @@ def _validated_segmentation_track(
     if not np.all(np.diff(times) > 0.0):
         raise ValueError("segmentation track time_s must be strictly increasing")
     return times, positions, normalized_id
+
+
+def _active_track_positions_within_scene_bounds(
+    states: Sequence[_InteractionTrackState],
+    track_arrays: Sequence[tuple[np.ndarray, np.ndarray, int]],
+    *,
+    scene_geometry: RealismSceneGeometry | None,
+    start_time_s: float,
+    end_time_s: float,
+) -> bool:
+    """Return whether active track positions fit supplied bounds for this window.
+
+    The check is deliberately window-aware: incomplete tracks are already excluded by the
+    caller, and samples from complete active tracks are checked only over the admitted window.
+    Interpolated window endpoints and centres are checked as well so sparse tracks cannot bypass
+    the scene contract between raw samples.
+    """
+
+    if scene_geometry is None:
+        return True
+    lower = np.asarray(scene_geometry.bounds_m[0], dtype=float)
+    upper = np.asarray(scene_geometry.bounds_m[1], dtype=float)
+    active_track_ids = {state.track_id for state in states}
+    tolerance = 1e-9
+    for times, positions, track_id in track_arrays:
+        if track_id not in active_track_ids:
+            continue
+        in_window = (times >= start_time_s - tolerance) & (times <= end_time_s + tolerance)
+        window_positions = positions[in_window]
+        if window_positions.size and (
+            np.any(window_positions < lower - tolerance)
+            or np.any(window_positions > upper + tolerance)
+        ):
+            return False
+    for state in states:
+        for position in (state.start_position, state.position, state.end_position):
+            if position is not None and (
+                np.any(position < lower - tolerance) or np.any(position > upper + tolerance)
+            ):
+                return False
+    return True
 
 
 def _segmentation_window_starts(
@@ -939,7 +994,10 @@ def _classify_interaction_window(
     *,
     config: InteractionSegmentationConfig,
     context: RealismInteractionContext | None,
+    window_start_s: float,
+    window_end_s: float,
     horizon_s: float,
+    track_positions_in_scene: bool,
 ) -> tuple[str, tuple[int, ...], tuple[str, ...]] | None:
     """Apply the fixed primary-label precedence to one time window.
 
@@ -949,21 +1007,29 @@ def _classify_interaction_window(
         label.
     """
 
-    robot_ids = _robot_approach_ids(states, context, config=config, horizon_s=horizon_s)
-    if robot_ids:
-        return (
-            "robot_approach",
-            tuple(robot_ids),
-            ("explicit robot trajectory approached pedestrian",),
+    if track_positions_in_scene:
+        robot_ids = _robot_approach_ids(
+            states,
+            context,
+            config=config,
+            window_start_s=window_start_s,
+            window_end_s=window_end_s,
+            horizon_s=horizon_s,
         )
+        if robot_ids:
+            return (
+                "robot_approach",
+                tuple(robot_ids),
+                ("explicit robot trajectory approached pedestrian",),
+            )
 
-    obstacle_ids = _obstacle_avoidance_ids(states, context, config=config)
-    if obstacle_ids:
-        return (
-            "obstacle_avoidance",
-            tuple(obstacle_ids),
-            ("turning trajectory near static obstacle",),
-        )
+        obstacle_ids = _obstacle_avoidance_ids(states, context, config=config)
+        if obstacle_ids:
+            return (
+                "obstacle_avoidance",
+                tuple(obstacle_ids),
+                ("turning trajectory near static obstacle",),
+            )
 
     crossing_pair = _first_crossing_pair(states, config=config, horizon_s=horizon_s)
     if crossing_pair:
@@ -995,7 +1061,13 @@ def _classify_interaction_window(
 
     if not _states_have_observed_motion(states, config=config):
         return None
-    if not _free_walking_context_available(context):
+    if not _free_walking_context_available(
+        context,
+        window_start_s=window_start_s,
+        window_end_s=window_end_s,
+        prediction_horizon_s=horizon_s,
+        track_positions_in_scene=track_positions_in_scene,
+    ):
         return None
     return "free_walking", tuple(state.track_id for state in states), ()
 
@@ -1021,14 +1093,49 @@ def _states_have_observed_motion(
     return all(_state_has_observed_motion(state, config=config) for state in states)
 
 
-def _free_walking_context_available(context: RealismInteractionContext | None) -> bool:
-    """Return whether context can rule out unobserved robot/obstacle interactions."""
+def _free_walking_context_available(
+    context: RealismInteractionContext | None,
+    *,
+    window_start_s: float,
+    window_end_s: float,
+    prediction_horizon_s: float,
+    track_positions_in_scene: bool,
+) -> bool:
+    """Return whether context can rule out unobserved interactions for this window.
+
+    The robot trace must cover the whole window and the same forward horizon used by the
+    context-dependent classifier; scene bounds must also validate the active tracks.
+    """
 
     return (
-        context is not None
-        and context.robot_time_s is not None
-        and context.robot_positions is not None
+        track_positions_in_scene
+        and context is not None
         and context.scene_geometry is not None
+        and _robot_context_covers_window(
+            context,
+            window_start_s=window_start_s,
+            window_end_s=window_end_s,
+            prediction_horizon_s=prediction_horizon_s,
+        )
+    )
+
+
+def _robot_context_covers_window(
+    context: RealismInteractionContext | None,
+    *,
+    window_start_s: float,
+    window_end_s: float,
+    prediction_horizon_s: float,
+) -> bool:
+    """Return whether the robot trace covers a window and its prediction horizon."""
+
+    if context is None or context.robot_time_s is None or context.robot_positions is None:
+        return False
+    required_end_s = window_end_s + prediction_horizon_s
+    tolerance = 1e-9
+    return bool(
+        context.robot_time_s[0] <= window_start_s + tolerance
+        and context.robot_time_s[-1] + tolerance >= required_end_s
     )
 
 
@@ -1274,6 +1381,8 @@ def _robot_approach_ids(
     context: RealismInteractionContext | None,
     *,
     config: InteractionSegmentationConfig,
+    window_start_s: float,
+    window_end_s: float,
     horizon_s: float,
 ) -> tuple[int, ...]:
     """Return pedestrians approached by the explicit robot trajectory.
@@ -1284,11 +1393,16 @@ def _robot_approach_ids(
 
     if context is None or context.robot_time_s is None or context.robot_positions is None:
         return ()
+    if not _robot_context_covers_window(
+        context,
+        window_start_s=window_start_s,
+        window_end_s=window_end_s,
+        prediction_horizon_s=horizon_s,
+    ):
+        return ()
     robot_time_s = context.robot_time_s
     robot_positions = context.robot_positions
     center_time_s = _state_center_time(states)
-    if center_time_s < robot_time_s[0] or center_time_s > robot_time_s[-1]:
-        return ()
     robot_position = _interpolate_position(robot_time_s, robot_positions, center_time_s)
     robot_velocity = _track_velocity_at(robot_time_s, robot_positions, center_time_s)
     ids: list[int] = []

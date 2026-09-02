@@ -656,7 +656,12 @@ def run_demo(
             reward_func=simple_reward,
             debug=not explicit_fast_flag or eff_record,
             record_video=eff_record,
-            video_path=str(effective_output_dir) if eff_record else None,
+            # ``_maybe_record`` owns per-episode filenames.  Passing the output
+            # directory to ``SimulationView`` makes its shutdown hook treat the
+            # directory as a video filename and MoviePy cannot infer a codec.
+            # Keep the view in capture-only mode; the episode helper writes the
+            # deterministic ``*.mp4`` path below.
+            video_path=None,
         )
         logger.info(
             "Environment created (reward fallback active if custom reward not provided).",

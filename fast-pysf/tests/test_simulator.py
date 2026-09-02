@@ -99,16 +99,19 @@ def test_simulator_emits_explicit_obstacle_force_law_metadata():
     assert corrected.obstacle_force_law_metadata()["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
 
 
-def test_default_simulator_config_is_isolated_between_instances():
-    """A caller's opt-in law must not mutate later default simulator instances."""
+def test_default_simulator_configs_are_isolated_between_instances():
+    """Neither simulator wrapper leaks an opt-in law into a later default instance."""
     state = np.zeros((0, 7), dtype=float)
-    first = pysf.Simulator(state=state)
-    first.config.obstacle_force_config.law_version = SURFACE_DISTANCE_UNIT_NORMAL_V2
+    simulator_pairs = [
+        (pysf.Simulator(state=state), pysf.Simulator(state=state)),
+        (pysf.Simulator_v2(), pysf.Simulator_v2()),
+    ]
 
-    second = pysf.Simulator(state=state)
+    for first, second in simulator_pairs:
+        first.config.obstacle_force_config.law_version = SURFACE_DISTANCE_UNIT_NORMAL_V2
 
-    assert first.obstacle_force_law_metadata()["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
-    assert second.obstacle_force_law_metadata()["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
+        assert first.obstacle_force_law_metadata()["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
+        assert second.obstacle_force_law_metadata()["law_version"] == LEGACY_SHIFTED_GRADIENT_V1
 
 
 def test_compute_force_components_evaluates_each_force_once_and_preserves_default_sum():

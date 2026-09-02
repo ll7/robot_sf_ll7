@@ -567,6 +567,8 @@ def test_build_session_uses_header_only_token_and_requires_requests(
         "https://zenodo.org/api#fragment",
         "https://user:password@zenodo.org/api",
         "https://evil.example/api",
+        "https://zenodo.org/records",
+        "https://zenodo.org/%61pi",
     ],
 )
 def test_authenticated_operations_reject_untrusted_api_base_before_network(
@@ -597,6 +599,16 @@ def test_authenticated_operations_reject_untrusted_api_base_before_network(
             operation(session)
         assert "secret" not in str(exc_info.value).casefold()
         assert session.urls == []
+
+
+def test_api_base_normalizes_one_trailing_slash() -> None:
+    """A canonical API base with a trailing slash never emits a double-slash endpoint."""
+    session = _Session()
+    session.posts = [_Response(_draft())]
+
+    publisher.reserve(session, _metadata(), api_base="https://zenodo.org/api/")
+
+    assert session.urls == ["https://zenodo.org/api/deposit/depositions"]
 
 
 @pytest.mark.parametrize(

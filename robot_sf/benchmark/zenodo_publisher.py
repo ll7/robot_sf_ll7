@@ -217,6 +217,7 @@ def _validated_api_base(api_base: str) -> str:
     except ValueError as exc:
         raise ZenodoPublisherError("Zenodo API base must be a valid HTTPS URL") from exc
     normalized_hostname = hostname.casefold() if hostname is not None else None
+    normalized_path = parsed.path.rstrip("/")
     if normalized_hostname not in _APPROVED_ZENODO_API_HOSTS:
         raise ZenodoPublisherError("Zenodo API base must use an approved Zenodo HTTPS origin")
     if normalized_hostname in {"zenodo.org", "sandbox.zenodo.org"} and port not in {None, 443}:
@@ -228,10 +229,10 @@ def _validated_api_base(api_base: str) -> str:
         or parsed.password is not None
         or parsed.query
         or parsed.fragment
-        or not parsed.path.rstrip("/")
+        or normalized_path != "/api"
     ):
         raise ZenodoPublisherError("Zenodo API base must be a valid HTTPS URL")
-    return candidate
+    return candidate.rstrip("/")
 
 
 def _validated_remote_url(value: Any, api_base: str, label: str) -> str:

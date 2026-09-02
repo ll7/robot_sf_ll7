@@ -92,6 +92,15 @@ def test_issue_view_wrapper_matches_delegated_issue_reader() -> None:
     assert wrapper.fail_closed_markers == reader.fail_closed_markers
 
 
+def test_label_helper_contract_covers_reads_and_verified_writes() -> None:
+    """The shared label helper contract covers strict reads and verified writes."""
+    contract = get_transport_contract("gh_pr_label_rest.py")
+
+    assert contract.allowed_transports == ("rest",)
+    assert "read" in contract.purpose
+    assert "verify" in contract.purpose
+
+
 def test_all_contracts_declare_help_and_smoke_paths() -> None:
     """The registry keeps discoverability and focused proof mandatory."""
     for name in TRANSPORT_CONTRACTS:

@@ -125,7 +125,7 @@ TRANSPORT_CONTRACTS: dict[str, TransportContract] = {
     ),
     "gh_pr_label_rest.py": _rest_contract(
         "gh_pr_label_rest.py",
-        "add or remove and verify issue or pull-request labels",
+        "read, add, or remove and verify issue or pull-request labels",
         "tests/dev/test_gh_pr_label_rest.py",
     ),
     "gh_pr_merge.sh": TransportContract(

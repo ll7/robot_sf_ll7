@@ -338,29 +338,36 @@ def build_view_command(*, repo: str, number: int) -> list[str]:
 
 
 def build_remove_label_command(*, repo: str, number: int, label: str) -> list[str]:
-    """Build the GitHub CLI command that removes one label from one issue."""
+    """Build the verified REST label-helper command for one issue label."""
     return [
-        "gh",
-        "issue",
-        "edit",
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "scripts.dev.gh_pr_label_rest",
+        "remove",
         str(number),
         "--repo",
         repo,
-        "--remove-label",
+        "--label",
         label,
     ]
 
 
 def _run_gh_command(command: list[str]) -> str:
-    """Run a GitHub CLI command and return stdout, mapping failures to RuntimeError."""
+    """Run the REST label helper command and map failures to RuntimeError."""
     try:
         result = subprocess.run(command, check=True, capture_output=True, text=True)
     except FileNotFoundError as exc:
-        raise RuntimeError("GitHub CLI 'gh' was not found; install gh or add it to PATH.") from exc
+        raise RuntimeError(
+            "REST label helper command was not found; install uv and Python or add them to PATH."
+        ) from exc
     except subprocess.CalledProcessError as exc:
         stderr = (exc.stderr or "").strip()
         details = f": {stderr}" if stderr else ""
-        raise RuntimeError(f"GitHub CLI command failed ({' '.join(command)}){details}") from exc
+        raise RuntimeError(
+            f"REST label helper command failed ({' '.join(command)}){details}"
+        ) from exc
     return result.stdout or ""
 
 

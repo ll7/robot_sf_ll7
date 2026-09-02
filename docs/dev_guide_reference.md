@@ -1396,9 +1396,13 @@ reviewing #6454). Neither operation needs Projects Classic data, so perform them
 through the REST-only helpers instead of the broad `gh pr` commands:
 
 ```bash
+# read the current issue/PR label inventory (paginated REST read)
+uv run python scripts/dev/gh_pr_label_rest.py list <number> \
+  --repo ll7/robot_sf_ll7
+
 # add/remove a PR label (verify-on-write, pure REST issues-labels endpoint)
 uv run python scripts/dev/gh_pr_label_rest.py add <number> \
-    --label merge-ready --repo ll7/robot_sf_ll7
+  --label merge-ready --repo ll7/robot_sf_ll7
 uv run python scripts/dev/gh_pr_label_rest.py remove <number> \
     --label merge-ready --repo ll7/robot_sf_ll7
 
@@ -1412,9 +1416,9 @@ scripts/dev/gh_comment.sh pr <number> --repo ll7/robot_sf_ll7 --body-file <path>
 scripts/dev/gh_comment.sh pr --current --repo ll7/robot_sf_ll7 --body-file <path>
 ```
 
-The label helper covers `merge-ready` add/remove (and any PR or issue label)
-through `repos/{repo}/issues/{number}/labels`, which GitHub treats as the PR
-label endpoint. The comment helper reads the conversation thread through
+The label helper covers paginated reads plus `merge-ready` add/remove (and any
+PR or issue label) through `repos/{repo}/issues/{number}/labels`, which GitHub
+treats as the PR label endpoint. The comment helper reads the conversation thread through
 `repos/{repo}/issues/{number}/comments` (GitHub treats PR numbers as issue
 numbers), returning the PR header plus the same conversation-level comments
 `gh pr view --comments` would show. Inline review comments

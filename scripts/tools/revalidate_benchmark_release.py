@@ -2593,6 +2593,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Exact benchmark-release-erratum.v1 successor identity contract.",
     )
     parser.add_argument(
+        "--erratum-repository-root",
+        type=Path,
+        help=(
+            "Exact checkout containing the erratum contract's repository-relative metadata. "
+            "This is intentionally distinct from the frozen scientific-source and exact "
+            "validator checkouts."
+        ),
+    )
+    parser.add_argument(
         "--predecessor-archive",
         type=Path,
         help="Cold-downloaded immutable predecessor publication archive.",
@@ -2610,14 +2619,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.recovery_contract is not None
             else DEFAULT_RECOVERY_CONTRACT
         )
-        if (args.erratum_contract is None) != (args.predecessor_archive is None):
+        erratum_inputs = (
+            args.erratum_contract,
+            args.erratum_repository_root,
+            args.predecessor_archive,
+        )
+        if any(value is not None for value in erratum_inputs) and not all(
+            value is not None for value in erratum_inputs
+        ):
             raise DerivedReleaseError(
-                "--erratum-contract and --predecessor-archive must be supplied together"
+                "--erratum-contract, --erratum-repository-root, and --predecessor-archive "
+                "must be supplied together"
             )
         erratum_contract = (
             load_erratum_contract(
                 args.erratum_contract,
-                repository_root=args.validator_repository_root,
+                repository_root=args.erratum_repository_root,
             )
             if args.erratum_contract is not None
             else None

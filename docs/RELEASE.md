@@ -409,7 +409,10 @@ same Zenodo concept instead:
    scientific source SHA, and accepted correction-builder SHA in a reviewed
    `benchmark-release-erratum.v1` contract. Regenerate the publication layer
    with `scripts/tools/revalidate_benchmark_release.py --erratum-contract ...
-   --predecessor-archive ...`.
+   --erratum-repository-root <exact-orchestration-checkout> --predecessor-archive ...`.
+   The orchestration checkout owns the new contract and metadata; it is deliberately
+   separate from both the frozen scientific-source checkout and the exact historical
+   validator/builder checkout.
 5. Require the embedded erratum receipt to prove exact episode-identity,
    canonical-row, and component-metric equality. The detached publication
    custody receipt binds the complete successor archive digest because an

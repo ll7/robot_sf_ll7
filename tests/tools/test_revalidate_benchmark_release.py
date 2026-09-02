@@ -33,6 +33,109 @@ def _write(path: Path, value: str) -> None:
     path.write_text(value, encoding="utf-8")
 
 
+def test_main_resolves_erratum_metadata_from_explicit_orchestration_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Erratum metadata must not be resolved from the older exact validator checkout."""
+    source = tmp_path / "source"
+    validator = tmp_path / "validator"
+    orchestration = tmp_path / "orchestration"
+    producer = tmp_path / "producer"
+    output = tmp_path / "output"
+    for directory in (source, validator, orchestration, producer):
+        directory.mkdir()
+    manifest = source / "manifest.yaml"
+    contract_path = orchestration / "contract.json"
+    predecessor = tmp_path / "predecessor.tar.gz"
+    for path in (manifest, contract_path, predecessor):
+        path.write_bytes(b"fixture")
+
+    sentinel_contract = object()
+    observed: dict[str, object] = {}
+
+    def fake_load(path: Path, *, repository_root: Path) -> object:
+        observed["contract_path"] = path
+        observed["repository_root"] = repository_root
+        return sentinel_contract
+
+    def fake_build(**kwargs: object) -> dict[str, object]:
+        observed["build"] = kwargs
+        return {
+            "status": "published_to_staging",
+            "publication_descriptor": {},
+            "producer": {},
+            "acceptance": {},
+            "validator": {},
+        }
+
+    monkeypatch.setattr(recovery, "load_erratum_contract", fake_load)
+    monkeypatch.setattr(recovery, "build_derived_release", fake_build)
+
+    exit_code = recovery.main(
+        [
+            "--producer-root",
+            str(producer),
+            "--source-repository-root",
+            str(source),
+            "--validator-repository-root",
+            str(validator),
+            "--expected-validator-commit",
+            "a" * 40,
+            "--manifest",
+            str(manifest),
+            "--output-root",
+            str(output),
+            "--derived-name",
+            "derived",
+            "--erratum-contract",
+            str(contract_path),
+            "--erratum-repository-root",
+            str(orchestration),
+            "--predecessor-archive",
+            str(predecessor),
+        ]
+    )
+
+    assert exit_code == 0
+    assert observed["contract_path"] == contract_path
+    assert observed["repository_root"] == orchestration
+    build = observed["build"]
+    assert isinstance(build, dict)
+    assert build["validator_repository_root"] == validator
+    assert build["erratum_contract"] is sentinel_contract
+
+
+def test_main_rejects_partial_erratum_identity_inputs(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """No erratum input may silently fall back to a validator-root metadata lookup."""
+    exit_code = recovery.main(
+        [
+            "--producer-root",
+            str(tmp_path / "producer"),
+            "--source-repository-root",
+            str(tmp_path / "source"),
+            "--validator-repository-root",
+            str(tmp_path / "validator"),
+            "--expected-validator-commit",
+            "a" * 40,
+            "--manifest",
+            str(tmp_path / "manifest.yaml"),
+            "--output-root",
+            str(tmp_path / "output"),
+            "--derived-name",
+            "derived",
+            "--erratum-contract",
+            str(tmp_path / "contract.json"),
+            "--predecessor-archive",
+            str(tmp_path / "predecessor.tar.gz"),
+        ]
+    )
+
+    assert exit_code == 2
+    assert "--erratum-repository-root" in capsys.readouterr().out
+
+
 def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
     tmp_path: Path,
 ) -> None:

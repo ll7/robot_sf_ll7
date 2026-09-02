@@ -27,6 +27,7 @@ from robot_sf.nav.map_config import (
 from robot_sf.ped_npc.ped_behavior import SinglePedestrianBehavior
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.sim.simulator import (
+    Simulator,
     _compute_pedestrian_response_multipliers,
     init_ped_simulators,
     init_simulators,
@@ -194,6 +195,19 @@ def test_simulator_wires_opt_in_obstacle_force_law_to_fast_pysf() -> None:
         SURFACE_DISTANCE_UNIT_NORMAL_V2
     )
     assert simulator.obstacle_force_law_metadata()["law_version"] == SURFACE_DISTANCE_UNIT_NORMAL_V2
+
+
+def test_simulator_metadata_fallback_reports_disabled_obstacle_forces() -> None:
+    """The compatibility metadata path reports inactive obstacle forces safely."""
+    simulator = object.__new__(Simulator)
+    simulator.config = SimpleNamespace(obstacle_force_law=None)
+    simulator.pysf_sim = SimpleNamespace(forces=(), raw_obstacles=())
+
+    metadata = simulator.obstacle_force_law_metadata()
+
+    assert metadata["site"] == "fast_pysf"
+    assert metadata["enabled"] is False
+    assert metadata["applied"] is False
 
 
 def test_ped_simulator_keeps_none_response_multipliers() -> None:

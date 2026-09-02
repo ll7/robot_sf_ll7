@@ -36,16 +36,36 @@ jobs:
           # Single source of truth: derive the live state-label set from the detector module
           # (scripts/dev/closed_state_label_hygiene.py::LIVE_STATE_LABELS) so this Action and the
           # CLI never drift. No second hard-coded label list lives here.
-          mapfile -t LIVE_LABELS < <(
+          if ! live_labels_output=$(
             python -c 'import sys; sys.path.insert(0, "scripts/dev"); import closed_state_label_hygiene as h; print("\n".join(h.LIVE_STATE_LABELS))'
-          )
+          ); then
+            echo "Unable to load the live state-label allowlist; refusing cleanup." >&2
+            exit 1
+          fi
+          LIVE_LABELS=()
+          if [ -n "$live_labels_output" ]; then
+            mapfile -t LIVE_LABELS <<<"$live_labels_output"
+          fi
           echo "Live state labels: ${LIVE_LABELS[*]}"
 
           # Read-then-write (defense-in-depth): the trigger already implies the issue is closed,
-          # but re-confirm CLOSED and non-PR-shaped URL via the API before any write.
+          # but re-confirm CLOSED and non-PR-shaped URL through the REST issue reader before any
+          # label write.
+          issue_payload=$(
+            python -m scripts.dev.gh_issue_rest view "$ISSUE_NUMBER" --repo "$REPO" --json state url
+          )
           issue_state=$(
-            gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json state,url \
-              --jq '[.state, .url] | @tsv'
+            python -c '
+          import json
+          import sys
+
+          payload = json.load(sys.stdin)
+          state = payload.get("state")
+          issue_url = payload.get("url")
+          if not isinstance(state, str) or not isinstance(issue_url, str):
+              raise SystemExit("REST issue read returned malformed state or URL")
+          print(state, issue_url)
+          ' <<<"$issue_payload"
           )
           read -r state issue_url <<<"$issue_state"
           echo "Issue #$ISSUE_NUMBER state: $state url: $issue_url"
@@ -58,18 +78,38 @@ jobs:
             exit 0
           fi
 
-          # Fetch the issue's current labels once, then remove only the live state labels that are
-          # actually present. Guarding on presence keeps the step a no-op when nothing is stale.
-          mapfile -t CURRENT_LABELS < <(
-            gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json labels --jq '.labels[].name'
+          # Fetch the issue's current labels once through the verified REST helper, then remove
+          # only the live state labels that are actually present. Guarding on presence keeps the
+          # step a no-op when nothing is stale.
+          label_payload=$(
+            python -m scripts.dev.gh_pr_label_rest list "$ISSUE_NUMBER" --repo "$REPO"
           )
+          current_label_names=$(
+            python -c '
+          import json
+          import sys
+
+          payload = json.load(sys.stdin)
+          labels = payload.get("labels")
+          if payload.get("status") != "ok":
+              raise SystemExit(payload.get("error", "REST label read failed"))
+          if not isinstance(labels, list) or any(not isinstance(label, str) for label in labels):
+              raise SystemExit("REST label read returned malformed labels")
+          print("\n".join(labels))
+          ' <<<"$label_payload"
+          )
+          CURRENT_LABELS=()
+          if [ -n "$current_label_names" ]; then
+            mapfile -t CURRENT_LABELS <<<"$current_label_names"
+          fi
 
           removed=0
           for label in "${LIVE_LABELS[@]}"; do
             for present in "${CURRENT_LABELS[@]:-}"; do
               if [ "$label" = "$present" ]; then
                 echo "Removing stale label '$label' from issue #$ISSUE_NUMBER"
-                gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --remove-label "$label"
+                python -m scripts.dev.gh_pr_label_rest remove "$ISSUE_NUMBER" \
+                  --repo "$REPO" --label "$label"
                 removed=$((removed + 1))
                 break
               fi

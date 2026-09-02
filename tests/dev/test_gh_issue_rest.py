@@ -450,16 +450,14 @@ def test_cli_thread_outputs_rest_fallback(capsys: pytest.CaptureFixture[str]) ->
 def test_cli_view_json_without_comments_omits_thread(capsys: pytest.CaptureFixture[str]) -> None:
     """Without ``--comments`` the JSON output must not include a comments key."""
     with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
-        mock_api.side_effect = [
-            _proc(stdout=json.dumps(_raw_issue())),
-            _proc(stdout=json.dumps([_raw_comment(cid=7)])),
-        ]
+        mock_api.return_value = _proc(stdout=json.dumps(_raw_issue()))
         rc = main(["view", "5021", "--json", "number", "title", "state"])
     captured = capsys.readouterr()
     assert rc == 0
     payload = json.loads(captured.out)
     assert set(payload.keys()) == {"number", "title", "state"}
     assert payload["state"] == "OPEN"
+    mock_api.assert_called_once()
 
 
 def test_cli_view_json_comments_returns_thread(capsys: pytest.CaptureFixture[str]) -> None:
@@ -476,6 +474,16 @@ def test_cli_view_json_comments_returns_thread(capsys: pytest.CaptureFixture[str
     assert set(payload.keys()) == {"comments"}
     assert len(payload["comments"]) == 1
     assert payload["comments"][0]["id"] == 7
+
+
+def test_cli_view_without_comments_does_not_read_the_comments_endpoint() -> None:
+    """State-only workflow guards must not depend on a complete comments inventory."""
+    with patch("scripts.dev.gh_issue_rest._gh_api") as mock_api:
+        mock_api.return_value = _proc(stdout=json.dumps(_raw_issue()))
+        rc = main(["view", "5021", "--json", "state", "url"])
+
+    assert rc == 0
+    mock_api.assert_called_once_with("repos/ll7/robot_sf_ll7/issues/5021")
 
 
 def test_fetch_issue_maps_null_body_to_empty_string() -> None:

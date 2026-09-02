@@ -122,6 +122,47 @@ def test_socnav_observation_rotates_pedestrian_velocities_to_ego_frame() -> None
     )
 
 
+def test_socnav_default_ordering_preserves_legacy_exact_tie_behavior() -> None:
+    """The default slot order remains source-stable for equal-distance rows.
+
+    This characterization protects existing benchmark observations while the
+    opt-in canonical ordering is introduced separately.
+    """
+    env_config = RobotSimulationConfig()
+    simulator = SimpleNamespace(
+        ped_pos=np.array([[1.0, 0.0], [0.0, 1.0], [2.0, 0.0]], dtype=np.float32),
+        ped_vel=np.zeros((3, 2), dtype=np.float32),
+        robots=[
+            SimpleNamespace(
+                pose=((0.0, 0.0), 0.0),
+                current_speed=np.array([0.0, 0.0], dtype=np.float32),
+                config=SimpleNamespace(radius=1.0),
+            )
+        ],
+        goal_pos=[np.array([5.0, 0.0], dtype=np.float32)],
+        next_goal_pos=[None],
+        map_def=SimpleNamespace(width=10.0, height=10.0, obstacles=[]),
+        config=SimpleNamespace(time_per_step_in_secs=0.1),
+    )
+
+    fusion = SocNavObservationFusion(simulator=simulator, env_config=env_config, max_pedestrians=4)
+    obs = fusion.next_obs()
+
+    np.testing.assert_array_equal(
+        obs["pedestrians"]["positions"][:3],
+        simulator.ped_pos,
+    )
+    assert "track_id" not in obs["pedestrians"]
+    assert (
+        "track_id"
+        not in socnav_observation_space(
+            simulator.map_def,
+            env_config,
+            max_pedestrians=4,
+        )["pedestrians"]
+    )
+
+
 def test_socnav_observation_visibility_filters_fov_without_mutating_ground_truth() -> None:
     """Planner-facing pedestrian observations should honor opt-in FOV settings only."""
     env_config = RobotSimulationConfig()

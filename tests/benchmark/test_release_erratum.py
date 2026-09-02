@@ -289,6 +289,28 @@ def test_scientific_equality_distinguishes_nonfinite_float_categories(tmp_path: 
         compare_scientific_snapshots(predecessor, successor)
 
 
+def test_scientific_snapshot_rejects_duplicate_matrix_cell_with_distinct_episode_id(
+    tmp_path: Path,
+) -> None:
+    """A second episode ID cannot replace a missing arm/scenario/seed cell."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    episodes = campaign / "runs/goal__differential_drive/episodes.jsonl"
+    rows = [json.loads(line) for line in episodes.read_text(encoding="utf-8").splitlines()]
+    rows[0]["scenario_id"] = rows[1]["scenario_id"]
+    rows[0]["seed"] = rows[1]["seed"]
+    rows[0]["episode_id"] = f"{rows[1]['episode_id']}--duplicate-cell"
+    episodes.write_text("".join(f"{_canonical_json(row)}\n" for row in rows), encoding="utf-8")
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _contract(archive)
+
+    with pytest.raises(ReleaseErratumError, match="duplicate scientific arm/scenario/seed cell"):
+        snapshot_campaign(campaign, contract=contract)
+    with pytest.raises(ReleaseErratumError, match="duplicate scientific arm/scenario/seed cell"):
+        snapshot_predecessor_archive(archive, contract=contract)
+
+
 def test_cold_erratum_receipt_recomputes_successor_leaves(tmp_path: Path) -> None:
     """A downloaded successor must reproduce every scientific digest in its receipt."""
     campaign = tmp_path / "campaign"

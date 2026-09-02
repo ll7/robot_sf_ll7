@@ -516,6 +516,7 @@ def _snapshot_from_arm_rows(  # noqa: C901, PLR0912
 ) -> ScientificSnapshot:
     validate_erratum_contract_identity(contract)
     rows: dict[tuple[str, str, int, str], _RowDigests] = {}
+    cells: set[tuple[str, str, int]] = set()
     scenarios: set[str] = set()
     seeds: set[int] = set()
     per_arm_rows: dict[str, list[tuple[tuple[str, str, int, str], _RowDigests]]] = {}
@@ -559,6 +560,10 @@ def _snapshot_from_arm_rows(  # noqa: C901, PLR0912
                         f"{arm}/{episode_id} {source_path} differs from the frozen source"
                     )
             metrics = _require_mapping(row.get("metrics"), label=f"{arm}/{episode_id}.metrics")
+            cell = (arm, scenario, seed)
+            if cell in cells:
+                raise ReleaseErratumError(f"duplicate scientific arm/scenario/seed cell: {cell!r}")
+            cells.add(cell)
             identity = (arm, scenario, seed, episode_id)
             if identity in rows:
                 raise ReleaseErratumError(f"duplicate scientific identity: {identity!r}")

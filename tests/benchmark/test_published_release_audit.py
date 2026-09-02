@@ -399,8 +399,7 @@ def _full_erratum_payload(
         },
         "release_url": f"https://github.com/ll7/robot_sf_ll7/releases/tag/{successor_tag}",
         "release_asset_url": (
-            "https://github.com/ll7/robot_sf_ll7/releases/download/"
-            f"{successor_tag}/bundle.zip"
+            f"https://github.com/ll7/robot_sf_ll7/releases/download/{successor_tag}/bundle.zip"
         ),
         "doi_url": f"https://doi.org/{successor_doi}",
     }

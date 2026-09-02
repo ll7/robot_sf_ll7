@@ -227,9 +227,10 @@ def _validate_contract_dois_and_tags(contract: ErratumContract) -> None:
         contract.concept_doi,
         contract.successor_version_doi,
     )
-    if any(
-        not isinstance(value, str) or _DOI_RE.fullmatch(value) is None for value in doi_values
-    ) or len(set(doi_values)) != 3:
+    if (
+        any(not isinstance(value, str) or _DOI_RE.fullmatch(value) is None for value in doi_values)
+        or len(set(doi_values)) != 3
+    ):
         raise ReleaseErratumError(
             "predecessor, concept, and successor DOIs must be valid and distinct"
         )
@@ -1419,16 +1420,12 @@ def _assert_publication_url_aliases(  # noqa: C901
             if key not in _PUBLICATION_URL_ALIASES:
                 continue
             if not isinstance(nested, str):
-                raise ReleaseErratumError(
-                    f"{nested_path} must be a canonical public URL string"
-                )
+                raise ReleaseErratumError(f"{nested_path} must be a canonical public URL string")
             try:
                 parsed = urlsplit(nested)
                 has_credentials = parsed.username is not None or parsed.password is not None
             except ValueError as exc:
-                raise ReleaseErratumError(
-                    f"{nested_path} is not a canonical public URL"
-                ) from exc
+                raise ReleaseErratumError(f"{nested_path} is not a canonical public URL") from exc
             if (
                 has_credentials
                 or parsed.query
@@ -1457,9 +1454,7 @@ def _assert_publication_url_aliases(  # noqa: C901
                     )
                 continue
             if nested != expected_urls[key]:
-                raise ReleaseErratumError(
-                    f"{nested_path} is not bound to the requested release"
-                )
+                raise ReleaseErratumError(f"{nested_path} is not bound to the requested release")
             observed.add(key)
 
     if require_aliases:

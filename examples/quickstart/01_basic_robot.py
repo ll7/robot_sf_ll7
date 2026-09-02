@@ -58,8 +58,8 @@ def run_demo() -> None:
         print("\nRolling out random actions:")
         for step in range(1, _step_budget(STEP_COUNT) + 1):
             action = env.action_space.sample()
-            result = env.step(action)
-            observation, reward, done = _normalize_step(result)
+            observation, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
             total_reward += float(reward)
 
             print(f"Step {step:02d}: reward={reward:.3f} done={done}")
@@ -71,18 +71,7 @@ def run_demo() -> None:
         print("\nDemo complete.")
         print(f"Total reward collected: {total_reward:.3f}")
     finally:
-        env.exit()
-
-
-def _normalize_step(step_result: tuple[Any, ...]) -> tuple[Any, float, bool]:
-    """Support both Gym and Gymnasium step signatures."""
-
-    if len(step_result) == 5:
-        observation, reward, terminated, truncated, _ = step_result
-        return observation, float(reward), bool(terminated or truncated)
-
-    observation, reward, done, _ = step_result
-    return observation, float(reward), bool(done)
+        env.close()
 
 
 def _extract_keys(observation: Any) -> list[str]:

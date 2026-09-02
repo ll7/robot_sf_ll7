@@ -223,7 +223,7 @@ def run(svg_map_path: str, model_name: str | None = None):
         # plot_forces_over_time2(forces)
         # plot_forces_quiver(forces)
     finally:
-        env.exit()
+        env.close()
 
 
 def plot_forces_over_time2(

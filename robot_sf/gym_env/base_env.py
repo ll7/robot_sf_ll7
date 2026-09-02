@@ -6,6 +6,7 @@ Provides common functionality for all environments.
 import datetime
 import importlib
 import pickle
+import warnings
 from typing import TYPE_CHECKING, Any, SupportsFloat
 
 from gymnasium import Env
@@ -44,7 +45,72 @@ def _make_jsonl_recorder(**kwargs):
     return module.JSONLRecorder(**kwargs)
 
 
-class BaseEnv(Env):
+#: Process-level guard so the ``exit()`` deprecation warning fires only once.
+_EXIT_DEPRECATION_WARNED = False
+
+
+def _warn_exit_deprecated() -> None:  # pragma: no cover - once-per-process shim
+    """Emit the ``exit()`` deprecation warning at most once per process.
+
+    Excluded from line coverage: the process-global once-guard makes the
+    emission lines execute exactly once per shard, so their coverage is
+    order-dependent. The behavior is asserted explicitly by the lifecycle
+    tests (pytest.warns on a fresh process state).
+    """
+    global _EXIT_DEPRECATION_WARNED
+    if not _EXIT_DEPRECATION_WARNED:
+        warnings.warn(
+            "env.exit() is deprecated and will be removed in a future "
+            "release; use env.close() instead.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        _EXIT_DEPRECATION_WARNED = True
+
+
+class SimulationUICloseMixin:
+    """Shared sim-UI lifecycle for the Gymnasium environment base classes.
+
+    The mixin owns the ``close()``/deprecated ``exit()`` contract so the two
+    parallel environment hierarchies (``BaseEnv`` and ``BaseSimulationEnv``)
+    cannot drift: ``close()`` releases the simulation UI and closes the
+    Gymnasium environment (idempotent), and ``exit()`` stays as a deprecated
+    alias during the two-release migration window.
+    """
+
+    sim_ui: Any = None
+
+    def _release_sim_ui(self) -> None:
+        """Tear down the simulation UI, if one is attached."""
+        sim_ui = self.sim_ui
+        self.sim_ui = None
+        if sim_ui is not None:
+            sim_ui.exit_simulation()
+
+    def close(self) -> None:
+        """Release simulation resources and close the Gymnasium environment.
+
+        Idempotent: calling it more than once is safe.
+        """
+        try:
+            self._release_sim_ui()
+        finally:
+            close_recorder = getattr(self, "close_recorder", None)
+            if callable(close_recorder):
+                close_recorder()
+            super().close()
+
+    def exit(self) -> None:  # pragma: no cover - deprecated shim
+        """Deprecated alias for :meth:`close`.
+
+        Kept for the two-release deprecation window; new code calls
+        :meth:`close`.
+        """
+        _warn_exit_deprecated()
+        self.close()
+
+
+class BaseEnv(SimulationUICloseMixin, Env):
     """Base environment class that handles common functionality."""
 
     def __init__(  # noqa: PLR0913
@@ -209,13 +275,6 @@ class BaseEnv(Env):
         """
         raise NotImplementedError
 
-    def exit(self) -> None:
-        """
-        Clean up and exit the simulation UI, if it exists.
-        """
-        if self.sim_ui:
-            self.sim_ui.exit_simulation()
-
     def save_recording(self, filename: str | None = None) -> None:
         """
         Save the recorded states to a file.
@@ -283,7 +342,9 @@ class BaseEnv(Env):
     def close_recorder(self) -> None:
         """Close the recorder and clean up resources."""
         if self.jsonl_recorder is not None:
-            self.jsonl_recorder.close()
+            recorder = self.jsonl_recorder
+            recorder.close()
+            self.last_recorded_jsonl = recorder.last_episode_file
             self.jsonl_recorder = None
 
 

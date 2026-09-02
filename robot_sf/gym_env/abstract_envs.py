@@ -10,14 +10,14 @@ from typing import Any
 
 from gymnasium import Env, spaces
 
-from robot_sf.gym_env.base_env import BaseEnv
+from robot_sf.gym_env.base_env import BaseEnv, SimulationUICloseMixin
 from robot_sf.gym_env.unified_config import BaseSimulationConfig
 from robot_sf.render.sim_view import VisualizableSimState
 
 __all__ = ["BaseSimulationEnv", "MultiAgentEnv", "SingleAgentEnv"]
 
 
-class BaseSimulationEnv(Env, ABC):
+class BaseSimulationEnv(SimulationUICloseMixin, Env, ABC):
     """
     Abstract base class for all simulation environments.
 
@@ -110,11 +110,6 @@ class BaseSimulationEnv(Env, ABC):
     def render(self, **kwargs) -> None:
         """Render the environment."""
         pass
-
-    def exit(self) -> None:
-        """Clean up and exit the simulation."""
-        if self.sim_ui:
-            self.sim_ui.exit_simulation()
 
     def save_recording(self, filename: str | None = None) -> None:
         """Save recorded states to file."""

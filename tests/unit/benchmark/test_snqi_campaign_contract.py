@@ -12,11 +12,92 @@ from robot_sf.benchmark.snqi.campaign_contract import (
     compute_component_correlations,
     compute_component_dominance,
     compute_planner_snqi_ordering,
+    compute_stored_snqi_ordering,
     compute_weight_sensitivity,
     evaluate_snqi_contract,
     resolve_weight_mapping,
     sanitize_baseline_stats,
 )
+
+
+def test_stored_snqi_ordering_aggregates_and_tie_breaks_deterministically() -> None:
+    """Canonical stored episode scores define deterministic planner-arm means and ranks."""
+    episodes = [
+        {
+            "planner_key": "planner_b",
+            "kinematics": "differential_drive",
+            "metrics": {"snqi": 0.4},
+        },
+        {
+            "planner_key": "planner_a",
+            "kinematics": "differential_drive",
+            "metrics": {"snqi": 0.6},
+        },
+        {
+            "planner_key": "planner_a",
+            "kinematics": "differential_drive",
+            "metrics": {"snqi": 0.2},
+        },
+    ]
+
+    rows = compute_stored_snqi_ordering(episodes)
+
+    assert rows is not None
+    assert [row["planner_key"] for row in rows] == ["planner_a", "planner_b"]
+    assert [row["rank"] for row in rows] == [1, 2]
+    assert rows[0]["episode_count"] == 2
+    assert rows[0]["mean_snqi"] == pytest.approx(0.4)
+
+
+def test_stored_snqi_ordering_all_absent_selects_legacy_diagnostics() -> None:
+    """A campaign that uniformly omits stored SNQI returns the explicit fallback sentinel."""
+    episodes = [
+        {
+            "planner_key": "planner_a",
+            "kinematics": "differential_drive",
+            "metrics": {"success": 1.0},
+        }
+    ]
+
+    assert compute_stored_snqi_ordering(episodes) is None
+
+
+@pytest.mark.parametrize(
+    ("episodes", "message"),
+    [
+        ([{"planner_key": "a", "kinematics": "d", "metrics": None}], "metrics"),
+        (
+            [{"planner_key": "a", "kinematics": "d", "metrics": {"snqi": True}}],
+            "finite number",
+        ),
+        (
+            [{"planner_key": "a", "kinematics": "d", "metrics": {"snqi": float("inf")}}],
+            "finite number",
+        ),
+        (
+            [{"planner_key": "", "kinematics": "d", "metrics": {"snqi": 0.1}}],
+            "planner_key",
+        ),
+        (
+            [{"planner_key": "a", "kinematics": "", "metrics": {"snqi": 0.1}}],
+            "kinematics",
+        ),
+        (
+            [
+                {"planner_key": "a", "kinematics": "d", "metrics": {"snqi": 0.1}},
+                {"planner_key": "b", "kinematics": "d", "metrics": {}},
+            ],
+            "all episodes or no episodes",
+        ),
+    ],
+)
+def test_stored_snqi_ordering_rejects_invalid_or_partial_contracts(
+    episodes: list[dict[str, object]],
+    message: str,
+) -> None:
+    """Present malformed or partial stored fields fail instead of changing scalarizers."""
+    with pytest.raises(ValueError, match=message):
+        compute_stored_snqi_ordering(episodes)
 
 
 def _sample_rows() -> list[dict[str, object]]:

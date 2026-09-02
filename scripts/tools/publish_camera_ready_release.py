@@ -85,27 +85,44 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _resolve_publication_path(publication: dict[str, object], key: str, repo_root: Path) -> Path:
-    """Resolve and validate one required publication path field."""
+def _resolve_publication_path(
+    publication: dict[str, object],
+    key: str,
+    *,
+    campaign_root: Path,
+    repo_root: Path,
+) -> Path:
+    """Resolve one publication path against its declared campaign or repository root."""
     raw_value = publication.get(key)
     if not isinstance(raw_value, str) or not raw_value.strip():
         raise ValueError(
             f"publication_bundle.{key} must be a non-empty string path in campaign_summary.json."
         )
     relative = raw_value.strip()
-    try:
-        return resolve_campaign_artifact_path(repo_root, relative)
-    except ValueError as exc:
-        # Preserve the command's established missing-artifact error while still
-        # routing every candidate through the fail-closed path validator first.
-        candidate = Path(repo_root).absolute() / relative
-        if (
-            "not a regular file" in str(exc)
-            and not candidate.exists()
-            and not candidate.is_symlink()
-        ):
-            raise FileNotFoundError(f"Missing required publication artifact: {candidate}") from exc
-        raise
+    roots = tuple(dict.fromkeys((Path(campaign_root).absolute(), Path(repo_root).absolute())))
+    matches: list[Path] = []
+    missing_candidates: list[Path] = []
+    for root in roots:
+        try:
+            matches.append(resolve_campaign_artifact_path(root, relative))
+        except ValueError as exc:
+            # An absent path may belong to the other supported root. Security
+            # violations are root-independent and must still fail immediately.
+            if "not a regular file" not in str(exc):
+                raise
+            candidate = root / relative
+            if candidate.exists() or candidate.is_symlink():
+                raise
+            missing_candidates.append(candidate)
+    distinct_matches = tuple(dict.fromkeys(matches))
+    if len(distinct_matches) > 1:
+        raise ValueError(
+            f"publication_bundle.{key} is ambiguous between campaign and repository roots"
+        )
+    if distinct_matches:
+        return distinct_matches[0]
+    candidate_text = ", ".join(str(path) for path in missing_candidates)
+    raise FileNotFoundError(f"Missing required publication artifact: {candidate_text}")
 
 
 def _validate_prerequisites(
@@ -123,9 +140,24 @@ def _validate_prerequisites(
         )
 
     repo_root = get_repository_root()
-    archive_path = _resolve_publication_path(publication, "archive_path", repo_root)
-    checksums_path = _resolve_publication_path(publication, "checksums_path", repo_root)
-    manifest_path = _resolve_publication_path(publication, "manifest_path", repo_root)
+    archive_path = _resolve_publication_path(
+        publication,
+        "archive_path",
+        campaign_root=campaign_root,
+        repo_root=repo_root,
+    )
+    checksums_path = _resolve_publication_path(
+        publication,
+        "checksums_path",
+        campaign_root=campaign_root,
+        repo_root=repo_root,
+    )
+    manifest_path = _resolve_publication_path(
+        publication,
+        "manifest_path",
+        campaign_root=campaign_root,
+        repo_root=repo_root,
+    )
     bundle_dir = manifest_path.parent
     if not bundle_dir.is_dir():
         raise ValueError("publication bundle path must name a regular directory")
@@ -340,40 +372,66 @@ def _check_release_collision(
     """
     if dry_run:
         return None, False
-    view_cmd = ["gh", "release", "view", tag, "--repo", repo, "--json", "isDraft,targetCommitish"]
-    try:
-        result = subprocess.run(
-            view_cmd,
-            check=True,
-            capture_output=True,
-            text=True,
+    # GitHub's release-by-tag endpoint returns published releases only.  The
+    # authenticated list endpoint is the REST surface that also includes
+    # drafts, so use its complete paginated result for retry-safe admission.
+    endpoint = f"repos/{repo}/releases?per_page=100"
+    view_cmd = ["gh", "api", "--paginate", "--slurp", endpoint]
+    result = subprocess.run(
+        view_cmd,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        # Authentication, transport, and query errors are ambiguous live state
+        # and must not be treated as an unused release tag.
+        detail = str(result.stderr or result.stdout or "")
+        return (
+            f"cannot determine whether release {tag} exists: {detail or 'unknown error'}",
+            False,
         )
-    except subprocess.CalledProcessError as exc:
-        # Only an explicit not-found response means that creation is safe.
-        # Authentication, transport, or malformed-query errors are ambiguous
-        # live state and must not be treated as an unused tag.
-        detail = str(exc.stderr or exc.output or "")
-        if not re.search(r"(?:not found|does not exist|HTTP 404|status 404)", detail, re.I):
-            return (
-                f"cannot determine whether release {tag} exists: {detail or 'unknown error'}",
-                False,
-            )
+    existing, parse_blocker = _parse_release_listing(result.stdout, tag=tag)
+    if parse_blocker is not None:
+        return parse_blocker, False
+    if existing is None:
         return None, False
-    try:
-        existing = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return f"cannot parse `gh release view {tag}` output; refusing to create or upload", False
-    target = str(existing.get("targetCommitish") or "").strip()
-    is_draft = bool(existing.get("isDraft"))
-    if target and target != expected_source_sha:
+    target_value = existing.get("target_commitish")
+    if not isinstance(target_value, str) or not target_value.strip():
+        return f"release {tag} does not declare an exact target commit; refusing to mutate", False
+    target = target_value.strip()
+    if target != expected_source_sha:
         return (
             f"release {tag} already exists at target {target!r}, not the required "
             f"{expected_source_sha!r}; refusing to create or upload",
             False,
         )
-    if not is_draft:
+    draft_value = existing.get("draft")
+    if not isinstance(draft_value, bool):
+        return f"release {tag} has a malformed draft flag; refusing to mutate", False
+    if draft_value is not True:
         return f"release {tag} already exists and is not a draft; refusing to mutate it", False
     return None, True
+
+
+def _parse_release_listing(
+    stdout: str,
+    *,
+    tag: str,
+) -> tuple[dict[str, object] | None, str | None]:
+    """Return one exact-tag release from paginated ``gh api --slurp`` JSON."""
+    try:
+        pages = json.loads(stdout)
+    except json.JSONDecodeError:
+        return None, f"cannot parse release lookup for {tag}; refusing to create or upload"
+    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+        return None, f"release lookup for {tag} has an invalid response shape"
+    if any(not isinstance(release, dict) for page in pages for release in page):
+        return None, f"release lookup for {tag} contains an invalid release record"
+    matches = [release for page in pages for release in page if release.get("tag_name") == tag]
+    if len(matches) > 1:
+        return None, f"release lookup found multiple releases for tag {tag}; refusing to mutate"
+    return (matches[0] if matches else None), None
 
 
 def _check_tag_collision(*, repo: str, tag: str, dry_run: bool) -> str | None:

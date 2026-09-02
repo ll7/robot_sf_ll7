@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 import textwrap
 from pathlib import Path
 
@@ -29,6 +31,7 @@ def _mock_current_rest_issue(
             "title": title,
             "url": f"https://github.com/ll7/robot_sf_ll7/issues/{number}",
             "state": "CLOSED",
+            "is_pull_request": False,
             "labels": labels,
         },
     )
@@ -43,6 +46,7 @@ def test_collect_stale_issues_aggregates_closed_issue_state_labels() -> None:
                 "title": "done but still queued",
                 "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
                 "state": "closed",
+                "is_pull_request": False,
                 "labels": [{"name": "state:ready"}, {"name": "workflow"}],
             },
             {
@@ -50,6 +54,7 @@ def test_collect_stale_issues_aggregates_closed_issue_state_labels() -> None:
                 "title": "open issue should not count",
                 "url": "https://github.com/ll7/robot_sf_ll7/issues/13",
                 "state": "open",
+                "is_pull_request": False,
                 "labels": [{"name": "state:ready"}],
             },
         ],
@@ -59,6 +64,7 @@ def test_collect_stale_issues_aggregates_closed_issue_state_labels() -> None:
                 "title": "done but still queued",
                 "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
                 "state": "closed",
+                "is_pull_request": False,
                 "labels": [{"name": "state:ready"}, {"name": "state:blocked"}],
             }
         ],
@@ -79,6 +85,7 @@ def test_collect_stale_issues_ignores_pull_request_rows() -> None:
                 "title": "closed PR with a state label",
                 "url": "https://github.com/ll7/robot_sf_ll7/pull/12",
                 "state": "closed",
+                "is_pull_request": True,
                 "labels": [{"name": "state:ready"}],
             }
         ],
@@ -100,6 +107,7 @@ def test_reconcile_stale_issues_suppresses_search_index_lag() -> None:
             "title": "done and cleaned up",
             "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
             "state": "CLOSED",
+            "is_pull_request": False,
             "labels": ["priority:4", "technical-debt"],
         },
     )
@@ -120,6 +128,7 @@ def test_reconcile_stale_issues_preserves_current_rest_live_labels() -> None:
             "title": "current REST title",
             "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
             "state": "CLOSED",
+            "is_pull_request": False,
             "labels": ["priority:4", "state:running"],
         },
     )
@@ -137,6 +146,13 @@ def test_reconcile_stale_issues_preserves_current_rest_live_labels() -> None:
         ("https://github.com/ll7/robot_sf_ll7/issues/pull", False),
         ("https://github.com/ll7/robot_sf_ll7/pull/not-a-number", False),
         ("https://github.com/ll7/robot_sf_ll7/pulls/12", False),
+        ("http://github.com/ll7/robot_sf_ll7/pull/12", False),
+        ("https://evil.example/ll7/robot_sf_ll7/pull/12", False),
+        ("https://github.com:443/ll7/robot_sf_ll7/pull/12", False),
+        ("https://github.com:/ll7/robot_sf_ll7/pull/12", False),
+        ("https://github.com/ll7/robot_sf_ll7/pull/12\n", False),
+        ("https://user@github.com/ll7/robot_sf_ll7/pull/12", False),
+        ("https://user:pass@github.com/ll7/robot_sf_ll7/pull/12", False),
         (None, False),
     ],
 )
@@ -185,9 +201,30 @@ def test_build_search_command_uses_read_only_closed_issue_search() -> None:
     assert "--label" in command
     assert command[command.index("--label") + 1] == "state:ready"
     assert "url" in command[command.index("--json") + 1].split(",")
-    assert "isPullRequest" not in command[command.index("--json") + 1].split(",")
+    assert "isPullRequest" in command[command.index("--json") + 1].split(",")
     assert "--project" not in command
     assert "edit" not in command
+
+
+def test_build_view_command_uses_module_invocation() -> None:
+    """The managed interpreter must invoke the REST helper as a package module."""
+    command = closed_state_label_hygiene.build_view_command(
+        repo="ll7/robot_sf_ll7",
+        number=12,
+    )
+
+    assert command[:3] == [sys.executable, "-m", "scripts.dev.gh_issue_rest"]
+    assert command[3:] == [
+        "view",
+        "12",
+        "--repo",
+        "ll7/robot_sf_ll7",
+        "--json",
+        "number",
+        "state",
+        "url",
+        "is_pull_request",
+    ]
 
 
 def test_closure_workflow_routes_state_label_io_through_rest_helpers() -> None:
@@ -220,11 +257,11 @@ def test_closure_workflow_allowlist_failure_stops_before_cleanup() -> None:
     start = workflow.index("          if ! live_labels_output=$(")
     end = workflow.index('          echo "Live state labels:', start)
     guard = textwrap.dedent(workflow[start:end])
-    producer_lines = [
-        line for line in guard.splitlines() if "import closed_state_label_hygiene as h" in line
-    ]
-    assert len(producer_lines) == 1
-    failing_guard = guard.replace(producer_lines[0], "python -c 'raise SystemExit(7)'")
+    producer_start = guard.index("python -c '")
+    producer_end = guard.index("\n'", producer_start) + len("\n'")
+    failing_guard = (
+        guard[:producer_start] + "python -c 'raise SystemExit(7)'" + guard[producer_end:]
+    )
 
     probe = subprocess.run(
         ["bash", "-c", f"set -euo pipefail\n{failing_guard}\necho sentinel"],
@@ -235,6 +272,325 @@ def test_closure_workflow_allowlist_failure_stops_before_cleanup() -> None:
 
     assert probe.returncode == 1
     assert "sentinel" not in probe.stdout
+
+
+def _closure_workflow_script() -> str:
+    """Extract the checked-in Action shell block for an offline execution test."""
+    workflow = (
+        Path(__file__).resolve().parents[2]
+        / ".github"
+        / "workflows"
+        / "strip-closed-state-labels.yml"
+    ).read_text(encoding="utf-8")
+    start = workflow.index("        run: |\n") + len("        run: |\n")
+    return textwrap.dedent(workflow[start:])
+
+
+def _run_closure_workflow(
+    tmp_path: Path,
+    *,
+    issue_payload: dict[str, object],
+    list_stdout: str,
+    remove_stdout: str,
+    remove_exit: int = 0,
+    environment_overrides: dict[str, str] | None = None,
+) -> tuple[subprocess.CompletedProcess[str], Path, Path, Path]:
+    """Run the real Action shell block with deterministic helper subprocesses."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_python = fake_bin / "python"
+    fake_python.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "${1:-}" = "-c" ]; then
+  case "${2:-}" in
+    *LIVE_STATE_LABELS*)
+      printf '%s\\n' "${FAKE_ALLOWLIST_OUTPUT}"
+      exit "${FAKE_ALLOWLIST_EXIT}"
+      ;;
+  esac
+fi
+
+if [ "${1:-}" = "-m" ] && [ "${2:-}" = "scripts.dev.gh_issue_rest" ] && [ "${3:-}" = "view" ]; then
+  : > "${FAKE_VIEW_MARKER}"
+  cat "${FAKE_ISSUE_PAYLOAD}"
+  exit "${FAKE_VIEW_EXIT}"
+fi
+
+if [ "${1:-}" = "-m" ] && [ "${2:-}" = "scripts.dev.gh_pr_label_rest" ] && [ "${3:-}" = "list" ]; then
+  : > "${FAKE_LIST_MARKER}"
+  cat "${FAKE_LIST_PAYLOAD}"
+  exit "${FAKE_LIST_EXIT}"
+fi
+
+if [ "${1:-}" = "-m" ] && [ "${2:-}" = "scripts.dev.gh_pr_label_rest" ] && [ "${3:-}" = "remove" ]; then
+  printf '%s\\n' "$*" >> "${FAKE_REMOVE_LOG}"
+  cat "${FAKE_REMOVE_PAYLOAD}"
+  exit "${FAKE_REMOVE_EXIT}"
+fi
+
+exec "${REAL_PYTHON}" "$@"
+""",
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+
+    issue_path = tmp_path / "issue.json"
+    list_path = tmp_path / "list.json"
+    remove_path = tmp_path / "remove.json"
+    issue_path.write_text(json.dumps(issue_payload), encoding="utf-8")
+    list_path.write_text(list_stdout, encoding="utf-8")
+    remove_path.write_text(remove_stdout, encoding="utf-8")
+    view_marker = tmp_path / "view-called"
+    list_marker = tmp_path / "list-called"
+    remove_log = tmp_path / "remove.log"
+    remove_log.write_text("", encoding="utf-8")
+
+    repo_root = Path(__file__).resolve().parents[2]
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "PATH": f"{fake_bin}{os.pathsep}{environment.get('PATH', '')}",
+            "PYTHONPATH": f"{repo_root}{os.pathsep}{environment.get('PYTHONPATH', '')}",
+            "REAL_PYTHON": sys.executable,
+            "REPO": "ll7/robot_sf_ll7",
+            "ISSUE_NUMBER": "12",
+            "FAKE_ALLOWLIST_OUTPUT": "state:ready\nstate:running\nstate:blocked",
+            "FAKE_ALLOWLIST_EXIT": "0",
+            "FAKE_VIEW_EXIT": "0",
+            "FAKE_LIST_EXIT": "0",
+            "FAKE_REMOVE_EXIT": str(remove_exit),
+            "FAKE_ISSUE_PAYLOAD": str(issue_path),
+            "FAKE_LIST_PAYLOAD": str(list_path),
+            "FAKE_REMOVE_PAYLOAD": str(remove_path),
+            "FAKE_VIEW_MARKER": str(view_marker),
+            "FAKE_LIST_MARKER": str(list_marker),
+            "FAKE_REMOVE_LOG": str(remove_log),
+        }
+    )
+    if environment_overrides:
+        environment.update(environment_overrides)
+    probe = subprocess.run(
+        ["bash", "-c", _closure_workflow_script()],
+        cwd=repo_root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return probe, view_marker, list_marker, remove_log
+
+
+def _workflow_issue(
+    *,
+    status: str = "ok",
+    state: str = "CLOSED",
+    url: str = "https://github.com/ll7/robot_sf_ll7/issues/12",
+    is_pull_request: bool = False,
+) -> dict[str, object]:
+    """Build the normalized issue payload emitted by the REST view helper."""
+    return {
+        "status": status,
+        "number": 12,
+        "state": state,
+        "url": url,
+        "is_pull_request": is_pull_request,
+    }
+
+
+def _workflow_list(*labels: str) -> str:
+    """Build a successful label-list envelope for the Action subprocess stub."""
+    return json.dumps(
+        {
+            "status": "ok",
+            "action": "list",
+            "number": 12,
+            "repo": "ll7/robot_sf_ll7",
+            "labels": list(labels),
+        }
+    )
+
+
+def _workflow_remove(label: str) -> str:
+    """Build a successful label-removal envelope for the Action subprocess stub."""
+    return json.dumps(
+        {
+            "status": "ok",
+            "action": "remove",
+            "number": 12,
+            "repo": "ll7/robot_sf_ll7",
+            "label": label,
+        }
+    )
+
+
+def test_closure_workflow_removes_only_present_label_after_validating_results(
+    tmp_path: Path,
+) -> None:
+    """A valid closed issue uses the checked helper envelopes and removes one label."""
+    probe, view_marker, list_marker, remove_log = _run_closure_workflow(
+        tmp_path,
+        issue_payload=_workflow_issue(),
+        list_stdout=_workflow_list("state:ready", "bug"),
+        remove_stdout=_workflow_remove("state:ready"),
+    )
+
+    assert probe.returncode == 0, probe.stderr
+    assert view_marker.exists()
+    assert list_marker.exists()
+    assert remove_log.read_text(encoding="utf-8").count("state:ready") == 1
+
+
+def test_closure_workflow_closed_issue_without_live_labels_is_a_no_op(tmp_path: Path) -> None:
+    """A valid closed issue with no live labels must not invoke the remove helper."""
+    probe, _, list_marker, remove_log = _run_closure_workflow(
+        tmp_path,
+        issue_payload=_workflow_issue(),
+        list_stdout=_workflow_list("bug"),
+        remove_stdout="",
+    )
+
+    assert probe.returncode == 0, probe.stderr
+    assert list_marker.exists()
+    assert remove_log.read_text(encoding="utf-8") == ""
+
+
+def test_closure_workflow_rejects_malformed_allowlist_output(tmp_path: Path) -> None:
+    """A malformed source-of-truth allowlist cannot turn cleanup into a no-op."""
+    probe, _, _, remove_log = _run_closure_workflow(
+        tmp_path,
+        issue_payload=_workflow_issue(),
+        list_stdout=_workflow_list("state:ready"),
+        remove_stdout=_workflow_remove("state:ready"),
+        environment_overrides={"FAKE_ALLOWLIST_OUTPUT": "state:ready\nstate:ready"},
+    )
+
+    assert probe.returncode != 0
+    assert remove_log.read_text(encoding="utf-8") == ""
+
+
+def test_closure_workflow_rejects_control_characters_in_allowlist_output(tmp_path: Path) -> None:
+    """Control characters must not become extra labels after line splitting."""
+    probe, _, _, remove_log = _run_closure_workflow(
+        tmp_path,
+        issue_payload=_workflow_issue(),
+        list_stdout=_workflow_list("state:ready"),
+        remove_stdout=_workflow_remove("state:ready"),
+        environment_overrides={"FAKE_ALLOWLIST_OUTPUT": "state:ready\nfoo\x01bar"},
+    )
+
+    assert probe.returncode != 0
+    assert remove_log.read_text(encoding="utf-8") == ""
+
+
+def test_closure_workflow_open_issue_is_a_no_op(tmp_path: Path) -> None:
+    """A valid open issue is skipped before label inventory or writes."""
+    probe, _, list_marker, remove_log = _run_closure_workflow(
+        tmp_path,
+        issue_payload=_workflow_issue(state="OPEN"),
+        list_stdout=_workflow_list("state:ready"),
+        remove_stdout=_workflow_remove("state:ready"),
+    )
+
+    assert probe.returncode == 0, probe.stderr
+    assert not list_marker.exists()
+    assert remove_log.read_text(encoding="utf-8") == ""
+
+
+@pytest.mark.parametrize(
+    "issue_payload",
+    [
+        _workflow_issue(status="error"),
+        _workflow_issue(state="BANANA"),
+        _workflow_issue(url="not-a-url"),
+        _workflow_issue(is_pull_request=True),
+    ],
+)
+def test_closure_workflow_rejects_unknown_or_inconsistent_issue_identity(
+    tmp_path: Path,
+    issue_payload: dict[str, object],
+) -> None:
+    """Malformed state, URL, or PR marker must stop before label discovery or writes."""
+    probe, _, list_marker, remove_log = _run_closure_workflow(
+        tmp_path,
+        issue_payload=issue_payload,
+        list_stdout=_workflow_list("state:ready"),
+        remove_stdout=_workflow_remove("state:ready"),
+    )
+
+    assert probe.returncode != 0
+    assert not list_marker.exists()
+    assert remove_log.read_text(encoding="utf-8") == ""
+
+
+def test_closure_workflow_skips_a_valid_pull_request_identity(tmp_path: Path) -> None:
+    """A canonical PR response is an intentional no-op, not a malformed issue."""
+    probe, _, list_marker, remove_log = _run_closure_workflow(
+        tmp_path,
+        issue_payload=_workflow_issue(
+            url="https://github.com/ll7/robot_sf_ll7/pull/12",
+            is_pull_request=True,
+        ),
+        list_stdout=_workflow_list("state:ready"),
+        remove_stdout=_workflow_remove("state:ready"),
+    )
+
+    assert probe.returncode == 0, probe.stderr
+    assert not list_marker.exists()
+    assert remove_log.read_text(encoding="utf-8") == ""
+
+
+@pytest.mark.parametrize(
+    "list_stdout",
+    [
+        "",
+        json.dumps([]),
+        json.dumps({"status": "ok"}),
+        _workflow_list("state:ready", "state:ready"),
+        _workflow_list("state:ready\nfoo"),
+    ],
+)
+def test_closure_workflow_rejects_empty_or_malformed_label_inventory(
+    tmp_path: Path,
+    list_stdout: str,
+) -> None:
+    """A zero-exit list helper with an invalid envelope must not become a clean no-op."""
+    probe, _, _, remove_log = _run_closure_workflow(
+        tmp_path,
+        issue_payload=_workflow_issue(),
+        list_stdout=list_stdout,
+        remove_stdout=_workflow_remove("state:ready"),
+    )
+
+    assert probe.returncode != 0
+    assert remove_log.read_text(encoding="utf-8") == ""
+
+
+@pytest.mark.parametrize(
+    ("remove_stdout", "remove_exit"),
+    [
+        ("", 0),
+        (json.dumps({"status": "ok", "action": "remove"}), 0),
+        (_workflow_remove("state:ready"), 1),
+    ],
+)
+def test_closure_workflow_rejects_remove_failure_or_wrong_success_envelope(
+    tmp_path: Path,
+    remove_stdout: str,
+    remove_exit: int,
+) -> None:
+    """Removal failures and mismatched zero-exit results must fail the Action."""
+    probe, _, _, remove_log = _run_closure_workflow(
+        tmp_path,
+        issue_payload=_workflow_issue(),
+        list_stdout=_workflow_list("state:ready"),
+        remove_stdout=remove_stdout,
+        remove_exit=remove_exit,
+    )
+
+    assert probe.returncode != 0
+    assert remove_log.read_text(encoding="utf-8").count("state:ready") == 1
 
 
 def test_main_returns_nonzero_json_summary_without_live_github(
@@ -259,6 +615,7 @@ def test_main_returns_nonzero_json_summary_without_live_github(
                     "title": "done but still queued",
                     "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
                     "state": "closed",
+                    "is_pull_request": False,
                     "labels": [{"name": "state:ready"}],
                 }
             ]
@@ -295,6 +652,7 @@ def test_main_suppresses_search_label_absent_from_current_rest_issue(
                     "title": "stale search row",
                     "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
                     "state": "closed",
+                    "is_pull_request": False,
                     "labels": [{"name": "state:ready"}],
                 }
             ]
@@ -355,6 +713,68 @@ def test_run_search_command_reports_invalid_json(monkeypatch: pytest.MonkeyPatch
         closed_state_label_hygiene._run_search_command(["gh", "search", "issues"])
 
 
+def _native_issue(
+    *,
+    number: int = 12,
+    state: str = "closed",
+    url: str = "https://github.com/ll7/robot_sf_ll7/issues/12",
+    is_pull_request: object = False,
+) -> dict[str, object]:
+    """Build a normalized GitHub CLI search row."""
+    return {
+        "number": number,
+        "title": "candidate issue",
+        "url": url,
+        "state": state,
+        "labels": [{"name": "state:ready"}],
+        "isPullRequest": is_pull_request,
+    }
+
+
+@pytest.mark.parametrize(
+    ("row", "message"),
+    [
+        (None, "expected an object"),
+        ({**_native_issue(), "state": "BANANA"}, "OPEN or CLOSED"),
+        ({**_native_issue(), "isPullRequest": "false"}, "isPullRequest"),
+        ({**_native_issue(), "url": "not-a-url"}, "canonical"),
+        ({**_native_issue(), "number": 0}, "positive integer"),
+    ],
+)
+def test_run_search_command_rejects_malformed_candidate_rows(
+    monkeypatch: pytest.MonkeyPatch,
+    row: object,
+    message: str,
+) -> None:
+    """Every malformed native search row must make discovery indeterminate."""
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args=("gh",), returncode=0, stdout=json.dumps([row]))
+
+    monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fake_run)
+
+    with pytest.raises((RuntimeError, ValueError), match=message):
+        closed_state_label_hygiene._run_search_command(
+            ["gh", "search", "issues"],
+            repo="ll7/robot_sf_ll7",
+        )
+
+
+def test_run_search_command_rejects_empty_success_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty successful search response is malformed, not an empty inventory."""
+
+    monkeypatch.setattr(
+        closed_state_label_hygiene.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args=("gh",), returncode=0, stdout=""),
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to parse GitHub CLI JSON output"):
+        closed_state_label_hygiene._run_search_command(["gh", "search", "issues"])
+
+
 def _rest_page(rows: list[dict[str, object]]) -> subprocess.CompletedProcess[str]:
     """Build a successful mocked ``gh api`` page."""
     return subprocess.CompletedProcess(args=("gh", "api"), returncode=0, stdout=json.dumps(rows))
@@ -369,6 +789,53 @@ def _rest_issue(number: int, title: str, labels: list[str]) -> dict[str, object]
         "state": "closed",
         "labels": [{"name": label} for label in labels],
     }
+
+
+@pytest.mark.parametrize(
+    ("row", "message"),
+    [
+        (None, "list of objects"),
+        ({**_rest_issue(12, "candidate", ["state:ready"]), "pull_request": {}}, "resource kind"),
+        ({**_rest_issue(12, "candidate", ["state:ready"]), "pull_request": None}, "pull_request"),
+        ({**_rest_issue(12, "candidate", ["state:ready"]), "html_url": "not-a-url"}, "canonical"),
+        ({**_rest_issue(12, "candidate", ["state:ready"]), "state": "banana"}, "OPEN or CLOSED"),
+        ({**_rest_issue(12, "candidate", ["state:ready\nfoo"])}, "printable"),
+    ],
+)
+def test_fetch_closed_issues_by_label_rest_rejects_malformed_candidate_rows(
+    row: object,
+    message: str,
+) -> None:
+    """REST discovery must preserve malformed rows as an observable failure."""
+
+    def fake_gh_api(path: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=("gh", "api"), returncode=0, stdout=json.dumps([row])
+        )
+
+    with pytest.raises(ValueError, match=message):
+        closed_state_label_hygiene.fetch_closed_issues_by_label_rest(
+            repo="ll7/robot_sf_ll7",
+            labels=("state:ready",),
+            max_pages=1,
+            per_page=100,
+            gh_api=fake_gh_api,
+        )
+
+
+def test_fetch_closed_issues_by_label_rest_rejects_empty_success_output() -> None:
+    """An empty successful REST response is malformed, not an empty page."""
+
+    def fake_gh_api(path: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args=("gh", "api"), returncode=0, stdout="")
+
+    with pytest.raises(ValueError, match="Invalid JSON"):
+        closed_state_label_hygiene.fetch_closed_issues_by_label_rest(
+            repo="ll7/robot_sf_ll7",
+            labels=("state:ready",),
+            max_pages=1,
+            gh_api=fake_gh_api,
+        )
 
 
 def test_fetch_closed_issues_by_label_rest_paginates_until_partial_page() -> None:
@@ -465,6 +932,7 @@ def test_discover_closed_issues_falls_back_to_rest_when_search_fails(
                         "title": "done but still queued",
                         "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
                         "state": "closed",
+                        "is_pull_request": False,
                         "labels": [{"name": "state:ready"}],
                     }
                 ]
@@ -573,6 +1041,7 @@ def test_main_skips_fix_when_candidate_discovery_is_truncated(
                         "title": "stale candidate",
                         "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
                         "state": "closed",
+                        "is_pull_request": False,
                         "labels": [{"name": "state:ready"}],
                     }
                 ]
@@ -624,6 +1093,17 @@ def _stale(number: int, labels: tuple[str, ...]) -> closed_state_label_hygiene.S
     )
 
 
+def _remove_result(number: int, label: str) -> dict[str, object]:
+    """Build a successful REST label-removal envelope for injected callbacks."""
+    return {
+        "status": "ok",
+        "number": number,
+        "label": label,
+        "action": "remove",
+        "repo": "ll7/robot_sf_ll7",
+    }
+
+
 def test_fix_stale_issues_removes_only_live_state_labels_from_closed_issues() -> None:
     """Fix mode strips the live state labels after re-confirming each issue is closed."""
     removed: list[tuple[int, str]] = []
@@ -633,8 +1113,9 @@ def test_fix_stale_issues_removes_only_live_state_labels_from_closed_issues() ->
         confirmed.append(number)
         return True
 
-    def fake_remove(number: int, label: str) -> None:
+    def fake_remove(number: int, label: str) -> dict[str, object]:
         removed.append((number, label))
+        return _remove_result(number, label)
 
     actions = closed_state_label_hygiene.fix_stale_issues(
         repo="ll7/robot_sf_ll7",
@@ -657,8 +1138,9 @@ def test_fix_stale_issues_does_not_touch_issue_that_is_not_closed() -> None:
     def fake_confirm(*, repo: str, number: int) -> bool:
         return False
 
-    def fake_remove(number: int, label: str) -> None:
+    def fake_remove(number: int, label: str) -> dict[str, object]:
         removed.append((number, label))
+        return _remove_result(number, label)
 
     actions = closed_state_label_hygiene.fix_stale_issues(
         repo="ll7/robot_sf_ll7",
@@ -683,7 +1165,7 @@ def test_fix_stale_issues_is_a_no_op_when_there_are_no_stale_issues() -> None:
         repo="ll7/robot_sf_ll7",
         stale_issues=[],
         confirm_closed=fail_confirm,
-        remove_label=lambda number, label: None,
+        remove_label=_remove_result,
     )
 
     assert actions == []
@@ -697,13 +1179,38 @@ def test_fix_stale_issues_only_removes_documented_label_set() -> None:
         repo="ll7/robot_sf_ll7",
         stale_issues=[_stale(12, ("state:ready", "workflow", "priority:high"))],
         confirm_closed=lambda *, repo, number: True,
-        remove_label=lambda number, label: removed.append((number, label)),
+        remove_label=lambda number, label: (
+            removed.append((number, label)) or _remove_result(number, label)
+        ),
     )
 
     assert removed == [(12, "state:ready")]
     assert actions[0]["removed_labels"] == ["state:ready"]
     # The fix set is exactly the single-source-of-truth live label tuple.
     assert all(label in closed_state_label_hygiene.LIVE_STATE_LABELS for _, label in removed)
+
+
+def test_fix_stale_issues_rejects_unsupported_library_allowlist() -> None:
+    """Direct callers cannot bypass the canonical live-label allowlist."""
+    with pytest.raises(ValueError, match="unsupported"):
+        closed_state_label_hygiene.fix_stale_issues(
+            repo="ll7/robot_sf_ll7",
+            stale_issues=[_stale(12, ("workflow",))],
+            watched_labels=("workflow",),
+            confirm_closed=lambda *, repo, number: True,
+            remove_label=_remove_result,
+        )
+
+
+def test_fix_stale_issues_rejects_zero_exit_malformed_remove_result() -> None:
+    """A successful subprocess/library exit is insufficient without its envelope."""
+    with pytest.raises(RuntimeError, match="invalid result"):
+        closed_state_label_hygiene.fix_stale_issues(
+            repo="ll7/robot_sf_ll7",
+            stale_issues=[_stale(12, ("state:ready",))],
+            confirm_closed=lambda *, repo, number: True,
+            remove_label=lambda number, label: {},
+        )
 
 
 def test_confirm_issue_closed_reads_state_via_rest(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -715,6 +1222,7 @@ def test_confirm_issue_closed_reads_state_via_rest(monkeypatch: pytest.MonkeyPat
             "status": "ok",
             "state": "CLOSED",
             "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
+            "is_pull_request": False,
         }
 
     monkeypatch.setattr("scripts.dev.gh_issue_rest.fetch_issue", fake_fetch_issue)
@@ -731,6 +1239,7 @@ def test_confirm_issue_closed_is_false_for_open_or_pr(monkeypatch: pytest.Monkey
             "status": "ok",
             "state": "OPEN",
             "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
+            "is_pull_request": False,
         }
 
     monkeypatch.setattr("scripts.dev.gh_issue_rest.fetch_issue", fake_fetch_issue_open)
@@ -742,27 +1251,11 @@ def test_confirm_issue_closed_is_false_for_open_or_pr(monkeypatch: pytest.Monkey
             "status": "ok",
             "state": "CLOSED",
             "url": "https://github.com/ll7/robot_sf_ll7/pull/12",
+            "is_pull_request": True,
         }
 
     monkeypatch.setattr("scripts.dev.gh_issue_rest.fetch_issue", fake_fetch_issue_pr)
     assert not closed_state_label_hygiene.confirm_issue_closed(repo="ll7/robot_sf_ll7", number=12)
-
-
-def test_remove_label_command_targets_only_one_label() -> None:
-    """The command invokes the verified REST label helper for one named label."""
-    command = closed_state_label_hygiene.build_remove_label_command(
-        repo="ll7/robot_sf_ll7", number=12, label="state:ready"
-    )
-    assert command[:6] == [
-        "uv",
-        "run",
-        "python",
-        "-m",
-        "scripts.dev.gh_pr_label_rest",
-        "remove",
-    ]
-    assert command[command.index("--label") + 1] == "state:ready"
-    assert command[command.index("--repo") + 1] == "ll7/robot_sf_ll7"
 
 
 def test_main_fix_mode_strips_labels_and_reports(
@@ -781,20 +1274,22 @@ def test_main_fix_mode_strips_labels_and_reports(
                     "title": "done but still queued",
                     "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
                     "state": "closed",
+                    "is_pull_request": False,
                     "labels": [{"name": "state:ready"}],
                 }
             ]
         }
 
-    edits: list[list[str]] = []
+    edits: list[tuple[int, str]] = []
 
-    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        edits.append(command)
-        return subprocess.CompletedProcess(args=tuple(command), returncode=0, stdout="")
+    def fake_remove(number: int, label: str, *, repo: str) -> dict[str, object]:
+        assert repo == "ll7/robot_sf_ll7"
+        edits.append((number, label))
+        return _remove_result(number, label)
 
     monkeypatch.setattr(closed_state_label_hygiene, "fetch_closed_issues_by_label", fake_fetch)
     _mock_current_rest_issue(monkeypatch, labels=["state:ready"])
-    monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fake_run)
+    monkeypatch.setattr(closed_state_label_hygiene.gh_pr_label_rest, "remove_label", fake_remove)
 
     exit_code = closed_state_label_hygiene.main(["--repo", "ll7/robot_sf_ll7", "--fix"])
 
@@ -803,10 +1298,7 @@ def test_main_fix_mode_strips_labels_and_reports(
     assert payload["fix_applied"] is True
     assert payload["read_only"] is False
     assert payload["fix_actions"][0]["removed_labels"] == ["state:ready"]
-    assert any(
-        cmd[:6] == ["uv", "run", "python", "-m", "scripts.dev.gh_pr_label_rest", "remove"]
-        for cmd in edits
-    )
+    assert edits == [(12, "state:ready")]
 
 
 def test_fix_stale_issues_fails_closed_when_rest_helper_fails(
@@ -814,16 +1306,16 @@ def test_fix_stale_issues_fails_closed_when_rest_helper_fails(
 ) -> None:
     """A verified REST helper error must stop fix mode instead of reporting success."""
 
-    def fail_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        raise subprocess.CalledProcessError(
-            returncode=1,
-            cmd=command,
-            stderr='{"error": "HTTP 403: forbidden", "status": "error"}',
-        )
+    monkeypatch.setattr(
+        closed_state_label_hygiene.gh_pr_label_rest,
+        "remove_label",
+        lambda number, label, *, repo: {
+            "status": "error",
+            "error": "HTTP 403: forbidden",
+        },
+    )
 
-    monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fail_run)
-
-    with pytest.raises(RuntimeError, match="HTTP 403: forbidden"):
+    with pytest.raises(RuntimeError, match="status must be ok"):
         closed_state_label_hygiene.fix_stale_issues(
             repo="ll7/robot_sf_ll7",
             stale_issues=[_stale(12, ("state:ready",))],

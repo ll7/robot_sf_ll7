@@ -6,6 +6,8 @@ import json
 import subprocess
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from scripts.dev.gh_pr_label_rest import (
     LABEL_PAGE_CEILING,
     LABEL_PAGE_SIZE,
@@ -14,6 +16,7 @@ from scripts.dev.gh_pr_label_rest import (
     get_label_names,
     main,
     remove_label,
+    validate_result_envelope,
 )
 
 
@@ -29,6 +32,59 @@ def _mock_labels_payload(*names: str) -> str:
 
 def _page_path(page: int) -> str:
     return f"repos/ll7/robot_sf_ll7/issues/5220/labels?per_page=100&page={page}"
+
+
+def test_validate_result_envelope_rejects_untrusted_success_payloads() -> None:
+    """Orchestrators must not trust a zero exit code without the exact result envelope."""
+    valid_list = {
+        "status": "ok",
+        "action": "list",
+        "number": 5220,
+        "repo": "ll7/robot_sf_ll7",
+        "labels": ["state:ready"],
+    }
+    invalid_results = [
+        {},
+        {**valid_list, "action": "remove"},
+        {**valid_list, "number": 5221},
+        {**valid_list, "repo": "other/repo"},
+        {**valid_list, "labels": ["state:ready", "state:ready"]},
+        {**valid_list, "labels": [""]},
+        {**valid_list, "labels": ["state:ready\nfoo"]},
+    ]
+
+    for result in invalid_results:
+        with pytest.raises(ValueError):
+            validate_result_envelope(
+                result,
+                action="list",
+                number=5220,
+                repo="ll7/robot_sf_ll7",
+            )
+
+    with pytest.raises(ValueError):
+        validate_result_envelope(
+            {"status": "ok", "action": "remove", "number": 5220, "repo": "ll7/robot_sf_ll7"},
+            action="remove",
+            number=5220,
+            repo="ll7/robot_sf_ll7",
+            label="state:ready",
+        )
+
+    with pytest.raises(ValueError, match="printable"):
+        validate_result_envelope(
+            {
+                "status": "ok",
+                "action": "remove",
+                "number": 5220,
+                "repo": "ll7/robot_sf_ll7",
+                "label": "state:ready\nfoo",
+            },
+            action="remove",
+            number=5220,
+            repo="ll7/robot_sf_ll7",
+            label="state:ready\nfoo",
+        )
 
 
 class TestLabelRead:
@@ -58,6 +114,7 @@ class TestLabelRead:
             [{"name": ""}],
             [{"name": None}],
             [{"name": 42}],
+            [{"name": "state:ready\nfoo"}],
             ["not-a-row"],
         ):
             with patch(
@@ -87,10 +144,15 @@ class TestLabelRead:
         }
 
     def test_fails_closed_at_page_ceiling(self) -> None:
-        full_page = _mock_labels_payload(*[f"label-{index}" for index in range(LABEL_PAGE_SIZE)])
+        full_pages = [
+            _mock_labels_payload(
+                *[f"label-{page * LABEL_PAGE_SIZE + index}" for index in range(LABEL_PAGE_SIZE)]
+            )
+            for page in range(LABEL_PAGE_CEILING)
+        ]
         with patch(
             "scripts.dev.gh_pr_label_rest._gh_api_get",
-            return_value=_proc(stdout=full_page),
+            side_effect=[_proc(stdout=page) for page in full_pages],
         ) as mock_get:
             result = _get_label_names(5220)
 
@@ -275,6 +337,18 @@ class TestAddLabel:
         assert result["status"] == "error"
         assert "was not found in labels after add" in result["error"]
 
+    def test_fails_closed_when_post_write_readback_has_duplicate_labels(self) -> None:
+        """A duplicate label row makes add verification indeterminate."""
+        with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _proc(stdout=json.dumps({"name": "cheap-lane"})),
+                _proc(stdout=_mock_labels_payload("cheap-lane", "cheap-lane")),
+            ]
+            result = add_label(5220, "cheap-lane")
+
+        assert result["status"] == "error"
+        assert "duplicate label" in result["error"]
+
     def test_fails_closed_for_negative_number(self) -> None:
         """Zero or negative numbers must be rejected without network calls."""
         with patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post:
@@ -291,6 +365,16 @@ class TestAddLabel:
 
         assert result["status"] == "error"
         assert "non-empty" in result["error"]
+        mock_post.assert_not_called()
+
+    @pytest.mark.parametrize("label", ["state:ready\nfoo", "state:\tready", "state:\x00ready"])
+    def test_fails_closed_for_non_printable_label(self, label: str) -> None:
+        """Control characters must be rejected before an add request is sent."""
+        with patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post:
+            result = add_label(5220, label)
+
+        assert result["status"] == "error"
+        assert "printable" in result["error"]
         mock_post.assert_not_called()
 
 
@@ -400,6 +484,18 @@ class TestRemoveLabel:
         assert result["status"] == "error"
         assert "was still found" in result["error"]
 
+    def test_fails_closed_when_remove_readback_has_duplicate_labels(self) -> None:
+        """A duplicate label row makes remove verification indeterminate."""
+        with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _proc(stdout=""),
+                _proc(stdout=_mock_labels_payload("bug", "bug")),
+            ]
+            result = remove_label(5220, "state:running")
+
+        assert result["status"] == "error"
+        assert "duplicate label" in result["error"]
+
     def test_fails_closed_for_negative_number(self) -> None:
         """Zero or negative numbers must be rejected without network calls."""
         with patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_del:
@@ -408,6 +504,16 @@ class TestRemoveLabel:
         assert result["status"] == "error"
         assert "must be positive" in result["error"]
         mock_del.assert_not_called()
+
+    @pytest.mark.parametrize("label", ["state:ready\nfoo", "state:\tready", "state:\x00ready"])
+    def test_fails_closed_for_non_printable_label(self, label: str) -> None:
+        """Control characters must be rejected before a remove request is sent."""
+        with patch("scripts.dev.gh_pr_label_rest._gh_api_delete") as mock_delete:
+            result = remove_label(5220, label)
+
+        assert result["status"] == "error"
+        assert "printable" in result["error"]
+        mock_delete.assert_not_called()
 
 
 class TestCli:

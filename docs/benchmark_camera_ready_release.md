@@ -55,6 +55,13 @@ concepts `10.5281/zenodo.19482025` or `10.5281/zenodo.19563812`, and do not
 assume GitHub-to-Zenodo automation is enabled. Until a real record exists, keep
 the manifest DOI as a pending placeholder.
 
+That rule applies to a new scientific campaign. A derived-metadata-only repair
+of an already published campaign uses a new linked version inside that
+campaign's existing concept, never replacement files behind the old DOI. See
+[Immutable publication errata](RELEASE.md#immutable-publication-errata) for the
+required predecessor custody, scientific-leaf equality, `zenodo new-version`,
+and two-channel draft checks.
+
 The direct Zenodo path is deliberately separate from the GitHub release path.
 Disable the repository's GitHub-to-Zenodo webhook immediately before publishing
 the GitHub Release and leave it disabled. Do not use the webhook to create or

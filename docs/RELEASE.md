@@ -376,6 +376,54 @@ credential and binds subsequent `upload`, `verify`, and irreversible `publish`
 operations to the same deposition. Do not run `publish` until the accepted
 20,160-cell campaign bundle has passed independent cold verification.
 
+### Immutable publication errata
+
+The fresh-concept rule above remains the default for a new benchmark campaign.
+If a published archive has a derived-publication defect but its accepted
+scientific rows are unchanged, do not replace files behind its DOI and do not
+create a dissertation-side overlay. Publish a linked successor version in the
+same Zenodo concept instead:
+
+1. Cold-download the predecessor and verify its recorded byte count and
+   SHA-256 before deriving anything.
+2. Prepare successor metadata with the new GitHub erratum tag and exactly one
+   DOI relation whose relation is `isNewVersionOf` and whose identifier is the
+   predecessor version DOI.
+3. Create the unpublished linked draft with the exact published predecessor:
+
+   ```bash
+   uv run robot-sf release zenodo new-version \
+     --token-file /home/<user>/.config/robot-sf/zenodo.token \
+     --state <credential-free-successor-state.json> \
+     --metadata <successor-zenodo-metadata.json> \
+     --predecessor-deposition-id <predecessor-version-record-id> \
+     --expected-predecessor-doi <predecessor-version-doi> \
+     --expected-concept-doi <unchanged-concept-doi>
+   ```
+
+   The command reads and validates the published predecessor before invoking
+   Zenodo's new-version action. It then checks the new draft's distinct DOI,
+   unchanged concept, unpublished state, and metadata readback. It never
+   records the token.
+4. Freeze the returned version DOI, successor tag, predecessor archive digest,
+   scientific source SHA, and accepted correction-builder SHA in a reviewed
+   `benchmark-release-erratum.v1` contract. Regenerate the publication layer
+   with `scripts/tools/revalidate_benchmark_release.py --erratum-contract ...
+   --predecessor-archive ...`.
+5. Require the embedded erratum receipt to prove exact episode-identity,
+   canonical-row, and component-metric equality. The detached publication
+   custody receipt binds the complete successor archive digest because an
+   archive cannot contain its own digest without a checksum cycle.
+6. Stage both channels as drafts, verify byte-identical archives from empty
+   directories, and only then publish. Leave the predecessor DOI, tag, files,
+   and checksum unchanged.
+
+An erratum tag may append `-erratum.<positive integer>` after the exact
+40-character scientific source SHA. The suffix creates a new publication
+identity; it does not change or replace the scientific source commit. A row,
+component metric, source, matrix, or claim-boundary change is not a
+derived-metadata erratum and requires a new scientific campaign decision.
+
 Upload and verify the generated bundle using:
 
 - `docs/benchmark_camera_ready_release.md`

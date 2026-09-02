@@ -413,6 +413,11 @@ def _build_pysf_simulation(  # noqa: PLR0913
     pysf_config.scene_config.dt_secs = config.time_per_step_in_secs
     pysf_config.scene_config.integration_scheme = config.pedestrian_integration_scheme
     pysf_config.obstacle_force_config.law_version = getattr(config, "obstacle_force_law", None)
+    pysf_config.obstacle_force_config._obstacle_force_law_resolution_mode = getattr(
+        config,
+        "obstacle_force_law_resolution_mode",
+        pysf_config.obstacle_force_config.obstacle_force_law_resolution_mode,
+    )
     _apply_ped_desired_speed_config(pysf_config, config)
     spawn_config = PedSpawnConfig(
         config.peds_per_area_m2,
@@ -639,6 +644,11 @@ class Simulator:
                 radius_convention="threshold_plus_agent_radius_sigma",
                 enabled=enabled,
                 applied=applied,
+                resolution_mode=getattr(
+                    self.config,
+                    "obstacle_force_law_resolution_mode",
+                    None,
+                ),
             )
         return dict(metadata_fn())
 

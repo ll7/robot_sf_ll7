@@ -162,7 +162,7 @@ class _PedSim:
     def obstacle_force_law_metadata() -> dict[str, object]:
         """Expose the fast-pysf site payload used by the record-path test."""
         return {
-            "schema_version": "obstacle_force_law_metadata.v1",
+            "schema_version": "obstacle_force_law_metadata.v2",
             "law_version": "legacy_shifted_gradient_v1",
             "site": "fast_pysf",
             "geometry_convention": "map_line_endpoints_orthogonal_vector",
@@ -170,6 +170,7 @@ class _PedSim:
             "compatibility_mode": "legacy_compatible",
             "enabled": True,
             "applied": True,
+            "resolution_mode": "defaulted_missing",
         }
 
 
@@ -245,7 +246,7 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
     )
 
     planner_metadata = {
-        "schema_version": "obstacle_force_law_metadata.v1",
+        "schema_version": "obstacle_force_law_metadata.v2",
         "law_version": "surface_distance_unit_normal_v2",
         "site": "socnav_social_force",
         "geometry_convention": "occupancy_cell_centers",
@@ -253,6 +254,7 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
         "compatibility_mode": "corrected_opt_in",
         "enabled": True,
         "applied": True,
+        "resolution_mode": "explicit",
     }
 
     def policy_builder(_algo, _algo_config, **_kwargs):
@@ -291,6 +293,8 @@ def test_run_map_episode_record_carries_native_blocks(monkeypatch: pytest.Monkey
     assert runtime["schema_version"] == "obstacle_force_law_runtime_record.v1"
     assert runtime["sites"]["fast_pysf"]["enabled"] is True
     assert runtime["sites"]["fast_pysf"]["applied"] is True
+    assert runtime["sites"]["fast_pysf"]["config_hash"] == record["config_hash"]
+    assert runtime["sites"]["fast_pysf"]["source_commit"] == record["git_hash"]
     assert runtime["sites"]["socnav_social_force"]["law_version"] == (
         "surface_distance_unit_normal_v2"
     )
@@ -300,7 +304,7 @@ def test_obstacle_force_sites_are_serialized_in_episode_metadata() -> None:
     """The durable runtime record keeps both site payloads and application state."""
     fast_pysf = _PedSim.obstacle_force_law_metadata()
     planner = {
-        "schema_version": "obstacle_force_law_metadata.v1",
+        "schema_version": "obstacle_force_law_metadata.v2",
         "law_version": "surface_distance_unit_normal_v2",
         "site": "socnav_social_force",
         "geometry_convention": "occupancy_cell_centers",
@@ -308,6 +312,7 @@ def test_obstacle_force_sites_are_serialized_in_episode_metadata() -> None:
         "compatibility_mode": "corrected_opt_in",
         "enabled": True,
         "applied": False,
+        "resolution_mode": "explicit",
     }
     record = {
         "algorithm_metadata": {

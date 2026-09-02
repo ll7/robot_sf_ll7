@@ -120,7 +120,14 @@ def test_invalid_obstacle_law_fails_before_empty_obstacle_short_circuit():
     """An explicit invalid law is rejected even when no obstacles are present."""
     state = np.zeros((0, 7), dtype=float)
     simulator = pysf.Simulator(state=state)
-    simulator.config.obstacle_force_config.law_version = "unknown_obstacle_force_law"
+    # Bypass the validated assignment to model a malformed object loaded from an
+    # older/untyped boundary; runtime dispatch must still fail before the empty-map
+    # short circuit.
+    object.__setattr__(
+        simulator.config.obstacle_force_config,
+        "law_version",
+        "unknown_obstacle_force_law",
+    )
 
     with pytest.raises(ValueError, match="unsupported obstacle-force law"):
         simulator.compute_forces()

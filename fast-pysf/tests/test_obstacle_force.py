@@ -12,6 +12,7 @@ from pysocialforce.config import (
     ObstacleForceConfig,
     obstacle_force_law_metadata,
     resolve_obstacle_force_law,
+    resolve_obstacle_force_law_with_mode,
 )
 from pysocialforce.forces import (
     ObstacleForce,
@@ -129,13 +130,34 @@ def test_unversioned_dispatch_reproduces_legacy_obstacle_force_exactly(
 def test_obstacle_force_law_resolution_and_metadata_are_explicit():
     """Law resolution defaults old metadata to legacy and records site conventions."""
     assert resolve_obstacle_force_law() == DEFAULT_OBSTACLE_FORCE_LAW
+    assert resolve_obstacle_force_law_with_mode() == (
+        DEFAULT_OBSTACLE_FORCE_LAW,
+        "defaulted_missing",
+    )
     assert resolve_obstacle_force_law("") == LEGACY_SHIFTED_GRADIENT_V1
+    assert resolve_obstacle_force_law_with_mode("") == (
+        LEGACY_SHIFTED_GRADIENT_V1,
+        "historical_unversioned",
+    )
     assert resolve_obstacle_force_law({}) == LEGACY_SHIFTED_GRADIENT_V1
     assert (
         resolve_obstacle_force_law({"law_version": SURFACE_DISTANCE_UNIT_NORMAL_V2})
         == SURFACE_DISTANCE_UNIT_NORMAL_V2
     )
+    assert resolve_obstacle_force_law_with_mode(
+        {"law_version": SURFACE_DISTANCE_UNIT_NORMAL_V2}
+    ) == (SURFACE_DISTANCE_UNIT_NORMAL_V2, "explicit")
+    assert (
+        resolve_obstacle_force_law(
+            {
+                "law_version": SURFACE_DISTANCE_UNIT_NORMAL_V2,
+                "obstacle_force_law": SURFACE_DISTANCE_UNIT_NORMAL_V2,
+            }
+        )
+        == SURFACE_DISTANCE_UNIT_NORMAL_V2
+    )
     assert ObstacleForceConfig().law_version == LEGACY_SHIFTED_GRADIENT_V1
+    assert ObstacleForceConfig().obstacle_force_law_resolution_mode == "defaulted_missing"
 
     metadata = obstacle_force_law_metadata(
         SURFACE_DISTANCE_UNIT_NORMAL_V2,
@@ -144,7 +166,7 @@ def test_obstacle_force_law_resolution_and_metadata_are_explicit():
         radius_convention="threshold_plus_agent_radius_sigma",
     )
     assert metadata == {
-        "schema_version": "obstacle_force_law_metadata.v1",
+        "schema_version": "obstacle_force_law_metadata.v2",
         "law_version": SURFACE_DISTANCE_UNIT_NORMAL_V2,
         "site": "fast_pysf",
         "geometry_convention": "map_line_endpoints_orthogonal_vector",
@@ -152,10 +174,35 @@ def test_obstacle_force_law_resolution_and_metadata_are_explicit():
         "compatibility_mode": "corrected_opt_in",
         "enabled": True,
         "applied": True,
+        "resolution_mode": "explicit",
     }
 
     with pytest.raises(ValueError, match="unsupported obstacle-force law"):
         resolve_obstacle_force_law("unknown_obstacle_force_law")
+    with pytest.raises(ValueError, match="conflicting obstacle-force law selectors"):
+        resolve_obstacle_force_law(
+            {
+                "law_version": None,
+                "obstacle_force_law": SURFACE_DISTANCE_UNIT_NORMAL_V2,
+            }
+        )
+
+
+def test_obstacle_force_metadata_hashes_numerical_parameters() -> None:
+    """Site metadata carries a stable hash for the parameters that affect the law."""
+    metadata = obstacle_force_law_metadata(
+        site="fast_pysf",
+        geometry_convention="map_line_endpoints_orthogonal_vector",
+        radius_convention="threshold_plus_agent_radius_sigma",
+        parameters={"factor": 10.0, "distance_floor": 1e-5},
+        source_commit="abc123",
+        config_hash="cfg123",
+    )
+
+    assert metadata["parameters"] == {"factor": 10.0, "distance_floor": 1e-5}
+    assert len(metadata["parameters_sha256"]) == 64
+    assert metadata["source_commit"] == "abc123"
+    assert metadata["config_hash"] == "cfg123"
 
 
 def test_obstacle_force_component_dispatches_corrected_law_without_changing_default():

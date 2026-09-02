@@ -98,11 +98,17 @@ def test_oracle_force_trace_enabled_requires_a_boolean() -> None:
 def test_obstacle_force_law_defaults_to_legacy_and_accepts_corrected_opt_in() -> None:
     """Simulation settings resolve historical inputs and expose the explicit opt-in law."""
     assert SimulationSettings().obstacle_force_law == LEGACY_SHIFTED_GRADIENT_V1
+    assert SimulationSettings().obstacle_force_law_resolution_mode == "defaulted_missing"
     assert SimulationSettings(obstacle_force_law=None).obstacle_force_law == (  # type: ignore[arg-type]
         LEGACY_SHIFTED_GRADIENT_V1
     )
+    assert (
+        SimulationSettings(obstacle_force_law=None).obstacle_force_law_resolution_mode
+        == "defaulted_missing"
+    )
     corrected = SimulationSettings(obstacle_force_law=SURFACE_DISTANCE_UNIT_NORMAL_V2)
     assert corrected.obstacle_force_law_version == SURFACE_DISTANCE_UNIT_NORMAL_V2
+    assert corrected.obstacle_force_law_resolution_mode == "explicit"
 
     with pytest.raises(ValueError, match="unsupported obstacle-force law"):
         SimulationSettings(obstacle_force_law="unsupported")

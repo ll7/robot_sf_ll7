@@ -111,8 +111,8 @@ def test_obstacle_wrapper_scalar_rejects_invalid_law_without_fallback(
 ):
     """Scalar dispatch must fail closed before calling the numerical kernel."""
     sim = make_simple_sim()
-    sim.config.obstacle_force_config.law_version = invalid_law
     wrapper = FastPysfWrapper(sim)
+    object.__setattr__(sim.config.obstacle_force_config, "law_version", invalid_law)
     called = False
 
     def fake_dispatch(*_args, **_kwargs):
@@ -140,8 +140,8 @@ def test_obstacle_wrapper_batch_rejects_invalid_law_without_fallback(
 ):
     """Batched dispatch must reject invalid selectors without a partial result."""
     sim = make_simple_sim()
-    sim.config.obstacle_force_config.law_version = invalid_law
     wrapper = FastPysfWrapper(sim)
+    object.__setattr__(sim.config.obstacle_force_config, "law_version", invalid_law)
     called = False
 
     def fake_dispatch(*_args, **_kwargs):
@@ -208,6 +208,17 @@ def test_obstacle_wrapper_batch_preserves_fallback_for_kernel_input_errors(monke
     assert diagnostics["fallback_reason"] == "obstacle_force_batch_pointwise"
     assert diagnostics["fallback_reasons"] == {"obstacle_force_batch_pointwise": 1}
     assert warning.call_count == 1
+@pytest.mark.parametrize(
+    ("invalid_law", "error_type"),
+    [("surface_distance_v3_typo", ValueError), (object(), TypeError)],
+)
+def test_obstacle_wrapper_constructor_rejects_invalid_law(invalid_law, error_type):
+    """Wrapper construction validates the selector before exposing force queries."""
+    sim = make_simple_sim()
+    object.__setattr__(sim.config.obstacle_force_config, "law_version", invalid_law)
+
+    with pytest.raises(error_type):
+        FastPysfWrapper(sim)
 
 
 def test_get_forces_at_points_matches_pointwise_force_queries():

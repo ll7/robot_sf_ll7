@@ -4,7 +4,7 @@ from dataclasses import dataclass, field, replace
 from math import ceil, isfinite, pi
 from typing import Any
 
-from pysocialforce.config import DEFAULT_OBSTACLE_FORCE_LAW, resolve_obstacle_force_law
+from pysocialforce.config import resolve_obstacle_force_law_with_mode
 from pysocialforce.scene import normalize_integration_scheme
 
 from robot_sf.ped_npc.adversial_ped_force import AdversarialPedForceConfig
@@ -401,8 +401,17 @@ class SimulationSettings:
     debug_without_robot_movement: bool = False
     """Whether to disable robot movement in the simulator for debugging purposes"""
 
-    obstacle_force_law: str = DEFAULT_OBSTACLE_FORCE_LAW
+    obstacle_force_law: Any = None
     """Versioned pedestrian obstacle-force law; defaults to the historical law."""
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Resolve law assignments immediately and retain selector provenance."""
+        if name == "obstacle_force_law":
+            resolved, mode = resolve_obstacle_force_law_with_mode(value)
+            object.__setattr__(self, name, resolved)
+            object.__setattr__(self, "_obstacle_force_law_resolution_mode", mode)
+            return
+        object.__setattr__(self, name, value)
 
     @property
     def resolved_action_latency_steps(self) -> int:
@@ -432,10 +441,15 @@ class SimulationSettings:
         """Return the configured obstacle law through the versioned alias."""
         return self.obstacle_force_law
 
+    @property
+    def obstacle_force_law_resolution_mode(self) -> str:
+        """Return how the law selector was resolved for this configuration."""
+        return getattr(self, "_obstacle_force_law_resolution_mode", "historical_unversioned")
+
     @obstacle_force_law_version.setter
     def obstacle_force_law_version(self, value: Any) -> None:
         """Set the obstacle law through the versioned alias."""
-        self.obstacle_force_law = resolve_obstacle_force_law(value)
+        self.obstacle_force_law = value
 
     def _validate_action_latency_config(self) -> None:
         """Reject ambiguous or non-realizable action-latency configuration values."""
@@ -477,7 +491,6 @@ class SimulationSettings:
         self.pedestrian_integration_scheme = normalize_integration_scheme(
             self.pedestrian_integration_scheme
         )
-        self.obstacle_force_law = resolve_obstacle_force_law(self.obstacle_force_law)
         # Check that the pedestrian speed multiplier is positive
         if self.peds_speed_mult <= 0:
             raise ValueError("Pedestrian speed mustn't be negative or zero!")

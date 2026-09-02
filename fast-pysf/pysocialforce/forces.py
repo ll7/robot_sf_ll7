@@ -24,6 +24,7 @@ from numba import njit
 
 from pysocialforce.config import (
     LEGACY_SHIFTED_GRADIENT_V1,
+    OBSTACLE_FORCE_DISTANCE_FLOOR,
     DesiredForceConfig,
     GroupCoherenceForceConfig,
     GroupGazeForceConfig,
@@ -442,10 +443,11 @@ class ObstacleForce:
     def law_metadata(self) -> dict[str, object]:
         """Return the fast-pysf law and site conventions used by this force."""
         obstacles = self.get_obstacles()
-        try:
-            enabled = float(getattr(self.config, "factor", 1.0)) != 0.0
-        except (TypeError, ValueError):
-            enabled = True
+        factor = float(getattr(self.config, "factor", 1.0))
+        sigma = float(getattr(self.config, "sigma", 0.0))
+        threshold = float(getattr(self.config, "threshold", 0.0))
+        agent_radius = float(self.get_agent_radius())
+        enabled = factor != 0.0
         return obstacle_force_law_metadata(
             getattr(self.config, "law_version", None),
             site="fast_pysf",
@@ -453,6 +455,15 @@ class ObstacleForce:
             radius_convention="threshold_plus_agent_radius_sigma",
             enabled=enabled,
             applied=enabled and obstacles is not None and len(obstacles) > 0,
+            resolution_mode=getattr(self.config, "obstacle_force_law_resolution_mode", None),
+            parameters={
+                "factor": factor,
+                "sigma": sigma,
+                "threshold": threshold,
+                "agent_radius": agent_radius,
+                "effective_offset": threshold + agent_radius * sigma,
+                "distance_floor": OBSTACLE_FORCE_DISTANCE_FLOOR,
+            },
         )
 
 
@@ -604,7 +615,7 @@ def surface_distance_unit_normal_force(
     """
     if raw_distance <= 0.0:
         return 0.0, 0.0
-    obst_dist = max(raw_distance - ped_radius, 1e-5)
+    obst_dist = max(raw_distance - ped_radius, OBSTACLE_FORCE_DISTANCE_FLOOR)
     der_potential = 1 / pow(obst_dist, 3)
     normal_x = dx_to_surface / raw_distance
     normal_y = dy_to_surface / raw_distance
@@ -725,7 +736,10 @@ def surface_distance_unit_normal_force_vectors(
     if offsets.shape != raw_distances.shape:
         raise ValueError("effective_offsets must be scalar or have one value per position")
 
-    surface_distances = np.maximum(raw_distances - offsets, 1e-5)
+    surface_distances = np.maximum(
+        raw_distances - offsets,
+        OBSTACLE_FORCE_DISTANCE_FLOOR,
+    )
     valid = (
         np.isfinite(positions).all(axis=1)
         & np.isfinite(raw_distances)

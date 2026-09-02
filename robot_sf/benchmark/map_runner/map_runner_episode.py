@@ -4164,6 +4164,12 @@ def _assemble_episode_record(  # noqa: PLR0913
         contradictions=contradictions,
         view_integrity=loop_result.view_integrity,
     )
+    runtime_law = record.get("algorithm_metadata", {}).get("obstacle_force_law")
+    if isinstance(runtime_law, dict) and isinstance(runtime_law.get("sites"), dict):
+        for site_metadata in runtime_law["sites"].values():
+            if isinstance(site_metadata, dict):
+                site_metadata.setdefault("config_hash", record["config_hash"])
+                site_metadata.setdefault("source_commit", record["git_hash"])
     _finalize_assembled_record_provenance(
         record,
         ctx=ctx,

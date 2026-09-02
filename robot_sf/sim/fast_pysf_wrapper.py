@@ -18,7 +18,7 @@ import numpy as np
 import pysocialforce as pysf
 from loguru import logger
 from pysocialforce import forces as pf_forces
-from pysocialforce.config import resolve_obstacle_force_law
+from pysocialforce.config import OBSTACLE_FORCE_DISTANCE_FLOOR, resolve_obstacle_force_law
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -46,11 +46,15 @@ class FastPysfWrapper:
         Args:
             simulator: Active PySocialForce simulator instance to query.
         """
+        self.sim = simulator
         n_agents = simulator.peds.size()
         if n_agents < 0:
             raise ValueError(f"n_agents must be non-negative (got {n_agents})")
 
-        self.sim = simulator
+        # Validate before the wrapper can enter any numerical fallback path. An
+        # invalid selector must never degrade into a zero obstacle contribution.
+        self._resolve_obstacle_force_law()
+
         # Named caches for precomputed force grids. Each cache is a dict with
         # keys: 'xs' (1D array), 'ys' (1D array), 'field' (H,W,2 array).
         self._force_grid_caches: dict[str, dict] = {}
@@ -83,6 +87,9 @@ class FastPysfWrapper:
 
     def obstacle_force_law_metadata(self) -> dict[str, Any]:
         """Return the wrapper's resolved law and runtime application state."""
+        config = self.sim.config.obstacle_force_config
+        factor = float(getattr(config, "factor", 1.0))
+        agent_radius = float(self.sim.peds.agent_radius)
         return pf_forces.obstacle_force_law_metadata(
             self._resolve_obstacle_force_law(),
             site="fast_pysf_wrapper",
@@ -90,6 +97,12 @@ class FastPysfWrapper:
             radius_convention="agent_radius_direct",
             enabled=self._obstacle_force_enabled(),
             applied=bool(getattr(self, "_obstacle_force_applied", False)),
+            resolution_mode=getattr(config, "obstacle_force_law_resolution_mode", None),
+            parameters={
+                "factor": factor,
+                "agent_radius": agent_radius,
+                "distance_floor": OBSTACLE_FORCE_DISTANCE_FLOOR,
+            },
         )
 
     def diagnostics(self) -> dict[str, Any]:

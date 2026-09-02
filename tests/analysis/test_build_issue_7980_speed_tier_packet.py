@@ -20,13 +20,16 @@ import yaml
 from robot_sf.benchmark.result_interpretation_packet import (
     compute_packet_digest,
     load_result_interpretation_packet,
+    write_deterministic_json,
 )
+from scripts.analysis import build_issue_7980_speed_tier_packet as builder
 from scripts.analysis.build_issue_7980_speed_tier_packet import (
     _canonical_manifest_digest,
     _review_sidecar_path,
     _review_sidecar_payload,
     _validate_source_receipt,
     _validate_synthesis,
+    build_packet,
     decode_source_binding,
 )
 
@@ -472,6 +475,60 @@ def test_independent_source_crosswalk_validates_rows_without_packet_reuse() -> N
 
     assert validated["source_ingestion_status"] == "fixture_verified"
     assert validated["independent_of_packet"] is True
+
+
+def test_fixture_receipt_build_declares_durable_source_and_validates_packet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Build a receipt-backed packet through the generic schema validator end to end."""
+
+    synthesis, synthesis_sha256, _, _ = _validation_inputs()
+    synthesis_path = tmp_path / "synthesis.json"
+    synthesis_path.write_text(json.dumps(synthesis), encoding="utf-8")
+    receipt_path = EVIDENCE_DIR / "source_ingestion_receipt.issue_7980.fixture.json"
+    real_sha256 = builder._sha256
+
+    def synthetic_synthesis_sha256(path: Path) -> str:
+        """Use the reviewed synthesis digest for the compact row-only test fixture."""
+
+        if path.resolve() == synthesis_path.resolve():
+            return synthesis_sha256
+        return real_sha256(path)
+
+    monkeypatch.setattr(builder, "_sha256", synthetic_synthesis_sha256)
+    producer_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    packet = build_packet(
+        synthesis_path=synthesis_path,
+        recovery_manifest_path=RECOVERY_MANIFEST_PATH,
+        previous_packet_path=EVIDENCE_DIR / "result_interpretation_packet.v1.json",
+        preregistration_path=PREREGISTRATION_PATH,
+        producer_commit=producer_commit,
+        source_receipt_path=receipt_path,
+    )
+    output = tmp_path / "receipt-backed-packet.json"
+    write_deterministic_json(packet, output)
+    loaded = load_result_interpretation_packet(output)
+
+    sources = {source["source_id"]: source for source in packet["sources"]}
+    assert set(sources) == {"recovery_manifest", "issue_7980_source_receipt"}
+    receipt_source = sources["issue_7980_source_receipt"]
+    assert receipt_source["path"] == (
+        "docs/context/evidence/issue_6102_robot_speed_tier_recovery/"
+        "source_row_crosswalk.issue_7980.fixture.json"
+    )
+    assert receipt_source["sha256"] == _load_json(receipt_path)["source_sha256"]
+    assert receipt_source["commit"] == producer_commit
+    assert receipt_source["tracked_commit"]
+    assert all("issue_7980_source_receipt" in metric["source_ids"] for metric in packet["metrics"])
+    assert loaded.evidence.admission_state == "diagnostic_only"
+    assert {decision.outcome for decision in loaded.decisions} == {"inconclusive", "invalid"}
 
 
 def test_source_receipt_fails_closed_when_authenticated_hydration_is_unavailable() -> None:

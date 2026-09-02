@@ -416,6 +416,53 @@ def _validate_source_receipt(
     return dict(receipt)
 
 
+def _source_receipt_source_ref(
+    receipt: Mapping[str, Any],
+    *,
+    producer_commit: str,
+) -> dict[str, Any]:
+    """Project the receipt's durable source crosswalk into a packet ``SourceRef``.
+
+    The receipt itself may be an ignored, task-local hydration record.  The generic packet
+    contract only permits repository-relative durable source files, so the metric binding points
+    at the independently supplied crosswalk that the receipt validates.  The receipt's complete
+    custody identity remains encoded in each metric sensitivity binding.
+    """
+
+    source_path = _input_path(receipt.get("source_path"), "source_path")
+    try:
+        relative_path = source_path.relative_to(_REPO_ROOT.resolve()).as_posix()
+    except ValueError as exc:
+        raise ValueError(
+            "source receipt crosswalk must be a durable repository file for packet declaration"
+        ) from exc
+    tracked_commit = _git("log", "-1", "--format=%H", "--", relative_path)
+    if not tracked_commit:
+        raise ValueError(
+            "source receipt crosswalk must be tracked before it can be declared in the packet"
+        )
+    source_sha256 = _require_sha256(receipt.get("source_sha256"), "source_sha256")
+    return {
+        "source_id": "issue_7980_source_receipt",
+        "path": relative_path,
+        "sha256": source_sha256,
+        "kind": "independent_source_crosswalk",
+        "commit": producer_commit,
+        "tracked_commit": tracked_commit,
+        "command": (
+            f"scripts/analysis/build_issue_7980_speed_tier_packet.py "
+            "--synthesis <verified-synthesis.json> "
+            "--source-receipt <verified-source-receipt.json> "
+            f"--producer-commit {producer_commit}"
+        ),
+        "description": (
+            "Independent source-row crosswalk retained and validated by the supplied "
+            "issue #7980 source-ingestion receipt."
+        ),
+        "direction": "not_applicable",
+    }
+
+
 def _sha256(path: Path) -> str:
     """Return the lowercase SHA-256 digest for one file."""
 
@@ -878,6 +925,15 @@ def build_packet(
         "Claim that prediction_planner is insensitive to the speed cap.",
         "Dissertation, release, or paper-facing admission claim.",
     ]
+    sources = [dict(recovery_source)]
+    if source_receipt is not None:
+        sources.append(
+            _source_receipt_source_ref(
+                source_receipt,
+                producer_commit=producer_commit,
+            )
+        )
+
     packet = {
         "schema_version": "result_interpretation_packet.v1",
         "packet_id": "issue_7980_robot_speed_tier_contrast_binding_diagnostic",
@@ -901,7 +957,7 @@ def build_packet(
                 "successor remains diagnostic only."
             ),
         },
-        "sources": [dict(recovery_source)],
+        "sources": sources,
         "population": previous_packet["population"],
         "execution_mode": previous_packet["execution_mode"],
         "estimand": {

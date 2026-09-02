@@ -15,6 +15,7 @@ import pytest
 from robot_sf.benchmark.release_erratum import (
     SCIENTIFIC_CANONICALIZATION,
     ErratumContract,
+    PredecessorEvidence,
     ReleaseErratumError,
     build_erratum_receipt,
     compare_scientific_snapshots,
@@ -102,6 +103,17 @@ def _contract(archive: Path) -> ErratumContract:
         successor_github_release_tag=NEW_TAG,
         metadata_path=Path("metadata.json"),
         metadata_sha256="a" * 64,
+    )
+
+
+def _predecessor_evidence(archive: Path, contract: ErratumContract) -> PredecessorEvidence:
+    return PredecessorEvidence(
+        archive_path=archive,
+        version_doi=contract.predecessor_version_doi,
+        concept_doi=contract.concept_doi,
+        github_release_tag=contract.predecessor_github_release_tag,
+        archive_sha256=contract.predecessor_archive_sha256,
+        archive_size_bytes=contract.predecessor_archive_size_bytes,
     )
 
 
@@ -332,6 +344,7 @@ def test_cold_erratum_receipt_recomputes_successor_leaves(tmp_path: Path) -> Non
         receipt_path,
         campaign_root=campaign,
         metadata_path=contract.metadata_path,
+        predecessor_evidence=_predecessor_evidence(archive, contract),
         expected_tag=NEW_TAG,
         expected_doi=contract.successor_version_doi,
     )
@@ -339,6 +352,179 @@ def test_cold_erratum_receipt_recomputes_successor_leaves(tmp_path: Path) -> Non
     assert observed["status"] == "pass"
     assert observed["episode_rows"] == 8
     assert observed["canonical_row_manifest_sha256"] == snapshot.canonical_row_manifest_sha256
+    assert observed["predecessor"] == {
+        "version_doi": contract.predecessor_version_doi,
+        "concept_doi": contract.concept_doi,
+        "github_release_tag": contract.predecessor_github_release_tag,
+        "archive_sha256": contract.predecessor_archive_sha256,
+        "archive_size_bytes": contract.predecessor_archive_size_bytes,
+        "scientific_identity": snapshot.public_dict(),
+    }
+    assert observed["successor"] == {
+        "version_doi": contract.successor_version_doi,
+        "concept_doi": contract.concept_doi,
+        "github_release_tag": contract.successor_github_release_tag,
+        "scientific_identity": snapshot.public_dict(),
+    }
+    assert observed["scientific_equality"] == receipt["scientific_equality"]
+    assert "archive_path" not in json.dumps(observed)
+
+
+def test_cold_erratum_requires_explicit_predecessor_evidence(tmp_path: Path) -> None:
+    """A self-equality receipt cannot pass without a detached predecessor archive."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_text(
+        json.dumps(
+            build_erratum_receipt(
+                contract=contract,
+                predecessor=snapshot,
+                successor=snapshot,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ReleaseErratumError, match="predecessor evidence is required"):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "match"),
+    [
+        ("version_doi", None, "version DOI"),
+        ("version_doi", "10.5281/zenodo.999991", "version DOI"),
+        ("concept_doi", None, "concept DOI"),
+        ("concept_doi", "10.5281/zenodo.999992", "concept DOI"),
+        ("github_release_tag", None, "GitHub release tag"),
+        ("github_release_tag", "wrong-predecessor-tag", "GitHub release tag"),
+        ("archive_sha256", None, "archive SHA-256"),
+        ("archive_sha256", "0" * 64, "archive SHA-256"),
+        ("archive_size_bytes", None, "archive size"),
+        ("archive_size_bytes", 1, "archive size"),
+    ],
+)
+def test_cold_erratum_rejects_predecessor_evidence_field_drift(
+    tmp_path: Path, field: str, value: object, match: str
+) -> None:
+    """Every predecessor custody coordinate must agree with the embedded receipt."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_text(
+        json.dumps(
+            build_erratum_receipt(
+                contract=contract,
+                predecessor=snapshot,
+                successor=snapshot,
+            )
+        ),
+        encoding="utf-8",
+    )
+    evidence = replace(_predecessor_evidence(archive, contract), **{field: value})
+
+    with pytest.raises(ReleaseErratumError, match=match):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            predecessor_evidence=evidence,
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+
+
+def test_cold_erratum_rejects_mutated_predecessor_archive(tmp_path: Path) -> None:
+    """Changing the detached predecessor after receipt creation fails custody first."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_text(
+        json.dumps(
+            build_erratum_receipt(
+                contract=contract,
+                predecessor=snapshot,
+                successor=snapshot,
+            )
+        ),
+        encoding="utf-8",
+    )
+    original = archive.read_bytes()
+    archive.write_bytes(bytes([original[0] ^ 1]) + original[1:])
+
+    with pytest.raises(ReleaseErratumError, match="SHA-256"):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(archive, contract),
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+
+
+def test_cold_erratum_rejects_fabricated_self_equality(tmp_path: Path) -> None:
+    """Receipt self-equality cannot hide different predecessor episode bytes."""
+    campaign = tmp_path / "campaign"
+    predecessor_campaign = tmp_path / "predecessor-campaign"
+    _write_campaign(campaign)
+    _write_campaign(predecessor_campaign)
+    predecessor_episode = predecessor_campaign / "runs/goal__differential_drive/episodes.jsonl"
+    rows = [
+        json.loads(line) for line in predecessor_episode.read_text(encoding="utf-8").splitlines()
+    ]
+    predecessor_episode.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(predecessor_campaign, archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
+    successor = snapshot_campaign(campaign, contract=contract)
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.parent.mkdir(parents=True, exist_ok=True)
+    receipt_path.write_text(
+        json.dumps(
+            build_erratum_receipt(
+                contract=contract,
+                predecessor=successor,
+                successor=successor,
+            )
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ReleaseErratumError, match="scientific leaves differ"):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(archive, contract),
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
 
 
 def test_cold_erratum_receipt_rejects_tampered_successor_row(tmp_path: Path) -> None:
@@ -371,6 +557,7 @@ def test_cold_erratum_receipt_rejects_tampered_successor_row(tmp_path: Path) -> 
             receipt_path,
             campaign_root=campaign,
             metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(archive, contract),
             expected_tag=NEW_TAG,
             expected_doi=contract.successor_version_doi,
         )
@@ -411,6 +598,7 @@ def test_cold_erratum_receipt_rejects_byte_different_successor_episode_file(
             receipt_path,
             campaign_root=campaign,
             metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(archive, contract),
             expected_tag=NEW_TAG,
             expected_doi=contract.successor_version_doi,
         )
@@ -454,6 +642,7 @@ def test_cold_erratum_receipt_rejects_identity_or_metadata_drift(
             receipt_path,
             campaign_root=campaign,
             metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(archive, contract),
             expected_tag=NEW_TAG,
             expected_doi=contract.successor_version_doi,
             expected_source_sha=expected_source_sha,
@@ -485,6 +674,7 @@ def test_cold_erratum_helper_requires_canonical_payload_paths(tmp_path: Path) ->
             external_receipt,
             campaign_root=campaign,
             metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(archive, contract),
             expected_tag=NEW_TAG,
             expected_doi=contract.successor_version_doi,
         )
@@ -493,6 +683,7 @@ def test_cold_erratum_helper_requires_canonical_payload_paths(tmp_path: Path) ->
             canonical_receipt,
             campaign_root=campaign,
             metadata_path=external_metadata,
+            predecessor_evidence=_predecessor_evidence(archive, contract),
             expected_tag=NEW_TAG,
             expected_doi=contract.successor_version_doi,
         )
@@ -527,6 +718,7 @@ def test_cold_erratum_receipt_rejects_stale_release_document_alias(tmp_path: Pat
             receipt_path,
             campaign_root=campaign,
             metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(archive, contract),
             expected_tag=NEW_TAG,
             expected_doi=contract.successor_version_doi,
         )
@@ -590,6 +782,7 @@ def test_cold_erratum_receipt_rejects_nested_identity_drift(
             receipt_path,
             campaign_root=campaign,
             metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(archive, contract),
             expected_tag=NEW_TAG,
             expected_doi=contract.successor_version_doi,
         )

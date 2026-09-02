@@ -66,6 +66,49 @@ class ErratumContract:
 
 
 @dataclass(frozen=True)
+class PredecessorEvidence:
+    """Offline evidence identifying and locating the immutable predecessor archive.
+
+    The values beside ``archive_path`` are claims supplied by the cold-audit
+    caller.  The validator binds each claim to the embedded receipt before it
+    opens the archive, so a successor receipt cannot manufacture its own
+    predecessor by reusing the successor campaign snapshot.
+    """
+
+    archive_path: Path
+    version_doi: str
+    concept_doi: str
+    github_release_tag: str
+    archive_sha256: str
+    archive_size_bytes: int
+
+    @property
+    def expected_version_doi(self) -> str:
+        """Return the expected predecessor version DOI."""
+        return self.version_doi
+
+    @property
+    def expected_concept_doi(self) -> str:
+        """Return the expected predecessor concept DOI."""
+        return self.concept_doi
+
+    @property
+    def expected_github_release_tag(self) -> str:
+        """Return the expected predecessor GitHub release tag."""
+        return self.github_release_tag
+
+    @property
+    def expected_archive_sha256(self) -> str:
+        """Return the expected predecessor archive SHA-256."""
+        return self.archive_sha256
+
+    @property
+    def expected_archive_size_bytes(self) -> int:
+        """Return the expected predecessor archive byte count."""
+        return self.archive_size_bytes
+
+
+@dataclass(frozen=True)
 class _RowDigests:
     """Canonical leaf digests retained only while two snapshots are compared."""
 
@@ -191,6 +234,41 @@ def validate_erratum_contract_identity(contract: ErratumContract) -> None:
     """
     _validate_contract_sha_and_matrix(contract)
     _validate_contract_dois_and_tags(contract)
+
+
+def _validate_predecessor_evidence(
+    evidence: PredecessorEvidence | None, *, contract: ErratumContract
+) -> PredecessorEvidence:
+    """Bind explicit offline predecessor claims to the receipt-derived contract.
+
+    Returns:
+        The validated evidence object.
+    """
+    if evidence is None:
+        raise ReleaseErratumError("predecessor evidence is required for cold validation")
+    if not isinstance(evidence, PredecessorEvidence):
+        raise ReleaseErratumError("predecessor evidence has an unsupported type")
+    if not isinstance(evidence.archive_path, Path):
+        raise ReleaseErratumError("predecessor evidence archive path must be a Path")
+    expected_values = (
+        ("version DOI", evidence.version_doi, contract.predecessor_version_doi),
+        ("concept DOI", evidence.concept_doi, contract.concept_doi),
+        (
+            "GitHub release tag",
+            evidence.github_release_tag,
+            contract.predecessor_github_release_tag,
+        ),
+        ("archive SHA-256", evidence.archive_sha256, contract.predecessor_archive_sha256),
+        (
+            "archive size",
+            evidence.archive_size_bytes,
+            contract.predecessor_archive_size_bytes,
+        ),
+    )
+    for label, observed, expected in expected_values:
+        if observed != expected:
+            raise ReleaseErratumError(f"predecessor evidence {label} differs from the receipt")
+    return evidence
 
 
 def _require_mapping(value: Any, *, label: str) -> Mapping[str, Any]:
@@ -802,6 +880,7 @@ def compare_scientific_snapshots(
         "canonical_row_manifest_sha256": predecessor.canonical_row_manifest_sha256,
         "episode_file_sha256": dict(predecessor.episode_file_sha256),
         "episode_file_manifest_sha256": predecessor.episode_file_manifest_sha256,
+        "per_arm": dict(predecessor.per_arm),
     }
 
 
@@ -1315,16 +1394,18 @@ def validate_erratum_receipt_against_campaign(
     *,
     campaign_root: Path,
     metadata_path: Path,
+    predecessor_evidence: PredecessorEvidence | None = None,
     expected_tag: str,
     expected_doi: str,
     expected_source_sha: str | None = None,
 ) -> dict[str, Any]:
-    """Validate an embedded receipt and recompute its successor scientific leaves.
+    """Validate an embedded receipt and recompute both scientific snapshots.
 
     This cold-audit helper does not trust the receipt's claimed successor
-    digests. It rebuilds them from the downloaded bundle. The predecessor
-    archive remains independently verified during derivation and is bound by
-    DOI, size, and SHA-256 in the receipt.
+    digests. It rebuilds the successor snapshot from the downloaded bundle and
+    independently opens, hashes, and snapshots the predecessor archive supplied
+    by ``predecessor_evidence``. The evidence claims are bound to the receipt's
+    predecessor DOI, concept DOI, tag, size, and SHA-256 before comparison.
 
     Returns:
         Compact public observations for the cold audit receipt.
@@ -1348,10 +1429,17 @@ def validate_erratum_receipt_against_campaign(
         expected_doi=expected_doi,
         expected_source_sha=expected_source_sha,
     )
+    evidence = _validate_predecessor_evidence(predecessor_evidence, contract=contract)
+    predecessor = snapshot_predecessor_archive(evidence.archive_path, contract=contract)
     observed = snapshot_campaign(campaign_root, contract=contract)
     if observed.public_dict() != dict(scientific):
         raise ReleaseErratumError("published successor scientific leaves differ from its receipt")
     _assert_published_equality_digests(scientific, equality)
+    recomputed_equality = compare_scientific_snapshots(predecessor, observed)
+    if dict(equality) != recomputed_equality:
+        raise ReleaseErratumError(
+            "published erratum equality proof differs from recomputed predecessor/successor proof"
+        )
     _validate_published_release_documents(root, contract=contract)
 
     return {
@@ -1362,8 +1450,24 @@ def validate_erratum_receipt_against_campaign(
         "orchestration_sha": contract.orchestration_sha,
         "predecessor_version_doi": contract.predecessor_version_doi,
         "predecessor_archive_sha256": contract.predecessor_archive_sha256,
+        "predecessor_archive_size_bytes": contract.predecessor_archive_size_bytes,
         "concept_doi": contract.concept_doi,
         "successor_version_doi": expected_doi,
+        "predecessor": {
+            "version_doi": contract.predecessor_version_doi,
+            "concept_doi": contract.concept_doi,
+            "github_release_tag": contract.predecessor_github_release_tag,
+            "archive_sha256": contract.predecessor_archive_sha256,
+            "archive_size_bytes": contract.predecessor_archive_size_bytes,
+            "scientific_identity": predecessor.public_dict(),
+        },
+        "successor": {
+            "version_doi": expected_doi,
+            "concept_doi": contract.concept_doi,
+            "github_release_tag": expected_tag,
+            "scientific_identity": observed.public_dict(),
+        },
+        "scientific_equality": recomputed_equality,
         "episode_rows": observed.episode_rows,
         "planner_arms": observed.planner_arms,
         "episode_identity_manifest_sha256": observed.episode_identity_manifest_sha256,

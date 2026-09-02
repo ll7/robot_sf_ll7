@@ -32,6 +32,12 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
                 "pysocialforce is required for SocialForcePlannerAdapter. "
                 "Install the fast-pysf dependency."
             )
+        self._obstacle_force_applied = False
+
+    def reset(self, *, seed: int | None = None) -> None:
+        """Reset episode-local obstacle-force application diagnostics."""
+        del seed
+        self._obstacle_force_applied = False
 
     def plan_velocity_world(self, observation: dict) -> np.ndarray:
         """Compute a world-frame translational velocity using the social-force model.
@@ -197,14 +203,16 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         Returns:
             np.ndarray: Combined obstacle repulsion vector.
         """
+        law_version = resolve_obstacle_force_law(
+            getattr(self.config, "social_force_obstacle_law", None)
+        )
         centers, radii = self._extract_obstacles_from_grid(observation, robot_pos, robot_heading)
         if centers.size == 0:
             return np.zeros(2, dtype=float)
 
         robot_radius = float(self._as_1d_float(robot_state.get("radius", [0.0]), pad=1)[0])
-        law_version = resolve_obstacle_force_law(
-            getattr(self.config, "social_force_obstacle_law", None)
-        )
+        obstacle_factor = float(self.config.social_force_obstacle_factor)
+        self._obstacle_force_applied = self._obstacle_force_enabled()
         # Vectorized point-obstacle force broadcast (issue #5412). The scalar loop
         # built a degenerate single-point line ``(cx, cy, cx, cy)`` per obstacle
         # and called ``sf_forces.obstacle_force``. That degenerate line exercises
@@ -221,7 +229,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         diff = (robot_pos[np.newaxis, :] - centers).astype(float)  # (M, 2)
         if law_version != LEGACY_SHIFTED_GRADIENT_V1:
             force = sf_forces.surface_distance_unit_normal_force_vectors(diff, ped_radius)
-            return np.sum(force, axis=0) * float(self.config.social_force_obstacle_factor)
+            return np.sum(force, axis=0) * obstacle_factor
 
         raw_dist = np.sqrt(diff[:, 0] ** 2 + diff[:, 1] ** 2)
         obst_dist = np.maximum(raw_dist - ped_radius, 1e-5)
@@ -234,7 +242,14 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         grad = diff_f / obst_dist_f[:, np.newaxis]
         force = der_potential[:, np.newaxis] * grad
         total = np.sum(force, axis=0)
-        return total * float(self.config.social_force_obstacle_factor)
+        return total * obstacle_factor
+
+    def _obstacle_force_enabled(self) -> bool:
+        """Return whether the configured obstacle-force factor can contribute."""
+        try:
+            return float(self.config.social_force_obstacle_factor) != 0.0
+        except (AttributeError, TypeError, ValueError):
+            return True
 
     @staticmethod
     def _grid_cell_centers(
@@ -442,13 +457,15 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             "obstacle_force_law": self.obstacle_force_law_metadata(),
         }
 
-    def obstacle_force_law_metadata(self) -> dict[str, str]:
+    def obstacle_force_law_metadata(self) -> dict[str, Any]:
         """Return planner obstacle-law metadata without making an evidence claim."""
         return obstacle_force_law_metadata(
             getattr(getattr(self, "config", None), "social_force_obstacle_law", None),
             site="socnav_social_force",
             geometry_convention="occupancy_cell_centers",
             radius_convention="cell_derived_radius_plus_robot_radius",
+            enabled=self._obstacle_force_enabled(),
+            applied=bool(getattr(self, "_obstacle_force_applied", False)),
         )
 
 

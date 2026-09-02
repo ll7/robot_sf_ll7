@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 __all__ = ["build_reset_metadata", "resolve_map_id"]
@@ -28,6 +29,7 @@ def build_reset_metadata(
     map_def: Any,
     seed: int | None,
     extra: dict[str, Any] | None = None,
+    simulator: Any | None = None,
 ) -> dict[str, Any]:
     """Build stable map/timing reset metadata for Gymnasium environments.
 
@@ -49,4 +51,9 @@ def build_reset_metadata(
     }
     if extra:
         metadata.update(extra)
+    metadata_fn = getattr(simulator, "obstacle_force_law_metadata", None)
+    if callable(metadata_fn):
+        obstacle_force_metadata = metadata_fn()
+        if isinstance(obstacle_force_metadata, Mapping):
+            metadata["obstacle_force_law"] = dict(obstacle_force_metadata)
     return metadata

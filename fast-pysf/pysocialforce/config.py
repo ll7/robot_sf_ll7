@@ -72,7 +72,9 @@ def obstacle_force_law_metadata(
     site: str,
     geometry_convention: str,
     radius_convention: str,
-) -> dict[str, str]:
+    enabled: bool = True,
+    applied: bool | None = None,
+) -> dict[str, Any]:
     """Build explicit, JSON-safe metadata for one obstacle-force runtime site.
 
     The metadata describes implementation dispatch and compatibility only.  It is
@@ -83,6 +85,9 @@ def obstacle_force_law_metadata(
         site: Stable runtime site identifier.
         geometry_convention: Site-specific obstacle geometry convention.
         radius_convention: Site-specific radius/offset convention.
+        enabled: Whether this runtime site is configured to contribute obstacle force.
+        applied: Whether the site evaluated obstacle force for the current runtime.
+            When omitted, this follows ``enabled`` for configuration-only callers.
 
     Returns:
         Versioned metadata mapping suitable for configuration or episode diagnostics.
@@ -97,6 +102,8 @@ def obstacle_force_law_metadata(
         "compatibility_mode": (
             "legacy_compatible" if resolved == LEGACY_SHIFTED_GRADIENT_V1 else "corrected_opt_in"
         ),
+        "enabled": bool(enabled),
+        "applied": bool(enabled if applied is None else applied),
     }
 
 

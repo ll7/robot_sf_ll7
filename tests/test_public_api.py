@@ -81,6 +81,15 @@ def test_load_scenario_resolves_path_and_stem():
         robot_sf.load_scenario("definitely_nonexistent_scenario_12345")
 
 
+def test_load_scenario_prefers_canonical_definition_over_reexports():
+    """Aggregate manifests do not make a canonical scenario identifier ambiguous."""
+    scenario = robot_sf.load_scenario("classic_bottleneck_low")
+    assert scenario["name"] == "classic_bottleneck_low"
+    assert scenario["__scenario_path__"].endswith(
+        "configs/scenarios/archetypes/classic_bottleneck.yaml"
+    )
+
+
 def test_make_env_and_run_episode_roundtrip(tmp_path: Path):
     """Verify make_env + run_episode + episode.save round-trip."""
     env = robot_sf.make_env(
@@ -150,6 +159,23 @@ def test_make_env_with_mapping_and_planner():
         env.close()
 
 
+def test_make_env_rejects_relative_mapping_without_source_metadata():
+    """Plain mappings must not guess a base directory for relative asset paths."""
+    scenario = robot_sf.load_scenario("quickstart_demo")
+    scenario.pop("__scenario_path__")
+    with pytest.raises(ValueError, match="relative asset paths"):
+        robot_sf.make_env(scenario=scenario, seed=123)
+
+
+def test_make_env_preserves_caller_scenario_name():
+    """An explicit scenario_name remains the public environment identity."""
+    env = robot_sf.make_env(scenario="quickstart_demo", scenario_name="caller_name", seed=123)
+    try:
+        assert env.scenario_id == "caller_name"
+    finally:
+        env.close()
+
+
 @pytest.mark.parametrize(
     "planner_action",
     [{"v": 0.0, "omega": 0.0}, {"vx": 0.0, "vy": 0.0}],
@@ -165,6 +191,38 @@ def test_run_episode_converts_protocol_action(planner_action):
 
         record = robot_sf.run_episode(env, planner=DictPlanner(), max_steps=1)
         assert record.horizon == 1
+    finally:
+        env.close()
+
+
+def test_run_episode_rejects_invalid_planner():
+    """Invalid planner objects fail clearly instead of sampling random actions."""
+    env = robot_sf.make_env(seed=123)
+    try:
+        with pytest.raises(TypeError, match=r"callable step\(\) method"):
+            robot_sf.run_episode(env, planner=object(), max_steps=1)
+    finally:
+        env.close()
+
+
+@pytest.mark.parametrize("max_steps", [0, -1])
+def test_run_episode_rejects_non_positive_max_steps(max_steps):
+    """A non-positive step budget cannot execute an implicit extra action."""
+    env = robot_sf.make_env(seed=123)
+    try:
+        with pytest.raises(ValueError, match="positive integer"):
+            robot_sf.run_episode(env, max_steps=max_steps)
+    finally:
+        env.close()
+
+
+def test_run_episode_uses_stable_episode_identity():
+    """Repeated calls with the same scenario and seed share the canonical identity."""
+    env = robot_sf.make_env(seed=123)
+    try:
+        first = robot_sf.run_episode(env, max_steps=1)
+        second = robot_sf.run_episode(env, max_steps=1)
+        assert first.episode_id == second.episode_id == "default--123"
     finally:
         env.close()
 

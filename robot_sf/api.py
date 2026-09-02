@@ -6,6 +6,7 @@ environment construction, and episode execution.
 
 from __future__ import annotations
 
+import json
 import math
 import time
 from collections.abc import Mapping
@@ -82,6 +83,56 @@ def _scenario_matches(scenario: Mapping[str, Any], query_values: set[str]) -> bo
     return False
 
 
+def _scenario_manifest_precedence(manifest_path: Path, scenarios_root: Path) -> int:
+    """Return the lookup precedence for a scenario manifest.
+
+    Canonical single-scenario and archetype definitions take precedence over
+    aggregate manifests that re-export them.  The precedence is deliberately
+    limited to lookup routing: conflicting entries within the selected source
+    class still remain ambiguous and fail closed.
+    """
+    try:
+        relative_parts = manifest_path.resolve().relative_to(scenarios_root.resolve()).parts
+    except ValueError:
+        return 3
+    if len(relative_parts) >= 2 and relative_parts[-2] in {"archetypes", "single"}:
+        return 0
+    if len(relative_parts) == 1:
+        return 1
+    if "sets" in relative_parts:
+        return 2
+    if "generated" in relative_parts:
+        return 3
+    return 1
+
+
+def _scenario_lookup_key(scenario: Mapping[str, Any], manifest_path: Path) -> str:
+    """Return a canonical comparison key for equivalent scenario definitions.
+
+    Scenario loader output is rebased to the manifest root, so equivalent
+    entries can spell the same map or route file with different relative paths.
+    Normalize those path-bearing fields before comparing entries while keeping
+    every other scenario value exact.
+    """
+
+    def normalize(value: Any, *, key: str | None = None) -> Any:
+        if isinstance(value, Mapping):
+            return {
+                str(child_key): normalize(child_value, key=str(child_key))
+                for child_key, child_value in value.items()
+            }
+        if isinstance(value, list):
+            return [normalize(item) for item in value]
+        if key in {"map_file", "route_overrides_file"} and isinstance(value, str):
+            path = Path(value)
+            if not path.is_absolute():
+                path = manifest_path.parent / path
+            return path.resolve().as_posix()
+        return value
+
+    return json.dumps(normalize(scenario), sort_keys=True, separators=(",", ":"), default=str)
+
+
 def _find_scenario_in_manifests(
     scenario_id: str | Path,
     scenarios_root: Path,
@@ -109,10 +160,25 @@ def _find_scenario_in_manifests(
             if _scenario_matches(scenario, query_values):
                 matches.append((manifest_path.resolve(), scenario, loaded))
 
-    if len(matches) > 1:
-        locations = ", ".join(str(path) for path, _entry, _loaded in matches)
+    if not matches:
+        return None
+
+    best_precedence = min(
+        _scenario_manifest_precedence(path, scenarios_root) for path, _entry, _loaded in matches
+    )
+    canonical_matches = [
+        match
+        for match in matches
+        if _scenario_manifest_precedence(match[0], scenarios_root) == best_precedence
+    ]
+    unique_matches: dict[str, tuple[Path, Mapping[str, Any], list[Mapping[str, Any]]]] = {}
+    for match in sorted(canonical_matches, key=lambda item: item[0].as_posix()):
+        unique_matches.setdefault(_scenario_lookup_key(match[1], match[0]), match)
+
+    if len(unique_matches) > 1:
+        locations = ", ".join(str(path) for path, _entry, _loaded in unique_matches.values())
         raise ValueError(f"Scenario {scenario_id!r} is ambiguous; found matches in {locations}")
-    return matches[0] if matches else None
+    return next(iter(unique_matches.values()))
 
 
 def load_scenario(scenario_id: str | Path) -> dict[str, Any]:
@@ -183,7 +249,9 @@ def make_env(
         build_robot_config_from_scenario,
     )
 
-    scenario_name = "default"
+    scenario_name = (
+        str(kwargs["scenario_name"]) if kwargs.get("scenario_name") is not None else "default"
+    )
     if scenario is not None:
         if isinstance(scenario, (str, Path)):
             sc_dict = load_scenario(scenario)
@@ -195,15 +263,31 @@ def make_env(
             )
 
         scenario_path_str = sc_dict.get("__scenario_path__")
-        sc_path = (
-            Path(scenario_path_str)
-            if scenario_path_str is not None
-            else _find_repo_root() / "configs" / "scenarios" / "scenario.yaml"
+        if scenario_path_str is None:
+            relative_assets = [
+                field
+                for field in ("map_file", "route_overrides_file")
+                if isinstance(sc_dict.get(field), (str, Path))
+                and not Path(sc_dict[field]).is_absolute()
+            ]
+            if relative_assets:
+                fields = ", ".join(relative_assets)
+                raise ValueError(
+                    "scenario mappings with relative asset paths ("
+                    f"{fields}) must preserve the source metadata returned by load_scenario "
+                    "or use absolute paths"
+                )
+            sc_path = _find_repo_root() / "configs" / "scenarios" / "scenario.yaml"
+        else:
+            sc_path = Path(scenario_path_str)
+        inferred_scenario_name = str(
+            sc_dict.get("name") or sc_dict.get("scenario_id") or sc_dict.get("id") or scenario
         )
-        scenario_name = str(sc_dict.get("name") or sc_dict.get("id") or scenario)
         config = build_robot_config_from_scenario(sc_dict, scenario_path=sc_path)
         kwargs.setdefault("config", config)
-        kwargs.setdefault("scenario_name", scenario_name)
+        if kwargs.get("scenario_name") is None:
+            kwargs["scenario_name"] = inferred_scenario_name
+        scenario_name = str(kwargs["scenario_name"])
 
     env = make_robot_env(seed=seed, **kwargs)
     env.scenario_id = scenario_name
@@ -266,12 +350,16 @@ def _extract_action(planner: Any, obs: Any, env: Any) -> Any:
         Action compatible with the environment's action space.
     """
     if planner is not None:
-        if hasattr(planner, "step"):
-            raw_action = planner.step(obs)
+        planner_step = getattr(planner, "step", None)
+        if callable(planner_step):
+            raw_action = planner_step(obs)
         elif callable(planner):
             raw_action = planner(obs)
         else:
-            raw_action = env.action_space.sample()
+            raise TypeError(
+                "planner must provide a callable step() method or be callable; "
+                f"got {type(planner).__name__}"
+            )
     else:
         raw_action = np.zeros(2, dtype=np.float32)
     return _planner_action_to_env_action(raw_action, planner, env)
@@ -317,6 +405,11 @@ def run_episode(
     Returns:
         An :class:`EpisodeRecord` containing episode metrics and metadata.
     """
+    if max_steps is not None and (isinstance(max_steps, bool) or not isinstance(max_steps, int)):
+        raise TypeError("max_steps must be a positive integer or None")
+    if max_steps is not None and max_steps <= 0:
+        raise ValueError("max_steps must be a positive integer or None")
+
     resolved_seed = seed if seed is not None else getattr(env, "applied_seed", None) or 0
 
     obs, info = env.reset(seed=resolved_seed)
@@ -348,7 +441,9 @@ def run_episode(
         or meta.get("scenario_id")
         or "default"
     )
-    episode_id = f"{scenario_id}_{resolved_seed}_{int(time.time() * 1000)}"
+    from robot_sf.benchmark.utils import compute_episode_id  # noqa: PLC0415
+
+    episode_id = compute_episode_id({"id": str(scenario_id)}, int(resolved_seed))
 
     algo_name = None
     if planner is not None:

@@ -15,6 +15,7 @@ from scripts.dev.software_promotion import PromotionError, _artifact_name, _load
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 HELPER = REPO_ROOT / "scripts" / "dev" / "software_candidate_manifest.py"
+_CLEAN_SOURCE: Path | None = None
 
 
 def _source_sha() -> str:
@@ -28,13 +29,25 @@ def _source_sha() -> str:
 
 
 def _clean_source(tmp_path: Path) -> Path:
+    """Create one reusable clean source clone and retain Git diagnostics on failure."""
+    global _CLEAN_SOURCE
+    if _CLEAN_SOURCE is not None:
+        return _CLEAN_SOURCE
     source = tmp_path / "clean-source"
-    subprocess.run(
+    result = subprocess.run(
         ["git", "clone", "--quiet", "--no-hardlinks", str(REPO_ROOT), str(source)],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
     )
+    if result.returncode != 0:
+        raise AssertionError(
+            "git clone failed with exit code "
+            f"{result.returncode}: {result.args!r}\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+    _CLEAN_SOURCE = source
     return source
 
 

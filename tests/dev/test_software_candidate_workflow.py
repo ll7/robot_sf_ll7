@@ -149,11 +149,17 @@ def test_clean_runner_bootstraps_and_checks_the_cloned_helper_offline(tmp_path: 
     if uv is None:
         pytest.fail("uv is required to exercise the clean-runner bootstrap contract")
     clean_repo = tmp_path / "clean-source"
-    subprocess.run(
+    clone_result = subprocess.run(
         ["git", "clone", "--quiet", "--no-hardlinks", str(REPO_ROOT), str(clean_repo)],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
+    )
+    assert clone_result.returncode == 0, (
+        "git clone failed with exit code "
+        f"{clone_result.returncode}: {clone_result.args!r}\n"
+        f"stdout:\n{clone_result.stdout}\n"
+        f"stderr:\n{clone_result.stderr}"
     )
     source_sha = subprocess.run(
         ["git", "rev-parse", "HEAD"],

@@ -1485,6 +1485,8 @@ def classify_issue(
         blocker_evidence.append({"kind": "blocked", "text": "state:blocked label"})
     if "evidence:blocked" in labels:
         blocker_evidence.append({"kind": "blocked", "text": "evidence:blocked label"})
+    if TRIAGE_LABEL in labels:
+        blocker_evidence.append({"kind": "triage", "text": f"{TRIAGE_LABEL} label"})
     job_inventory_uncertain = "resource:slurm" in labels and not job_inventory_available
     if job_inventory_uncertain:
         findings.append(

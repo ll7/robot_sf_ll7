@@ -1347,6 +1347,79 @@ def test_numeric_field_literal_stays_plain_and_within_eight_decimals() -> None:
         _numeric_field_literal(float("nan"))
 
 
+def test_update_number_field_uses_exact_graphql_decimal_literal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Avoid gh's float32 item-edit path when writing a Project Number field."""
+
+    calls: list[list[str]] = []
+
+    def _fake_run(
+        args: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout='{"data":{"updateProjectV2ItemFieldValue":{"projectV2Item":{"id":"item-1"}}}}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+
+    GhProjectClient().update_number_field(
+        item_id="item-1",
+        field_id="field-1",
+        project_id="project-1",
+        number=0.7,
+    )
+
+    assert len(calls) == 1
+    command = calls[0]
+    assert command[:3] == ["gh", "api", "graphql"]
+    assert "--number" not in command
+    query = command[command.index("-f") + 1]
+    assert "number: 0.7" in query
+    assert "number: $number" not in query
+    assert "projectId=project-1" in command
+    assert "itemId=item-1" in command
+    assert "fieldId=field-1" in command
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"data": None},
+        {"data": {"updateProjectV2ItemFieldValue": {"projectV2Item": {}}}},
+    ],
+)
+def test_update_number_field_rejects_malformed_graphql_response(
+    monkeypatch: pytest.MonkeyPatch,
+    payload: dict[str, object],
+) -> None:
+    """Malformed successful responses never masquerade as a completed write."""
+
+    def _fake_run(
+        args: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout=json.dumps(payload),
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+
+    with pytest.raises(RuntimeError, match="returned no updated project item"):
+        GhProjectClient().update_number_field(
+            item_id="item-1",
+            field_id="field-1",
+            project_id="project-1",
+            number=0.7,
+        )
+
+
 class _RejectingGhProjectClient(FakeGhProjectClient):
     """Fake client whose numeric writes are rejected like a live gh failure."""
 

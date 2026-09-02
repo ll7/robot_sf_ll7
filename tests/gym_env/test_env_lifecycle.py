@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import warnings
 from typing import Any
 
@@ -96,24 +97,51 @@ def test_warn_exit_deprecated_helper_warns_exactly_once(
     assert not [w for w in caught if issubclass(w.category, DeprecationWarning)]
 
 
-def _simulation_env() -> Any:
+def _simulation_env(monkeypatch: pytest.MonkeyPatch) -> Any:
     """A BaseSimulationEnv stub created without the config machinery.
 
     The module itself uses the same ``__new__`` pattern for its recording
-    helper, so lifecycle tests can exercise the shared teardown directly.
-    Requires pygame (an optional extra) via the render import chain.
+    helper. The render import chain needs pygame (an optional extra), so the
+    core dependency lane stubs it: the lifecycle paths under test never touch
+    pygame functionality.
     """
-    pytest.importorskip("pygame")
+    if "pygame" not in sys.modules:
+        try:
+            import pygame  # noqa: F401
+        except ModuleNotFoundError:
+            from unittest.mock import MagicMock
+
+            monkeypatch.setitem(sys.modules, "pygame", MagicMock())
     from robot_sf.gym_env.abstract_envs import BaseSimulationEnv
 
-    env = BaseSimulationEnv.__new__(BaseSimulationEnv)
+    class _StubSimulationEnv(BaseSimulationEnv):
+        """Concrete enough to instantiate without the config machinery."""
+
+        def _create_spaces(self) -> None:
+            pass
+
+        def _setup_environment(self) -> None:
+            pass
+
+        def render(self, **kwargs: Any) -> None:
+            pass
+
+        def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None):
+            return {}, {}
+
+        def step(self, action: Any):
+            return {}, 0.0, False, False, {}
+
+    env = _StubSimulationEnv.__new__(_StubSimulationEnv)
     env.sim_ui = None
     env.recorded_states = []
     return env
 
 
-def test_simulation_env_close_releases_sim_ui_and_is_idempotent() -> None:
-    env = _simulation_env()
+def test_simulation_env_close_releases_sim_ui_and_is_idempotent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env = _simulation_env(monkeypatch)
     sim_ui = _FakeSimUi()
     env.sim_ui = sim_ui
 
@@ -129,7 +157,7 @@ def test_simulation_env_exit_alias_warns_and_tears_down(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(base_env_module, "_EXIT_DEPRECATION_WARNED", False)
-    env = _simulation_env()
+    env = _simulation_env(monkeypatch)
     sim_ui = _FakeSimUi()
     env.sim_ui = sim_ui
 

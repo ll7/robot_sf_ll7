@@ -76,11 +76,15 @@ integration through the approved operator path, and recheck immediately before
 publishing. The release receipt must retain the observed hook state and must
 not claim that a read-only check proves future non-reactivation.
 
-The credential-free public audit follows same-origin HTTPS responses and bounds
-the redirect chain. GitHub release assets are allowed their documented
-`github.com` to `release-assets.githubusercontent.com` hand-off; API responses,
-Zenodo assets, arbitrary `githubusercontent.com` subdomains, userinfo, and
-non-default ports are not trusted.
+The credential-free public audit pins API discovery to the exact production
+endpoints `https://api.github.com` and `https://zenodo.org/api` (with trailing
+slashes normalized only). API/document requests never follow redirects.
+Route-mocked tests may inject alternate HTTPS bases through the explicit
+test-only API, which is not exposed by the production CLI. GitHub release
+assets are allowed their documented `github.com` to
+`release-assets.githubusercontent.com` hand-off; Zenodo assets, arbitrary
+`githubusercontent.com` subdomains, userinfo, and non-default ports are not
+trusted.
 
 ## Exact-SHA Continuous Integration (CI) reconciliation
 

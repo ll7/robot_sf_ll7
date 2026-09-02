@@ -1916,8 +1916,18 @@ def _validate_public_redirects(
         raise PublishedAuditInvalid(f"{label} redirect crossed an unapproved origin")
 
 
-def _api_base(value: str, *, label: str) -> str:
-    """Normalize an HTTPS API base URL and reject query/path ambiguity.
+def _api_base(
+    value: str,
+    *,
+    label: str,
+    canonical_base: str,
+    allow_test_api_bases: bool,
+) -> str:
+    """Normalize an HTTPS API base URL and enforce its production endpoint.
+
+    Production discovery is pinned to the canonical GitHub or Zenodo API
+    endpoint.  Alternate HTTPS bases are supported only for an explicitly
+    injected test session; the production CLI does not expose that mode.
 
     Returns:
         The normalized URL without a trailing slash.
@@ -1926,6 +1936,8 @@ def _api_base(value: str, *, label: str) -> str:
     parsed = urlsplit(candidate)
     if parsed.query or parsed.fragment:
         raise PublishedAuditInvalid(f"{label} URL must not contain a query or fragment")
+    if not allow_test_api_bases and candidate != canonical_base:
+        raise PublishedAuditInvalid(f"{label} URL must use the canonical production endpoint")
     return candidate
 
 
@@ -2691,6 +2703,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
     session: _PublicSession | None = None,
     github_api_base: str = GITHUB_API_BASE,
     zenodo_api_base: str = ZENODO_API_BASE,
+    allow_test_api_bases: bool = False,
     max_download_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES,
     download_chunk_size: int = DEFAULT_DOWNLOAD_CHUNK_SIZE,
     timeout: float = DEFAULT_NETWORK_TIMEOUT,
@@ -2700,6 +2713,10 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
     Only unauthenticated HTTPS GET requests are issued. Public response or
     transport failures are returned as ``invalid`` or ``unavailable`` receipts;
     callers do not need to catch expected network conditions.
+
+    ``allow_test_api_bases`` is an injected-session-only escape hatch for
+    route-mocked tests. It is intentionally not exposed by the production
+    release CLI and cannot create a mirror-backed session by itself.
 
     Returns:
         A stable credential-free network audit receipt.
@@ -2726,8 +2743,22 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
             raise PublishedAuditInvalid("download_chunk_size must be positive")
         if isinstance(timeout, bool) or timeout <= 0:
             raise PublishedAuditInvalid("timeout must be positive")
-        github_base = _api_base(github_api_base, label="GitHub API")
-        zenodo_base = _api_base(zenodo_api_base, label="Zenodo API")
+        if not isinstance(allow_test_api_bases, bool):
+            raise PublishedAuditInvalid("allow_test_api_bases must be boolean")
+        if allow_test_api_bases and session is None:
+            raise PublishedAuditInvalid("test API bases require an injected session")
+        github_base = _api_base(
+            github_api_base,
+            label="GitHub API",
+            canonical_base=GITHUB_API_BASE,
+            allow_test_api_bases=allow_test_api_bases,
+        )
+        zenodo_base = _api_base(
+            zenodo_api_base,
+            label="Zenodo API",
+            canonical_base=ZENODO_API_BASE,
+            allow_test_api_bases=allow_test_api_bases,
+        )
         public_session = _prepare_public_session(session)
         discovery: dict[str, Any] = {}
         source_tag_url = f"https://github.com/{repo}/releases/tag/{requested_tag}"

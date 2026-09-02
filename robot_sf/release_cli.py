@@ -80,16 +80,6 @@ def build_subparser(subparsers: Any) -> None:
     )
     audit.add_argument("--output", type=Path, help="Optional path for the JSON audit receipt.")
     audit.add_argument(
-        "--github-api-base",
-        default=published_release_audit.GITHUB_API_BASE,
-        help="Public GitHub API base (HTTPS; useful for controlled test mirrors).",
-    )
-    audit.add_argument(
-        "--zenodo-api-base",
-        default=published_release_audit.ZENODO_API_BASE,
-        help="Public Zenodo API base (HTTPS; useful for controlled test mirrors).",
-    )
-    audit.add_argument(
         "--max-download-bytes",
         type=int,
         default=published_release_audit.DEFAULT_MAX_DOWNLOAD_BYTES,
@@ -269,8 +259,6 @@ def _handle_published_audit(args: argparse.Namespace) -> int:
         tag=args.tag,
         doi=args.doi,
         repo=args.repo,
-        github_api_base=args.github_api_base,
-        zenodo_api_base=args.zenodo_api_base,
         max_download_bytes=args.max_download_bytes,
         download_chunk_size=args.download_chunk_size,
         timeout=args.timeout,

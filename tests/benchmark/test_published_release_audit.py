@@ -1646,11 +1646,13 @@ def _network_fixture(
     release_tag: str = "paper-matrix-v2-h600-s30",
     predecessor_doi: str | None = None,
     corrupt_member_checksum: bool = False,
+    github_base: str | None = None,
+    zenodo_base: str | None = None,
 ) -> tuple[_PublicSession, bytes, str, str, str]:
     """Build a complete mocked GitHub/Zenodo public response set."""
     del tmp_path
-    github_base = "https://github.test"
-    zenodo_base = "https://zenodo.test/api"
+    github_base = github_base or published_audit_module.GITHUB_API_BASE
+    zenodo_base = zenodo_base or published_audit_module.ZENODO_API_BASE
     tag = release_tag
     source_sha = "b" * 40
     bundle_buffer = io.BytesIO()
@@ -1858,6 +1860,118 @@ def test_network_audit_discovers_and_streams_public_assets(tmp_path: Path) -> No
     )
     assert all("stream" in kwargs for url, kwargs, _ in session.calls if "bundle.zip" in url)
     assert "robot-sf-published-audit-" not in json.dumps(receipt)
+
+
+def test_network_audit_normalizes_only_canonical_api_trailing_slashes(tmp_path: Path) -> None:
+    """Production API bases accept only harmless trailing-slash normalization."""
+    session, _bundle, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=f"{github_base}/",
+        zenodo_api_base=f"{zenodo_base}/",
+    )
+
+    assert receipt["status"] == "pass"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("github_api_base", "https://evil.example/api"),
+        ("github_api_base", "https://api.github.com/v3"),
+        ("zenodo_api_base", "https://evil.example/api"),
+        ("zenodo_api_base", "https://zenodo.org/api/v2"),
+    ],
+)
+def test_network_audit_rejects_noncanonical_api_mirrors(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    """Injected sessions cannot opt into an arbitrary API origin by omission."""
+    session, _, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    kwargs: dict[str, object] = {
+        "tag": tag,
+        "doi": "10.5281/zenodo.1234567",
+        "session": session,
+        "github_api_base": github_base,
+        "zenodo_api_base": zenodo_base,
+    }
+    kwargs[field] = value
+
+    receipt = audit_published_network(**kwargs)  # type: ignore[arg-type]
+
+    assert receipt["status"] == "invalid"
+    assert receipt["ok"] is False
+    assert "canonical production endpoint" in receipt["problems"][0]
+    assert session.calls == []
+
+
+def test_network_audit_allows_mirrors_only_in_explicit_injected_test_mode(
+    tmp_path: Path,
+) -> None:
+    """Route-mocked tests may use mirrors only when both escape hatches are explicit."""
+    session, _, tag, github_base, zenodo_base = _network_fixture(
+        tmp_path,
+        github_base="https://github.test",
+        zenodo_base="https://zenodo.test/api",
+    )
+
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+        allow_test_api_bases=True,
+    )
+
+    assert receipt["status"] == "pass"
+    assert receipt["ok"] is True
+
+
+def test_network_audit_test_mirror_mode_requires_injected_session(tmp_path: Path) -> None:
+    """The test-only origin escape hatch cannot create a mirror-backed production session."""
+    receipt = audit_published_network(
+        tag="paper-matrix-v2-h600-s30",
+        doi="10.5281/zenodo.1234567",
+        github_api_base="https://github.test",
+        zenodo_api_base="https://zenodo.test/api",
+        allow_test_api_bases=True,
+    )
+
+    assert receipt["status"] == "invalid"
+    assert receipt["problems"] == ["test API bases require an injected session"]
+
+
+def test_network_audit_rejects_cross_origin_api_redirect_without_following(
+    tmp_path: Path,
+) -> None:
+    """API/document requests must not follow a redirect to an unapproved origin."""
+    session, _, tag, github_base, zenodo_base = _network_fixture(tmp_path)
+    release_url = f"{github_base}/repos/ll7/robot_sf_ll7/releases/tags/{tag}"
+    response = session.routes[release_url]
+    assert isinstance(response, _PublicResponse)
+    response.history = (
+        _PublicResponse(
+            status_code=302,
+            url=release_url,
+            headers={"Location": "https://evil.example/release.json"},
+        ),
+    )
+
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+
+    assert receipt["status"] == "invalid"
+    assert any("crossed an unapproved origin" in problem for problem in receipt["problems"])
+    assert len(session.calls) == 1
+    assert session.calls[0][1]["allow_redirects"] is False
 
 
 def test_network_audit_allows_only_the_documented_github_asset_redirect(
@@ -2678,8 +2792,35 @@ def test_release_cli_exposes_network_audit_and_writes_receipt(
     )
     assert code == 0
     assert seen["tag"] == "tag"
+    assert "github_api_base" not in seen
+    assert "zenodo_api_base" not in seen
     assert json.loads(output.read_text()) == receipt
     assert json.loads(capsys.readouterr().out) == receipt
+
+
+@pytest.mark.parametrize("option", ["--github-api-base", "--zenodo-api-base"])
+def test_release_cli_rejects_public_api_base_overrides(
+    option: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Production audit CLI does not expose arbitrary API mirror selection."""
+    from robot_sf import cli
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(
+            [
+                "release",
+                "audit-published",
+                "--tag",
+                "tag",
+                "--doi",
+                "10.5281/zenodo.1",
+                option,
+                "https://evil.example/api",
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "unrecognized arguments" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("status, expected_code", [("invalid", 1), ("unavailable", 2)])

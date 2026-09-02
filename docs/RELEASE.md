@@ -529,7 +529,9 @@ uv run robot-sf release audit-published \
   --output /tmp/published-release-audit.json
 ```
 
-This command performs unauthenticated HTTPS `GET` requests, resolves the
+This command performs unauthenticated HTTPS `GET` requests against the pinned
+production API endpoints `https://api.github.com` and `https://zenodo.org/api`
+(trailing slashes are normalized only), resolves the
 published GitHub release and tag commit, checks the Zenodo version/concept DOI
 and source-tag relation, then streams the public assets into isolated temporary
 directories before calling the offline audit core. Downloads are bounded and

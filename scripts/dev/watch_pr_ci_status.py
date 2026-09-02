@@ -315,22 +315,60 @@ def _newer_workflow_run(
     )
 
 
-def _has_materialized_replacement(
+def _find_materialized_replacement(
     check: dict[str, Any], replacement: dict[str, Any], visible_checks: list[dict[str, Any]]
-) -> bool:
-    """Return whether the replacement workflow already exposed this named job check."""
+) -> int | None:
+    """Return the visible replacement check index for this named job, if any."""
     replacement_run_id = _workflow_run_id(replacement)
     if replacement_run_id is None:
-        return False
+        return None
     check_name = str(check.get("name") or check.get("context") or "")
     if not check_name:
-        return False
-    for visible in visible_checks:
+        return None
+    for index, visible in enumerate(visible_checks):
         visible_name = str(visible.get("name") or visible.get("context") or "")
         details_url = str(visible.get("details_url") or visible.get("detailsUrl") or "")
         if visible_name == check_name and _actions_run_id(details_url) == replacement_run_id:
-            return True
-    return False
+            return index
+    return None
+
+
+def _replacement_materialization_marker(
+    replacement: dict[str, Any],
+    *,
+    details_url: str,
+    check_status: str,
+    check_conclusion: Any,
+) -> dict[str, Any] | None:
+    """Build URL-bound replacement evidence for a synthetic or materialized check.
+
+    The check details URL is the source of truth for the run identity carried into the reducer.
+    A malformed workflow URL is rejected when present; a missing one falls back to the already
+    validated check URL so the real job check can still carry the workflow-run ordering evidence.
+    """
+    replacement_run_id = _workflow_run_id(replacement)
+    workflow_id = _workflow_run_workflow_id(replacement)
+    if replacement_run_id is None or not workflow_id:
+        return None
+    if _actions_run_id(details_url) != replacement_run_id:
+        return None
+
+    replacement_url = str(
+        replacement.get("html_url") or replacement.get("htmlUrl") or replacement.get("url") or ""
+    )
+    if replacement_url and _actions_run_id(replacement_url) != replacement_run_id:
+        return None
+    replacement_url = replacement_url or details_url
+    return {
+        "source": "actions_workflow_run_metadata",
+        "replacement_run_id": replacement_run_id,
+        "replacement_run_url": replacement_url,
+        "workflow_id": workflow_id,
+        "run_status": str(replacement.get("status") or "").lower() or None,
+        "run_conclusion": str(replacement.get("conclusion") or "").lower() or None,
+        "check_status": str(check_status or "").lower() or None,
+        "check_conclusion": str(check_conclusion).lower() if check_conclusion else None,
+    }
 
 
 def _replacement_check_shape(
@@ -344,7 +382,6 @@ def _replacement_check_shape(
         return None
 
     raw_status = str(replacement.get("status") or "").lower()
-    raw_conclusion = str(replacement.get("conclusion") or "").lower()
     # A workflow-level terminal conclusion does not prove that this individual job's
     # check-run has materialized. Keep the representative pending until the job check
     # itself is visible; the conclusion remains diagnostic evidence in the marker.
@@ -354,16 +391,14 @@ def _replacement_check_shape(
     replacement_url = str(
         replacement.get("html_url") or replacement.get("htmlUrl") or replacement.get("url") or ""
     )
-    materialization = {
-        "source": "actions_workflow_run_metadata",
-        "replacement_run_id": replacement_run_id,
-        "replacement_run_url": replacement_url or None,
-        "workflow_id": workflow_id,
-        "run_status": raw_status or None,
-        "run_conclusion": raw_conclusion or None,
-        "check_status": check_status,
-        "check_conclusion": check_conclusion,
-    }
+    materialization = _replacement_materialization_marker(
+        replacement,
+        details_url=replacement_url,
+        check_status=check_status,
+        check_conclusion=check_conclusion,
+    )
+    if materialization is None:
+        return None
     synthetic = {
         "__typename": "CheckRun",
         "name": str(check.get("name") or check.get("context") or "unknown"),
@@ -379,13 +414,33 @@ def _replacement_check_shape(
     return synthetic, materialization
 
 
+def _materialized_replacement_marker(
+    replacement: dict[str, Any], visible_check: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Build replacement evidence from the actual visible check without changing its outcome."""
+    workflow_id = _workflow_run_workflow_id(replacement)
+    visible_workflow_id = str(
+        visible_check.get("workflow_id") or visible_check.get("workflowId") or ""
+    )
+    if not workflow_id or visible_workflow_id != workflow_id:
+        return None
+    details_url = str(visible_check.get("details_url") or visible_check.get("detailsUrl") or "")
+    check_status = str(visible_check.get("status") or visible_check.get("state") or "")
+    return _replacement_materialization_marker(
+        replacement,
+        details_url=details_url,
+        check_status=check_status,
+        check_conclusion=visible_check.get("conclusion"),
+    )
+
+
 def _materialize_missing_replacements(
     check_runs: list[dict[str, Any]],
     *,
     commit_sha: str,
     fetch_workflow_runs: Callable[[str], Any],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Add fail-closed representatives for exact-SHA replacement jobs absent from REST checks."""
+    """Add missing replacement representatives and mark visible ones with run-order evidence."""
     normalized = _rest_check_runs_to_rollup(check_runs)
     effective, _, _ = _latest_check_runs_with_evidence(normalized)
     if not any(str(check.get("conclusion") or "").lower() == "cancelled" for check in effective):
@@ -409,9 +464,17 @@ def _materialize_missing_replacements(
         if str(check.get("conclusion") or "").lower() != "cancelled":
             continue
         replacement = _newer_workflow_run(check, workflow_runs)
-        if replacement is None or _has_materialized_replacement(
-            check, replacement, bound_check_runs
-        ):
+        if replacement is None:
+            continue
+        materialized_index = _find_materialized_replacement(check, replacement, bound_check_runs)
+        if materialized_index is not None:
+            visible_check = bound_check_runs[materialized_index]
+            marker = _materialized_replacement_marker(replacement, visible_check)
+            if marker is None:
+                continue
+            marked_check = dict(visible_check)
+            marked_check["__replacement_materialization"] = marker
+            bound_check_runs[materialized_index] = marked_check
             continue
         shape = _replacement_check_shape(check, replacement, commit_sha)
         if shape is None:

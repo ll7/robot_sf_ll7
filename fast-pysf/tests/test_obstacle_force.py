@@ -150,6 +150,8 @@ def test_obstacle_force_law_resolution_and_metadata_are_explicit():
         "geometry_convention": "map_line_endpoints_orthogonal_vector",
         "radius_convention": "threshold_plus_agent_radius_sigma",
         "compatibility_mode": "corrected_opt_in",
+        "enabled": True,
+        "applied": True,
     }
 
     with pytest.raises(ValueError, match="unsupported obstacle-force law"):

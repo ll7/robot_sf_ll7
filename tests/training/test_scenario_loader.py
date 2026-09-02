@@ -119,6 +119,39 @@ def test_build_robot_config_rejects_invalid_observation_visibility(tmp_path: Pat
             _coerce_positive_float(0, field_name="radius")
 
 
+@pytest.mark.parametrize(
+    ("visibility", "message"),
+    [
+        (
+            {"ordering_tie_break": 1},
+            "observation_visibility.ordering_tie_break must be a string",
+        ),
+        (
+            {"ordering_tie_break": "unsupported"},
+            "observation_visibility.ordering_tie_break must be 'legacy' or 'stable'",
+        ),
+        (
+            {"tracking_config": []},
+            "observation_visibility.tracking_config must be a mapping",
+        ),
+    ],
+)
+def test_build_robot_config_rejects_invalid_socnav_options(
+    tmp_path: Path,
+    visibility: dict[str, object],
+    message: str,
+) -> None:
+    """New SocNav options should reject malformed values with actionable errors."""
+    with pytest.raises(ValueError, match=message):
+        build_robot_config_from_scenario(
+            {
+                "name": "invalid_identity_case",
+                "observation_visibility": visibility,
+            },
+            scenario_path=tmp_path / "scenario.yaml",
+        )
+
+
 def test_load_scenarios_select_scenarios_preserves_explicit_order(tmp_path: Path) -> None:
     """Scenario selection should keep an explicit, deterministic subset order."""
     source = tmp_path / "source.yaml"

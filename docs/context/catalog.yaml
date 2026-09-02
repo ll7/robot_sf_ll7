@@ -84,6 +84,10 @@ entries:
   status: current
   freshness: maintained
   area: research_contract
+- path: docs/context/issue_8246_realism_validation_preregistration.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_8205_tracker_adapter_smoke_receipt.v1.json
   status: evidence
   freshness: evidence

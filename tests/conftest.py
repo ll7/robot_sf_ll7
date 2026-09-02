@@ -602,6 +602,13 @@ _FAST_FILES = {
     # admission-contract coverage for changed release producers.
     "test__legacy_campaign_facade.py",
     "test_campaign_checkpoint_preflight.py",
+    # Interaction-conditioned realism validation and its contract tests are
+    # deterministic schema/segmenter contracts for the changed benchmark
+    # producer; keep them in fast shards for the exact-head changed-coverage
+    # gate (issue #8246).
+    "test_pedestrian_realism_validation.py",
+    "test_realism_validation_contract.py",
+    "test_realism_segmenter.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

@@ -70,6 +70,7 @@ def _make_campaign_tree(tmp_path: Path, *, tag: str) -> Path:
     payloads = {
         "release/release_manifest.resolved.json": {
             "release_tag": tag,
+            "source_sha": commit,
             "provenance": {"doi": "10.5281/zenodo.1234567"},
         },
         "release/release_result.json": campaign,
@@ -166,6 +167,57 @@ def test_publish_camera_ready_release_accepts_campaign_relative_derived_bundle(
     payload = json.loads(capsys.readouterr().out)
     assert payload["archive_path"].startswith(str(campaign_root))
     assert payload["manifest_path"].startswith(str(campaign_root))
+
+
+def test_publish_camera_ready_release_erratum_upload_includes_detached_custody(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """Canonical errata upload the detached archive-custody receipt."""
+    source_sha = "a" * 40
+    tag = f"paper-matrix-{source_sha}-erratum.1"
+    campaign_root = _make_campaign_tree(tmp_path, tag=tag)
+    custody = tmp_path / "output" / "benchmarks" / "publication" / "publication_custody.json"
+    _write_json(custody, {"schema_version": "benchmark-publication-custody.v1"})
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+
+    exit_code = publish_camera_ready_release.main(
+        ["--campaign-root", str(campaign_root), "--tag", tag]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["upload_assets"][-1] == str(custody)
+    assert str(custody) in payload["upload_command"]
+
+
+def test_publish_camera_ready_release_erratum_requires_detached_custody(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """An erratum cannot produce an unauditable three-asset upload plan."""
+    source_sha = "a" * 40
+    tag = f"paper-matrix-{source_sha}-erratum.1"
+    campaign_root = _make_campaign_tree(tmp_path, tag=tag)
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="not a regular file"):
+        publish_camera_ready_release.main(["--campaign-root", str(campaign_root), "--tag", tag])
+
+
+def test_publish_camera_ready_release_erratum_rejects_symlinked_custody(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The detached custody asset must not escape through a symlink."""
+    source_sha = "a" * 40
+    tag = f"paper-matrix-{source_sha}-erratum.1"
+    campaign_root = _make_campaign_tree(tmp_path, tag=tag)
+    publication_root = tmp_path / "output" / "benchmarks" / "publication"
+    outside = tmp_path / "outside-custody.json"
+    _write_json(outside, {"schema_version": "benchmark-publication-custody.v1"})
+    (publication_root / "publication_custody.json").symlink_to(outside)
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="symlink"):
+        publish_camera_ready_release.main(["--campaign-root", str(campaign_root), "--tag", tag])
 
 
 def test_publish_camera_ready_release_executes_upload(tmp_path: Path, monkeypatch) -> None:

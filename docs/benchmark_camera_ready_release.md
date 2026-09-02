@@ -306,8 +306,10 @@ contents.
    derived-metadata erratum, also require the detached
    `publication_custody.json`; the archive, `publication_manifest.json`,
    `checksums.sha256`, and custody receipt must have byte-identical counterparts
-   on Zenodo. Extract the archive and run `sha256sum -c checksums.sha256` from
-   the bundle root.
+   on Zenodo. For a canonical `-erratum.N` tag, the GitHub publication helper
+   automatically requires and uploads that detached receipt beside the archive;
+   a missing or symlinked receipt blocks before draft mutation. Extract the
+   archive and run `sha256sum -c checksums.sha256` from the bundle root.
 2. Confirm that `payload/release/release_manifest.resolved.json` and
    `payload/release/release_result.json` agree on release id, tag, source SHA,
    acceptance status, and 20,160 episode identities. No fallback, degraded,

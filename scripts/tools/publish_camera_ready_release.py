@@ -24,6 +24,9 @@ from robot_sf.common.artifact_paths import get_repository_root
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+ERRATUM_CUSTODY_ASSET = "publication_custody.json"
+_ERRATUM_TAG_RE = re.compile(r".+-[0-9a-f]{40}-erratum\.[1-9][0-9]*$")
+
 
 def _build_parser() -> argparse.ArgumentParser:
     """Create argument parser for guided release publication."""
@@ -251,6 +254,36 @@ def _validate_source_identity(
     return source_sha
 
 
+def _resolve_upload_assets(
+    *,
+    tag: str,
+    archive_path: Path,
+    checksums_path: Path,
+    manifest_path: Path,
+) -> tuple[Path, ...]:
+    """Return the complete, ordered GitHub asset set for this release.
+
+    Canonical errata carry a detached custody receipt beside the archive. It
+    cannot live inside the archive because it binds the completed archive
+    digest, so omitting it would make the two-channel cold audit impossible.
+
+    Returns:
+        The archive, checksum manifest, publication manifest, and (for an
+        erratum) detached custody receipt.
+    """
+    assets = [archive_path, checksums_path, manifest_path]
+    if _ERRATUM_TAG_RE.fullmatch(tag) is None:
+        return tuple(assets)
+    custody_path = resolve_campaign_artifact_path(
+        archive_path.parent,
+        ERRATUM_CUSTODY_ASSET,
+    )
+    if custody_path.parent != archive_path.parent:
+        raise ValueError("erratum custody receipt must be beside the publication archive")
+    assets.append(custody_path)
+    return tuple(assets)
+
+
 def _build_release_payload(
     *,
     campaign_root: Path,
@@ -259,6 +292,7 @@ def _build_release_payload(
     archive_path: Path,
     checksums_path: Path,
     manifest_path: Path,
+    upload_assets: tuple[Path, ...],
     summary: dict[str, object],
 ) -> dict[str, object]:
     """Build release publication metadata and command plan."""
@@ -271,9 +305,7 @@ def _build_release_payload(
         "release",
         "upload",
         tag,
-        str(archive_path),
-        str(checksums_path),
-        str(manifest_path),
+        *(str(path) for path in upload_assets),
         "--repo",
         repo,
         "--clobber",
@@ -286,6 +318,7 @@ def _build_release_payload(
         "archive_path": str(archive_path),
         "checksums_path": str(checksums_path),
         "manifest_path": str(manifest_path),
+        "upload_assets": [str(path) for path in upload_assets],
         "release_url": f"{repository_url.rstrip('/')}/releases/tag/{tag}",
         "release_asset_url": (
             f"{repository_url.rstrip('/')}/releases/download/{tag}/{archive_path.name}"
@@ -474,6 +507,12 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
             str(args.expected_source_sha) if args.expected_source_sha is not None else None
         ),
     )
+    upload_assets = _resolve_upload_assets(
+        tag=str(args.tag),
+        archive_path=archive_path,
+        checksums_path=checksums_path,
+        manifest_path=manifest_path,
+    )
     payload = _build_release_payload(
         campaign_root=campaign_root,
         repo=str(args.repo),
@@ -481,6 +520,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
         archive_path=archive_path,
         checksums_path=checksums_path,
         manifest_path=manifest_path,
+        upload_assets=upload_assets,
         summary=summary,
     )
     payload["source_sha"] = source_sha

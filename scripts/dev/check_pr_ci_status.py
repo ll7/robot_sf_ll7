@@ -219,10 +219,13 @@ def _check_run_identity(check: dict[str, Any]) -> tuple[str, str] | None:
             return None
         replacement_run_id = _replacement_materialization_run_id(check)
         materialization_workflow_id = str(materialization.get("workflow_id") or "")
+        materialization_url = str(materialization.get("replacement_run_url") or "")
         if (
             replacement_run_id is None
             or not materialization_workflow_id
             or materialization_workflow_id != workflow_id
+            or _actions_run_id(_check_details_url(check)) != replacement_run_id
+            or _actions_run_id(materialization_url) != replacement_run_id
         ):
             return None
     return workflow_identity, _rollup_name(check)

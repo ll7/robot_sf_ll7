@@ -7,6 +7,7 @@ import json
 import os
 import re
 from collections.abc import Mapping
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import quote, urlsplit
@@ -23,6 +24,8 @@ _SOURCE_TAG_RE = re.compile(r"^https://github\.com/ll7/robot_sf_ll7/releases/tag
 _ZENODO_DOI_RE = re.compile(r"^10\.5281/zenodo\.\d+$")
 _CLAIM_BOUNDARY_TERMS = ("snqi", "advisory", "ranking")
 _CREDENTIAL_KEYS = ("token", "authorization", "password", "secret")
+_APPROVED_ZENODO_API_HOSTS = frozenset({"zenodo.org", "sandbox.zenodo.org"})
+_REMOTE_VERSION_FIELDS = ("modified", "version", "revision")
 
 
 class ZenodoPublisherError(RuntimeError):
@@ -199,7 +202,7 @@ def _metadata_sha256(metadata: Mapping[str, Any]) -> str:
 
 
 def _validated_api_base(api_base: str) -> str:
-    """Require an HTTPS API base without URL-embedded credentials or queries.
+    """Require an approved Zenodo HTTPS API base without URL credentials/queries.
 
     Returns:
         The trimmed API base URL.
@@ -210,9 +213,14 @@ def _validated_api_base(api_base: str) -> str:
     try:
         parsed = urlsplit(candidate)
         hostname = parsed.hostname
-        _port = parsed.port
+        port = parsed.port
     except ValueError as exc:
         raise ZenodoPublisherError("Zenodo API base must be a valid HTTPS URL") from exc
+    normalized_hostname = hostname.casefold() if hostname is not None else None
+    if normalized_hostname not in _APPROVED_ZENODO_API_HOSTS:
+        raise ZenodoPublisherError("Zenodo API base must use an approved Zenodo HTTPS origin")
+    if normalized_hostname in {"zenodo.org", "sandbox.zenodo.org"} and port not in {None, 443}:
+        raise ZenodoPublisherError("Zenodo API base must use an approved Zenodo HTTPS origin")
     if (
         parsed.scheme.casefold() != "https"
         or not hostname
@@ -220,9 +228,47 @@ def _validated_api_base(api_base: str) -> str:
         or parsed.password is not None
         or parsed.query
         or parsed.fragment
+        or not parsed.path.rstrip("/")
     ):
         raise ZenodoPublisherError("Zenodo API base must be a valid HTTPS URL")
     return candidate
+
+
+def _validated_remote_url(value: Any, api_base: str, label: str) -> str:
+    """Validate one server-supplied URL against the configured API origin.
+
+    Server-supplied bucket and download links are untrusted data. They must be
+    HTTPS URLs on the exact configured API origin, with no userinfo, query, or
+    fragment that could smuggle credentials or redirect the authenticated
+    session to an unintended resource.
+
+    Returns:
+        The validated URL.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise ZenodoPublisherError(f"Zenodo {label} is not a valid same-origin HTTPS URL")
+    try:
+        base = urlsplit(_validated_api_base(api_base))
+        candidate = urlsplit(value.strip())
+        base_hostname = base.hostname
+        candidate_hostname = candidate.hostname
+        base_port = base.port or 443
+        candidate_port = candidate.port or 443
+    except ValueError as exc:
+        raise ZenodoPublisherError(f"Zenodo {label} is not a valid same-origin HTTPS URL") from exc
+    if (
+        candidate.scheme.casefold() != "https"
+        or not candidate_hostname
+        or candidate_hostname.casefold() != (base_hostname or "").casefold()
+        or candidate_port != base_port
+        or candidate.username is not None
+        or candidate.password is not None
+        or candidate.query
+        or candidate.fragment
+        or not candidate.path
+    ):
+        raise ZenodoPublisherError(f"Zenodo {label} is not a valid same-origin HTTPS URL")
+    return value.strip()
 
 
 def _validated_latest_draft_link(latest_draft: Any, api_base: str) -> tuple[str, int]:
@@ -231,10 +277,14 @@ def _validated_latest_draft_link(latest_draft: Any, api_base: str) -> tuple[str,
     Returns:
         The validated link and its positive deposition identifier.
     """
-    base = urlsplit(_validated_api_base(api_base))
+    validated_base = _validated_api_base(api_base)
+    base = urlsplit(validated_base)
     if not isinstance(latest_draft, str) or not latest_draft.strip():
         raise ZenodoPublisherError("Zenodo new-version response omitted links.latest_draft")
-    candidate = latest_draft.strip()
+    try:
+        candidate = _validated_remote_url(latest_draft, validated_base, "links.latest_draft")
+    except ZenodoPublisherError as exc:
+        raise ZenodoPublisherError("Zenodo links.latest_draft is not a valid same-API URL") from exc
     try:
         link = urlsplit(candidate)
         base_hostname = base.hostname
@@ -251,14 +301,9 @@ def _validated_latest_draft_link(latest_draft: Any, api_base: str) -> tuple[str,
         parts[-1] if len(parts) == 3 and parts[:2] == ["deposit", "depositions"] else ""
     )
     if (
-        link.scheme.casefold() != "https"
-        or link_hostname is None
+        link_hostname is None
         or link_hostname.casefold() != (base_hostname or "").casefold()
         or link_port != base_port
-        or link.username is not None
-        or link.password is not None
-        or link.query
-        or link.fragment
         or (base_path and not (link_path == base_path or link_path.startswith(base_path + "/")))
         or not re.fullmatch(r"[1-9][0-9]*", deposition_text)
     ):
@@ -864,6 +909,8 @@ def _json_object(response: _Response, operation: str) -> dict[str, Any]:
         Parsed response object.
     """
     try:
+        if response.status_code >= 300:
+            raise RuntimeError("HTTP redirect or failure")
         response.raise_for_status()
         payload = response.json()
     except (OSError, RuntimeError, ValueError) as exc:
@@ -871,6 +918,34 @@ def _json_object(response: _Response, operation: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ZenodoPublisherError(f"Zenodo {operation} response was not a JSON object")
     return payload
+
+
+def _remote_optimistic_binding(payload: Mapping[str, Any]) -> dict[str, str] | None:
+    """Return a non-secret binding for a remote optimistic version field.
+
+    Zenodo depositions expose ``modified`` as a last-change timestamp. Some
+    controlled mirrors may expose a similarly useful ``version`` or
+    ``revision`` field instead. Persist only a digest of the value so a
+    malicious server cannot cause a credential-shaped string to be echoed in a
+    receipt.
+
+    Returns:
+        A field name and SHA-256 digest, or ``None`` when no known field exists.
+    """
+    for field in _REMOTE_VERSION_FIELDS:
+        value = payload.get(field)
+        if value is None:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, str)) or not str(value):
+            raise ZenodoPublisherError(f"Zenodo remote {field} optimistic version is invalid")
+        digest = hashlib.sha256(_canonical_bytes({"field": field, "value": value})).hexdigest()
+        return {"field": field, "sha256": digest}
+    return None
+
+
+def _receipt_contract(receipt: Mapping[str, Any]) -> dict[str, Any]:
+    """Return receipt fields that bind one verified remote state."""
+    return {key: value for key, value in receipt.items() if key != "integrity"}
 
 
 def _public_state(payload: dict[str, Any]) -> dict[str, Any]:
@@ -907,6 +982,7 @@ def reserve(
     Returns:
         Credential-free deposition state.
     """
+    validated_base = _validated_api_base(api_base)
     normalized_metadata = _validate_metadata(metadata)
     binding = _normalize_release_binding(release_binding) if release_binding is not None else None
     file_metadata = (
@@ -916,9 +992,10 @@ def reserve(
     )
     normalized_metadata["prereserve_doi"] = True
     response = session.post(
-        f"{api_base.rstrip('/')}/deposit/depositions",
+        f"{validated_base}/deposit/depositions",
         json={"metadata": normalized_metadata},
         timeout=60,
+        allow_redirects=False,
     )
     payload = _json_object(response, "reserve")
     state = _public_state(payload)
@@ -984,6 +1061,7 @@ def new_version(  # noqa: PLR0913
     Returns:
         Credential-free sealed state for the unpublished successor draft.
     """
+    validated_base = _validated_api_base(api_base)
     predecessor_id = _positive_deposition_id(predecessor_deposition_id, "predecessor deposition ID")
     expected_predecessor_source_url, expected_source_url = _validate_new_version_tag_lineage(
         predecessor_tag=expected_predecessor_tag,
@@ -1027,11 +1105,14 @@ def new_version(  # noqa: PLR0913
         if binding is not None
         else None
     )
-    validated_base = _validated_api_base(api_base)
     base = validated_base.rstrip("/")
 
     predecessor = _json_object(
-        session.get(f"{base}/deposit/depositions/{predecessor_id}", timeout=60),
+        session.get(
+            f"{base}/deposit/depositions/{predecessor_id}",
+            timeout=60,
+            allow_redirects=False,
+        ),
         "retrieve predecessor",
     )
     _validate_predecessor_payload(
@@ -1046,13 +1127,17 @@ def new_version(  # noqa: PLR0913
         session.post(
             f"{base}/deposit/depositions/{predecessor_id}/actions/newversion",
             timeout=60,
+            allow_redirects=False,
         ),
         "new-version",
     )
     links = created.get("links")
     latest_draft = links.get("latest_draft") if isinstance(links, Mapping) else None
     latest_draft_url, latest_draft_id = _validated_latest_draft_link(latest_draft, validated_base)
-    draft = _json_object(session.get(latest_draft_url, timeout=60), "new-version draft")
+    draft = _json_object(
+        session.get(latest_draft_url, timeout=60, allow_redirects=False),
+        "new-version draft",
+    )
     state = _validate_successor_payload(
         draft,
         predecessor_deposition_id=predecessor_id,
@@ -1068,6 +1153,7 @@ def new_version(  # noqa: PLR0913
             f"{base}/deposit/depositions/{state['deposition_id']}",
             json={"metadata": successor_metadata},
             timeout=60,
+            allow_redirects=False,
         ),
         "new-version metadata update",
     )
@@ -1123,6 +1209,7 @@ def recover(
     Returns:
         Credential-free sealed deposition state.
     """
+    validated_base = _validated_api_base(api_base)
     if isinstance(deposition_id, bool) or not isinstance(deposition_id, int) or deposition_id <= 0:
         raise ZenodoPublisherError("Zenodo recovery deposition ID must be a positive integer")
     normalized_metadata = _validate_metadata(metadata)
@@ -1130,8 +1217,9 @@ def recover(
     file_metadata = _validate_release_binding_metadata(normalized_metadata, binding)
     payload = _json_object(
         session.get(
-            f"{api_base.rstrip('/')}/deposit/depositions/{deposition_id}",
+            f"{validated_base}/deposit/depositions/{deposition_id}",
             timeout=60,
+            allow_redirects=False,
         ),
         "recover draft",
     )
@@ -1180,6 +1268,7 @@ def upload(
     Returns:
         Updated credential-free deposition state.
     """
+    validated_base = _validated_api_base(api_base)
     _validate_state_for_operation(state)
     binding = _normalize_release_binding(release_binding) if release_binding is not None else None
     binding_metadata = _validate_release_binding_file(binding) if binding is not None else None
@@ -1192,17 +1281,29 @@ def upload(
     )
     deposition_id = state.get("deposition_id")
     deposition = _json_object(
-        session.get(f"{api_base.rstrip('/')}/deposit/depositions/{deposition_id}", timeout=60),
+        session.get(
+            f"{validated_base}/deposit/depositions/{deposition_id}",
+            timeout=60,
+            allow_redirects=False,
+        ),
         "retrieve draft",
     )
     if bool(deposition.get("submitted")):
         raise ZenodoPublisherError("cannot upload files to a published Zenodo deposition")
     links = deposition.get("links")
     bucket = links.get("bucket") if isinstance(links, dict) else None
-    if not isinstance(bucket, str) or not bucket.startswith("https://"):
-        raise ZenodoPublisherError("Zenodo draft response omitted a secure upload bucket")
+    try:
+        bucket = _validated_remote_url(bucket, validated_base, "draft upload bucket")
+    except ZenodoPublisherError as exc:
+        raise ZenodoPublisherError(
+            "Zenodo draft response omitted a secure upload bucket (invalid Zenodo URL)"
+        ) from exc
     if not files:
         raise ZenodoPublisherError("upload requires at least one nonempty file")
+    if not isinstance(bucket, str):  # pragma: no cover - narrowed by _validated_remote_url
+        raise ZenodoPublisherError(
+            "Zenodo draft response omitted a secure upload bucket (invalid Zenodo URL)"
+        )
     uploaded: list[dict[str, Any]] = []
     for file_path in files:
         resolved = file_path.resolve()
@@ -1216,6 +1317,7 @@ def upload(
                 f"{bucket.rstrip('/')}/{quote(resolved.name)}",
                 data=stream,
                 timeout=3600,
+                allow_redirects=False,
             )
         remote = _json_object(response, f"upload {resolved.name}")
         uploaded.append(
@@ -1232,7 +1334,7 @@ def upload(
     return _seal_state(updated)
 
 
-def publish(  # noqa: C901
+def publish(  # noqa: C901, PLR0912
     session: _Session,
     state: dict[str, Any],
     metadata: Mapping[str, Any] | None = None,
@@ -1245,6 +1347,7 @@ def publish(  # noqa: C901
     Returns:
         Updated published deposition state.
     """
+    validated_base = _validated_api_base(api_base)
     _validate_state_for_operation(state)
     deposition_id = state.get("deposition_id")
     if metadata is None:
@@ -1297,9 +1400,36 @@ def publish(  # noqa: C901
     ]
     if receipt_files != expected_receipt_files:
         raise ZenodoPublisherError("verification receipt file inventory does not match state")
+    # Verification seals a receipt into its state argument on success. Use a
+    # deep copy so a fresh-readback mismatch cannot rewrite the caller's state
+    # before publication admission has completed.
+    verification_state = deepcopy(state)
+    fresh_report = verify(
+        session,
+        verification_state,
+        normalized_metadata,
+        api_base=validated_base,
+        release_binding=binding,
+    )
+    if fresh_report.get("status") != "pass":
+        problems = fresh_report.get("problems")
+        detail = (
+            "; ".join(str(problem) for problem in problems)
+            if isinstance(problems, list)
+            else "unknown drift"
+        )
+        raise ZenodoPublisherError(f"publish fresh draft verification failed: {detail}")
+    fresh_receipt = fresh_report.get("receipt")
+    if not isinstance(fresh_receipt, Mapping):
+        raise ZenodoPublisherError("publish fresh draft verification omitted a receipt")
+    _verify_integrity(fresh_receipt, key="integrity", schema=ZENODO_VERIFICATION_SCHEMA)
+    if _receipt_contract(fresh_receipt) != _receipt_contract(receipt):
+        raise ZenodoPublisherError("publish remote draft changed since verification receipt")
+    receipt = dict(fresh_receipt)
     response = session.post(
-        f"{api_base.rstrip('/')}/deposit/depositions/{deposition_id}/actions/publish",
+        f"{validated_base}/deposit/depositions/{deposition_id}/actions/publish",
         timeout=120,
+        allow_redirects=False,
     )
     published = _public_state(_json_object(response, "publish"))
     if not published["submitted"]:
@@ -1329,6 +1459,7 @@ def verify(  # noqa: C901, PLR0912, PLR0915
         A machine-readable verification report. Passing draft verification is
         also sealed into ``state`` for publication admission.
     """
+    validated_base = _validated_api_base(api_base)
     _validate_state_for_operation(state)
     normalized_metadata = _validate_metadata(metadata)
     binding = _normalize_release_binding(release_binding) if release_binding is not None else None
@@ -1348,12 +1479,21 @@ def verify(  # noqa: C901, PLR0912, PLR0915
     )
     deposition_id = state.get("deposition_id")
     remote = _json_object(
-        session.get(f"{api_base.rstrip('/')}/deposit/depositions/{deposition_id}", timeout=60),
+        session.get(
+            f"{validated_base}/deposit/depositions/{deposition_id}",
+            timeout=60,
+            allow_redirects=False,
+        ),
         "verify",
     )
     remote_state = _public_state(remote)
     remote_metadata = remote.get("metadata") if isinstance(remote.get("metadata"), Mapping) else {}
     problems: list[str] = []
+    try:
+        remote_optimistic = _remote_optimistic_binding(remote)
+    except ZenodoPublisherError as exc:
+        problems.append(str(exc))
+        remote_optimistic = None
 
     for key in ("deposition_id", "record_id", "concept_record_id", "doi"):
         if remote_state.get(key) != state.get(key):
@@ -1395,7 +1535,11 @@ def verify(  # noqa: C901, PLR0912, PLR0915
     if remote_submitted is True:
         record_id = state.get("record_id")
         public_record = _json_object(
-            session.get(f"{api_base.rstrip('/')}/records/{record_id}", timeout=60),
+            session.get(
+                f"{validated_base}/records/{record_id}",
+                timeout=60,
+                allow_redirects=False,
+            ),
             "verify published record",
         )
         if public_record.get("id") != record_id:
@@ -1453,11 +1597,22 @@ def verify(  # noqa: C901, PLR0912, PLR0915
             if isinstance(links, Mapping)
             else None
         )
-        if not isinstance(download_url, str) or not download_url.startswith("https://"):
-            problems.append(f"remote file {name} has no secure download URL")
+        try:
+            download_url = _validated_remote_url(
+                download_url,
+                validated_base,
+                f"remote file {name} download",
+            )
+        except ZenodoPublisherError:
+            problems.append(f"remote file {name} has no secure download URL (download failed)")
             continue
-        response = session.get(download_url, stream=True, timeout=3600)
-        if response.status_code >= 400:
+        response = session.get(
+            download_url,
+            stream=True,
+            timeout=3600,
+            allow_redirects=False,
+        )
+        if response.status_code >= 300:
             problems.append(f"remote file {name} download failed")
             continue
         try:
@@ -1501,6 +1656,11 @@ def verify(  # noqa: C901, PLR0912, PLR0915
                 "metadata_sha256": _metadata_sha256(normalized_metadata),
                 "source_tag": source_tag,
                 "files": receipt_files,
+                **(
+                    {"remote_optimistic": remote_optimistic}
+                    if remote_optimistic is not None
+                    else {}
+                ),
                 **(
                     {
                         "release_binding": dict(state["release_binding"]),

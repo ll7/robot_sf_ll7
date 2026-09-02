@@ -250,6 +250,7 @@ def test_reserve_upload_publish_and_verify_without_credentials_in_state(tmp_path
     with pytest.raises(ZenodoPublisherError, match="integrity"):
         publish(session, tampered, _metadata())
 
+    session.gets = [_Response(remote_draft), downloaded]
     state = publish(session, state, _metadata())
     assert state["submitted"] is True
     remote = _draft_payload(submitted=True)
@@ -311,6 +312,46 @@ def test_verify_accepts_draft_without_advertised_size_when_download_matches(
     assert report["status"] == "pass"
     assert report["publication_state"] == "draft"
     assert report["problem_count"] == 0
+
+
+@pytest.mark.parametrize(
+    ("remote_change", "match"),
+    [
+        ("metadata", "fresh draft verification failed"),
+        ("modified", "changed since verification receipt"),
+    ],
+)
+def test_publish_reverifies_fresh_draft_and_blocks_drift_without_post(
+    tmp_path: Path, remote_change: str, match: str
+) -> None:
+    """Publication requires the exact verified draft immediately before its POST."""
+    session, state, remote = _metadata_verification_fixture(tmp_path)
+    initial_download = session.gets[1]
+    assert verify(session, state, _metadata())["status"] == "pass"
+
+    fresh_remote = json.loads(json.dumps(remote))
+    if remote_change == "metadata":
+        fresh_remote["metadata"]["title"] = "drifted title"
+    else:
+        fresh_remote["modified"] = "remote-version-2"
+        remote["modified"] = "remote-version-1"
+        # Rebuild the receipt with the first optimistic value before testing
+        # the fresh readback with the second value.
+        session.gets = [_Response(remote), initial_download]
+        assert verify(session, state, _metadata())["status"] == "pass"
+        fresh_remote["modified"] = "remote-version-2"
+
+    publish_response = _Response(_draft_payload(submitted=True), 202)
+    session.posts = [publish_response]
+    session.gets = [_Response(fresh_remote), initial_download]
+    state_before_publish = json.loads(json.dumps(state))
+
+    with pytest.raises(ZenodoPublisherError, match=match):
+        publish(session, state, _metadata())
+
+    assert session.posts == [publish_response]
+    assert not any(url.endswith("/actions/publish") for url in session.urls)
+    assert state == state_before_publish
 
 
 @pytest.mark.parametrize(
@@ -397,4 +438,8 @@ def test_verify_streams_remote_bundle_in_bounded_chunks_without_content_access(
 
     assert report["status"] == "pass"
     assert streamed.chunk_sizes == [_REMOTE_DOWNLOAD_CHUNK_SIZE]
-    assert session.get_kwargs[-1] == {"stream": True, "timeout": 3600}
+    assert session.get_kwargs[-1] == {
+        "stream": True,
+        "timeout": 3600,
+        "allow_redirects": False,
+    }

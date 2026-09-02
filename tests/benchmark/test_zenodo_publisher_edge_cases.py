@@ -135,7 +135,7 @@ def _successor_draft(
             **(metadata or _new_version_metadata()),
             "prereserve_doi": {"doi": doi or "10.5281/zenodo.8"},
         },
-        "links": {"bucket": "https://zenodo.test/api/files/bucket"},
+        "links": {"bucket": "https://zenodo.org/api/files/bucket"},
         "files": [],
     }
 
@@ -194,7 +194,7 @@ def _new_version_fixture(
             {
                 "links": {
                     "latest_draft": (
-                        f"https://zenodo.test/api/deposit/depositions/{draft_payload['id']}"
+                        f"https://zenodo.org/api/deposit/depositions/{draft_payload['id']}"
                     )
                 }
             },
@@ -222,7 +222,7 @@ def _new_version_with_metadata(session: _Session, metadata: dict[str, Any]) -> d
         expected_predecessor_tag=PREDECESSOR_TAG,
         expected_source_sha=SOURCE_SHA,
         expected_successor_tag=SUCCESSOR_TAG,
-        api_base="https://zenodo.test/api",
+        api_base="https://zenodo.org/api",
     )
 
 
@@ -233,12 +233,18 @@ def test_new_version_replaces_metadata_and_seals_predecessor_identity() -> None:
     state = _new_version(session)
 
     assert session.urls == [
-        "https://zenodo.test/api/deposit/depositions/7",
-        "https://zenodo.test/api/deposit/depositions/7/actions/newversion",
-        "https://zenodo.test/api/deposit/depositions/8",
-        "https://zenodo.test/api/deposit/depositions/8",
+        "https://zenodo.org/api/deposit/depositions/7",
+        "https://zenodo.org/api/deposit/depositions/7/actions/newversion",
+        "https://zenodo.org/api/deposit/depositions/8",
+        "https://zenodo.org/api/deposit/depositions/8",
     ]
-    assert session.put_kwargs == [{"json": {"metadata": _new_version_metadata()}, "timeout": 60}]
+    assert session.put_kwargs == [
+        {
+            "json": {"metadata": _new_version_metadata()},
+            "timeout": 60,
+            "allow_redirects": False,
+        }
+    ]
     assert state["deposition_id"] == 8
     assert state["record_id"] == 8
     assert state["concept_record_id"] == "6"
@@ -268,9 +274,9 @@ def test_new_version_accepts_legacy_prereserved_version_doi() -> None:
     "latest_draft",
     [
         None,
-        "http://zenodo.test/api/deposit/depositions/8",
+        "http://zenodo.org/api/deposit/depositions/8",
         "https://other.test/api/deposit/depositions/8",
-        "https://zenodo.test/not-the-api/deposit/depositions/8",
+        "https://zenodo.org/not-the-api/deposit/depositions/8",
     ],
 )
 def test_new_version_rejects_malformed_or_cross_host_latest_draft(latest_draft: Any) -> None:
@@ -301,7 +307,7 @@ def test_new_version_rejects_reused_identity_wrong_concept_or_submitted_draft(
     """Successor creation fails closed when the draft identity or state drifts."""
     session = _new_version_fixture(draft=draft)
     session.posts[0].payload["links"]["latest_draft"] = (
-        f"https://zenodo.test/api/deposit/depositions/{draft['id']}"
+        f"https://zenodo.org/api/deposit/depositions/{draft['id']}"
     )
 
     with pytest.raises(publisher.ZenodoPublisherError, match=match):
@@ -340,7 +346,7 @@ def test_new_version_rejects_wrong_or_unpublished_predecessor(
     with pytest.raises(publisher.ZenodoPublisherError, match=match):
         _new_version(session)
 
-    assert session.urls == ["https://zenodo.test/api/deposit/depositions/7"]
+    assert session.urls == ["https://zenodo.org/api/deposit/depositions/7"]
 
 
 def test_new_version_requires_exact_predecessor_relation_and_deposition_id() -> None:
@@ -362,7 +368,7 @@ def test_new_version_requires_exact_predecessor_relation_and_deposition_id() -> 
             expected_predecessor_tag=PREDECESSOR_TAG,
             expected_source_sha=SOURCE_SHA,
             expected_successor_tag=SUCCESSOR_TAG,
-            api_base="https://zenodo.test/api",
+            api_base="https://zenodo.org/api",
         )
     assert session.urls == []
 
@@ -376,7 +382,7 @@ def test_new_version_requires_exact_predecessor_relation_and_deposition_id() -> 
             expected_predecessor_tag=PREDECESSOR_TAG,
             expected_source_sha=SOURCE_SHA,
             expected_successor_tag=SUCCESSOR_TAG,
-            api_base="https://zenodo.test/api",
+            api_base="https://zenodo.org/api",
         )
 
 
@@ -454,7 +460,7 @@ def test_new_version_rejects_non_url_successor_source_relation_before_remote_mut
             expected_predecessor_tag=PREDECESSOR_TAG,
             expected_source_sha=SOURCE_SHA,
             expected_successor_tag=SUCCESSOR_TAG,
-            api_base="https://zenodo.test/api",
+            api_base="https://zenodo.org/api",
         )
 
     assert session.urls == []
@@ -478,7 +484,7 @@ def test_new_version_rejects_wrong_successor_tag_before_remote_mutation() -> Non
             expected_predecessor_tag=PREDECESSOR_TAG,
             expected_source_sha=SOURCE_SHA,
             expected_successor_tag="different-erratum.1",
-            api_base="https://zenodo.test/api",
+            api_base="https://zenodo.org/api",
         )
 
     assert session.urls == []
@@ -511,7 +517,7 @@ def test_new_version_rejects_noncanonical_lineage_before_remote_mutation(
             expected_predecessor_tag=predecessor_tag,
             expected_source_sha=source_sha,
             expected_successor_tag=successor_tag,
-            api_base="https://zenodo.test/api",
+            api_base="https://zenodo.org/api",
         )
 
     assert session.urls == []
@@ -551,6 +557,172 @@ def test_build_session_uses_header_only_token_and_requires_requests(
     monkeypatch.setattr(publisher, "try_import", lambda name: None)
     with pytest.raises(publisher.ZenodoPublisherError, match="requests is required"):
         publisher.build_session(token_file)
+
+
+@pytest.mark.parametrize(
+    "api_base",
+    [
+        "http://zenodo.org/api",
+        "https://zenodo.org/api?access_token=secret",
+        "https://zenodo.org/api#fragment",
+        "https://user:password@zenodo.org/api",
+        "https://evil.example/api",
+    ],
+)
+def test_authenticated_operations_reject_untrusted_api_base_before_network(
+    api_base: str,
+) -> None:
+    """Every credential-bearing operation rejects a malicious API base first."""
+    operation_calls = [
+        lambda session: publisher.reserve(session, _metadata(), api_base=api_base),
+        lambda session: publisher.upload(session, {}, [], api_base=api_base),
+        lambda session: publisher.publish(session, {}, _metadata(), api_base=api_base),
+        lambda session: publisher.verify(session, {}, _metadata(), api_base=api_base),
+        lambda session: publisher.new_version(
+            session,
+            _new_version_metadata(),
+            predecessor_deposition_id=7,
+            expected_predecessor_doi="10.5281/zenodo.7",
+            expected_concept_doi="10.5281/zenodo.6",
+            expected_predecessor_tag=PREDECESSOR_TAG,
+            expected_source_sha=SOURCE_SHA,
+            expected_successor_tag=SUCCESSOR_TAG,
+            api_base=api_base,
+        ),
+    ]
+
+    for operation in operation_calls:
+        session = _Session()
+        with pytest.raises(publisher.ZenodoPublisherError, match="API base") as exc_info:
+            operation(session)
+        assert "secret" not in str(exc_info.value).casefold()
+        assert session.urls == []
+
+
+@pytest.mark.parametrize(
+    "bucket",
+    [
+        "http://zenodo.org/api/files/bucket",
+        "https://other.example/api/files/bucket",
+        "https://zenodo.org/api/files/bucket?access_token=secret",
+    ],
+)
+def test_upload_rejects_cross_origin_or_credentialed_bucket_before_put(
+    tmp_path: Path, bucket: str
+) -> None:
+    """A server-supplied bucket must stay on the approved API origin."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "concept_record_id": "6",
+            "doi": "10.5281/zenodo.7",
+            "submitted": False,
+            "files": [],
+        }
+    )
+    draft = _draft()
+    draft["links"]["bucket"] = bucket
+    session = _Session()
+    session.gets = [_Response(draft)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="secure upload bucket") as exc_info:
+        publisher.upload(session, state, [bundle], api_base="https://zenodo.org/api")
+
+    assert "secret" not in str(exc_info.value).casefold()
+    assert session.urls == ["https://zenodo.org/api/deposit/depositions/7"]
+    assert session.puts == []
+
+
+def test_verify_rejects_cross_origin_download_without_authenticated_fetch(tmp_path: Path) -> None:
+    """Verification reports an unapproved download URL without requesting it."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "concept_record_id": "6",
+            "doi": "10.5281/zenodo.7",
+            "submitted": False,
+            "files": [
+                {
+                    "name": bundle.name,
+                    "size": bundle.stat().st_size,
+                    "sha256": publisher._sha256_file(bundle),
+                }
+            ],
+        }
+    )
+    remote = _draft()
+    remote["files"] = [
+        {
+            "filename": bundle.name,
+            "size": bundle.stat().st_size,
+            "links": {
+                "download": "https://evil.example/files/bundle?access_token=secret",
+            },
+        }
+    ]
+    session = _Session()
+    session.gets = [_Response(remote)]
+
+    report = publisher.verify(session, state, _metadata(), api_base="https://zenodo.org/api")
+
+    assert report["status"] == "fail"
+    assert any("secure download URL" in problem for problem in report["problems"])
+    assert session.urls == ["https://zenodo.org/api/deposit/depositions/7"]
+    assert "secret" not in json.dumps(report).casefold()
+
+
+def test_verification_receipt_hashes_remote_version_without_echoing_server_value(
+    tmp_path: Path,
+) -> None:
+    """Receipts bind a remote version while never persisting its raw server value."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "concept_record_id": "6",
+            "doi": "10.5281/zenodo.7",
+            "submitted": False,
+            "files": [
+                {
+                    "name": bundle.name,
+                    "size": bundle.stat().st_size,
+                    "sha256": publisher._sha256_file(bundle),
+                }
+            ],
+        }
+    )
+    remote = _draft()
+    remote["modified"] = "Bearer secret-that-must-not-appear"
+    remote["files"] = [
+        {
+            "filename": bundle.name,
+            "size": bundle.stat().st_size,
+            "links": {"download": "https://zenodo.org/api/files/bundle/content"},
+        }
+    ]
+    session = _Session()
+    session.gets = [_Response(remote), _Response({}, content=bundle.read_bytes())]
+
+    report = publisher.verify(session, state, _metadata(), api_base="https://zenodo.org/api")
+
+    assert report["status"] == "pass"
+    binding = report["receipt"]["remote_optimistic"]
+    assert binding["field"] == "modified"
+    assert len(binding["sha256"]) == 64
+    serialized = json.dumps(report["receipt"])
+    assert "Bearer" not in serialized
+    assert "secret-that-must-not-appear" not in serialized
 
 
 @pytest.mark.parametrize(
@@ -697,7 +869,7 @@ def test_verify_reports_inventory_transport_and_checksum_mismatches(tmp_path: Pa
         {
             "key": bundle.name,
             "size": bundle.stat().st_size,
-            "links": {"self": "https://download"},
+            "links": {"self": "https://zenodo.org/api/files/bundle/content"},
         }
     ]
     session.gets = [

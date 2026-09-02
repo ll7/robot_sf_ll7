@@ -198,6 +198,10 @@ def test_all_zenodo_modes_preserve_manifest_binding(tmp_path: Path) -> None:
     assert state["verification_receipt"]["release_binding"] == state["release_binding"]
     assert state["verification_receipt"]["manifest_metadata_sha256"] == binding["metadata_sha256"]
 
+    session.gets = [
+        _Response(remote_draft),
+        _Response({}, content=bundle.read_bytes()),
+    ]
     state = publish(session, state, metadata, release_binding=binding)
     assert state["submitted"] is True
     assert state["release_binding"]["version_doi"] == binding["version_doi"]

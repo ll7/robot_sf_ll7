@@ -16,6 +16,7 @@ from robot_sf.benchmark.zenodo_publisher import (
     ZENODO_STATE_SCHEMA,
     ZenodoPublisherError,
     _seal_state,
+    _verify_integrity,
     build_release_binding,
     load_dataset_metadata,
     load_state,
@@ -33,9 +34,15 @@ _MANIFEST_PATH = Path("configs/benchmarks/releases/benchmark_data_release_s30_h6
 class _Response:
     """Small requests-like response fixture."""
 
-    def __init__(self, payload: dict[str, Any], *, content: bytes | None = None) -> None:
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        content: bytes | None = None,
+        status_code: int = 200,
+    ) -> None:
         self.payload = payload
-        self.status_code = 200
+        self.status_code = status_code
         self.content = content if content is not None else json.dumps(payload).encode()
 
     def json(self) -> dict[str, Any]:
@@ -103,6 +110,26 @@ def _deposition_payload(binding: dict[str, Any], *, submitted: bool = False) -> 
         "links": {"bucket": "https://zenodo.org/api/files/bucket"},
         "files": [],
     }
+
+
+def _unbound_state(
+    binding: dict[str, Any], *, files: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """Build a valid state that lets a bound operation adopt its binding."""
+    deposition_id = int(binding["version_doi"].rsplit(".", 1)[-1])
+    concept_record_id = binding["concept_doi"].rsplit(".", 1)[-1]
+    return _seal_state(
+        {
+            "schema_version": ZENODO_STATE_SCHEMA,
+            "deposition_id": deposition_id,
+            "record_id": deposition_id,
+            "concept_record_id": concept_record_id,
+            "doi": binding["version_doi"],
+            "submitted": False,
+            "state": "unsubmitted",
+            "files": files or [],
+        }
+    )
 
 
 def test_benchmark_manifest_loads_exact_zenodo_metadata_binding() -> None:
@@ -335,6 +362,79 @@ def test_bound_reserve_rejects_concept_or_version_identity_drift() -> None:
         reserve(session, metadata, release_binding=binding)
 
 
+@pytest.mark.parametrize("receipt_kind", ["missing", "stale"])
+def test_publish_failure_preserves_bound_caller_state(
+    receipt_kind: str,
+) -> None:
+    """Receipt admission failures cannot mutate or invalidate caller state."""
+    binding, metadata = _binding_and_metadata()
+    deposition_id = int(binding["version_doi"].rsplit(".", 1)[-1])
+    concept_record_id = binding["concept_doi"].rsplit(".", 1)[-1]
+    state_payload: dict[str, Any] = {
+        "schema_version": ZENODO_STATE_SCHEMA,
+        "deposition_id": deposition_id,
+        "record_id": deposition_id,
+        "concept_record_id": concept_record_id,
+        "doi": binding["version_doi"],
+        "submitted": False,
+        "state": "unsubmitted",
+        "files": [{"name": "bundle.tar.gz", "size": 1, "sha256": "0" * 64}],
+    }
+    if receipt_kind == "stale":
+        state_payload["verification_receipt"] = {
+            "status": "pass",
+            "publication_state": "draft",
+        }
+    state = _seal_state(state_payload)
+    state_before = json.loads(json.dumps(state, sort_keys=True))
+    session = _Session()
+
+    expected_error = "verification receipt" if receipt_kind == "missing" else "integrity"
+    with pytest.raises(ZenodoPublisherError, match=expected_error):
+        publish(session, state, metadata, release_binding=binding)
+
+    assert state == state_before
+    assert session.gets == []
+    assert session.posts == []
+    _verify_integrity(state, key="integrity", schema=ZENODO_STATE_SCHEMA)
+
+
+def test_bound_upload_failure_preserves_unbound_caller_state(tmp_path: Path) -> None:
+    """Upload binding adoption is discarded when the remote bucket is rejected."""
+    binding, _ = _binding_and_metadata()
+    state = _unbound_state(binding)
+    state_before = json.dumps(state, sort_keys=True)
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    draft = _deposition_payload(binding)
+    draft["links"]["bucket"] = "http://zenodo.org/api/files/bucket"
+    session = _Session()
+    session.gets = [_Response(draft)]
+
+    with pytest.raises(ZenodoPublisherError, match="secure upload bucket"):
+        upload(session, state, [bundle], release_binding=binding)
+
+    assert json.dumps(state, sort_keys=True) == state_before
+    assert "release_binding" not in state
+    _verify_integrity(state, key="integrity", schema=ZENODO_STATE_SCHEMA)
+
+
+def test_bound_verify_failure_preserves_unbound_caller_state() -> None:
+    """Verify binding adoption is discarded when the remote lookup fails."""
+    binding, metadata = _binding_and_metadata()
+    state = _unbound_state(binding)
+    state_before = json.dumps(state, sort_keys=True)
+    session = _Session()
+    session.gets = [_Response({}, status_code=503)]
+
+    with pytest.raises(ZenodoPublisherError, match="verify request failed"):
+        verify(session, state, metadata, release_binding=binding)
+
+    assert json.dumps(state, sort_keys=True) == state_before
+    assert "release_binding" not in state
+    _verify_integrity(state, key="integrity", schema=ZENODO_STATE_SCHEMA)
+
+
 def test_state_shape_for_binding_remains_credential_free() -> None:
     """Manifest binding state contains no token-shaped field or value."""
     state = _seal_state(
@@ -345,6 +445,7 @@ def test_state_shape_for_binding_remains_credential_free() -> None:
             "concept_record_id": "3",
             "doi": "10.5281/zenodo.4",
             "submitted": False,
+            "state": "unsubmitted",
             "files": [],
         }
     )

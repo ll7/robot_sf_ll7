@@ -227,6 +227,12 @@ uv run robot-sf release zenodo publish \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
   --metadata "$ZENODO_METADATA"
+
+# Mandatory post-publication check; require a passing published-record receipt.
+uv run robot-sf release zenodo verify \
+  --token-file "$ZENODO_TOKEN_FILE" \
+  --state "$ZENODO_STATE" \
+  --metadata "$ZENODO_METADATA"
 ```
 
 `reserve` must return a fresh concept and version DOI; freeze those values in
@@ -238,6 +244,13 @@ the byte-identical bundle used for GitHub. `verify` is read-only and must check
 the title, dataset type, GPL-3.0-only license, creator union, exact source tag,
 and concept/version DOI distinction. `publish` is irreversible; never run it
 for a draft with missing files, unaccepted rows, or an unresolved DOI.
+The publisher performs a mandatory fresh draft verification immediately before
+the irreversible request. The documented legacy [Zenodo deposition actions
+API](https://developers.zenodo.org/#depositions-actions-publish) exposes no
+conditional compare-and-publish precondition, so a final time-of-check/time-of-use
+window remains. Run the authenticated `zenodo verify` command again immediately
+after publication and require its published-record receipt to pass before
+treating the DOI as accepted.
 
 Disable or remove the specific GitHub-to-Zenodo webhook through repository
 settings or the approved GitHub API operation immediately before GitHub

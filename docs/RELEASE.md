@@ -40,7 +40,8 @@ The smoke is execution evidence only: the Social Navigation Quality Index
 - confirm benchmark fallback policy is fail-closed for benchmark mode
 - confirm a fresh Zenodo concept is reserved for the benchmark-data record; the
   current reservation is concept `10.5281/zenodo.22077447` and version
-  `10.5281/zenodo.22077448`; verify both again after publication; the
+  `10.5281/zenodo.22077448`; run the authenticated `zenodo verify` command
+  again after publication and require a passing published-record receipt; the
   historical concepts `10.5281/zenodo.19482025` and
   `10.5281/zenodo.19563812` must not be reused
 - confirm the dataset metadata is the tracked benchmark-specific file

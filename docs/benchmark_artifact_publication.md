@@ -246,7 +246,9 @@ placeholders before citing the bundle as paper-facing evidence.
 5. Upload the exact same archive to the reserved Zenodo draft, run read-only
    `release zenodo verify`, and independently compare GitHub/Zenodo downloads.
 6. Publish the GitHub Release and Zenodo version only after all acceptance and
-   cold-download checks pass. Record the version DOI and parent concept DOI.
+   cold-download checks pass. Immediately rerun the authenticated Zenodo
+   verification against the published record and require a passing receipt
+   before recording the version DOI and parent concept DOI.
 7. Update paper references to the verified Zenodo DOI and benchmark-data asset URL.
 
 Software/package tags and their DOI records remain separate. This documentation

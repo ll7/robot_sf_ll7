@@ -567,6 +567,7 @@ def test_build_session_uses_header_only_token_and_requires_requests(
         "https://zenodo.org/api#fragment",
         "https://user:password@zenodo.org/api",
         "https://evil.example/api",
+        "https://sandbox.zenodo.org/api",
         "https://zenodo.org/records",
         "https://zenodo.org/%61pi",
     ],
@@ -633,6 +634,7 @@ def test_upload_rejects_cross_origin_or_credentialed_bucket_before_put(
             "concept_record_id": "6",
             "doi": "10.5281/zenodo.7",
             "submitted": False,
+            "state": "unsubmitted",
             "files": [],
         }
     )
@@ -661,6 +663,7 @@ def test_verify_rejects_cross_origin_download_without_authenticated_fetch(tmp_pa
             "concept_record_id": "6",
             "doi": "10.5281/zenodo.7",
             "submitted": False,
+            "state": "unsubmitted",
             "files": [
                 {
                     "name": bundle.name,
@@ -705,6 +708,7 @@ def test_verification_receipt_hashes_remote_version_without_echoing_server_value
             "concept_record_id": "6",
             "doi": "10.5281/zenodo.7",
             "submitted": False,
+            "state": "unsubmitted",
             "files": [
                 {
                     "name": bundle.name,
@@ -784,15 +788,252 @@ def test_reserve_rejects_incomplete_deposition_identity() -> None:
     """A reserved DOI cannot be accepted without complete deposition identity."""
     session = _Session()
     session.posts = [_Response({"id": 7, "conceptrecid": "6", "metadata": {}})]
-    with pytest.raises(publisher.ZenodoPublisherError, match="omitted"):
+    with pytest.raises(publisher.ZenodoPublisherError, match="response ID"):
         publisher.reserve(session, _metadata())
 
 
-def test_public_state_handles_missing_metadata_and_prefers_published_doi() -> None:
-    """State extraction remains credential-free for sparse API payloads."""
-    sparse = publisher._public_state({"id": 1, "record_id": 2, "conceptrecid": 3, "doi": "doi"})
-    assert sparse["doi"] == "doi"
-    assert sparse["files"] == []
+@pytest.mark.parametrize("lifecycle", ["inprogress", "error"])
+def test_reserve_rejects_unstable_remote_lifecycle(lifecycle: str) -> None:
+    """Reservation cannot seal a transient or failed remote deposition state."""
+    response = _draft()
+    response["state"] = lifecycle
+    session = _Session()
+    session.posts = [_Response(response)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="unpublished draft"):
+        publisher.reserve(session, _metadata())
+
+
+def test_public_state_normalizes_verified_identity() -> None:
+    """State extraction normalizes only the supported Zenodo identity fields."""
+    payload = _draft()
+    payload["conceptrecid"] = "006"
+
+    state = publisher._public_state(payload)
+
+    assert state["deposition_id"] == 7
+    assert state["record_id"] == 7
+    assert state["concept_record_id"] == "6"
+    assert state["doi"] == "10.5281/zenodo.7"
+    assert state["state"] == "unsubmitted"
+    assert state["submitted"] is False
+    assert state["files"] == []
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("id", "7?access_token=query-injected-id"),
+        ("record_id", "7?access_token=query-injected-id"),
+        ("conceptrecid", "7?access_token=query-injected-id"),
+        ("doi", "Bearer secret-reflection"),
+        ("submitted", "false"),
+        ("state", "Bearer secret-reflection"),
+    ],
+)
+def test_public_state_rejects_untrusted_identity_and_state_values(field: str, value: Any) -> None:
+    """Server response values cannot become arbitrary persisted state fields."""
+    payload = _draft()
+    payload[field] = value
+
+    with pytest.raises(publisher.ZenodoPublisherError) as exc_info:
+        publisher._public_state(payload)
+
+    assert "query-injected-id" not in str(exc_info.value)
+    assert "secret-reflection" not in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("deposition_id", "7?access_token=query-injected-id"),
+        ("record_id", "7?access_token=query-injected-id"),
+        ("concept_record_id", "6?access_token=query-injected-id"),
+        ("doi", "10.5281/zenodo.999"),
+        ("submitted", "false"),
+        ("state", "inprogress"),
+        ("state", "done"),
+    ],
+)
+def test_operation_rejects_self_hashed_untrusted_state_before_network(
+    field: str, value: Any
+) -> None:
+    """A valid self-hash cannot authorize unsafe state values for an operation."""
+    payload: dict[str, Any] = {
+        "schema_version": publisher.ZENODO_STATE_SCHEMA,
+        "deposition_id": 7,
+        "record_id": 7,
+        "concept_record_id": "6",
+        "doi": "10.5281/zenodo.7",
+        "submitted": False,
+        "state": "unsubmitted",
+        "files": [],
+    }
+    payload[field] = value
+    state = publisher._seal_state(payload)
+    session = _Session()
+
+    with pytest.raises(publisher.ZenodoPublisherError):
+        publisher.upload(session, state, [])
+
+    assert session.urls == []
+
+
+def test_upload_does_not_persist_server_checksum_or_reflected_secret(tmp_path: Path) -> None:
+    """Only the local SHA-256 belongs in credential-free upload state."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "concept_record_id": "6",
+            "doi": "10.5281/zenodo.7",
+            "submitted": False,
+            "state": "unsubmitted",
+            "files": [],
+        }
+    )
+    session = _Session()
+    session.gets = [_Response(_draft())]
+    session.puts = [_Response({"checksum": "Bearer secret-reflection"})]
+
+    updated = publisher.upload(session, state, [bundle])
+    serialized = json.dumps(updated, sort_keys=True)
+
+    assert "secret-reflection" not in serialized
+    assert "zenodo_checksum" not in updated["files"][0]
+    assert updated["files"][0]["sha256"] == publisher._sha256_file(bundle)
+
+
+@pytest.mark.parametrize("field", ["id", "record_id", "conceptrecid", "doi"])
+def test_upload_binds_authenticated_draft_identity_before_put(field: str, tmp_path: Path) -> None:
+    """Upload rejects a draft response whose identity is not the sealed deposition."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "concept_record_id": "6",
+            "doi": "10.5281/zenodo.7",
+            "submitted": False,
+            "state": "unsubmitted",
+            "files": [],
+        }
+    )
+    remote = _draft()
+    if field == "id":
+        remote["id"] = 8
+    elif field == "record_id":
+        remote["record_id"] = 8
+        remote["doi"] = "10.5281/zenodo.8"
+        remote["metadata"]["prereserve_doi"] = {"doi": "10.5281/zenodo.8"}
+    elif field == "conceptrecid":
+        remote["conceptrecid"] = "8"
+    else:
+        remote["doi"] = "10.5072/zenodo.7"
+    session = _Session()
+    session.gets = [_Response(remote)]
+
+    with pytest.raises(publisher.ZenodoPublisherError):
+        publisher.upload(session, state, [bundle])
+
+    assert session.puts == []
+
+
+@pytest.mark.parametrize("lifecycle", ["inprogress", "error"])
+def test_upload_rejects_unstable_remote_draft_before_put(lifecycle: str, tmp_path: Path) -> None:
+    """Upload accepts only a stable unpublished draft response."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "concept_record_id": "6",
+            "doi": "10.5281/zenodo.7",
+            "submitted": False,
+            "state": "unsubmitted",
+            "files": [],
+        }
+    )
+    remote = _draft()
+    remote["state"] = lifecycle
+    session = _Session()
+    session.gets = [_Response(remote)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="unpublished draft"):
+        publisher.upload(session, state, [bundle])
+
+    assert session.puts == []
+
+
+def test_verify_rejects_reflected_doi_before_sealing_a_receipt(tmp_path: Path) -> None:
+    """A reflected secret cannot enter a serialized verification receipt."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "concept_record_id": "6",
+            "doi": "10.5281/zenodo.7",
+            "submitted": False,
+            "state": "unsubmitted",
+            "files": [{"name": bundle.name, "size": 6, "sha256": publisher._sha256_file(bundle)}],
+        }
+    )
+    remote = _draft()
+    remote["doi"] = "Bearer secret-reflection"
+    remote["files"] = [
+        {
+            "filename": bundle.name,
+            "size": bundle.stat().st_size,
+            "links": {"download": "https://zenodo.org/api/records/7/files/bundle/content"},
+        }
+    ]
+    session = _Session()
+    session.gets = [_Response(remote), _Response({}, content=bundle.read_bytes())]
+    state_before = json.dumps(state, sort_keys=True)
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="DOI"):
+        publisher.verify(session, state, _metadata())
+
+    assert json.dumps(state, sort_keys=True) == state_before
+    assert "secret-reflection" not in json.dumps(state, sort_keys=True)
+
+
+@pytest.mark.parametrize("lifecycle", ["inprogress", "error"])
+def test_verify_rejects_unstable_remote_lifecycle_before_download(lifecycle: str) -> None:
+    """Verification does not treat transient or failed drafts as usable records."""
+    state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "concept_record_id": "6",
+            "doi": "10.5281/zenodo.7",
+            "submitted": False,
+            "state": "unsubmitted",
+            "files": [],
+        }
+    )
+    state_before = json.dumps(state, sort_keys=True)
+    remote = _draft()
+    remote["state"] = lifecycle
+    session = _Session()
+    session.gets = [_Response(remote)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="lifecycle state"):
+        publisher.verify(session, state, _metadata())
+
+    assert session.urls == ["https://zenodo.org/api/deposit/depositions/7"]
+    assert json.dumps(state, sort_keys=True) == state_before
 
 
 @pytest.mark.parametrize(
@@ -827,6 +1068,7 @@ def test_upload_rejects_missing_file_and_publish_rejects_unsubmitted_response(
             "concept_record_id": "6",
             "doi": "10.5281/zenodo.7",
             "submitted": False,
+            "state": "unsubmitted",
             "files": [],
         }
     )
@@ -858,6 +1100,7 @@ def test_verify_reports_inventory_transport_and_checksum_mismatches(tmp_path: Pa
         "doi": "10.5281/zenodo.7",
         "concept_record_id": "6",
         "submitted": True,
+        "state": "done",
         "files": [{"name": bundle.name, "size": bundle.stat().st_size, "sha256": "0" * 64}],
     }
     state = publisher._seal_state(state)
@@ -907,6 +1150,45 @@ def test_verify_reports_inventory_transport_and_checksum_mismatches(tmp_path: Pa
     assert any("inventory is empty" in problem for problem in report["problems"])
 
 
+def test_verify_does_not_reflect_secret_shaped_remote_filename(tmp_path: Path) -> None:
+    """Remote duplicate filenames are reported without echoing server strings."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "doi": "10.5281/zenodo.7",
+            "concept_record_id": "6",
+            "submitted": False,
+            "state": "unsubmitted",
+            "files": [
+                {
+                    "name": bundle.name,
+                    "size": bundle.stat().st_size,
+                    "sha256": publisher._sha256_file(bundle),
+                }
+            ],
+        }
+    )
+    secret_name = "Bearer secret-reflection"
+    remote = _draft()
+    remote["files"] = [
+        {"filename": secret_name, "size": bundle.stat().st_size, "links": {}},
+        {"filename": secret_name, "size": bundle.stat().st_size, "links": {}},
+    ]
+    session = _Session()
+    session.gets = [_Response(remote)]
+
+    report = publisher.verify(session, state, _metadata())
+
+    assert report["status"] == "fail"
+    serialized = json.dumps(report, sort_keys=True)
+    assert secret_name not in serialized
+    assert "duplicate entry at index 1" in serialized
+
+
 @pytest.mark.parametrize(
     ("field", "value", "problem"),
     [
@@ -928,6 +1210,7 @@ def test_verify_rejects_published_record_identity_drift(
             "doi": "10.5281/zenodo.7",
             "concept_record_id": "6",
             "submitted": True,
+            "state": "done",
             "files": [],
         }
     )
@@ -967,6 +1250,7 @@ def test_verify_rejects_invalid_published_file_size(
             "doi": "10.5281/zenodo.7",
             "concept_record_id": "6",
             "submitted": True,
+            "state": "done",
             "files": [
                 {
                     "name": bundle.name,
@@ -1017,6 +1301,7 @@ def test_state_load_and_write_are_schema_checked_and_non_destructive(tmp_path: P
             "concept_record_id": "6",
             "doi": "10.5281/zenodo.7",
             "submitted": False,
+            "state": "unsubmitted",
             "files": [],
         }
     )
@@ -1050,6 +1335,7 @@ def test_state_integrity_rejects_manual_edit(tmp_path: Path) -> None:
                 "concept_record_id": "6",
                 "doi": "10.5281/zenodo.7",
                 "submitted": False,
+                "state": "unsubmitted",
                 "files": [],
             }
         ),

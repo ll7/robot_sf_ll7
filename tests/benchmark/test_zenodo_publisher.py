@@ -160,6 +160,7 @@ def _metadata_verification_fixture(
             "concept_record_id": "122",
             "doi": "10.5281/zenodo.123",
             "submitted": False,
+            "state": "unsubmitted",
             "files": [
                 {
                     "name": bundle.name,
@@ -209,7 +210,7 @@ def test_metadata_requires_dataset_license_creators_and_exact_tag(tmp_path: Path
 
 
 def test_reserve_upload_publish_and_verify_without_credentials_in_state(tmp_path: Path) -> None:
-    """All publisher modes preserve identity and a credential-free state contract."""
+    """Publication is followed by mandatory published-record verification."""
     session = _Session()
     session.posts = [
         _Response(_draft_payload(), 201),
@@ -390,6 +391,7 @@ def test_publish_requires_prior_verification_receipt(tmp_path: Path) -> None:
         "concept_record_id": "122",
         "doi": "10.5281/zenodo.123",
         "submitted": False,
+        "state": "unsubmitted",
         "files": [{"name": bundle.name, "size": 6, "sha256": "0" * 64}],
     }
     state = _seal_state(state)
@@ -414,6 +416,7 @@ def test_verify_streams_remote_bundle_in_bounded_chunks_without_content_access(
             "concept_record_id": "122",
             "doi": "10.5281/zenodo.123",
             "submitted": False,
+            "state": "unsubmitted",
             "files": [
                 {
                     "name": bundle.name,

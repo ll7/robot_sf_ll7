@@ -24,7 +24,9 @@ _SOURCE_TAG_RE = re.compile(r"^https://github\.com/ll7/robot_sf_ll7/releases/tag
 _ZENODO_DOI_RE = re.compile(r"^10\.5281/zenodo\.\d+$")
 _CLAIM_BOUNDARY_TERMS = ("snqi", "advisory", "ranking")
 _CREDENTIAL_KEYS = ("token", "authorization", "password", "secret")
-_APPROVED_ZENODO_API_HOSTS = frozenset({"zenodo.org", "sandbox.zenodo.org"})
+_APPROVED_ZENODO_API_HOSTS = frozenset({"zenodo.org"})
+_KNOWN_ZENODO_STATES = frozenset({"unsubmitted", "inprogress", "done", "error"})
+_STABLE_ZENODO_STATES = frozenset({"unsubmitted", "done"})
 _REMOTE_VERSION_FIELDS = ("modified", "version", "revision")
 
 
@@ -202,7 +204,11 @@ def _metadata_sha256(metadata: Mapping[str, Any]) -> str:
 
 
 def _validated_api_base(api_base: str) -> str:
-    """Require an approved Zenodo HTTPS API base without URL credentials/queries.
+    """Require the production Zenodo HTTPS API base without URL credentials/queries.
+
+    The sandbox is intentionally unsupported: its official test DOI prefix is
+    ``10.5072`` while this publisher's persisted identity schema is pinned to
+    production ``10.5281/zenodo.<record-id>`` values.
 
     Returns:
         The trimmed API base URL.
@@ -220,7 +226,7 @@ def _validated_api_base(api_base: str) -> str:
     normalized_path = parsed.path.rstrip("/")
     if normalized_hostname not in _APPROVED_ZENODO_API_HOSTS:
         raise ZenodoPublisherError("Zenodo API base must use an approved Zenodo HTTPS origin")
-    if normalized_hostname in {"zenodo.org", "sandbox.zenodo.org"} and port not in {None, 443}:
+    if normalized_hostname == "zenodo.org" and port not in {None, 443}:
         raise ZenodoPublisherError("Zenodo API base must use an approved Zenodo HTTPS origin")
     if (
         parsed.scheme.casefold() != "https"
@@ -323,6 +329,39 @@ def _positive_deposition_id(value: Any, label: str) -> int:
     return value
 
 
+def _positive_decimal_id(value: Any, label: str) -> str:
+    """Require and canonicalize a positive decimal identifier string.
+
+    Returns:
+        The identifier without leading zeroes.
+    """
+    if isinstance(value, bool):
+        raise ZenodoPublisherError(f"Zenodo {label} must be a positive decimal identifier")
+    if isinstance(value, int):
+        if value <= 0:
+            raise ZenodoPublisherError(f"Zenodo {label} must be a positive decimal identifier")
+        return str(value)
+    if not isinstance(value, str) or re.fullmatch(r"[0-9]+", value) is None:
+        raise ZenodoPublisherError(f"Zenodo {label} must be a positive decimal identifier")
+    normalized = value.lstrip("0")
+    if not normalized:
+        raise ZenodoPublisherError(f"Zenodo {label} must be a positive decimal identifier")
+    return normalized
+
+
+def _validated_version_doi(value: Any, record_id: int, label: str) -> str:
+    """Require a production version DOI whose record suffix matches its ID.
+
+    Returns:
+        The validated DOI.
+    """
+    if not isinstance(value, str) or _ZENODO_DOI_RE.fullmatch(value) is None:
+        raise ZenodoPublisherError(f"Zenodo {label} is invalid")
+    if value.rsplit(".", 1)[-1] != str(record_id):
+        raise ZenodoPublisherError(f"Zenodo {label} does not match record ID")
+    return value
+
+
 def _successor_version_doi(payload: Mapping[str, Any]) -> Any:
     """Extract a version DOI from the direct or pre-reserved legacy API field.
 
@@ -389,8 +428,8 @@ def _validate_successor_version_doi(
     return version_doi
 
 
-def _validate_successor_unpublished(payload: Mapping[str, Any], operation: str) -> None:
-    """Require an API payload to describe an unpublished draft."""
+def _validate_unpublished_draft(payload: Mapping[str, Any], operation: str) -> None:
+    """Require an API payload to describe a stable unpublished draft."""
     if payload.get("submitted") is not False or payload.get("state") != "unsubmitted":
         raise ZenodoPublisherError(f"Zenodo {operation} must remain an unpublished draft")
 
@@ -432,7 +471,7 @@ def _validate_successor_payload(
         expected_concept_doi=expected_concept_doi,
         operation=operation,
     )
-    _validate_successor_unpublished(payload, operation)
+    _validate_unpublished_draft(payload, operation)
 
     state = _public_state(dict(payload))
     state.update(
@@ -751,12 +790,33 @@ def _verify_integrity(payload: Mapping[str, Any], *, key: str, schema: str) -> N
 
 
 def _validate_state_for_operation(state: Mapping[str, Any]) -> None:
-    """Validate identity and integrity before a mutating deposition operation."""
-    if not isinstance(state, Mapping) or not state.get("deposition_id"):
+    """Validate sealed state identity and lifecycle before any API URL use."""
+    if not isinstance(state, Mapping):
+        raise ZenodoPublisherError("invalid Zenodo deposition state")
+    if not state.get("deposition_id"):
         raise ZenodoPublisherError("deposition state has no deposition_id")
-    if not isinstance(state, Mapping) or state.get("schema_version") != ZENODO_STATE_SCHEMA:
+    if state.get("schema_version") != ZENODO_STATE_SCHEMA:
         raise ZenodoPublisherError("invalid Zenodo deposition state")
     _verify_integrity(state, key="integrity", schema=ZENODO_STATE_SCHEMA)
+
+    _positive_deposition_id(state.get("deposition_id"), "state deposition ID")
+    record_id = _positive_deposition_id(state.get("record_id"), "state record ID")
+    concept_record_id = _positive_decimal_id(
+        state.get("concept_record_id"), "state concept record ID"
+    )
+    if state.get("concept_record_id") != concept_record_id:
+        raise ZenodoPublisherError("Zenodo state concept record ID is not canonical")
+    _validated_version_doi(state.get("doi"), record_id, "state version DOI")
+    submitted = state.get("submitted")
+    lifecycle = state.get("state")
+    if not isinstance(submitted, bool):
+        raise ZenodoPublisherError("Zenodo state submitted flag is invalid")
+    if not isinstance(lifecycle, str) or lifecycle not in _KNOWN_ZENODO_STATES:
+        raise ZenodoPublisherError("Zenodo state lifecycle is invalid")
+    if (submitted and lifecycle != "done") or (not submitted and lifecycle == "done"):
+        raise ZenodoPublisherError("Zenodo state lifecycle is inconsistent")
+    if lifecycle not in _STABLE_ZENODO_STATES:
+        raise ZenodoPublisherError("Zenodo state lifecycle is not an admissible operation state")
 
 
 def _file_inventory(state: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
@@ -949,24 +1009,50 @@ def _receipt_contract(receipt: Mapping[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in receipt.items() if key != "integrity"}
 
 
-def _public_state(payload: dict[str, Any]) -> dict[str, Any]:
-    """Extract the non-secret deposition identity needed by later modes.
+def _public_state(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Extract only a validated, credential-free deposition identity.
+
+    Zenodo response fields are untrusted input. Identity and lifecycle values
+    are normalized here before they can be interpolated into later requests or
+    sealed into a state/verification receipt.
 
     Returns:
-        A credential-free state object.
+        A validated credential-free state object.
     """
-    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
-    preregistered = (
-        metadata.get("prereserve_doi") if isinstance(metadata.get("prereserve_doi"), dict) else {}
+    if not isinstance(payload, Mapping):
+        raise ZenodoPublisherError("Zenodo deposition response is not a JSON object")
+    deposition_id = _positive_deposition_id(payload.get("id"), "deposition response ID")
+    record_id = _positive_deposition_id(payload.get("record_id"), "record response ID")
+    concept_record_id = _positive_decimal_id(
+        payload.get("conceptrecid"), "concept record response ID"
     )
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), Mapping) else {}
+    preregistered = (
+        metadata.get("prereserve_doi")
+        if isinstance(metadata.get("prereserve_doi"), Mapping)
+        else {}
+    )
+    direct_doi = payload.get("doi")
+    version_doi = (
+        direct_doi if direct_doi is not None and direct_doi != "" else preregistered.get("doi")
+    )
+    version_doi = _validated_version_doi(version_doi, record_id, "deposition version DOI")
+    submitted = payload.get("submitted")
+    state = payload.get("state")
+    if not isinstance(submitted, bool):
+        raise ZenodoPublisherError("Zenodo deposition response submitted state is invalid")
+    if not isinstance(state, str) or state not in _KNOWN_ZENODO_STATES:
+        raise ZenodoPublisherError("Zenodo deposition response state is invalid")
+    if (submitted and state != "done") or (not submitted and state == "done"):
+        raise ZenodoPublisherError("Zenodo deposition response state is inconsistent")
     return {
         "schema_version": ZENODO_STATE_SCHEMA,
-        "deposition_id": payload.get("id"),
-        "record_id": payload.get("record_id"),
-        "concept_record_id": payload.get("conceptrecid"),
-        "doi": payload.get("doi") or preregistered.get("doi"),
-        "state": payload.get("state"),
-        "submitted": bool(payload.get("submitted")),
+        "deposition_id": deposition_id,
+        "record_id": record_id,
+        "concept_record_id": concept_record_id,
+        "doi": version_doi,
+        "state": state,
+        "submitted": submitted,
         "files": [],
     }
 
@@ -1000,10 +1086,7 @@ def reserve(
     )
     payload = _json_object(response, "reserve")
     state = _public_state(payload)
-    if not state["deposition_id"] or not state["doi"] or not state["concept_record_id"]:
-        raise ZenodoPublisherError(
-            "Zenodo reserve response omitted deposition/concept/DOI identity"
-        )
+    _validate_unpublished_draft(state, "reserve response")
     if binding is not None:
         _assert_deposition_identity(state, binding)
         state["release_binding"] = _state_release_binding(
@@ -1269,18 +1352,19 @@ def upload(
     Returns:
         Updated credential-free deposition state.
     """
+    working_state = deepcopy(state)
     validated_base = _validated_api_base(api_base)
-    _validate_state_for_operation(state)
+    _validate_state_for_operation(working_state)
     binding = _normalize_release_binding(release_binding) if release_binding is not None else None
     binding_metadata = _validate_release_binding_file(binding) if binding is not None else None
     _validate_state_binding(
-        state,
+        working_state,
         binding,
         metadata_contract_sha256=(
             _metadata_sha256(binding_metadata) if binding_metadata is not None else None
         ),
     )
-    deposition_id = state.get("deposition_id")
+    deposition_id = working_state.get("deposition_id")
     deposition = _json_object(
         session.get(
             f"{validated_base}/deposit/depositions/{deposition_id}",
@@ -1289,8 +1373,11 @@ def upload(
         ),
         "retrieve draft",
     )
-    if bool(deposition.get("submitted")):
-        raise ZenodoPublisherError("cannot upload files to a published Zenodo deposition")
+    remote_state = _public_state(deposition)
+    for key in ("deposition_id", "record_id", "concept_record_id", "doi"):
+        if remote_state.get(key) != working_state.get(key):
+            raise ZenodoPublisherError("Zenodo draft response changed reserved identity")
+    _validate_unpublished_draft(remote_state, "upload response")
     links = deposition.get("links")
     bucket = links.get("bucket") if isinstance(links, dict) else None
     try:
@@ -1320,16 +1407,15 @@ def upload(
                 timeout=3600,
                 allow_redirects=False,
             )
-        remote = _json_object(response, f"upload {resolved.name}")
+        _json_object(response, f"upload {resolved.name}")
         uploaded.append(
             {
                 "name": resolved.name,
                 "size": size,
                 "sha256": _sha256_file(resolved),
-                "zenodo_checksum": remote.get("checksum"),
             }
         )
-    updated = dict(state)
+    updated = dict(working_state)
     updated["files"] = uploaded
     updated.pop("verification_receipt", None)
     return _seal_state(updated)
@@ -1345,12 +1431,19 @@ def publish(  # noqa: C901, PLR0912
 ) -> dict[str, Any]:
     """Irreversibly publish a deposition admitted by a draft verification receipt.
 
+    The legacy Zenodo publish endpoint has no documented conditional
+    compare-and-publish precondition. Fresh verification is therefore required
+    immediately before the publish request, but cannot close the final
+    time-of-check/time-of-use window; callers must run :func:`verify` again
+    after publication before treating the public record as accepted.
+
     Returns:
         Updated published deposition state.
     """
+    working_state = deepcopy(state)
     validated_base = _validated_api_base(api_base)
-    _validate_state_for_operation(state)
-    deposition_id = state.get("deposition_id")
+    _validate_state_for_operation(working_state)
+    deposition_id = working_state.get("deposition_id")
     if metadata is None:
         raise ZenodoPublisherError("publish requires the exact expected metadata")
     normalized_metadata = _validate_metadata(metadata)
@@ -1361,7 +1454,7 @@ def publish(  # noqa: C901, PLR0912
         else None
     )
     _validate_state_binding(
-        state,
+        working_state,
         binding,
         metadata_contract_sha256=(
             _metadata_sha256(file_metadata or normalized_metadata)
@@ -1369,30 +1462,30 @@ def publish(  # noqa: C901, PLR0912
             else _metadata_sha256(normalized_metadata)
         ),
     )
-    if bool(state.get("submitted")):
+    if bool(working_state.get("submitted")):
         raise ZenodoPublisherError("Zenodo deposition is already published")
-    expected_files, file_problems = _file_inventory(state)
+    expected_files, file_problems = _file_inventory(working_state)
     if file_problems:
         raise ZenodoPublisherError("cannot publish: " + "; ".join(file_problems))
-    receipt = state.get("verification_receipt")
+    receipt = working_state.get("verification_receipt")
     if not isinstance(receipt, Mapping):
         raise ZenodoPublisherError("publish requires a prior verification receipt")
     _verify_integrity(receipt, key="integrity", schema=ZENODO_VERIFICATION_SCHEMA)
     if receipt.get("status") != "pass" or receipt.get("publication_state") != "draft":
         raise ZenodoPublisherError("publish requires a passing draft verification receipt")
-    if receipt.get("deposition_id") != state.get("deposition_id"):
+    if receipt.get("deposition_id") != working_state.get("deposition_id"):
         raise ZenodoPublisherError("verification receipt deposition identity does not match state")
     if receipt.get("metadata_sha256") != _metadata_sha256(normalized_metadata):
         raise ZenodoPublisherError("verification receipt metadata does not match expected metadata")
     if receipt.get("source_tag") != _source_tag(normalized_metadata):
         raise ZenodoPublisherError("verification receipt source tag does not match metadata")
-    if state.get("release_binding") is not None and receipt.get("release_binding") != state.get(
+    if working_state.get("release_binding") is not None and receipt.get(
         "release_binding"
-    ):
+    ) != working_state.get("release_binding"):
         raise ZenodoPublisherError("verification receipt release binding does not match state")
-    if state.get("release_binding") is not None and receipt.get(
+    if working_state.get("release_binding") is not None and receipt.get(
         "manifest_metadata_sha256"
-    ) != state["release_binding"].get("metadata_sha256"):
+    ) != working_state["release_binding"].get("metadata_sha256"):
         raise ZenodoPublisherError("verification receipt metadata checksum does not match state")
     receipt_files = receipt.get("files")
     expected_receipt_files = [
@@ -1401,10 +1494,9 @@ def publish(  # noqa: C901, PLR0912
     ]
     if receipt_files != expected_receipt_files:
         raise ZenodoPublisherError("verification receipt file inventory does not match state")
-    # Verification seals a receipt into its state argument on success. Use a
-    # deep copy so a fresh-readback mismatch cannot rewrite the caller's state
-    # before publication admission has completed.
-    verification_state = deepcopy(state)
+    # Keep every validation and receipt mutation on private copies. The caller's
+    # state remains byte-identical, including when publication admission fails.
+    verification_state = deepcopy(working_state)
     fresh_report = verify(
         session,
         verification_state,
@@ -1436,11 +1528,11 @@ def publish(  # noqa: C901, PLR0912
     if not published["submitted"]:
         raise ZenodoPublisherError("Zenodo publish response did not mark the deposition submitted")
     for key in ("deposition_id", "record_id", "concept_record_id", "doi"):
-        if published.get(key) != state.get(key):
+        if published.get(key) != working_state.get(key):
             raise ZenodoPublisherError(f"Zenodo publish response changed {key}")
-    published["files"] = list(state["files"])
-    if state.get("release_binding") is not None:
-        published["release_binding"] = dict(state["release_binding"])
+    published["files"] = list(working_state["files"])
+    if working_state.get("release_binding") is not None:
+        published["release_binding"] = dict(working_state["release_binding"])
     published["verification_receipt"] = dict(receipt)
     published["published_from_receipt_sha256"] = receipt["integrity"]["receipt_sha256"]
     return _seal_state(published)
@@ -1457,11 +1549,13 @@ def verify(  # noqa: C901, PLR0912, PLR0915
     """Verify a draft or published deposition and, on pass, seal a receipt.
 
     Returns:
-        A machine-readable verification report. Passing draft verification is
-        also sealed into ``state`` for publication admission.
+        A machine-readable verification report. Passing verification seals a
+        receipt into ``state`` for publication admission; failures leave the
+        caller's state unchanged.
     """
+    working_state = deepcopy(state)
     validated_base = _validated_api_base(api_base)
-    _validate_state_for_operation(state)
+    _validate_state_for_operation(working_state)
     normalized_metadata = _validate_metadata(metadata)
     binding = _normalize_release_binding(release_binding) if release_binding is not None else None
     file_metadata = (
@@ -1470,7 +1564,7 @@ def verify(  # noqa: C901, PLR0912, PLR0915
         else None
     )
     _validate_state_binding(
-        state,
+        working_state,
         binding,
         metadata_contract_sha256=(
             _metadata_sha256(file_metadata or normalized_metadata)
@@ -1478,7 +1572,7 @@ def verify(  # noqa: C901, PLR0912, PLR0915
             else _metadata_sha256(normalized_metadata)
         ),
     )
-    deposition_id = state.get("deposition_id")
+    deposition_id = working_state.get("deposition_id")
     remote = _json_object(
         session.get(
             f"{validated_base}/deposit/depositions/{deposition_id}",
@@ -1496,10 +1590,12 @@ def verify(  # noqa: C901, PLR0912, PLR0915
         problems.append(str(exc))
         remote_optimistic = None
 
+    if remote_state["state"] not in _STABLE_ZENODO_STATES:
+        raise ZenodoPublisherError("Zenodo verify response has an unsupported lifecycle state")
     for key in ("deposition_id", "record_id", "concept_record_id", "doi"):
-        if remote_state.get(key) != state.get(key):
+        if remote_state.get(key) != working_state.get(key):
             problems.append(f"{key} does not match reserved state")
-    expected_submitted = state.get("submitted")
+    expected_submitted = working_state.get("submitted")
     if not isinstance(expected_submitted, bool):
         problems.append("state submitted flag is missing or invalid")
     remote_submitted = remote.get("submitted")
@@ -1530,11 +1626,11 @@ def verify(  # noqa: C901, PLR0912, PLR0915
         problems.append(str(exc))
         source_tag = ""
 
-    expected_files, file_problems = _file_inventory(state)
+    expected_files, file_problems = _file_inventory(working_state)
     problems.extend(file_problems)
     file_inventory_source = remote
     if remote_submitted is True:
-        record_id = state.get("record_id")
+        record_id = working_state.get("record_id")
         public_record = _json_object(
             session.get(
                 f"{validated_base}/records/{record_id}",
@@ -1546,10 +1642,10 @@ def verify(  # noqa: C901, PLR0912, PLR0915
         if public_record.get("id") != record_id:
             problems.append("published record id does not match reserved state")
         if str(public_record.get("conceptrecid") or "") != str(
-            state.get("concept_record_id") or ""
+            working_state.get("concept_record_id") or ""
         ):
             problems.append("published record concept id does not match reserved state")
-        if public_record.get("doi") != state.get("doi"):
+        if public_record.get("doi") != working_state.get("doi"):
             problems.append("published record DOI does not match reserved state")
         if public_record.get("status") != "published":
             problems.append("published record status is not published")
@@ -1560,16 +1656,16 @@ def verify(  # noqa: C901, PLR0912, PLR0915
     if not remote_files:
         problems.append("remote file inventory is empty")
     remote_by_name: dict[str, Mapping[str, Any]] = {}
-    for item in remote_files:
+    for index, item in enumerate(remote_files):
         if not isinstance(item, Mapping):
             problems.append("remote file inventory contains a malformed entry")
             continue
         name = item.get("filename") or item.get("key")
         if not isinstance(name, str) or not name:
-            problems.append("remote file inventory contains an unnamed entry")
+            problems.append(f"remote file inventory contains an unnamed entry at index {index}")
             continue
         if name in remote_by_name:
-            problems.append(f"remote file inventory contains duplicate filename {name}")
+            problems.append(f"remote file inventory contains a duplicate entry at index {index}")
             continue
         remote_by_name[name] = item
     if set(expected_files) != set(remote_by_name):
@@ -1650,10 +1746,10 @@ def verify(  # noqa: C901, PLR0912, PLR0915
                 "schema_version": ZENODO_VERIFICATION_SCHEMA,
                 "status": "pass",
                 "publication_state": publication_state,
-                "deposition_id": state["deposition_id"],
-                "record_id": state.get("record_id"),
-                "concept_record_id": state.get("concept_record_id"),
-                "doi": state.get("doi"),
+                "deposition_id": working_state["deposition_id"],
+                "record_id": working_state.get("record_id"),
+                "concept_record_id": working_state.get("concept_record_id"),
+                "doi": working_state.get("doi"),
                 "metadata_sha256": _metadata_sha256(normalized_metadata),
                 "source_tag": source_tag,
                 "files": receipt_files,
@@ -1664,10 +1760,12 @@ def verify(  # noqa: C901, PLR0912, PLR0915
                 ),
                 **(
                     {
-                        "release_binding": dict(state["release_binding"]),
-                        "manifest_metadata_sha256": state["release_binding"]["metadata_sha256"],
+                        "release_binding": dict(working_state["release_binding"]),
+                        "manifest_metadata_sha256": working_state["release_binding"][
+                            "metadata_sha256"
+                        ],
                     }
-                    if state.get("release_binding") is not None
+                    if working_state.get("release_binding") is not None
                     else {}
                 ),
             },
@@ -1675,7 +1773,7 @@ def verify(  # noqa: C901, PLR0912, PLR0915
             ZENODO_VERIFICATION_SCHEMA,
         )
         report["receipt"] = receipt
-        updated_state = dict(state)
+        updated_state = dict(working_state)
         updated_state["verification_receipt"] = receipt
         sealed_state = _seal_state(updated_state)
         state.clear()

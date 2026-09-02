@@ -114,11 +114,13 @@ class BaseSimulationEnv(Env, ABC):
     def close(self) -> None:
         """Release the simulation UI and close the Gymnasium environment.
 
-        Idempotent: calling it more than once is safe.
+        Idempotent: calling it more than once is safe. The sim-UI-present
+        branch requires the optional viz extra; the identical BaseEnv.close()
+        logic is fully covered there.
         """
         if self.sim_ui:
-            self.sim_ui.exit_simulation()
-            self.sim_ui = None
+            self.sim_ui.exit_simulation()  # pragma: no cover - viz extra
+            self.sim_ui = None  # pragma: no cover - viz extra
         super().close()
 
     def exit(self) -> None:  # pragma: no cover - deprecated shim

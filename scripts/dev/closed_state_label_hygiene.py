@@ -474,7 +474,8 @@ def build_view_command(*, repo: str, number: int) -> list[str]:
     """
     return [
         sys.executable,
-        "scripts/dev/gh_issue_rest.py",
+        "-m",
+        "scripts.dev.gh_issue_rest",
         "view",
         str(number),
         "--repo",

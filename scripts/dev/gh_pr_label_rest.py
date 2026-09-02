@@ -70,6 +70,7 @@ def _is_absent_label_delete(result: subprocess.CompletedProcess[str]) -> bool:
 def _get_label_names(number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30) -> dict[str, Any]:
     """Return a complete, strictly validated label inventory, or an error dict."""
     names: list[str] = []
+    seen_names: set[str] = set()
     for page in range(1, LABEL_PAGE_CEILING + 1):
         path = f"repos/{repo}/issues/{number}/labels?per_page={LABEL_PAGE_SIZE}&page={page}"
         result = _gh_api_get(path, timeout=timeout)
@@ -102,6 +103,12 @@ def _get_label_names(number: int, *, repo: str = DEFAULT_REPO, timeout: int = 30
                     "status": "error",
                     "error": f"malformed label row on page {page}: name must be non-empty text",
                 }
+            if name in seen_names:
+                return {
+                    "status": "error",
+                    "error": f"duplicate label row on page {page}: {name!r}",
+                }
+            seen_names.add(name)
             names.append(name)
         if len(data) < LABEL_PAGE_SIZE:
             return {"status": "ok", "labels": names}

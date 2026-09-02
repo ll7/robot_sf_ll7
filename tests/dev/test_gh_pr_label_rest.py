@@ -127,10 +127,15 @@ class TestLabelRead:
         }
 
     def test_fails_closed_at_page_ceiling(self) -> None:
-        full_page = _mock_labels_payload(*[f"label-{index}" for index in range(LABEL_PAGE_SIZE)])
+        full_pages = [
+            _mock_labels_payload(
+                *[f"label-{page * LABEL_PAGE_SIZE + index}" for index in range(LABEL_PAGE_SIZE)]
+            )
+            for page in range(LABEL_PAGE_CEILING)
+        ]
         with patch(
             "scripts.dev.gh_pr_label_rest._gh_api_get",
-            return_value=_proc(stdout=full_page),
+            side_effect=[_proc(stdout=page) for page in full_pages],
         ) as mock_get:
             result = _get_label_names(5220)
 
@@ -315,6 +320,18 @@ class TestAddLabel:
         assert result["status"] == "error"
         assert "was not found in labels after add" in result["error"]
 
+    def test_fails_closed_when_post_write_readback_has_duplicate_labels(self) -> None:
+        """A duplicate label row makes add verification indeterminate."""
+        with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _proc(stdout=json.dumps({"name": "cheap-lane"})),
+                _proc(stdout=_mock_labels_payload("cheap-lane", "cheap-lane")),
+            ]
+            result = add_label(5220, "cheap-lane")
+
+        assert result["status"] == "error"
+        assert "duplicate label" in result["error"]
+
     def test_fails_closed_for_negative_number(self) -> None:
         """Zero or negative numbers must be rejected without network calls."""
         with patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post:
@@ -439,6 +456,18 @@ class TestRemoveLabel:
 
         assert result["status"] == "error"
         assert "was still found" in result["error"]
+
+    def test_fails_closed_when_remove_readback_has_duplicate_labels(self) -> None:
+        """A duplicate label row makes remove verification indeterminate."""
+        with patch("scripts.dev.gh_pr_label_rest.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _proc(stdout=""),
+                _proc(stdout=_mock_labels_payload("bug", "bug")),
+            ]
+            result = remove_label(5220, "state:running")
+
+        assert result["status"] == "error"
+        assert "duplicate label" in result["error"]
 
     def test_fails_closed_for_negative_number(self) -> None:
         """Zero or negative numbers must be rejected without network calls."""

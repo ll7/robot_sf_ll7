@@ -204,6 +204,27 @@ def test_build_search_command_uses_read_only_closed_issue_search() -> None:
     assert "edit" not in command
 
 
+def test_build_view_command_uses_module_invocation() -> None:
+    """The managed interpreter must invoke the REST helper as a package module."""
+    command = closed_state_label_hygiene.build_view_command(
+        repo="ll7/robot_sf_ll7",
+        number=12,
+    )
+
+    assert command[:3] == [sys.executable, "-m", "scripts.dev.gh_issue_rest"]
+    assert command[3:] == [
+        "view",
+        "12",
+        "--repo",
+        "ll7/robot_sf_ll7",
+        "--json",
+        "number",
+        "state",
+        "url",
+        "is_pull_request",
+    ]
+
+
 def test_closure_workflow_routes_state_label_io_through_rest_helpers() -> None:
     """The closure Action must not use native issue label commands."""
     workflow = (

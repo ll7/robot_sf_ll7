@@ -20,6 +20,10 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/issue_8222_obstacle_force_compatibility.md
+  status: current
+  freshness: policy
+  area: planner
 - path: docs/context/pedestrian_goal_force_prediction_research.md
   status: current
   freshness: maintained

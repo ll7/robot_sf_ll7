@@ -22,6 +22,7 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
 import stat
 import sys
 import tarfile
@@ -55,6 +56,13 @@ ZENODO_API_BASE = "https://zenodo.org/api"
 DEFAULT_NETWORK_TIMEOUT = 60.0
 DEFAULT_DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 DEFAULT_MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024 * 1024
+# The largest known publication archive expands to roughly 686 MiB.  These
+# limits leave room for that release while bounding metadata and decompressed
+# output from untrusted archives before the audit reads it further.
+DEFAULT_MAX_ARCHIVE_MEMBERS = 100_000
+DEFAULT_MAX_MEMBER_EXPANDED_BYTES = 1 * 1024 * 1024 * 1024
+DEFAULT_MAX_ARCHIVE_EXPANDED_BYTES = 2 * 1024 * 1024 * 1024
+DEFAULT_EXTRACTION_CHUNK_SIZE = 1024 * 1024
 _ARCHIVE_SUFFIXES = (".zip", ".tar.gz", ".tgz")
 ERRATUM_CUSTODY_ASSET = "publication_custody.json"
 ERRATUM_MANIFEST_ASSET = "publication_manifest.json"
@@ -151,16 +159,115 @@ def _safe_extraction_target(
     return target
 
 
-def _extract_zip_members(archive_path: Path, dest: Path) -> list[str]:
-    """Validate and extract one ZIP archive.
+def _validate_extraction_limits(
+    *, max_members: int, max_member_expanded_bytes: int, max_expanded_bytes: int, chunk_size: int
+) -> None:
+    """Reject invalid archive extraction bounds before touching the destination."""
+    for name, value in (
+        ("max_members", max_members),
+        ("max_member_expanded_bytes", max_member_expanded_bytes),
+        ("max_expanded_bytes", max_expanded_bytes),
+        ("chunk_size", chunk_size),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+
+
+def _prepare_member_parent(dest: Path, target: Path, *, kind: str, member_name: str) -> None:
+    """Create safe parent directories without following archive-created symlinks."""
+    try:
+        relative_parts = target.parent.relative_to(dest).parts
+    except ValueError as exc:
+        raise ValueError(f"{kind} path escape: {member_name}") from exc
+    current = dest
+    for part in relative_parts:
+        current /= part
+        if current.is_symlink():
+            raise ValueError(f"{kind} member traverses symbolic link: {member_name}")
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(f"{kind} member conflicts with directory: {member_name}")
+        else:
+            current.mkdir()
+
+
+def _prepare_member_directory(dest: Path, target: Path, *, kind: str, member_name: str) -> None:
+    """Create one validated archive directory without replacing existing entries."""
+    _prepare_member_parent(dest, target, kind=kind, member_name=member_name)
+    if target.is_symlink():
+        raise ValueError(f"{kind} member is a symbolic link: {member_name}")
+    if target.exists() and not target.is_dir():
+        raise ValueError(f"{kind} member conflicts with directory: {member_name}")
+    target.mkdir(exist_ok=True)
+
+
+def _stream_archive_member(  # noqa: PLR0913
+    source: Any,
+    target: Path,
+    *,
+    kind: str,
+    member_name: str,
+    declared_size: int,
+    expanded_bytes: int,
+    max_member_expanded_bytes: int,
+    max_expanded_bytes: int,
+    chunk_size: int,
+) -> int:
+    """Copy one archive member while enforcing declared and observed byte bounds.
 
     Returns:
-        The validated member names.
+        Updated cumulative expanded byte count.
+    """
+    written_bytes = 0
+    with target.open("xb") as handle:
+        while True:
+            chunk = source.read(chunk_size)
+            if not chunk:
+                break
+            if not isinstance(chunk, (bytes, bytearray, memoryview)):
+                raise ValueError(f"{kind} member yielded a non-byte chunk: {member_name}")
+            chunk_bytes = bytes(chunk)
+            next_written_bytes = written_bytes + len(chunk_bytes)
+            if next_written_bytes > max_member_expanded_bytes:
+                raise ValueError(
+                    f"{kind} member exceeds per-file expanded byte limit: {member_name}"
+                )
+            if expanded_bytes + next_written_bytes > max_expanded_bytes:
+                raise ValueError(f"{kind} archive exceeds cumulative expanded byte limit")
+            write_result = handle.write(chunk_bytes)
+            if write_result != len(chunk_bytes):
+                raise OSError(f"short write for {kind} member {member_name}")
+            written_bytes = next_written_bytes
+    if written_bytes != declared_size:
+        raise ValueError(
+            f"{kind} member expanded size mismatch for {member_name}: "
+            f"observed {written_bytes}, expected {declared_size}"
+        )
+    return expanded_bytes + written_bytes
+
+
+def _extract_zip_members(  # noqa: C901
+    archive_path: Path,
+    dest: Path,
+    *,
+    max_members: int,
+    max_member_expanded_bytes: int,
+    max_expanded_bytes: int,
+    chunk_size: int,
+) -> list[str]:
+    """Validate and stream one ZIP archive into ``dest``.
+
+    Returns:
+        Validated archive member names.
     """
     with zipfile.ZipFile(archive_path) as archive:
+        infos = archive.infolist()
+        if len(infos) > max_members:
+            raise ValueError(f"zip member count exceeds limit: {len(infos)} > {max_members}")
         seen: set[str] = set()
         seen_targets: set[Path] = set()
-        for info in archive.infolist():
+        declared_expanded_bytes = 0
+        for info in infos:
             if info.filename in seen:
                 raise ValueError(f"zip contains duplicate member: {info.filename}")
             seen.add(info.filename)
@@ -170,25 +277,71 @@ def _extract_zip_members(archive_path: Path, dest: Path) -> list[str]:
             if target in seen_targets:
                 raise ValueError(f"zip contains colliding member: {info.filename}")
             seen_targets.add(target)
-            if stat.S_IFMT(info.external_attr >> 16) == stat.S_IFLNK:
+            zip_type = stat.S_IFMT(info.external_attr >> 16)
+            if zip_type == stat.S_IFLNK:
                 raise ValueError(f"zip contains symbolic link: {info.filename}")
-        archive.extractall(dest)
-        return archive.namelist()
+            if zip_type not in {0, stat.S_IFREG, stat.S_IFDIR}:
+                raise ValueError(f"zip contains non-regular member: {info.filename}")
+            if info.is_dir():
+                continue
+            if info.file_size > max_member_expanded_bytes:
+                raise ValueError(
+                    f"zip member exceeds per-file expanded byte limit: {info.filename}"
+                )
+            declared_expanded_bytes += info.file_size
+            if declared_expanded_bytes > max_expanded_bytes:
+                raise ValueError("zip archive exceeds cumulative expanded byte limit")
+
+        expanded_bytes = 0
+        for info in infos:
+            target = _safe_extraction_target(
+                dest, info.filename, kind="zip", directory=info.is_dir()
+            )
+            if info.is_dir():
+                _prepare_member_directory(dest, target, kind="zip", member_name=info.filename)
+                continue
+            _prepare_member_parent(dest, target, kind="zip", member_name=info.filename)
+            with archive.open(info, "r") as source:
+                expanded_bytes = _stream_archive_member(
+                    source,
+                    target,
+                    kind="zip",
+                    member_name=info.filename,
+                    declared_size=info.file_size,
+                    expanded_bytes=expanded_bytes,
+                    max_member_expanded_bytes=max_member_expanded_bytes,
+                    max_expanded_bytes=max_expanded_bytes,
+                    chunk_size=chunk_size,
+                )
+        return [info.filename for info in infos]
 
 
-def _extract_tar_members(archive_path: Path, dest: Path) -> list[str]:
-    """Validate and extract one TAR archive.
+def _extract_tar_members(  # noqa: C901
+    archive_path: Path,
+    dest: Path,
+    *,
+    max_members: int,
+    max_member_expanded_bytes: int,
+    max_expanded_bytes: int,
+    chunk_size: int,
+) -> list[str]:
+    """Validate and stream one TAR archive into ``dest``.
 
     Returns:
-        The validated member names.
+        Validated archive member names.
     """
-    with tarfile.open(archive_path) as archive:
+    with tarfile.open(archive_path, mode="r:*") as archive:
         seen: set[str] = set()
         seen_targets: set[Path] = set()
-        for member in archive.getmembers():
+        members: list[str] = []
+        expanded_bytes = 0
+        for member in archive:
+            if len(members) >= max_members:
+                raise ValueError(f"tar member count exceeds limit: {max_members}")
             if member.name in seen:
                 raise ValueError(f"tar contains duplicate member: {member.name}")
             seen.add(member.name)
+            members.append(member.name)
             target = _safe_extraction_target(
                 dest, member.name, kind="tar", directory=member.isdir()
             )
@@ -197,34 +350,128 @@ def _extract_tar_members(archive_path: Path, dest: Path) -> list[str]:
             seen_targets.add(target)
             if not (member.isdir() or member.isreg()):
                 raise ValueError(f"tar contains non-regular member: {member.name}")
-        archive.extractall(dest, filter="data")
-        return archive.getnames()
+            if member.isdir():
+                _prepare_member_directory(dest, target, kind="tar", member_name=member.name)
+                continue
+            if isinstance(member.size, bool) or not isinstance(member.size, int) or member.size < 0:
+                raise ValueError(f"tar member has an invalid size: {member.name}")
+            if member.size > max_member_expanded_bytes:
+                raise ValueError(f"tar member exceeds per-file expanded byte limit: {member.name}")
+            if expanded_bytes + member.size > max_expanded_bytes:
+                raise ValueError("tar archive exceeds cumulative expanded byte limit")
+            _prepare_member_parent(dest, target, kind="tar", member_name=member.name)
+            source = archive.extractfile(member)
+            if source is None:
+                raise ValueError(f"tar member has no readable data: {member.name}")
+            with source:
+                expanded_bytes = _stream_archive_member(
+                    source,
+                    target,
+                    kind="tar",
+                    member_name=member.name,
+                    declared_size=member.size,
+                    expanded_bytes=expanded_bytes,
+                    max_member_expanded_bytes=max_member_expanded_bytes,
+                    max_expanded_bytes=max_expanded_bytes,
+                    chunk_size=chunk_size,
+                )
+        return members
 
 
-def _extract_members(archive_path: Path, dest: Path) -> list[str]:
-    """Defensively extract an archive and return the member names.
+def _extract_members(  # noqa: C901
+    archive_path: Path,
+    dest: Path,
+    *,
+    max_members: int = DEFAULT_MAX_ARCHIVE_MEMBERS,
+    max_member_expanded_bytes: int = DEFAULT_MAX_MEMBER_EXPANDED_BYTES,
+    max_expanded_bytes: int = DEFAULT_MAX_ARCHIVE_EXPANDED_BYTES,
+    chunk_size: int = DEFAULT_EXTRACTION_CHUNK_SIZE,
+) -> list[str]:
+    """Safely stream an archive and return its member names.
+
+    Extraction is staged and committed only after every member has been read.
+    A rejected archive therefore leaves no partial output at ``dest``.
 
     Returns:
-        The extracted member names.
+        Validated archive member names.
 
     Raises:
-        ValueError: On path escape, unsupported archive, or read failure.
+        ValueError: On path escape, unsupported archive, limit violation, or read failure.
     """
+    _validate_extraction_limits(
+        max_members=max_members,
+        max_member_expanded_bytes=max_member_expanded_bytes,
+        max_expanded_bytes=max_expanded_bytes,
+        chunk_size=chunk_size,
+    )
     lexical_dest = Path(dest)
     if lexical_dest.is_symlink():
         raise ValueError("extraction destination must not be a symlink")
-    dest = lexical_dest.resolve()
-    dest.mkdir(parents=True, exist_ok=True)
-    if lexical_dest.is_symlink():
+    resolved_dest = lexical_dest.resolve()
+    if resolved_dest.exists() and resolved_dest.is_symlink():
         raise ValueError("extraction destination must not be a symlink")
+    if resolved_dest.exists() and not resolved_dest.is_dir():
+        raise ValueError("extraction destination must be a directory")
+    resolved_dest.parent.mkdir(parents=True, exist_ok=True)
+    staging: Path | None = None
+    previous: Path | None = None
     try:
+        staging = Path(
+            tempfile.mkdtemp(
+                prefix=f".{resolved_dest.name or 'extraction'}-", dir=resolved_dest.parent
+            )
+        )
         if zipfile.is_zipfile(archive_path):
-            return _extract_zip_members(archive_path, dest)
-        if tarfile.is_tarfile(archive_path):
-            return _extract_tar_members(archive_path, dest)
-        raise ValueError(f"unsupported archive format: {archive_path.name}")
-    except (OSError, tarfile.TarError, zipfile.BadZipFile) as exc:
-        raise ValueError(f"extraction failed for {archive_path.name}: {exc}") from exc
+            members = _extract_zip_members(
+                archive_path,
+                staging,
+                max_members=max_members,
+                max_member_expanded_bytes=max_member_expanded_bytes,
+                max_expanded_bytes=max_expanded_bytes,
+                chunk_size=chunk_size,
+            )
+        elif tarfile.is_tarfile(archive_path):
+            members = _extract_tar_members(
+                archive_path,
+                staging,
+                max_members=max_members,
+                max_member_expanded_bytes=max_member_expanded_bytes,
+                max_expanded_bytes=max_expanded_bytes,
+                chunk_size=chunk_size,
+            )
+        else:
+            raise ValueError(f"unsupported archive format: {archive_path.name}")
+
+        if lexical_dest.is_symlink() or resolved_dest.is_symlink():
+            raise ValueError("extraction destination must not be a symlink")
+        if resolved_dest.exists():
+            previous = Path(
+                tempfile.mkdtemp(
+                    prefix=f".{resolved_dest.name or 'extraction'}-old-",
+                    dir=resolved_dest.parent,
+                )
+            )
+            previous.rmdir()
+            resolved_dest.replace(previous)
+        try:
+            staging.replace(resolved_dest)
+        except Exception:
+            if previous is not None and previous.exists() and not resolved_dest.exists():
+                previous.replace(resolved_dest)
+            raise
+        if previous is not None:
+            shutil.rmtree(previous, ignore_errors=True)
+        staging = None
+        return members
+    except (OSError, RuntimeError, tarfile.TarError, zipfile.BadZipFile) as exc:
+        raise ValueError(
+            f"extraction failed for {archive_path.name}: {type(exc).__name__}"
+        ) from exc
+    finally:
+        if staging is not None:
+            shutil.rmtree(staging, ignore_errors=True)
+        if previous is not None and previous.exists():
+            shutil.rmtree(previous, ignore_errors=True)
 
 
 def _load_checksum_map(extracted_dir: Path, problems: list[str]) -> dict[str, str]:
@@ -1878,6 +2125,55 @@ def _download_public_asset(  # noqa: C901
     }, downloaded_bytes + observed_size
 
 
+def _sanitize_network_text(value: str, *, private_root: Path | None) -> str:
+    """Replace temporary audit paths with stable bundle-relative labels.
+
+    Returns:
+        Sanitized text.
+    """
+    if private_root is None:
+        return value
+    roots = (private_root, private_root.resolve())
+    replacements = tuple(
+        (root / suffix, public_path)
+        for root in roots
+        for suffix, public_path in (
+            (Path("github/_extracted"), "github-bundle"),
+            (Path("github"), "github"),
+            (Path("zenodo"), "zenodo"),
+            (Path("predecessor-github"), "predecessor-github"),
+            (Path("predecessor-zenodo"), "predecessor-zenodo"),
+            (Path(), "audit"),
+        )
+    )
+    sanitized = value
+    for private_path, public_path in replacements:
+        sanitized = sanitized.replace(str(private_path), public_path)
+    return sanitized
+
+
+def _sanitize_network_value(value: Any, *, private_root: Path | None) -> Any:
+    """Recursively remove private temporary paths from a receipt payload.
+
+    Returns:
+        A JSON-compatible value with temporary paths sanitized.
+    """
+    if isinstance(value, str):
+        return _sanitize_network_text(value, private_root=private_root)
+    if isinstance(value, Mapping):
+        return {
+            _sanitize_network_text(str(key), private_root=private_root): _sanitize_network_value(
+                nested, private_root=private_root
+            )
+            for key, nested in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_network_value(item, private_root=private_root) for item in value]
+    if isinstance(value, tuple):
+        return [_sanitize_network_value(item, private_root=private_root) for item in value]
+    return value
+
+
 def _failure_network_receipt(
     *,
     tag: str,
@@ -1886,13 +2182,14 @@ def _failure_network_receipt(
     problem: str,
     discovery: Mapping[str, Any] | None = None,
     predecessor: Mapping[str, Any] | None = None,
+    private_root: Path | None = None,
 ) -> dict[str, Any]:
     """Build a stable credential-free receipt for a non-pass network audit.
 
     Returns:
         A failure receipt without temporary paths or request metadata.
     """
-    return {
+    receipt = {
         "schema": NETWORK_SCHEMA,
         "ok": False,
         "status": status,
@@ -1905,6 +2202,7 @@ def _failure_network_receipt(
         "downloads": {"github": [], "zenodo": [], "bytes": 0},
         "audit": None,
     }
+    return _sanitize_network_value(receipt, private_root=private_root)
 
 
 def _receipt_identifier(value: str, *, kind: str) -> str:
@@ -1968,6 +2266,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
     requested_tag = str(tag or "").strip()
     requested_doi = str(doi or "").strip()
     predecessor_receipt: dict[str, Any] | None = None
+    private_temp_root: Path | None = None
     try:
         if (
             not requested_tag
@@ -2124,6 +2423,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
 
         with tempfile.TemporaryDirectory(prefix="robot-sf-published-audit-") as temp_root:
             root = Path(temp_root)
+            private_temp_root = root
             github_dir = root / "github"
             zenodo_dir = root / "zenodo"
             github_downloads: list[dict[str, Any]] = []
@@ -2219,7 +2519,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
             )
             _reconcile_zenodo_erratum_lineage(core, tag=requested_tag, zenodo=zenodo)
         status = "pass" if core["ok"] else "invalid"
-        return {
+        receipt = {
             "schema": NETWORK_SCHEMA,
             "ok": bool(core["ok"]),
             "status": status,
@@ -2236,6 +2536,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
             },
             "audit": core,
         }
+        return _sanitize_network_value(receipt, private_root=private_temp_root)
     except PublishedAuditUnavailable as exc:
         return _failure_network_receipt(
             tag=requested_tag,
@@ -2244,6 +2545,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
             problem=str(exc),
             discovery=locals().get("discovery"),
             predecessor=predecessor_receipt,
+            private_root=private_temp_root,
         )
     except PublishedAuditInvalid as exc:
         return _failure_network_receipt(
@@ -2253,6 +2555,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
             problem=str(exc),
             discovery=locals().get("discovery"),
             predecessor=predecessor_receipt,
+            private_root=private_temp_root,
         )
     except (OSError, ValueError) as exc:
         return _failure_network_receipt(
@@ -2262,6 +2565,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
             problem=f"local audit preparation failed ({type(exc).__name__})",
             discovery=locals().get("discovery"),
             predecessor=predecessor_receipt,
+            private_root=private_temp_root,
         )
     except Exception as exc:  # noqa: BLE001 - final fail-closed receipt boundary
         return _failure_network_receipt(
@@ -2271,6 +2575,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
             problem=f"unexpected audit failure ({type(exc).__name__})",
             discovery=locals().get("discovery"),
             predecessor=predecessor_receipt,
+            private_root=private_temp_root,
         )
 
 

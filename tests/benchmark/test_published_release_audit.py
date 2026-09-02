@@ -51,6 +51,20 @@ def _make_bundle(
         zf.writestr(member, data)
 
 
+def _make_archive(path: Path, archive_kind: str, entries: list[tuple[str, bytes]]) -> None:
+    """Write a small ZIP or TAR archive fixture for bounded-extraction tests."""
+    if archive_kind == "zip":
+        with zipfile.ZipFile(path, "w") as archive:
+            for name, data in entries:
+                archive.writestr(name, data)
+        return
+    with tarfile.open(path, "w") as archive:
+        for name, data in entries:
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            archive.addfile(info, io.BytesIO(data))
+
+
 def _make_erratum_assets(
     github: Path,
     zenodo: Path,
@@ -975,6 +989,58 @@ def test_path_escape_fails_closed(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("archive_kind", ["zip", "tar"])
+def test_archive_member_count_limit_removes_partial_output(
+    tmp_path: Path, archive_kind: str
+) -> None:
+    """Extraction rejects oversized member inventories before committing output."""
+    archive_path = tmp_path / f"member-count.{archive_kind}"
+    _make_archive(archive_path, archive_kind, [(f"member-{index}.txt", b"x") for index in range(3)])
+    destination = tmp_path / "member-count-dest"
+
+    with pytest.raises(ValueError, match="member count exceeds limit"):
+        _extract_members(archive_path, destination, max_members=2)
+
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".member-count-dest-*"))
+
+
+@pytest.mark.parametrize("archive_kind", ["zip", "tar"])
+def test_archive_per_file_expanded_limit_removes_partial_output(
+    tmp_path: Path, archive_kind: str
+) -> None:
+    """Extraction bounds each member's expanded bytes before writing a bomb."""
+    archive_path = tmp_path / f"per-file.{archive_kind}"
+    _make_archive(archive_path, archive_kind, [("large.txt", b"1234")])
+    destination = tmp_path / "per-file-dest"
+
+    with pytest.raises(ValueError, match="per-file expanded byte limit"):
+        _extract_members(archive_path, destination, max_member_expanded_bytes=3)
+
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".per-file-dest-*"))
+
+
+@pytest.mark.parametrize("archive_kind", ["zip", "tar"])
+def test_archive_cumulative_expanded_limit_removes_partial_output(
+    tmp_path: Path, archive_kind: str
+) -> None:
+    """Extraction bounds total expanded bytes across all regular members."""
+    archive_path = tmp_path / f"cumulative.{archive_kind}"
+    _make_archive(
+        archive_path,
+        archive_kind,
+        [("first.txt", b"123"), ("second.txt", b"456")],
+    )
+    destination = tmp_path / "cumulative-dest"
+
+    with pytest.raises(ValueError, match="cumulative expanded byte limit"):
+        _extract_members(archive_path, destination, max_expanded_bytes=5)
+
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".cumulative-dest-*"))
+
+
+@pytest.mark.parametrize("archive_kind", ["zip", "tar"])
 def test_sibling_prefix_escape_fails_closed(tmp_path: Path, archive_kind: str) -> None:
     """A sibling whose name begins with the destination prefix is still outside it."""
     archive_path = tmp_path / f"evil.{archive_kind}"
@@ -1008,6 +1074,19 @@ def test_zip_duplicate_and_symlink_members_fail_closed(tmp_path: Path) -> None:
         archive.writestr(info, "target")
     with pytest.raises(ValueError, match="symbolic link"):
         _extract_members(symlink, tmp_path / "symlink-dest")
+
+
+def test_zip_special_unix_member_types_fail_closed(tmp_path: Path) -> None:
+    """ZIP device-like entries cannot become files during release-audit extraction."""
+    special = tmp_path / "special.zip"
+    info = zipfile.ZipInfo("device")
+    info.create_system = 3
+    info.external_attr = (stat.S_IFCHR | 0o600) << 16
+    with zipfile.ZipFile(special, "w") as archive:
+        archive.writestr(info, b"device-bytes")
+
+    with pytest.raises(ValueError, match="non-regular member"):
+        _extract_members(special, tmp_path / "special-dest")
 
 
 @pytest.mark.parametrize("archive_kind", ["zip", "tar"])
@@ -1350,6 +1429,7 @@ def _network_fixture(
     zenodo_doi: str = "10.5281/zenodo.1234567",
     release_tag: str = "paper-matrix-v2-h600-s30",
     predecessor_doi: str | None = None,
+    corrupt_member_checksum: bool = False,
 ) -> tuple[_PublicSession, bytes, str, str, str]:
     """Build a complete mocked GitHub/Zenodo public response set."""
     del tmp_path
@@ -1360,6 +1440,8 @@ def _network_fixture(
     bundle_buffer = io.BytesIO()
     with zipfile.ZipFile(bundle_buffer, "w") as archive:
         archive.writestr("manifest.json", b"network-fixture")
+        if corrupt_member_checksum:
+            archive.writestr("checksums.sha256", f"{'0' * 64}  manifest.json\n")
     bundle = bundle_buffer.getvalue()
     digest = hashlib.sha256(bundle).hexdigest()
     github_release_url = f"{github_base}/repos/ll7/robot_sf_ll7/releases/tags/{tag}"
@@ -1552,6 +1634,40 @@ def test_network_audit_discovers_and_streams_public_assets(tmp_path: Path) -> No
     assert all(kwargs["allow_redirects"] is True for _, kwargs, _ in session.calls)
     assert all("stream" in kwargs for url, kwargs, _ in session.calls if "bundle.zip" in url)
     assert "robot-sf-published-audit-" not in json.dumps(receipt)
+
+
+def test_network_invalid_receipt_sanitizes_private_temp_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Invalid receipts retain bundle diagnostics without private temporary roots."""
+    session, _, tag, github_base, zenodo_base = _network_fixture(
+        tmp_path, corrupt_member_checksum=True
+    )
+    original_verify = published_audit_module._verify_internal_checksums
+    seen: dict[str, str] = {}
+
+    def leaking_verify(extracted_dir: Path, members: list[str]) -> list[str]:
+        problems = original_verify(extracted_dir, members)
+        assert problems
+        private_root = extracted_dir.parents[1]
+        seen["private_root"] = str(private_root)
+        seen["resolved_private_root"] = str(private_root.resolve())
+        return [*problems, f"diagnostic path: {extracted_dir / 'manifest.json'}"]
+
+    monkeypatch.setattr(published_audit_module, "_verify_internal_checksums", leaking_verify)
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+
+    serialized = json.dumps(receipt, sort_keys=True)
+    assert receipt["status"] == "invalid"
+    assert seen["private_root"] not in serialized
+    assert seen["resolved_private_root"] not in serialized
+    assert "github-bundle/manifest.json" in serialized
 
 
 def test_network_erratum_resolves_and_authenticates_predecessor(

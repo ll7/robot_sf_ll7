@@ -82,9 +82,10 @@ class SimulationUICloseMixin:
 
     def _release_sim_ui(self) -> None:
         """Tear down the simulation UI, if one is attached."""
-        if self.sim_ui:
-            self.sim_ui.exit_simulation()
-            self.sim_ui = None
+        sim_ui = self.sim_ui
+        self.sim_ui = None
+        if sim_ui is not None:
+            sim_ui.exit_simulation()
 
     def close(self) -> None:
         """Release simulation resources and close the Gymnasium environment.

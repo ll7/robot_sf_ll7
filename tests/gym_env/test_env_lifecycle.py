@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import sys
 import warnings
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -22,6 +24,14 @@ class _FakeSimUi:
 
     def exit_simulation(self) -> None:
         self.exit_calls += 1
+
+
+class _FailingSimUi(_FakeSimUi):
+    """Raise during teardown to exercise failure-path idempotence."""
+
+    def exit_simulation(self) -> None:
+        self.exit_calls += 1
+        raise RuntimeError("sim UI teardown failed")
 
 
 class _MinimalEnv(BaseEnv):
@@ -64,6 +74,43 @@ def test_close_without_sim_ui_is_safe() -> None:
     env = _MinimalEnv()
     env.close()
     assert env.sim_ui is None
+
+
+def test_close_clears_sim_ui_when_teardown_raises() -> None:
+    """A failed UI teardown is not retried by a later close call."""
+    env = _MinimalEnv()
+    sim_ui = _FailingSimUi()
+    env.sim_ui = sim_ui
+
+    with pytest.raises(RuntimeError, match="sim UI teardown failed"):
+        env.close()
+
+    assert env.sim_ui is None
+    assert sim_ui.exit_calls == 1
+    env.close()
+    assert sim_ui.exit_calls == 1
+
+
+def test_debug_ped_policy_closes_after_the_rollout_loop() -> None:
+    """The long-running debugger must not release its environment per iteration."""
+    source_path = Path(__file__).resolve().parents[2] / "scripts" / "debug_ped_policy.py"
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    run_function = next(
+        node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "run"
+    )
+    rollout_loop = next(node for node in run_function.body if isinstance(node, ast.For))
+    close_calls = [
+        node
+        for node in ast.walk(run_function)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "close"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "env"
+    ]
+
+    assert len(close_calls) == 1
+    assert close_calls[0].lineno > rollout_loop.end_lineno
 
 
 def test_close_finalizes_active_jsonl_recorder_once(tmp_path) -> None:

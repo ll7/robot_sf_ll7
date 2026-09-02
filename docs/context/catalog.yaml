@@ -24,6 +24,10 @@ entries:
   status: current
   freshness: maintained
   area: research_contract
+- path: docs/context/core_contract_v1.md
+  status: current
+  freshness: maintained
+  area: research_contract
 - path: docs/context/evidence/issue_8073_goal_candidate_provider_smoke_2026-09-01.json
   status: evidence
   freshness: evidence

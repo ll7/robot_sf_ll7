@@ -326,7 +326,7 @@ class FastPysfWrapper:
                     self.sim.config.obstacle_force_config.factor,
                 )
                 applied = True
-            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError) as exc:
+            except (FloatingPointError, np.linalg.LinAlgError) as exc:
                 self._record_fallback("obstacle_force_dropped", exc)
         if applied and self._obstacle_force_enabled():
             self._obstacle_force_applied = True
@@ -357,7 +357,7 @@ class FastPysfWrapper:
             if self._obstacle_force_enabled():
                 self._obstacle_force_applied = True
             return forces * float(self.sim.config.obstacle_force_config.factor)
-        except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError) as exc:
+        except (FloatingPointError, np.linalg.LinAlgError) as exc:
             self._record_fallback("obstacle_force_batch_pointwise", exc)
             return np.asarray(
                 [self._compute_obstacle_force_at_point(point) for point in points],

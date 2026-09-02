@@ -107,7 +107,7 @@ def test_notebook_01_action_reward_trace_is_reproducible() -> None:
             if terminated or truncated:
                 env.reset(seed=SEED)
                 env.action_space.seed(SEED)
-        env.exit()
+        env.close()
         return rewards
 
     assert run_trace() == run_trace(), (
@@ -147,6 +147,46 @@ def test_generator_produces_valid_notebooks(tmp_path: Path) -> None:
     for name in EXPECTED_NOTEBOOKS:
         nb = nbformat.read(tmp_path / name, as_version=4)
         assert nb.cells, f"generated {name} has no cells"
+
+
+def test_generator_preserves_close_lifecycle_in_canonical_notebooks(tmp_path: Path) -> None:
+    """Generated notebooks must keep the public close() lifecycle contract."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "gen_lifecycle", REPO_ROOT / "scripts" / "dev" / "generate_quickstart_notebooks.py"
+    )
+    assert spec and spec.loader
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    gen.OUT_DIR = tmp_path
+    gen.main()
+
+    for name in ("01_run_first_episode.ipynb", "03_visualize_trace.ipynb"):
+        nb = nbformat.read(tmp_path / name, as_version=4)
+        joined = "\n".join(c.source for c in nb.cells if c.cell_type == "code")
+        assert "env.close()" in joined, f"generated {name} must close its environment"
+        assert "env.exit()" not in joined, f"generated {name} must not reintroduce env.exit()"
+
+
+def test_generator_is_byte_reproducible_in_fresh_directories(tmp_path: Path) -> None:
+    """Fresh generator runs must not randomize notebook cell IDs."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "gen_reproducible", REPO_ROOT / "scripts" / "dev" / "generate_quickstart_notebooks.py"
+    )
+    assert spec and spec.loader
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+
+    outputs: list[dict[str, bytes]] = []
+    for directory in (tmp_path / "first", tmp_path / "second"):
+        gen.OUT_DIR = directory
+        gen.main()
+        outputs.append({path.name: path.read_bytes() for path in directory.glob("*.ipynb")})
+
+    assert outputs[0] == outputs[1]
 
 
 @pytest.mark.slow
@@ -256,5 +296,4 @@ def test_notebook_03_locates_fresh_recording_with_stale_present(tmp_path: Path) 
             "discovery must not select the stale higher episode id"
         )
     finally:
-        env.close_recorder()
-        env.exit()
+        env.close()

@@ -156,7 +156,7 @@ def run():
             if done:
                 break
     finally:
-        env.exit()
+        env.close()
 
 
 if __name__ == "__main__":

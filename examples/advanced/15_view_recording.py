@@ -79,7 +79,7 @@ def test_simulation(map_definition: MapDefinition):
         env.render()
 
     env.reset()  # Save the recording
-    env.exit()
+    env.close()
 
 
 def convert_map(svg_file: str):

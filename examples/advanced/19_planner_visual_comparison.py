@@ -217,7 +217,7 @@ def rollout_policy(
                 )
                 break
     finally:
-        env.exit()
+        env.close()
 
     return RolloutResult(
         name=name,

@@ -19,7 +19,7 @@ def training():
         if done:
             obs = env.reset()
             env.render()
-    env.exit()
+    env.close()
 
 
 if __name__ == "__main__":

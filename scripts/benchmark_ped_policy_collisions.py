@@ -395,10 +395,7 @@ def run_benchmark(
             if (episode_idx + 1) % 25 == 0 or (episode_idx + 1) == num_episodes:
                 logger.info("Completed {}/{} episodes", episode_idx + 1, num_episodes)
     finally:
-        if hasattr(env, "exit"):
-            env.exit()
-        else:
-            env.close()
+        env.close()
 
     wall_time = float(time.perf_counter() - t0)
     total_steps = int(sum(int(v) for v in episode_steps))

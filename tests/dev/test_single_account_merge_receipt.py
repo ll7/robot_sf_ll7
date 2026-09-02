@@ -1068,3 +1068,32 @@ def test_report_only_mode_fails_closed_on_unwritable_output_path(
     payload = json.loads(captured.out)
     assert payload["status"] == "error"
     assert "failed to write output receipt" in payload["error"]
+
+
+def test_report_only_mode_fails_closed_on_invalid_output_path(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    receipt = _receipt()
+
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (_live_evidence(receipt), None),
+    )
+
+    exit_code = receipt_module.main(
+        [
+            "--pr",
+            "42",
+            "--repo",
+            "owner/repo",
+            "--mode",
+            "report-only",
+            "--output",
+            "\x00invalid",
+        ]
+    )
+    assert exit_code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "error"
+    assert "failed to write output receipt" in payload["error"]

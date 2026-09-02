@@ -1953,7 +1953,7 @@ def _write_json(path: Path, value: Mapping[str, Any]) -> str | None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         return f"failed to write output receipt: {exc}"
     return None
 

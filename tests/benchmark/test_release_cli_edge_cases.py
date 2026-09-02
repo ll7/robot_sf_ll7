@@ -83,6 +83,92 @@ def test_release_cli_dispatches_each_zenodo_mode(
     assert "secret" not in capsys.readouterr().out
 
 
+def test_release_cli_dispatches_new_version_without_loading_existing_state(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The successor mode reserves a fresh state file from explicit identities."""
+    calls: list[tuple[str, object]] = []
+    state = {
+        "schema_version": "robot-sf-zenodo-deposition.v1",
+        "deposition_id": 8,
+        "predecessor_deposition_id": 7,
+    }
+    args = _args("new-version", tmp_path)
+    args.predecessor_deposition_id = 7
+    args.expected_predecessor_doi = "10.5281/zenodo.7"
+    args.expected_concept_doi = "10.5281/zenodo.6"
+    monkeypatch.setattr(release_cli.zenodo_publisher, "build_session", lambda path: object())
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "load_dataset_metadata",
+        lambda path: {"upload_type": "dataset"},
+    )
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "load_state",
+        lambda path: (_ for _ in ()).throw(AssertionError("new-version must not load state")),
+    )
+
+    def new_version(session, metadata, **kwargs):
+        calls.append(("new-version", kwargs))
+        return state
+
+    monkeypatch.setattr(release_cli.zenodo_publisher, "new_version", new_version)
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "write_state",
+        lambda path, value: calls.append(("write_state", value)),
+    )
+
+    assert release_cli.handle(args) == 0
+    assert calls[0] == (
+        "new-version",
+        {
+            "predecessor_deposition_id": 7,
+            "expected_predecessor_doi": "10.5281/zenodo.7",
+            "expected_concept_doi": "10.5281/zenodo.6",
+            "api_base": "https://example.test/api",
+        },
+    )
+    assert calls[1] == ("write_state", state)
+    assert "secret" not in capsys.readouterr().out
+
+
+def test_release_cli_parser_exposes_new_version_identity_arguments() -> None:
+    """The public release parser exposes the successor arguments and optional manifest."""
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+    release_cli.build_subparser(subparsers)
+
+    args = parser.parse_args(
+        [
+            "release",
+            "zenodo",
+            "new-version",
+            "--token-file",
+            "token",
+            "--state",
+            "state.json",
+            "--metadata",
+            "metadata.json",
+            "--predecessor-deposition-id",
+            "7",
+            "--expected-predecessor-doi",
+            "10.5281/zenodo.7",
+            "--expected-concept-doi",
+            "10.5281/zenodo.6",
+        ]
+    )
+
+    assert args.zenodo_mode == "new-version"
+    assert args.predecessor_deposition_id == 7
+    assert args.expected_predecessor_doi == "10.5281/zenodo.7"
+    assert args.expected_concept_doi == "10.5281/zenodo.6"
+    assert args.manifest is None
+
+
 def test_release_cli_recovers_without_loading_state_or_reserving(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

@@ -26,7 +26,7 @@ def build_subparser(subparsers: Any) -> None:
     modes = release.add_subparsers(dest="release_cmd", required=True)
     zenodo = modes.add_parser("zenodo", help="Direct Zenodo benchmark-dataset publisher.")
     zenodo_modes = zenodo.add_subparsers(dest="zenodo_mode", required=True)
-    for mode in ("reserve", "recover", "upload", "publish", "verify"):
+    for mode in ("reserve", "recover", "upload", "publish", "verify", "new-version"):
         parser = zenodo_modes.add_parser(mode)
         parser.add_argument("--token-file", type=Path, required=True)
         parser.add_argument("--state", type=Path, required=True)
@@ -37,10 +37,14 @@ def build_subparser(subparsers: Any) -> None:
             required=mode == "recover",
             help="Validated benchmark release manifest to bind Zenodo operations to.",
         )
-        if mode in {"reserve", "recover", "publish", "verify"}:
+        if mode in {"reserve", "recover", "publish", "verify", "new-version"}:
             parser.add_argument("--metadata", type=Path, required=True)
         if mode == "recover":
             parser.add_argument("--deposition-id", type=int, required=True)
+        if mode == "new-version":
+            parser.add_argument("--predecessor-deposition-id", type=int, required=True)
+            parser.add_argument("--expected-predecessor-doi", required=True)
+            parser.add_argument("--expected-concept-doi", required=True)
         if mode == "upload":
             parser.add_argument("files", nargs="+", type=Path)
     audit = modes.add_parser(
@@ -353,6 +357,31 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
                 state = zenodo_publisher.reserve(
                     session, metadata, api_base=args.api_base, **operation_kwargs
                 )
+            zenodo_publisher.write_state(args.state, state)
+            _print(state)
+            return 0
+        if args.zenodo_mode == "new-version":
+            metadata_kwargs = (
+                {
+                    "expected_source_tag": release_manifest.release_tag,
+                    "expected_metadata_sha256": release_manifest.metadata_sha256,
+                }
+                if release_manifest is not None
+                else {}
+            )
+            metadata = zenodo_publisher.load_dataset_metadata(args.metadata, **metadata_kwargs)
+            operation_kwargs = (
+                {"release_binding": release_binding} if release_binding is not None else {}
+            )
+            state = zenodo_publisher.new_version(
+                session,
+                metadata,
+                predecessor_deposition_id=args.predecessor_deposition_id,
+                expected_predecessor_doi=args.expected_predecessor_doi,
+                expected_concept_doi=args.expected_concept_doi,
+                api_base=args.api_base,
+                **operation_kwargs,
+            )
             zenodo_publisher.write_state(args.state, state)
             _print(state)
             return 0

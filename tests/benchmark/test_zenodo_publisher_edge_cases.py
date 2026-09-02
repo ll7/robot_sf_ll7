@@ -46,6 +46,7 @@ class _Session:
         self.posts: list[_Response] = []
         self.puts: list[_Response] = []
         self.urls: list[str] = []
+        self.put_kwargs: list[dict[str, Any]] = []
 
     def get(self, url: str, **kwargs: Any) -> _Response:
         """Consume one GET fixture."""
@@ -60,6 +61,7 @@ class _Session:
     def put(self, url: str, **kwargs: Any) -> _Response:
         """Consume one PUT fixture."""
         self.urls.append(url)
+        self.put_kwargs.append(kwargs)
         return self.puts.pop(0)
 
 
@@ -105,6 +107,162 @@ def _published_record(files: list[dict[str, Any]]) -> dict[str, Any]:
         "status": "published",
         "files": files,
     }
+
+
+def _successor_draft(
+    *,
+    deposition_id: int = 8,
+    record_id: int = 8,
+    concept_record_id: str = "6",
+    doi: str | None = "10.5281/zenodo.8",
+    submitted: bool = False,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return a representative legacy-API successor draft."""
+    return {
+        "id": deposition_id,
+        "record_id": record_id,
+        "conceptrecid": concept_record_id,
+        "conceptdoi": "10.5281/zenodo.6",
+        "doi": doi,
+        "state": "done" if submitted else "unsubmitted",
+        "submitted": submitted,
+        "metadata": {
+            **(metadata or _metadata()),
+            "prereserve_doi": {"doi": doi or "10.5281/zenodo.8"},
+        },
+        "links": {"bucket": "https://zenodo.test/api/files/bucket"},
+        "files": [],
+    }
+
+
+def _new_version_fixture(
+    *,
+    draft: dict[str, Any] | None = None,
+    readback: dict[str, Any] | None = None,
+) -> _Session:
+    """Build a queued session for one successor reservation."""
+    draft_payload = draft or _successor_draft()
+    session = _Session()
+    session.posts = [
+        _Response(
+            {
+                "links": {
+                    "latest_draft": (
+                        f"https://zenodo.test/api/deposit/depositions/{draft_payload['id']}"
+                    )
+                }
+            },
+            status_code=201,
+        )
+    ]
+    session.gets = [_Response(draft_payload)]
+    session.puts = [_Response(readback or draft_payload, status_code=200)]
+    return session
+
+
+def _new_version(session: _Session) -> dict[str, Any]:
+    """Reserve a successor with the fixture's predecessor and concept identity."""
+    return publisher.new_version(
+        session,
+        _metadata(),
+        predecessor_deposition_id=7,
+        expected_predecessor_doi="10.5281/zenodo.7",
+        expected_concept_doi="10.5281/zenodo.6",
+        api_base="https://zenodo.test/api",
+    )
+
+
+def test_new_version_replaces_metadata_and_seals_predecessor_identity() -> None:
+    """A legacy new-version reservation returns only checked, credential-free state."""
+    session = _new_version_fixture()
+
+    state = _new_version(session)
+
+    assert session.urls == [
+        "https://zenodo.test/api/deposit/depositions/7/actions/newversion",
+        "https://zenodo.test/api/deposit/depositions/8",
+        "https://zenodo.test/api/deposit/depositions/8",
+    ]
+    assert session.put_kwargs == [{"json": {"metadata": _metadata()}, "timeout": 60}]
+    assert state["deposition_id"] == 8
+    assert state["record_id"] == 8
+    assert state["concept_record_id"] == "6"
+    assert state["concept_doi"] == "10.5281/zenodo.6"
+    assert state["doi"] == "10.5281/zenodo.8"
+    assert state["submitted"] is False
+    assert state["predecessor_deposition_id"] == 7
+    assert state["predecessor_doi"] == "10.5281/zenodo.7"
+    assert state["predecessor"] == {
+        "deposition_id": 7,
+        "doi": "10.5281/zenodo.7",
+    }
+    assert "token" not in json.dumps(state).casefold()
+    publisher._verify_integrity(state, key="integrity", schema=publisher.ZENODO_STATE_SCHEMA)
+
+
+def test_new_version_accepts_legacy_prereserved_version_doi() -> None:
+    """Legacy drafts may expose the new DOI only under metadata.prereserve_doi."""
+    session = _new_version_fixture(draft=_successor_draft(doi=None))
+
+    state = _new_version(session)
+
+    assert state["doi"] == "10.5281/zenodo.8"
+
+
+@pytest.mark.parametrize(
+    "latest_draft",
+    [
+        None,
+        "http://zenodo.test/api/deposit/depositions/8",
+        "https://other.test/api/deposit/depositions/8",
+        "https://zenodo.test/not-the-api/deposit/depositions/8",
+    ],
+)
+def test_new_version_rejects_malformed_or_cross_host_latest_draft(latest_draft: Any) -> None:
+    """The new-version link cannot redirect the authenticated session elsewhere."""
+    session = _Session()
+    session.posts = [_Response({"links": {"latest_draft": latest_draft}}, status_code=201)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="latest_draft"):
+        _new_version(session)
+
+    assert session.gets == []
+    assert session.puts == []
+
+
+@pytest.mark.parametrize(
+    ("draft", "match"),
+    [
+        (_successor_draft(deposition_id=7, record_id=7, doi="10.5281/zenodo.7"), "reused"),
+        (_successor_draft(doi="10.5281/zenodo.7"), "reused"),
+        (_successor_draft(concept_record_id="99"), "concept ID"),
+        (_successor_draft(submitted=True), "unpublished draft"),
+    ],
+)
+def test_new_version_rejects_reused_identity_wrong_concept_or_submitted_draft(
+    draft: dict[str, Any], match: str
+) -> None:
+    """Successor creation fails closed when the draft identity or state drifts."""
+    session = _new_version_fixture(draft=draft)
+    session.posts[0].payload["links"]["latest_draft"] = (
+        f"https://zenodo.test/api/deposit/depositions/{draft['id']}"
+    )
+
+    with pytest.raises(publisher.ZenodoPublisherError, match=match):
+        _new_version(session)
+
+    assert len(session.puts) == 1
+
+
+def test_new_version_rejects_metadata_readback_mismatch() -> None:
+    """A successful PUT transport response is insufficient when metadata changed."""
+    readback = _successor_draft()
+    readback["metadata"] = {**_metadata(), "title": "inherited title"}
+    session = _new_version_fixture(readback=readback)
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="metadata readback mismatch"):
+        _new_version(session)
 
 
 def test_token_file_missing_and_empty_are_rejected(tmp_path: Path) -> None:

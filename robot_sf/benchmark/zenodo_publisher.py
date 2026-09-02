@@ -9,7 +9,7 @@ import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Protocol
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from robot_sf.common.optional_import import try_import
 
@@ -168,6 +168,236 @@ def _metadata_sha256(metadata: Mapping[str, Any]) -> str:
         Lowercase hexadecimal SHA-256 digest.
     """
     return hashlib.sha256(_canonical_bytes(_metadata_contract(metadata))).hexdigest()
+
+
+def _validated_api_base(api_base: str) -> str:
+    """Require an HTTPS API base without URL-embedded credentials or queries.
+
+    Returns:
+        The trimmed API base URL.
+    """
+    if not isinstance(api_base, str) or not api_base.strip():
+        raise ZenodoPublisherError("Zenodo API base must be a non-empty HTTPS URL")
+    candidate = api_base.strip().rstrip("/")
+    try:
+        parsed = urlsplit(candidate)
+        hostname = parsed.hostname
+        _port = parsed.port
+    except ValueError as exc:
+        raise ZenodoPublisherError("Zenodo API base must be a valid HTTPS URL") from exc
+    if (
+        parsed.scheme.casefold() != "https"
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ZenodoPublisherError("Zenodo API base must be a valid HTTPS URL")
+    return candidate
+
+
+def _validated_latest_draft_link(latest_draft: Any, api_base: str) -> tuple[str, int]:
+    """Validate and extract the deposition ID from a same-API draft link.
+
+    Returns:
+        The validated link and its positive deposition identifier.
+    """
+    base = urlsplit(_validated_api_base(api_base))
+    if not isinstance(latest_draft, str) or not latest_draft.strip():
+        raise ZenodoPublisherError("Zenodo new-version response omitted links.latest_draft")
+    candidate = latest_draft.strip()
+    try:
+        link = urlsplit(candidate)
+        base_hostname = base.hostname
+        link_hostname = link.hostname
+        base_port = base.port or 443
+        link_port = link.port or 443
+    except ValueError as exc:
+        raise ZenodoPublisherError("Zenodo links.latest_draft is not a valid same-API URL") from exc
+    base_path = base.path.rstrip("/")
+    link_path = link.path.rstrip("/")
+    relative_path = link_path[len(base_path) :].lstrip("/") if base_path else link_path.lstrip("/")
+    parts = relative_path.split("/")
+    deposition_text = (
+        parts[-1] if len(parts) == 3 and parts[:2] == ["deposit", "depositions"] else ""
+    )
+    if (
+        link.scheme.casefold() != "https"
+        or link_hostname is None
+        or link_hostname.casefold() != (base_hostname or "").casefold()
+        or link_port != base_port
+        or link.username is not None
+        or link.password is not None
+        or link.query
+        or link.fragment
+        or (base_path and not (link_path == base_path or link_path.startswith(base_path + "/")))
+        or not re.fullmatch(r"[1-9][0-9]*", deposition_text)
+    ):
+        raise ZenodoPublisherError("Zenodo links.latest_draft is not a valid same-API URL")
+    return candidate, int(deposition_text)
+
+
+def _positive_deposition_id(value: Any, label: str) -> int:
+    """Require an API deposition/record identifier to be a positive integer.
+
+    Returns:
+        The validated identifier.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ZenodoPublisherError(f"Zenodo {label} must be a positive integer")
+    return value
+
+
+def _successor_version_doi(payload: Mapping[str, Any]) -> Any:
+    """Extract a version DOI from the direct or pre-reserved legacy API field.
+
+    Returns:
+        The direct or pre-reserved DOI, if present.
+    """
+    direct_doi = payload.get("doi")
+    if direct_doi is not None and direct_doi != "":
+        return direct_doi
+    metadata = payload.get("metadata")
+    preregistered = metadata.get("prereserve_doi") if isinstance(metadata, Mapping) else None
+    return preregistered.get("doi") if isinstance(preregistered, Mapping) else None
+
+
+def _validate_successor_concept(
+    payload: Mapping[str, Any], *, expected_concept_doi: str, operation: str
+) -> str:
+    """Validate the legacy concept record ID and any advertised concept DOI.
+
+    Returns:
+        The normalized concept record identifier.
+    """
+    concept_record_id = payload.get("conceptrecid")
+    if isinstance(concept_record_id, bool) or not str(concept_record_id or "").isdigit():
+        raise ZenodoPublisherError(f"Zenodo {operation} omitted a positive concept record ID")
+    if int(str(concept_record_id)) <= 0:
+        raise ZenodoPublisherError(f"Zenodo {operation} omitted a positive concept record ID")
+    expected_concept_record_id = expected_concept_doi.rsplit(".", 1)[-1]
+    if str(concept_record_id) != expected_concept_record_id:
+        raise ZenodoPublisherError(
+            f"Zenodo {operation} concept ID does not match expected concept DOI"
+        )
+    metadata = payload.get("metadata")
+    observed_values = [payload.get("conceptdoi"), payload.get("concept_doi")]
+    if isinstance(metadata, Mapping):
+        observed_values.extend([metadata.get("conceptdoi"), metadata.get("concept_doi")])
+    if any(value is not None and value != expected_concept_doi for value in observed_values):
+        raise ZenodoPublisherError(
+            f"Zenodo {operation} concept DOI does not match expected concept DOI"
+        )
+    return str(concept_record_id)
+
+
+def _validate_successor_version_doi(
+    payload: Mapping[str, Any],
+    *,
+    record_id: int,
+    expected_predecessor_doi: str,
+    expected_concept_doi: str,
+    operation: str,
+) -> str:
+    """Validate a distinct version DOI and its record-ID binding.
+
+    Returns:
+        The validated version DOI.
+    """
+    version_doi = _successor_version_doi(payload)
+    if not isinstance(version_doi, str) or _ZENODO_DOI_RE.fullmatch(version_doi) is None:
+        raise ZenodoPublisherError(f"Zenodo {operation} omitted a valid version DOI")
+    if version_doi in {expected_predecessor_doi, expected_concept_doi}:
+        raise ZenodoPublisherError(f"Zenodo {operation} reused a predecessor or concept DOI")
+    if version_doi.rsplit(".", 1)[-1] != str(record_id):
+        raise ZenodoPublisherError(f"Zenodo {operation} version DOI does not match record ID")
+    return version_doi
+
+
+def _validate_successor_unpublished(payload: Mapping[str, Any], operation: str) -> None:
+    """Require an API payload to describe an unpublished draft."""
+    if payload.get("submitted") is not False or payload.get("state") != "unsubmitted":
+        raise ZenodoPublisherError(f"Zenodo {operation} must remain an unpublished draft")
+
+
+def _validate_successor_payload(
+    payload: Mapping[str, Any],
+    *,
+    predecessor_deposition_id: int,
+    expected_predecessor_doi: str,
+    expected_concept_doi: str,
+    latest_draft_id: int | None = None,
+    operation: str,
+) -> dict[str, Any]:
+    """Validate one new-version draft/read-back identity and return public state.
+
+    Returns:
+        A normalized credential-free state object.
+    """
+    deposition_id = _positive_deposition_id(payload.get("id"), f"{operation} deposition ID")
+    record_id = _positive_deposition_id(payload.get("record_id"), f"{operation} record ID")
+    if latest_draft_id is not None and deposition_id != latest_draft_id:
+        raise ZenodoPublisherError(f"Zenodo {operation} changed the latest_draft deposition ID")
+    predecessor_record_id = int(expected_predecessor_doi.rsplit(".", 1)[-1])
+    if predecessor_deposition_id in {deposition_id, record_id} or predecessor_record_id in {
+        deposition_id,
+        record_id,
+    }:
+        raise ZenodoPublisherError(
+            f"Zenodo {operation} reused the predecessor deposition/record ID"
+        )
+
+    concept_record_id = _validate_successor_concept(
+        payload, expected_concept_doi=expected_concept_doi, operation=operation
+    )
+    version_doi = _validate_successor_version_doi(
+        payload,
+        record_id=record_id,
+        expected_predecessor_doi=expected_predecessor_doi,
+        expected_concept_doi=expected_concept_doi,
+        operation=operation,
+    )
+    _validate_successor_unpublished(payload, operation)
+
+    state = _public_state(dict(payload))
+    state.update(
+        {
+            "deposition_id": deposition_id,
+            "record_id": record_id,
+            "concept_record_id": str(concept_record_id),
+            "doi": version_doi,
+            "state": "unsubmitted",
+            "submitted": False,
+        }
+    )
+    return state
+
+
+def _validate_successor_metadata_readback(
+    expected_metadata: Mapping[str, Any], payload: Mapping[str, Any]
+) -> None:
+    """Require the PUT response metadata to equal the requested metadata contract."""
+    observed = payload.get("metadata")
+    if not isinstance(observed, Mapping):
+        raise ZenodoPublisherError("Zenodo new-version PUT response omitted metadata")
+    expected_contract = {
+        key: _canonical_metadata_value_for_comparison(key, value)
+        for key, value in _metadata_contract(expected_metadata).items()
+    }
+    observed_contract = {
+        key: _canonical_metadata_value_for_comparison(key, value)
+        for key, value in _metadata_contract(observed).items()
+    }
+    if expected_contract == observed_contract:
+        return
+    mismatched_keys = sorted(
+        key
+        for key in set(expected_contract) | set(observed_contract)
+        if expected_contract.get(key) != observed_contract.get(key)
+    )
+    key = mismatched_keys[0] if mismatched_keys else "unknown"
+    raise ZenodoPublisherError(f"Zenodo new-version metadata readback mismatch at metadata.{key}")
 
 
 def _binding_value(binding: Any, key: str) -> Any:
@@ -634,6 +864,117 @@ def reserve(
     return _seal_state(state)
 
 
+def new_version(
+    session: _Session,
+    metadata: Mapping[str, Any],
+    *,
+    predecessor_deposition_id: int,
+    expected_predecessor_doi: str,
+    expected_concept_doi: str,
+    api_base: str = ZENODO_API_BASE,
+    release_binding: Any | None = None,
+) -> dict[str, Any]:
+    """Create a fail-closed successor draft for one published Zenodo version.
+
+    The legacy deposit API creates the successor through the predecessor's
+    ``actions/newversion`` endpoint. The returned ``links.latest_draft`` link
+    is treated as untrusted until it is proven to be an HTTPS URL on the same
+    API, and the draft metadata is replaced and checked through a PUT before
+    any state is sealed.
+
+    Returns:
+        Credential-free sealed state for the unpublished successor draft.
+    """
+    predecessor_id = _positive_deposition_id(predecessor_deposition_id, "predecessor deposition ID")
+    if (
+        not isinstance(expected_predecessor_doi, str)
+        or _ZENODO_DOI_RE.fullmatch(expected_predecessor_doi) is None
+    ):
+        raise ZenodoPublisherError("expected predecessor DOI is invalid")
+    if (
+        not isinstance(expected_concept_doi, str)
+        or _ZENODO_DOI_RE.fullmatch(expected_concept_doi) is None
+    ):
+        raise ZenodoPublisherError("expected concept DOI is invalid")
+    if expected_predecessor_doi == expected_concept_doi:
+        raise ZenodoPublisherError("expected predecessor and concept DOIs must differ")
+
+    normalized_metadata = _validate_metadata(metadata)
+    preregistered = normalized_metadata.get("prereserve_doi")
+    if preregistered is not None and preregistered is not True:
+        raise ZenodoPublisherError(
+            "new-version metadata must not carry an inherited prereserved DOI"
+        )
+    binding = _normalize_release_binding(release_binding) if release_binding is not None else None
+    file_metadata = (
+        _validate_release_binding_metadata(normalized_metadata, binding)
+        if binding is not None
+        else None
+    )
+    validated_base = _validated_api_base(api_base)
+    base = validated_base.rstrip("/")
+
+    created = _json_object(
+        session.post(
+            f"{base}/deposit/depositions/{predecessor_id}/actions/newversion",
+            timeout=60,
+        ),
+        "new-version",
+    )
+    links = created.get("links")
+    latest_draft = links.get("latest_draft") if isinstance(links, Mapping) else None
+    latest_draft_url, latest_draft_id = _validated_latest_draft_link(latest_draft, validated_base)
+    draft = _json_object(session.get(latest_draft_url, timeout=60), "new-version draft")
+    state = _validate_successor_payload(
+        draft,
+        predecessor_deposition_id=predecessor_id,
+        expected_predecessor_doi=expected_predecessor_doi,
+        expected_concept_doi=expected_concept_doi,
+        latest_draft_id=latest_draft_id,
+        operation="new-version draft",
+    )
+
+    updated = _json_object(
+        session.put(
+            f"{base}/deposit/depositions/{state['deposition_id']}",
+            json={"metadata": normalized_metadata},
+            timeout=60,
+        ),
+        "new-version metadata update",
+    )
+    updated_state = _validate_successor_payload(
+        updated,
+        predecessor_deposition_id=predecessor_id,
+        expected_predecessor_doi=expected_predecessor_doi,
+        expected_concept_doi=expected_concept_doi,
+        latest_draft_id=state["deposition_id"],
+        operation="new-version metadata readback",
+    )
+    for key in ("deposition_id", "record_id", "concept_record_id", "doi"):
+        if updated_state.get(key) != state.get(key):
+            raise ZenodoPublisherError(f"Zenodo new-version metadata readback changed {key}")
+    _validate_successor_metadata_readback(normalized_metadata, updated)
+
+    updated_state.update(
+        {
+            "concept_doi": expected_concept_doi,
+            "predecessor_deposition_id": predecessor_id,
+            "predecessor_doi": expected_predecessor_doi,
+            "predecessor": {
+                "deposition_id": predecessor_id,
+                "doi": expected_predecessor_doi,
+            },
+        }
+    )
+    if binding is not None:
+        _assert_deposition_identity(updated_state, binding)
+        updated_state["release_binding"] = _state_release_binding(
+            binding,
+            metadata_contract_sha256=_metadata_sha256(file_metadata or normalized_metadata),
+        )
+    return _seal_state(updated_state)
+
+
 def recover(
     session: _Session,
     deposition_id: int,
@@ -1093,6 +1434,7 @@ __all__ = [
     "build_session",
     "load_dataset_metadata",
     "load_state",
+    "new_version",
     "publish",
     "read_token_file",
     "recover",

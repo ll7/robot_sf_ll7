@@ -453,6 +453,9 @@ _FAST_FILES = {
     # (issue #8073).
     "test_goal_candidate_provider.py",
     "test_goal_candidate_coverage.py",
+    # Core simulation-state contract tests are deterministic alias, schema, and
+    # import-boundary coverage for the additive core package (issue #8243).
+    "test_contract_v1.py",
     # The pre-submit launch-manifest tests cover deterministic release-input
     # binding and the public Slurm preflight consumer contract.
     "test_generate_slurm_launch_manifest.py",

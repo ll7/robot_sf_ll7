@@ -925,6 +925,44 @@ def test_zip_duplicate_and_symlink_members_fail_closed(tmp_path: Path) -> None:
         _extract_members(symlink, tmp_path / "symlink-dest")
 
 
+@pytest.mark.parametrize("archive_kind", ["zip", "tar"])
+@pytest.mark.parametrize("alias", ["bundle/payload//file.txt", "bundle/payload/./file.txt"])
+def test_archive_noncanonical_member_aliases_fail_closed(
+    tmp_path: Path, archive_kind: str, alias: str
+) -> None:
+    """Two raw member names cannot collapse onto one authenticated output path."""
+    archive_path = tmp_path / f"collision.{archive_kind}"
+    canonical = "bundle/payload/file.txt"
+    if archive_kind == "zip":
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            archive.writestr(canonical, b"trusted")
+            archive.writestr(alias, b"replacement")
+    else:
+        with tarfile.open(archive_path, "w") as archive:
+            for name, data in ((canonical, b"trusted"), (alias, b"replacement")):
+                member = tarfile.TarInfo(name)
+                member.size = len(data)
+                archive.addfile(member, io.BytesIO(data))
+
+    with pytest.raises(ValueError, match="path escape|colliding member"):
+        _extract_members(archive_path, tmp_path / "collision-dest")
+
+
+def test_extraction_rejects_preexisting_destination_symlink(tmp_path: Path) -> None:
+    """Offline audit extraction cannot be redirected outside its lexical directory."""
+    archive_path = tmp_path / "bundle.zip"
+    _make_bundle(archive_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    destination = tmp_path / "_extracted"
+    destination.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="destination must not be a symlink"):
+        _extract_members(archive_path, destination)
+
+    assert list(outside.iterdir()) == []
+
+
 @pytest.mark.parametrize("member_type", [tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.FIFOTYPE])
 def test_tar_link_and_device_like_members_fail_closed(tmp_path: Path, member_type: bytes) -> None:
     archive_path = tmp_path / "unsafe.tar"

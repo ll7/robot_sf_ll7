@@ -126,18 +126,23 @@ def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _safe_extraction_target(dest: Path, member_name: str, *, kind: str) -> Path:
+def _safe_extraction_target(
+    dest: Path, member_name: str, *, kind: str, directory: bool = False
+) -> Path:
     """Return a member target only when its lexical and resolved paths are safe."""
-    path = Path(member_name)
+    raw_name = member_name[:-1] if directory and member_name.endswith("/") else member_name
+    raw_parts = raw_name.split("/")
+    path = Path(raw_name)
     if (
         path.is_absolute()
-        or not path.parts
-        or any(part in {"", ".", ".."} for part in path.parts)
+        or not raw_name
+        or any(part in {"", ".", ".."} for part in raw_parts)
+        or (member_name.endswith("/") and not directory)
         or "\\" in member_name
         or "\x00" in member_name
     ):
         raise ValueError(f"{kind} path escape: {member_name}")
-    target = (dest / member_name).resolve()
+    target = (dest / path).resolve()
     if not target.is_relative_to(dest):
         raise ValueError(f"{kind} path escape: {member_name}")
     return target
@@ -151,11 +156,17 @@ def _extract_zip_members(archive_path: Path, dest: Path) -> list[str]:
     """
     with zipfile.ZipFile(archive_path) as archive:
         seen: set[str] = set()
+        seen_targets: set[Path] = set()
         for info in archive.infolist():
             if info.filename in seen:
                 raise ValueError(f"zip contains duplicate member: {info.filename}")
             seen.add(info.filename)
-            _safe_extraction_target(dest, info.filename, kind="zip")
+            target = _safe_extraction_target(
+                dest, info.filename, kind="zip", directory=info.is_dir()
+            )
+            if target in seen_targets:
+                raise ValueError(f"zip contains colliding member: {info.filename}")
+            seen_targets.add(target)
             if stat.S_IFMT(info.external_attr >> 16) == stat.S_IFLNK:
                 raise ValueError(f"zip contains symbolic link: {info.filename}")
         archive.extractall(dest)
@@ -170,11 +181,17 @@ def _extract_tar_members(archive_path: Path, dest: Path) -> list[str]:
     """
     with tarfile.open(archive_path) as archive:
         seen: set[str] = set()
+        seen_targets: set[Path] = set()
         for member in archive.getmembers():
             if member.name in seen:
                 raise ValueError(f"tar contains duplicate member: {member.name}")
             seen.add(member.name)
-            _safe_extraction_target(dest, member.name, kind="tar")
+            target = _safe_extraction_target(
+                dest, member.name, kind="tar", directory=member.isdir()
+            )
+            if target in seen_targets:
+                raise ValueError(f"tar contains colliding member: {member.name}")
+            seen_targets.add(target)
             if not (member.isdir() or member.isreg()):
                 raise ValueError(f"tar contains non-regular member: {member.name}")
         archive.extractall(dest, filter="data")
@@ -190,8 +207,13 @@ def _extract_members(archive_path: Path, dest: Path) -> list[str]:
     Raises:
         ValueError: On path escape, unsupported archive, or read failure.
     """
-    dest = dest.resolve()
+    lexical_dest = Path(dest)
+    if lexical_dest.is_symlink():
+        raise ValueError("extraction destination must not be a symlink")
+    dest = lexical_dest.resolve()
     dest.mkdir(parents=True, exist_ok=True)
+    if lexical_dest.is_symlink():
+        raise ValueError("extraction destination must not be a symlink")
     try:
         if zipfile.is_zipfile(archive_path):
             return _extract_zip_members(archive_path, dest)

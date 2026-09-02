@@ -605,6 +605,9 @@ _FAST_FILES = {
     # coverage for persisted obstacle-force runtime metadata.
     "test_reset_metadata.py",
     "test_jsonl_recording.py",
+    # Pedestrian reset compatibility covers the simulator metadata forwarding
+    # branch in the changed environment reset path.
+    "test_pedestrian_env_compat.py",
     # The evaluator-only oracle channel test is a one-step deterministic contract
     # for changed environment plumbing; keep it in PR fast shards so changed
     # coverage proves the info-only branch.

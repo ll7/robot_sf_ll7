@@ -1386,6 +1386,40 @@ def test_update_number_field_uses_exact_graphql_decimal_literal(
     assert "fieldId=field-1" in command
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"data": None},
+        {"data": {"updateProjectV2ItemFieldValue": {"projectV2Item": {}}}},
+    ],
+)
+def test_update_number_field_rejects_malformed_graphql_response(
+    monkeypatch: pytest.MonkeyPatch,
+    payload: dict[str, object],
+) -> None:
+    """Malformed successful responses never masquerade as a completed write."""
+
+    def _fake_run(
+        args: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout=json.dumps(payload),
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+
+    with pytest.raises(RuntimeError, match="returned no updated project item"):
+        GhProjectClient().update_number_field(
+            item_id="item-1",
+            field_id="field-1",
+            project_id="project-1",
+            number=0.7,
+        )
+
+
 class _RejectingGhProjectClient(FakeGhProjectClient):
     """Fake client whose numeric writes are rejected like a live gh failure."""
 

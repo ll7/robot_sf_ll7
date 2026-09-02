@@ -1072,8 +1072,14 @@ mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!) {{
             "-F",
             f"fieldId={field_id}",
         )
-        mutation = payload.get("data", {}).get("updateProjectV2ItemFieldValue")
-        if not isinstance(mutation, dict) or not isinstance(mutation.get("projectV2Item"), dict):
+        data = payload.get("data")
+        mutation = data.get("updateProjectV2ItemFieldValue") if isinstance(data, dict) else None
+        updated_item = mutation.get("projectV2Item") if isinstance(mutation, dict) else None
+        if (
+            not isinstance(updated_item, dict)
+            or not isinstance(updated_item.get("id"), str)
+            or not updated_item["id"]
+        ):
             raise RuntimeError(
                 "GitHub Projects numeric update returned no updated project item: "
                 + json.dumps(payload, sort_keys=True)
@@ -1083,7 +1089,7 @@ mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!) {{
 #: GitHub Projects numeric fields reject values with more than 8 decimal
 #: places, and ``Format.General`` style floats can produce scientific
 #: notation. Every written literal is quantized to at most 8 decimal places
-#: and validated against this shape before the ``item-edit`` call.
+#: and validated against this shape before the GraphQL mutation.
 _NUMERIC_FIELD_LITERAL_RE = re.compile(r"-?\d+(\.\d{1,8})?")
 
 

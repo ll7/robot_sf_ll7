@@ -185,6 +185,9 @@ def test_clean_runner_bootstraps_and_checks_the_cloned_helper_offline(tmp_path: 
     if python312 is None:
         pytest.fail("python3.12 is required to match the GitHub Actions bootstrap runtime")
     cache_dir = os.environ.get("UV_CACHE_DIR", "")
+    if cache_dir:
+        # The child runs from tmp_path; anchor relative configured paths before handing them over.
+        cache_dir = str(Path(cache_dir).resolve())
     if not cache_dir:
         cache_dir = subprocess.run(
             [uv, "cache", "dir"],

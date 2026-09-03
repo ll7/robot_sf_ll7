@@ -141,6 +141,15 @@ class Question:
 
 
 @dataclass(frozen=True, slots=True)
+class ClaimIdentity:
+    """Campaign/question/estimand identity for a packet claim."""
+
+    campaign_id: str
+    question: str
+    estimand: str
+
+
+@dataclass(frozen=True, slots=True)
 class Evidence:
     """Admission identity and tier for the evidence represented by a packet."""
 
@@ -404,6 +413,7 @@ class ResultInterpretationPacket:
     reviewer: ActorRef | None = None
     reviewed_packet_digest: str | None = None
     post_review_digest: str | None = None
+    claim_identity: ClaimIdentity | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-safe primitives.
@@ -414,6 +424,8 @@ class ResultInterpretationPacket:
         payload = asdict(self)
         if self.estimand.comparator is None:
             payload["estimand"].pop("comparator")
+        if self.claim_identity is None:
+            payload.pop("claim_identity", None)
         return payload
 
 
@@ -2105,6 +2117,17 @@ def _validate_digest_field(value: str | None, field_name: str, errors: list[str]
         errors.append(f"{field_name}: {value!r} is not a valid 64-hex SHA-256 digest")
 
 
+def _validate_claim_identity(packet: ResultInterpretationPacket, errors: list[str]) -> None:
+    """Keep optional claim identity aligned with the packet's own text fields."""
+    identity = packet.claim_identity
+    if identity is None:
+        return
+    if identity.question != packet.question.text:
+        errors.append("claim_identity.question must match question.text")
+    if identity.estimand != packet.estimand.description:
+        errors.append("claim_identity.estimand must match estimand.description")
+
+
 def validate_packet(payload: dict[str, Any]) -> list[str]:
     """Validate a result interpretation packet dict semantically.
 
@@ -2120,6 +2143,7 @@ def validate_packet(payload: dict[str, Any]) -> list[str]:
 
     packet = _dict_to_packet(payload)
 
+    _validate_claim_identity(packet, errors)
     _validate_evidence(packet.evidence, errors)
     _validate_population(packet.population, errors)
     _validate_execution_mode(packet.execution_mode, errors)
@@ -2210,6 +2234,14 @@ def _dict_to_packet(d: dict[str, Any]) -> ResultInterpretationPacket:
         text=q["text"],
         issue_refs=q.get("issue_refs", []),
     )
+    claim_identity = None
+    if d.get("claim_identity") is not None:
+        identity = d["claim_identity"]
+        claim_identity = ClaimIdentity(
+            campaign_id=identity["campaign_id"],
+            question=identity["question"],
+            estimand=identity["estimand"],
+        )
     ev = d["evidence"]
     evidence = Evidence(
         evidence_id=ev["evidence_id"],
@@ -2471,6 +2503,7 @@ def _dict_to_packet(d: dict[str, Any]) -> ResultInterpretationPacket:
         findings=d["findings"],
         limitations=d["limitations"],
         fail_closed_changes=d.get("fail_closed_changes", []),
+        claim_identity=claim_identity,
     )
 
 

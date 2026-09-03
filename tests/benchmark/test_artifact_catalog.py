@@ -61,6 +61,11 @@ def test_v2_schema_requires_figure_semantics_and_loads_typed_metadata(tmp_path: 
     payload = {
         "schema_version": ARTIFACT_CATALOG_SCHEMA_V2,
         "catalog_id": "v2_fixture",
+        "claim_identity": {
+            "campaign_id": "campaign_fixture",
+            "question": "Which fixture is loaded?",
+            "estimand": "Fixture artifact identity",
+        },
         "artifacts": [
             {
                 "artifact_id": "fig_v2",
@@ -99,12 +104,99 @@ def test_v2_schema_requires_figure_semantics_and_loads_typed_metadata(tmp_path: 
     catalog = load_artifact_catalog(catalog_path)
     assert catalog.schema_version == ARTIFACT_CATALOG_SCHEMA_V2
     assert catalog.artifacts[0].figure_semantics is not None
+    assert catalog.claim_identity == payload["claim_identity"]
 
     del payload["artifacts"][0]["figure_semantics"]
     catalog_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
     issues = validate_artifact_catalog(catalog_path)
     assert any(
         issue.path == "/artifacts/0" and "figure_semantics" in issue.message for issue in issues
+    )
+
+
+def test_catalog_rejects_resolved_symlink_escape_without_approved_root(tmp_path: Path) -> None:
+    """Catalog references are contained after symlink resolution, not before it."""
+    repository_root = tmp_path / "repository"
+    repository_root.mkdir()
+    outside_root = tmp_path / "approved_durable"
+    outside_root.mkdir()
+    outside_file = outside_root / "artifact.json"
+    outside_file.write_text("durable artifact\n", encoding="utf-8")
+    link = repository_root / "artifact-link.json"
+    link.symlink_to(outside_file)
+    ref = {"path": link.name, "sha256": sha256_file(outside_file)}
+    payload = {
+        "schema_version": ARTIFACT_CATALOG_SCHEMA_VERSION,
+        "catalog_id": "symlink_boundary",
+        "artifacts": [
+            {
+                "artifact_id": "tab_symlink_boundary",
+                "artifact_kind": "table",
+                "source_kind": "benchmark_campaign",
+                "source_files": [ref],
+                "outputs": {"json": ref},
+                "generation_command": "fixture",
+                "generation_commit": "44f4f364",
+                "claim_boundary": "bounded test artifact",
+            }
+        ],
+    }
+    catalog_path = repository_root / "catalog.yaml"
+    catalog_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    issues = validate_artifact_catalog(catalog_path, repository_root=repository_root)
+
+    assert any(
+        issue.path == "/artifacts/0/source_files/0/path"
+        and "escapes the repository" in issue.message
+        for issue in issues
+    )
+    assert (
+        validate_artifact_catalog(
+            catalog_path,
+            repository_root=repository_root,
+            approved_durable_roots=[outside_root],
+        )
+        == []
+    )
+
+
+def test_catalog_does_not_fallback_through_dangling_symlink(tmp_path: Path) -> None:
+    """A dangling catalog symlink cannot substitute a repository-root file."""
+    repository_root = tmp_path / "repository"
+    catalog_dir = repository_root / "nested"
+    catalog_dir.mkdir(parents=True)
+    outside_target = tmp_path / "approved_durable" / "missing.json"
+    link = catalog_dir / "artifact-link.json"
+    link.symlink_to(outside_target)
+    decoy = repository_root / link.name
+    decoy.write_text("decoy artifact\n", encoding="utf-8")
+    ref = {"path": link.name, "sha256": sha256_file(decoy)}
+    payload = {
+        "schema_version": ARTIFACT_CATALOG_SCHEMA_VERSION,
+        "catalog_id": "dangling_symlink_boundary",
+        "artifacts": [
+            {
+                "artifact_id": "tab_dangling_symlink",
+                "artifact_kind": "table",
+                "source_kind": "benchmark_campaign",
+                "source_files": [ref],
+                "outputs": {"json": ref},
+                "generation_command": "fixture",
+                "generation_commit": "44f4f364",
+                "claim_boundary": "bounded test artifact",
+            }
+        ],
+    }
+    catalog_path = catalog_dir / "catalog.yaml"
+    catalog_path.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+
+    issues = validate_artifact_catalog(catalog_path, repository_root=repository_root)
+
+    assert any(
+        issue.path == "/artifacts/0/source_files/0/path"
+        and "escapes the repository" in issue.message
+        for issue in issues
     )
 
 

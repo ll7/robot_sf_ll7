@@ -17,6 +17,8 @@ Each catalog has:
 
 - `schema_version: artifact_catalog.v1`
 - `catalog_id`: stable catalog identifier
+- optional `claim_identity`: the exact `campaign_id`, `question`, and `estimand`
+  that the catalog supports
 - `artifacts`: one or more figure/table rows
 
 Each artifact row has:
@@ -44,7 +46,14 @@ that the declared metadata is complete and internally consistent.
 
 The validator fails closed when IDs are duplicated, required files are missing,
 checksums mismatch, or a durable reference points at local-only locations such as
-`output/`, `.git/`, `.venv/`, `/tmp/`, or a worktree path.
+`output/`, `.git/`, `.venv/`, `/tmp/`, or a worktree path. File references are
+resolved through symlinks before containment is checked. They must remain under
+the catalog's repository root, or under a durable root explicitly supplied by a
+trusted caller to `validate_artifact_catalog(..., approved_durable_roots=...)`.
+
+Decision-capable answerability proof requires `claim_identity` and compares all
+three fields to the manifest. Existing catalogs may omit the optional field for
+compatibility, but they cannot satisfy that strict admission surface without it.
 
 ## Example
 

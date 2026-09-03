@@ -72,6 +72,21 @@ jobs:
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
 
+      - name: Prime uv cache metadata for offline software-candidate checks
+        run: |
+          set -euo pipefail
+          # A locked sync records the selected wheel payload but may not retain the
+          # wheel-metadata response needed by a later offline ``uv pip install``.
+          # Refresh and reinstall the exact helper pins so each test shard can
+          # resolve them without depending on a prior unrelated registry lookup.
+          uv pip install \
+            --python .venv/bin/python \
+            --refresh-package packaging \
+            --refresh-package pyyaml \
+            --reinstall \
+            "packaging==26.0" \
+            "pyyaml==6.0.3"
+
       - name: Hydrate result-interpretation provenance
         run: uv run python scripts/dev/ensure_result_interpretation_provenance.py
 

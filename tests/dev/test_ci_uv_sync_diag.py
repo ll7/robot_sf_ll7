@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 
 def _script_path() -> Path:
@@ -214,6 +215,33 @@ def test_workflow_uv_cache_is_pruned_by_setup_uv() -> None:
         workflow_text = (_repo_root() / workflow_path).read_text(encoding="utf-8")
         assert "uses: ./.github/actions/setup-ci-python" in workflow_text, workflow_path
         assert "~/.cache/uv" not in workflow_text, workflow_path
+
+
+def test_fast_feedback_primes_offline_helper_cache_metadata_after_setup() -> None:
+    """Each main-CI test shard seeds resolver metadata for offline helper tests."""
+    workflow_path = _repo_root() / ".github" / "workflows" / "ci.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["fast-feedback"]["steps"]
+    setup_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("uses") == "./.github/actions/setup-ci-python"
+    )
+    prime_index, prime_step = next(
+        (index, step)
+        for index, step in enumerate(steps)
+        if step.get("name") == "Prime uv cache metadata for offline software-candidate checks"
+    )
+
+    assert prime_index > setup_index
+    prime_run = prime_step["run"]
+    assert "uv pip install" in prime_run
+    assert "--python .venv/bin/python" in prime_run
+    assert "--refresh-package packaging" in prime_run
+    assert "--refresh-package pyyaml" in prime_run
+    assert "--reinstall" in prime_run
+    assert '"packaging==26.0"' in prime_run
+    assert '"pyyaml==6.0.3"' in prime_run
 
 
 def test_perf_nightly_runs_xdist_race_validation_route() -> None:

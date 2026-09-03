@@ -1496,6 +1496,9 @@ class Simulator:
 
     def _reset_social_force_state(self) -> None:
         """Restore pedestrian physics state for a fresh deterministic episode reset."""
+        for force in getattr(getattr(self, "pysf_sim", None), "forces", ()):
+            if isinstance(force, ObstacleForce):
+                force._obstacle_force_applied = False
         residual_adversary = getattr(self, "_residual_adversary", None)
         if residual_adversary is not None:
             residual_adversary.reset()

@@ -28,7 +28,7 @@ Issue #8246 interaction-conditioned realism validation preregistration: a seven-
 window segmenter, per-class scorecard floors, calibration/held-out scene contract, and baseline
 hierarchy prepared before Stanford Drone Dataset (SDD) staging. Current evidence is synthetic and
 implementation-only; external-data execution remains blocked by #6530:
-[issue_8246_realism_validation_preregistration.md](issue_8246_realism_validation_preregistration.md).
+[realism_validation_preregistration.md](realism_validation_preregistration.md).
 
 Issue #8205 observation-derived tracker goal-belief adapter: a default-off, actor-safe bridge
 from `PedestrianTrackingResult` to `GoalBeliefV1`, with stable track ordering, global-frame

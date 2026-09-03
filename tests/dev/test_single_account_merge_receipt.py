@@ -1097,3 +1097,252 @@ def test_report_only_mode_fails_closed_on_invalid_output_path(
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "error"
     assert "failed to write output receipt" in payload["error"]
+
+
+def test_apply_mode_succeeds_when_post_merge_reread_matches_expected_terminal_transition(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Reproduction of PR #8364: apply mode succeeds when reread observes expected terminal merge."""
+    receipt = _receipt()
+    receipt_file = tmp_path / "receipt.json"
+    receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+
+    merged_sha = "800be570faf17ba060a9a95fef1d3027a62ac90f"
+    merged_at = "2026-09-03T19:53:13Z"
+
+    post_merge_evidence = _live_evidence(receipt)
+    post_merge_evidence["pr_state"] = "MERGED"
+    post_merge_evidence["pr_merged_at"] = merged_at
+    post_merge_evidence["merge_commit_sha"] = merged_sha
+    post_merge_evidence["current_base_sha"] = merged_sha
+    post_merge_evidence["gate_audit"] = {
+        "schema": "merge_queue_gate.v1",
+        "passed": False,
+        "status": "blocked",
+        "reasons": ["stale_merge_base"],
+    }
+    post_merge_evidence["holds"] = receipt_module.derive_holds(post_merge_evidence)
+
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (copy.deepcopy(post_merge_evidence), None),
+    )
+
+    api_calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+    def mock_api(
+        method: str, path: str, payload: dict[str, Any] | None = None
+    ) -> tuple[dict[str, Any], None]:
+        api_calls.append((method, path, payload))
+        if method == "PUT":
+            pytest.fail("guarded apply must not attempt a second merge PUT when already merged")
+        return {
+            "state": "closed",
+            "merged": True,
+            "head": {"sha": receipt["head_sha"]},
+            "merge_commit_sha": merged_sha,
+        }, None
+
+    monkeypatch.setattr(receipt_module, "_run_gh_api", mock_api)
+
+    exit_code = receipt_module.main(
+        [
+            "--pr",
+            "42",
+            "--repo",
+            "owner/repo",
+            "--mode",
+            "apply",
+            "--receipt-file",
+            str(receipt_file),
+        ]
+    )
+    assert exit_code == 0
+    captured = json.loads(capsys.readouterr().out)
+    assert captured["pr"] == 42
+    assert captured["merge_commit_sha"] == merged_sha
+    assert captured["receipt"]["status"] == "merged"
+    assert captured["receipt"]["merge_result"]["status"] == "merged"
+    assert captured["receipt"]["merge_result"]["returned_merged_sha"] == merged_sha
+
+
+@pytest.mark.parametrize(
+    ("mutation_key", "mutation_value", "expected_reason"),
+    [
+        ("head_sha", "1" * 40, "live_head_sha_changed"),
+        ("base_sha", "2" * 40, "live_pr_base_sha_changed"),
+        ("metadata_digest", "3" * 64, "live_metadata_digest_changed"),
+        ("merge_commit_sha", None, "returned_merged_sha_missing_or_malformed"),
+        ("merge_commit_sha", "invalid_sha", "returned_merged_sha_missing_or_malformed"),
+    ],
+)
+def test_apply_mode_fails_closed_when_post_merge_reread_has_unexpected_drift(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mutation_key: str,
+    mutation_value: Any,
+    expected_reason: str,
+) -> None:
+    """Unexpected drift in immutable identity fields blocks apply without a second merge."""
+    receipt = _receipt()
+    receipt_file = tmp_path / "receipt.json"
+    receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+
+    merged_sha = "800be570faf17ba060a9a95fef1d3027a62ac90f"
+    merged_at = "2026-09-03T19:53:13Z"
+
+    post_merge_evidence = _live_evidence(receipt)
+    post_merge_evidence["pr_state"] = "MERGED"
+    post_merge_evidence["pr_merged_at"] = merged_at
+    post_merge_evidence["merge_commit_sha"] = merged_sha
+    post_merge_evidence[mutation_key] = mutation_value
+
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (copy.deepcopy(post_merge_evidence), None),
+    )
+
+    def mock_api(
+        method: str, path: str, payload: dict[str, Any] | None = None
+    ) -> tuple[dict[str, Any], None]:
+        if method == "PUT":
+            pytest.fail("guarded apply must not attempt a second merge PUT on drifted evidence")
+        return {"state": "closed", "merged": True}, None
+
+    monkeypatch.setattr(receipt_module, "_run_gh_api", mock_api)
+
+    exit_code = receipt_module.main(
+        [
+            "--pr",
+            "42",
+            "--repo",
+            "owner/repo",
+            "--mode",
+            "apply",
+            "--receipt-file",
+            str(receipt_file),
+        ]
+    )
+    assert exit_code == 1
+    captured = json.loads(capsys.readouterr().out)
+    assert captured["status"] == "blocked"
+    assert expected_reason in captured["reasons"]
+
+
+def test_apply_mode_fails_closed_when_pr_is_closed_unmerged(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A closed PR without a merged_at timestamp is not a terminal merged transition."""
+    receipt = _receipt()
+    receipt_file = tmp_path / "receipt.json"
+    receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+
+    post_merge_evidence = _live_evidence(receipt)
+    post_merge_evidence["pr_state"] = "CLOSED"
+    post_merge_evidence["pr_merged_at"] = None
+
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (copy.deepcopy(post_merge_evidence), None),
+    )
+
+    exit_code = receipt_module.main(
+        [
+            "--pr",
+            "42",
+            "--repo",
+            "owner/repo",
+            "--mode",
+            "apply",
+            "--receipt-file",
+            str(receipt_file),
+        ]
+    )
+    assert exit_code == 1
+    captured = json.loads(capsys.readouterr().out)
+    assert captured["status"] == "blocked"
+    assert "live_pr_state_changed" in captured["reasons"]
+
+
+def test_apply_mode_fails_closed_when_merged_sha_mismatches_receipt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """If the receipt already records a merge SHA, a different live merge SHA fails closed."""
+    receipt = _receipt()
+    receipt["merge_result"] = {
+        "status": "merged",
+        "returned_merged_sha": "a" * 40,
+    }
+    receipt_file = tmp_path / "receipt.json"
+    receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+
+    post_merge_evidence = _live_evidence(receipt)
+    post_merge_evidence["pr_state"] = "MERGED"
+    post_merge_evidence["pr_merged_at"] = "2026-09-03T19:53:13Z"
+    post_merge_evidence["merge_commit_sha"] = "b" * 40
+
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (copy.deepcopy(post_merge_evidence), None),
+    )
+
+    exit_code = receipt_module.main(
+        [
+            "--pr",
+            "42",
+            "--repo",
+            "owner/repo",
+            "--mode",
+            "apply",
+            "--receipt-file",
+            str(receipt_file),
+        ]
+    )
+    assert exit_code == 1
+    captured = json.loads(capsys.readouterr().out)
+    assert captured["status"] == "blocked"
+    assert "post_merge_sha_mismatch" in captured["reasons"]
+
+
+def test_apply_mode_fails_closed_on_malformed_merge_result(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Malformed receipt state must block terminal recovery instead of raising."""
+    receipt = _receipt()
+    receipt["merge_result"] = "not-an-object"
+    receipt["receipt_digest"] = receipt_module.receipt_digest(receipt)
+    receipt_file = tmp_path / "receipt.json"
+    receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+
+    post_merge_evidence = _live_evidence(_receipt())
+    post_merge_evidence["pr_state"] = "MERGED"
+    post_merge_evidence["pr_merged_at"] = "2026-09-03T19:53:13Z"
+    post_merge_evidence["merge_commit_sha"] = "8" * 40
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (copy.deepcopy(post_merge_evidence), None),
+    )
+
+    exit_code = receipt_module.main(
+        [
+            "--pr",
+            "42",
+            "--repo",
+            "owner/repo",
+            "--mode",
+            "apply",
+            "--receipt-file",
+            str(receipt_file),
+        ]
+    )
+
+    assert exit_code == 1
+    captured = json.loads(capsys.readouterr().out)
+    assert captured["status"] == "blocked"
+    assert "merge_result_invalid_for_premerge_verification" in captured["reasons"]

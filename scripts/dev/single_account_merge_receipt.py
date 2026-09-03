@@ -1099,6 +1099,7 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
     evidence_provenance: Any = None,
     pr_state: str | None = None,
     pr_merged_at: str | None = None,
+    merge_commit_sha: str | None = None,
     observed_at: str | None = None,
 ) -> dict[str, Any]:
     """Produce one deterministic receipt, including blocked evidence states."""
@@ -1358,39 +1359,70 @@ def validate_receipt(receipt: Any) -> dict[str, Any]:
     }
 
 
-def verify_receipt(  # noqa: C901, PLR0912 - revalidation compares every immutable evidence dimension.
+def _compare_live_evidence(  # noqa: C901, PLR0912 - revalidation compares every immutable evidence dimension.
     receipt: Mapping[str, Any],
+    live_evidence: Mapping[str, Any],
     *,
-    live_evidence: Mapping[str, Any] | None = None,
-    require_merged: bool = False,
-) -> dict[str, Any]:
-    """Verify a receipt and optionally compare it with a fresh live snapshot."""
-    structural = validate_receipt(receipt)
-    reasons = list(structural.get("reasons", []))
-    if structural.get("passed") is True:
-        reasons.extend(_premerge_reasons(receipt))
+    is_terminal_merged: bool,
+) -> list[str]:
+    """Compare an immutable receipt against live re-read evidence."""
+    reasons: list[str] = []
+    if _string(live_evidence.get("head_sha")).lower() != _string(receipt.get("head_sha")).lower():
+        reasons.append("live_head_sha_changed")
+    if _string(live_evidence.get("base_sha")).lower() != _string(receipt.get("base_sha")).lower():
+        reasons.append("live_pr_base_sha_changed")
+    if (
+        _string(live_evidence.get("metadata_digest")).lower()
+        != _string(receipt.get("metadata_digest")).lower()
+    ):
+        reasons.append("live_metadata_digest_changed")
+    fresh_checks = normalize_required_checks(
+        live_evidence.get("required_checks"), head_sha=_string(live_evidence.get("head_sha"))
+    )
+    if _canonical_json(fresh_checks) != _canonical_json(receipt.get("required_checks")):
+        reasons.append("live_required_checks_changed")
+    fresh_review = _normalize_review_source(
+        live_evidence.get("review_source"),
+        head_sha=_string(live_evidence.get("head_sha")),
+        metadata_digest=_string(live_evidence.get("metadata_digest")),
+    )
+    if _canonical_json(fresh_review) != _canonical_json(receipt.get("implementation_review")):
+        reasons.append("live_implementation_review_changed")
+    fresh_threads = _normalize_thread_resolution(live_evidence.get("thread_resolution"))
+    if fresh_threads.get("status") != (receipt.get("thread_resolution") or {}).get("status"):
+        reasons.append("live_review_threads_changed")
+    fresh_reviewers = _normalize_requested(
+        live_evidence.get("requested_reviewers"), label="reviewers"
+    )
+    fresh_teams = _normalize_requested(live_evidence.get("requested_teams"), label="teams")
+    if fresh_reviewers.get("status") != (receipt.get("requested_reviewers") or {}).get("status"):
+        reasons.append("live_requested_reviewers_changed")
+    if fresh_teams.get("status") != (receipt.get("requested_teams") or {}).get("status"):
+        reasons.append("live_requested_teams_changed")
+    if "evidence_provenance" in receipt and _canonical_json(
+        live_evidence.get("evidence_provenance")
+    ) != _canonical_json(receipt.get("evidence_provenance")):
+        reasons.append("live_evidence_provenance_changed")
 
-    if live_evidence is not None:
-        if (
-            _string(live_evidence.get("head_sha")).lower()
-            != _string(receipt.get("head_sha")).lower()
-        ):
-            reasons.append("live_head_sha_changed")
-        if (
-            _string(live_evidence.get("base_sha")).lower()
-            != _string(receipt.get("base_sha")).lower()
-        ):
-            reasons.append("live_pr_base_sha_changed")
+    if is_terminal_merged:
+        merged_sha = live_evidence.get("merge_commit_sha")
+        if not _full_sha(_string(merged_sha)):
+            reasons.append("returned_merged_sha_missing_or_malformed")
+        else:
+            merge_result = receipt.get("merge_result")
+            recorded_sha = (
+                merge_result.get("returned_merged_sha")
+                if isinstance(merge_result, Mapping)
+                else None
+            )
+            if recorded_sha and _string(recorded_sha).lower() != _string(merged_sha).lower():
+                reasons.append("post_merge_sha_mismatch")
+    else:
         if (
             _string(live_evidence.get("current_base_sha")).lower()
             != _string(receipt.get("current_base_sha")).lower()
         ):
             reasons.append("live_current_base_sha_changed")
-        if (
-            _string(live_evidence.get("metadata_digest")).lower()
-            != _string(receipt.get("metadata_digest")).lower()
-        ):
-            reasons.append("live_metadata_digest_changed")
         if (
             _string(live_evidence.get("pr_state")).upper()
             != _string(receipt.get("pr_state")).upper()
@@ -1398,39 +1430,10 @@ def verify_receipt(  # noqa: C901, PLR0912 - revalidation compares every immutab
             reasons.append("live_pr_state_changed")
         if live_evidence.get("pr_merged_at") != receipt.get("pr_merged_at"):
             reasons.append("live_pr_merged_at_changed")
-        fresh_checks = normalize_required_checks(
-            live_evidence.get("required_checks"), head_sha=_string(live_evidence.get("head_sha"))
-        )
-        if _canonical_json(fresh_checks) != _canonical_json(receipt.get("required_checks")):
-            reasons.append("live_required_checks_changed")
-        fresh_review = _normalize_review_source(
-            live_evidence.get("review_source"),
-            head_sha=_string(live_evidence.get("head_sha")),
-            metadata_digest=_string(live_evidence.get("metadata_digest")),
-        )
-        if _canonical_json(fresh_review) != _canonical_json(receipt.get("implementation_review")):
-            reasons.append("live_implementation_review_changed")
-        fresh_threads = _normalize_thread_resolution(live_evidence.get("thread_resolution"))
-        if fresh_threads.get("status") != (receipt.get("thread_resolution") or {}).get("status"):
-            reasons.append("live_review_threads_changed")
-        fresh_reviewers = _normalize_requested(
-            live_evidence.get("requested_reviewers"), label="reviewers"
-        )
-        fresh_teams = _normalize_requested(live_evidence.get("requested_teams"), label="teams")
-        if fresh_reviewers.get("status") != (receipt.get("requested_reviewers") or {}).get(
-            "status"
-        ):
-            reasons.append("live_requested_reviewers_changed")
-        if fresh_teams.get("status") != (receipt.get("requested_teams") or {}).get("status"):
-            reasons.append("live_requested_teams_changed")
         if _canonical_json(live_evidence.get("gate_audit")) != _canonical_json(
             receipt.get("gate_audit")
         ):
             reasons.append("live_gate_audit_changed")
-        if "evidence_provenance" in receipt and _canonical_json(
-            live_evidence.get("evidence_provenance")
-        ) != _canonical_json(receipt.get("evidence_provenance")):
-            reasons.append("live_evidence_provenance_changed")
         if "ordinary_cas" in receipt and _canonical_json(
             live_evidence.get("ordinary_cas")
         ) != _canonical_json(receipt.get("ordinary_cas")):
@@ -1438,6 +1441,32 @@ def verify_receipt(  # noqa: C901, PLR0912 - revalidation compares every immutab
         fresh_holds = derive_holds(live_evidence)
         if _canonical_json(fresh_holds) != _canonical_json(receipt.get("holds")):
             reasons.append("live_hold_disposition_changed")
+    return reasons
+
+
+def verify_receipt(
+    receipt: Mapping[str, Any],
+    *,
+    live_evidence: Mapping[str, Any] | None = None,
+    require_merged: bool = False,
+    allow_terminal_transition: bool = False,
+) -> dict[str, Any]:
+    """Verify a receipt and optionally compare it with a fresh live snapshot."""
+    structural = validate_receipt(receipt)
+    reasons = list(structural.get("reasons", []))
+    if structural.get("passed") is True:
+        reasons.extend(_premerge_reasons(receipt))
+
+    is_terminal_merged = False
+    if live_evidence is not None:
+        is_terminal_merged = (
+            allow_terminal_transition
+            and _string(live_evidence.get("pr_state")).upper() in {"CLOSED", "MERGED"}
+            and bool(live_evidence.get("pr_merged_at"))
+        )
+        reasons.extend(
+            _compare_live_evidence(receipt, live_evidence, is_terminal_merged=is_terminal_merged)
+        )
 
     merge_result = (
         receipt.get("merge_result") if isinstance(receipt.get("merge_result"), Mapping) else {}
@@ -1452,7 +1481,7 @@ def verify_receipt(  # noqa: C901, PLR0912 - revalidation compares every immutab
 
     unique = sorted(set(reasons))
     passed = not unique
-    return {
+    res: dict[str, Any] = {
         "schema": VERIFY_SCHEMA,
         "status": "passed" if passed else "blocked",
         "passed": passed,
@@ -1461,6 +1490,12 @@ def verify_receipt(  # noqa: C901, PLR0912 - revalidation compares every immutab
         "head_sha": _string(receipt.get("head_sha")),
         "current_base_sha": _string(receipt.get("current_base_sha")),
     }
+    if is_terminal_merged:
+        res["terminal_transition"] = "merged"
+        merged_sha = live_evidence.get("merge_commit_sha")
+        if _full_sha(_string(merged_sha)):
+            res["merge_commit_sha"] = _string(merged_sha)
+    return res
 
 
 def record_merge_result(
@@ -1497,12 +1532,47 @@ def apply_guarded_merge(
         return None, "receipt blocked: " + ", ".join(verification.get("reasons", []))
     pr_number = receipt.get("pr_number")
     head_sha = _string(receipt.get("head_sha"))
+
     response, error = api(
         "PUT",
         f"repos/{repository}/pulls/{pr_number}/merge",
         {"sha": head_sha, "merge_method": "squash"},
     )
     if error:
+        # Verify whether the PR actually transitioned to merged despite the PUT error (e.g. timeout or already merged)
+        verified, verify_error = api("GET", f"repos/{repository}/pulls/{pr_number}", None)
+        if (
+            not verify_error
+            and isinstance(verified, Mapping)
+            and verified.get("state") == "closed"
+            and verified.get("merged") is True
+        ):
+            remote_head = (
+                verified.get("head", {}).get("sha")
+                if isinstance(verified.get("head"), Mapping)
+                else verified.get("headRefOid")
+            )
+            merged_sha = _string(
+                verified.get("merge_commit_sha")
+                or (
+                    verified.get("mergeCommit", {}).get("oid")
+                    if isinstance(verified.get("mergeCommit"), Mapping)
+                    else None
+                )
+            )
+            if _string(remote_head).lower() == head_sha.lower() and _full_sha(merged_sha):
+                merged_receipt = record_merge_result(
+                    receipt,
+                    status="merged",
+                    returned_merged_sha=merged_sha,
+                    response=dict(verified),
+                    observed_at=observed_at,
+                )
+                return {
+                    "pr": pr_number,
+                    "merge_commit_sha": merged_sha,
+                    "receipt": merged_receipt,
+                }, None
         return record_merge_result(
             receipt, status="failed", response={"error": error}, observed_at=observed_at
         ), error
@@ -1732,6 +1802,22 @@ def build_live_evidence(
     }
     if thread_error:
         evidence_provenance["review_threads"]["diagnostic"] = thread_error
+    merge_commit_sha = snapshot.get("merge_commit_sha")
+    if (
+        not merge_commit_sha
+        and _string(snapshot.get("pr_state")).upper() in {"MERGED", "CLOSED"}
+        and snapshot.get("pr_merged_at")
+    ):
+        pull_data, _ = _run_gh_api("GET", f"repos/{repository}/pulls/{pr_number}", None)
+        if isinstance(pull_data, Mapping):
+            candidate_sha = pull_data.get("merge_commit_sha") or (
+                pull_data.get("mergeCommit", {}).get("oid")
+                if isinstance(pull_data.get("mergeCommit"), Mapping)
+                else None
+            )
+            if isinstance(candidate_sha, str) and _full_sha(candidate_sha):
+                merge_commit_sha = candidate_sha
+
     return {
         "repository": repository,
         "pr_number": int(snapshot.get("number") or pr_number),
@@ -1740,6 +1826,7 @@ def build_live_evidence(
         "current_base_sha": current_base_sha,
         "pr_state": snapshot.get("pr_state"),
         "pr_merged_at": snapshot.get("pr_merged_at"),
+        "merge_commit_sha": merge_commit_sha,
         "metadata_digest": snapshot.get("metadata_digest"),
         "required_checks": snapshot.get("required_checks"),
         "review_source": review_source,
@@ -2021,13 +2108,46 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - CLI modes are ex
             )
         )
         return 1
-    verification = verify_receipt(receipt, live_evidence=evidence)
+    merge_result = receipt.get("merge_result")
+    merge_status = merge_result.get("status") if isinstance(merge_result, Mapping) else None
+    allow_terminal = args.mode == "apply" or merge_status == "merged"
+    verification = verify_receipt(
+        receipt, live_evidence=evidence, allow_terminal_transition=allow_terminal
+    )
     if args.mode == "validate":
         print(json.dumps(verification, indent=2, sort_keys=True))
         return 0 if verification.get("passed") is True else 1
     if verification.get("passed") is not True:
         print(json.dumps(verification, indent=2, sort_keys=True))
         return 1
+    if args.mode == "apply" and verification.get("terminal_transition") == "merged":
+        merged_sha = _string(
+            verification.get("merge_commit_sha") or evidence.get("merge_commit_sha")
+        )
+        merged_receipt = record_merge_result(
+            receipt,
+            status="merged",
+            returned_merged_sha=merged_sha,
+            response={
+                "message": "Pull Request already merged; terminal transition verified",
+                "sha": merged_sha,
+                "merged": True,
+            },
+            observed_at=evidence.get("observed_at"),
+        )
+        print(
+            json.dumps(
+                {
+                    "pr": args.pr,
+                    "merge_commit_sha": merged_sha,
+                    "receipt": merged_receipt,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+
     merged, merge_error = apply_guarded_merge(receipt, repository=args.repo, api=_run_gh_api)
     if merge_error or merged is None:
         output: dict[str, Any] = {

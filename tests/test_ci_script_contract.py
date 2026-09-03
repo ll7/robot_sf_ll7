@@ -27,6 +27,7 @@ Excluded (no usage/help support at all):
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import tomllib
 from pathlib import Path
@@ -2139,6 +2140,34 @@ def test_worktree_shared_venv_standalone_fails_closed_on_stale_pinned_tool(
     assert "resolved to 0.16.4 but the active checkout pins ruff==0.16.5" in result.stderr
 
 
+def test_worktree_shared_venv_rejects_option_as_wrapped_command(
+    tmp_path: Path,
+) -> None:
+    """An option after the wrapper separator cannot bypass freshness as the command name."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--standalone",
+            "--",
+            "--no-sync",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "must start with an executable, not an option: --no-sync" in result.stderr
+    assert "uv-reached" not in result.stderr
+
+
 def test_worktree_shared_venv_checks_tool_after_uv_run_prefix(tmp_path: Path) -> None:
     """The documented nested ``uv run`` form must not bypass the tool gate."""
     repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
@@ -2272,6 +2301,73 @@ def test_worktree_shared_venv_rejects_unknown_uv_run_equals_option(
     assert result.returncode == 2
     assert "uv-reached" not in result.stderr
     assert "could not identify the nested uv tool" in result.stderr
+
+
+@pytest.mark.parametrize("uv_option", [("--with", "tomli"), ("--isolated",)])
+def test_worktree_shared_venv_rejects_environment_changing_uv_run_options(
+    tmp_path: Path,
+    uv_option: tuple[str, ...],
+) -> None:
+    """Freshness must not inspect the selected venv for an overlay or isolated run."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.5")
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--standalone",
+            "--",
+            "uv",
+            "run",
+            *uv_option,
+            "ruff",
+            "check",
+            "x.py",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "unsupported environment-changing uv run option" in result.stderr
+    assert "uv-reached" not in result.stderr
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="real uv is not installed")
+def test_worktree_shared_venv_rejects_overlay_before_real_uv_run(tmp_path: Path) -> None:
+    """With real uv available, an unsupported overlay is rejected before uv can run it."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.5")
+    real_uv = Path(shutil.which("uv") or "uv")
+    env["PATH"] = f"{real_uv.parent}{os.pathsep}{os.defpath}"
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--standalone",
+            "--",
+            "uv",
+            "run",
+            "--with=tomli",
+            "ruff",
+            "--version",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "unsupported environment-changing uv run option '--with=tomli'" in result.stderr
 
 
 def test_worktree_shared_venv_passes_fresh_pinned_tool_with_preflight_line(

@@ -40,6 +40,9 @@ Options:
                           precedence over any reused installed copy. Also accepted via
                           ROBOT_SF_VENV_FRESHNESS_CHECK=skip. Bypasses the pinned-tool version
                           gate as well; use only after confirming the environment matches.
+  The wrapped command must begin with an executable after `--`. Nested `uv run` overlay or
+  isolated-environment options (`--with*`, `--isolated`, `--python`) are rejected because this
+  helper cannot verify freshness for the resulting environment.
   -h, --help             Show this help message.
 
 Environment:
@@ -187,6 +190,11 @@ if [[ ${#cmd[@]} -eq 0 ]]; then
   show_help >&2
   exit 2
 fi
+if [[ "${cmd[0]}" == -* ]]; then
+  echo "ERROR: the wrapped command must start with an executable, not an option: ${cmd[0]}" >&2
+  echo "Put wrapper options before '--' and provide the command after it." >&2
+  exit 2
+fi
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
@@ -272,7 +280,15 @@ check_shared_venv_freshness() {
           tool="python"
           break
           ;;
-        --extra|--no-extra|--group|--no-group|--only-group|--no-editable-package|--env-file|-w|--with|--with-editable|--with-requirements|--package|--python-platform|--index|--default-index|-i|--index-url|--extra-index-url|-f|--find-links|--index-strategy|--keyring-provider|-P|--upgrade-package|--upgrade-group|--resolution|--prerelease|--fork-strategy|--exclude-newer|--exclude-newer-package|--no-sources-package|--reinstall-package|--refresh-package|--link-mode|-C|--config-setting|--config-settings-package|--no-build-isolation-package|--no-build-package|--no-binary-package|-p|--python|--allow-insecure-host|--cache-dir|--color|--directory|--project|--config-file)
+        --isolated|--with|--with-editable|--with-requirements|-w|-p|--python)
+          freshness_parse_error="unsupported environment-changing uv run option '$uv_run_arg'"
+          break
+          ;;
+        --with=*|--with-editable=*|--with-requirements=*|--isolated=*|-w=*|-p=*|--python=*)
+          freshness_parse_error="unsupported environment-changing uv run option '$uv_run_arg'"
+          break
+          ;;
+        --extra|--no-extra|--group|--no-group|--only-group|--no-editable-package|--env-file|--package|--python-platform|--index|--default-index|-i|--index-url|--extra-index-url|-f|--find-links|--index-strategy|--keyring-provider|-P|--upgrade-package|--upgrade-group|--resolution|--prerelease|--fork-strategy|--exclude-newer|--exclude-newer-package|--no-sources-package|--reinstall-package|--refresh-package|--link-mode|-C|--config-setting|--config-settings-package|--no-build-isolation-package|--no-build-package|--no-binary-package|--allow-insecure-host|--cache-dir|--color|--directory|--project|--config-file)
           if (( uv_run_index + 1 >= ${#cmd[@]} )); then
             freshness_parse_error="uv run option '$uv_run_arg' is missing its value"
             break

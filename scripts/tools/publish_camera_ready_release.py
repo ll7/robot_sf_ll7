@@ -7,6 +7,7 @@ import argparse
 import json
 import re
 import subprocess
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -39,6 +40,8 @@ _HTTP_ERROR_STATUS_RE = re.compile(
 )
 _CUSTODY_SCHEMA = "benchmark-publication-custody.v1"
 _CUSTODY_DIGEST_POLICY = "archive digest is external to the bundle; no cycle"
+_DRAFT_READBACK_ATTEMPTS = 10
+_DRAFT_READBACK_DELAY_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -759,7 +762,13 @@ def _require_exact_draft(
     tag: str,
     expected_source_sha: str,
 ) -> tuple[dict[str, object] | None, str | None]:
-    """Require one exact unpublished draft and an exact peeled tag target."""
+    """Require one exact unpublished draft and validate any existing tag target.
+
+    GitHub normally does not create ``refs/tags/<tag>`` until a draft release is
+    published.  The draft's exact ``target_commitish`` therefore binds its
+    intended source while an absent tag ref is expected.  If the ref already
+    exists, it must still peel to the same source SHA so drift remains blocking.
+    """
     release, blocker = _query_release_listing(repo=repo, tag=tag)
     if blocker is not None:
         return None, blocker
@@ -768,10 +777,10 @@ def _require_exact_draft(
     blocker = _release_target_blocker(release, tag=tag, source_sha=expected_source_sha)
     if blocker is not None:
         return None, blocker
-    tag_target, tag_blocker = _resolve_tag_ref_target(repo=repo, tag=tag, allow_absent=False)
+    tag_target, tag_blocker = _resolve_tag_ref_target(repo=repo, tag=tag, allow_absent=True)
     if tag_blocker is not None:
         return None, tag_blocker
-    if tag_target != expected_source_sha:
+    if tag_target is not None and tag_target != expected_source_sha:
         return (
             None,
             f"tag {tag} resolves to {tag_target!r}, not the required "
@@ -952,9 +961,28 @@ def _admit_draft_assets(
     source_sha: str,
     local_assets: tuple[_LocalAsset, ...],
     error_prefix: str,
+    readback_attempts: int = 1,
 ) -> tuple[dict[str, object], tuple[_LocalAsset, ...]]:
     """Re-read one exact draft and validate its assets before any upload."""
-    release, blocker = _require_exact_draft(repo=repo, tag=tag, expected_source_sha=source_sha)
+    missing_draft = f"release {tag} does not exist as an unpublished draft"
+    release: dict[str, object] | None = None
+    blocker: str | None = None
+    for attempt in range(readback_attempts):
+        release, blocker = _require_exact_draft(
+            repo=repo,
+            tag=tag,
+            expected_source_sha=source_sha,
+        )
+        if blocker != missing_draft or attempt + 1 == readback_attempts:
+            break
+        logger.info(
+            "Waiting for draft release readback tag={} repo={} attempt={}/{}",
+            tag,
+            repo,
+            attempt + 1,
+            readback_attempts,
+        )
+        time.sleep(_DRAFT_READBACK_DELAY_SECONDS)
     if blocker is not None or release is None:
         raise SystemExit(f"{error_prefix}: {blocker or 'missing release'}")
     blocker, missing_assets = _validate_remote_asset_inventory(release, local_assets)
@@ -993,6 +1021,7 @@ def _execute_release_upload(
         source_sha=source_sha,
         local_assets=local_assets,
         error_prefix=error_prefix,
+        readback_attempts=_DRAFT_READBACK_ATTEMPTS if draft_create_command is not None else 1,
     )
     _set_upload_inventory_payload(payload, local_assets=local_assets, missing_assets=missing_assets)
     if not missing_assets:

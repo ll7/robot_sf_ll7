@@ -301,6 +301,142 @@ def test_build_manifest_records_terminal_state_per_attempt(tmp_path: Path) -> No
     assert data["attempted_routes"][2]["terminal_state"] == "none"
 
 
+# --- Delegation startup recovery tests ---
+
+
+def test_classify_delegation_attempt_distinguishes_backend_404_from_task_failure() -> None:
+    """A backend 404 before startup must not be reported as a worker task failure."""
+    startup = manifest.classify_delegation_attempt(
+        {
+            "worker_started": False,
+            "run_dir": None,
+            "returncode": 1,
+            "stderr": (
+                "unexpected status 404 Not Found from "
+                "https://chatgpt.com/backend-api/codex/responses"
+            ),
+        }
+    )
+    task = manifest.classify_delegation_attempt(
+        {
+            "worker_started": True,
+            "run_dir": "run-1",
+            "returncode": 1,
+            "stderr": "worker task failed after startup",
+        }
+    )
+
+    assert startup["phase"] == "worker_startup"
+    assert startup["classification"] == "startup_backend_404"
+    assert startup["signature"] == "codex_responses_backend_http_404"
+    assert startup["retryable"] is True
+    assert task["phase"] == "worker_task"
+    assert task["classification"] == "worker_task_failure"
+    assert task["retryable"] is False
+
+
+def test_classify_delegation_attempt_does_not_infer_success_from_missing_status() -> None:
+    """A started worker with no terminal status remains unavailable, not successful."""
+    result = manifest.classify_delegation_attempt(
+        {"worker_started": True, "run_dir": "run-unknown", "returncode": None}
+    )
+
+    assert result["phase"] == "worker_task"
+    assert result["classification"] == "unavailable"
+    assert result["review_evidence_status"] == "unavailable"
+    assert result["retryable"] is False
+
+
+def test_build_delegation_recovery_recommends_only_one_bounded_retry() -> None:
+    """A startup 404 produces a recommendation, not an unbounded executor loop."""
+    recovery = manifest.build_delegation_recovery(
+        [
+            {
+                "worker_started": False,
+                "run_dir": None,
+                "http_status": 404,
+            }
+        ],
+        max_attempts=2,
+    )
+
+    assert recovery["schema"] == "delegation_recovery.v1"
+    assert recovery["retry_recommended"] is True
+    assert recovery["next_action"] == "retry_worker_start_once"
+    assert recovery["fallback"]["required"] is False
+    assert recovery["fallback"]["independent_review_authorized"] is False
+
+
+def test_build_delegation_recovery_requires_local_fallback_after_retry_budget() -> None:
+    """Exhausted startup retries remain inconclusive and require manual/local review."""
+    attempt = {"worker_started": False, "run_dir": None, "http_status": 404}
+    recovery = manifest.build_delegation_recovery([attempt, attempt], max_attempts=2)
+
+    assert recovery["retry_recommended"] is False
+    assert recovery["next_action"] == "manual_or_local_review_required"
+    assert recovery["fallback"] == {
+        "required": True,
+        "mode": "manual_or_local_review",
+        "aggregation": "inconclusive",
+        "independent_review_authorized": False,
+    }
+
+
+def test_build_delegation_recovery_does_not_duplicate_successful_worker() -> None:
+    """A later startup failure must not trigger another route after worker success."""
+    recovery = manifest.build_delegation_recovery(
+        [
+            {
+                "worker_started": True,
+                "run_dir": "run-success",
+                "returncode": 0,
+                "failure_class": "none",
+            },
+            {"worker_started": False, "run_dir": None, "http_status": 404},
+        ],
+        max_attempts=3,
+    )
+
+    assert recovery["retry_recommended"] is False
+    assert recovery["next_action"] == "do_not_retry"
+    assert recovery["reason"] == (
+        "a successful worker attempt was already observed; avoid duplicate work"
+    )
+
+
+def test_build_manifest_exposes_startup_recovery_without_authorizing_review(tmp_path: Path) -> None:
+    """The manifest carries recovery evidence while retaining its route-only boundary."""
+    repo = _init_repo(tmp_path / "repo")
+    data = manifest.build_routing_manifest(
+        [
+            {
+                "route": {"model": "luna"},
+                "worker_started": False,
+                "run_dir": None,
+                "returncode": 1,
+                "http_status": 404,
+            }
+        ],
+        chosen_index=0,
+        target_repo=repo,
+    )
+
+    attempt = data["attempted_routes"][0]
+    assert attempt["delegation"]["classification"] == "startup_backend_404"
+    assert data["recovery"]["next_action"] == "retry_worker_start_once"
+    assert data["route_evidence_only"] is True
+    assert data["aggregation"] == "inconclusive"
+    assert data["recovery"]["fallback"]["independent_review_authorized"] is False
+
+
+def test_build_delegation_recovery_rejects_empty_retry_budget() -> None:
+    """An empty or unbounded retry budget is invalid instead of weakening the contract."""
+    with pytest.raises(ValueError, match="between 1 and 3"):
+        manifest.build_delegation_recovery([], max_attempts=0)
+    with pytest.raises(ValueError, match="between 1 and 3"):
+        manifest.build_delegation_recovery([], max_attempts=4)
+
+
 # --- Scope and spill detection tests ---
 
 

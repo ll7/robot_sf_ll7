@@ -42,7 +42,7 @@ scripts/dev/create_worktree.sh \
   --path "$WORKTREE_PARENT/review-pr-123" \
   --base origin/main \
   --mode review
-python scripts/dev/review_worktree_guard.py integrate \
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/review_worktree_guard.py integrate \
   --worktree "$WORKTREE_PARENT/review-pr-123" \
   --source-ref origin/main \
   --remote origin
@@ -65,17 +65,17 @@ If the selected base predates the guard files, `create_worktree.sh --mode review
 clean and temporarily points its worktree-local hooks path at the invoking checkout's tracked
 guard and hook. Keep that invoking checkout available until the review worktree is restored or
 removed; once the guard is present in the base, the target uses its own tracked files. In this
-fallback, invoke the integration helper by its absolute path in the invoking checkout, for
-example `python "$MAIN_REPO_ROOT/scripts/dev/review_worktree_guard.py" integrate --worktree
-<review-worktree> --source-ref origin/main --remote origin`; the target does not contain the
-helper yet.
+fallback, invoke the integration helper through the invoking checkout's wrapper, for example
+`"$MAIN_REPO_ROOT/scripts/dev/run_worktree_shared_venv.sh" --standalone -- python
+"$MAIN_REPO_ROOT/scripts/dev/review_worktree_guard.py" integrate --worktree <review-worktree>
+--source-ref origin/main --remote origin`; the target does not contain the helper yet.
 The integration helper snapshots every ref from `git ls-remote --refs`, runs
 `git merge --no-commit --no-ff`, always attempts `git merge --abort`, restores the pre-probe
 `ORIG_HEAD` pseudo-ref, and exits nonzero unless the worktree is clean and the before/after remote
 snapshots are identical.
 
 Ordinary implementation worktrees retain the default pushable behavior. To deliberately restore a
-previously protected worktree, run `python scripts/dev/review_worktree_guard.py configure
+previously protected worktree, run `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/review_worktree_guard.py configure
 --worktree <path> --mode implementation`; the helper restores the worktree-local hook and push
 configuration captured when review mode was enabled. Re-fetch `origin/main` before creating a new
 review worktree so its source ref is explicit and current.
@@ -99,16 +99,23 @@ Creation writes the receipt atomically after the linked worktree exists. The `--
 guarded before it starts; the read-only guard exits nonzero with one JSON result when the current
 working directory, top-level, shared Git directory, branch/ref, or base ancestry differs. Workers
 started separately must run the equivalent check from inside the assigned worktree with
-`python scripts/dev/worktree_receipt.py check`.
+`scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/worktree_receipt.py check`.
 Ordinary callers retain the existing behavior when receipt options are omitted.
 
-Bootstrap symlinks the local machine context and creates a worktree-local `.venv`. For a cheap
-targeted check, use the shared environment wrapper instead:
+Bootstrap symlinks the local machine context and creates a worktree-local `.venv`. Do not run a
+bare `uv run ...` first in a fresh worktree: it can materialize a partial local environment, which
+then shadows the shared environment selected by later commands. For a cheap targeted check, route
+the command through the shared environment wrapper instead:
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- \
-  python scripts/dev/check_worktree_optional_deps.py --profile all-extras
+  uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras
 ```
+
+If a worktree-local environment is intentional, create and sync it with
+`scripts/dev/bootstrap_worktree.sh` before using it. If a bare invocation has already created an
+accidental partial `.venv`, stop using that environment and follow the bootstrap/wrapper path after
+confirming it contains no worktree-local state that needs preserving.
 
 Never edit `.venv`; manage dependencies through `pyproject.toml` and `uv sync`. Never use a bare
 `git stash pop` in a linked worktree because all worktrees share one stash namespace. Prefer a

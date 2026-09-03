@@ -53,6 +53,7 @@ def test_check_context_notes_in_fresh_worktree_does_not_create_venv(tmp_path: Pa
         "run_worktree_shared_venv.sh",
         "common_setup.sh",
         "check_worktree_optional_deps.py",
+        "check_fast_pysf_runtime.py",
     ):
         source = ROOT / "scripts" / "dev" / script_name
         target = script_dir / script_name

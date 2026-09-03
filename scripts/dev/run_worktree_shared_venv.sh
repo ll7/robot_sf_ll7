@@ -8,14 +8,19 @@ Usage: scripts/dev/run_worktree_shared_venv.sh [options] -- <uv-run-command> [ar
 Run a targeted validation command from the current checkout while reusing a shared virtualenv.
 The helper pins imports to this worktree by prepending PYTHONPATH=$PWD:$PWD/fast-pysf and sets UV_NO_SYNC=1 so
 `uv run` does not silently resync or rewrite the shared environment.
+Do not start a fresh linked-worktree command with bare `uv run`: it can materialize a partial local
+`.venv` that then shadows the shared environment. Route commands through this wrapper; intentionally
+local environments must be created with `scripts/dev/bootstrap_worktree.sh` first.
 For linked worktrees, the helper also derives a per-worktree COVERAGE_FILE unless one is already
 set, preventing parallel focused pytest runs from sharing output/coverage/.coverage state.
 
 Because the shared env is reused without resync (UV_NO_SYNC=1), a stale owning-checkout .venv can
-lag the current worktree source. The vendored `pysocialforce` package is shadowed by
-PYTHONPATH=$PWD:$PWD/fast-pysf, so an initialized checkout source is authoritative and must not be
-rejected because the reused installed copy differs. If the source package is unavailable, the
-helper leaves the installed-environment decision to the command that imports it.
+lag the current worktree source. Before interpreter or pytest commands, the helper checks the
+installed vendored `pysocialforce` package against this checkout and fails closed with the exact
+`uv sync --all-extras --reinstall-package robot-sf` repair command when it is stale. After that
+check, PYTHONPATH=$PWD:$PWD/fast-pysf makes the checkout source authoritative for the command. Use
+--standalone for commands that do not import project code, or --no-freshness-check only after
+confirming the environment matches.
 Pinned tool binaries are a separate boundary (issue #8250): `uv run` executes the requested tool
 from the selected venv, so a stale venv would silently run a drifted binary. Before proceeding,
 the freshness preflight compares the resolved `<venv>/bin/<tool>` version against the exact `==`
@@ -36,10 +41,10 @@ Options:
                          the dependency-profile and project-source checks, but still applies the
                          pinned-tool freshness gate; it does not prepend the worktree root to
                          PYTHONPATH.
-  --no-freshness-check   Retained for compatibility; checkout-local fast-pysf source already takes
-                          precedence over any reused installed copy. Also accepted via
-                          ROBOT_SF_VENV_FRESHNESS_CHECK=skip. Bypasses the pinned-tool version
-                          gate as well; use only after confirming the environment matches.
+  --no-freshness-check   Retained for compatibility; checkout-local fast-pysf source takes
+                          precedence after the interpreter package-coherence check. Also accepted
+                          via ROBOT_SF_VENV_FRESHNESS_CHECK=skip. Bypasses all freshness gates; use
+                          only after confirming the environment matches.
   The wrapped command must begin with an executable after `--`. Nested `uv run` overlay or
   isolated-environment options (`--with*`, `--isolated`, `--python`) are rejected because this
   helper cannot verify freshness for the resulting environment.
@@ -245,15 +250,43 @@ if [[ -z "$standalone" ]]; then
   check_dependency_profile
 fi
 
+is_project_interpreter_command() {
+  local tool_name="${1##*/}"
+  case "$tool_name" in
+    python|python[0-9]*|pytest|py.test)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+check_project_package_freshness() {
+  local venv_path="$1"
+  local checker="$repo_root/scripts/dev/check_fast_pysf_runtime.py"
+  if [[ ! -f "$checker" ]]; then
+    echo "ERROR: shared-venv project package freshness checker is missing: $checker" >&2
+    echo "Restore the checkout's scripts/dev/check_fast_pysf_runtime.py, then retry." >&2
+    return 2
+  fi
+
+  local report
+  if ! report="$(env -u PYTHONPATH "$venv_path/bin/python" "$checker" 2>&1)"; then
+    echo "ERROR: shared-venv project package freshness preflight failed in $venv_path." >&2
+    printf '%s\n' "$report" >&2
+    echo "Remedy: run 'uv sync --all-extras --reinstall-package robot-sf' in the owning checkout, then retry." >&2
+    return 2
+  fi
+  echo "Shared-venv project package freshness preflight passed: package=pysocialforce venv=$venv_path" >&2
+}
+
 check_shared_venv_freshness() {
   local venv_path="$1"
   local src_pkg="$repo_root/fast-pysf/pysocialforce"
 
-  # PYTHONPATH makes the checkout source authoritative; an owning checkout's
-  # installed copy is intentionally not a freshness boundary for this helper.
-  # Pinned tool binaries (issue #8250) are checked below: the requested tool
-  # runs from the selected venv, so only its version is compared against the
-  # active checkout pin. Interpreters and shells are never gated here.
+  # PYTHONPATH makes the checkout source authoritative after the interpreter
+  # package-coherence check below. Pinned tool binaries (issue #8250) are
+  # checked below: the requested tool runs from the selected venv, so its
+  # version is compared against the active checkout pin.
   local start_ms=""
   start_ms="$(date +%s%3N 2>/dev/null)" || start_ms=""
   local tool="${cmd[0]:-}"
@@ -343,7 +376,7 @@ check_shared_venv_freshness() {
   fi
   if [[ -z "$skip_reason" ]]; then
     case "$tool" in
-      python|python3|bash|sh|dash|uv|git)
+      python|python[0-9]*|pytest|py.test|bash|sh|dash|uv|git)
         skip_reason="interpreter-or-shell"
         ;;
     esac
@@ -366,6 +399,12 @@ check_shared_venv_freshness() {
     return 2
   fi
   if [[ -n "$skip_reason" ]]; then
+    if [[ -z "$standalone" && "$skip_reason" == "interpreter-or-shell" ]] \
+      && is_project_interpreter_command "$tool"; then
+      if ! check_project_package_freshness "$venv_path"; then
+        return 2
+      fi
+    fi
     echo "Shared-venv tool freshness preflight skipped: tool=${tool:-none} reason=$skip_reason elapsed_ms=$(freshness_elapsed_ms) venv=$venv_path" >&2
     return 0
   fi

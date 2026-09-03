@@ -27,6 +27,7 @@ Excluded (no usage/help support at all):
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import subprocess
 import tomllib
@@ -1565,6 +1566,7 @@ def test_worktree_shared_venv_helper_has_valid_shell_and_help() -> None:
     assert "PYTHONPATH=$PWD:$PWD/fast-pysf" in help_result.stdout
     assert "UV_PROJECT_ENVIRONMENT" in help_result.stdout
     assert "UV_NO_SYNC=1" in help_result.stdout
+    assert "Do not start a fresh linked-worktree command with bare `uv run`" in help_result.stdout
     assert "COVERAGE_FILE" in help_result.stdout
     assert "full local .venv" in help_result.stdout
     assert "--profile NAME" in help_result.stdout
@@ -1611,10 +1613,14 @@ def test_worktree_shared_venv_helper_has_freshness_check_wiring() -> None:
     """The shared-venv helper recognizes checkout-local source as authoritative (issue #6003)."""
     script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
 
-    # The freshness gate recognizes the checkout-local source as authoritative.
+    # The freshness gate checks the installed package before making checkout source authoritative.
     assert "check_shared_venv_freshness()" in script_text
     assert 'local src_pkg="$repo_root/fast-pysf/pysocialforce"' in script_text
     assert "checkout source authoritative" in script_text
+    assert "check_project_package_freshness()" in script_text
+    assert "check_fast_pysf_runtime.py" in script_text
+    assert "env -u PYTHONPATH" in script_text
+    assert "uv sync --all-extras --reinstall-package robot-sf" in script_text
     # Standalone commands with a verified no-project-import boundary remain supported.
     assert "--standalone" in script_text
     assert 'if [[ -z "$standalone" ]]; then' in script_text
@@ -1632,8 +1638,9 @@ def _make_freshness_fixture_repo(
     """Build a git repo + shared venv whose installed pysocialforce/scene.py is ``installed_scene``.
 
     The worktree source fast-pysf/pysocialforce/scene.py carries a newer API (normalize_integration_scheme)
-    while the installed copy may or may not match it. A fake ``uv`` on PATH proves whether the helper
-    reached the underlying command or failed earlier in the freshness gate.
+    while the installed copy may or may not match it. The fixture also carries the canonical
+    fast-pysf coherence checker and a small Python launcher so a fake ``uv`` proves whether the
+    wrapper reached the underlying command or failed earlier in the freshness gate.
     """
     repo = tmp_path / "repo"
     fake_bin = repo / "fake-bin"
@@ -1645,19 +1652,37 @@ def _make_freshness_fixture_repo(
     installed_pkg.mkdir(parents=True)
     src_pkg.mkdir(parents=True)
     (venv / "bin").mkdir(parents=True)
+    checker = repo / "scripts" / "dev" / "check_fast_pysf_runtime.py"
+    checker.parent.mkdir(parents=True)
+    checker.write_text(
+        (ROOT / "scripts" / "dev" / "check_fast_pysf_runtime.py").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
 
     # Worktree source scene.py carries the newer API the helper must detect drift against.
     newer_scene = "def normalize_integration_scheme(value=None):\n    return value\n"
+    runtime_api = "def social_force_gil_releasing_context():\n    return None\n"
     (src_pkg / "scene.py").write_text(newer_scene, encoding="utf-8")
+    (src_pkg / "forces.py").write_text(runtime_api, encoding="utf-8")
     (src_pkg / "__init__.py").write_text("", encoding="utf-8")
     # Installed copy is whatever the caller passes (matching = fresh, divergent = stale).
     (installed_pkg / "scene.py").write_text(installed_scene, encoding="utf-8")
+    (installed_pkg / "forces.py").write_text(runtime_api, encoding="utf-8")
     (installed_pkg / "__init__.py").write_text("", encoding="utf-8")
     (repo / ".gitignore").write_text(".venv/\n", encoding="utf-8")
 
-    # The helper only checks venv presence via bin/python executability.
+    # Run the canonical checker with the fixture's installed package; other Python calls only
+    # need a successful executable probe because fake uv owns the command outcome.
     py = venv / "bin" / "python"
-    py.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    py.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "${1:-}" == *check_fast_pysf_runtime.py ]]; then\n'
+        f"  export PYTHONPATH={shlex.quote(str(site_packages))}:${{PYTHONPATH:-}}\n"
+        '  exec python3 "$@"\n'
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
     py.chmod(0o755)
 
     fake_uv = fake_bin / "uv"
@@ -1688,10 +1713,10 @@ def _make_freshness_fixture_repo(
     return repo, venv, env
 
 
-def test_worktree_shared_venv_ignores_stale_installed_copy(
+def test_worktree_shared_venv_rejects_stale_installed_copy(
     tmp_path: Path,
 ) -> None:
-    """A checkout source package must win over a stale installed copy (issue #6003)."""
+    """Interpreter commands fail closed before stale installed code can run (issue #8337)."""
     repo, venv, env = _make_freshness_fixture_repo(
         tmp_path,
         installed_scene="# stale install without normalize_integration_scheme\n",
@@ -1715,9 +1740,35 @@ def test_worktree_shared_venv_ignores_stale_installed_copy(
         check=False,
     )
 
-    assert result.returncode == 7
-    assert "uv-reached" in result.stderr
-    assert "Shared virtualenv is stale" not in result.stderr
+    assert result.returncode == 2
+    assert "ERROR: shared-venv project package freshness preflight failed" in result.stderr
+    assert "installed pysocialforce package is stale" in result.stderr
+    assert "uv sync --all-extras --reinstall-package robot-sf" in result.stderr
+    assert "uv-reached" not in result.stderr
+
+
+def test_worktree_shared_venv_rejects_stale_copy_for_nested_uv_python(
+    tmp_path: Path,
+) -> None:
+    """Nested ``uv run python`` commands use the same interpreter freshness guard."""
+    repo, venv, env = _make_freshness_fixture_repo(
+        tmp_path,
+        installed_scene="# stale install without normalize_integration_scheme\n",
+    )
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--", "uv", "run", "python", "-V"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "installed pysocialforce package is stale" in result.stderr
+    assert "uv-reached" not in result.stderr
 
 
 def test_worktree_shared_venv_freshness_check_passes_on_fresh_env(
@@ -1747,6 +1798,7 @@ def test_worktree_shared_venv_freshness_check_passes_on_fresh_env(
     # The freshness gate passes, so the helper reaches the underlying command (fake uv exits 7).
     assert result.returncode == 7
     assert "uv-reached" in result.stderr
+    assert "Shared-venv project package freshness preflight passed" in result.stderr
     assert "Shared virtualenv is stale" not in result.stderr
 
 
@@ -2623,6 +2675,9 @@ def test_worktree_shared_venv_skips_tool_gate_for_interpreters(
 ) -> None:
     """Interpreter commands keep the #6003 contract even when a stale tool sits in the venv."""
     repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+    checker = repo / "scripts" / "dev" / "check_fast_pysf_runtime.py"
+    checker.parent.mkdir(parents=True)
+    checker.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
 
     result = subprocess.run(
         [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--", "python", "-V"],

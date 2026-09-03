@@ -873,7 +873,8 @@ def _to_receipt_check_runs(
     for item in effective_items:
         if not isinstance(item, dict):
             continue
-        app = item.get("app") if isinstance(item.get("app"), dict) else {}
+        app_value = item.get("app")
+        app: dict[str, Any] = app_value if isinstance(app_value, dict) else {}
         name = str(item.get("name") or item.get("context") or "")
         if name.strip().lower() in NON_REQUIRED_RECEIPT_CHECK_NAMES:
             continue
@@ -918,8 +919,10 @@ def _to_receipt_review_evidence(
     for item in items:
         if not isinstance(item, dict):
             continue
-        author = item.get("author") if isinstance(item.get("author"), dict) else {}
-        user = item.get("user") if isinstance(item.get("user"), dict) else {}
+        author_value = item.get("author")
+        author: dict[str, Any] = author_value if isinstance(author_value, dict) else {}
+        user_value = item.get("user")
+        user: dict[str, Any] = user_value if isinstance(user_value, dict) else {}
         body = str(item.get("body") or "")
         declared_shas = re.findall(r"(?<![0-9a-fA-F])([0-9a-fA-F]{40})(?![0-9a-fA-F])", body)
         observed_head = item.get("head_sha") or item.get("commit_id") or item.get("commitId")
@@ -973,8 +976,10 @@ def _requested_review_identities(items: Any) -> tuple[list[str], list[str]]:
     for item in items:
         if not isinstance(item, dict):
             continue
-        user = item.get("user") if isinstance(item.get("user"), dict) else {}
-        team = item.get("team") if isinstance(item.get("team"), dict) else {}
+        user_value = item.get("user")
+        user: dict[str, Any] = user_value if isinstance(user_value, dict) else {}
+        team_value = item.get("team")
+        team: dict[str, Any] = team_value if isinstance(team_value, dict) else {}
         typename = str(item.get("__typename") or "").lower()
         if team or "team" in typename:
             identity = str(team.get("name") or team.get("slug") or item.get("name") or "")
@@ -2537,10 +2542,11 @@ def main(argv: list[str] | None = None) -> int:
         merge_group_head_sha = merge_group_pr.head_sha
         merge_group_base_sha = str(event["merge_group"]["base_sha"])
     else:
-        pr_number = _safe_int(args.pr)
-        if pr_number is None:
+        parsed_pr_number = _safe_int(args.pr)
+        if parsed_pr_number is None:
             print(f"Invalid PR number: {args.pr!r}", file=sys.stderr)
             return 1
+        pr_number = parsed_pr_number
         merge_group_base_sha = ""
         merge_group_head_sha = ""
 

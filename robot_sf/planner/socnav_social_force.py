@@ -221,7 +221,6 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
             self._obstacle_force_runtime_parameters["effective_offset"] = robot_radius + float(
                 cell_radius
             )
-        self._obstacle_force_applied = self._obstacle_force_enabled()
         # Vectorized point-obstacle force broadcast (issue #5412). The scalar loop
         # built a degenerate single-point line ``(cx, cy, cx, cy)`` per obstacle
         # and called ``sf_forces.obstacle_force``. That degenerate line exercises
@@ -238,6 +237,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         diff = (robot_pos[np.newaxis, :] - centers).astype(float)  # (M, 2)
         if law_version != LEGACY_SHIFTED_GRADIENT_V1:
             force = sf_forces.surface_distance_unit_normal_force_vectors(diff, ped_radius)
+            self._obstacle_force_applied = self._obstacle_force_enabled()
             return np.sum(force, axis=0) * obstacle_factor
 
         raw_dist = np.sqrt(diff[:, 0] ** 2 + diff[:, 1] ** 2)
@@ -251,6 +251,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         grad = diff_f / obst_dist_f[:, np.newaxis]
         force = der_potential[:, np.newaxis] * grad
         total = np.sum(force, axis=0)
+        self._obstacle_force_applied = self._obstacle_force_enabled()
         return total * obstacle_factor
 
     def _obstacle_force_enabled(self) -> bool:

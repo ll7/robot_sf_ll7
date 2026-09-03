@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock
 
 from scripts.dev.github_graphql_retry import (
@@ -86,6 +87,21 @@ def test_is_quota_exhausted_ignores_rate_limit_text_in_success_output() -> None:
         stderr="",
     )
     assert is_quota_exhausted(result) is False
+
+
+def test_is_quota_exhausted_classifies_structured_graphql_error_envelope() -> None:
+    """A successful GraphQL error envelope still carries quota semantics."""
+    result = MagicMock(
+        returncode=0,
+        stdout=json.dumps(
+            {
+                "data": None,
+                "errors": [{"message": "GraphQL: API rate limit already exceeded (403)"}],
+            }
+        ),
+        stderr="",
+    )
+    assert is_quota_exhausted(result) is True
 
 
 def test_is_quota_exhausted_rejects_unrelated_failures() -> None:

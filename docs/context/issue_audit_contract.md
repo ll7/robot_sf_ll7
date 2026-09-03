@@ -74,16 +74,29 @@ Issue bodies and comments are evidence sources for decisions and gates. They
 are not permission to infer missing provenance, rights, compute authorization,
 or maintainer intent.
 
-The command applies one aggregate wall-time budget (`--max-wall-seconds`,
-default 120 seconds) across REST discovery, local discovery, merged-PR
-reference indexing, and issue classification, in addition to the 60-second
-timeout on each individual `gh` subprocess. When the aggregate budget expires,
-the core records a structured inventory or classification error, writes a
-partial plan when an output path was requested, returns a non-zero status, and
-the apply path refuses all mutations. A classification timeout includes the
-deterministic `classification_status` resume cursor and suppresses planned
-mutations. A partial plan is never a complete audit; callers may increase the
-budget only when the bounded inventory scope justifies it.
+The command applies one aggregate monotonic wall-time budget
+(`--max-wall-seconds`, default 120 seconds) across REST discovery, local
+discovery, merged-PR reference indexing, and issue classification, in addition
+to the 60-second timeout on each individual `gh` subprocess. Each runner
+receives the remaining budget, and a result that returns after the deadline is
+converted to a timeout. The merged-PR index, classification loop, plan
+finalization, and JSON rendering perform final deadline checks before a result
+can be reported as complete; on POSIX main-thread execution, in-process
+discovery, indexing, classification, and rendering are also interrupted at the
+deadline. Embedding contexts that cannot install an interval timer retain
+cooperative checks and invalidate late results. When the aggregate budget
+expires, the core records a structured inventory or classification error, writes a partial plan
+when an output path was requested, returns a non-zero status, and the apply
+path refuses all mutations. Timeout conversion clears both the top-level
+`mutations` list and every per-issue `issues[*].mutations` list.
+
+A classification timeout retains `classification_status.resume_from_issue` for
+diagnostics as the next unclassified issue; it is not a resumable cursor.
+`resume_supported` is `false` and `resume_requires_fresh_full_inventory` is
+`true`, so consumers must reject suffix-only continuation and rerun discovery
+and classification against a fresh full inventory. A partial plan is never a
+complete audit; callers may increase the budget only when the bounded
+inventory scope justifies it.
 
 ## Label rules
 
@@ -254,6 +267,9 @@ Every plan has schema issue_audit_plan.v1 and contains:
       "inventory": {},
       "classification_status": {
         "status": "complete",
+        "resume_from_issue": null,
+        "resume_supported": false,
+        "resume_requires_fresh_full_inventory": true,
         "remaining_issue_numbers": [],
         "mutations_suppressed": false
       },

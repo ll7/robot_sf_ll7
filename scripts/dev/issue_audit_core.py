@@ -24,9 +24,12 @@ import hashlib
 import json
 import math
 import re
+import signal
 import subprocess
+import threading
 import time
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -218,6 +221,68 @@ PARENT_CLOSE_PATTERN = re.compile(
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess[str]]
 
 
+class _AuditDeadlineExceeded(TimeoutError):
+    """Signal-driven interruption for one in-process audit phase."""
+
+
+@contextmanager
+def _deadline_interrupt(deadline: float | None) -> Iterator[None]:
+    """Interrupt in-process work at the deadline when the host permits it.
+
+    ``SIGALRM`` is intentionally limited to the main thread and to hosts with
+    no pre-existing timer. The prior handler is restored before returning.
+    Other embedding contexts retain the cooperative checks around each phase
+    and invalidate any late result.
+    """
+    sigalrm = getattr(signal, "SIGALRM", None)
+    setitimer = getattr(signal, "setitimer", None)
+    getitimer = getattr(signal, "getitimer", None)
+    itimer_real = getattr(signal, "ITIMER_REAL", None)
+    if (
+        deadline is None
+        or sigalrm is None
+        or setitimer is None
+        or getitimer is None
+        or itimer_real is None
+        or threading.current_thread() is not threading.main_thread()
+    ):
+        yield
+        return
+
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        yield
+        return
+    previous_handler = signal.getsignal(sigalrm)
+    previous_timer = getitimer(itimer_real)
+    if previous_timer[0] > 0:
+        yield
+        return
+
+    def handle_deadline(_signum: int, _frame: object) -> None:
+        raise _AuditDeadlineExceeded("issue-audit wall-time budget exhausted")
+
+    handler_installed = False
+    timer_installed = False
+    try:
+        signal.signal(sigalrm, handle_deadline)
+        handler_installed = True
+        setitimer(itimer_real, remaining)
+        timer_installed = True
+    except (OSError, ValueError):
+        if timer_installed:
+            setitimer(itimer_real, 0)
+        if handler_installed:
+            signal.signal(sigalrm, previous_handler)
+        yield
+        return
+    try:
+        yield
+    finally:
+        setitimer(itimer_real, 0)
+        signal.signal(sigalrm, previous_handler)
+
+
 def _deadline_from_seconds(max_wall_seconds: float | None) -> float | None:
     """Return an absolute monotonic deadline for an optional audit budget."""
     if max_wall_seconds is None:
@@ -250,6 +315,78 @@ def _deadline_timeout_result(args: list[str]) -> subprocess.CompletedProcess[str
         "",
         "issue-audit wall-time budget exhausted",
     )
+
+
+def _deadline_timeout_inventory(repo: str, remote: str, *, reason: str) -> dict[str, Any]:
+    """Return a minimal inventory artifact when discovery is interrupted."""
+    return {
+        "repo": repo,
+        "remote": remote,
+        "issues": [],
+        "open_prs": [],
+        "merged_prs": [],
+        "labels": [],
+        "claims": {},
+        "worktrees": [],
+        "jobs": [],
+        "inventory": {
+            "issues": {
+                "available": False,
+                "errors": [reason],
+                "truncated": False,
+            }
+        },
+    }
+
+
+def _suppress_mutation_fields(value: object) -> None:
+    """Clear every serialized mutation list in an incomplete audit result."""
+    if isinstance(value, dict):
+        if "mutations" in value:
+            value["mutations"] = []
+        for nested in value.values():
+            _suppress_mutation_fields(nested)
+    elif isinstance(value, (list, tuple)):
+        for nested in value:
+            _suppress_mutation_fields(nested)
+
+
+def _mark_plan_timed_out(plan: dict[str, Any], *, reason: str) -> None:
+    """Convert a complete-looking plan into a mutation-free timeout artifact."""
+    status_value = plan.get("classification_status")
+    status = dict(status_value) if isinstance(status_value, Mapping) else {}
+    issue_rows = plan.get("issues")
+    classified_issues = (
+        len(issue_rows) if isinstance(issue_rows, list) else status.get("classified_issues", 0)
+    )
+    total_issues = status.get("total_issues", classified_issues)
+    remaining = status.get("remaining_issue_numbers", [])
+    if not isinstance(remaining, list):
+        remaining = []
+    status.update(
+        {
+            "status": "timed_out",
+            "reason": reason,
+            "classified_issues": classified_issues,
+            "total_issues": total_issues,
+            "remaining_issue_numbers": remaining,
+            "resume_from_issue": remaining[0] if remaining else None,
+            "resume_supported": False,
+            "resume_requires_fresh_full_inventory": True,
+            "mutations_suppressed": True,
+        }
+    )
+    plan["classification_status"] = status
+    _suppress_mutation_fields(plan)
+    truncated = set(plan.get("truncation_or_errors", []))
+    truncated.add("classification")
+    plan["truncation_or_errors"] = sorted(truncated)
+    counts_value = plan.get("counts")
+    counts = dict(counts_value) if isinstance(counts_value, Mapping) else {}
+    counts["mutations"] = 0
+    counts["truncated_or_error_sources"] = len(truncated)
+    plan["counts"] = counts
+    plan["plan_digest"] = compute_plan_digest(plan)
 
 
 def _run_gh(
@@ -308,12 +445,13 @@ def _deadline_runner(
         if remaining <= 0:
             return _deadline_timeout_result(command)
         if runner is _run_gh:
-            return _run_gh(
+            result = _run_gh(
                 args,
                 input_text,
                 timeout_seconds=min(DEFAULT_GH_TIMEOUT_SECONDS, remaining),
             )
-        result = runner(args, input_text)
+        else:
+            result = runner(args, input_text)
         if _deadline_expired(effective_deadline):
             return _deadline_timeout_result(command)
         return result
@@ -366,8 +504,9 @@ def _deadline_command_runner(
         if remaining <= 0:
             return _deadline_timeout_result(args)
         if runner is _run_command:
-            return _run_command(args, timeout_seconds=min(30.0, remaining))
-        result = runner(args)
+            result = _run_command(args, timeout_seconds=min(30.0, remaining))
+        else:
+            result = runner(args)
         if _deadline_expired(deadline):
             return _deadline_timeout_result(args)
         return result
@@ -1355,6 +1494,10 @@ def _index_merged_prs(
         row = dict(pr)
         for issue_number in _merged_pr_issue_numbers(row):
             indexed.setdefault(issue_number, []).append(row)
+        if _deadline_expired(deadline):
+            return {}, True
+    if _deadline_expired(deadline):
+        return {}, True
     return indexed, False
 
 
@@ -2011,10 +2154,14 @@ def build_audit_plan(
     pending: list[dict[str, Any]] = []
     blocked_label_report: list[dict[str, Any]] = []
     ordered_issues = sorted(issues, key=lambda item: int(item.get("number", 0)))
-    merged_pr_index, index_timed_out = _index_merged_prs(
-        merged_prs,
-        deadline=effective_deadline,
-    )
+    try:
+        with _deadline_interrupt(effective_deadline):
+            merged_pr_index, index_timed_out = _index_merged_prs(
+                merged_prs,
+                deadline=effective_deadline,
+            )
+    except _AuditDeadlineExceeded:
+        merged_pr_index, index_timed_out = {}, True
     classification_timeout_reason = (
         "issue-audit wall-time budget exhausted while indexing merged-PR references"
         if index_timed_out
@@ -2030,22 +2177,29 @@ def build_audit_plan(
                 + " issue classification"
             )
             break
-        classified = classify_issue(
-            issue,
-            open_prs=open_prs,
-            merged_prs=merged_prs,
-            merged_pr_index=merged_pr_index,
-            claims=claims,
-            worktrees=worktrees,
-            jobs=jobs,
-            job_inventory_available=job_available,
-            open_issue_numbers=open_numbers,
-            available_labels=available_labels,
-            completion_receipt=_completion_receipt_for_issue(
-                completion_receipts, int(issue["number"])
-            ),
-            repository=repository,
-        )
+        try:
+            with _deadline_interrupt(effective_deadline):
+                classified = classify_issue(
+                    issue,
+                    open_prs=open_prs,
+                    merged_prs=merged_prs,
+                    merged_pr_index=merged_pr_index,
+                    claims=claims,
+                    worktrees=worktrees,
+                    jobs=jobs,
+                    job_inventory_available=job_available,
+                    open_issue_numbers=open_numbers,
+                    available_labels=available_labels,
+                    completion_receipt=_completion_receipt_for_issue(
+                        completion_receipts, int(issue["number"])
+                    ),
+                    repository=repository,
+                )
+        except _AuditDeadlineExceeded:
+            classification_timeout_reason = (
+                "issue-audit wall-time budget exhausted during issue classification"
+            )
+            break
         issue_labels = _label_names(issue.get("labels"))
         decision_sources = _decision_source_rows(issue)
         documented_options = _documented_options(issue)
@@ -2113,6 +2267,10 @@ def build_audit_plan(
                 "issue-audit wall-time budget exhausted during issue classification"
             )
             break
+    if classification_timeout_reason is None and _deadline_expired(effective_deadline):
+        classification_timeout_reason = (
+            "issue-audit wall-time budget exhausted while finalizing the audit plan"
+        )
     inventory_meta = inventory.get("inventory") or {}
     truncated = [
         name
@@ -2137,12 +2295,15 @@ def build_audit_plan(
         "total_issues": len(ordered_issues),
         "remaining_issue_numbers": remaining_issue_numbers,
         "resume_from_issue": remaining_issue_numbers[0] if remaining_issue_numbers else None,
+        "resume_supported": False,
+        "resume_requires_fresh_full_inventory": True,
         "mutations_suppressed": classification_timed_out,
     }
     if classification_timed_out:
         # Partial classifications are useful for diagnosis, but no mutation
         # from an incomplete pass is safe to carry into an apply operation.
         mutations = []
+        _suppress_mutation_fields(classifications)
         truncated.append("classification")
     if len(mutations) > max_mutations:
         mutations = mutations[:max_mutations]
@@ -2179,7 +2340,29 @@ def build_audit_plan(
             "truncated_or_error_sources": len(set(truncated)),
         },
     }
-    plan["plan_digest"] = compute_plan_digest(plan)
+    if classification_timed_out:
+        _suppress_mutation_fields(plan)
+    elif _deadline_expired(effective_deadline):
+        _mark_plan_timed_out(
+            plan,
+            reason="issue-audit wall-time budget exhausted while finalizing the audit plan",
+        )
+    else:
+        try:
+            with _deadline_interrupt(effective_deadline):
+                plan["plan_digest"] = compute_plan_digest(plan)
+        except _AuditDeadlineExceeded:
+            _mark_plan_timed_out(
+                plan,
+                reason="issue-audit wall-time budget exhausted while finalizing the audit plan",
+            )
+        if _deadline_expired(effective_deadline):
+            _mark_plan_timed_out(
+                plan,
+                reason="issue-audit wall-time budget exhausted while finalizing the audit plan",
+            )
+    if "plan_digest" not in plan:
+        plan["plan_digest"] = compute_plan_digest(plan)
     return plan
 
 
@@ -2926,6 +3109,23 @@ def _load_json(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _render_plan(plan: dict[str, Any], deadline: float | None) -> str:
+    """Render a plan only after admitting it as complete under the shared deadline."""
+    timeout_reason = "issue-audit wall-time budget exhausted while serializing the audit plan"
+    if _deadline_expired(deadline) and plan["classification_status"]["status"] == "complete":
+        _mark_plan_timed_out(plan, reason=timeout_reason)
+    try:
+        with _deadline_interrupt(deadline):
+            rendered = json.dumps(plan, indent=2, sort_keys=True) + "\n"
+    except _AuditDeadlineExceeded:
+        _mark_plan_timed_out(plan, reason=timeout_reason)
+        rendered = json.dumps(plan, indent=2, sort_keys=True) + "\n"
+    if _deadline_expired(deadline) and plan["classification_status"]["status"] == "complete":
+        _mark_plan_timed_out(plan, reason=timeout_reason)
+        rendered = json.dumps(plan, indent=2, sort_keys=True) + "\n"
+    return rendered
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Expose bounded plan and apply operations for skills and CI checks."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -2973,21 +3173,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not math.isfinite(args.max_wall_seconds) or args.max_wall_seconds < 0:
             parser.error("--max-wall-seconds must be finite and non-negative")
         deadline = _deadline_from_seconds(args.max_wall_seconds)
-        plan = build_audit_plan(
-            discover_inventory(
+        try:
+            with _deadline_interrupt(deadline):
+                inventory = discover_inventory(
+                    args.repo,
+                    remote=args.remote,
+                    max_pages=args.max_pages,
+                    max_closed_pr_pages=args.max_closed_pr_pages,
+                    include_comments=args.include_comments,
+                    max_comment_pages=args.max_comment_pages,
+                    deadline=deadline,
+                )
+        except _AuditDeadlineExceeded:
+            inventory = _deadline_timeout_inventory(
                 args.repo,
-                remote=args.remote,
-                max_pages=args.max_pages,
-                max_closed_pr_pages=args.max_closed_pr_pages,
-                include_comments=args.include_comments,
-                max_comment_pages=args.max_comment_pages,
-                deadline=deadline,
-            ),
+                args.remote,
+                reason="issue-audit wall-time budget exhausted during inventory discovery",
+            )
+        plan = build_audit_plan(
+            inventory,
             mode=args.mode,
             max_mutations=args.max_mutations,
             deadline=deadline,
         )
-        rendered = json.dumps(plan, indent=2, sort_keys=True) + "\n"
+        rendered = _render_plan(plan, deadline)
         if args.output:
             args.output.write_text(rendered, encoding="utf-8")
         else:

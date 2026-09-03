@@ -44,9 +44,15 @@ issue_audit_plan.v1.
    50-page budget so repository growth does not widen every other REST source.
    If either budget expires, preserve affected issues and stop mutation
    application; the emitted partial inventory is not a complete audit. A
-   classification timeout includes a deterministic resume cursor and
-   suppresses planned mutations. Increase a bounded source budget only when
-   current repository counts justify it.
+   classification timeout retains `resume_from_issue` only as a diagnostic
+   next-unclassified issue. It is not a resumable cursor:
+   `resume_supported: false` and
+   `resume_requires_fresh_full_inventory: true` require a fresh full inventory
+   before any retry, and suffix-only continuation must be rejected. Timeout
+   plans have empty top-level and per-issue mutation lists. POSIX main-thread
+   discovery and classification work is interrupted at the deadline; other
+   hosts invalidate late results cooperatively. Increase a bounded source
+   budget only when current repository counts justify it.
 3. Apply only the mutations already present in the plan:
 
        uv run python scripts/dev/issue_audit_core.py apply \

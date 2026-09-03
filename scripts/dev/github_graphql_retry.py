@@ -8,6 +8,7 @@ their existing fail-closed behavior when the bounded retry budget is exhausted.
 
 from __future__ import annotations
 
+import json
 import re
 import time
 from dataclasses import dataclass
@@ -36,6 +37,17 @@ def is_quota_exhausted(result: subprocess.CompletedProcess[Any]) -> bool:
     Returns:
         bool: True when the diagnostic names a GraphQL or GitHub API rate limit.
     """
+    # A successful JSON response may legitimately contain user-controlled text
+    # such as a PR body or comment mentioning a rate limit.  Keep compatibility
+    # with callers that surface a plain diagnostic with exit code zero, but never
+    # classify structured successful output as transport quota exhaustion.
+    if result.returncode == 0:
+        try:
+            json.loads(str(result.stdout or ""))
+        except (TypeError, json.JSONDecodeError):
+            pass
+        else:
+            return False
     text = f"{result.stderr or ''}\n{result.stdout or ''}".lower()
     if "rate limit" not in text and "rate_limit" not in text:
         return False

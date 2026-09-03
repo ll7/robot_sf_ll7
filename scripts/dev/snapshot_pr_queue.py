@@ -69,11 +69,13 @@ def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
 
 def _labels(pr: dict[str, Any]) -> list[str]:
     """Return compact label names from gh PR JSON."""
-    return sorted(
-        str(label.get("name", ""))
-        for label in pr.get("labels", [])
-        if isinstance(label, dict) and label.get("name")
-    )
+    names: list[str] = []
+    for label in pr.get("labels", []) or []:
+        if isinstance(label, dict) and label.get("name"):
+            names.append(str(label["name"]))
+        elif isinstance(label, str) and label:
+            names.append(label)
+    return sorted(names)
 
 
 def _shorten_text(value: Any, *, limit: int) -> str:
@@ -541,14 +543,73 @@ def _blocked_preflight_reasons(blocked_state: dict[str, Any]) -> list[str]:
     return [str(reason) for reason in blocked_state.get("reasons", [])]
 
 
+def _rebuild_preflight_after_review_thread_update(pr: dict[str, Any]) -> None:
+    """Recompute outer preflight after replacing nested review-thread evidence.
+
+    Review-thread reads are a separate evidence dimension.  Rebuilding the
+    ordinary preflight here removes a prior fallback-only thread blocker without
+    discarding base, check, mergeability, explicit-label, or REST-enrichment
+    evidence that still applies to the same PR snapshot.
+    """
+    previous = pr.get("preflight")
+    if not isinstance(previous, dict):
+        return
+    base_freshness = previous.get("base_freshness")
+    if not isinstance(base_freshness, dict):
+        return
+    checks = pr.get("checks")
+    checks_overall = previous.get("checks_overall")
+    if not isinstance(checks_overall, str):
+        checks_overall = checks.get("overall", "") if isinstance(checks, dict) else ""
+    blocked_state = previous.get("blocked_state")
+    if not isinstance(blocked_state, dict):
+        blocked_state = _blocked_state(_labels(pr))
+    rebuilt = _preflight(
+        base_freshness=base_freshness,
+        checks_overall=str(checks_overall),
+        expected_head_sha=str(previous.get("expected_head_sha", "") or ""),
+        head_sha=str(previous.get("head_sha", pr.get("head_sha", "")) or ""),
+        is_draft=bool(pr.get("draft")),
+        mergeable=str(previous.get("mergeable", pr.get("mergeable", "unknown")) or "unknown"),
+        blocked_state=blocked_state,
+    )
+    rest_enrichment = previous.get("rest_enrichment")
+    if isinstance(rest_enrichment, dict):
+        rebuilt["rest_enrichment"] = rest_enrichment
+        reasons = rebuilt["reasons"]
+        for endpoint, status in rest_enrichment.items():
+            if status != "ok":
+                reasons.append(f"rest_{endpoint}_{status}")
+        if rebuilt["status"] not in {"stale", "blocked"}:
+            rebuilt["status"] = "blocked"
+    pr["preflight"] = rebuilt
+
+
 def _project_review_thread_state(pr: dict[str, Any], status: Any) -> None:
-    """Project non-OK review-thread evidence onto the outer PR route state."""
+    """Project review-thread evidence without losing higher-priority route state."""
     review_thread_status = str(status or "unknown")
     if review_thread_status == "ok":
+        pr.pop("review_threads", None)
+        pr.pop("review_threads_admission", None)
+        preflight = pr.get("preflight")
+        if isinstance(preflight, dict):
+            preflight.pop("review_threads", None)
+            preflight.pop("review_threads_admission", None)
+            reasons = preflight.get("reasons")
+            if isinstance(reasons, list):
+                preflight["reasons"] = [
+                    reason for reason in reasons if not str(reason).startswith("review_threads_")
+                ]
+        _rebuild_preflight_after_review_thread_update(pr)
         return
 
+    admission = (
+        "fail_closed_unknown"
+        if review_thread_status == "unknown_graphql_quota"
+        else "not_evaluated"
+    )
     pr["review_threads"] = review_thread_status
-    pr["review_threads_admission"] = "fail_closed_unknown"
+    pr["review_threads_admission"] = admission
     preflight = pr.get("preflight")
     if not isinstance(preflight, dict):
         preflight = {"status": "unknown", "reasons": []}
@@ -561,14 +622,13 @@ def _project_review_thread_state(pr: dict[str, Any], status: Any) -> None:
     if reason not in reasons:
         reasons.append(reason)
 
-    # Nested thread state is an independent admission dimension. Any non-OK
-    # result therefore overrides the outer route to the established blocked
-    # action, including when another stale or incomplete dimension is present.
-    preflight["status"] = "blocked"
-    pr["next_action"] = "inspect_blocking_preflight"
-    pr["attention"] = "preflight_attention"
+    # Preserve explicit blocker and stale-base precedence.  A non-OK thread
+    # result blocks a healthy outer row, but must not replace a more specific
+    # action already selected for another independent dimension.
+    if preflight.get("status") not in {"stale", "blocked"}:
+        preflight["status"] = "blocked"
     preflight["review_threads"] = review_thread_status
-    preflight["review_threads_admission"] = "fail_closed_unknown"
+    preflight["review_threads_admission"] = admission
 
 
 def _head_preflight(
@@ -676,6 +736,7 @@ def _fetch_pr_rest(
             preflight["status"] = "blocked"
             payload["next_action"] = "inspect_blocking_preflight"
             payload["attention"] = "preflight_attention"
+    _refresh_route_hint(payload)
     return payload
 
 
@@ -730,6 +791,7 @@ def _validated_review_thread_payload(
             "reviewThreads response is incomplete; refusing a thread-free result",
             False,
         )
+    assert isinstance(nodes_value, list)
     nodes = nodes_value
     if has_next_page or total_value != len(nodes):
         return (
@@ -867,7 +929,15 @@ query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
     compact_threads: list[dict[str, Any]] = []
     unresolved_count = 0
     for node in nodes:
-        resolved = bool(node.get("isResolved"))
+        resolved_value = node.get("isResolved")
+        if type(resolved_value) is not bool:
+            return {
+                "status": "incomplete",
+                "unresolved": None,
+                "error": "reviewThreads node isResolved is missing or malformed",
+                "raw_diff_hunks_omitted": True,
+            }
+        resolved = resolved_value
         if not resolved:
             unresolved_count += 1
         comments = node.get("comments", {}) if isinstance(node.get("comments"), dict) else {}
@@ -1046,7 +1116,12 @@ def _next_action(
 
 def _attention(*, next_action: str, is_draft: bool, labels: list[str]) -> str:
     """Return a compact attention category for queue triage."""
-    if next_action == "invalidate_stale_lane":
+    if next_action in {
+        "invalidate_stale_lane",
+        "refresh_pr_base_before_review_or_merge",
+        "verify_pr_base_before_queue_routing",
+        "refresh_current_main_before_queue_routing",
+    }:
         return "stale_attention"
     if next_action == "inspect_blocking_preflight":
         return "preflight_attention"
@@ -1061,6 +1136,27 @@ def _attention(*, next_action: str, is_draft: bool, labels: list[str]) -> str:
     if "merge-ready" in labels:
         return "merge_attention"
     return "review_attention"
+
+
+def _refresh_route_hint(pr: dict[str, Any]) -> None:
+    """Recompute the next action after nested evidence changes the preflight."""
+    preflight = pr.get("preflight")
+    if not isinstance(preflight, dict):
+        return
+    checks = pr.get("checks")
+    _checks_payload = checks if isinstance(checks, dict) else {}
+    next_action = _next_action(
+        is_draft=bool(pr.get("draft")),
+        labels=_labels(pr),
+        checks=_checks_payload,
+        preflight=preflight,
+    )
+    pr["next_action"] = next_action
+    pr["attention"] = _attention(
+        next_action=next_action,
+        is_draft=bool(pr.get("draft")),
+        labels=_labels(pr),
+    )
 
 
 def _parse_explicit_verdict(item: Any) -> str | None:
@@ -1357,7 +1453,9 @@ def _active_snapshot_envelope(
             review_threads = "unknown_graphql_transient" if transient else "unknown_graphql_quota"
             payload["route_evidence_only"] = True
             payload["review_threads"] = review_threads
-            payload["review_threads_admission"] = "fail_closed_unknown"
+            payload["review_threads_admission"] = (
+                "fail_closed_unknown" if not transient else "not_evaluated"
+            )
     return payload
 
 
@@ -1377,7 +1475,9 @@ def _active_rest_fallback_error(
         "data_source": data_source,
         "route_evidence_only": True,
         "review_threads": review_threads,
-        "review_threads_admission": "fail_closed_unknown",
+        "review_threads_admission": (
+            "fail_closed_unknown" if review_threads == "unknown_graphql_quota" else "not_evaluated"
+        ),
         "truncated": False,
         "truncation_note": "",
         "route_health_overview": {
@@ -1612,6 +1712,7 @@ def snapshot_prs(
                 )
                 pr["review_thread_snapshot"] = review_thread_snapshot
                 _project_review_thread_state(pr, review_thread_snapshot.get("status"))
+                _refresh_route_hint(pr)
     return {
         "schema": SCHEMA_VERSION,
         "repo": repo,

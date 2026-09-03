@@ -78,6 +78,16 @@ def test_is_quota_exhausted_classifies_graphql_rate_limit() -> None:
     assert is_quota_exhausted(result) is True
 
 
+def test_is_quota_exhausted_ignores_rate_limit_text_in_success_output() -> None:
+    """Successful JSON payload text cannot turn a valid read into a quota failure."""
+    result = MagicMock(
+        returncode=0,
+        stdout='{"body":"Please document the API rate limit."}',
+        stderr="",
+    )
+    assert is_quota_exhausted(result) is False
+
+
 def test_is_quota_exhausted_rejects_unrelated_failures() -> None:
     """Non-quota errors, including plain 429 and 404, are not quota exhaustion."""
     assert is_quota_exhausted(_response(status=429)) is False

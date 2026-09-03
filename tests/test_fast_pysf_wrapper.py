@@ -208,6 +208,8 @@ def test_obstacle_wrapper_batch_preserves_fallback_for_kernel_input_errors(monke
     assert diagnostics["fallback_reason"] == "obstacle_force_batch_pointwise"
     assert diagnostics["fallback_reasons"] == {"obstacle_force_batch_pointwise": 1}
     assert warning.call_count == 1
+
+
 @pytest.mark.parametrize(
     ("invalid_law", "error_type"),
     [("surface_distance_v3_typo", ValueError), (object(), TypeError)],

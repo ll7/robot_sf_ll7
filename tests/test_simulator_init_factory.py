@@ -208,6 +208,8 @@ def test_simulator_metadata_fallback_reports_disabled_obstacle_forces() -> None:
     assert metadata["site"] == "fast_pysf"
     assert metadata["enabled"] is False
     assert metadata["applied"] is False
+
+
 def test_simulator_metadata_fallback_reports_obstacle_application_state() -> None:
     """The compatibility metadata fallback reports enabled and applied state."""
     simulator = object.__new__(Simulator)

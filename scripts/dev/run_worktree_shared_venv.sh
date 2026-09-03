@@ -16,6 +16,11 @@ lag the current worktree source. The vendored `pysocialforce` package is shadowe
 PYTHONPATH=$PWD:$PWD/fast-pysf, so an initialized checkout source is authoritative and must not be
 rejected because the reused installed copy differs. If the source package is unavailable, the
 helper leaves the installed-environment decision to the command that imports it.
+Pinned tool binaries are a separate boundary (issue #8250): `uv run` executes the requested tool
+from the selected venv, so a stale venv would silently run a drifted binary. Before proceeding,
+the freshness preflight compares the resolved `<venv>/bin/<tool>` version against the exact `==`
+pin in the active checkout's pyproject; on mismatch it fails closed with the exact `--venv`
+remedy instead of running. One preflight log line (with elapsed ms) is always emitted.
 
 Standalone commands with a verified boundary that does not import project packages can use
 --standalone. That mode skips the project-source freshness check and does not add the worktree root
@@ -31,8 +36,9 @@ Options:
                          the dependency-profile and project-source checks and does not prepend the
                          worktree root to PYTHONPATH.
   --no-freshness-check   Retained for compatibility; checkout-local fast-pysf source already takes
-                         precedence over any reused installed copy. Also accepted via
-                         ROBOT_SF_VENV_FRESHNESS_CHECK=skip.
+                          precedence over any reused installed copy. Also accepted via
+                          ROBOT_SF_VENV_FRESHNESS_CHECK=skip. Bypasses the pinned-tool version
+                          gate as well; use only after confirming the environment matches.
   -h, --help             Show this help message.
 
 Environment:
@@ -229,11 +235,82 @@ if [[ -z "$standalone" ]]; then
 fi
 
 check_shared_venv_freshness() {
+  local venv_path="$1"
   local src_pkg="$repo_root/fast-pysf/pysocialforce"
 
   # PYTHONPATH makes the checkout source authoritative; an owning checkout's
   # installed copy is intentionally not a freshness boundary for this helper.
-  return 0
+  # Pinned tool binaries (issue #8250) are checked below: the requested tool
+  # runs from the selected venv, so only its version is compared against the
+  # active checkout pin. Interpreters and shells are never gated here.
+  local tool="${cmd[0]:-}"
+  local start_ms=""
+  start_ms="$(date +%s%3N 2>/dev/null)" || start_ms=""
+  local skip_reason=""
+  local pin=""
+
+  freshness_elapsed_ms() {
+    local end_ms=""
+    end_ms="$(date +%s%3N 2>/dev/null)" || end_ms=""
+    if [[ "$start_ms" =~ ^[0-9]+$ && "$end_ms" =~ ^[0-9]+$ ]]; then
+      printf '%s' "$((end_ms - start_ms))"
+    else
+      printf 'unknown'
+    fi
+  }
+
+  if [[ -z "$tool" ]]; then
+    skip_reason="empty-command"
+  elif [[ "$tool" == *"/"* ]]; then
+    skip_reason="explicit-path"
+  elif [[ ! "$tool" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+    skip_reason="unsafe-tool-name"
+  fi
+  if [[ -z "$skip_reason" ]]; then
+    case "$tool" in
+      python|python3|bash|sh|dash|uv|git)
+        skip_reason="interpreter-or-shell"
+        ;;
+    esac
+  fi
+  if [[ -z "$skip_reason" && ! -x "$venv_path/bin/$tool" ]]; then
+    skip_reason="not-in-selected-venv"
+  fi
+  if [[ -z "$skip_reason" && ! -f "$repo_root/pyproject.toml" ]]; then
+    skip_reason="no-pin-manifest"
+  fi
+  if [[ -z "$skip_reason" ]]; then
+    local tool_esc="${tool//./\\.}"
+    pin="$(grep -E "^[[:space:]]*\"${tool_esc}==[0-9A-Za-z._+-]+\"" "$repo_root/pyproject.toml" 2>/dev/null | head -n 1 | sed -E 's/^[^=]*==([0-9A-Za-z._+-]+).*/\1/' || true)"
+    if [[ -z "$pin" ]]; then
+      skip_reason="unpinned"
+    fi
+  fi
+  if [[ -n "$skip_reason" ]]; then
+    echo "Shared-venv tool freshness preflight skipped: tool=${tool:-none} reason=$skip_reason elapsed_ms=$(freshness_elapsed_ms) venv=$venv_path" >&2
+    return 0
+  fi
+
+  local resolved=""
+  resolved="$("$venv_path/bin/$tool" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1 || true)"
+  if [[ -z "$resolved" ]]; then
+    echo "Shared-venv tool freshness preflight skipped: tool=$tool reason=unparsable-version elapsed_ms=$(freshness_elapsed_ms) venv=$venv_path" >&2
+    return 0
+  fi
+  if [[ "$resolved" == "$pin" ]]; then
+    echo "Shared-venv tool freshness preflight passed: tool=$tool resolved=$resolved pin==$pin elapsed_ms=$(freshness_elapsed_ms) venv=$venv_path" >&2
+    return 0
+  fi
+
+  echo "ERROR: Shared-venv tool freshness preflight failed: tool '$tool' resolved to $resolved but the active checkout pins $tool==$pin." >&2
+  echo "Selected environment: $venv_path (active checkout: $repo_root)." >&2
+  if [[ "$venv_path" == "$repo_root/.venv" && "$main_repo_root/.venv" != "$venv_path" ]]; then
+    echo "Remedy: rerun with --venv $main_repo_root/.venv, or re-sync the owning checkout and retry." >&2
+  else
+    echo "Remedy: re-sync the owning checkout ('uv sync --all-extras' where this venv lives), or pass an explicit --venv." >&2
+  fi
+  echo "To bypass after confirming the environment matches, rerun with --no-freshness-check." >&2
+  return 2
 }
 
 if [[ -z "$standalone" && -z "$skip_freshness" && "${ROBOT_SF_VENV_FRESHNESS_CHECK:-}" != "skip" ]]; then

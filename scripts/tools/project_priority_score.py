@@ -27,6 +27,7 @@ import json
 import math
 import re
 import subprocess
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -44,6 +45,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
 DEFAULT_ALPHA = 0.8
+DEFAULT_GH_TIMEOUT_SECONDS = 120.0
+DEFAULT_GH_TOTAL_BUDGET_SECONDS = 600.0
 DEFAULT_IMPROVEMENT = 1.0
 DEFAULT_SUCCESS_PROBABILITY = 0.7
 DEFAULT_EFFORT_HOURS = 1.0
@@ -211,6 +214,42 @@ class ProjectQuotaBlockedError(RuntimeError):
         )
 
 
+class GhProjectTimeoutError(RuntimeError):
+    """Raised when one bounded `gh` subprocess exceeds its timeout (issue #8263)."""
+
+    def __init__(
+        self,
+        *,
+        command: Sequence[str],
+        timeout_seconds: float,
+        phase: str,
+        budget_exhausted: bool = False,
+    ) -> None:
+        """Store the timed-out command, elapsed budget, and attempted sync phase."""
+        self.command = tuple(command)
+        self.timeout_seconds = timeout_seconds
+        self.phase = phase
+        self.budget_exhausted = budget_exhausted
+        if budget_exhausted:
+            what = (
+                "gh operation budget exhausted after "
+                + f"{timeout_seconds:g}s during {phase}: "
+                + " ".join(self.command)
+                + " was not started"
+            )
+        else:
+            what = (
+                "gh command timed out after "
+                + f"{timeout_seconds:g}s during {phase}: "
+                + " ".join(self.command)
+            )
+        super().__init__(
+            what
+            + ". No score write is claimed for this command; a timed-out write may still "
+            + "have landed server-side, so retry only after re-reading live state."
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class CachedProjectMetadata:
     """Validated local Project #5 identifiers used as read hints."""
@@ -265,6 +304,8 @@ class SyncOptions:
     skip_statuses: set[str]
     only_empty: bool = False
     min_graphql_remaining: int = DEFAULT_GRAPHQL_SAFETY_THRESHOLD
+    gh_timeout_seconds: float = DEFAULT_GH_TIMEOUT_SECONDS
+    gh_total_budget_seconds: float = DEFAULT_GH_TOTAL_BUDGET_SECONDS
     cache_file: Path | None = Path(".github/cache/project5.json")
     repo: str = DEFAULT_REPO
 
@@ -493,21 +534,51 @@ def compute_priority_score(inputs: ScoreInputs, *, alpha: float = DEFAULT_ALPHA)
 class GhProjectClient:
     """Small wrapper around the gh CLI for project field automation."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        timeout_seconds: float = DEFAULT_GH_TIMEOUT_SECONDS,
+        total_budget_seconds: float = DEFAULT_GH_TOTAL_BUDGET_SECONDS,
+    ) -> None:
         """Initialize read telemetry without changing the existing CLI surface."""
+        if timeout_seconds <= 0:
+            raise ValueError("gh subprocess timeout must be positive")
+        if total_budget_seconds <= 0:
+            raise ValueError("gh operation budget must be positive")
+        self.timeout_seconds = timeout_seconds
+        self.total_budget_seconds = total_budget_seconds
+        self.current_phase = "read"
+        self._budget_start = time.monotonic()
         self.last_item_fetch_stats: ProjectItemFetchStats | None = None
         self.last_eligibility_plan: dict[str, Any] | None = None
 
     def _run_completed(self, *args: str) -> subprocess.CompletedProcess[str]:
         """Run a gh command and raise a high-signal error on failure."""
 
+        elapsed = time.monotonic() - self._budget_start
+        remaining = self.total_budget_seconds - elapsed
+        if remaining <= 0:
+            raise GhProjectTimeoutError(
+                command=("gh", *args),
+                timeout_seconds=self.total_budget_seconds,
+                phase=self.current_phase,
+                budget_exhausted=True,
+            )
+        effective_timeout = min(self.timeout_seconds, remaining)
         try:
             return subprocess.run(
                 ["gh", *args],
                 check=True,
                 capture_output=True,
                 text=True,
+                timeout=effective_timeout,
             )
+        except subprocess.TimeoutExpired as exc:
+            raise GhProjectTimeoutError(
+                command=("gh", *args),
+                timeout_seconds=effective_timeout,
+                phase=self.current_phase,
+            ) from exc
         except subprocess.CalledProcessError as exc:
             stderr = exc.stderr.strip()
             stdout = exc.stdout.strip()
@@ -1635,6 +1706,10 @@ def _apply_score_updates(
             )
             row["written"] = True
             writes_performed += 1
+    except GhProjectTimeoutError:
+        # A timed-out write must reach the structured top-level timeout summary with its
+        # command, budget, and phase instead of being folded into the generic apply failure.
+        raise
     except (RuntimeError, ValueError, TypeError) as exc:
         # A rejected write (for example GitHub's numeric-shape enforcement) must
         # not crash the run before the structured summary is written: record the
@@ -1728,6 +1803,7 @@ def sync_scores(
         round_digits=options.round_digits,
     )
 
+    client.current_phase = "write"
     if not _apply_score_updates(
         client,
         options,
@@ -1770,6 +1846,25 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=DEFAULT_GRAPHQL_SAFETY_THRESHOLD,
         help="GraphQL quota safety margin retained after the estimated sync budget.",
+    )
+    sync.add_argument(
+        "--gh-timeout",
+        type=float,
+        default=DEFAULT_GH_TIMEOUT_SECONDS,
+        help=(
+            "Per-command timeout in seconds for `gh` subprocesses. A timeout fails closed "
+            "with a structured no-write summary instead of hanging the sync (issue #8263)."
+        ),
+    )
+    sync.add_argument(
+        "--gh-total-budget",
+        type=float,
+        default=DEFAULT_GH_TOTAL_BUDGET_SECONDS,
+        help=(
+            "Overall operation budget in seconds for all `gh` subprocesses in one sync. "
+            "Exceeding it fails closed with a structured no-write summary; each command "
+            "is additionally capped at the remaining budget (issue #8263)."
+        ),
     )
     sync.add_argument(
         "--alpha", type=float, default=DEFAULT_ALPHA, help="Effort dampening exponent."
@@ -1850,6 +1945,53 @@ def _blocked_project_scope_payload(
     }
 
 
+def _blocked_project_timeout_payload(
+    *, owner: str, project_number: int, error: GhProjectTimeoutError
+) -> dict[str, Any]:
+    """Build a resumable no-write payload for a `gh` subprocess timeout (issue #8263)."""
+    write_phase = error.phase == "write"
+    if error.budget_exhausted:
+        headline = (
+            "Project #5 priority sync exhausted its bounded operation budget "
+            f"({error.timeout_seconds:g}s) during {error.phase}: "
+            + " ".join(error.command)
+            + " was not started."
+        )
+    else:
+        headline = (
+            "Project #5 priority sync hit the bounded subprocess timeout "
+            f"({error.timeout_seconds:g}s) during {error.phase}: " + " ".join(error.command) + "."
+        )
+    return {
+        "status": "timeout_blocked",
+        "reason": "gh_subprocess_timeout",
+        "owner": owner,
+        "project_number": project_number,
+        "command": list(error.command),
+        "timeout_seconds": error.timeout_seconds,
+        "phase": error.phase,
+        "budget_exhausted": error.budget_exhausted,
+        "retryable": True,
+        "items": [],
+        "non_fatal": True,
+        "writes_performed": False,
+        "write_ambiguity": write_phase,
+        "fallback": "live-label ordering",
+        "message": (
+            headline
+            + " No score write is claimed."
+            + (
+                " A timed-out write may still have landed server-side; re-read live "
+                "state before retrying."
+                if write_phase
+                else ""
+            )
+            + " Continue with live-label ordering; retry with a larger --gh-timeout "
+            "or --gh-total-budget after checking Project #5 responsiveness."
+        ),
+    }
+
+
 def _blocked_project_quota_payload(
     *, owner: str, project_number: int, decision: dict[str, Any], non_fatal: bool
 ) -> dict[str, Any]:
@@ -1871,12 +2013,49 @@ def _blocked_project_quota_payload(
     }
 
 
+def _handle_only_empty_failure(*, args: argparse.Namespace, error: Exception) -> int | None:
+    """Print the structured no-write payload for a known auto-fill blocker.
+
+    Returns the process exit code when the failure is a known blocker in
+    ``--only-empty`` mode, else None so the caller re-raises fail-closed.
+    """
+    if isinstance(error, MissingProjectScopeError):
+        payload = _blocked_project_scope_payload(
+            owner=args.owner,
+            project_number=args.project_number,
+            error=error,
+        )
+    elif isinstance(error, GhProjectTimeoutError):
+        payload = _blocked_project_timeout_payload(
+            owner=args.owner,
+            project_number=args.project_number,
+            error=error,
+        )
+    elif isinstance(error, ProjectQuotaBlockedError):
+        payload = _blocked_project_quota_payload(
+            owner=args.owner,
+            project_number=args.project_number,
+            decision=error.decision,
+            non_fatal=True,
+        )
+    else:
+        return None
+    if not args.only_empty:
+        return None
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point."""
 
     args = _build_parser().parse_args(argv)
     if args.command != "sync":
         raise ValueError(f"unsupported command: {args.command}")
+    if args.gh_timeout <= 0:
+        _build_parser().error("--gh-timeout must be positive")
+    if args.gh_total_budget <= 0:
+        _build_parser().error("--gh-total-budget must be positive")
 
     options = SyncOptions(
         owner=args.owner,
@@ -1890,6 +2069,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         skip_statuses=set(args.skip_status),
         only_empty=args.only_empty,
         min_graphql_remaining=args.min_graphql_remaining,
+        gh_timeout_seconds=args.gh_timeout,
+        gh_total_budget_seconds=args.gh_total_budget,
         cache_file=args.cache_file,
         repo=args.repo,
     )
@@ -1904,40 +2085,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0 if args.only_empty else 2
 
-    client = GhProjectClient()
+    client = GhProjectClient(
+        timeout_seconds=options.gh_timeout_seconds,
+        total_budget_seconds=options.gh_total_budget_seconds,
+    )
     try:
         previews = sync_scores(client, options)
-    except MissingProjectScopeError as exc:
-        if not args.only_empty:
+    except (
+        MissingProjectScopeError,
+        GhProjectTimeoutError,
+        ProjectQuotaBlockedError,
+    ) as exc:
+        handled = _handle_only_empty_failure(args=args, error=exc)
+        if handled is None:
             raise
-        print(
-            json.dumps(
-                _blocked_project_scope_payload(
-                    owner=args.owner,
-                    project_number=args.project_number,
-                    error=exc,
-                ),
-                indent=2,
-                sort_keys=True,
-            )
-        )
-        return 0
-    except ProjectQuotaBlockedError as exc:
-        if not args.only_empty:
-            raise
-        print(
-            json.dumps(
-                _blocked_project_quota_payload(
-                    owner=args.owner,
-                    project_number=args.project_number,
-                    decision=exc.decision,
-                    non_fatal=True,
-                ),
-                indent=2,
-                sort_keys=True,
-            )
-        )
-        return 0
+        return handled
 
     if args.summary_file is not None:
         write_summary(args.summary_file, previews, client.last_eligibility_plan)

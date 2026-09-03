@@ -1036,9 +1036,7 @@ def _assert_cold_current_aliases(  # noqa: C901, PLR0913
         if "provenance" in provenance:
             raise ValueError(f"{label}.provenance contains unsupported nested provenance")
         levels.append((provenance, f"{label}.provenance", scientific_release_id))
-    observed_release_ids = [
-        level[key] for level, _, _ in levels for key in _ERRATUM_RELEASE_ID_KEYS if key in level
-    ]
+    root_release_ids = [payload[key] for key in _ERRATUM_RELEASE_ID_KEYS if key in payload]
     for level, level_label, expected_release_id in levels:
         tag_values = [level[key] for key in _ERRATUM_CURRENT_TAG_KEYS if key in level]
         release_id_values = [level[key] for key in _ERRATUM_RELEASE_ID_KEYS if key in level]
@@ -1084,7 +1082,7 @@ def _assert_cold_current_aliases(  # noqa: C901, PLR0913
             raise ValueError(f"{label} is missing its current version DOI")
         if not concept_values:
             raise ValueError(f"{label} is missing its current concept DOI")
-    if require_release_id and not observed_release_ids:
+    if require_release_id and not root_release_ids:
         raise ValueError(f"{label} is missing its scientific release ID")
 
 
@@ -1130,6 +1128,7 @@ def _assert_cold_predecessor_aliases(  # noqa: C901, PLR0913
     scientific_release_id: str,
     require_concept: bool,
     require_release_id: bool = False,
+    require_source: bool = False,
 ) -> None:
     """Validate an explicitly preserved scientific-execution identity."""
     levels: list[tuple[Mapping[str, Any], str]] = [(payload, label)]
@@ -1171,6 +1170,14 @@ def _assert_cold_predecessor_aliases(  # noqa: C901, PLR0913
     concepts = [level["concept_doi"] for level, _ in levels if "concept_doi" in level]
     if require_concept and not concepts:
         raise ValueError(f"{label} contains an invalid predecessor concept DOI")
+    sources = [
+        level[key]
+        for level, _ in levels
+        for key in ("source_sha", "source_commit", "scientific_source_sha")
+        if key in level
+    ]
+    if require_source and not sources:
+        raise ValueError(f"{label} is missing its scientific source SHA")
 
 
 def _assert_cold_publication_document(  # noqa: PLR0913
@@ -1255,6 +1262,7 @@ def _assert_cold_publication_document(  # noqa: PLR0913
             scientific_release_id=scientific_release_id,
             require_concept=key != "scientific_execution_release_identity",
             require_release_id=key == "scientific_execution_resolved_manifest",
+            require_source=True,
         )
 
 

@@ -32,6 +32,28 @@ New branches are created without automatic upstream tracking. This avoids concur
 contending on the shared repository configuration while they create linked worktrees. Configure a
 remote explicitly when publishing a branch, for example with `git push -u origin <branch>`.
 
+## Delegated-worker isolation receipt
+
+Repository-owned delegated workers should opt into an immutable, credential-free receipt and bind
+their first command to the new worktree:
+
+```bash
+scripts/dev/create_worktree.sh \
+  --branch issue-123-short-description \
+  --path "$WORKTREE_PARENT/issue-123-short-description" \
+  --base origin/main \
+  --receipt "/path/to/private/issue-123.receipt.json" \
+  --task-id issue-123 \
+  --exec <worker-command>
+```
+
+Creation writes the receipt atomically after the linked worktree exists. The `--exec` command is
+guarded before it starts; the read-only guard exits nonzero with one JSON result when the current
+working directory, top-level, shared Git directory, branch/ref, or base ancestry differs. Workers
+started separately must run the equivalent check from inside the assigned worktree with
+`python scripts/dev/worktree_receipt.py check`.
+Ordinary callers retain the existing behavior when receipt options are omitted.
+
 Bootstrap symlinks the local machine context and creates a worktree-local `.venv`. For a cheap
 targeted check, use the shared environment wrapper instead:
 

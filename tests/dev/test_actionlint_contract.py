@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 import platform
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -327,10 +328,12 @@ def test_actionlint_fails_on_invalid_workflow_fixture(tmp_path: Path) -> None:
 def test_actionlint_rejects_untrusted_explicit_override(tmp_path: Path) -> None:
     """An executable override must not bypass actionlint with unrelated bytes."""
     bad_workflow = _write_invalid_workflow(tmp_path / "bad_override.yml")
+    true_binary = shutil.which("true")
+    candidate = Path(true_binary) if true_binary else Path("/bin/true")
     res = _run_wrapper(
         bad_workflow,
         tmp_path=tmp_path,
-        actionlint_bin=Path("/bin/true"),
+        actionlint_bin=candidate,
     )
 
     assert res.returncode != 0
@@ -365,7 +368,8 @@ def test_actionlint_rejects_poisoned_cached_binary(tmp_path: Path) -> None:
     """A cached executable is revalidated from its bytes before every use."""
     cached_bin = tmp_path / "cache" / EXPECTED_VERSION / "actionlint"
     cached_bin.parent.mkdir(parents=True)
-    cached_bin.symlink_to("/bin/true")
+    true_binary = shutil.which("true") or "/bin/true"
+    cached_bin.symlink_to(true_binary)
     bad_workflow = _write_invalid_workflow(tmp_path / "bad_cache.yml")
 
     res = _run_wrapper(bad_workflow, tmp_path=tmp_path)

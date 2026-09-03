@@ -705,7 +705,7 @@ def _extract_members(  # noqa: C901
             resolved_dest.replace(previous)
         try:
             staging.replace(resolved_dest)
-        except Exception:
+        except OSError:
             if previous is not None and previous.exists() and not resolved_dest.exists():
                 previous.replace(resolved_dest)
             raise

@@ -1568,6 +1568,39 @@ def test_extraction_rejects_preexisting_destination_symlink(tmp_path: Path) -> N
     assert list(outside.iterdir()) == []
 
 
+def test_extraction_restores_previous_destination_when_atomic_commit_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An OS-level staging rename failure preserves the prior extracted evidence."""
+    archive_path = tmp_path / "bundle.zip"
+    _make_archive(archive_path, "zip", [("new.txt", b"new evidence")])
+    destination = tmp_path / "extracted"
+    destination.mkdir()
+    (destination / "old.txt").write_bytes(b"accepted evidence")
+    original_replace = Path.replace
+
+    def fail_staging_commit(path: Path, target: Path) -> Path:
+        target_path = Path(target)
+        is_staging_commit = (
+            target_path == destination
+            and path.parent == destination.parent
+            and path.name.startswith(f".{destination.name}-")
+            and not path.name.startswith(f".{destination.name}-old-")
+        )
+        if is_staging_commit:
+            raise OSError("synthetic atomic commit failure")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", fail_staging_commit)
+
+    with pytest.raises(ValueError, match="extraction failed.*OSError"):
+        _extract_members(archive_path, destination)
+
+    assert (destination / "old.txt").read_bytes() == b"accepted evidence"
+    assert not (destination / "new.txt").exists()
+    assert not list(tmp_path.glob(f".{destination.name}-*"))
+
+
 @pytest.mark.parametrize("member_type", [tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.FIFOTYPE])
 def test_tar_link_and_device_like_members_fail_closed(tmp_path: Path, member_type: bytes) -> None:
     archive_path = tmp_path / "unsafe.tar"

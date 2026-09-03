@@ -207,8 +207,15 @@ git worktree prune
 # several workers create worktrees concurrently.
 git worktree add --no-track -b "$branch_name" "$worktree_path" "$base_ref"
 if [[ "$worktree_mode" == "review" ]]; then
-  python3 "$SCRIPT_DIR/review_worktree_guard.py" configure \
-    --worktree "$worktree_path" --mode review
+  review_guard_args=(--worktree "$worktree_path" --mode review)
+  # A review candidate may be created from a base that predates this guard.
+  # Keep the target clean by using the invoking checkout's tracked helper and
+  # hook until the guard itself is present in the selected base.
+  if [[ ! -f "$worktree_path/scripts/dev/review_worktree_guard.py" ||
+        ! -x "$worktree_path/scripts/dev/git_hooks/pre-push" ]]; then
+    review_guard_args+=(--hook-source-root "$SCRIPT_DIR")
+  fi
+  python3 "$SCRIPT_DIR/review_worktree_guard.py" configure "${review_guard_args[@]}"
 fi
 if [[ -n "$receipt_path" ]]; then
   python3 "$SCRIPT_DIR/worktree_receipt.py" create \

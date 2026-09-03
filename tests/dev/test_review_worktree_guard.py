@@ -195,11 +195,12 @@ def test_create_review_worktree_blocks_refspecs_and_no_verify(tmp_path: Path) ->
 
 
 def test_review_mode_blocks_a_remote_added_after_configuration(tmp_path: Path) -> None:
-    """The push-only catch-all also covers a newly configured remote."""
+    """Transport barriers cover a newly configured remote and common URL aliases."""
     repo, _remote = _fixture_repo(tmp_path)
     second_remote = tmp_path / "second-remote.git"
     _git(tmp_path, "init", "--bare", str(second_remote))
     _git(repo, "push", str(second_remote), "main:refs/heads/main")
+    _git(repo, "config", f"url.{second_remote}.insteadOf", "review-target:")
     worktree = tmp_path / "review-new-remote"
     branch = "review/new-remote"
     try:
@@ -207,7 +208,7 @@ def test_review_mode_blocks_a_remote_added_after_configuration(tmp_path: Path) -
         configured = _configure(worktree, "review")
         assert configured.returncode == 0, configured.stderr
         _git(worktree, "remote", "add", "mirror", str(second_remote))
-        _git(worktree, "config", "--worktree", "remote.mirror.pushurl", str(second_remote))
+        _git(worktree, "config", "--worktree", "remote.mirror.pushurl", "review-target:")
         result = _git(
             worktree,
             "push",
@@ -219,6 +220,52 @@ def test_review_mode_blocks_a_remote_added_after_configuration(tmp_path: Path) -
         assert result.returncode != 0, result.stdout + result.stderr
         refs = _common_git(worktree, "ls-remote", "--refs", str(second_remote)).stdout
         assert "refs/heads/new-remote-bypass" not in refs
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
+def test_create_review_worktree_bootstraps_from_invoking_checkout(tmp_path: Path) -> None:
+    """A base without the new helper can still be protected without dirtying the target."""
+    repo, _remote = _fixture_repo(tmp_path)
+    _git(repo, "rm", "scripts/dev/git_hooks/pre-push", "scripts/dev/review_worktree_guard.py")
+    _git(repo, "commit", "-m", "fixture base predates review guard")
+    worktree = tmp_path / "review-bootstrap"
+    branch = "review/bootstrap"
+    try:
+        created = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(worktree),
+                "--branch",
+                branch,
+                "--base",
+                "HEAD",
+                "--minimum-free-bytes",
+                "0",
+                "--mode",
+                "review",
+            ],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert created.returncode == 0, created.stdout + created.stderr
+        assert not (worktree / "scripts/dev/review_worktree_guard.py").exists()
+        hook_root = (REPO_ROOT / "scripts/dev/git_hooks").resolve()
+        assert _git(worktree, "config", "--get", "core.hooksPath").stdout.strip() == str(hook_root)
+        assert (
+            _git(worktree, "config", "--get", "robot-sf.worktree-mode").stdout.strip() == "review"
+        )
+        blocked = _git(
+            worktree,
+            "push",
+            "origin",
+            "HEAD:refs/heads/bootstrap-blocked",
+            check=False,
+        )
+        assert blocked.returncode != 0, blocked.stdout + blocked.stderr
     finally:
         _remove_worktree(repo, worktree, branch)
 
@@ -283,6 +330,8 @@ def test_integration_aborts_and_compares_remote_refs(tmp_path: Path) -> None:
         configured = _configure(worktree, "review")
         assert configured.returncode == 0, configured.stderr
         before_head = _git(worktree, "rev-parse", "HEAD").stdout.strip()
+        before_orig_head = _git(worktree, "rev-parse", "origin/main").stdout.strip()
+        _git(worktree, "update-ref", "ORIG_HEAD", before_orig_head)
         before_refs = _remote_refs(worktree)
 
         result = _integrate(worktree)
@@ -293,6 +342,9 @@ def test_integration_aborts_and_compares_remote_refs(tmp_path: Path) -> None:
         assert payload["abort_attempted"] is True
         assert payload["abort_returncode"] == 0
         assert payload["head_before"] == before_head == payload["head_after"]
+        assert payload["orig_head_before"] == before_orig_head == payload["orig_head_after"]
+        assert payload["orig_head_restore_returncode"] == 0
+        assert _git(worktree, "rev-parse", "ORIG_HEAD").stdout.strip() == before_orig_head
         assert payload["status_before"] == payload["status_after"] == ""
         assert payload["merge_head_after"] is None
         assert payload["remote_refs_unchanged"] is True
@@ -318,6 +370,8 @@ def test_conflicting_integration_is_aborted_and_reported(tmp_path: Path) -> None
         _git(worktree, "fetch", "origin", "main")
         configured = _configure(worktree, "review")
         assert configured.returncode == 0, configured.stderr
+        orig_head = _git(worktree, "rev-parse", "-q", "--verify", "ORIG_HEAD", check=False)
+        before_orig_head = orig_head.stdout.strip() or None
         before_refs = _remote_refs(worktree)
 
         result = _integrate(worktree)
@@ -327,6 +381,11 @@ def test_conflicting_integration_is_aborted_and_reported(tmp_path: Path) -> None
         assert payload["merge_returncode"] != 0
         assert payload["abort_attempted"] is True
         assert payload["abort_returncode"] == 0
+        assert payload["orig_head_before"] == before_orig_head
+        assert payload["orig_head_after"] == before_orig_head
+        assert payload["orig_head_restore_returncode"] == 0
+        restored_orig_head = _git(worktree, "rev-parse", "-q", "--verify", "ORIG_HEAD", check=False)
+        assert (restored_orig_head.stdout.strip() or None) == before_orig_head
         assert payload["status_after"] == ""
         assert payload["merge_head_after"] is None
         assert payload["remote_refs_unchanged"] is True

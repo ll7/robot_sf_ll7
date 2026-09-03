@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-worktree_root="$(git rev-parse --show-toplevel)"
-exec python3 "$worktree_root/scripts/dev/review_worktree_guard.py" pre-push
+hook_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+exec python3 "$hook_root/../review_worktree_guard.py" pre-push

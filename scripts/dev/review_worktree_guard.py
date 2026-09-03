@@ -4,9 +4,9 @@
 Review worktrees are deliberately read-only with respect to remote references.
 ``configure --mode review`` stores the mode in the linked worktree's private
 Git config, installs the tracked pre-push hook, and routes push destinations to
-a non-repository URL.  A worktree-local URL rewrite catches direct URLs and
-explicit push URLs as well; the integration probe reads remote state through
-the common Git config so it can retain a read-only remote comparison.
+a non-repository URL.  Worktree-local URL and protocol barriers catch direct
+URLs and explicit push URLs as well; the integration probe reads remote state
+through the common Git config so it can retain a read-only remote comparison.
 This is a Git-level workflow guard, not an operating-system sandbox; a caller
 who deliberately overrides the worktree's Git configuration can bypass these
 local barriers.
@@ -38,6 +38,15 @@ IMPLEMENTATION_MODE = "implementation"
 HOOK_RELATIVE_PATH = Path("scripts/dev/git_hooks/pre-push")
 GUARD_RELATIVE_PATH = Path("scripts/dev/review_worktree_guard.py")
 DEFAULT_TIMEOUT_SECONDS = 120
+PROTOCOL_POLICY_KEYS = (
+    "protocol.allow",
+    "protocol.ext.allow",
+    "protocol.file.allow",
+    "protocol.git.allow",
+    "protocol.http.allow",
+    "protocol.https.allow",
+    "protocol.ssh.allow",
+)
 
 
 class GuardError(ValueError):
@@ -258,6 +267,7 @@ def _capture_backup(identity: dict[str, Path], original_mode: str | None) -> dic
             remote: _worktree_values(identity, f"remote.{remote}.receivepack") for remote in remotes
         },
         "remote_urls": {remote: _remote_urls(identity, remote) for remote in remotes},
+        "protocol_allows": {key: _worktree_values(identity, key) for key in PROTOCOL_POLICY_KEYS},
     }
 
 
@@ -267,6 +277,19 @@ def _write_backup(identity: dict[str, Path], backup: dict[str, Any]) -> None:
         BACKUP_KEY,
         json.dumps(backup, sort_keys=True, separators=(",", ":")),
     )
+
+
+def _validate_string_list_mapping(value: Any, label: str) -> None:
+    """Validate a backup mapping whose values are string lists."""
+    if not isinstance(value, dict):
+        raise GuardError(f"review guard backup has malformed {label} values")
+    for key, values in value.items():
+        if (
+            not isinstance(key, str)
+            or not isinstance(values, list)
+            or not all(isinstance(value, str) for value in values)
+        ):
+            raise GuardError(f"review guard backup has malformed {label} values")
 
 
 def _load_backup(identity: dict[str, Path]) -> dict[str, Any] | None:
@@ -287,36 +310,24 @@ def _load_backup(identity: dict[str, Path]) -> dict[str, Any] | None:
         isinstance(value, str) for value in backup["core_hooks_path"]
     ):
         raise GuardError("review guard backup has malformed core.hooksPath values")
-    remote_pushurls = backup.get("remote_pushurls")
-    if not isinstance(remote_pushurls, dict) or any(
-        not isinstance(remote, str)
-        or not isinstance(values, list)
-        or not all(isinstance(value, str) for value in values)
-        for remote, values in remote_pushurls.items()
-    ):
-        raise GuardError("review guard backup has malformed remote.pushurl values")
-    remote_receivepacks = backup.get("remote_receivepacks", {})
-    if not isinstance(remote_receivepacks, dict) or any(
-        not isinstance(remote, str)
-        or not isinstance(values, list)
-        or not all(isinstance(value, str) for value in values)
-        for remote, values in remote_receivepacks.items()
-    ):
-        raise GuardError("review guard backup has malformed remote.receivepack values")
-    remote_urls = backup.get("remote_urls")
-    if not isinstance(remote_urls, dict) or any(
-        not isinstance(remote, str)
-        or not isinstance(values, list)
-        or not all(isinstance(value, str) for value in values)
-        for remote, values in remote_urls.items()
-    ):
-        raise GuardError("review guard backup has malformed remote URL values")
+    _validate_string_list_mapping(backup.get("remote_pushurls"), "remote.pushurl")
+    _validate_string_list_mapping(backup.get("remote_receivepacks", {}), "remote.receivepack")
+    _validate_string_list_mapping(backup.get("remote_urls"), "remote URL")
+    _validate_string_list_mapping(backup.get("protocol_allows", {}), "protocol policy")
     return backup
 
 
-def _check_hook_files(identity: dict[str, Path]) -> Path:
-    hook = identity["path"] / HOOK_RELATIVE_PATH
-    guard = identity["path"] / GUARD_RELATIVE_PATH
+def _check_hook_files(identity: dict[str, Path], hook_source_root: str | Path | None) -> Path:
+    if hook_source_root is None:
+        hook = identity["path"] / HOOK_RELATIVE_PATH
+        guard = identity["path"] / GUARD_RELATIVE_PATH
+    else:
+        source_root = Path(hook_source_root)
+        if source_root.is_symlink() or not source_root.is_dir():
+            raise GuardError(f"hook source root must be a real directory: {hook_source_root}")
+        source_root = source_root.resolve()
+        hook = source_root / "git_hooks" / HOOK_RELATIVE_PATH.name
+        guard = source_root / GUARD_RELATIVE_PATH.name
     for candidate, label in ((hook, "pre-push hook"), (guard, "guard script")):
         if candidate.is_symlink() or not candidate.is_file():
             raise GuardError(f"review mode requires a tracked {label}: {candidate}")
@@ -330,13 +341,14 @@ def _configure_review_mode(
     *,
     original_mode: str | None,
     backup: dict[str, Any] | None,
+    hook_source_root: str | Path | None,
 ) -> dict[str, Any]:
     """Install the hook and configured-remote barriers."""
     if original_mode == REVIEW_MODE and backup is None:
         raise GuardError("review mode is set but its restoration backup is missing")
     if original_mode != REVIEW_MODE and backup is not None:
         raise GuardError("stale review guard backup exists outside review mode")
-    hook = _check_hook_files(identity)
+    hook = _check_hook_files(identity, hook_source_root)
     if backup is None:
         backup = _capture_backup(identity, original_mode)
         _write_backup(identity, backup)
@@ -390,12 +402,18 @@ def _prepare_review_barriers(
         _worktree_set(identity, f"remote.{remote}.receivepack", blocked_receivepack)
         for url in configured_urls[remote]:
             _worktree_add(identity, rule_key, url)
-    # Keep the barrier effective for remotes added after review mode is
+    # Keep the URL barrier effective for remotes added after review mode is
     # configured, including explicit pushurl values. This all-URL rewrite is
     # intentionally broader than pushInsteadOf: Git ignores pushInsteadOf when
     # a remote has an explicit pushurl. Remote reads needed by ``integrate``
     # use the common Git config below, outside this worktree-local rule.
     _worktree_add(identity, catchall_key, "")
+    # URL rewrite precedence is longest-prefix based, so a pre-existing common
+    # config alias can otherwise beat the empty-prefix catch-all. Deny every
+    # built-in transport in this worktree as the final barrier, including
+    # remotes and aliases added after review mode is configured.
+    for key in PROTOCOL_POLICY_KEYS:
+        _worktree_set(identity, key, "never")
     return expected_url
 
 
@@ -434,6 +452,10 @@ def _restore_implementation_mode(
         _worktree_unset(identity, key)
         for value in backup.get("remote_receivepacks", {}).get(remote, []):
             _worktree_add(identity, key, value)
+    for key in PROTOCOL_POLICY_KEYS:
+        _worktree_unset(identity, key)
+        for value in backup.get("protocol_allows", {}).get(key, []):
+            _worktree_add(identity, key, value)
     _worktree_unset(identity, "core.hooksPath")
     for value in backup["core_hooks_path"]:
         _worktree_add(identity, "core.hooksPath", value)
@@ -445,7 +467,12 @@ def _restore_implementation_mode(
     return _configure_result(identity, IMPLEMENTATION_MODE, None, 0)
 
 
-def configure_worktree(worktree: str | Path, *, mode: str) -> dict[str, Any]:
+def configure_worktree(
+    worktree: str | Path,
+    *,
+    mode: str,
+    hook_source_root: str | Path | None = None,
+) -> dict[str, Any]:
     """Configure or restore one linked worktree's review protection."""
     if mode not in (REVIEW_MODE, IMPLEMENTATION_MODE):
         raise GuardError(f"unsupported worktree mode: {mode}")
@@ -456,7 +483,12 @@ def configure_worktree(worktree: str | Path, *, mode: str) -> dict[str, Any]:
         raise GuardError(f"unsupported configured worktree mode: {original_mode}")
     backup = _load_backup(identity)
     if mode == REVIEW_MODE:
-        return _configure_review_mode(identity, original_mode=original_mode, backup=backup)
+        return _configure_review_mode(
+            identity,
+            original_mode=original_mode,
+            backup=backup,
+            hook_source_root=hook_source_root,
+        )
     if original_mode == REVIEW_MODE:
         if backup is None:
             raise GuardError("cannot restore review mode without its backup")
@@ -536,6 +568,9 @@ def _integration_payload(source_ref: str, remote: str) -> dict[str, Any]:
         "abort_returncode": None,
         "abort_stdout": None,
         "abort_stderr": None,
+        "orig_head_before": None,
+        "orig_head_after": None,
+        "orig_head_restore_returncode": None,
         "merge_head_after": None,
         "remote_refs_before": None,
         "remote_refs_after": None,
@@ -598,6 +633,30 @@ def _collect_post_probe_state(
         errors.append(f"post-merge remote-state check failed: {exc}")
 
 
+def _restore_orig_head(
+    identity: dict[str, Path],
+    payload: dict[str, Any],
+    timeout: int,
+    errors: list[str],
+) -> None:
+    """Restore the worktree's pre-probe ORIG_HEAD pseudo-ref."""
+    desired = payload["orig_head_before"]
+    command = ("update-ref", "ORIG_HEAD", desired) if desired else ("update-ref", "-d", "ORIG_HEAD")
+    result = _run_git(identity["path"], *command, timeout=timeout)
+    payload["orig_head_restore_returncode"] = result.returncode
+    if result.returncode != 0:
+        errors.append(f"ORIG_HEAD restoration failed: {_command_detail(result)}")
+    try:
+        payload["orig_head_after"] = _git_optional(
+            identity["path"], "rev-parse", "-q", "--verify", "ORIG_HEAD"
+        )
+    except GuardError as exc:
+        errors.append(f"ORIG_HEAD post-restore check failed: {exc}")
+        return
+    if payload["orig_head_after"] != desired:
+        errors.append("ORIG_HEAD changed during the integration probe")
+
+
 def _validate_probe(
     payload: dict[str, Any],
     merge_result: subprocess.CompletedProcess[str],
@@ -653,6 +712,9 @@ def integrate_worktree(
         if merge_head_before is not None:
             raise GuardError("synthetic integration refuses an existing merge state")
         payload["head_before"] = _git(identity["path"], "rev-parse", "HEAD")
+        payload["orig_head_before"] = _git_optional(
+            identity["path"], "rev-parse", "-q", "--verify", "ORIG_HEAD"
+        )
         payload["source_commit"] = _git(
             identity["path"], "rev-parse", "--verify", f"{source_ref}^{{commit}}"
         )
@@ -664,6 +726,7 @@ def integrate_worktree(
     finally:
         if merge_result is not None and identity is not None:
             _abort_merge_probe(identity, timeout, payload)
+            _restore_orig_head(identity, payload, timeout, errors)
 
         if identity is not None and remote_before is not None:
             _collect_post_probe_state(identity, remote_before, timeout, payload, errors)
@@ -695,6 +758,10 @@ def _parser() -> argparse.ArgumentParser:
     configure = subparsers.add_parser("configure", help="configure one linked worktree mode")
     configure.add_argument("--worktree", required=True)
     configure.add_argument("--mode", choices=(REVIEW_MODE, IMPLEMENTATION_MODE), required=True)
+    configure.add_argument(
+        "--hook-source-root",
+        help="use this scripts/dev directory when the target base lacks the guard files",
+    )
 
     pre_push = subparsers.add_parser("pre-push", help="run the review worktree push guard")
     pre_push.add_argument("--worktree", default=".")
@@ -713,7 +780,11 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         if args.command == "configure":
-            payload = configure_worktree(args.worktree, mode=args.mode)
+            payload = configure_worktree(
+                args.worktree,
+                mode=args.mode,
+                hook_source_root=args.hook_source_root,
+            )
             return_code = 0
         elif args.command == "pre-push":
             payload, return_code = pre_push_check(args.worktree)

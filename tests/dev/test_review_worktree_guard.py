@@ -152,6 +152,34 @@ def test_create_review_worktree_blocks_refspecs_and_no_verify(tmp_path: Path) ->
         _remove_worktree(repo, worktree, branch)
 
 
+def test_review_mode_blocks_a_remote_added_after_configuration(tmp_path: Path) -> None:
+    """The push-only catch-all also covers a newly configured remote."""
+    repo, _remote = _fixture_repo(tmp_path)
+    second_remote = tmp_path / "second-remote.git"
+    _git(tmp_path, "init", "--bare", str(second_remote))
+    _git(repo, "push", str(second_remote), "main:refs/heads/main")
+    worktree = tmp_path / "review-new-remote"
+    branch = "review/new-remote"
+    try:
+        _git(repo, "worktree", "add", "--no-track", "-b", branch, str(worktree), "HEAD")
+        configured = _configure(worktree, "review")
+        assert configured.returncode == 0, configured.stderr
+        _git(worktree, "remote", "add", "mirror", str(second_remote))
+        result = _git(
+            worktree,
+            "push",
+            "--no-verify",
+            "mirror",
+            "HEAD:refs/heads/new-remote-bypass",
+            check=False,
+        )
+        assert result.returncode != 0, result.stdout + result.stderr
+        refs = _git(worktree, "ls-remote", "--refs", str(second_remote)).stdout
+        assert "refs/heads/new-remote-bypass" not in refs
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
 def test_ordinary_implementation_worktree_remains_pushable(tmp_path: Path) -> None:
     """The default worktree mode does not install the review-only boundary."""
     repo, _remote = _fixture_repo(tmp_path)

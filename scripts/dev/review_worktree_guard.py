@@ -319,6 +319,10 @@ def _prepare_review_barriers(
         _worktree_set(identity, f"remote.{remote}.pushurl", expected_url)
         for url in configured_urls[remote]:
             _worktree_add(identity, rule_key, url)
+    # Keep the push-only barrier effective for remotes added after review mode
+    # is configured.  The empty prefix is a catch-all for push URLs while
+    # leaving fetch and ls-remote URLs untouched.
+    _worktree_add(identity, rule_key, "")
     return expected_url
 
 

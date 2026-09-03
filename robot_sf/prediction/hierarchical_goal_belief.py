@@ -391,20 +391,36 @@ class HierarchicalGoalPosteriorV1:
         conditional_by_destination = {
             value.destination_id: value for value in self.waypoint_conditionals
         }
-        masses: dict[str, float] = {}
-        unknown = self.unknown_destination_probability
+        # Keep every product as a separate term so cardinality-dependent
+        # accumulation uses compensated summation instead of order-sensitive
+        # incremental addition.
+        masses: dict[str, list[float]] = {}
+        unknown_terms = [self.unknown_destination_probability]
         for destination in self.destination_probabilities:
             conditional = conditional_by_destination[destination.candidate_id]
             for waypoint in conditional.waypoint_probabilities:
-                masses[waypoint.candidate_id] = masses.get(waypoint.candidate_id, 0.0) + (
+                masses.setdefault(waypoint.candidate_id, []).append(
                     destination.probability * waypoint.probability
                 )
-            unknown += destination.probability * conditional.unknown_waypoint_probability
+            unknown_terms.append(destination.probability * conditional.unknown_waypoint_probability)
+
+        # Provider-bound vectors are independently normalized within a small
+        # tolerance. Normalize the derived vector once to absorb their
+        # floating-point drift while preserving its relative masses.
+        canonical_masses = {
+            candidate_id: math.fsum(contributions)
+            for candidate_id, contributions in sorted(masses.items())
+        }
+        unknown = math.fsum(unknown_terms)
+        total = math.fsum((*canonical_masses.values(), unknown))
+        if not math.isfinite(total) or total <= 0.0:
+            raise ValueError("active waypoint marginal has an invalid probability total")
+        scale = 1.0 / total
         probabilities = tuple(
-            HierarchicalProbability(candidate_id, probability)
-            for candidate_id, probability in sorted(masses.items())
+            HierarchicalProbability(candidate_id, min(1.0, probability * scale))
+            for candidate_id, probability in canonical_masses.items()
         )
-        return probabilities, unknown
+        return probabilities, min(1.0, unknown * scale)
 
     def to_goal_belief_v1(self, level: str) -> GoalBeliefV1:
         """Project exactly one hierarchy level into the unchanged flat v1 type.

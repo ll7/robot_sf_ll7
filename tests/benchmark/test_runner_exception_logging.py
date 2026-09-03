@@ -82,6 +82,53 @@ def test_policy_step_fallback_updates_returned_metadata(monkeypatch) -> None:
     assert metadata["fallback_reason"] == "policy_step_error"
 
 
+@pytest.mark.parametrize(
+    ("exception", "expected"),
+    [
+        (RuntimeError("planner step worker was unavailable"), True),
+        (RuntimeError("planner step worker exited before returning an action"), True),
+        (RuntimeError("planner step worker exited without returning an action"), True),
+        (RuntimeError("planner step worker failed to start"), True),
+        (RuntimeError("planner step worker failed to initialize"), True),
+        (RuntimeError("policy_step_isolation_unavailable"), True),
+        (RuntimeError("policy step isolation unavailable"), True),
+        (RuntimeError("unrelated planner failure"), False),
+        (ValueError("planner step worker was unavailable"), False),
+    ],
+)
+def test_process_isolation_error_identifies_worker_lifecycle(exception, expected) -> None:
+    """Only known worker-lifecycle failures receive the isolation disposition."""
+    assert runner._is_process_isolation_error(exception) is expected
+
+
+def test_policy_step_isolation_error_preserves_classification() -> None:
+    """Worker-lifecycle errors remain identifiable after the fallback path."""
+    step_runner = Mock()
+    step_runner.step.side_effect = RuntimeError(
+        "planner step worker exited before returning an action"
+    )
+    timeout_metadata = {
+        "step_timeouts": 0,
+        "worker_errors": 0,
+        "step_retries": 0,
+        "fallback_actions": 0,
+    }
+    metadata = {}
+
+    action = runner._step_planner_with_retry(
+        step_runner,
+        None,
+        "ppo",
+        timeout_metadata,
+        metadata,
+        retry_budget=0,
+    )
+
+    assert action == {"vx": 0.0, "vy": 0.0}
+    assert metadata["status"] == "policy_step_isolation_unavailable"
+    assert metadata["fallback_reason"] == "planner step worker exited before returning an action"
+
+
 def test_action_to_velocity_covers_action_shapes_and_validation() -> None:
     """Extracted action conversion must clamp, align, and reject malformed actions."""
     zero = np.array([0.0, 0.0])
@@ -182,8 +229,8 @@ def test_policy_builder_records_unavailable_step_isolation(monkeypatch) -> None:
         runner._close_robot_policy(policy)
 
     assert velocity == pytest.approx(np.array([0.0, 0.0]))
-    assert metadata["status"] == "policy_step_error_fallback"
-    assert metadata["fallback_reason"] == "policy_step_error"
+    assert metadata["status"] == "policy_step_isolation_unavailable"
+    assert metadata["fallback_reason"] == "policy step isolation unavailable"
     assert metadata["policy_step_timeout"]["isolation"] == "unavailable"
 
 

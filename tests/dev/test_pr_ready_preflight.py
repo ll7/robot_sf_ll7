@@ -383,12 +383,23 @@ def _write_startup_interleaving_python3(repo: Path, marker: Path, release: Path)
     stub.chmod(0o755)
 
 
-def _write_debug_signal_hook(repo: Path, marker: Path) -> Path:
+def _write_debug_signal_hook(
+    repo: Path, marker: Path, *, launch_previous_child: bool = False
+) -> Path:
     """Deliver SIGTERM from a Bash DEBUG trap at a selected registration command."""
     hook = repo / ".home" / "pr-ready-debug-signal.bash"
     hook.parent.mkdir(parents=True, exist_ok=True)
+    previous_child_setup = (
+        'if [[ -n "${PR_READY_SIGNAL_PREVIOUS_CHILD_MARKER:-}" && '
+        '! -e "$PR_READY_SIGNAL_PREVIOUS_CHILD_MARKER" ]]; then\n'
+        "  sleep 60 >/dev/null 2>&1 &\n"
+        '  printf "%s\\n" "$!" > "$PR_READY_SIGNAL_PREVIOUS_CHILD_MARKER"\n'
+        "fi\n"
+        if launch_previous_child
+        else ""
+    )
     hook.write_text(
-        "pr_ready_debug_signal() {\n"
+        previous_child_setup + "pr_ready_debug_signal() {\n"
         '  if [[ "${pr_ready_child_registration_state:-}" == "registering" && '
         '-n "${PR_READY_SIGNAL_COMMAND_FRAGMENT:-}" && '
         '"$BASH_COMMAND" == *"${PR_READY_SIGNAL_COMMAND_FRAGMENT}"* && '
@@ -451,6 +462,31 @@ def _wait_for_process_exit(pid: int, *, timeout: float = 3.0) -> None:
             break
         time.sleep(0.02)
     raise AssertionError(f"descendant process {pid} survived cleanup")
+
+
+def _process_is_alive(pid: int) -> bool:
+    """Return whether a POSIX process is alive rather than only a zombie."""
+    try:
+        os.kill(pid, 0)
+    except (ProcessLookupError, PermissionError):
+        return False
+    proc_stat = Path(f"/proc/{pid}/stat")
+    if proc_stat.is_file():
+        state = proc_stat.read_text(encoding="utf-8").rsplit(")", 1)[-1].split()[0]
+        return state != "Z"
+    return True
+
+
+def _release_fifo(path: Path) -> None:
+    """Write one byte to a FIFO without blocking teardown when no reader exists."""
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_NONBLOCK)
+    except OSError:
+        return
+    try:
+        os.write(descriptor, b"release\n")
+    finally:
+        os.close(descriptor)
 
 
 def _wait_for_marker(
@@ -778,6 +814,79 @@ def test_pr_ready_sigterm_before_launcher_registration_is_queued(
 @pytest.mark.skipif(
     os.name != "posix", reason="signal and process-group semantics are POSIX-specific"
 )
+def test_pr_ready_sigterm_before_launcher_does_not_kill_previous_async_job(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """An interrupted launch cannot recover and kill the prior ``$!`` job."""
+    _write_signal_lane_stub(preflight_repo)
+    hook_marker = tmp_path / "before-launch-hook"
+    previous_marker = tmp_path / "previous-async-pid"
+    hook = _write_debug_signal_hook(preflight_repo, hook_marker, launch_previous_child=True)
+    receipt = tmp_path / "before-launch-termination.json"
+    env = {
+        "BASH_ENV": str(hook),
+        "PR_READY_MODE": "interim",
+        "PR_READY_SKIP_PREFLIGHT": "1",
+        "PR_READY_TERMINATION_RECEIPT": str(receipt),
+        "PR_READY_SIGNAL_COMMAND_FRAGMENT": "python3 -",
+        "PR_READY_SIGNAL_FAIL_HOOK": "1",
+        "PR_READY_SIGNAL_MARKER": str(hook_marker),
+        "PR_READY_SIGNAL_PREVIOUS_CHILD_MARKER": str(previous_marker),
+        "PR_READY_SIGNAL_CORE_READY": str(tmp_path / "core-ready"),
+        "PR_READY_SIGNAL_CORE_RELEASE": str(tmp_path / "core-release"),
+    }
+
+    process = _start_pr_ready(preflight_repo, env_overrides=env)
+    previous_pid: int | None = None
+    try:
+        _wait_for_marker(previous_marker, process, timeout=3.0)
+        previous_pid = int(previous_marker.read_text(encoding="utf-8"))
+        stdout, stderr = _collect_process(process, timeout=3.0)
+
+        assert process.returncode == 143, stdout + stderr
+        assert _process_is_alive(previous_pid), "the prior asynchronous job was killed"
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        assert payload["process"]["child_pid"] != previous_pid
+        assert payload["cleanup"]["verified"] is False
+    finally:
+        if previous_pid is not None and _process_is_alive(previous_pid):
+            os.kill(previous_pid, signal.SIGKILL)
+        _stop_process_group(process, signal.SIGKILL)
+        try:
+            _collect_process(process, timeout=3.0)
+        except AssertionError:
+            pass
+
+
+def _write_termination_receipt_gate(repo: Path) -> Path:
+    """Pause the receipt writer so a second signal can test its once-only guard."""
+    termination = repo / "scripts" / "dev" / "pr_ready_termination.py"
+    implementation = repo / ".home" / "pr_ready_termination_impl.py"
+    implementation.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(termination, implementation)
+    termination.write_text(
+        "from __future__ import annotations\n"
+        "import os\n"
+        "import runpy\n"
+        "from pathlib import Path\n"
+        "\n"
+        'counter = Path(os.environ["PR_READY_SIGNAL_RECEIPT_INVOCATIONS"])\n'
+        'with counter.open("a", encoding="utf-8") as handle:\n'
+        '    handle.write("invoked\\n")\n'
+        'Path(os.environ["PR_READY_SIGNAL_RECEIPT_START"]).touch()\n'
+        'with open(os.environ["PR_READY_SIGNAL_RECEIPT_RELEASE"], "rb") as handle:\n'
+        "    handle.read(1)\n"
+        "runpy.run_path(\n"
+        '    os.environ["PR_READY_SIGNAL_TERMINATION_IMPL"], run_name="__main__"\n'
+        ")\n",
+        encoding="utf-8",
+    )
+    return implementation
+
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="signal and process-group semantics are POSIX-specific"
+)
 def test_pr_ready_sigterm_exit_during_registration_cleans_lane(
     preflight_repo: Path, tmp_path: Path
 ) -> None:
@@ -787,6 +896,11 @@ def test_pr_ready_sigterm_exit_during_registration_cleans_lane(
     hook = _write_debug_signal_hook(preflight_repo, hook_marker)
     receipt = tmp_path / "registration-exit-termination.json"
     release = tmp_path / "core-release"
+    receipt_start = tmp_path / "receipt-start"
+    receipt_release = tmp_path / "receipt-release.fifo"
+    receipt_invocations = tmp_path / "receipt-invocations"
+    os.mkfifo(receipt_release)
+    termination_impl = _write_termination_receipt_gate(preflight_repo)
     env = {
         "BASH_ENV": str(hook),
         "PR_READY_MODE": "interim",
@@ -795,23 +909,32 @@ def test_pr_ready_sigterm_exit_during_registration_cleans_lane(
         "PR_READY_SIGNAL_COMMAND_FRAGMENT": "pr_ready_child_pid=$!",
         "PR_READY_SIGNAL_FAIL_HOOK": "1",
         "PR_READY_SIGNAL_MARKER": str(hook_marker),
+        "PR_READY_SIGNAL_RECEIPT_START": str(receipt_start),
+        "PR_READY_SIGNAL_RECEIPT_RELEASE": str(receipt_release),
+        "PR_READY_SIGNAL_RECEIPT_INVOCATIONS": str(receipt_invocations),
+        "PR_READY_SIGNAL_TERMINATION_IMPL": str(termination_impl),
         "PR_READY_SIGNAL_CORE_READY": str(tmp_path / "core-ready"),
         "PR_READY_SIGNAL_CORE_RELEASE": str(release),
     }
 
     process = _start_pr_ready(preflight_repo, env_overrides=env)
     try:
-        process.wait(timeout=3.0)
+        _wait_for_marker(receipt_start, process, timeout=3.0)
+        os.kill(process.pid, signal.SIGTERM)
+        _release_fifo(receipt_release)
         stdout, stderr = _collect_process(process, timeout=3.0)
 
         assert hook_marker.is_file()
         assert process.returncode == 143, stdout + stderr
+        assert receipt_invocations.read_text(encoding="utf-8").splitlines() == ["invoked"]
         payload = json.loads(receipt.read_text(encoding="utf-8"))
+        assert payload["signal"]["exit_code"] == 143
         assert payload["cleanup"]["verified"] is True
         assert payload["process"]["child_registration_state"] == "registered"
         assert payload["process"]["child_process_group_exists"] is False
     finally:
         release.touch()
+        _release_fifo(receipt_release)
         _stop_process_group(process, signal.SIGKILL)
         try:
             _collect_process(process, timeout=3.0)

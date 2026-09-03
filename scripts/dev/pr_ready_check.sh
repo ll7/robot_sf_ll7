@@ -70,6 +70,7 @@ pr_ready_child_pid=""
 pr_ready_child_pgid=""
 pr_ready_child_registration_state="not_started"
 pr_ready_child_launch_started=0
+pr_ready_previous_async_pid=""
 pr_ready_parent_pgid=""
 pr_ready_cleanup_status="no_child_active"
 pr_ready_termination_receipt="${PR_READY_TERMINATION_RECEIPT:-}"
@@ -121,6 +122,15 @@ pr_ready_process_alive() {
     return $?
   fi
   return 0
+}
+
+pr_ready_is_direct_child() {
+  local pid="$1"
+  local parent_pid
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  command -v ps >/dev/null 2>&1 || return 1
+  parent_pid="$(ps -o ppid= -p "$pid" 2>/dev/null | awk 'NF { print $1; exit }')" || return 1
+  [[ "$parent_pid" == "$$" ]]
 }
 
 pr_ready_wait_for_group_exit() {
@@ -291,7 +301,9 @@ pr_ready_finalize_child_registration_for_exit() {
   [[ "$pr_ready_child_registration_state" == "registering" ]] || return 0
   if [[ "$pr_ready_child_launch_started" -eq 1 && -z "$pr_ready_child_pid" ]]; then
     local recovered_child_pid="${!:-}"
-    if [[ "$recovered_child_pid" =~ ^[1-9][0-9]*$ ]]; then
+    if [[ "$recovered_child_pid" =~ ^[1-9][0-9]*$ &&
+      "$recovered_child_pid" != "$pr_ready_previous_async_pid" ]] &&
+      pr_ready_is_direct_child "$recovered_child_pid"; then
       pr_ready_child_pid="$recovered_child_pid"
       pr_ready_child_pgid="$recovered_child_pid"
     fi
@@ -313,8 +325,12 @@ pr_ready_exit_without_coverage() {
 }
 
 start_pr_ready_child() {
-  pr_ready_child_registration_state="registering"
+  # Bash exposes the previous asynchronous PID through ``$!`` until the new
+  # background command is launched.  Preserve it so an EXIT trap interrupted
+  # before the new launch cannot mistake that unrelated job for the lane.
+  pr_ready_previous_async_pid="${!:-}"
   pr_ready_child_launch_started=1
+  pr_ready_child_registration_state="registering"
   python3 - "$@" <<'PY' &
 import os
 import sys
@@ -396,6 +412,7 @@ run_pr_ready_lane() {
   pr_ready_child_pgid=""
   pr_ready_child_registration_state="not_started"
   pr_ready_child_launch_started=0
+  pr_ready_previous_async_pid=""
   return "$lane_status"
 }
 

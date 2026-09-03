@@ -269,6 +269,19 @@ def _successor_state(**updates: Any) -> dict[str, Any]:
     return publisher._seal_state(payload)
 
 
+def _successor_release_binding(**updates: Any) -> dict[str, Any]:
+    """Return a complete valid release binding for direct validator tests."""
+    binding: dict[str, Any] = {
+        "metadata_sha256": "0" * 64,
+        "metadata_contract_sha256": "1" * 64,
+        "release_tag": SUCCESSOR_TAG,
+        "concept_doi": "10.5281/zenodo.6",
+        "version_doi": "10.5281/zenodo.8",
+    }
+    binding.update(updates)
+    return binding
+
+
 def _remote_file(name: str, file_id: str, *, size: int = 1) -> dict[str, Any]:
     """Return one strict legacy deposition-file representation."""
     return {
@@ -290,6 +303,99 @@ def _successor_payload(files: list[dict[str, Any]], **updates: Any) -> dict[str,
 def _intended_remote_files(names: list[str]) -> list[dict[str, Any]]:
     """Return remote entries for intended names without deletion authority."""
     return [{"filename": name, "size": 1, "links": {}} for name in names]
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"concept_doi": "not-a-doi"},
+        {"predecessor": None},
+        {"source_tag": None},
+        {"concept_doi": 6},
+        {"source_tag": 6},
+        {"source_tag": "not-a-release-tag"},
+    ],
+)
+def test_successor_state_validator_rejects_malformed_lineage_before_remote_use(
+    updates: dict[str, Any],
+) -> None:
+    """The successor validator rejects malformed sealed lineage independently of HTTP state."""
+    state = dict(_successor_state())
+    state.update(updates)
+
+    with pytest.raises(publisher.ZenodoPublisherError):
+        publisher._validate_successor_state(state)
+
+
+@pytest.mark.parametrize(
+    "binding",
+    [
+        "malformed",
+        {},
+        _successor_release_binding(metadata_sha256="not-a-sha"),
+        _successor_release_binding(release_tag=6),
+        _successor_release_binding(release_tag="another-release"),
+        _successor_release_binding(concept_doi="10.5281/zenodo.7"),
+    ],
+)
+def test_successor_state_validator_rejects_malformed_release_binding(
+    binding: Any,
+) -> None:
+    """A sealed successor cannot use incomplete or conflicting release binding metadata."""
+    state = dict(_successor_state(release_binding=binding))
+
+    with pytest.raises(publisher.ZenodoPublisherError):
+        publisher._validate_successor_state(state)
+
+
+@pytest.mark.parametrize(
+    "links",
+    [
+        None,
+        {
+            "self": "https://zenodo.org/api/deposit/depositions/7",
+            "bucket": "https://zenodo.org/api/files/bucket",
+        },
+        {"bucket": "https://zenodo.org/api/files/bucket/extra"},
+    ],
+)
+def test_upload_rejects_malformed_deposition_links_before_put(links: Any, tmp_path: Path) -> None:
+    """The exact deposition response must provide structurally valid successor links."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    remote = _successor_payload([])
+    remote["links"] = links
+    session = _Session()
+    session.gets = [_Response(remote)]
+
+    with pytest.raises(publisher.ZenodoPublisherError):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.methods == ["GET"]
+    assert session.deletes == []
+
+
+@pytest.mark.parametrize(
+    "remote_file",
+    [
+        {"filename": ".", "id": "file-id", "links": {}},
+        {"filename": "inherited.tar.gz", "id": ".", "links": {}},
+    ],
+)
+def test_upload_rejects_dot_remote_names_and_ids_before_put(
+    remote_file: dict[str, Any], tmp_path: Path
+) -> None:
+    """Dot segments cannot become remote inventory or deletion targets."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    session = _Session()
+    session.gets = [_Response(_successor_payload([remote_file]))]
+
+    with pytest.raises(publisher.ZenodoPublisherError):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.methods == ["GET"]
+    assert session.deletes == []
 
 
 @pytest.mark.parametrize("invalid_kind", ["duplicate", "missing", "empty", "symlink", "control"])

@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Protect review worktrees from remote writes and unsafe synthetic merges.
 
-Review worktrees are deliberately read-only with respect to configured remote
-references.  ``configure --mode review`` stores the mode in the linked
-worktree's private Git config, installs the tracked pre-push hook, and routes
-configured push destinations to a non-repository URL.  The second barrier
-covers explicit refspecs and ``--no-verify`` pushes to configured remotes.
+Review worktrees are deliberately read-only with respect to remote references.
+``configure --mode review`` stores the mode in the linked worktree's private
+Git config, installs the tracked pre-push hook, and routes push destinations to
+a non-repository URL.  A worktree-local URL rewrite catches direct URLs and
+explicit push URLs as well; the integration probe reads remote state through
+the common Git config so it can retain a read-only remote comparison.
 This is a Git-level workflow guard, not an operating-system sandbox; a caller
-who deliberately overrides Git command-line configuration or ``--receive-pack``
-can bypass these local barriers.
+who deliberately overrides the worktree's Git configuration can bypass these
+local barriers.
 
 ``integrate`` is the canonical read-only merge probe.  It snapshots all refs
 reported by ``git ls-remote --refs`` before and after a ``--no-commit --no-ff``
@@ -50,6 +51,39 @@ def _run_git(
 ) -> subprocess.CompletedProcess[str]:
     """Run Git without invoking a shell and preserve bounded diagnostics."""
     command = ["git", "-C", str(worktree), *args]
+    try:
+        return subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(
+            command,
+            returncode=124,
+            stdout="",
+            stderr=f"command timed out after {timeout} seconds",
+        )
+    except OSError as exc:
+        return subprocess.CompletedProcess(command, returncode=127, stdout="", stderr=str(exc))
+
+
+def _run_common_git(
+    identity: dict[str, Path],
+    *args: str,
+    timeout: int = DEFAULT_TIMEOUT_SECONDS,
+) -> subprocess.CompletedProcess[str]:
+    """Run a common-config Git command without the review worktree config."""
+    command = [
+        "git",
+        "-C",
+        str(identity["path"]),
+        "--git-dir",
+        str(identity["common_git_dir"]),
+        *args,
+    ]
     try:
         return subprocess.run(
             command,
@@ -207,6 +241,10 @@ def _url_rule_key(blocked_url: str) -> str:
     return f"url.{blocked_url}.pushInsteadOf"
 
 
+def _url_catchall_key(blocked_url: str) -> str:
+    return f"url.{blocked_url}.insteadOf"
+
+
 def _capture_backup(identity: dict[str, Path], original_mode: str | None) -> dict[str, Any]:
     remotes = _remote_names(identity)
     return {
@@ -315,7 +353,7 @@ def _prepare_review_barriers(
     original_mode: str | None,
     backup: dict[str, Any],
 ) -> str:
-    """Apply inert push destinations and push-only URL rewrites."""
+    """Apply inert push destinations and URL rewrites."""
     expected_url = _blocked_url(identity)
     blocked_values = _worktree_values(identity, BLOCKED_URL_KEY)
     if blocked_values and blocked_values != [expected_url]:
@@ -331,6 +369,8 @@ def _prepare_review_barriers(
         )
     rule_key = _url_rule_key(expected_url)
     _worktree_unset(identity, rule_key)
+    catchall_key = _url_catchall_key(expected_url)
+    _worktree_unset(identity, catchall_key)
     remotes = _remote_names(identity)
     configured_urls = {
         remote: (
@@ -345,11 +385,12 @@ def _prepare_review_barriers(
         _worktree_set(identity, f"remote.{remote}.receivepack", blocked_receivepack)
         for url in configured_urls[remote]:
             _worktree_add(identity, rule_key, url)
-    # Keep the push-only barrier effective for remotes added after review mode
-    # is configured. The empty prefix is a catch-all for push URLs while
-    # leaving fetch and ls-remote URLs untouched. It also covers inherited
-    # common-config pushurl values and equivalent local-path spellings.
-    _worktree_add(identity, rule_key, "")
+    # Keep the barrier effective for remotes added after review mode is
+    # configured, including explicit pushurl values. This all-URL rewrite is
+    # intentionally broader than pushInsteadOf: Git ignores pushInsteadOf when
+    # a remote has an explicit pushurl. Remote reads needed by ``integrate``
+    # use the common Git config below, outside this worktree-local rule.
+    _worktree_add(identity, catchall_key, "")
     return expected_url
 
 
@@ -378,6 +419,7 @@ def _restore_implementation_mode(
     if len(blocked_values) != 1:
         raise GuardError("review guard blocked push URL is missing or duplicated")
     _worktree_unset(identity, _url_rule_key(blocked_values[0]))
+    _worktree_unset(identity, _url_catchall_key(blocked_values[0]))
     for remote in set(_remote_names(identity)) | set(backup["remote_pushurls"]):
         key = f"remote.{remote}.pushurl"
         _worktree_unset(identity, key)
@@ -455,7 +497,7 @@ def _merge_head(identity: dict[str, Path]) -> str | None:
 
 
 def _remote_snapshot(identity: dict[str, Path], remote: str, *, timeout: int) -> str:
-    result = _run_git(identity["path"], "ls-remote", "--refs", remote, timeout=timeout)
+    result = _run_common_git(identity, "ls-remote", "--refs", remote, timeout=timeout)
     if result.returncode != 0:
         raise GuardError(f"git ls-remote failed for {remote}: {_command_detail(result)}")
     return result.stdout

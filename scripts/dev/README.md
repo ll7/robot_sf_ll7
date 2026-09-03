@@ -158,9 +158,10 @@ the ordinary path.
 
 Use `create_worktree.sh --mode review` for review-only or synthetic-integration work. It installs
 the worktree-local push guard and transport barriers; `review_worktree_guard.py integrate` then
-performs an aborting no-commit merge and compares all remote refs before returning success.
+performs an aborting no-commit merge and compares all remote refs before returning success. Review
+mode blocks direct remote reads as well, so refresh refs before entering it or use the helper.
 The barriers cover ordinary Git invocation paths, but are not an operating-system sandbox: a
-deliberate per-command Git configuration or `--receive-pack` override can bypass them.
+deliberate per-command Git configuration override can bypass them.
 Implementation worktrees keep the default pushable behavior. See
 [`worktree_lifecycle.md`](../../docs/dev/worktree_lifecycle.md) for the complete invocation and
 restoration procedure.

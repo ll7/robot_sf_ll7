@@ -91,7 +91,31 @@ def _remove_worktree(repo: Path, worktree: Path, branch: str) -> None:
 
 
 def _remote_refs(worktree: Path) -> str:
-    return _git(worktree, "ls-remote", "--refs", "origin").stdout
+    common_git_dir = _git(
+        worktree,
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+    ).stdout.strip()
+    return _git(
+        worktree,
+        "--git-dir",
+        common_git_dir,
+        "ls-remote",
+        "--refs",
+        "origin",
+    ).stdout
+
+
+def _common_git(worktree: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run a remote-read command with the common config, not review barriers."""
+    common_git_dir = _git(
+        worktree,
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+    ).stdout.strip()
+    return _git(worktree, "--git-dir", common_git_dir, *args)
 
 
 def test_create_review_worktree_blocks_refspecs_and_no_verify(tmp_path: Path) -> None:
@@ -126,6 +150,8 @@ def test_create_review_worktree_blocks_refspecs_and_no_verify(tmp_path: Path) ->
         )
         configured_again = _configure(worktree, "review")
         assert configured_again.returncode == 0, configured_again.stderr
+        blocked_fetch = _git(worktree, "fetch", "origin", "main", check=False)
+        assert blocked_fetch.returncode != 0, blocked_fetch.stdout + blocked_fetch.stderr
         before = _remote_refs(worktree)
         expected = _git(worktree, "rev-parse", "HEAD").stdout.strip()
         attempts = (
@@ -172,6 +198,7 @@ def test_review_mode_blocks_a_remote_added_after_configuration(tmp_path: Path) -
         configured = _configure(worktree, "review")
         assert configured.returncode == 0, configured.stderr
         _git(worktree, "remote", "add", "mirror", str(second_remote))
+        _git(worktree, "config", "--worktree", "remote.mirror.pushurl", str(second_remote))
         result = _git(
             worktree,
             "push",
@@ -181,7 +208,7 @@ def test_review_mode_blocks_a_remote_added_after_configuration(tmp_path: Path) -
             check=False,
         )
         assert result.returncode != 0, result.stdout + result.stderr
-        refs = _git(worktree, "ls-remote", "--refs", str(second_remote)).stdout
+        refs = _common_git(worktree, "ls-remote", "--refs", str(second_remote)).stdout
         assert "refs/heads/new-remote-bypass" not in refs
     finally:
         _remove_worktree(repo, worktree, branch)
@@ -239,13 +266,13 @@ def test_integration_aborts_and_compares_remote_refs(tmp_path: Path) -> None:
     branch = "review/integration"
     try:
         _git(repo, "worktree", "add", "--no-track", "-b", branch, str(worktree), "HEAD")
-        configured = _configure(worktree, "review")
-        assert configured.returncode == 0, configured.stderr
         (repo / "main-only.txt").write_text("main\n", encoding="utf-8")
         _git(repo, "add", "main-only.txt")
         _git(repo, "commit", "-m", "advance main")
         _git(repo, "push", "origin", "main")
         _git(worktree, "fetch", "origin", "main")
+        configured = _configure(worktree, "review")
+        assert configured.returncode == 0, configured.stderr
         before_head = _git(worktree, "rev-parse", "HEAD").stdout.strip()
         before_refs = _remote_refs(worktree)
 
@@ -272,8 +299,6 @@ def test_conflicting_integration_is_aborted_and_reported(tmp_path: Path) -> None
     branch = "review/conflict"
     try:
         _git(repo, "worktree", "add", "--no-track", "-b", branch, str(worktree), "HEAD")
-        configured = _configure(worktree, "review")
-        assert configured.returncode == 0, configured.stderr
         (worktree / "fixture.txt").write_text("feature\n", encoding="utf-8")
         _git(worktree, "add", "fixture.txt")
         _git(worktree, "commit", "-m", "feature change")
@@ -282,6 +307,8 @@ def test_conflicting_integration_is_aborted_and_reported(tmp_path: Path) -> None
         _git(repo, "commit", "-m", "main change")
         _git(repo, "push", "origin", "main")
         _git(worktree, "fetch", "origin", "main")
+        configured = _configure(worktree, "review")
+        assert configured.returncode == 0, configured.stderr
         before_refs = _remote_refs(worktree)
 
         result = _integrate(worktree)

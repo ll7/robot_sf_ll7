@@ -36,7 +36,7 @@ class _Response:
 
     def __init__(
         self,
-        payload: dict[str, Any],
+        payload: Any,
         *,
         content: bytes | None = None,
         status_code: int = 200,
@@ -45,7 +45,7 @@ class _Response:
         self.status_code = status_code
         self.content = content if content is not None else json.dumps(payload).encode()
 
-    def json(self) -> dict[str, Any]:
+    def json(self) -> Any:
         """Return the configured JSON payload."""
         return self.payload
 
@@ -109,6 +109,20 @@ def _deposition_payload(binding: dict[str, Any], *, submitted: bool = False) -> 
         "metadata": {"prereserve_doi": {"doi": binding["version_doi"]}},
         "links": {"bucket": "https://zenodo.org/api/files/bucket"},
         "files": [],
+    }
+
+
+def _draft_file(binding: dict[str, Any], name: str) -> dict[str, Any]:
+    """Return one legacy draft-file identity bound to the manifest deposition."""
+    deposition_id = binding["version_doi"].rsplit(".", 1)[-1]
+    return {
+        "id": "uploaded-file",
+        "filename": name,
+        "links": {
+            "self": (
+                f"https://zenodo.org/api/deposit/depositions/{deposition_id}/files/uploaded-file"
+            )
+        },
     }
 
 
@@ -198,7 +212,10 @@ def test_all_zenodo_modes_preserve_manifest_binding(tmp_path: Path) -> None:
 
     bundle = tmp_path / "bundle.tar.gz"
     bundle.write_bytes(b"manifest-bound bundle")
-    session.gets = [_Response(_deposition_payload(binding))]
+    session.gets = [
+        _Response(_deposition_payload(binding)),
+        _Response([_draft_file(binding, bundle.name)]),
+    ]
     session.puts = [_Response({"checksum": "md5:fixture"})]
     state = upload(session, state, [bundle], release_binding=binding)
 
@@ -262,7 +279,10 @@ def test_recover_restores_manifest_bound_state_for_upload_and_verify(tmp_path: P
 
     bundle = tmp_path / "bundle.tar.gz"
     bundle.write_bytes(b"recovered draft bundle")
-    session.gets = [_Response(draft)]
+    session.gets = [
+        _Response(draft),
+        _Response([_draft_file(binding, bundle.name)]),
+    ]
     session.puts = [_Response({"checksum": "md5:fixture"})]
     state = upload(session, state, [bundle], release_binding=binding)
 

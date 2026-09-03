@@ -1,0 +1,37 @@
+{
+  "metadata": {
+    "title": "Robot SF 14-planner S30/H600 benchmark dataset — derived-metadata erratum",
+    "upload_type": "dataset",
+    "access_right": "open",
+    "license": "GPL-3.0-only",
+    "description": "Derived-metadata erratum to Robot SF benchmark version 10.5281/zenodo.22227035. The accepted scientific source 59577bad289dd692ba3580e1600c4a649ae27880, 14 planner arms, 48 scenarios, 30 seeds, all 20,160 episode identities, raw rows, and component metrics are unchanged. No simulation was rerun. This successor corrects the contradictory derived publication verdict only. The Social Navigation Quality Index (SNQI) remains advisory; it has no ranking authority and no planner-ranking claim is admitted. The predecessor DOI, archive, checksum, and GitHub release remain immutable.",
+    "creators": [
+      {
+        "name": "Luttkus, Lennart"
+      },
+      {
+        "name": "Tröster, Marco"
+      }
+    ],
+    "keywords": [
+      "social navigation",
+      "robotics",
+      "benchmark dataset",
+      "motion planning",
+      "simulation",
+      "erratum"
+    ],
+    "related_identifiers": [
+      {
+        "identifier": "https://github.com/ll7/robot_sf_ll7/releases/tag/paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1",
+        "relation": "isSupplementTo",
+        "scheme": "url"
+      },
+      {
+        "identifier": "10.5281/zenodo.22227035",
+        "relation": "isNewVersionOf",
+        "scheme": "doi"
+      }
+    ]
+  }
+}

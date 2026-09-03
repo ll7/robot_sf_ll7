@@ -303,6 +303,15 @@ REVIEWED_ASSERTIONS: dict[tuple[str, str, str], Review] = {
         ownership_status="unowned_residual",
         ownership_references=_NEW_RESIDUAL_REFS,
     ),
+    (
+        "robot_sf/benchmark/goal_force_metrics.py",
+        "evaluate_goal_force_rows",
+        "component_bias_x is not None and component_bias_y is not None",
+    ): _review(
+        "The non-empty bias branch produces both finite means; this assertion is a local postcondition and type narrowing before constructing the summary.",
+        ownership_status="unowned_residual",
+        ownership_references=_NEW_RESIDUAL_REFS,
+    ),
 }
 
 

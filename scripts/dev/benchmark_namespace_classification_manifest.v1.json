@@ -92,6 +92,7 @@
     "freeze_manifest.py",
     "frozen_trace_reconciliation.py",
     "full_classic",
+    "goal_force_metrics.py",
     "group_space_metrics.py",
     "grouping.py",
     "hazard_odd_coverage.py",

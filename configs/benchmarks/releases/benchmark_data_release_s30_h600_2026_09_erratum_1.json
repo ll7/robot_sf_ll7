@@ -11,6 +11,7 @@
   },
   "scientific_identity": {
     "source_sha": "59577bad289dd692ba3580e1600c4a649ae27880",
+    "release_id": "paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880",
     "planner_arms": 14,
     "scenario_count": 48,
     "seed_count": 30,

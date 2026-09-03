@@ -462,6 +462,9 @@ _FAST_FILES = {
     # Inverse goal-force estimator tests are deterministic actor/oracle-boundary
     # contracts; keep their implementation-integrity coverage in PR fast shards.
     "test_goal_force_inverse_dynamics.py",
+    # Pure goal-force metric tests are deterministic evaluator contracts; keep
+    # their implementation-integrity coverage in PR fast shards.
+    "test_goal_force_metrics.py",
     # Core simulation-state contract tests are deterministic alias, schema, and
     # import-boundary coverage for the additive core package (issue #8243).
     "test_contract_v1.py",

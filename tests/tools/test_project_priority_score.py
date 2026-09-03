@@ -641,6 +641,96 @@ def test_only_empty_blocks_unavailable_issue_snapshot_without_writes() -> None:
     assert client.last_eligibility_plan["items"][0]["reason_code"] == "issue_state_unavailable"
 
 
+def test_only_empty_propagates_issue_snapshot_timeout_before_any_write() -> None:
+    """A timed-out eligibility read aborts the whole guarded batch."""
+
+    timeout = GhProjectTimeoutError(
+        command=("gh", "api", "repos/ll7/robot_sf_ll7/issues/702"),
+        timeout_seconds=5.0,
+        phase="read",
+    )
+    client = FakeGhProjectClient(
+        fields=[_field(name) for name in (EFFORT_FIELD, *REQUIRED_NUMBER_FIELDS)],
+        items=[_item(701, improvement=5), _item(702, improvement=5)],
+        issue_snapshots={
+            701: {
+                "number": 701,
+                "title": "Issue 701",
+                "state": "OPEN",
+                "updated_at": "2026-08-24T00:00:00Z",
+                "labels": ["state:ready"],
+            },
+            702: timeout,
+        },
+    )
+
+    with pytest.raises(GhProjectTimeoutError) as exc_info:
+        sync_scores(
+            client,
+            SyncOptions(
+                owner="ll7",
+                project_number=5,
+                ensure_fields=False,
+                limit=1000,
+                alpha=DEFAULT_ALPHA,
+                round_digits=6,
+                issue_number=None,
+                dry_run=False,
+                skip_statuses={"Done"},
+                only_empty=True,
+            ),
+        )
+
+    assert exc_info.value is timeout
+    assert client.issue_snapshot_calls == [
+        ("ll7/robot_sf_ll7", 701),
+        ("ll7/robot_sf_ll7", 702),
+    ]
+    assert client.updated_numbers == []
+
+
+def test_only_empty_propagates_revalidation_timeout_before_any_write() -> None:
+    """A timed-out guarded re-read cannot be downgraded to ordinary drift."""
+
+    timeout = GhProjectTimeoutError(
+        command=("gh", "api", "repos/ll7/robot_sf_ll7/issues/701"),
+        timeout_seconds=5.0,
+        phase="read",
+    )
+
+    class RevalidationTimeoutClient(FakeGhProjectClient):
+        def issue_snapshot(self, *, repo: str, issue_number: int) -> dict:
+            snapshot = super().issue_snapshot(repo=repo, issue_number=issue_number)
+            if len(self.issue_snapshot_calls) > 1:
+                raise timeout
+            return snapshot
+
+    client = RevalidationTimeoutClient(
+        fields=[_field(name) for name in (EFFORT_FIELD, *REQUIRED_NUMBER_FIELDS)],
+        items=[_item(701, improvement=5)],
+    )
+
+    with pytest.raises(GhProjectTimeoutError) as exc_info:
+        sync_scores(
+            client,
+            SyncOptions(
+                owner="ll7",
+                project_number=5,
+                ensure_fields=False,
+                limit=1000,
+                alpha=DEFAULT_ALPHA,
+                round_digits=6,
+                issue_number=None,
+                dry_run=False,
+                skip_statuses={"Done"},
+                only_empty=True,
+            ),
+        )
+
+    assert exc_info.value is timeout
+    assert client.updated_numbers == []
+
+
 def test_only_empty_blocks_cross_repository_project_item() -> None:
     """Issue numbers from another repository cannot alias Robot SF REST state."""
 
@@ -1203,13 +1293,14 @@ def test_gh_project_client_timeout_records_write_phase(
     assert exc_info.value.timeout_seconds == 5.0
 
 
-def test_gh_project_client_rejects_non_positive_timeout() -> None:
-    """A non-positive subprocess budget is a programming error, not a slow API."""
+def test_gh_project_client_rejects_non_positive_or_non_finite_timeout() -> None:
+    """Invalid subprocess budgets are programming errors, not slow API calls."""
 
-    with pytest.raises(ValueError, match="must be positive"):
-        GhProjectClient(timeout_seconds=0)
-    with pytest.raises(ValueError, match="must be positive"):
-        GhProjectClient(total_budget_seconds=-1)
+    for value in (0, -1, float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="must be positive and finite"):
+            GhProjectClient(timeout_seconds=value)
+        with pytest.raises(ValueError, match="must be positive and finite"):
+            GhProjectClient(total_budget_seconds=value)
 
 
 def test_main_only_empty_timeout_is_non_fatal_json_without_writes(
@@ -1294,15 +1385,14 @@ def test_main_gh_timeout_flag_reaches_client(
     assert seen["options_total_budget"] == 60.0
 
 
-def test_main_gh_timeout_rejects_non_positive() -> None:
-    """A non-positive --gh-timeout fails closed at argument parsing."""
+def test_main_gh_timeout_rejects_non_positive_or_non_finite() -> None:
+    """Invalid CLI budgets fail closed before quota reads or Project writes."""
 
-    with pytest.raises(SystemExit) as exc_info:
-        main(["sync", "--gh-timeout", "0"])
-    assert exc_info.value.code == 2
-    with pytest.raises(SystemExit) as exc_info:
-        main(["sync", "--gh-total-budget", "0"])
-    assert exc_info.value.code == 2
+    for flag in ("--gh-timeout", "--gh-total-budget"):
+        for value in ("0", "-1", "nan", "inf", "-inf"):
+            with pytest.raises(SystemExit) as exc_info:
+                main(["sync", f"{flag}={value}"])
+            assert exc_info.value.code == 2
 
 
 def test_gh_project_client_total_budget_breach_skips_subprocess(
@@ -1348,6 +1438,33 @@ def test_gh_project_client_caps_command_at_remaining_budget(
     assert 0 < seen["timeout"] <= 5.5
 
 
+def test_ensure_required_fields_marks_field_creation_as_write(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A timeout while creating a missing schema field is reported as a write."""
+
+    def _run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        command = list(args[0])  # type: ignore[arg-type]
+        if command[1:3] == ["project", "field-list"]:
+            return subprocess.CompletedProcess(
+                args=command,
+                returncode=0,
+                stdout=json.dumps({"fields": []}),
+            )
+        raise subprocess.TimeoutExpired(cmd=command, timeout=kwargs["timeout"])
+
+    monkeypatch.setattr(subprocess, "run", _run)
+
+    with pytest.raises(GhProjectTimeoutError) as exc_info:
+        project_priority_score.ensure_required_fields(
+            GhProjectClient(timeout_seconds=5.0),
+            owner="ll7",
+            project_number=5,
+        )
+
+    assert exc_info.value.phase == "write"
+
+
 def test_main_only_empty_budget_breach_reports_unstarted_command(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1375,18 +1492,25 @@ def test_main_only_empty_budget_breach_reports_unstarted_command(
 
 
 def test_apply_score_updates_reraises_write_phase_timeout() -> None:
-    """A timed-out write must reach the structured summary, not the generic failure."""
+    """A partial timed-out write reports known progress and remains ambiguous."""
     from types import SimpleNamespace
 
-    client = SimpleNamespace(
-        last_eligibility_plan=None,
-        update_number_field=lambda **kwargs: (_ for _ in ()).throw(
-            GhProjectTimeoutError(
-                command=("gh", "project", "item-edit", "5"),
-                timeout_seconds=120.0,
+    calls = 0
+
+    def _update(**kwargs: object) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise GhProjectTimeoutError(
+                command=("gh", "api", "graphql"),
+                timeout_seconds=5.0,
                 phase="write",
             )
-        ),
+
+    plan: dict[str, object] = {}
+    client = SimpleNamespace(
+        last_eligibility_plan=plan,
+        update_number_field=_update,
     )
     options = SyncOptions(
         owner="ll7",
@@ -1399,18 +1523,38 @@ def test_apply_score_updates_reraises_write_phase_timeout() -> None:
         dry_run=False,
         skip_statuses=set(),
     )
-    preview = SimpleNamespace(issue_number=1, new_score=3.0)
+    previews = [
+        SimpleNamespace(issue_number=1, new_score=3.0),
+        SimpleNamespace(issue_number=2, new_score=4.0),
+    ]
 
     with pytest.raises(GhProjectTimeoutError) as exc_info:
         project_priority_score._apply_score_updates(
             client,
             options,
-            [(preview, {"id": "item-1"})],
+            [(previews[0], {"id": "item-1"}), (previews[1], {"id": "item-2"})],
             issue_snapshots={},
             score_field_id="field-1",
             project_id="project-1",
         )
     assert exc_info.value.phase == "write"
+    assert exc_info.value.attempted_rows == [
+        {"issue_number": 1, "item_id": "item-1", "written": True},
+        {"issue_number": 2, "item_id": "item-2", "written": False},
+    ]
+    assert exc_info.value.writes_performed_count == 1
+    payload = project_priority_score._blocked_project_timeout_payload(
+        owner="ll7",
+        project_number=5,
+        error=exc_info.value,
+    )
+    assert payload["attempted_rows"] == exc_info.value.attempted_rows
+    assert payload["writes_performed_count"] == 1
+    assert payload["writes_performed"] is True
+    assert payload["write_ambiguity"] is True
+    assert "1 score write(s) completed" in payload["message"]
+    assert plan["status"] == "timeout_blocked"
+    assert plan["writes_performed_count"] == 1
 
 
 def test_main_reports_complete_item_fetch_stats(

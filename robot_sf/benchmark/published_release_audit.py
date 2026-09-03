@@ -1036,6 +1036,9 @@ def _assert_cold_current_aliases(  # noqa: C901, PLR0913
         if "provenance" in provenance:
             raise ValueError(f"{label}.provenance contains unsupported nested provenance")
         levels.append((provenance, f"{label}.provenance", scientific_release_id))
+    observed_release_ids = [
+        level[key] for level, _, _ in levels for key in _ERRATUM_RELEASE_ID_KEYS if key in level
+    ]
     for level, level_label, expected_release_id in levels:
         tag_values = [level[key] for key in _ERRATUM_CURRENT_TAG_KEYS if key in level]
         release_id_values = [level[key] for key in _ERRATUM_RELEASE_ID_KEYS if key in level]
@@ -1075,17 +1078,14 @@ def _assert_cold_current_aliases(  # noqa: C901, PLR0913
             if key in level
         ]
         concept_values = [level["concept_doi"] for level, _, _ in levels if "concept_doi" in level]
-        release_id_values = [
-            level[key] for level, _, _ in levels for key in _ERRATUM_RELEASE_ID_KEYS if key in level
-        ]
         if not tag_values:
             raise ValueError(f"{label} is missing its current release tag")
         if not doi_values:
             raise ValueError(f"{label} is missing its current version DOI")
         if not concept_values:
             raise ValueError(f"{label} is missing its current concept DOI")
-        if require_release_id and not release_id_values:
-            raise ValueError(f"{label} is missing its scientific release ID")
+    if require_release_id and not observed_release_ids:
+        raise ValueError(f"{label} is missing its scientific release ID")
 
 
 def _assert_cold_publication_mapping(

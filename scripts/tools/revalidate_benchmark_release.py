@@ -2118,9 +2118,11 @@ def _erratum_identity_block(contract: ErratumContract) -> dict[str, Any]:
 
 
 def _rewrite_publication_provenance(
-    payload: Mapping[str, Any], *, contract: ErratumContract
+    payload: object, *, contract: ErratumContract
 ) -> dict[str, Any]:
     """Rewrite one current-publication provenance mapping to successor coordinates."""
+    if not isinstance(payload, Mapping):
+        raise DerivedReleaseError("source publication provenance must be an object when present")
     provenance = dict(payload)
     execution_metadata_path = provenance.get("metadata_path")
     execution_metadata_sha256 = provenance.get("metadata_sha256")
@@ -2566,6 +2568,22 @@ def _assert_erratum_release_result(campaign_root: Path, *, contract: ErratumCont
         raise DerivedReleaseError("erratum release result has a contradictory verdict")
 
 
+def _assert_summary_execution_release(
+    summary: Mapping[str, Any], *, contract: ErratumContract
+) -> None:
+    """Require the summary's preserved execution identity to name the predecessor."""
+    execution_release = summary.get("scientific_execution_benchmark_release")
+    if not isinstance(execution_release, Mapping):
+        raise DerivedReleaseError("campaign summary lost predecessor benchmark release identity")
+    _assert_predecessor_execution_identity(
+        execution_release,
+        contract=contract,
+        label="campaign summary scientific_execution_benchmark_release",
+        require_concept=True,
+        require_source=True,
+    )
+
+
 def _assert_erratum_summary(campaign_root: Path, *, contract: ErratumContract) -> None:
     """Check all current campaign-summary DOI, tag, and asset coordinates."""
     summary = _read_json(campaign_root / "reports" / "campaign_summary.json")
@@ -2591,6 +2609,7 @@ def _assert_erratum_summary(campaign_root: Path, *, contract: ErratumContract) -
     _assert_publication_identity_mapping(
         summary_release, contract=contract, label="campaign summary benchmark_release"
     )
+    _assert_summary_execution_release(summary, contract=contract)
     _assert_publication_identity_mapping(
         campaign, contract=contract, label="campaign summary.campaign"
     )
@@ -2650,22 +2669,38 @@ def _rewrite_erratum_campaign_summary(campaign_root: Path, *, contract: ErratumC
         summary.get("publication", _MISSING_PUBLICATION), contract=contract
     )
     summary_release = summary.get("benchmark_release")
-    if isinstance(summary_release, Mapping):
-        summary.setdefault("scientific_execution_benchmark_release", dict(summary_release))
-        summary["benchmark_release"] = _rewrite_embedded_publication_identity(
-            summary_release, contract=contract
-        )
-    campaign = summary.get("campaign")
-    campaign = dict(campaign) if isinstance(campaign, Mapping) else {}
-    execution_release = summary.get("scientific_execution_benchmark_release")
-    execution_levels = _identity_levels(campaign, label="source campaign summary")
-    if isinstance(execution_release, Mapping):
-        execution_levels.extend(
-            _identity_levels(
-                execution_release,
-                label="source campaign summary benchmark release",
+    if not isinstance(summary_release, Mapping):
+        raise DerivedReleaseError("source campaign summary lacks a benchmark release identity")
+    if "scientific_execution_benchmark_release" in summary:
+        execution_release = summary["scientific_execution_benchmark_release"]
+        if not isinstance(execution_release, Mapping):
+            raise DerivedReleaseError(
+                "source campaign summary scientific execution benchmark release must be an object"
             )
+        _assert_predecessor_execution_identity(
+            execution_release,
+            contract=contract,
+            label="source campaign summary scientific_execution_benchmark_release",
+            require_concept=True,
+            require_source=True,
         )
+    else:
+        execution_release = dict(summary_release)
+        summary["scientific_execution_benchmark_release"] = execution_release
+    summary["benchmark_release"] = _rewrite_embedded_publication_identity(
+        summary_release, contract=contract
+    )
+    source_campaign = summary.get("campaign")
+    if not isinstance(source_campaign, Mapping):
+        raise DerivedReleaseError("source campaign summary campaign must be an object")
+    campaign = dict(source_campaign)
+    execution_levels = _identity_levels(campaign, label="source campaign summary")
+    execution_levels.extend(
+        _identity_levels(
+            execution_release,
+            label="source campaign summary benchmark release",
+        )
+    )
 
     def _first_execution_alias(*keys: str) -> Any:
         return next(
@@ -2728,8 +2763,10 @@ def _rewrite_erratum_campaign_summary(campaign_root: Path, *, contract: ErratumC
             + existing_asset_url.rsplit("/", 1)[-1]
         )
     summary["campaign"] = campaign
-    artifacts = summary.get("artifacts")
-    artifacts = dict(artifacts) if isinstance(artifacts, Mapping) else {}
+    source_artifacts = summary.get("artifacts")
+    if not isinstance(source_artifacts, Mapping):
+        raise DerivedReleaseError("source campaign summary artifacts must be an object")
+    artifacts = dict(source_artifacts)
     artifacts.update(
         {
             "doi_url": f"https://doi.org/{contract.successor_version_doi}",

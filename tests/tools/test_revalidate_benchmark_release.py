@@ -296,6 +296,57 @@ def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
 @pytest.mark.parametrize(
     ("mutation", "message"),
     (
+        (
+            "scalar_execution_release",
+            "scientific execution benchmark release must be an object",
+        ),
+        ("stale_execution_release", "lost predecessor identity"),
+        ("malformed_campaign_provenance", "has malformed provenance"),
+    ),
+)
+def test_erratum_summary_rewrite_rejects_malformed_preserved_identity(
+    tmp_path: Path,
+    mutation: str,
+    message: str,
+) -> None:
+    """Malformed present provenance must reject before a successor summary is written."""
+    fixture = _make_real_erratum_publication_fixture(tmp_path)
+    producer = fixture["producer"]
+    contract = fixture["contract"]
+    assert isinstance(producer, Path)
+    assert isinstance(contract, ErratumContract)
+    summary_path = producer / "reports/campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    if mutation == "scalar_execution_release":
+        summary["scientific_execution_benchmark_release"] = "malformed"
+    elif mutation == "stale_execution_release":
+        execution_release = dict(summary["benchmark_release"])
+        execution_release["release_tag"] = fixture["successor_tag"]
+        summary["scientific_execution_benchmark_release"] = execution_release
+    else:
+        summary["campaign"]["provenance"] = "malformed"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+    source_bytes = summary_path.read_bytes()
+
+    with pytest.raises(recovery.DerivedReleaseError, match=message):
+        recovery._rewrite_erratum_campaign_summary(producer, contract=contract)
+
+    assert summary_path.read_bytes() == source_bytes
+
+
+def test_rewrite_publication_provenance_rejects_non_mapping(tmp_path: Path) -> None:
+    """The central provenance rewrite returns a structured rejection, not TypeError."""
+    fixture = _make_real_erratum_publication_fixture(tmp_path)
+    contract = fixture["contract"]
+    assert isinstance(contract, ErratumContract)
+
+    with pytest.raises(recovery.DerivedReleaseError, match="must be an object"):
+        recovery._rewrite_publication_provenance(None, contract=contract)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
         ("missing_provenance", "lacks predecessor provenance"),
         ("malformed_provenance", "lacks predecessor provenance"),
         ("missing_tag", "lost predecessor identity"),
@@ -2458,6 +2509,13 @@ def test_erratum_build_exports_and_cold_audits_real_publication_path(  # noqa: P
     summary = json.loads(
         (final_campaign / "reports/campaign_summary.json").read_text(encoding="utf-8")
     )
+    summary_execution_release = summary["scientific_execution_benchmark_release"]
+    assert (
+        summary_execution_release["release_tag"] == erratum_contract.predecessor_github_release_tag
+    )
+    assert summary_execution_release["release_id"] == erratum_contract.scientific_release_id
+    assert summary_execution_release["source_sha"] == fixture["source_sha"]
+    assert summary_execution_release["version_doi"] == fixture["predecessor_doi"]
     summary_execution = summary["campaign"]["scientific_execution_release_identity"]
     assert summary_execution["release_tag"] == erratum_contract.predecessor_github_release_tag
     assert summary_execution["release_id"] == erratum_contract.scientific_release_id

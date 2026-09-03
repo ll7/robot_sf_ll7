@@ -1104,6 +1104,14 @@ def test_deadline_runner_fails_closed_before_the_next_rest_call() -> None:
     assert calls == []
 
 
+def test_deadline_rejects_non_finite_budgets() -> None:
+    """A non-finite CLI budget must not disable the aggregate timeout."""
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        issue_audit_core._deadline_from_seconds(float("nan"))
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        issue_audit_core._deadline_from_seconds(float("inf"))
+
+
 def test_plan_writes_fail_closed_artifact_when_wall_budget_is_zero(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1137,6 +1145,172 @@ def test_plan_writes_fail_closed_artifact_when_wall_budget_is_zero(
     assert plan["mutations"] == []
     assert plan["truncation_or_errors"]
     assert "wall-time budget exhausted" in json.dumps(plan["inventory"])
+
+
+def test_classification_timeout_is_explicit_and_suppresses_mutations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A partial classification exposes a resume cursor and cannot authorize writes."""
+    issues = [
+        _issue(
+            201,
+            body="## Definition of Done\n- [ ] implement the bounded change",
+        ),
+        _issue(
+            202,
+            body="## Definition of Done\n- [ ] implement the second bounded change",
+        ),
+    ]
+    checks = 0
+
+    def expire_on_second_check(_deadline: float | None) -> bool:
+        nonlocal checks
+        checks += 1
+        return checks >= 2
+
+    monkeypatch.setattr(issue_audit_core, "_deadline_expired", expire_on_second_check)
+
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": issues,
+            "open_prs": [],
+            "merged_prs": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": ["state:ready"],
+            "inventory": {},
+        },
+        deadline=10.0,
+    )
+
+    assert plan["classification_status"] == {
+        "status": "timed_out",
+        "reason": "issue-audit wall-time budget exhausted during issue classification",
+        "classified_issues": 1,
+        "total_issues": 2,
+        "remaining_issue_numbers": [202],
+        "resume_from_issue": 202,
+        "mutations_suppressed": True,
+    }
+    assert plan["mutations"] == []
+    assert "classification" in plan["truncation_or_errors"]
+
+
+def test_final_classification_overrun_cannot_report_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A deadline reached by the final classifier still produces a timeout plan."""
+    checks = 0
+
+    def expire_after_classification(_deadline: float | None) -> bool:
+        nonlocal checks
+        checks += 1
+        return checks >= 2
+
+    monkeypatch.setattr(issue_audit_core, "_deadline_expired", expire_after_classification)
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [_issue(204, body="## Definition of Done\n- [ ] implement the change")],
+            "open_prs": [],
+            "merged_prs": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": ["state:ready"],
+            "inventory": {},
+        },
+        deadline=10.0,
+    )
+
+    assert plan["classification_status"] == {
+        "status": "timed_out",
+        "reason": "issue-audit wall-time budget exhausted during issue classification",
+        "classified_issues": 1,
+        "total_issues": 1,
+        "remaining_issue_numbers": [],
+        "resume_from_issue": None,
+        "mutations_suppressed": True,
+    }
+    assert plan["mutations"] == []
+
+
+def test_build_plan_indexes_merged_pr_references_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Per-issue classification consumes the shared merged-PR index."""
+    issue = _issue(203, body="Completion condition: merged PR #901")
+    merged_pr = {
+        "number": 901,
+        "title": "Implement audit support",
+        "body": "",
+        "head_ref": "fix/issue-203-audit",
+        "merged_at": "2026-09-03T12:00:00Z",
+        "linked_issue_numbers": [203],
+    }
+
+    def fail_if_scanned(*_args: object, **_kwargs: object) -> list[dict[str, object]]:
+        raise AssertionError("build_audit_plan should use its merged-PR index")
+
+    monkeypatch.setattr(issue_audit_core, "_merged_records", fail_if_scanned)
+
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [issue],
+            "open_prs": [],
+            "merged_prs": [merged_pr],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": [],
+            "inventory": {},
+        }
+    )
+
+    assert plan["classification_status"]["status"] == "complete"
+    assert plan["issues"][0]["closure_evidence"]["merged_prs"] == [901]
+
+
+def test_plan_cli_shares_one_deadline_between_discovery_and_classification(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The CLI applies one aggregate deadline to both expensive phases."""
+    observed: list[float | None] = []
+
+    def discover(_repo: str, **kwargs: object) -> dict[str, object]:
+        observed.append(kwargs["deadline"] if isinstance(kwargs["deadline"], float) else None)
+        return {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [],
+            "open_prs": [],
+            "merged_prs": [],
+            "labels": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "inventory": {},
+        }
+
+    original_build = issue_audit_core.build_audit_plan
+
+    def build(inventory: dict[str, object], **kwargs: object) -> dict[str, object]:
+        observed.append(kwargs["deadline"] if isinstance(kwargs["deadline"], float) else None)
+        return original_build(inventory, **kwargs)
+
+    monkeypatch.setattr(issue_audit_core, "discover_inventory", discover)
+    monkeypatch.setattr(issue_audit_core, "build_audit_plan", build)
+    output = tmp_path / "issue-audit-plan.json"
+
+    result = main(["plan", "--max-wall-seconds", "30", "--output", str(output)])
+
+    assert result == 0
+    assert len(observed) == 2
+    assert observed[0] is not None
+    assert observed[0] == observed[1]
 
 
 def test_plan_cli_accepts_a_separate_closed_pr_page_budget(

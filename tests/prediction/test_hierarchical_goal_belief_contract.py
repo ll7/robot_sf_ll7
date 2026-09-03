@@ -272,6 +272,33 @@ def test_hierarchy_constructor_rejects_invalid_vectors_and_lifecycle_shapes() ->
                 ("waypoint-b", "destination-b"),
             ],
         )
+    with pytest.raises(ValueError, match="duplicate waypoint ID"):
+        replace(
+            posterior,
+            waypoint_conditionals=(
+                HierarchicalWaypointConditionalV1(
+                    "destination-a",
+                    (HierarchicalProbability("shared-waypoint", 0.5),),
+                    0.5,
+                ),
+                HierarchicalWaypointConditionalV1(
+                    "destination-b",
+                    (HierarchicalProbability("shared-waypoint", 0.5),),
+                    0.5,
+                ),
+            ),
+            waypoint_parent_destination={"shared-waypoint": "destination-a"},
+        )
+    with pytest.raises(ValueError, match="cover every waypoint"):
+        replace(
+            posterior,
+            waypoint_parent_destination={
+                "waypoint-a-near": "destination-a",
+                "waypoint-a-far": "destination-a",
+                "waypoint-b": "destination-b",
+                "extra-waypoint": "destination-a",
+            },
+        )
     with pytest.raises(TypeError, match="waypoint_conditionals must contain"):
         replace(posterior, waypoint_conditionals=("not-a-conditional",))  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="duplicate destination IDs"):

@@ -269,7 +269,7 @@ def _deadline_interrupt(deadline: float | None) -> Iterator[None]:
         handler_installed = True
         setitimer(itimer_real, remaining)
         timer_installed = True
-    except (OSError, ValueError):
+    except (OSError, OverflowError, ValueError):
         if timer_installed:
             setitimer(itimer_real, 0)
         if handler_installed:
@@ -299,6 +299,8 @@ def _resolve_deadline(
     """Resolve either a new relative budget or a shared absolute deadline."""
     if max_wall_seconds is not None and deadline is not None:
         raise ValueError("pass max_wall_seconds or deadline, not both")
+    if deadline is not None and not math.isfinite(deadline):
+        raise ValueError("deadline must be finite")
     return deadline if deadline is not None else _deadline_from_seconds(max_wall_seconds)
 
 

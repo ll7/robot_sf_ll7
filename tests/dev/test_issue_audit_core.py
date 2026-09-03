@@ -1213,6 +1213,13 @@ def test_deadline_rejects_non_finite_budgets() -> None:
         issue_audit_core._deadline_from_seconds(float("inf"))
 
 
+def test_deadline_rejects_non_finite_absolute_deadlines() -> None:
+    """An invalid shared absolute deadline must not admit a complete plan."""
+    for deadline in (float("nan"), float("inf"), float("-inf")):
+        with pytest.raises(ValueError, match="deadline must be finite"):
+            build_audit_plan({"issues": [], "inventory": {}}, deadline=deadline)
+
+
 def test_plan_writes_fail_closed_artifact_when_wall_budget_is_zero(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

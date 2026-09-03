@@ -12,6 +12,15 @@ SUPPORTED_SEMANTIC_BOUNDARY_FLAGS = frozenset(
     {"vehicle_blocking", "pedestrian_passable", "occluding", "spawn_edge"}
 )
 
+GEOMETRY_CONTRACT_LEGACY = "legacy"
+"""Historical SVG geometry contract: ancestor transforms are ignored (issue #8314)."""
+
+GEOMETRY_CONTRACT_CORRECTED = "corrected"
+"""Corrected SVG geometry contract: nested ``translate(...)`` transforms apply (issue #8314)."""
+
+SUPPORTED_GEOMETRY_CONTRACTS = frozenset({GEOMETRY_CONTRACT_LEGACY, GEOMETRY_CONTRACT_CORRECTED})
+"""Geometry contracts accepted for SVG map conversion (issue #8314)."""
+
 
 @dataclass
 class SvgRectangle:

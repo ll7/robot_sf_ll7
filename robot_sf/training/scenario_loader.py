@@ -28,6 +28,7 @@ from robot_sf.nav.map_config import (
     parse_social_group_definitions,
     serialize_map,
 )
+from robot_sf.nav.nav_types import SUPPORTED_GEOMETRY_CONTRACTS
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
 from robot_sf.ped_npc.residual_adversary import ResidualAdversaryConfig
@@ -1183,8 +1184,8 @@ def select_scenario(
 
 
 @lru_cache(maxsize=256)
-def _load_map_definition(map_path: str) -> MapDefinition | None:
-    """Load and convert a map definition, caching by absolute path.
+def _load_map_definition(map_path: str, geometry_contract: str = "legacy") -> MapDefinition | None:
+    """Load and convert a map definition, caching by absolute path and geometry contract.
 
     The cache size is set to 256 to accommodate all unique maps across typical
     multi-scenario SAC training runs. ``classic_interactions.yaml`` alone
@@ -1201,7 +1202,7 @@ def _load_map_definition(map_path: str) -> MapDefinition | None:
         logger.warning("Scenario map file not found: {}", path)
         return None
     if path.suffix.lower() == ".svg":
-        return convert_map(str(path))
+        return convert_map(str(path), geometry_contract=geometry_contract)
     if path.suffix.lower() in {".json", ".yaml", ".yml"}:
         data = _load_yaml_documents(path)
         if not isinstance(data, dict):
@@ -1557,7 +1558,9 @@ def _apply_robot_overrides(
     )
 
 
-def resolve_map_definition(map_file: str | None, *, scenario_path: Path) -> MapDefinition | None:
+def resolve_map_definition(
+    map_file: str | None, *, scenario_path: Path, geometry_contract: str = "legacy"
+) -> MapDefinition | None:
     """Resolve and load a map definition from a scenario map file reference.
 
     Returns:
@@ -1575,7 +1578,7 @@ def resolve_map_definition(map_file: str | None, *, scenario_path: Path) -> MapD
             map_file,
             scenario_path,
         )
-    return _load_map_definition(str(candidate))
+    return _load_map_definition(str(candidate), geometry_contract)
 
 
 def apply_single_pedestrian_overrides(
@@ -2382,7 +2385,17 @@ def _apply_map_pool(
             reset (the original issue #830 failure mode on long SLURM runs).
     """
     map_file = scenario.get("map_file")
-    map_def = resolve_map_definition(map_file, scenario_path=scenario_path)
+    geometry_contract = scenario.get("map_geometry_contract", "legacy")
+    if geometry_contract not in SUPPORTED_GEOMETRY_CONTRACTS:
+        scenario_name = scenario.get("name") or scenario.get("scenario_id") or "unknown"
+        raise ValueError(
+            f"Scenario '{scenario_name}': unknown map_geometry_contract "
+            f"{geometry_contract!r}. Supported contracts: "
+            f"{sorted(SUPPORTED_GEOMETRY_CONTRACTS)}."
+        )
+    map_def = resolve_map_definition(
+        map_file, scenario_path=scenario_path, geometry_contract=geometry_contract
+    )
     if map_def is None:
         if map_file:
             scenario_name = scenario.get("name") or scenario.get("scenario_id") or "unknown"

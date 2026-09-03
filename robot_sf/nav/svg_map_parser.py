@@ -25,9 +25,22 @@ Supported SVG Elements and Labels:
         - 'single_ped_<id>_start': Individual pedestrian start position
         - 'single_ped_<id>_goal': Individual pedestrian goal position
 
+Geometry contracts (issue #8314):
+    - 'legacy' (default): ancestor SVG transforms are ignored, reproducing the
+      historical as-run coordinates exactly.
+    - 'corrected': nested ancestor ``translate(...)`` transforms are applied to
+      parsed paths, rectangles, and circles. Any other transform class
+      (scale, rotate, skew, matrix) or malformed transform fails closed with
+      ``ValueError`` instead of being silently ignored.
+    The active contract is recorded on ``MapDefinition.svg_geometry_contract``
+    so legacy and corrected rows cannot be pooled accidentally.
+
 Typical Usage:
     # Load a single SVG map
     map_def = convert_map('maps/svg_maps/example.svg')
+
+    # Load a single SVG map with authored geometry
+    map_def = convert_map('maps/svg_maps/example.svg', geometry_contract='corrected')
 
     # Load all SVG maps from a directory
     maps = load_svg_maps('maps/svg_maps/', pattern='*.svg')
@@ -36,7 +49,7 @@ Typical Usage:
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from math import atan2, ceil, cos, dist, pi, radians, sin, sqrt
+from math import atan2, ceil, cos, dist, isfinite, pi, radians, sin, sqrt
 from pathlib import Path
 
 import numpy as np
@@ -50,6 +63,9 @@ from robot_sf.common.types import Line2D, Rect, Zone
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition, SinglePedestrianDefinition
 from robot_sf.nav.nav_types import (
+    GEOMETRY_CONTRACT_CORRECTED,
+    GEOMETRY_CONTRACT_LEGACY,
+    SUPPORTED_GEOMETRY_CONTRACTS,
     SUPPORTED_SEMANTIC_BOUNDARY_FLAGS,
     SemanticBoundary,
     SvgCircle,
@@ -59,6 +75,9 @@ from robot_sf.nav.nav_types import (
 from robot_sf.nav.obstacle import Obstacle, obstacle_from_svgrectangle
 
 _LOGGED_OBSTACLE_PATH_EVENTS: set[tuple[str, str, str]] = set()
+
+_SVG_NAMESPACE = "http://www.w3.org/2000/svg"
+_TRANSLATE_FUNCTION = re.compile(r"translate\s*\(\s*([^)]*)\)")
 
 
 def _log_obstacle_path_event_once(
@@ -122,11 +141,12 @@ class SvgMapConverter:
     rect_info: list
     circle_info: list
     map_definition: MapDefinition
+    geometry_contract: str
     _ROUTE_ONLY_ZONE_EDGE: float = 1.0
     _INDEX_FALLBACK_ZONE_EDGE: float = 0.1
     _CURVE_MAX_STEP: float = 0.75
 
-    def __init__(self, svg_file: str):
+    def __init__(self, svg_file: str, *, geometry_contract: str = GEOMETRY_CONTRACT_LEGACY):
         """Initialize the SVG map converter and perform full parsing.
 
         Loads the SVG file, extracts all labeled elements, and constructs the
@@ -134,13 +154,25 @@ class SvgMapConverter:
 
         Args:
             svg_file: Path to the SVG file to parse.
+            geometry_contract: ``"legacy"`` reproduces the historical
+                transform-ignoring coordinates exactly. ``"corrected"`` applies
+                nested ancestor ``translate(...)`` transforms and fails closed
+                on any other transform class (issue #8314).
 
         Raises:
             FileNotFoundError: If svg_file does not exist.
             xml.etree.ElementTree.ParseError: If SVG file has invalid XML syntax.
-            ValueError: If map validation fails (e.g., no robot routes defined).
+            ValueError: If map validation fails (e.g., no robot routes defined),
+                the geometry contract is unknown, or (corrected contract) an
+                unsupported or malformed transform is encountered.
         """
+        if geometry_contract not in SUPPORTED_GEOMETRY_CONTRACTS:
+            raise ValueError(
+                f"Unknown geometry_contract {geometry_contract!r} for {svg_file}. "
+                f"Supported contracts: {sorted(SUPPORTED_GEOMETRY_CONTRACTS)}."
+            )
         self.svg_file_str = svg_file
+        self.geometry_contract = geometry_contract
         self._load_svg_root()
 
         self._get_svg_info()
@@ -172,6 +204,119 @@ class SvgMapConverter:
                 f"Invalid SVG format in {self.svg_file_str}: {e}",
                 "Ensure the SVG file is valid XML (use Inkscape or check XML syntax)",
             )
+
+    @staticmethod
+    def _parse_translate_offset(transform_value: str | None, *, source: str) -> tuple[float, float]:
+        """Parse an SVG transform attribute restricted to ``translate(...)``.
+
+        Args:
+            transform_value: Raw ``transform`` attribute value (or ``None``).
+            source: Human-readable element identifier for error messages.
+
+        Returns:
+            tuple[float, float]: Accumulated ``(dx, dy)`` translation. A missing
+                or blank attribute yields ``(0.0, 0.0)``.
+
+        Raises:
+            ValueError: If the attribute contains anything other than
+                ``translate(...)`` functions, or a malformed translate list.
+        """
+        if not transform_value or not transform_value.strip():
+            return (0.0, 0.0)
+        dx = 0.0
+        dy = 0.0
+        consumed: list[tuple[int, int]] = []
+        for match in _TRANSLATE_FUNCTION.finditer(transform_value):
+            numbers = [
+                float(number)
+                for number in re.findall(
+                    r"[+-]?(?:\d+\.\d+|\d+|\.\d+)(?:[eE][+-]?\d+)?", match.group(1)
+                )
+            ]
+            if len(numbers) not in (1, 2) or not all(isfinite(n) for n in numbers):
+                raise ValueError(
+                    f"Malformed translate transform {match.group(0)!r} on {source}; "
+                    "expected translate(tx[, ty]) with finite numbers."
+                )
+            dx += numbers[0]
+            dy += numbers[1] if len(numbers) > 1 else 0.0
+            consumed.append(match.span())
+        remainder_parts: list[str] = []
+        cursor = 0
+        for start, end in consumed:
+            remainder_parts.append(transform_value[cursor:start])
+            cursor = end
+        remainder_parts.append(transform_value[cursor:])
+        if "".join(remainder_parts).strip(" \t\r\n,"):
+            raise ValueError(
+                f"Unsupported SVG transform {transform_value!r} on {source}; "
+                "only translate(...) is supported under the corrected geometry contract."
+            )
+        return (dx, dy)
+
+    def _iter_elements_with_offsets(
+        self,
+    ) -> tuple[
+        list[tuple[ET.Element, float, float]],
+        list[tuple[ET.Element, float, float]],
+        list[tuple[ET.Element, float, float]],
+    ]:
+        """Walk the SVG tree accumulating ancestor ``translate(...)`` offsets.
+
+        Returns:
+            tuple: ``(paths, rects, circles)`` where each entry pairs an element
+                with its total ``(dx, dy)`` offset from the root to the element
+                itself, inclusive.
+
+        Raises:
+            ValueError: If any element on a parsed path carries an unsupported
+                or malformed transform.
+        """
+
+        def _describe(element: ET.Element) -> str:
+            """Identify an element for transform error messages.
+
+            Returns:
+                str: Human-readable element identifier.
+            """
+            label = element.attrib.get("{http://www.inkscape.org/namespaces/inkscape}label")
+            element_id = element.attrib.get("id")
+            return f"<{element.tag}> label={label!r} id={element_id!r} in {self.svg_file_str}"
+
+        paths: list[tuple[ET.Element, float, float]] = []
+        rects: list[tuple[ET.Element, float, float]] = []
+        circles: list[tuple[ET.Element, float, float]] = []
+        stack: list[tuple[ET.Element, float, float]] = [(self.svg_root, 0.0, 0.0)]
+        while stack:
+            element, parent_dx, parent_dy = stack.pop()
+            own_dx, own_dy = self._parse_translate_offset(
+                element.attrib.get("transform"), source=_describe(element)
+            )
+            dx = parent_dx + own_dx
+            dy = parent_dy + own_dy
+            if element.tag == f"{{{_SVG_NAMESPACE}}}path":
+                paths.append((element, dx, dy))
+            elif element.tag == f"{{{_SVG_NAMESPACE}}}rect":
+                rects.append((element, dx, dy))
+            elif element.tag == f"{{{_SVG_NAMESPACE}}}circle":
+                circles.append((element, dx, dy))
+            for child in reversed(list(element)):
+                stack.append((child, dx, dy))
+        return paths, rects, circles
+
+    @staticmethod
+    def _shift_coordinates(
+        coordinates: tuple[tuple[float, float], ...], dx: float, dy: float
+    ) -> tuple[tuple[float, float], ...]:
+        """Shift parsed absolute waypoints by an ancestor translation.
+
+        Returns:
+            tuple[tuple[float, float], ...]: Shifted waypoints, or the input
+                unchanged for a near-zero translation.
+        """
+        if abs(dx) < 1e-12 and abs(dy) < 1e-12:
+            return coordinates
+        return tuple((x + dx, y + dy) for x, y in coordinates)
 
     @staticmethod
     def _append_point(points: list[tuple[float, float]], point: tuple[float, float]) -> None:
@@ -791,6 +936,12 @@ class SvgMapConverter:
             "inkscape": "http://www.inkscape.org/namespaces/inkscape",
         }
 
+        coordinate_pattern = re.compile(r"([+-]?[0-9]*\.?[0-9]+)[, ]([+-]?[0-9]*\.?[0-9]+)")
+
+        if self.geometry_contract == GEOMETRY_CONTRACT_CORRECTED:
+            self._get_corrected_svg_info(coordinate_pattern)
+            return
+
         paths = self.svg_root.findall(".//svg:path", namespaces)
         logger.debug(f"Found {len(paths)} paths in the SVG file")
         rects = self.svg_root.findall(".//svg:rect", namespaces)
@@ -798,13 +949,52 @@ class SvgMapConverter:
         circles = self.svg_root.findall(".//svg:circle", namespaces)
         logger.debug(f"Found {len(circles)} circles in the SVG file")
 
-        coordinate_pattern = re.compile(r"([+-]?[0-9]*\.?[0-9]+)[, ]([+-]?[0-9]*\.?[0-9]+)")
-
         path_info = [
             p for path in paths if (p := self._parse_path_element(path, coordinate_pattern))
         ]
         rect_info = [self._parse_rect_element(rect) for rect in rects]
         circle_info = [c for circle in circles if (c := self._parse_circle_element(circle))]
+
+        logger.debug(f"Parsed {len(path_info)} paths in the SVG file")
+        self.path_info = path_info
+        logger.debug(f"Parsed {len(rect_info)} rects in the SVG file")
+        self.rect_info = rect_info
+        logger.debug(f"Parsed {len(circle_info)} circles in the SVG file")
+        self.circle_info = circle_info
+
+    def _get_corrected_svg_info(self, coordinate_pattern: re.Pattern) -> None:
+        """Extract elements with ancestor ``translate(...)`` offsets applied.
+
+        Walks the SVG tree depth-first (document order), accumulates nested
+        translations per element, and shifts parsed coordinates. Any unsupported
+        or malformed transform fails closed in
+        :meth:`_parse_translate_offset` instead of being silently ignored.
+        """
+        paths, rects, circles = self._iter_elements_with_offsets()
+        logger.debug(
+            f"Found {len(paths)} paths, {len(rects)} rects, {len(circles)} circles "
+            "in the SVG file (corrected geometry contract)"
+        )
+
+        path_info: list[SvgPath] = []
+        for path, dx, dy in paths:
+            parsed = self._parse_path_element(path, coordinate_pattern)
+            if parsed is not None:
+                parsed.coordinates = self._shift_coordinates(parsed.coordinates, dx, dy)
+                path_info.append(parsed)
+        rect_info: list[SvgRectangle] = []
+        for rect, dx, dy in rects:
+            parsed_rect = self._parse_rect_element(rect)
+            parsed_rect.x += dx
+            parsed_rect.y += dy
+            rect_info.append(parsed_rect)
+        circle_info: list[SvgCircle] = []
+        for circle, dx, dy in circles:
+            parsed_circle = self._parse_circle_element(circle)
+            if parsed_circle is not None:
+                parsed_circle.cx += dx
+                parsed_circle.cy += dy
+                circle_info.append(parsed_circle)
 
         logger.debug(f"Parsed {len(path_info)} paths in the SVG file")
         self.path_info = path_info
@@ -1636,6 +1826,7 @@ class SvgMapConverter:
             poi_positions=poi_positions,
             poi_labels=poi_labels,
             semantic_boundaries=semantic_boundaries,
+            svg_geometry_contract=self.geometry_contract,
         )
         logger.debug(f"MapDefinition object created: {type(self.map_definition)}")
 
@@ -1678,7 +1869,9 @@ class SvgMapConverter:
         return spawn, goal
 
 
-def convert_map(svg_file: str) -> MapDefinition | None:
+def convert_map(
+    svg_file: str, *, geometry_contract: str = GEOMETRY_CONTRACT_LEGACY
+) -> MapDefinition | None:
     """Create a MapDefinition object from an SVG file.
 
     Parses the SVG file and converts labeled elements into a structured MapDefinition.
@@ -1687,13 +1880,19 @@ def convert_map(svg_file: str) -> MapDefinition | None:
 
     Args:
         svg_file: Path to the SVG file to convert.
+        geometry_contract: ``"legacy"`` reproduces the historical
+            transform-ignoring coordinates exactly. ``"corrected"`` applies
+            nested ancestor ``translate(...)`` transforms and fails closed on
+            any other transform class (issue #8314).
 
     Returns:
         MapDefinition object on successful conversion, or None if parsing fails
         (except for validation errors which are re-raised).
 
     Raises:
-        ValueError: If map validation fails (e.g., no robot routes defined).
+        ValueError: If map validation fails (e.g., no robot routes defined),
+            the geometry contract is unknown, or (corrected contract) an
+            unsupported or malformed transform is encountered.
 
     Example:
         >>> map_def = convert_map("maps/svg_maps/hallway.svg")
@@ -1704,7 +1903,7 @@ def convert_map(svg_file: str) -> MapDefinition | None:
     logger.debug(f'Converting SVG map "{svg_file}" to MapDefinition object.')
 
     try:
-        converter = SvgMapConverter(svg_file)
+        converter = SvgMapConverter(svg_file, geometry_contract=geometry_contract)
         if not isinstance(converter.map_definition, MapDefinition):
             raise TypeError(
                 f"SVG map converter produced unexpected type: {type(converter.map_definition)}",

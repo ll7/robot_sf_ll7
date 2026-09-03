@@ -44,6 +44,10 @@ The interaction-conditioned realism validation preregistration is documented in
 its current evidence is synthetic implementation-integrity proof and the external-data lane remains
 blocked.
 
+The SVG geometry-contract boundary (legacy as-run vs corrected authored coordinates) is documented
+in [svg_geometry_contract.md](svg_geometry_contract.md); legacy and corrected rows must never be
+pooled as comparable evidence.
+
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.
 

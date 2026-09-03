@@ -37,6 +37,13 @@ hierarchy prepared before Stanford Drone Dataset (SDD) staging. Current evidence
 implementation-only; external-data execution remains blocked by #6530:
 [realism_validation_preregistration.md](realism_validation_preregistration.md).
 
+Issue #8314 SVG geometry contract: the map loader ignored authored ancestor
+transforms, displacing bottleneck pedestrian geometry 4.37 m. The `legacy`
+contract preserves as-run coordinates and the `corrected` contract applies
+nested `translate(...)` while failing closed on other transforms. Legacy and
+corrected rows must never be pooled:
+[svg_geometry_contract.md](svg_geometry_contract.md).
+
 Issue #8205 observation-derived tracker goal-belief adapter: a default-off, actor-safe bridge
 from `PedestrianTrackingResult` to `GoalBeliefV1`, with stable track ordering, global-frame
 timing, explicit visibility/history masks, reset provenance, and smoke-only evidence. It does not

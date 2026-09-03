@@ -723,7 +723,10 @@ def test_audit_plan_reports_blocked_label_decision() -> None:
         }
     ]
     assert plan["counts"]["blocked_label_decisions"] == 1
-    assert all(mutation["expected_issue"] == _expected_issue() for mutation in plan["mutations"])
+    assert all(
+        mutation["expected_issue"] == {**_expected_issue(), "labels": []}
+        for mutation in plan["mutations"]
+    )
 
 
 def test_type_mirror_requires_complete_valid_archetype_metadata() -> None:
@@ -1861,6 +1864,192 @@ def test_apply_skips_entire_issue_batch_when_state_or_version_is_stale(
         "skipped_stale_mutations": 2,
     }
     assert calls == [["api", "repos/ll7/robot_sf_ll7/issues/109"]]
+
+
+def _expected_issue_with_labels(labels: list[str], state: str = "open") -> dict[str, object]:
+    """Return a label-carrying plan-time snapshot for drift-tolerance tests."""
+    return {**_expected_issue(state), "labels": sorted(labels)}
+
+
+def test_apply_proceeds_on_timestamp_only_drift_with_matching_labels() -> None:
+    """A comment-only updated_at bump must not block an unchanged label repair (issue #8295)."""
+    calls: list[list[str]] = []
+    live_labels = [{"name": "state:ready"}]
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        if args[:2] == ["api", "repos/ll7/robot_sf_ll7/issues/109"]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                json.dumps(
+                    {
+                        "state": "open",
+                        # Periodic automation advanced the clock without touching labels.
+                        "updated_at": "2026-08-23T00:05:00Z",
+                        "labels": list(live_labels),
+                    }
+                ),
+                "",
+            )
+        assert args[:3] == ["api", "-X", "POST"]
+        live_labels.append({"name": "state:running"})
+        return subprocess.CompletedProcess(args, 0, "{}", "")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "add_label",
+                "issue": 109,
+                "value": "state:running",
+                "expected_issue": _expected_issue_with_labels(["state:ready"]),
+            },
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is True
+    assert result["stale_states"] == []
+    assert result["failures"] == []
+    assert len(result["applied"]) == 1
+    assert result["timestamp_drift_bypassed"] == [
+        {
+            "issue": 109,
+            "expected_updated_at": EXPECTED_ISSUE_UPDATED_AT,
+            "observed_updated_at": "2026-08-23T00:05:00Z",
+        }
+    ]
+    assert result["counts"]["applied"] == 1
+    assert result["counts"]["stale_state_issues"] == 0
+
+
+def test_apply_blocks_on_label_drift_with_retry_handoff() -> None:
+    """A concurrent label change stays fail-closed stale with a regenerate handoff."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        assert args == ["api", "repos/ll7/robot_sf_ll7/issues/109"]
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            json.dumps(
+                {
+                    "state": "open",
+                    "updated_at": EXPECTED_ISSUE_UPDATED_AT,
+                    "labels": [{"name": "state:ready"}, {"name": "needs-triage"}],
+                }
+            ),
+            "",
+        )
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "remove_label",
+                "issue": 109,
+                "value": "state:ready",
+                "expected_issue": _expected_issue_with_labels(["state:ready"]),
+            },
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert calls == [["api", "repos/ll7/robot_sf_ll7/issues/109"]]
+    (stale,) = result["stale_states"]
+    assert stale["disposition"] == "stale_state"
+    assert stale["drift_kind"] == "semantic"
+    assert stale["expected_issue"]["labels"] == ["state:ready"]
+    assert stale["observed_issue"]["labels"] == ["needs-triage", "state:ready"]
+    assert stale["retry"]["action"] == "regenerate_plan"
+    assert result["timestamp_drift_bypassed"] == []
+
+
+def test_apply_blocks_on_state_drift_with_labels() -> None:
+    """A concurrent state change stays stale even when labels match."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        assert args == ["api", "repos/ll7/robot_sf_ll7/issues/109"]
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            json.dumps(
+                {
+                    "state": "closed",
+                    "updated_at": EXPECTED_ISSUE_UPDATED_AT,
+                    "labels": [{"name": "state:ready"}],
+                }
+            ),
+            "",
+        )
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "remove_label",
+                "issue": 109,
+                "value": "state:ready",
+                "expected_issue": _expected_issue_with_labels(["state:ready"]),
+            },
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert calls == [["api", "repos/ll7/robot_sf_ll7/issues/109"]]
+    (stale,) = result["stale_states"]
+    assert stale["drift_kind"] == "semantic"
+
+
+def test_apply_rejects_malformed_expected_labels_before_reads() -> None:
+    """A non-list label snapshot is a plan defect, not a live-state question."""
+    calls: list[list[str]] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        raise AssertionError("invalid plan must fail before any REST call")
+
+    plan = {
+        "schema": "issue_audit_plan.v1",
+        "repo": "ll7/robot_sf_ll7",
+        "mutations": [
+            {
+                "operation": "add_label",
+                "issue": 109,
+                "value": "state:running",
+                "expected_issue": {**_expected_issue(), "labels": "state:ready"},
+            }
+        ],
+        "truncation_or_errors": [],
+    }
+    plan["plan_digest"] = compute_plan_digest(plan)
+
+    result = apply_mutations(plan, runner=runner)
+
+    assert result["ok"] is False
+    assert result["applied"] == []
+    assert calls == []
+    assert any("string list" in str(failure) for failure in result["failures"])
 
 
 def test_apply_rejects_missing_state_version_precondition_before_reads() -> None:

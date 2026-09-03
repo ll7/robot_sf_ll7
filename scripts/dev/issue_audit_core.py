@@ -2052,6 +2052,9 @@ def build_audit_plan(
         expected_issue = {
             "state": str(issue.get("state") or "").lower(),
             "updated_at": str(issue.get("updated_at") or ""),
+            # Sorted label snapshot for timestamp-only drift tolerance at apply
+            # time (issue #8295). Sorted for plan-digest determinism.
+            "labels": sorted(issue_labels),
         }
         issue_mutations = [
             {**mutation, "expected_issue": expected_issue.copy()}
@@ -2301,6 +2304,21 @@ def _mutation_issue_preconditions(
                 }
             )
             continue
+        raw_labels = raw_expected.get("labels")
+        if raw_labels is not None:
+            if not isinstance(raw_labels, list) or not all(
+                isinstance(entry, str) for entry in raw_labels
+            ):
+                errors.append(
+                    {
+                        "index": index,
+                        "issue": number,
+                        "expected_issue": expected,
+                        "error": "expected_issue labels must be a string list when present",
+                    }
+                )
+                continue
+            expected["labels"] = sorted(raw_labels)
         previous = preconditions.setdefault(number, expected)
         if previous != expected:
             errors.append(
@@ -2350,6 +2368,7 @@ def apply_mutations(
             "applied": [],
             "already_applied": [],
             "stale_states": [],
+            "timestamp_drift_bypassed": [],
             "failures": [reason],
             "readback": [],
             "counts": empty_counts(failed),
@@ -2374,6 +2393,7 @@ def apply_mutations(
             "applied": [],
             "already_applied": [],
             "stale_states": [],
+            "timestamp_drift_bypassed": [],
             "failures": ["missing plan_digest"],
             "readback": [],
             "counts": empty_counts(1),
@@ -2388,6 +2408,7 @@ def apply_mutations(
             "applied": [],
             "already_applied": [],
             "stale_states": [],
+            "timestamp_drift_bypassed": [],
             "failures": [str(exc)],
             "readback": [],
             "counts": empty_counts(1),
@@ -2400,6 +2421,7 @@ def apply_mutations(
             "applied": [],
             "already_applied": [],
             "stale_states": [],
+            "timestamp_drift_bypassed": [],
             "failures": ["stale plan_digest"],
             "readback": [],
             "counts": empty_counts(1),
@@ -2412,6 +2434,7 @@ def apply_mutations(
             "applied": [],
             "already_applied": [],
             "stale_states": [],
+            "timestamp_drift_bypassed": [],
             "failures": list(raw_truncation_errors),
             "readback": [],
             "counts": empty_counts(len(raw_truncation_errors)),
@@ -2426,6 +2449,7 @@ def apply_mutations(
             "applied": [],
             "already_applied": [],
             "stale_states": [],
+            "timestamp_drift_bypassed": [],
             "failures": blocked_label_errors,
             "readback": [],
             "counts": empty_counts(len(blocked_label_errors)),
@@ -2439,6 +2463,7 @@ def apply_mutations(
             "applied": [],
             "already_applied": [],
             "stale_states": [],
+            "timestamp_drift_bypassed": [],
             "failures": precondition_plan_errors,
             "readback": [],
             "counts": empty_counts(len(precondition_plan_errors)),
@@ -2448,6 +2473,7 @@ def apply_mutations(
     applied: list[dict[str, Any]] = []
     already_applied: list[dict[str, Any]] = []
     stale_states: list[dict[str, Any]] = []
+    timestamp_drift_bypassed: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
     touched: set[int] = set()
     expectations: dict[int, dict[str, Any]] = {}
@@ -2500,7 +2526,22 @@ def apply_mutations(
                     "state": str(live_issue.get("state") or "").lower(),
                     "updated_at": str(live_issue.get("updated_at") or ""),
                 }
-                if observed_issue != expected_issue:
+                if "labels" in expected_issue:
+                    # Timestamp-only drift tolerance (issue #8295): automation
+                    # comments advance updated_at without touching the mutation
+                    # target. Compare only the semantic fields (state plus the
+                    # label set); a mismatch stays fail-closed stale.
+                    observed_labels = sorted(_label_names(live_issue.get("labels")))
+                    observed_issue["labels"] = observed_labels
+                    semantic_match = (
+                        observed_issue["state"] == expected_issue["state"]
+                        and observed_labels == expected_issue["labels"]
+                    )
+                else:
+                    # Legacy plan without a label snapshot: keep the strict
+                    # state/version comparison.
+                    semantic_match = observed_issue == expected_issue
+                if not semantic_match:
                     skipped_batches.add(number)
                     stale = {
                         "issue": number,
@@ -2513,8 +2554,24 @@ def apply_mutations(
                             if isinstance(candidate, Mapping) and candidate.get("issue") == number
                         ),
                     }
+                    if "labels" in expected_issue:
+                        stale["drift_kind"] = "semantic"
+                        stale["retry"] = {
+                            "action": "regenerate_plan",
+                            "reason": "labels or state changed since the plan was built",
+                            "detail": "re-run the plan step that produced this artifact, "
+                            "then re-apply; do not retry this artifact",
+                        }
                     stale_states.append(stale)
                     failures.append(stale)
+                elif observed_issue["updated_at"] != expected_issue["updated_at"]:
+                    timestamp_drift_bypassed.append(
+                        {
+                            "issue": number,
+                            "expected_updated_at": expected_issue["updated_at"],
+                            "observed_updated_at": observed_issue["updated_at"],
+                        }
+                    )
         if number in skipped_batches:
             continue
         if operation == "add_label" and isinstance(value, str) and value:
@@ -2601,6 +2658,7 @@ def apply_mutations(
         "applied": applied,
         "already_applied": already_applied,
         "stale_states": stale_states,
+        "timestamp_drift_bypassed": timestamp_drift_bypassed,
         "failures": failures,
         "readback": readback,
         "counts": {

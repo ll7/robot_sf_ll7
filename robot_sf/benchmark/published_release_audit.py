@@ -32,7 +32,7 @@ import zipfile
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from urllib.parse import quote, urlsplit
 
 from robot_sf.benchmark.artifact_publication import (
@@ -109,6 +109,13 @@ _GITHUB_ASSET_ORIGINS = frozenset(
     }
 )
 _ZENODO_ASSET_ORIGINS = frozenset({("https", "zenodo.org", 443)})
+
+
+def _is_lower_hex(value: object, pattern: re.Pattern[str]) -> bool:
+    """Return whether one value is a lowercase hexadecimal string matching a pattern."""
+    return (
+        isinstance(value, str) and pattern.fullmatch(value) is not None and value == value.lower()
+    )
 
 
 class PublishedAuditUnavailable(RuntimeError):
@@ -1456,7 +1463,7 @@ def _erratum_identity_paths(bundle_root: Path, relative_members: list[str]) -> t
     return bundle_root / receipt_relative, bundle_root / metadata_relative
 
 
-def _verify_canonical_erratum_bundle(
+def _verify_canonical_erratum_bundle(  # noqa: PLR0913
     *,
     bundle: Path,
     extracted: Path,
@@ -1466,6 +1473,14 @@ def _verify_canonical_erratum_bundle(
     doi: str,
     source_sha: str | None,
     predecessor_evidence: PredecessorEvidence | None = None,
+    expected_concept_doi: str | None = None,
+    expected_predecessor_doi: str | None = None,
+    expected_predecessor_tag: str | None = None,
+    expected_predecessor_archive_sha256: str | None = None,
+    expected_predecessor_size_bytes: int | None = None,
+    expected_builder_sha: str | None = None,
+    expected_validator_sha: str | None = None,
+    expected_orchestration_sha: str | None = None,
 ) -> dict[str, Any]:
     """Verify one complete canonical erratum archive and detached proof set.
 
@@ -1485,15 +1500,34 @@ def _verify_canonical_erratum_bundle(
     )
     receipt_path, metadata_path = _erratum_identity_paths(bundle_root, relative_members)
     try:
+        validation_kwargs: dict[str, Any] = {
+            "predecessor_evidence": predecessor_evidence,
+            "archive_name": bundle.name,
+            "expected_tag": tag,
+            "expected_doi": doi,
+            "expected_source_sha": source_sha,
+        }
+        validation_kwargs.update(
+            {
+                name: value
+                for name, value in (
+                    ("expected_concept_doi", expected_concept_doi),
+                    ("expected_predecessor_doi", expected_predecessor_doi),
+                    ("expected_predecessor_tag", expected_predecessor_tag),
+                    ("expected_predecessor_archive_sha256", expected_predecessor_archive_sha256),
+                    ("expected_predecessor_archive_size_bytes", expected_predecessor_size_bytes),
+                    ("expected_builder_sha", expected_builder_sha),
+                    ("expected_validator_sha", expected_validator_sha),
+                    ("expected_orchestration_sha", expected_orchestration_sha),
+                )
+                if value is not None
+            }
+        )
         receipt = validate_erratum_receipt_against_campaign(
             receipt_path,
             campaign_root=bundle_root / "payload",
             metadata_path=metadata_path,
-            predecessor_evidence=predecessor_evidence,
-            archive_name=bundle.name,
-            expected_tag=tag,
-            expected_doi=doi,
-            expected_source_sha=source_sha,
+            **validation_kwargs,
         )
     except ReleaseErratumError as exc:
         raise ValueError(f"erratum receipt validation failed: {exc}") from exc
@@ -1536,7 +1570,7 @@ def _verify_canonical_erratum_bundle(
     }
 
 
-def _verify_bundle(
+def _verify_bundle(  # noqa: PLR0913
     github_assets: list[Path],
     github_dir: Path,
     observations: dict[str, Any],
@@ -1546,6 +1580,14 @@ def _verify_bundle(
     doi: str,
     source_sha: str | None,
     predecessor_evidence: PredecessorEvidence | None = None,
+    expected_concept_doi: str | None = None,
+    expected_predecessor_doi: str | None = None,
+    expected_predecessor_tag: str | None = None,
+    expected_predecessor_archive_sha256: str | None = None,
+    expected_predecessor_size_bytes: int | None = None,
+    expected_builder_sha: str | None = None,
+    expected_validator_sha: str | None = None,
+    expected_orchestration_sha: str | None = None,
 ) -> None:
     """Extract the largest archive and verify internal checksums.
 
@@ -1576,6 +1618,14 @@ def _verify_bundle(
                 doi=doi,
                 source_sha=source_sha,
                 predecessor_evidence=predecessor_evidence,
+                expected_concept_doi=expected_concept_doi,
+                expected_predecessor_doi=expected_predecessor_doi,
+                expected_predecessor_tag=expected_predecessor_tag,
+                expected_predecessor_archive_sha256=expected_predecessor_archive_sha256,
+                expected_predecessor_size_bytes=expected_predecessor_size_bytes,
+                expected_builder_sha=expected_builder_sha,
+                expected_validator_sha=expected_validator_sha,
+                expected_orchestration_sha=expected_orchestration_sha,
             )
             observations["erratum_bundle_inventory"] = proof["inventory"]
             observations["erratum"] = proof["receipt"]
@@ -1627,7 +1677,7 @@ def _check_erratum_channel_assets(
     return problems
 
 
-def audit_published(
+def audit_published(  # noqa: C901, PLR0913
     *,
     tag: str,
     doi: str,
@@ -1635,6 +1685,15 @@ def audit_published(
     zenodo_dir: Path,
     source_sha: str | None = None,
     predecessor_evidence: PredecessorEvidence | None = None,
+    expected_source_sha: str | None = None,
+    expected_concept_doi: str | None = None,
+    expected_predecessor_doi: str | None = None,
+    expected_predecessor_tag: str | None = None,
+    expected_predecessor_archive_sha256: str | None = None,
+    expected_predecessor_size_bytes: int | None = None,
+    expected_builder_sha: str | None = None,
+    expected_validator_sha: str | None = None,
+    expected_orchestration_sha: str | None = None,
 ) -> dict[str, Any]:
     """Audit two downloaded asset directories for cross-channel identity.
 
@@ -1643,6 +1702,52 @@ def audit_published(
     """
     problems: list[str] = []
     observations: dict[str, Any] = {}
+
+    if (
+        source_sha is not None
+        and expected_source_sha is not None
+        and source_sha != expected_source_sha
+    ):
+        problems.append("observed source SHA differs from the reviewed expected source SHA")
+    effective_source_sha = expected_source_sha or source_sha
+    canonical_predecessor_tag = _canonical_erratum_predecessor_tag(tag)
+    if canonical_predecessor_tag is not None:
+        try:
+            _validate_reviewed_erratum_pins(
+                tag=tag,
+                expected_source_sha=expected_source_sha,
+                expected_concept_doi=expected_concept_doi,
+                expected_predecessor_doi=expected_predecessor_doi,
+                expected_predecessor_tag=expected_predecessor_tag,
+                expected_predecessor_archive_sha256=expected_predecessor_archive_sha256,
+                expected_predecessor_size_bytes=expected_predecessor_size_bytes,
+                expected_builder_sha=expected_builder_sha,
+                expected_validator_sha=expected_validator_sha,
+                expected_orchestration_sha=expected_orchestration_sha,
+            )
+        except PublishedAuditInvalid as exc:
+            problems.append(str(exc))
+        if predecessor_evidence is not None and all(
+            value is not None
+            for value in (
+                expected_predecessor_doi,
+                expected_concept_doi,
+                expected_predecessor_tag,
+                expected_predecessor_archive_sha256,
+                expected_predecessor_size_bytes,
+            )
+        ):
+            try:
+                _validate_predecessor_evidence_against_reviewed_pins(
+                    predecessor_evidence,
+                    expected_predecessor_doi=expected_predecessor_doi,
+                    expected_concept_doi=expected_concept_doi,
+                    expected_predecessor_tag=expected_predecessor_tag,
+                    expected_predecessor_archive_sha256=expected_predecessor_archive_sha256,
+                    expected_predecessor_size_bytes=expected_predecessor_size_bytes,
+                )
+            except PublishedAuditInvalid as exc:
+                problems.append(str(exc))
 
     github_assets = _channel_assets(github_dir, channel="GitHub", problems=problems)
     zenodo_assets = _channel_assets(zenodo_dir, channel="Zenodo", problems=problems)
@@ -1698,14 +1803,22 @@ def audit_published(
         problems,
         tag=tag,
         doi=doi,
-        source_sha=source_sha,
+        source_sha=effective_source_sha,
         predecessor_evidence=predecessor_evidence,
+        expected_concept_doi=expected_concept_doi,
+        expected_predecessor_doi=expected_predecessor_doi,
+        expected_predecessor_tag=expected_predecessor_tag,
+        expected_predecessor_archive_sha256=expected_predecessor_archive_sha256,
+        expected_predecessor_size_bytes=expected_predecessor_size_bytes,
+        expected_builder_sha=expected_builder_sha,
+        expected_validator_sha=expected_validator_sha,
+        expected_orchestration_sha=expected_orchestration_sha,
     )
     doi_version = _validate_doi(doi, observations, problems)
 
     # Source-SHA binding: prospective check (issue #7938 contract).
-    if source_sha:
-        problems.extend(_check_tag_source(tag, source_sha))
+    if effective_source_sha:
+        problems.extend(_check_tag_source(tag, effective_source_sha))
 
     status = "pass" if not problems else "fail"
     return {
@@ -1714,7 +1827,7 @@ def audit_published(
         "status": status,
         "tag": tag,
         "doi": doi_version,
-        "source_sha": source_sha,
+        "source_sha": effective_source_sha,
         "problems": problems,
         "observations": observations,
         "artifacts": [artifact.as_dict() for artifact in channel_artifacts],
@@ -1973,6 +2086,159 @@ def _canonical_erratum_predecessor_tag(tag: str) -> str | None:
     """Return the predecessor tag encoded by an exact ``-erratum.1`` suffix."""
     match = _CANONICAL_ERRATUM_TAG_RE.fullmatch(tag)
     return match.group("predecessor") if match is not None else None
+
+
+def _validate_reviewed_erratum_pins(  # noqa: C901, PLR0913
+    *,
+    tag: str,
+    expected_source_sha: str | None,
+    expected_concept_doi: str | None,
+    expected_predecessor_doi: str | None,
+    expected_predecessor_tag: str | None,
+    expected_predecessor_archive_sha256: str | None,
+    expected_predecessor_size_bytes: int | None,
+    expected_builder_sha: str | None,
+    expected_validator_sha: str | None,
+    expected_orchestration_sha: str | None,
+) -> str | None:
+    """Validate reviewed identity pins before any public predecessor lookup.
+
+    Canonical erratum audits must receive their predecessor and implementation
+    identities from an independent, reviewed source.  In particular, this
+    helper deliberately does not derive any expected value from the Zenodo
+    relation, GitHub release, or embedded successor receipt.  The caller must
+    supply the exact production values (source ``59577...``, predecessor DOI
+    ``10.5281/zenodo.22227035``, predecessor tag, archive digest/size,
+    accepted builder/validator ``a4aaf1...``, and the reviewed orchestration
+    SHA) at the publication gate.
+
+    Returns:
+        The predecessor tag encoded by ``tag`` for a canonical erratum, or
+        ``None`` for a non-erratum release.
+    """
+    predecessor_tag = _canonical_erratum_predecessor_tag(tag)
+    supplied = (
+        expected_source_sha,
+        expected_concept_doi,
+        expected_predecessor_doi,
+        expected_predecessor_tag,
+        expected_predecessor_archive_sha256,
+        expected_predecessor_size_bytes,
+        expected_builder_sha,
+        expected_validator_sha,
+        expected_orchestration_sha,
+    )
+    if predecessor_tag is None:
+        if any(value is not None for value in supplied[1:]):
+            # Reviewed pins are meaningful only for the canonical erratum
+            # path.  Rejecting them on an ordinary release avoids a caller
+            # accidentally believing that an unrelated release was audited
+            # against the predecessor contract.
+            raise PublishedAuditInvalid(
+                "erratum identity pins require a canonical -erratum.1 release tag"
+            )
+        if expected_source_sha is not None and not _is_lower_hex(expected_source_sha, _SHA1_RE):
+            raise PublishedAuditInvalid("expected_source_sha must be a full lowercase Git SHA")
+        return None
+
+    labels = (
+        "expected_source_sha",
+        "expected_concept_doi",
+        "expected_predecessor_doi",
+        "expected_predecessor_tag",
+        "expected_predecessor_archive_sha256",
+        "expected_predecessor_size_bytes",
+        "expected_builder_sha",
+        "expected_validator_sha",
+        "expected_orchestration_sha",
+    )
+    missing = [label for label, value in zip(labels, supplied, strict=True) if value is None]
+    if missing:
+        raise PublishedAuditInvalid(
+            "canonical erratum audit requires reviewed identity pins: " + ", ".join(missing)
+        )
+    # ``missing`` above is the runtime guard; casts keep the values narrowed
+    # for the checks below without relying on assertions that disappear under
+    # ``python -O``.
+    expected_source_sha = cast("str", expected_source_sha)
+    expected_concept_doi = cast("str", expected_concept_doi)
+    expected_predecessor_doi = cast("str", expected_predecessor_doi)
+    expected_predecessor_tag = cast("str", expected_predecessor_tag)
+    expected_predecessor_archive_sha256 = cast("str", expected_predecessor_archive_sha256)
+    expected_predecessor_size_bytes = cast("int", expected_predecessor_size_bytes)
+    expected_builder_sha = cast("str", expected_builder_sha)
+    expected_validator_sha = cast("str", expected_validator_sha)
+    expected_orchestration_sha = cast("str", expected_orchestration_sha)
+
+    if expected_predecessor_tag != predecessor_tag:
+        raise PublishedAuditInvalid(
+            "reviewed predecessor tag does not match the canonical successor tag lineage"
+        )
+    if _check_tag_source(tag, expected_source_sha):
+        raise PublishedAuditInvalid(
+            "reviewed source SHA does not match the canonical successor tag"
+        )
+    if not _is_lower_hex(expected_source_sha, _SHA1_RE):
+        raise PublishedAuditInvalid("expected_source_sha must be a full lowercase Git SHA")
+    if not _is_lower_hex(expected_builder_sha, _SHA1_RE):
+        raise PublishedAuditInvalid("expected_builder_sha must be a full lowercase Git SHA")
+    if not _is_lower_hex(expected_validator_sha, _SHA1_RE):
+        raise PublishedAuditInvalid("expected_validator_sha must be a full lowercase Git SHA")
+    if not _is_lower_hex(expected_orchestration_sha, _SHA1_RE):
+        raise PublishedAuditInvalid("expected_orchestration_sha must be a full lowercase Git SHA")
+    if expected_builder_sha != expected_validator_sha:
+        raise PublishedAuditInvalid(
+            "reviewed builder and validator SHAs must name the same accepted commit"
+        )
+    if not _is_lower_hex(expected_predecessor_archive_sha256, _SHA256_RE):
+        raise PublishedAuditInvalid(
+            "expected_predecessor_archive_sha256 must be a full lowercase SHA-256"
+        )
+    if (
+        isinstance(expected_predecessor_size_bytes, bool)
+        or not isinstance(expected_predecessor_size_bytes, int)
+        or expected_predecessor_size_bytes <= 0
+    ):
+        raise PublishedAuditInvalid("expected_predecessor_size_bytes must be positive")
+    try:
+        normalized_predecessor_doi = _normalise_version_doi(expected_predecessor_doi)
+        normalized_concept_doi = _normalise_version_doi(expected_concept_doi)
+    except PublishedAuditInvalid:
+        raise PublishedAuditInvalid(
+            "reviewed predecessor and concept DOIs must be canonical Zenodo DOIs"
+        ) from None
+    if normalized_predecessor_doi == normalized_concept_doi:
+        raise PublishedAuditInvalid("reviewed predecessor and concept DOIs must differ")
+    return predecessor_tag
+
+
+def _validate_predecessor_evidence_against_reviewed_pins(
+    evidence: PredecessorEvidence,
+    *,
+    expected_predecessor_doi: str,
+    expected_concept_doi: str,
+    expected_predecessor_tag: str,
+    expected_predecessor_archive_sha256: str,
+    expected_predecessor_size_bytes: int,
+) -> None:
+    """Require detached predecessor evidence to equal reviewed coordinates.
+
+    This comparison intentionally runs before the evidence archive is opened.
+    A caller cannot turn an observed predecessor into the expected predecessor
+    by constructing both sides of the comparison from the same public response.
+    """
+    observed = (
+        ("version DOI", evidence.version_doi, expected_predecessor_doi),
+        ("concept DOI", evidence.concept_doi, expected_concept_doi),
+        ("GitHub release tag", evidence.github_release_tag, expected_predecessor_tag),
+        ("archive SHA-256", evidence.archive_sha256, expected_predecessor_archive_sha256),
+        ("archive size", evidence.archive_size_bytes, expected_predecessor_size_bytes),
+    )
+    for label, value, expected in observed:
+        if value != expected:
+            raise PublishedAuditInvalid(
+                f"predecessor evidence {label} differs from the reviewed pin"
+            )
 
 
 def _close_public_response(response: Any) -> None:
@@ -2289,6 +2555,7 @@ def _resolve_github_release(
         "tag": tag,
         "source_sha": source_sha,
         "body_sha_count": len(body_shas),
+        "body_shas": sorted(body_shas),
         "assets": assets,
     }
 
@@ -2707,6 +2974,15 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
     max_download_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES,
     download_chunk_size: int = DEFAULT_DOWNLOAD_CHUNK_SIZE,
     timeout: float = DEFAULT_NETWORK_TIMEOUT,
+    expected_source_sha: str | None = None,
+    expected_concept_doi: str | None = None,
+    expected_predecessor_doi: str | None = None,
+    expected_predecessor_tag: str | None = None,
+    expected_predecessor_archive_sha256: str | None = None,
+    expected_predecessor_size_bytes: int | None = None,
+    expected_builder_sha: str | None = None,
+    expected_validator_sha: str | None = None,
+    expected_orchestration_sha: str | None = None,
 ) -> dict[str, Any]:
     """Discover public release assets and run the offline audit core.
 
@@ -2736,7 +3012,18 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
         if _REPO_RE.fullmatch(repo or "") is None:
             raise PublishedAuditInvalid("GitHub repository must have the form owner/name")
         normalized_doi = _normalise_version_doi(requested_doi)
-        canonical_predecessor_tag = _canonical_erratum_predecessor_tag(requested_tag)
+        canonical_predecessor_tag = _validate_reviewed_erratum_pins(
+            tag=requested_tag,
+            expected_source_sha=expected_source_sha,
+            expected_concept_doi=expected_concept_doi,
+            expected_predecessor_doi=expected_predecessor_doi,
+            expected_predecessor_tag=expected_predecessor_tag,
+            expected_predecessor_archive_sha256=expected_predecessor_archive_sha256,
+            expected_predecessor_size_bytes=expected_predecessor_size_bytes,
+            expected_builder_sha=expected_builder_sha,
+            expected_validator_sha=expected_validator_sha,
+            expected_orchestration_sha=expected_orchestration_sha,
+        )
         if isinstance(max_download_bytes, bool) or max_download_bytes <= 0:
             raise PublishedAuditInvalid("max_download_bytes must be positive")
         if isinstance(download_chunk_size, bool) or download_chunk_size <= 0:
@@ -2777,6 +3064,15 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
             "source_binding": "tag_ref_commit_and_release_body",
             "asset_names": sorted(asset["name"] for asset in github["assets"]),
         }
+        if expected_source_sha is not None:
+            if github["source_sha"] != expected_source_sha:
+                raise PublishedAuditInvalid(
+                    "GitHub successor tag source SHA differs from the reviewed source SHA"
+                )
+            if expected_source_sha not in github["body_shas"]:
+                raise PublishedAuditInvalid(
+                    "GitHub successor release body does not bind the reviewed source SHA"
+                )
         zenodo = _resolve_zenodo_record(
             public_session,
             api_base=zenodo_base,
@@ -2791,29 +3087,42 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
             "predecessor_doi": zenodo["predecessor_doi"],
             "asset_names": sorted(asset["name"] for asset in zenodo["assets"]),
         }
+        if expected_concept_doi is not None and zenodo["concept_doi"] != expected_concept_doi:
+            raise PublishedAuditInvalid(
+                "Zenodo successor concept DOI differs from the reviewed concept DOI"
+            )
 
         predecessor_github: dict[str, Any] | None = None
         predecessor_zenodo: dict[str, Any] | None = None
         predecessor_archive_name: str | None = None
         if canonical_predecessor_tag is not None:
-            predecessor_doi = zenodo.get("predecessor_doi")
-            if not isinstance(predecessor_doi, str) or not predecessor_doi:
+            expected_source_sha = cast("str", expected_source_sha)
+            expected_concept_doi = cast("str", expected_concept_doi)
+            expected_predecessor_tag = cast("str", expected_predecessor_tag)
+            expected_predecessor_doi = cast("str", expected_predecessor_doi)
+            observed_predecessor_doi = zenodo.get("predecessor_doi")
+            if observed_predecessor_doi != expected_predecessor_doi:
                 raise PublishedAuditInvalid(
-                    "canonical erratum successor lacks its predecessor version DOI"
+                    "Zenodo successor predecessor DOI differs from the reviewed predecessor DOI"
                 )
+            predecessor_doi = expected_predecessor_doi
             predecessor_source_tag_url = (
-                f"https://github.com/{repo}/releases/tag/{canonical_predecessor_tag}"
+                f"https://github.com/{repo}/releases/tag/{expected_predecessor_tag}"
             )
             predecessor_github = _resolve_github_release(
                 public_session,
                 api_base=github_base,
                 repo=repo,
-                tag=canonical_predecessor_tag,
+                tag=expected_predecessor_tag,
                 timeout=timeout,
             )
-            if predecessor_github["source_sha"] != github["source_sha"]:
+            if predecessor_github["source_sha"] != expected_source_sha:
                 raise PublishedAuditInvalid(
-                    "predecessor GitHub tag source SHA differs from the successor source SHA"
+                    "predecessor GitHub tag source SHA differs from the reviewed source SHA"
+                )
+            if expected_source_sha not in predecessor_github["body_shas"]:
+                raise PublishedAuditInvalid(
+                    "predecessor GitHub release body does not bind the reviewed source SHA"
                 )
             predecessor_zenodo = _resolve_zenodo_record(
                 public_session,
@@ -2822,9 +3131,13 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 source_tag_url=predecessor_source_tag_url,
                 timeout=timeout,
             )
-            if predecessor_zenodo["concept_doi"] != zenodo["concept_doi"]:
+            if predecessor_zenodo["concept_doi"] != expected_concept_doi:
                 raise PublishedAuditInvalid(
-                    "predecessor Zenodo concept DOI differs from the successor concept DOI"
+                    "predecessor Zenodo concept DOI differs from the reviewed concept DOI"
+                )
+            if predecessor_zenodo["doi"] != expected_predecessor_doi:
+                raise PublishedAuditInvalid(
+                    "predecessor Zenodo DOI differs from the reviewed predecessor DOI"
                 )
             predecessor_github_by_name = {
                 asset["name"]: asset for asset in predecessor_github["assets"]
@@ -2874,12 +3187,29 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 name=predecessor_archive_name,
                 label="predecessor Zenodo archive",
             )
-            _require_positive_advertised_size(
+            github_size = _require_positive_advertised_size(
                 predecessor_github_asset, label="predecessor GitHub archive"
             )
-            _require_positive_advertised_size(
+            zenodo_size = _require_positive_advertised_size(
                 predecessor_zenodo_asset, label="predecessor Zenodo archive"
             )
+            expected_predecessor_archive_sha256 = cast("str", expected_predecessor_archive_sha256)
+            expected_predecessor_size_bytes = cast("int", expected_predecessor_size_bytes)
+            if github_size != expected_predecessor_size_bytes:
+                raise PublishedAuditInvalid(
+                    "predecessor GitHub archive size differs from the reviewed predecessor size"
+                )
+            if zenodo_size != expected_predecessor_size_bytes:
+                raise PublishedAuditInvalid(
+                    "predecessor Zenodo archive size differs from the reviewed predecessor size"
+                )
+            github_digest = str(predecessor_github_asset.get("digest") or "").removeprefix(
+                "sha256:"
+            )
+            if github_digest != expected_predecessor_archive_sha256:
+                raise PublishedAuditInvalid(
+                    "predecessor GitHub archive digest differs from the reviewed predecessor SHA-256"
+                )
             advertised_assets.extend([predecessor_github_asset, predecessor_zenodo_asset])
         advertised_bytes = sum(
             int(asset["size"] or 0) for asset in advertised_assets if asset.get("size") is not None
@@ -2968,13 +3298,25 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 _require_cross_channel_archive_identity(
                     predecessor_github_record, predecessor_zenodo_record
                 )
+                expected_predecessor_archive_sha256 = cast(
+                    "str", expected_predecessor_archive_sha256
+                )
+                expected_predecessor_size_bytes = cast("int", expected_predecessor_size_bytes)
+                if predecessor_github_record["sha256"] != expected_predecessor_archive_sha256:
+                    raise PublishedAuditInvalid(
+                        "downloaded predecessor archive differs from the reviewed predecessor SHA-256"
+                    )
+                if predecessor_github_record["bytes"] != expected_predecessor_size_bytes:
+                    raise PublishedAuditInvalid(
+                        "downloaded predecessor archive differs from the reviewed predecessor size"
+                    )
                 predecessor_receipt = {
-                    "version_doi": predecessor_zenodo["doi"],
-                    "concept_doi": predecessor_zenodo["concept_doi"],
-                    "github_release_tag": predecessor_github["tag"],
-                    "source_sha": predecessor_github["source_sha"],
-                    "archive_sha256": predecessor_github_record["sha256"],
-                    "archive_size_bytes": predecessor_github_record["bytes"],
+                    "version_doi": expected_predecessor_doi,
+                    "concept_doi": expected_concept_doi,
+                    "github_release_tag": expected_predecessor_tag,
+                    "source_sha": expected_source_sha,
+                    "archive_sha256": expected_predecessor_archive_sha256,
+                    "archive_size_bytes": expected_predecessor_size_bytes,
                 }
                 predecessor_evidence = PredecessorEvidence(
                     archive_path=root / "predecessor-github" / predecessor_archive_name,
@@ -2993,6 +3335,15 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 zenodo_dir=zenodo_dir,
                 source_sha=github["source_sha"],
                 predecessor_evidence=predecessor_evidence,
+                expected_source_sha=expected_source_sha,
+                expected_concept_doi=expected_concept_doi,
+                expected_predecessor_doi=expected_predecessor_doi,
+                expected_predecessor_tag=expected_predecessor_tag,
+                expected_predecessor_archive_sha256=expected_predecessor_archive_sha256,
+                expected_predecessor_size_bytes=expected_predecessor_size_bytes,
+                expected_builder_sha=expected_builder_sha,
+                expected_validator_sha=expected_validator_sha,
+                expected_orchestration_sha=expected_orchestration_sha,
             )
             _reconcile_zenodo_erratum_lineage(core, tag=requested_tag, zenodo=zenodo)
         status = "pass" if core["ok"] else "invalid"
@@ -3002,7 +3353,7 @@ def audit_published_network(  # noqa: C901, PLR0912, PLR0913, PLR0915
             "status": status,
             "tag": requested_tag,
             "doi": normalized_doi,
-            "source_sha": github["source_sha"],
+            "source_sha": expected_source_sha or github["source_sha"],
             "predecessor": predecessor_receipt,
             "problems": list(core["problems"]),
             "discovery": discovery,
@@ -3090,6 +3441,56 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--zenodo-dir", type=Path, required=True, help="downloaded Zenodo assets")
     parser.add_argument("--source-sha", default=None, help="expected final source SHA")
     parser.add_argument(
+        "--expected-source-sha",
+        default=None,
+        help="reviewed exact source SHA (required for canonical erratum tags)",
+    )
+    parser.add_argument(
+        "--expected-concept-doi",
+        default=None,
+        help="reviewed Zenodo concept DOI (required for canonical erratum tags)",
+    )
+    parser.add_argument(
+        "--expected-predecessor-doi",
+        default=None,
+        help="reviewed predecessor Zenodo version DOI (required for canonical erratum tags)",
+    )
+    parser.add_argument(
+        "--expected-predecessor-tag",
+        default=None,
+        help="reviewed predecessor GitHub tag (required for canonical erratum tags)",
+    )
+    parser.add_argument(
+        "--expected-predecessor-archive-sha256",
+        "--expected-predecessor-sha256",
+        dest="expected_predecessor_archive_sha256",
+        default=None,
+        help="reviewed predecessor archive SHA-256 (required for canonical erratum tags)",
+    )
+    parser.add_argument(
+        "--expected-predecessor-size-bytes",
+        "--expected-predecessor-archive-size-bytes",
+        dest="expected_predecessor_size_bytes",
+        type=int,
+        default=None,
+        help="reviewed predecessor archive size (required for canonical erratum tags)",
+    )
+    parser.add_argument(
+        "--expected-builder-sha",
+        default=None,
+        help="reviewed accepted builder SHA (required for canonical erratum tags)",
+    )
+    parser.add_argument(
+        "--expected-validator-sha",
+        default=None,
+        help="reviewed accepted validator SHA (required for canonical erratum tags)",
+    )
+    parser.add_argument(
+        "--expected-orchestration-sha",
+        default=None,
+        help="reviewed orchestration SHA (required for canonical erratum tags)",
+    )
+    parser.add_argument(
         "--predecessor-archive",
         type=Path,
         default=None,
@@ -3168,6 +3569,15 @@ def main(argv: list[str] | None = None) -> int:
             zenodo_dir=args.zenodo_dir,
             source_sha=args.source_sha,
             predecessor_evidence=predecessor_evidence,
+            expected_source_sha=args.expected_source_sha,
+            expected_concept_doi=args.expected_concept_doi,
+            expected_predecessor_doi=args.expected_predecessor_doi,
+            expected_predecessor_tag=args.expected_predecessor_tag,
+            expected_predecessor_archive_sha256=args.expected_predecessor_archive_sha256,
+            expected_predecessor_size_bytes=args.expected_predecessor_size_bytes,
+            expected_builder_sha=args.expected_builder_sha,
+            expected_validator_sha=args.expected_validator_sha,
+            expected_orchestration_sha=args.expected_orchestration_sha,
         )
     except (OSError, ValueError) as exc:
         print(  # noqa: T201 - CLI output

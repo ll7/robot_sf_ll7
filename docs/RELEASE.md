@@ -437,9 +437,11 @@ same Zenodo concept instead:
    `checksums.sha256`, and `publication_custody.json` assets to both draft
    channels. Their file-name inventories and bytes must be identical. Verify
    both drafts from empty directories, and only then publish. The cold audit
-   must resolve the predecessor independently from the successor's sole
-   `isNewVersionOf` relation and exact `-erratum.1` tag lineage. It downloads
-   the predecessor archive from both GitHub and Zenodo, requires positive
+   must receive the predecessor identity and implementation identities as
+   reviewed, external inputs. It must compare those pins before using any
+   successor relation or constructing detached predecessor evidence; the
+   Zenodo `isNewVersionOf` relation and exact `-erratum.1` tag lineage are
+   observations to check, never sources for expected values. It downloads the predecessor archive from both GitHub and Zenodo, requires positive
    advertised sizes and byte-identical SHA-256 values, opens that detached
    archive within member-count, per-file, and cumulative expanded-byte budgets,
    and compares its complete scientific snapshot with the successor. Invalid
@@ -450,6 +452,30 @@ same Zenodo concept instead:
    both scientific digests, and match the embedded correction receipt. A
    successor receipt cannot authenticate its own predecessor. Leave the
    predecessor DOI, tag, files, and checksum unchanged.
+
+For the canonical September erratum, supply the reviewed coordinates explicitly
+to the public audit (never copy them from the observed Zenodo relation or the
+successor receipt):
+
+```bash
+uv run robot-sf release audit-published \
+  --tag paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1 \
+  --doi <successor-version-doi> \
+  --expected-source-sha 59577bad289dd692ba3580e1600c4a649ae27880 \
+  --expected-concept-doi 10.5281/zenodo.22227034 \
+  --expected-predecessor-doi 10.5281/zenodo.22227035 \
+  --expected-predecessor-tag paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880 \
+  --expected-predecessor-archive-sha256 e8f301c6f4eae16fdaf83f59b31bef060d84bf5a0e23dfdbf375f834b25d7b4b \
+  --expected-predecessor-size-bytes 54219004 \
+  --expected-builder-sha a4aaf1f06860cf632d0173c5a13e11ad855b6df2 \
+  --expected-validator-sha a4aaf1f06860cf632d0173c5a13e11ad855b6df2 \
+  --expected-orchestration-sha <reviewed-orchestration-sha>
+```
+
+The orchestration value must be the exact reviewed 40-character lowercase SHA;
+it is intentionally not inferred from public release data. The audit compares
+all pins with the public records, release bodies, downloaded predecessor bytes,
+embedded receipt, custody receipt, and scientific snapshots.
 
 This first-successor workflow requires `-erratum.1` after the predecessor tag,
 which already ends in the exact 40-character scientific source SHA. The cold

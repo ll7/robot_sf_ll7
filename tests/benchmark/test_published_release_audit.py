@@ -458,6 +458,217 @@ def _predecessor_evidence(tmp_path: Path, receipt: dict[str, object]) -> Predece
     )
 
 
+def _reviewed_offline_erratum_kwargs(receipt: dict[str, object], tag: str) -> dict[str, object]:
+    """Return explicit reviewed identity pins for the synthetic erratum fixture."""
+    supersedes = receipt["supersedes"]
+    successor = receipt["successor"]
+    assert isinstance(supersedes, dict)
+    assert isinstance(successor, dict)
+    assert supersedes["github_release_tag"] == tag.removesuffix("-erratum.1")
+    return {
+        "expected_source_sha": str(receipt["scientific_identity"]["source_sha"]),
+        "expected_concept_doi": str(successor["concept_doi"]),
+        "expected_predecessor_doi": str(supersedes["version_doi"]),
+        "expected_predecessor_tag": str(supersedes["github_release_tag"]),
+        "expected_predecessor_archive_sha256": str(supersedes["archive_sha256"]),
+        "expected_predecessor_size_bytes": int(supersedes["archive_size_bytes"]),
+        "expected_builder_sha": str(receipt["derivation"]["builder_sha"]),
+        "expected_validator_sha": str(receipt["derivation"]["validator_sha"]),
+        "expected_orchestration_sha": str(receipt["derivation"]["orchestration_sha"]),
+    }
+
+
+def _reviewed_network_erratum_kwargs(
+    tag: str, predecessor_doi: str, bundle: bytes
+) -> dict[str, object]:
+    """Return explicit reviewed identity pins for the network fixture."""
+    predecessor_bundle = bundle + b"-predecessor"
+    return {
+        "expected_source_sha": "b" * 40,
+        "expected_concept_doi": "10.5281/zenodo.1234566",
+        "expected_predecessor_doi": predecessor_doi,
+        "expected_predecessor_tag": tag.removesuffix("-erratum.1"),
+        "expected_predecessor_archive_sha256": hashlib.sha256(predecessor_bundle).hexdigest(),
+        "expected_predecessor_size_bytes": len(predecessor_bundle),
+        "expected_builder_sha": "a" * 40,
+        "expected_validator_sha": "a" * 40,
+        "expected_orchestration_sha": "c" * 40,
+    }
+
+
+def test_network_canonical_erratum_requires_reviewed_pins_before_lookup(
+    tmp_path: Path,
+) -> None:
+    """A canonical network audit must not discover predecessor identity itself."""
+    session, _, tag, github_base, zenodo_base = _network_fixture(
+        tmp_path,
+        release_tag=f"paper-matrix-v2-h600-s30-2026-09-{'b' * 40}-erratum.1",
+        predecessor_doi="10.5281/zenodo.1234565",
+    )
+
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+    )
+
+    assert receipt["status"] == "invalid"
+    assert "reviewed identity pins" in receipt["problems"][0]
+    assert session.calls == []
+
+
+def test_network_canonical_erratum_rejects_observed_predecessor_as_expected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An observed successor relation cannot silently become the reviewed predecessor."""
+    predecessor_doi = "10.5281/zenodo.1234565"
+    session, bundle, tag, github_base, zenodo_base = _network_fixture(
+        tmp_path,
+        release_tag=f"paper-matrix-v2-h600-s30-2026-09-{'b' * 40}-erratum.1",
+        predecessor_doi=predecessor_doi,
+    )
+    reviewed = _reviewed_network_erratum_kwargs(tag, predecessor_doi, bundle)
+    reviewed["expected_predecessor_doi"] = "10.5281/zenodo.22227035"
+    monkeypatch.setattr(
+        published_audit_module,
+        "audit_published",
+        lambda **_kwargs: pytest.fail("predecessor evidence must not be constructed"),
+    )
+
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+        **reviewed,
+    )
+
+    assert receipt["status"] == "invalid"
+    assert any(
+        "predecessor DOI differs from the reviewed" in problem for problem in receipt["problems"]
+    )
+    assert not any("predecessor.zip" in url for url, _, _ in session.calls)
+
+
+def test_network_canonical_erratum_rejects_successor_source_drift(tmp_path: Path) -> None:
+    """The reviewed source must match the resolved successor tag and release body."""
+    predecessor_doi = "10.5281/zenodo.1234565"
+    session, bundle, tag, github_base, zenodo_base = _network_fixture(
+        tmp_path,
+        release_tag=f"paper-matrix-v2-h600-s30-2026-09-{'b' * 40}-erratum.1",
+        predecessor_doi=predecessor_doi,
+    )
+    release_url = f"{github_base}/repos/ll7/robot_sf_ll7/releases/tags/{tag}"
+    ref_url = f"{github_base}/repos/ll7/robot_sf_ll7/git/ref/tags/{tag}"
+    release = session.routes[release_url]
+    ref = session.routes[ref_url]
+    assert isinstance(release, _PublicResponse)
+    assert isinstance(ref, _PublicResponse)
+    release_payload = copy.deepcopy(release._payload)
+    ref_payload = copy.deepcopy(ref._payload)
+    release_payload["body"] = f"Source SHA: {'c' * 40}"
+    ref_payload["object"]["sha"] = "c" * 40
+    release._payload = release_payload
+    ref._payload = ref_payload
+
+    receipt = audit_published_network(
+        tag=tag,
+        doi="10.5281/zenodo.1234567",
+        session=session,
+        github_api_base=github_base,
+        zenodo_api_base=zenodo_base,
+        **_reviewed_network_erratum_kwargs(tag, predecessor_doi, bundle),
+    )
+
+    assert receipt["status"] == "invalid"
+    assert any("successor tag source SHA" in problem for problem in receipt["problems"])
+    assert not any("predecessor.zip" in url for url, _, _ in session.calls)
+
+
+def test_offline_erratum_rejects_detached_evidence_drift_before_snapshot(tmp_path: Path) -> None:
+    """Detached predecessor evidence must match reviewed coordinates before opening it."""
+    payload_files, correction_receipt, tag, doi = _full_erratum_payload(tmp_path)
+    expected = _reviewed_offline_erratum_kwargs(correction_receipt, tag)
+    evidence = _predecessor_evidence(tmp_path, correction_receipt)
+    drifted_evidence = PredecessorEvidence(
+        archive_path=evidence.archive_path,
+        version_doi="10.5281/zenodo.9999999",
+        concept_doi=evidence.concept_doi,
+        github_release_tag=evidence.github_release_tag,
+        archive_sha256=evidence.archive_sha256,
+        archive_size_bytes=evidence.archive_size_bytes,
+    )
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    _make_erratum_assets(
+        github,
+        zenodo,
+        source_sha="5" * 40,
+        tag=tag,
+        doi=doi,
+        payload_files=payload_files,
+    )
+
+    result = audit_published(
+        tag=tag,
+        doi=doi,
+        github_dir=github,
+        zenodo_dir=zenodo,
+        source_sha="5" * 40,
+        predecessor_evidence=drifted_evidence,
+        **expected,
+    )
+
+    assert result["status"] == "fail"
+    assert any(
+        "predecessor evidence version DOI differs" in problem for problem in result["problems"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("identity", "needle"),
+    [("builder", "builder SHA"), ("orchestration", "orchestration SHA")],
+)
+def test_offline_erratum_rejects_reviewed_implementation_drift(
+    tmp_path: Path, identity: str, needle: str
+) -> None:
+    """The cold contract must compare implementation SHAs to reviewed inputs."""
+    payload_files, correction_receipt, tag, doi = _full_erratum_payload(tmp_path)
+    expected = _reviewed_offline_erratum_kwargs(correction_receipt, tag)
+    expected[f"expected_{identity}_sha"] = "f" * 40
+    if identity == "builder":
+        expected["expected_validator_sha"] = "f" * 40
+    predecessor_evidence = _predecessor_evidence(tmp_path, correction_receipt)
+    github = tmp_path / "github"
+    zenodo = tmp_path / "zenodo"
+    _make_erratum_assets(
+        github,
+        zenodo,
+        source_sha="5" * 40,
+        tag=tag,
+        doi=doi,
+        payload_files=payload_files,
+    )
+
+    result = audit_published(
+        tag=tag,
+        doi=doi,
+        github_dir=github,
+        zenodo_dir=zenodo,
+        source_sha="5" * 40,
+        predecessor_evidence=predecessor_evidence,
+        **expected,
+    )
+
+    assert result["status"] == "fail"
+    assert any(
+        f"{needle} differs from the reviewed pin" in problem for problem in result["problems"]
+    )
+
+
 def test_erratum_audit_runs_real_preflight_and_cold_validation(tmp_path: Path) -> None:
     """The production validators authenticate one complete cold-start archive."""
     payload_files, correction_receipt, tag, doi = _full_erratum_payload(tmp_path)
@@ -480,6 +691,7 @@ def test_erratum_audit_runs_real_preflight_and_cold_validation(tmp_path: Path) -
         zenodo_dir=zenodo,
         source_sha="5" * 40,
         predecessor_evidence=predecessor_evidence,
+        **_reviewed_offline_erratum_kwargs(correction_receipt, tag),
     )
 
     assert result["status"] == "pass"
@@ -492,7 +704,7 @@ def test_erratum_audit_runs_real_preflight_and_cold_validation(tmp_path: Path) -
 
 def test_erratum_audit_requires_exact_tag_target_before_bundle_validation(tmp_path: Path) -> None:
     """A canonical erratum cannot be audited without its immutable source target."""
-    payload_files, _receipt, tag, doi = _full_erratum_payload(tmp_path)
+    payload_files, receipt, tag, doi = _full_erratum_payload(tmp_path)
     github = tmp_path / "github"
     zenodo = tmp_path / "zenodo"
     _make_erratum_assets(
@@ -504,21 +716,24 @@ def test_erratum_audit_requires_exact_tag_target_before_bundle_validation(tmp_pa
         payload_files=payload_files,
     )
 
+    reviewed = _reviewed_offline_erratum_kwargs(receipt, tag)
+    reviewed.pop("expected_source_sha")
     result = audit_published(
         tag=tag,
         doi=doi,
         github_dir=github,
         zenodo_dir=zenodo,
         source_sha=None,
+        **reviewed,
     )
 
     assert result["status"] == "fail"
-    assert any("exact GitHub tag target SHA" in problem for problem in result["problems"])
+    assert any("expected_source_sha" in problem for problem in result["problems"])
 
 
 def test_erratum_audit_requires_detached_predecessor_evidence(tmp_path: Path) -> None:
     """A complete successor bundle cannot self-authenticate its predecessor."""
-    payload_files, _receipt, tag, doi = _full_erratum_payload(tmp_path)
+    payload_files, receipt, tag, doi = _full_erratum_payload(tmp_path)
     github = tmp_path / "github"
     zenodo = tmp_path / "zenodo"
     _make_erratum_assets(
@@ -536,6 +751,7 @@ def test_erratum_audit_requires_detached_predecessor_evidence(tmp_path: Path) ->
         github_dir=github,
         zenodo_dir=zenodo,
         source_sha="5" * 40,
+        **_reviewed_offline_erratum_kwargs(receipt, tag),
     )
 
     assert result["status"] == "fail"
@@ -544,7 +760,7 @@ def test_erratum_audit_requires_detached_predecessor_evidence(tmp_path: Path) ->
 
 def test_erratum_audit_rejects_manifest_file_size_tampering(tmp_path: Path) -> None:
     """A manifest entry cannot authenticate bytes with a false declared size."""
-    payload_files, _receipt, tag, doi = _full_erratum_payload(tmp_path)
+    payload_files, receipt, tag, doi = _full_erratum_payload(tmp_path)
     entries = [
         {
             "path": relative,
@@ -573,6 +789,7 @@ def test_erratum_audit_rejects_manifest_file_size_tampering(tmp_path: Path) -> N
         github_dir=github,
         zenodo_dir=zenodo,
         source_sha="5" * 40,
+        **_reviewed_offline_erratum_kwargs(receipt, tag),
     )
 
     assert result["status"] == "fail"
@@ -596,7 +813,7 @@ def test_erratum_audit_rejects_tampered_publication_channel(
     tmp_path: Path, field: str, value: str, expected: str
 ) -> None:
     """Publication-channel coordinates must match the requested tag and DOI."""
-    payload_files, _receipt, tag, doi = _full_erratum_payload(tmp_path)
+    payload_files, receipt, tag, doi = _full_erratum_payload(tmp_path)
     channels = {
         "repository_url": "https://github.com/ll7/robot_sf_ll7",
         "release_tag": tag,
@@ -622,6 +839,7 @@ def test_erratum_audit_rejects_tampered_publication_channel(
         github_dir=github,
         zenodo_dir=zenodo,
         source_sha="5" * 40,
+        **_reviewed_offline_erratum_kwargs(receipt, tag),
     )
 
     assert result["status"] == "fail"
@@ -663,6 +881,7 @@ def test_erratum_audit_rejects_stale_optional_publication_document(
         zenodo_dir=zenodo,
         source_sha="5" * 40,
         predecessor_evidence=predecessor_evidence,
+        **_reviewed_offline_erratum_kwargs(receipt, tag),
     )
 
     assert result["status"] == "fail"
@@ -749,6 +968,7 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
         expected_doi: str,
         expected_source_sha: str | None,
         predecessor_evidence: PredecessorEvidence | None,
+        **_kwargs: object,
     ) -> dict[str, object]:
         evidence_seen.append(predecessor_evidence)
         calls.append(
@@ -780,6 +1000,15 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
         zenodo_dir=zenodo,
         source_sha=source_sha,
         predecessor_evidence=predecessor_evidence,
+        expected_source_sha=source_sha,
+        expected_concept_doi="10.5281/zenodo.6",
+        expected_predecessor_doi="10.5281/zenodo.7",
+        expected_predecessor_tag=f"paper-matrix-v2-h600-s30-2026-09-{source_sha}",
+        expected_predecessor_archive_sha256="0" * 64,
+        expected_predecessor_size_bytes=1,
+        expected_builder_sha="a" * 40,
+        expected_validator_sha="a" * 40,
+        expected_orchestration_sha="b" * 40,
     )
 
     assert receipt["status"] == "pass"
@@ -2173,6 +2402,7 @@ def test_network_erratum_resolves_and_authenticates_predecessor(
         github_api_base=github_base,
         zenodo_api_base=zenodo_base,
         download_chunk_size=7,
+        **_reviewed_network_erratum_kwargs(tag, predecessor_doi, bundle),
     )
 
     assert receipt["status"] == "pass"
@@ -2383,7 +2613,7 @@ def test_network_erratum_requires_exact_relation_schemes_and_cardinality(
 ) -> None:
     source_sha = "b" * 40
     tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}-erratum.1"
-    session, _, _, github_base, zenodo_base = _network_fixture(
+    session, bundle, _, github_base, zenodo_base = _network_fixture(
         tmp_path,
         release_tag=tag,
         predecessor_doi="10.5281/zenodo.1234565",
@@ -2409,6 +2639,7 @@ def test_network_erratum_requires_exact_relation_schemes_and_cardinality(
         session=session,
         github_api_base=github_base,
         zenodo_api_base=zenodo_base,
+        **_reviewed_network_erratum_kwargs(tag, "10.5281/zenodo.1234565", bundle),
     )
 
     assert result["status"] == "invalid"
@@ -2428,7 +2659,7 @@ def test_network_erratum_requires_predecessor_source_and_concept_identity(
     """The independently resolved predecessor must retain both identities."""
     source_sha = "b" * 40
     tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}-erratum.1"
-    session, _, _, github_base, zenodo_base = _network_fixture(
+    session, bundle, _, github_base, zenodo_base = _network_fixture(
         tmp_path,
         release_tag=tag,
         predecessor_doi="10.5281/zenodo.1234565",
@@ -2462,6 +2693,7 @@ def test_network_erratum_requires_predecessor_source_and_concept_identity(
         session=session,
         github_api_base=github_base,
         zenodo_api_base=zenodo_base,
+        **_reviewed_network_erratum_kwargs(tag, "10.5281/zenodo.1234565", bundle),
     )
 
     assert result["status"] == "invalid"
@@ -2475,7 +2707,7 @@ def test_network_erratum_requires_one_common_predecessor_archive(
     """Predecessor custody must identify exactly one shared archive before downloading."""
     source_sha = "b" * 40
     tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}-erratum.1"
-    session, _, _, github_base, zenodo_base = _network_fixture(
+    session, bundle, _, github_base, zenodo_base = _network_fixture(
         tmp_path,
         release_tag=tag,
         predecessor_doi="10.5281/zenodo.1234565",
@@ -2522,6 +2754,7 @@ def test_network_erratum_requires_one_common_predecessor_archive(
         session=session,
         github_api_base=github_base,
         zenodo_api_base=zenodo_base,
+        **_reviewed_network_erratum_kwargs(tag, "10.5281/zenodo.1234565", bundle),
     )
 
     assert result["status"] == "invalid"
@@ -2538,7 +2771,7 @@ def test_network_erratum_requires_positive_predecessor_archive_size(
     """Both public predecessor channels must advertise a positive archive size."""
     source_sha = "b" * 40
     tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}-erratum.1"
-    session, _, _, github_base, zenodo_base = _network_fixture(
+    session, bundle, _, github_base, zenodo_base = _network_fixture(
         tmp_path,
         release_tag=tag,
         predecessor_doi="10.5281/zenodo.1234565",
@@ -2563,6 +2796,7 @@ def test_network_erratum_requires_positive_predecessor_archive_size(
         session=session,
         github_api_base=github_base,
         zenodo_api_base=zenodo_base,
+        **_reviewed_network_erratum_kwargs(tag, "10.5281/zenodo.1234565", bundle),
     )
 
     assert result["status"] == "invalid"
@@ -2603,10 +2837,11 @@ def test_network_erratum_reconciles_predecessor_archive_channels(
         session=session,
         github_api_base=github_base,
         zenodo_api_base=zenodo_base,
+        **_reviewed_network_erratum_kwargs(tag, "10.5281/zenodo.1234565", bundle),
     )
 
     assert result["status"] == "invalid"
-    expected = "size mismatch" if fault == "size" else "digest mismatch"
+    expected = "size" if fault == "size" else "digest mismatch"
     assert any(expected in problem for problem in result["problems"])
 
 
@@ -2627,6 +2862,7 @@ def test_network_erratum_applies_cumulative_predecessor_byte_limit(tmp_path: Pat
         github_api_base=github_base,
         zenodo_api_base=zenodo_base,
         max_download_bytes=total_advertised - 1,
+        **_reviewed_network_erratum_kwargs(tag, "10.5281/zenodo.1234565", bundle),
     )
 
     assert result["status"] == "invalid"
@@ -2821,6 +3057,47 @@ def test_release_cli_rejects_public_api_base_overrides(
 
     assert exc_info.value.code == 2
     assert "unrecognized arguments" in capsys.readouterr().err
+
+
+def test_release_cli_parser_exposes_reviewed_erratum_pins() -> None:
+    """The network audit CLI exposes every reviewed canonical-erratum coordinate."""
+    from robot_sf import cli
+
+    args = cli._build_parser().parse_args(
+        [
+            "release",
+            "audit-published",
+            "--tag",
+            "paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1",
+            "--doi",
+            "10.5281/zenodo.22227036",
+            "--expected-source-sha",
+            "59577bad289dd692ba3580e1600c4a649ae27880",
+            "--expected-concept-doi",
+            "10.5281/zenodo.22227034",
+            "--expected-predecessor-doi",
+            "10.5281/zenodo.22227035",
+            "--expected-predecessor-tag",
+            "paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880",
+            "--expected-predecessor-archive-sha256",
+            "e8f301c6f4eae16fdaf83f59b31bef060d84bf5a0e23dfdbf375f834b25d7b4b",
+            "--expected-predecessor-size-bytes",
+            "54219004",
+            "--expected-builder-sha",
+            "a4aaf1f06860cf632d0173c5a13e11ad855b6df2",
+            "--expected-validator-sha",
+            "a4aaf1f06860cf632d0173c5a13e11ad855b6df2",
+            "--expected-orchestration-sha",
+            "c" * 40,
+        ]
+    )
+
+    assert args.expected_source_sha == "59577bad289dd692ba3580e1600c4a649ae27880"
+    assert args.expected_concept_doi == "10.5281/zenodo.22227034"
+    assert args.expected_predecessor_doi == "10.5281/zenodo.22227035"
+    assert args.expected_predecessor_size_bytes == 54219004
+    assert args.expected_builder_sha == args.expected_validator_sha
+    assert args.expected_orchestration_sha == "c" * 40
 
 
 @pytest.mark.parametrize("status, expected_code", [("invalid", 1), ("unavailable", 2)])

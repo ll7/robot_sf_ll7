@@ -42,6 +42,77 @@ def _add_new_version_arguments(parser: Any) -> None:
     )
 
 
+def _add_published_audit_arguments(parser: Any) -> None:
+    """Register public-audit options, including reviewed erratum pins."""
+    parser.add_argument("--tag", required=True, help="Exact public GitHub release tag.")
+    parser.add_argument("--doi", required=True, help="Exact Zenodo version DOI.")
+    parser.add_argument(
+        "--expected-source-sha",
+        help="Reviewed exact scientific source SHA (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-concept-doi",
+        help="Reviewed Zenodo concept DOI (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-predecessor-doi",
+        help="Reviewed predecessor Zenodo version DOI (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-predecessor-tag",
+        help="Reviewed immutable predecessor GitHub tag (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-predecessor-archive-sha256",
+        "--expected-predecessor-sha256",
+        dest="expected_predecessor_archive_sha256",
+        help="Reviewed predecessor archive SHA-256 (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-predecessor-size-bytes",
+        "--expected-predecessor-archive-size-bytes",
+        dest="expected_predecessor_size_bytes",
+        type=int,
+        help="Reviewed predecessor archive size (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-builder-sha",
+        help="Reviewed accepted validator/builder SHA (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-validator-sha",
+        help="Reviewed accepted validator SHA (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-orchestration-sha",
+        help="Reviewed orchestration SHA (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--repo",
+        default="ll7/robot_sf_ll7",
+        help="GitHub repository in owner/name form (default: ll7/robot_sf_ll7).",
+    )
+    parser.add_argument("--output", type=Path, help="Optional path for the JSON audit receipt.")
+    parser.add_argument(
+        "--max-download-bytes",
+        type=int,
+        default=published_release_audit.DEFAULT_MAX_DOWNLOAD_BYTES,
+        help="Cumulative download limit (default: 2 GiB).",
+    )
+    parser.add_argument(
+        "--download-chunk-size",
+        type=int,
+        default=published_release_audit.DEFAULT_DOWNLOAD_CHUNK_SIZE,
+        help="Streaming chunk size in bytes (default: 1 MiB).",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=published_release_audit.DEFAULT_NETWORK_TIMEOUT,
+        help="Per-request timeout in seconds (default: 60).",
+    )
+
+
 def build_subparser(subparsers: Any) -> None:
     """Register the ``robot-sf release`` command tree."""
     release = subparsers.add_parser("release", help="Benchmark-data release operations.")
@@ -71,32 +142,7 @@ def build_subparser(subparsers: Any) -> None:
         "audit-published",
         help="Read-only credential-free audit of a public GitHub/Zenodo release.",
     )
-    audit.add_argument("--tag", required=True, help="Exact public GitHub release tag.")
-    audit.add_argument("--doi", required=True, help="Exact Zenodo version DOI.")
-    audit.add_argument(
-        "--repo",
-        default="ll7/robot_sf_ll7",
-        help="GitHub repository in owner/name form (default: ll7/robot_sf_ll7).",
-    )
-    audit.add_argument("--output", type=Path, help="Optional path for the JSON audit receipt.")
-    audit.add_argument(
-        "--max-download-bytes",
-        type=int,
-        default=published_release_audit.DEFAULT_MAX_DOWNLOAD_BYTES,
-        help="Cumulative download limit (default: 2 GiB).",
-    )
-    audit.add_argument(
-        "--download-chunk-size",
-        type=int,
-        default=published_release_audit.DEFAULT_DOWNLOAD_CHUNK_SIZE,
-        help="Streaming chunk size in bytes (default: 1 MiB).",
-    )
-    audit.add_argument(
-        "--timeout",
-        type=float,
-        default=published_release_audit.DEFAULT_NETWORK_TIMEOUT,
-        help="Per-request timeout in seconds (default: 60).",
-    )
+    _add_published_audit_arguments(audit)
     doctor = modes.add_parser("doctor", help="Fail-closed full benchmark-release diagnostics.")
     doctor.add_argument("--repo", type=Path, default=Path.cwd())
     doctor.add_argument(
@@ -262,6 +308,15 @@ def _handle_published_audit(args: argparse.Namespace) -> int:
         max_download_bytes=args.max_download_bytes,
         download_chunk_size=args.download_chunk_size,
         timeout=args.timeout,
+        expected_source_sha=args.expected_source_sha,
+        expected_concept_doi=args.expected_concept_doi,
+        expected_predecessor_doi=args.expected_predecessor_doi,
+        expected_predecessor_tag=args.expected_predecessor_tag,
+        expected_predecessor_archive_sha256=args.expected_predecessor_archive_sha256,
+        expected_predecessor_size_bytes=args.expected_predecessor_size_bytes,
+        expected_builder_sha=args.expected_builder_sha,
+        expected_validator_sha=args.expected_validator_sha,
+        expected_orchestration_sha=args.expected_orchestration_sha,
     )
     try:
         if args.output is not None:

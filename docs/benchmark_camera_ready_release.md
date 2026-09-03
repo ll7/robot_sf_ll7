@@ -320,13 +320,33 @@ release; retry it. A `pass` is a repeatable identity/download check, not full
 benchmark evidence and does not authorize publication. The command cannot
 reserve, upload, edit, publish, or rename a release.
 
-For a canonical `-erratum.1` release, the same command also resolves the
-predecessor tag and the sole Zenodo `isNewVersionOf` relation independently. It
-downloads the predecessor archive from both public channels, requires the same
-source commit, concept DOI, positive byte count, and SHA-256, and reopens the
-predecessor to recompute its scientific leaves. The successor's embedded
-receipt is evidence to check, not authority for the predecessor identity or
-contents.
+For a canonical `-erratum.1` release, the same command requires reviewed pins
+for the exact predecessor DOI, predecessor tag, predecessor archive digest and
+size, scientific source SHA, accepted builder/validator SHA, concept DOI, and
+orchestration SHA. The caller must provide these independently; the observed
+Zenodo `isNewVersionOf` relation and embedded successor receipt are evidence to
+check, not sources for expected values. For the September erratum, use:
+
+```bash
+uv run robot-sf release audit-published \
+  --tag paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1 \
+  --doi <successor-version-doi> \
+  --expected-source-sha 59577bad289dd692ba3580e1600c4a649ae27880 \
+  --expected-concept-doi 10.5281/zenodo.22227034 \
+  --expected-predecessor-doi 10.5281/zenodo.22227035 \
+  --expected-predecessor-tag paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880 \
+  --expected-predecessor-archive-sha256 e8f301c6f4eae16fdaf83f59b31bef060d84bf5a0e23dfdbf375f834b25d7b4b \
+  --expected-predecessor-size-bytes 54219004 \
+  --expected-builder-sha a4aaf1f06860cf632d0173c5a13e11ad855b6df2 \
+  --expected-validator-sha a4aaf1f06860cf632d0173c5a13e11ad855b6df2 \
+  --expected-orchestration-sha <reviewed-orchestration-sha>
+```
+
+The orchestration value must be the exact reviewed 40-character lowercase SHA;
+it is intentionally not inferred from public release data. The audit compares
+the pins with public records, release bodies, downloaded predecessor bytes,
+embedded receipt, custody receipt, and scientific snapshots before accepting
+the successor.
 
 1. Download the GitHub Release archive and its checksum/manifest assets. For a
    derived-metadata erratum, also require the detached

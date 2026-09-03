@@ -1158,7 +1158,7 @@ def _validate_published_erratum_verdict(receipt: Mapping[str, Any]) -> None:
         )
 
 
-def _published_erratum_contract(  # noqa: C901
+def _published_erratum_contract(  # noqa: C901, PLR0912, PLR0913
     receipt: Mapping[str, Any],
     *,
     receipt_path: Path,
@@ -1166,6 +1166,14 @@ def _published_erratum_contract(  # noqa: C901
     expected_tag: str,
     expected_doi: str,
     expected_source_sha: str | None,
+    expected_concept_doi: str | None = None,
+    expected_predecessor_doi: str | None = None,
+    expected_predecessor_tag: str | None = None,
+    expected_predecessor_archive_sha256: str | None = None,
+    expected_predecessor_archive_size_bytes: int | None = None,
+    expected_builder_sha: str | None = None,
+    expected_validator_sha: str | None = None,
+    expected_orchestration_sha: str | None = None,
 ) -> tuple[ErratumContract, Mapping[str, Any], Mapping[str, Any]]:
     """Validate receipt identities.
 
@@ -1191,6 +1199,10 @@ def _published_erratum_contract(  # noqa: C901
     concept_doi = _required_text(successor, "concept_doi", label="receipt.successor")
     if _DOI_RE.fullmatch(concept_doi) is None or concept_doi == expected_doi:
         raise ReleaseErratumError("published erratum receipt concept DOI is invalid")
+    if expected_concept_doi is not None and concept_doi != expected_concept_doi:
+        raise ReleaseErratumError(
+            "published erratum receipt concept DOI differs from the reviewed pin"
+        )
     metadata_digest = _required_text(
         successor, "metadata_sha256", label="receipt.successor"
     ).lower()
@@ -1213,6 +1225,24 @@ def _published_erratum_contract(  # noqa: C901
     if expected_tag != f"{predecessor_tag}-erratum.1":
         raise ReleaseErratumError("published erratum receipt tag lineage is incorrect")
 
+    expected_predecessor_values = (
+        ("version DOI", expected_predecessor_doi, predecessor_doi),
+        ("GitHub release tag", expected_predecessor_tag, predecessor_tag),
+        ("archive SHA-256", expected_predecessor_archive_sha256, predecessor_digest),
+        ("archive size", expected_predecessor_archive_size_bytes, predecessor_size),
+    )
+    if any(expected is not None for _, expected, _ in expected_predecessor_values) and not all(
+        expected is not None for _, expected, _ in expected_predecessor_values
+    ):
+        raise ReleaseErratumError(
+            "published erratum receipt predecessor reviewed pin is incomplete"
+        )
+    for label, expected, observed in expected_predecessor_values:
+        if expected is not None and expected != observed:
+            raise ReleaseErratumError(
+                f"published erratum receipt predecessor {label} differs from the reviewed pin"
+            )
+
     source_sha = _required_text(scientific, "source_sha", label="receipt.scientific_identity")
     builder_sha = _required_text(derivation, "builder_sha", label="receipt.derivation")
     validator_sha = _required_text(derivation, "validator_sha", label="receipt.derivation")
@@ -1232,6 +1262,22 @@ def _published_erratum_contract(  # noqa: C901
         raise ReleaseErratumError(
             "published erratum receipt source differs from the GitHub tag target"
         )
+    expected_implementation_values = (
+        ("builder", expected_builder_sha, builder_sha),
+        ("validator", expected_validator_sha, validator_sha),
+        ("orchestration", expected_orchestration_sha, orchestration_sha),
+    )
+    if any(expected is not None for _, expected, _ in expected_implementation_values) and not all(
+        expected is not None for _, expected, _ in expected_implementation_values
+    ):
+        raise ReleaseErratumError(
+            "published erratum receipt implementation reviewed pin is incomplete"
+        )
+    for label, expected, observed in expected_implementation_values:
+        if expected is not None and expected != observed:
+            raise ReleaseErratumError(
+                f"published erratum receipt {label} SHA differs from the reviewed pin"
+            )
     if derivation.get("simulation_rerun") is not False:
         raise ReleaseErratumError("published erratum receipt claims a simulation rerun")
     contract = ErratumContract(
@@ -1811,7 +1857,7 @@ def _validate_published_release_documents(
         raise ReleaseErratumError("published derived revalidation receipt identity is stale")
 
 
-def validate_erratum_receipt_against_campaign(
+def validate_erratum_receipt_against_campaign(  # noqa: PLR0913
     receipt_path: Path,
     *,
     campaign_root: Path,
@@ -1821,6 +1867,14 @@ def validate_erratum_receipt_against_campaign(
     expected_tag: str,
     expected_doi: str,
     expected_source_sha: str | None = None,
+    expected_concept_doi: str | None = None,
+    expected_predecessor_doi: str | None = None,
+    expected_predecessor_tag: str | None = None,
+    expected_predecessor_archive_sha256: str | None = None,
+    expected_predecessor_archive_size_bytes: int | None = None,
+    expected_builder_sha: str | None = None,
+    expected_validator_sha: str | None = None,
+    expected_orchestration_sha: str | None = None,
 ) -> dict[str, Any]:
     """Validate an embedded receipt and recompute both scientific snapshots.
 
@@ -1859,6 +1913,14 @@ def validate_erratum_receipt_against_campaign(
         expected_tag=expected_tag,
         expected_doi=expected_doi,
         expected_source_sha=expected_source_sha,
+        expected_concept_doi=expected_concept_doi,
+        expected_predecessor_doi=expected_predecessor_doi,
+        expected_predecessor_tag=expected_predecessor_tag,
+        expected_predecessor_archive_sha256=expected_predecessor_archive_sha256,
+        expected_predecessor_archive_size_bytes=expected_predecessor_archive_size_bytes,
+        expected_builder_sha=expected_builder_sha,
+        expected_validator_sha=expected_validator_sha,
+        expected_orchestration_sha=expected_orchestration_sha,
     )
     evidence = _validate_predecessor_evidence(predecessor_evidence, contract=contract)
     seen_aliases: set[str] = set()

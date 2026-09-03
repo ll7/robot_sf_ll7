@@ -256,12 +256,14 @@ def _repo_root(path: Path) -> Path:
 
 
 def _changed_modules(repo_root: Path, base_sha: str, head_sha: str) -> list[str]:
+    """Return source modules introduced or changed on the head side of the merge base."""
+
     output = _git(
         repo_root,
         "diff",
         "--name-only",
         "--diff-filter=ACMRTUXB",
-        f"{base_sha}..{head_sha}",
+        f"{base_sha}...{head_sha}",
         "--",
         SOURCE_ROOT,
     )

@@ -381,7 +381,12 @@ def _prepare_review_barriers(
         for remote in remotes
     }
     for remote in remotes:
-        _worktree_set(identity, f"remote.{remote}.pushurl", expected_url)
+        # An empty higher-priority value resets inherited common-config
+        # pushurl entries. Without it, Git pushes to every effective push URL
+        # and may update the real destination before the inert one fails.
+        pushurl_key = f"remote.{remote}.pushurl"
+        _worktree_set(identity, pushurl_key, "")
+        _worktree_add(identity, pushurl_key, expected_url)
         _worktree_set(identity, f"remote.{remote}.receivepack", blocked_receivepack)
         for url in configured_urls[remote]:
             _worktree_add(identity, rule_key, url)

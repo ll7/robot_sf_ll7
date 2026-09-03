@@ -150,6 +150,15 @@ def test_create_review_worktree_blocks_refspecs_and_no_verify(tmp_path: Path) ->
         )
         configured_again = _configure(worktree, "review")
         assert configured_again.returncode == 0, configured_again.stderr
+        effective_pushurls = _git(
+            worktree,
+            "remote",
+            "get-url",
+            "--all",
+            "--push",
+            "origin",
+        ).stdout.splitlines()
+        assert str(remote) not in effective_pushurls
         blocked_fetch = _git(worktree, "fetch", "origin", "main", check=False)
         assert blocked_fetch.returncode != 0, blocked_fetch.stdout + blocked_fetch.stderr
         before = _remote_refs(worktree)

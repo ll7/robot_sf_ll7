@@ -231,7 +231,11 @@ class GhProjectTimeoutError(RuntimeError):
         self.phase = phase
         self.budget_exhausted = budget_exhausted
         self.attempted_rows: list[dict[str, Any]] = []
+        self.attempted_field_names: list[str] = []
+        self.created_field_names: list[str] = []
+        self.completed_write_count = 0
         self.writes_performed_count = 0
+        self.write_ambiguity: bool | None = None
         if budget_exhausted:
             what = (
                 "gh operation budget exhausted after "
@@ -247,7 +251,7 @@ class GhProjectTimeoutError(RuntimeError):
             )
         super().__init__(
             what
-            + ". No score write is claimed for this command; a timed-out write may still "
+            + ". No write is claimed for this command; a timed-out write may still "
             + "have landed server-side, so retry only after re-reading live state."
         )
 
@@ -1199,15 +1203,54 @@ def ensure_required_fields(
     client.current_phase = "read"
     fields = field_map(client.field_list(owner=owner, project_number=project_number))
     created_missing_field = False
+    attempted_field_names: list[str] = []
+    created_field_names: list[str] = []
     for name in REQUIRED_NUMBER_FIELDS:
         if name not in fields:
+            attempted_field_names.append(name)
             client.current_phase = "write"
-            client.ensure_number_field(owner=owner, project_number=project_number, name=name)
+            try:
+                client.ensure_number_field(owner=owner, project_number=project_number, name=name)
+            except GhProjectTimeoutError as exc:
+                _record_field_creation_progress(
+                    exc,
+                    attempted_field_names=attempted_field_names,
+                    created_field_names=created_field_names,
+                    write_ambiguity=not exc.budget_exhausted,
+                )
+                raise
+            created_field_names.append(name)
             created_missing_field = True
     if created_missing_field:
         client.current_phase = "read"
-        return field_map(client.field_list(owner=owner, project_number=project_number))
+        try:
+            return field_map(client.field_list(owner=owner, project_number=project_number))
+        except GhProjectTimeoutError as exc:
+            # The schema mutations completed before this read are still part of the
+            # timeout outcome, even though the final field-list is a read operation.
+            _record_field_creation_progress(
+                exc,
+                attempted_field_names=attempted_field_names,
+                created_field_names=created_field_names,
+                write_ambiguity=False,
+            )
+            raise
     return fields
+
+
+def _record_field_creation_progress(
+    error: GhProjectTimeoutError,
+    *,
+    attempted_field_names: Sequence[str],
+    created_field_names: Sequence[str],
+    write_ambiguity: bool,
+) -> None:
+    """Attach schema-mutation progress to a timeout from field creation or re-read."""
+    error.attempted_field_names = list(attempted_field_names)
+    error.created_field_names = list(created_field_names)
+    error.completed_write_count = len(created_field_names)
+    error.writes_performed_count = error.completed_write_count
+    error.write_ambiguity = write_ambiguity
 
 
 def build_previews(
@@ -1724,13 +1767,16 @@ def _apply_score_updates(
         # A timed-out write must reach the structured top-level timeout summary with its
         # command, budget, and phase instead of being folded into the generic apply failure.
         exc.attempted_rows = [dict(row) for row in attempted_rows]
+        exc.completed_write_count = writes_performed
         exc.writes_performed_count = writes_performed
+        exc.write_ambiguity = not exc.budget_exhausted
         if plan is not None:
             plan["status"] = "timeout_blocked"
             plan["attempted_rows"] = [dict(row) for row in attempted_rows]
+            plan["completed_write_count"] = writes_performed
             plan["writes_performed_count"] = writes_performed
             plan["writes_performed"] = writes_performed > 0
-            plan["write_ambiguity"] = not exc.budget_exhausted
+            plan["write_ambiguity"] = exc.write_ambiguity
         raise
     except (RuntimeError, ValueError, TypeError) as exc:
         # A rejected write (for example GitHub's numeric-shape enforcement) must
@@ -1971,9 +2017,16 @@ def _blocked_project_timeout_payload(
 ) -> dict[str, Any]:
     """Build a resumable no-write payload for a `gh` subprocess timeout (issue #8263)."""
     write_phase = error.phase == "write"
-    write_ambiguity = write_phase and not error.budget_exhausted
+    write_ambiguity = (
+        error.write_ambiguity
+        if error.write_ambiguity is not None
+        else write_phase and not error.budget_exhausted
+    )
     attempted_rows = [dict(row) for row in error.attempted_rows]
-    writes_performed_count = error.writes_performed_count
+    attempted_field_names = list(error.attempted_field_names)
+    created_field_names = list(error.created_field_names)
+    completed_write_count = error.completed_write_count or error.writes_performed_count
+    writes_performed_count = completed_write_count
     if error.budget_exhausted:
         headline = (
             "Project #5 priority sync exhausted its bounded operation budget "
@@ -1999,6 +2052,10 @@ def _blocked_project_timeout_payload(
         "items": [],
         "non_fatal": True,
         "attempted_rows": attempted_rows,
+        "attempted_field_names": attempted_field_names,
+        "created_field_names": created_field_names,
+        "completed_field_names": created_field_names,
+        "completed_write_count": completed_write_count,
         "writes_performed_count": writes_performed_count,
         "writes_performed": writes_performed_count > 0,
         "write_ambiguity": write_ambiguity,
@@ -2006,7 +2063,11 @@ def _blocked_project_timeout_payload(
         "message": (
             headline
             + (
-                f" {writes_performed_count} score write(s) completed before this timeout."
+                f" {writes_performed_count} field-creation write(s) completed before this timeout."
+                if created_field_names
+                else " No field-creation write is claimed to have completed before this timeout."
+                if attempted_field_names
+                else f" {writes_performed_count} score write(s) completed before this timeout."
                 if writes_performed_count
                 else " No score write is claimed to have completed before this timeout."
             )

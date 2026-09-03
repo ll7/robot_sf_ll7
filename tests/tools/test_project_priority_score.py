@@ -1442,7 +1442,7 @@ def test_gh_project_client_caps_command_at_remaining_budget(
 def test_ensure_required_fields_marks_field_creation_as_write(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A timeout while creating a missing schema field is reported as a write."""
+    """A field-create timeout reports the attempted field and ambiguous outcome."""
 
     def _run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
         command = list(args[0])  # type: ignore[arg-type]
@@ -1463,7 +1463,146 @@ def test_ensure_required_fields_marks_field_creation_as_write(
             project_number=5,
         )
 
-    assert exc_info.value.phase == "write"
+    error = exc_info.value
+    assert error.phase == "write"
+    assert error.attempted_field_names == [REQUIRED_NUMBER_FIELDS[0]]
+    assert error.created_field_names == []
+    assert error.completed_write_count == 0
+    assert error.writes_performed_count == 0
+    assert error.write_ambiguity is True
+    payload = project_priority_score._blocked_project_timeout_payload(
+        owner="ll7", project_number=5, error=error
+    )
+    assert payload["attempted_field_names"] == [REQUIRED_NUMBER_FIELDS[0]]
+    assert payload["created_field_names"] == []
+    assert payload["completed_field_names"] == []
+    assert payload["completed_write_count"] == 0
+    assert payload["writes_performed"] is False
+    assert payload["write_ambiguity"] is True
+
+
+def test_ensure_required_fields_reports_partial_field_creation_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A later field-create timeout retains earlier schema mutations and ambiguity."""
+
+    def _run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        command = list(args[0])  # type: ignore[arg-type]
+        if command[1:3] == ["project", "field-list"]:
+            return subprocess.CompletedProcess(
+                args=command,
+                returncode=0,
+                stdout=json.dumps({"fields": []}),
+            )
+        field_name = command[command.index("--name") + 1]
+        if field_name == REQUIRED_NUMBER_FIELDS[1]:
+            raise subprocess.TimeoutExpired(cmd=command, timeout=kwargs["timeout"])
+        return subprocess.CompletedProcess(args=command, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _run)
+
+    with pytest.raises(GhProjectTimeoutError) as exc_info:
+        project_priority_score.ensure_required_fields(
+            GhProjectClient(timeout_seconds=5.0),
+            owner="ll7",
+            project_number=5,
+        )
+
+    error = exc_info.value
+    assert error.phase == "write"
+    assert error.attempted_field_names == list(REQUIRED_NUMBER_FIELDS[:2])
+    assert error.created_field_names == [REQUIRED_NUMBER_FIELDS[0]]
+    assert error.completed_write_count == 1
+    assert error.writes_performed_count == 1
+    assert error.write_ambiguity is True
+    payload = project_priority_score._blocked_project_timeout_payload(
+        owner="ll7", project_number=5, error=error
+    )
+    assert payload["completed_field_names"] == [REQUIRED_NUMBER_FIELDS[0]]
+    assert payload["completed_write_count"] == 1
+    assert payload["writes_performed"] is True
+    assert payload["write_ambiguity"] is True
+
+
+def test_ensure_required_fields_reports_completed_fields_when_final_read_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A post-creation read timeout retains completed schema writes without ambiguity."""
+
+    field_list_calls = 0
+
+    def _run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal field_list_calls
+        command = list(args[0])  # type: ignore[arg-type]
+        if command[1:3] == ["project", "field-list"]:
+            field_list_calls += 1
+            if field_list_calls == 2:
+                raise subprocess.TimeoutExpired(cmd=command, timeout=kwargs["timeout"])
+            return subprocess.CompletedProcess(
+                args=command,
+                returncode=0,
+                stdout=json.dumps({"fields": []}),
+            )
+        return subprocess.CompletedProcess(args=command, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", _run)
+
+    with pytest.raises(GhProjectTimeoutError) as exc_info:
+        project_priority_score.ensure_required_fields(
+            GhProjectClient(timeout_seconds=5.0),
+            owner="ll7",
+            project_number=5,
+        )
+
+    error = exc_info.value
+    assert error.phase == "read"
+    assert error.attempted_field_names == list(REQUIRED_NUMBER_FIELDS)
+    assert error.created_field_names == list(REQUIRED_NUMBER_FIELDS)
+    assert error.completed_write_count == len(REQUIRED_NUMBER_FIELDS)
+    assert error.writes_performed_count == len(REQUIRED_NUMBER_FIELDS)
+    assert error.write_ambiguity is False
+    payload = project_priority_score._blocked_project_timeout_payload(
+        owner="ll7", project_number=5, error=error
+    )
+    assert payload["writes_performed"] is True
+    assert payload["completed_write_count"] == len(REQUIRED_NUMBER_FIELDS)
+    assert payload["write_ambiguity"] is False
+
+
+def test_ensure_required_fields_reports_unstarted_field_creation_budget_breach() -> None:
+    """A field-create budget breach reports a planned field without ambiguity."""
+
+    client = GhProjectClient(timeout_seconds=5.0, total_budget_seconds=60.0)
+    client.field_list = lambda **kwargs: []
+
+    def _budget_breach(**kwargs: object) -> None:
+        raise GhProjectTimeoutError(
+            command=("gh", "project", "field-create", "5"),
+            timeout_seconds=60.0,
+            phase=client.current_phase,
+            budget_exhausted=True,
+        )
+
+    client.ensure_number_field = _budget_breach
+
+    with pytest.raises(GhProjectTimeoutError) as exc_info:
+        project_priority_score.ensure_required_fields(
+            client,
+            owner="ll7",
+            project_number=5,
+        )
+
+    error = exc_info.value
+    assert error.attempted_field_names == [REQUIRED_NUMBER_FIELDS[0]]
+    assert error.created_field_names == []
+    assert error.completed_write_count == 0
+    assert error.write_ambiguity is False
+    payload = project_priority_score._blocked_project_timeout_payload(
+        owner="ll7", project_number=5, error=error
+    )
+    assert payload["writes_performed"] is False
+    assert payload["completed_write_count"] == 0
+    assert payload["write_ambiguity"] is False
 
 
 def test_main_only_empty_budget_breach_reports_unstarted_command(

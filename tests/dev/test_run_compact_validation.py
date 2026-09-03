@@ -14,6 +14,19 @@ import pytest
 
 from scripts.dev.run_compact_validation import INTERRUPTED_EXIT_CODE, main, run_compact_validation
 
+_RUNNER_WITH_DEFAULT_SIGINT = """
+import signal
+import sys
+
+# Pytest-xdist workers may inherit an ignored SIGINT disposition.  Reset the
+# test runner so this regression exercises run_compact_validation's handler.
+signal.signal(signal.SIGINT, signal.default_int_handler)
+if hasattr(signal, "pthread_sigmask"):
+    signal.pthread_sigmask(signal.SIG_UNBLOCK, (signal.SIGINT,))
+from scripts.dev.run_compact_validation import main
+raise SystemExit(main(sys.argv[1:]))
+"""
+
 
 def test_run_compact_validation_bounds_failure_output(tmp_path: Path, capsys) -> None:
     """Many failure lines should produce a bounded parent-thread summary."""
@@ -236,8 +249,7 @@ def test_run_compact_validation_interrupt_terminates_process_group(tmp_path: Pat
         [
             sys.executable,
             "-c",
-            "import sys; from scripts.dev.run_compact_validation import main; "
-            "raise SystemExit(main(sys.argv[1:]))",
+            _RUNNER_WITH_DEFAULT_SIGINT,
             "--artifact-dir",
             str(artifact_dir),
             "--",
@@ -291,8 +303,7 @@ def test_run_compact_validation_interrupt_kills_sigterm_ignoring_descendant(
         [
             sys.executable,
             "-c",
-            "import sys; from scripts.dev.run_compact_validation import main; "
-            "raise SystemExit(main(sys.argv[1:]))",
+            _RUNNER_WITH_DEFAULT_SIGINT,
             "--artifact-dir",
             str(artifact_dir),
             "--",

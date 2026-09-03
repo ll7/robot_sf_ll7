@@ -47,10 +47,12 @@ def test_cold_current_aliases_accept_split_identity_and_reject_incomplete_shapes
     """Cold audit accepts canonical nesting while retaining complete identity gates."""
     source = "59577bad289dd692ba3580e1600c4a649ae27880"
     tag = f"paper-matrix-v2-h600-s30-2026-09-{source}-erratum.1"
+    scientific_release_id = tag.removesuffix("-erratum.1")
     doi = "10.5281/zenodo.22265925"
     concept = "10.5281/zenodo.22227034"
     split = {
         "release_tag": tag,
+        "release_id": scientific_release_id,
         "provenance": {"version_doi": doi, "concept_doi": concept},
     }
     published_audit_module._assert_cold_current_aliases(
@@ -61,10 +63,20 @@ def test_cold_current_aliases_accept_split_identity_and_reject_incomplete_shapes
         concept_doi=concept,
         required=True,
         source_sha=source,
+        scientific_release_id=scientific_release_id,
     )
 
     invalid = (
         ({"release_tag": tag, "provenance": "bad"}, "object"),
+        (
+            {
+                "release_tag": tag,
+                "release_id": tag,
+                "version_doi": doi,
+                "concept_doi": concept,
+            },
+            "scientific release-ID alias",
+        ),
         ({"provenance": {"version_doi": doi, "concept_doi": concept}}, "release tag"),
         ({"release_tag": tag, "provenance": {"concept_doi": concept}}, "version DOI"),
         ({"release_tag": tag, "provenance": {"version_doi": doi}}, "concept DOI"),
@@ -101,6 +113,7 @@ def test_cold_current_aliases_accept_split_identity_and_reject_incomplete_shapes
                 concept_doi=concept,
                 required=True,
                 source_sha=source,
+                scientific_release_id=scientific_release_id,
             )
 
 
@@ -108,10 +121,12 @@ def test_cold_predecessor_aliases_accept_split_identity_and_reject_conflicts() -
     """Cold audit preserves split execution provenance and rejects ambiguity."""
     source = "5" * 40
     tag = f"paper-matrix-v2-h600-s30-2026-09-{source}"
+    scientific_release_id = "paper_matrix_v2_h600_s30_fixture"
     doi = "10.5281/zenodo.22227035"
     concept = "10.5281/zenodo.22227034"
     split = {
         "release_tag": tag,
+        "release_id": scientific_release_id,
         "source_sha": source,
         "provenance": {"version_doi": doi, "concept_doi": concept},
     }
@@ -122,11 +137,21 @@ def test_cold_predecessor_aliases_accept_split_identity_and_reject_conflicts() -
         predecessor_doi=doi,
         concept_doi=concept,
         source_sha=source,
+        scientific_release_id=scientific_release_id,
         require_concept=True,
     )
 
     invalid = (
         ({"release_tag": tag, "provenance": "bad"}, "object"),
+        (
+            {
+                "release_tag": tag,
+                "release_id": tag,
+                "version_doi": doi,
+                "concept_doi": concept,
+            },
+            "scientific release-ID alias",
+        ),
         ({"provenance": {"version_doi": doi, "concept_doi": concept}}, "tag alias"),
         ({"release_tag": tag, "provenance": {"concept_doi": concept}}, "DOI alias"),
         ({"release_tag": tag, "provenance": {"version_doi": doi}}, "concept DOI"),
@@ -158,6 +183,7 @@ def test_cold_predecessor_aliases_accept_split_identity_and_reject_conflicts() -
                 predecessor_doi=doi,
                 concept_doi=concept,
                 source_sha=source,
+                scientific_release_id=scientific_release_id,
                 require_concept=True,
             )
 
@@ -174,6 +200,7 @@ def test_cold_publication_document_rejects_malformed_known_identity_mappings() -
         "predecessor_tag": predecessor_tag,
         "concept_doi": "10.5281/zenodo.22227034",
         "source_sha": source,
+        "scientific_release_id": "paper_matrix_v2_h600_s30_scientific_fixture",
     }
     for key in (
         "publication",
@@ -377,6 +404,7 @@ def _full_erratum_payload(
     successor_doi = "10.5281/zenodo.8"
     predecessor_tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}"
     successor_tag = f"{predecessor_tag}-erratum.1"
+    scientific_release_id = "paper_matrix_v2_h600_s30_scientific_fixture"
     campaign = tmp_path / "cold-campaign"
     episodes = campaign / "runs/orca__differential_drive/episodes.jsonl"
     row = {
@@ -433,6 +461,20 @@ def _full_erratum_payload(
             episodes,
             arcname="fixture_bundle/payload/runs/orca__differential_drive/episodes.jsonl",
         )
+        predecessor_manifest = json.dumps(
+            {
+                "release_id": scientific_release_id,
+                "release_tag": predecessor_tag,
+                "source_sha": source_sha,
+                "provenance": {"source_sha": source_sha, "source_commit": source_sha},
+            },
+            sort_keys=True,
+        ).encode()
+        manifest_info = tarfile.TarInfo(
+            "fixture_bundle/payload/release/release_manifest.resolved.json"
+        )
+        manifest_info.size = len(predecessor_manifest)
+        archive.addfile(manifest_info, io.BytesIO(predecessor_manifest))
     contract = ErratumContract(
         correction_id="fixture-derived-metadata-erratum.1",
         predecessor_version_doi=predecessor_doi,
@@ -440,6 +482,7 @@ def _full_erratum_payload(
         predecessor_archive_size_bytes=predecessor.stat().st_size,
         predecessor_github_release_tag=predecessor_tag,
         source_sha=source_sha,
+        scientific_release_id=scientific_release_id,
         planner_arms=1,
         scenario_count=1,
         seed_count=1,
@@ -465,7 +508,6 @@ def _full_erratum_payload(
     }
     publication = {
         "release_tag": successor_tag,
-        "release_id": successor_tag,
         "doi": successor_doi,
         "concept_doi": concept_doi,
         "version_doi": successor_doi,
@@ -476,7 +518,6 @@ def _full_erratum_payload(
     }
     provenance = {
         "release_tag": successor_tag,
-        "release_id": successor_tag,
         "doi": successor_doi,
         "version_doi": successor_doi,
         "concept_doi": concept_doi,
@@ -487,7 +528,7 @@ def _full_erratum_payload(
     }
     current = {
         "release_tag": successor_tag,
-        "release_id": successor_tag,
+        "release_id": contract.scientific_release_id,
         "doi": successor_doi,
         "version_doi": successor_doi,
         "concept_doi": concept_doi,
@@ -497,7 +538,7 @@ def _full_erratum_payload(
     }
     execution = {
         "release_tag": predecessor_tag,
-        "release_id": predecessor_tag,
+        "release_id": contract.scientific_release_id,
         "doi": predecessor_doi,
         "version_doi": predecessor_doi,
         "concept_doi": concept_doi,
@@ -994,7 +1035,9 @@ def test_erratum_audit_rejects_tampered_publication_channel(
     assert any(expected in problem for problem in result["problems"])
 
 
-@pytest.mark.parametrize("tamper", ["root_tag", "nested_doi", "publication_null"])
+@pytest.mark.parametrize(
+    "tamper", ["root_tag", "root_release_id", "nested_doi", "publication_null"]
+)
 def test_erratum_audit_rejects_stale_optional_publication_document(
     tmp_path: Path, tamper: str
 ) -> None:
@@ -1007,6 +1050,8 @@ def test_erratum_audit_rejects_stale_optional_publication_document(
     document = json.loads(payload_files["release/release_manifest.resolved.json"])
     if tamper == "root_tag":
         document["release_tag"] = predecessor_tag
+    elif tamper == "root_release_id":
+        document["release_id"] = tag
     elif tamper == "nested_doi":
         document["publication"]["version_doi"] = predecessor_doi
     else:
@@ -1037,6 +1082,7 @@ def test_erratum_audit_rejects_stale_optional_publication_document(
     assert result["status"] == "fail"
     expected = {
         "root_tag": "stale release-tag alias",
+        "root_release_id": "stale scientific release-ID alias",
         "nested_doi": "stale version-DOI alias",
         "publication_null": "publication must be an object",
     }[tamper]
@@ -1084,6 +1130,7 @@ def test_erratum_audit_requires_and_routes_embedded_correction_receipt(
         "successor": {"version_doi": doi, "github_release_tag": tag},
         "predecessor_version_doi": "10.5281/zenodo.7",
         "concept_doi": "10.5281/zenodo.6",
+        "scientific_identity": {"release_id": f"paper-matrix-v2-h600-s30-2026-09-{source_sha}"},
         "scientific_equality": {"status": "identical"},
     }
     receipt_bytes = json.dumps(correction_receipt, sort_keys=True).encode()

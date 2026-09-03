@@ -265,11 +265,27 @@ uv run robot-sf release zenodo verify \
   --metadata "$ZENODO_METADATA"
 ```
 
+For the September 2026 derived-metadata successor, keep the generic v0.2
+manifest above out of the post-reservation commands and bind the reserved DOI
+through the checked-in erratum contract instead:
+
+```bash
+ZENODO_MANIFEST=configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json
+ZENODO_METADATA=configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1_zenodo_metadata.json
+```
+
+That contract preserves the scientific source identity while binding the new
+erratum tag and successor version DOI. The CLI validates it before constructing
+an authenticated session. The successor bundle keeps the predecessor campaign's
+exact `release_id`; only `release_tag`, DOI, URL, and metadata coordinates move
+to the new publication identity.
+
 `reserve` is the explicit pre-reservation step: it may omit `--manifest` because
 Zenodo assigns the version DOI in its response. Freeze the returned concept and
-version identity in the reviewed release manifest before continuing. The CLI
-requires that manifest for `recover`, `upload`, `verify`, and `publish`, and
-rejects an omitted binding before constructing an authenticated HTTP session.
+version identity in the reviewed release manifest or erratum contract before
+continuing. The CLI requires that binding for `recover`, `upload`, `verify`,
+and `publish`, and rejects an omission before constructing an authenticated
+HTTP session.
 The same pre-reservation exception applies to `new-version`: create the linked
 successor draft without `--manifest` when its version DOI is not yet known,
 then freeze that DOI and use the manifest-bound post-reservation commands above.

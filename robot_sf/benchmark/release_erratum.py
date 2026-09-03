@@ -43,10 +43,14 @@ _DOI_RE = re.compile(r"^10\.5281/zenodo\.([1-9][0-9]*)$")
 _TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]+$")
 _ARCHIVE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _EPISODE_MEMBER_RE = re.compile(r"^[^/]+/payload/runs/([^/]+)/episodes\.jsonl$")
+_RESOLVED_MANIFEST_MEMBER_RE = re.compile(
+    r"^[^/]+/payload/release/release_manifest\.resolved\.json$"
+)
 _MAX_ARCHIVE_MEMBERS = 20_000
 _MAX_EXPANDED_BYTES = 4 * 1024**3
 _MAX_EPISODE_FILE_BYTES = 256 * 1024**2
 _MAX_EPISODE_ROW_BYTES = 16 * 1024**2
+_MAX_RESOLVED_MANIFEST_BYTES = 16 * 1024**2
 _MAX_IDENTITY_TRAVERSAL_DEPTH = 128
 _MAX_IDENTITY_TRAVERSAL_NODES = 100_000
 _SCIENTIFIC_ROW_STATUSES = frozenset({"success", "collision", "failure"})
@@ -74,6 +78,7 @@ class ErratumContract:
     predecessor_archive_size_bytes: int
     predecessor_github_release_tag: str
     source_sha: str
+    scientific_release_id: str
     planner_arms: int
     scenario_count: int
     seed_count: int
@@ -236,6 +241,7 @@ def _validate_contract_dois_and_tags(contract: ErratumContract) -> None:
         )
     predecessor_tag = contract.predecessor_github_release_tag
     successor_tag = contract.successor_github_release_tag
+    scientific_release_id = contract.scientific_release_id
     if not contract.correction_id.strip():
         raise ReleaseErratumError("erratum correction_id must be non-empty")
     if (
@@ -243,8 +249,10 @@ def _validate_contract_dois_and_tags(contract: ErratumContract) -> None:
         or not isinstance(successor_tag, str)
         or not _TAG_RE.fullmatch(predecessor_tag)
         or not _TAG_RE.fullmatch(successor_tag)
+        or not isinstance(scientific_release_id, str)
+        or not _TAG_RE.fullmatch(scientific_release_id)
     ):
-        raise ReleaseErratumError("erratum GitHub release tags are invalid")
+        raise ReleaseErratumError("erratum release tags or scientific release ID are invalid")
     problems = check_canonical_source_tag(predecessor_tag, contract.source_sha)
     if problems or re.search(r"-erratum\.[1-9][0-9]*$", predecessor_tag):
         raise ReleaseErratumError(
@@ -252,6 +260,8 @@ def _validate_contract_dois_and_tags(contract: ErratumContract) -> None:
         )
     if successor_tag != f"{predecessor_tag}-erratum.1":
         raise ReleaseErratumError("successor tag must be the predecessor tag plus -erratum.1")
+    if scientific_release_id == successor_tag:
+        raise ReleaseErratumError("scientific release ID must not use the erratum publication tag")
     if check_canonical_source_tag(successor_tag, contract.source_sha):
         raise ReleaseErratumError("successor tag does not carry the exact scientific source SHA")
 
@@ -607,6 +617,7 @@ def load_erratum_contract(  # noqa: C901, PLR0912, PLR0915
     predecessor_tag = _required_text(supersedes, "github_release_tag", label="supersedes")
     predecessor_digest = _required_text(supersedes, "archive_sha256", label="supersedes").lower()
     source_sha = _required_text(scientific, "source_sha", label="scientific_identity").lower()
+    scientific_release_id = _required_text(scientific, "release_id", label="scientific_identity")
     builder_sha = _required_text(derivation, "builder_sha", label="derivation").lower()
     validator_sha = _required_text(derivation, "validator_sha", label="derivation").lower()
     orchestration_sha = _required_text(derivation, "orchestration_sha", label="derivation").lower()
@@ -687,6 +698,7 @@ def load_erratum_contract(  # noqa: C901, PLR0912, PLR0915
         ),
         predecessor_github_release_tag=predecessor_tag,
         source_sha=source_sha,
+        scientific_release_id=scientific_release_id,
         planner_arms=planner_arms,
         scenario_count=scenario_count,
         seed_count=seed_count,
@@ -712,6 +724,53 @@ def _validate_archive_member(member: tarfile.TarInfo) -> None:
         raise ReleaseErratumError("predecessor archive contains a non-regular member")
     if member.size < 0:
         raise ReleaseErratumError("predecessor archive contains a negative member size")
+
+
+def _validate_predecessor_release_manifest(  # noqa: C901
+    bundle: tarfile.TarFile,
+    member: tarfile.TarInfo,
+    *,
+    contract: ErratumContract,
+) -> None:
+    """Bind the scientific campaign ID to the checksum-frozen predecessor."""
+    if not member.isfile() or member.size > _MAX_RESOLVED_MANIFEST_BYTES:
+        raise ReleaseErratumError("predecessor resolved manifest member is invalid")
+    stream = bundle.extractfile(member)
+    if stream is None:
+        raise ReleaseErratumError("predecessor resolved manifest member is unreadable")
+    try:
+        raw = stream.read(_MAX_RESOLVED_MANIFEST_BYTES + 1)
+    except OSError as exc:
+        raise ReleaseErratumError("predecessor resolved manifest member is unreadable") from exc
+    finally:
+        stream.close()
+    if len(raw) != member.size or len(raw) > _MAX_RESOLVED_MANIFEST_BYTES:
+        raise ReleaseErratumError("predecessor resolved manifest member is incomplete")
+    try:
+        payload = json.loads(raw)
+    except (UnicodeError, ValueError, RecursionError) as exc:
+        raise ReleaseErratumError("predecessor resolved manifest is not readable JSON") from exc
+    manifest = _require_mapping(payload, label="predecessor resolved manifest")
+    if manifest.get("release_id") != contract.scientific_release_id:
+        raise ReleaseErratumError(
+            "predecessor resolved manifest release_id differs from the scientific release ID"
+        )
+    if manifest.get("release_tag") != contract.predecessor_github_release_tag:
+        raise ReleaseErratumError(
+            "predecessor resolved manifest release_tag differs from the predecessor tag"
+        )
+    if manifest.get("source_sha") != contract.source_sha:
+        raise ReleaseErratumError(
+            "predecessor resolved manifest source_sha differs from the frozen source"
+        )
+    provenance = _require_mapping(
+        manifest.get("provenance"), label="predecessor resolved manifest.provenance"
+    )
+    for key in ("source_sha", "source_commit"):
+        if provenance.get(key) != contract.source_sha:
+            raise ReleaseErratumError(
+                f"predecessor resolved manifest provenance.{key} differs from the frozen source"
+            )
 
 
 def _read_episode_rows(
@@ -898,7 +957,7 @@ def snapshot_campaign(campaign_root: Path, *, contract: ErratumContract) -> Scie
             stream.close()
 
 
-def snapshot_predecessor_archive(  # noqa: C901, PLR0912
+def snapshot_predecessor_archive(  # noqa: C901, PLR0912, PLR0915
     archive_path: Path, *, contract: ErratumContract
 ) -> ScientificSnapshot:
     """Verify the immutable predecessor archive and compute its scientific leaves.
@@ -921,6 +980,7 @@ def snapshot_predecessor_archive(  # noqa: C901, PLR0912
             raise ReleaseErratumError("predecessor archive member count is invalid")
         expanded_bytes = 0
         episode_members: dict[str, tarfile.TarInfo] = {}
+        resolved_manifest_member: tarfile.TarInfo | None = None
         member_names: set[str] = set()
         roots: set[str] = set()
         for member in members:
@@ -934,6 +994,7 @@ def snapshot_predecessor_archive(  # noqa: C901, PLR0912
             parts = PurePosixPath(member.name).parts
             roots.add(parts[0])
             match = _EPISODE_MEMBER_RE.fullmatch(member.name)
+            manifest_match = _RESOLVED_MANIFEST_MEMBER_RE.fullmatch(member.name)
             if PurePosixPath(member.name).name == "episodes.jsonl" and match is None:
                 raise ReleaseErratumError(
                     "predecessor archive contains episode files outside payload/runs/<arm>"
@@ -945,8 +1006,28 @@ def snapshot_predecessor_archive(  # noqa: C901, PLR0912
                 if arm in episode_members:
                     raise ReleaseErratumError("predecessor archive repeats a planner episode file")
                 episode_members[arm] = member
+            if (
+                PurePosixPath(member.name).name == "release_manifest.resolved.json"
+                and manifest_match is None
+            ):
+                raise ReleaseErratumError(
+                    "predecessor archive contains a resolved manifest outside payload/release"
+                )
+            if manifest_match is not None:
+                if resolved_manifest_member is not None:
+                    raise ReleaseErratumError(
+                        "predecessor archive repeats the canonical resolved manifest"
+                    )
+                resolved_manifest_member = member
         if len(roots) != 1:
             raise ReleaseErratumError("predecessor archive must have exactly one bundle root")
+        if resolved_manifest_member is None:
+            raise ReleaseErratumError("predecessor archive lacks the canonical resolved manifest")
+        _validate_predecessor_release_manifest(
+            bundle,
+            resolved_manifest_member,
+            contract=contract,
+        )
         arm_rows: dict[str, Iterable[Mapping[str, Any]]] = {}
         episode_file_hashers: dict[str, Any] = {}
         streams: list[BinaryIO] = []
@@ -1071,7 +1152,10 @@ def build_erratum_receipt(
             "metadata_sha256": contract.metadata_sha256,
             "relation": "isNewVersionOf",
         },
-        "scientific_identity": successor.public_dict(),
+        "scientific_identity": {
+            **successor.public_dict(),
+            "release_id": contract.scientific_release_id,
+        },
         "scientific_equality": equality,
         "scientific_canonicalization": dict(SCIENTIFIC_CANONICALIZATION_POLICY),
         "derivation": {
@@ -1244,6 +1328,9 @@ def _published_erratum_contract(  # noqa: C901, PLR0912, PLR0913
             )
 
     source_sha = _required_text(scientific, "source_sha", label="receipt.scientific_identity")
+    scientific_release_id = _required_text(
+        scientific, "release_id", label="receipt.scientific_identity"
+    )
     builder_sha = _required_text(derivation, "builder_sha", label="receipt.derivation")
     validator_sha = _required_text(derivation, "validator_sha", label="receipt.derivation")
     orchestration_sha = _required_text(derivation, "orchestration_sha", label="receipt.derivation")
@@ -1287,6 +1374,7 @@ def _published_erratum_contract(  # noqa: C901, PLR0912, PLR0913
         predecessor_archive_size_bytes=predecessor_size,
         predecessor_github_release_tag=predecessor_tag,
         source_sha=source_sha,
+        scientific_release_id=scientific_release_id,
         planner_arms=_required_positive_int(
             scientific, "planner_arms", label="receipt.scientific_identity"
         ),
@@ -1359,17 +1447,28 @@ def _assert_current_alias_values(
     contract: ErratumContract,
     label: str,
     required: bool,
+    scientific_release_ids: bool,
 ) -> None:
-    """Validate one level of current-publication aliases."""
-    tag_keys = ("release_tag", "release_id", "benchmark_release_tag", "benchmark_release_id")
+    """Validate publication coordinates while keeping campaign IDs scientific."""
+    tag_keys = ("release_tag", "benchmark_release_tag")
+    release_id_keys = ("release_id", "benchmark_release_id")
     doi_keys = ("doi", "version_doi")
     tag_values = [payload[key] for key in tag_keys if key in payload]
+    release_id_values = [payload[key] for key in release_id_keys if key in payload]
     doi_values = [payload[key] for key in doi_keys if key in payload]
     concept_values = [payload["concept_doi"]] if "concept_doi" in payload else []
     if (required and not tag_values) or any(
         value != contract.successor_github_release_tag for value in tag_values
     ):
         raise ReleaseErratumError(f"{label} contains a stale release-tag alias")
+    if not scientific_release_ids and release_id_values:
+        raise ReleaseErratumError(
+            f"{label} must not contain an ambiguous publication release-ID alias"
+        )
+    if scientific_release_ids and any(
+        value != contract.scientific_release_id for value in release_id_values
+    ):
+        raise ReleaseErratumError(f"{label} contains a stale scientific release-ID alias")
     if (required and not doi_values) or any(
         value != contract.successor_version_doi for value in doi_values
     ):
@@ -1526,6 +1625,7 @@ def _assert_nested_publication_aliases(
         contract=contract,
         label=f"{label}.publication",
         required=True,
+        scientific_release_ids=False,
     )
     if "provenance" in publication:
         provenance = publication["provenance"]
@@ -1540,6 +1640,7 @@ def _assert_nested_publication_aliases(
             contract=contract,
             label=f"{label}.publication.provenance",
             required=False,
+            scientific_release_ids=False,
         )
     expected = {
         "concept_doi": contract.concept_doi,
@@ -1563,6 +1664,7 @@ def _assert_publication_aliases(
         contract=contract,
         label=label,
         required=False,
+        scientific_release_ids=True,
     )
     levels = [payload]
     if "provenance" in payload:
@@ -1577,17 +1679,13 @@ def _assert_publication_aliases(
             contract=contract,
             label=f"{label}.provenance",
             required=False,
+            scientific_release_ids=True,
         )
     if required:
         tag_values = [
             level[key]
             for level in levels
-            for key in (
-                "release_tag",
-                "release_id",
-                "benchmark_release_tag",
-                "benchmark_release_id",
-            )
+            for key in ("release_tag", "benchmark_release_tag")
             if key in level
         ]
         if not tag_values:
@@ -1612,15 +1710,18 @@ def _assert_predecessor_alias_values(
 ) -> None:
     """Validate one level of predecessor execution aliases."""
     tag_values = [
-        payload[key]
-        for key in ("release_tag", "release_id", "benchmark_release_tag", "benchmark_release_id")
-        if key in payload
+        payload[key] for key in ("release_tag", "benchmark_release_tag") if key in payload
+    ]
+    release_id_values = [
+        payload[key] for key in ("release_id", "benchmark_release_id") if key in payload
     ]
     doi_values = [payload[key] for key in ("doi", "version_doi") if key in payload]
     if (required and not tag_values) or any(
         value != contract.predecessor_github_release_tag for value in tag_values
     ):
         raise ReleaseErratumError(f"{label} contains a stale predecessor tag alias")
+    if any(value != contract.scientific_release_id for value in release_id_values):
+        raise ReleaseErratumError(f"{label} contains a stale scientific release-ID alias")
     if (required and not doi_values) or any(
         value != contract.predecessor_version_doi for value in doi_values
     ):
@@ -1672,7 +1773,7 @@ def _assert_predecessor_execution_aliases(
     tag_values = [
         level[key]
         for level, _ in levels
-        for key in ("release_tag", "release_id", "benchmark_release_tag", "benchmark_release_id")
+        for key in ("release_tag", "benchmark_release_tag")
         if key in level
     ]
     if not tag_values:
@@ -2057,7 +2158,9 @@ def validate_erratum_receipt_against_campaign(  # noqa: PLR0913
     )
     predecessor = snapshot_predecessor_archive(evidence.archive_path, contract=contract)
     observed = snapshot_campaign(campaign_root, contract=contract)
-    if observed.public_dict() != dict(scientific):
+    scientific_leaves = dict(scientific)
+    scientific_leaves.pop("release_id", None)
+    if observed.public_dict() != scientific_leaves:
         raise ReleaseErratumError("published successor scientific leaves differ from its receipt")
     _assert_published_equality_digests(scientific, equality)
     recomputed_equality = compare_scientific_snapshots(predecessor, observed)
@@ -2075,6 +2178,7 @@ def validate_erratum_receipt_against_campaign(  # noqa: PLR0913
     return {
         "status": "pass",
         "source_sha": contract.source_sha,
+        "scientific_release_id": contract.scientific_release_id,
         "builder_sha": contract.builder_sha,
         "validator_sha": contract.validator_sha,
         "orchestration_sha": contract.orchestration_sha,

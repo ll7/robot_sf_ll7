@@ -57,6 +57,7 @@ import binascii
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field, replace
@@ -79,7 +80,8 @@ from scripts.dev.check_pr_ci_status import (  # noqa: E402
     _rollup_conclusion,
     _rollup_status,
 )
-from scripts.dev.github_graphql_retry import run_with_retry  # noqa: E402
+from scripts.dev.github_graphql_retry import GraphQLRetryOutcome, run_with_retry  # noqa: E402
+from scripts.dev.github_quota import quota_reset_handoff  # noqa: E402
 from scripts.dev.pr_loop_policy import (  # noqa: E402
     has_any_pr_metadata_verdict,
     has_current_accepted_gate_verdict,
@@ -1930,6 +1932,44 @@ def fetch_merge_queue_strategy(pr_number: str | int, *, repo: str) -> tuple[str 
     return str(strategy), None
 
 
+def _quota_exhausted_thread_diagnostic(pr_number: str | int, *, repo: str) -> str:
+    """Build the reset-aware handoff for quota-blocked review-thread reads (issue #8282)."""
+    handoff = quota_reset_handoff(
+        retry_command=shlex.join(
+            [
+                "uv",
+                "run",
+                "python",
+                "scripts/dev/single_account_merge_receipt.py",
+                "--repo",
+                repo,
+                "--pr",
+                str(pr_number),
+                "--mode",
+                "report-only",
+                "--output",
+                f"output/validation/pr-{pr_number}-merge-receipt.json",
+            ]
+        ),
+    )
+    return handoff["handoff"]
+
+
+def _thread_query_failure_diagnostic(
+    retry: GraphQLRetryOutcome,
+    result: subprocess.CompletedProcess[str],
+    pr_number: str | int,
+    *,
+    repo: str,
+) -> str:
+    """Render the fail-closed diagnostic for a failed review-thread query."""
+    diagnostic = retry.terminal_diagnostic if retry.exhausted else result.stderr.strip()
+    if retry.quota_exhausted:
+        handoff_text = _quota_exhausted_thread_diagnostic(pr_number, repo=repo)
+        return f"{diagnostic} {handoff_text}" if diagnostic else handoff_text
+    return diagnostic or "graphql reviewThreads query failed"
+
+
 def fetch_threads_resolved(pr_number: str | int, *, repo: str) -> tuple[bool | None, str | None]:
     """Return ``(all_resolved, error)`` for a PR's review threads.
 
@@ -1965,8 +2005,7 @@ def fetch_threads_resolved(pr_number: str | int, *, repo: str) -> tuple[bool | N
     )
     result = retry.result
     if result.returncode != 0:
-        diagnostic = retry.terminal_diagnostic if retry.exhausted else result.stderr.strip()
-        return None, diagnostic or "graphql reviewThreads query failed"
+        return None, _thread_query_failure_diagnostic(retry, result, pr_number, repo=repo)
     payload, err = _parse_json(result.stdout)
     if err or not isinstance(payload, dict):
         return None, err or "graphql response is not JSON"

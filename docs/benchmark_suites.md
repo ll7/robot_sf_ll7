@@ -38,3 +38,9 @@ The source configs remain outside the Sphinx source tree and are linked from the
 - `configs/benchmarks/camera_ready_all_planners.yaml`
 - `configs/benchmarks/paper_experiment_matrix_v1.yaml`
 - `configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500.yaml`
+- `configs/benchmarks/paper_experiment_matrix_v2_h600_s30_benchmark_data_2026_08.yaml`
+  (current S30/H600 campaign: 14 arms, 48 scenarios, 30 seeds)
+- `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`
+  (publication-grade manifest for the campaign above)
+- `configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json`
+  (frozen September 2026 erratum successor: version DOI `10.5281/zenodo.22265925`)

@@ -52,10 +52,10 @@ than running experiments (see the [Research & Benchmark Guide](./research-guide.
   fail-closed geometry/parameter checks, and the evidence boundary.
 - [Per-Test Performance Budget](./dev_guide_reference.md#per-test-performance-budget) — soft/hard
   test timeouts.
-- [Code Review Guide](./code_review.md) — benchmark-facing review criteria and regression traps.
+- [Code Review Guide](./code_review.md) — benchmark-facing review criteria, regression traps,
+  semantics, normalization, and provenance review.
 - [Performance Notes](./performance_notes.md) — performance targets and optimization notes.
 - [Benchmark Planner Quality Audit](./benchmark_planner_quality_audit.md) — planner decision table.
-- [Benchmark/Planner Review Guide](./code_review.md) — semantics, normalization, provenance review.
 - [Mutation Testing Triage](../mutation_testing_triage.md) — mutation-testing triage notes.
 
 ## 4. Planner and scenario contribution

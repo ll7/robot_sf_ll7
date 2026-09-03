@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 import argparse
+import json
+from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
 
 import pytest
 
 from robot_sf import release_cli
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
 SOURCE_SHA = "5" * 40
 PREDECESSOR_TAG = f"paper-matrix-v2-h600-s30-2026-09-{SOURCE_SHA}"
 SUCCESSOR_TAG = f"{PREDECESSOR_TAG}-erratum.1"
+ERRATUM_CONTRACT_PATH = Path(
+    "configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json"
+)
+RELEASE_MANIFEST_PATH = Path("configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml")
 
 
 def _args(mode: str, tmp_path: Path) -> argparse.Namespace:
@@ -42,12 +44,14 @@ def test_release_cli_dispatches_each_zenodo_mode(
 ) -> None:
     """Each mode delegates to the publisher and emits only JSON state/report."""
     calls: list[tuple[str, object]] = []
+    metadata_calls: list[dict[str, object]] = []
+    expected_binding: dict[str, str] | None = None
     state = {"schema_version": "robot-sf-zenodo-deposition.v1", "deposition_id": 7}
     monkeypatch.setattr(release_cli.zenodo_publisher, "build_session", lambda path: object())
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
         "load_dataset_metadata",
-        lambda path, **kwargs: {"upload_type": "dataset"},
+        lambda path, **kwargs: metadata_calls.append(kwargs) or {"upload_type": "dataset"},
     )
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
@@ -57,27 +61,30 @@ def test_release_cli_dispatches_each_zenodo_mode(
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
         "reserve",
-        lambda session, metadata, api_base, **kwargs: calls.append(("reserve", api_base)) or state,
+        lambda session, metadata, api_base, **kwargs: (
+            calls.append(("reserve", {"api_base": api_base, **kwargs})) or state
+        ),
     )
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
         "upload",
         lambda session, loaded, files, api_base, **kwargs: (
-            calls.append(("upload", api_base)) or state
+            calls.append(("upload", {"api_base": api_base, **kwargs})) or state
         ),
     )
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
         "publish",
         lambda session, loaded, metadata, api_base, **kwargs: (
-            calls.append(("publish", api_base)) or state
+            calls.append(("publish", {"api_base": api_base, **kwargs})) or state
         ),
     )
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
         "verify",
         lambda session, loaded, metadata, api_base, **kwargs: (
-            calls.append(("verify", api_base)) or {"status": "pass", "file_count": 0}
+            calls.append(("verify", {"api_base": api_base, **kwargs}))
+            or {"status": "pass", "file_count": 0}
         ),
     )
     monkeypatch.setattr(
@@ -88,17 +95,32 @@ def test_release_cli_dispatches_each_zenodo_mode(
     args = _args(mode, tmp_path)
     if mode in {"upload", "publish", "verify"}:
         args.manifest = tmp_path / "manifest.yaml"
+        expected_binding = {"release_tag": "v1", "metadata_sha256": "a" * 64}
         monkeypatch.setattr(
             release_cli,
             "_load_release_binding",
             lambda value: (
                 SimpleNamespace(release_tag="v1", metadata_sha256="a" * 64),
-                {"release_tag": "v1"},
+                expected_binding,
             ),
         )
     result = release_cli.handle(args)
     assert result == 0
     assert calls[0][0] == mode
+    operation_kwargs = calls[0][1]
+    assert isinstance(operation_kwargs, dict)
+    if expected_binding is None:
+        assert "release_binding" not in operation_kwargs
+    else:
+        assert operation_kwargs["release_binding"] is expected_binding
+    if mode in {"publish", "verify"}:
+        assert metadata_calls == [
+            {"expected_source_tag": "v1", "expected_metadata_sha256": "a" * 64}
+        ]
+    elif mode == "reserve":
+        assert metadata_calls == [{}]
+    else:
+        assert metadata_calls == []
     assert "secret" not in capsys.readouterr().out
 
 
@@ -229,6 +251,85 @@ def test_release_cli_parser_requires_manifest_after_reservation(mode: str) -> No
         parser.parse_args(arguments)
 
 
+def test_release_cli_loads_checked_in_erratum_contract_for_post_reservation() -> None:
+    """The reviewed successor contract is a valid exact Zenodo release binding."""
+    payload = json.loads(ERRATUM_CONTRACT_PATH.read_text(encoding="utf-8"))
+    metadata_path = Path(payload["successor"]["metadata_path"])
+    args = argparse.Namespace(manifest=ERRATUM_CONTRACT_PATH, metadata=metadata_path)
+
+    release_context = release_cli._load_release_binding(args)
+
+    assert release_context is not None
+    contract, binding = release_context
+    assert contract.source_sha == "59577bad289dd692ba3580e1600c4a649ae27880"
+    assert contract.scientific_release_id == (
+        "paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880"
+    )
+    assert binding == {
+        "metadata_path": metadata_path.resolve(),
+        "metadata_sha256": "0a86f188c44d83949715e2d457c3b6154a511fbf041527a3e669d4995bdc6b2b",
+        "release_tag": (
+            "paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1"
+        ),
+        "source_tag": (
+            "https://github.com/ll7/robot_sf_ll7/releases/tag/"
+            "paper-matrix-v2-h600-s30-2026-09-"
+            "59577bad289dd692ba3580e1600c4a649ae27880-erratum.1"
+        ),
+        "concept_doi": "10.5281/zenodo.22227034",
+        "version_doi": "10.5281/zenodo.22265925",
+    }
+
+
+def test_release_cli_keeps_legacy_v02_manifest_binding() -> None:
+    """Schema dispatch preserves the existing benchmark-release manifest route."""
+    args = argparse.Namespace(manifest=RELEASE_MANIFEST_PATH, metadata=None)
+
+    release_context = release_cli._load_release_binding(args)
+
+    assert release_context is not None
+    manifest, binding = release_context
+    assert manifest.schema_version == "benchmark-release-manifest.v0.2"
+    assert binding["release_tag"] == manifest.release_tag
+    assert binding["metadata_sha256"] == manifest.metadata_sha256
+    assert binding["concept_doi"] == manifest.concept_doi
+    assert binding["version_doi"] == manifest.version_doi
+
+
+def test_release_cli_rejects_tampered_erratum_before_session(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An invalid successor contract cannot construct an authenticated client."""
+    payload = json.loads(ERRATUM_CONTRACT_PATH.read_text(encoding="utf-8"))
+    metadata_relative = Path(payload["successor"]["metadata_path"])
+    metadata_source = metadata_relative.resolve()
+    metadata_target = tmp_path / metadata_relative
+    metadata_target.parent.mkdir(parents=True)
+    metadata_target.write_bytes(metadata_source.read_bytes())
+    payload["successor"]["metadata_sha256"] = "0" * 64
+    contract_path = tmp_path / "erratum.json"
+    contract_path.write_text(json.dumps(payload), encoding="utf-8")
+    args = _args("verify", tmp_path)
+    args.manifest = contract_path
+    args.metadata = metadata_target
+
+    monkeypatch.setattr(release_cli, "get_repository_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "build_session",
+        lambda path: (_ for _ in ()).throw(
+            AssertionError("invalid erratum must fail before session construction")
+        ),
+    )
+
+    assert release_cli.handle(args) == 2
+    output = capsys.readouterr().out
+    assert "metadata" in output
+    assert "blocked" in output
+
+
 @pytest.mark.parametrize("mode", ["recover", "upload", "verify", "publish"])
 def test_release_cli_rejects_unbound_post_reservation_before_session(
     monkeypatch: pytest.MonkeyPatch,
@@ -258,7 +359,7 @@ def test_release_cli_recovers_without_loading_state_or_reserving(
     calls: list[tuple[str, object]] = []
     state = {"schema_version": "robot-sf-zenodo-deposition.v1", "deposition_id": 7}
     manifest = SimpleNamespace(release_tag="v1", metadata_sha256="a" * 64)
-    binding = {"release_tag": "v1"}
+    binding = {"release_tag": "v1", "metadata_sha256": "a" * 64}
     args = _args("recover", tmp_path)
     args.manifest = tmp_path / "release.yaml"
     monkeypatch.setattr(release_cli, "_load_release_binding", lambda value: (manifest, binding))
@@ -284,7 +385,7 @@ def test_release_cli_recovers_without_loading_state_or_reserving(
         release_cli.zenodo_publisher,
         "recover",
         lambda session, deposition_id, metadata, **kwargs: (
-            calls.append(("recover", deposition_id)) or state
+            calls.append(("recover", {"deposition_id": deposition_id, **kwargs})) or state
         ),
     )
     monkeypatch.setattr(
@@ -294,7 +395,17 @@ def test_release_cli_recovers_without_loading_state_or_reserving(
     )
 
     assert release_cli.handle(args) == 0
-    assert calls == [("recover", 7), ("write_state", state)]
+    assert calls == [
+        (
+            "recover",
+            {
+                "deposition_id": 7,
+                "api_base": "https://example.test/api",
+                "release_binding": binding,
+            },
+        ),
+        ("write_state", state),
+    ]
     assert "secret" not in capsys.readouterr().out
 
 
@@ -309,7 +420,7 @@ def test_release_cli_returns_blocked_for_verification_failure(
         "_load_release_binding",
         lambda value: (
             SimpleNamespace(release_tag="v1", metadata_sha256="a" * 64),
-            {"release_tag": "v1"},
+            {"release_tag": "v1", "metadata_sha256": "a" * 64},
         ),
     )
     monkeypatch.setattr(release_cli.zenodo_publisher, "build_session", lambda path: object())

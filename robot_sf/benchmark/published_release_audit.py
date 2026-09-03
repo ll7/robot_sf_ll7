@@ -84,8 +84,10 @@ ERRATUM_CHECKSUMS_ASSET = "checksums.sha256"
 ERRATUM_REPOSITORY_URL = "https://github.com/ll7/robot_sf_ll7"
 _ERRATUM_CURRENT_TAG_KEYS = (
     "release_tag",
-    "release_id",
     "benchmark_release_tag",
+)
+_ERRATUM_RELEASE_ID_KEYS = (
+    "release_id",
     "benchmark_release_id",
 )
 _ERRATUM_CURRENT_DOI_KEYS = ("doi", "version_doi")
@@ -1019,22 +1021,34 @@ def _assert_cold_current_aliases(  # noqa: C901
     doi: str,
     concept_doi: str,
     required: bool,
+    scientific_release_id: str | None,
     source_sha: str | None = None,
 ) -> None:
-    """Reject predecessor coordinates in one current-publication mapping."""
-    levels: list[tuple[Mapping[str, Any], str]] = [(payload, label)]
+    """Validate successor publication coordinates and preserved campaign IDs."""
+    levels: list[tuple[Mapping[str, Any], str, str | None]] = [
+        (payload, label, scientific_release_id)
+    ]
     if "provenance" in payload:
         provenance = payload["provenance"]
         if not isinstance(provenance, Mapping):
             raise ValueError(f"{label}.provenance must be an object")
         if "provenance" in provenance:
             raise ValueError(f"{label}.provenance contains unsupported nested provenance")
-        levels.append((provenance, f"{label}.provenance"))
-    for level, level_label in levels:
+        levels.append((provenance, f"{label}.provenance", scientific_release_id))
+    for level, level_label, expected_release_id in levels:
         tag_values = [level[key] for key in _ERRATUM_CURRENT_TAG_KEYS if key in level]
+        release_id_values = [level[key] for key in _ERRATUM_RELEASE_ID_KEYS if key in level]
         doi_values = [level[key] for key in _ERRATUM_CURRENT_DOI_KEYS if key in level]
         if any(value != tag for value in tag_values):
             raise ValueError(f"{level_label} contains a stale release-tag alias")
+        if expected_release_id is None and release_id_values:
+            raise ValueError(
+                f"{level_label} must not contain an ambiguous publication release-ID alias"
+            )
+        if expected_release_id is not None and any(
+            value != expected_release_id for value in release_id_values
+        ):
+            raise ValueError(f"{level_label} contains a stale scientific release-ID alias")
         if any(value != doi for value in doi_values):
             raise ValueError(f"{level_label} contains a stale version-DOI alias")
         if "concept_doi" in level and level["concept_doi"] != concept_doi:
@@ -1048,12 +1062,18 @@ def _assert_cold_current_aliases(  # noqa: C901
             raise ValueError(f"{level_label} contains an invalid scientific source SHA")
     if required:
         tag_values = [
-            level[key] for level, _ in levels for key in _ERRATUM_CURRENT_TAG_KEYS if key in level
+            level[key]
+            for level, _, _ in levels
+            for key in _ERRATUM_CURRENT_TAG_KEYS
+            if key in level
         ]
         doi_values = [
-            level[key] for level, _ in levels for key in _ERRATUM_CURRENT_DOI_KEYS if key in level
+            level[key]
+            for level, _, _ in levels
+            for key in _ERRATUM_CURRENT_DOI_KEYS
+            if key in level
         ]
-        concept_values = [level["concept_doi"] for level, _ in levels if "concept_doi" in level]
+        concept_values = [level["concept_doi"] for level, _, _ in levels if "concept_doi" in level]
         if not tag_values:
             raise ValueError(f"{label} is missing its current release tag")
         if not doi_values:
@@ -1087,6 +1107,7 @@ def _assert_cold_publication_mapping(
         concept_doi=concept_doi,
         required=True,
         source_sha=source_sha,
+        scientific_release_id=None,
     )
     if publication.get("predecessor_version_doi") != predecessor_doi:
         raise ValueError(f"{label}.publication contains a stale predecessor DOI alias")
@@ -1100,6 +1121,7 @@ def _assert_cold_predecessor_aliases(  # noqa: C901
     predecessor_doi: str,
     concept_doi: str,
     source_sha: str,
+    scientific_release_id: str,
     require_concept: bool,
 ) -> None:
     """Validate an explicitly preserved scientific-execution identity."""
@@ -1114,9 +1136,12 @@ def _assert_cold_predecessor_aliases(  # noqa: C901
 
     for level, level_label in levels:
         tags = [level[key] for key in _ERRATUM_CURRENT_TAG_KEYS if key in level]
+        release_ids = [level[key] for key in _ERRATUM_RELEASE_ID_KEYS if key in level]
         dois = [level[key] for key in _ERRATUM_CURRENT_DOI_KEYS if key in level]
         if any(value != predecessor_tag for value in tags):
             raise ValueError(f"{level_label} contains an invalid predecessor tag alias")
+        if any(value != scientific_release_id for value in release_ids):
+            raise ValueError(f"{level_label} contains an invalid scientific release-ID alias")
         if any(value != predecessor_doi for value in dois):
             raise ValueError(f"{level_label} contains an invalid predecessor DOI alias")
         if "concept_doi" in level and level["concept_doi"] != concept_doi:
@@ -1136,7 +1161,7 @@ def _assert_cold_predecessor_aliases(  # noqa: C901
         raise ValueError(f"{label} contains an invalid predecessor concept DOI")
 
 
-def _assert_cold_publication_document(
+def _assert_cold_publication_document(  # noqa: PLR0913
     payload: Mapping[str, Any],
     *,
     label: str,
@@ -1146,6 +1171,7 @@ def _assert_cold_publication_document(
     predecessor_tag: str,
     concept_doi: str,
     source_sha: str,
+    scientific_release_id: str,
 ) -> None:
     """Audit current and explicitly preserved identities in one JSON document."""
     _assert_cold_current_aliases(
@@ -1156,6 +1182,7 @@ def _assert_cold_publication_document(
         concept_doi=concept_doi,
         required=False,
         source_sha=source_sha,
+        scientific_release_id=scientific_release_id,
     )
     _assert_cold_publication_mapping(
         payload,
@@ -1181,6 +1208,7 @@ def _assert_cold_publication_document(
             concept_doi=concept_doi,
             required=True,
             source_sha=source_sha,
+            scientific_release_id=scientific_release_id,
         )
         _assert_cold_publication_mapping(
             current,
@@ -1209,6 +1237,7 @@ def _assert_cold_publication_document(
             predecessor_doi=predecessor_doi,
             concept_doi=concept_doi,
             source_sha=source_sha,
+            scientific_release_id=scientific_release_id,
             require_concept=key != "scientific_execution_release_identity",
         )
 
@@ -1222,6 +1251,7 @@ def _verify_erratum_cold_publication_documents(
     predecessor_doi: str,
     concept_doi: str,
     source_sha: str,
+    scientific_release_id: str,
 ) -> dict[str, Any]:
     """Audit copied optional/current release documents after archive extraction.
 
@@ -1253,6 +1283,7 @@ def _verify_erratum_cold_publication_documents(
             predecessor_tag=predecessor_tag,
             concept_doi=concept_doi,
             source_sha=source_sha,
+            scientific_release_id=scientific_release_id,
         )
         checked.append(relative)
     return {"status": "pass", "checked_documents": checked}
@@ -1579,6 +1610,10 @@ def _verify_canonical_erratum_bundle(  # noqa: PLR0913
     supersedes = embedded_receipt.get("supersedes")
     if not isinstance(supersedes, Mapping):
         raise ValueError("embedded erratum receipt lacks predecessor identity")
+    scientific_identity = embedded_receipt.get("scientific_identity")
+    if not isinstance(scientific_identity, Mapping):
+        raise ValueError("embedded erratum receipt lacks scientific identity")
+    scientific_release_id = scientific_identity.get("release_id")
     predecessor_tag = supersedes.get("github_release_tag")
     predecessor_doi = (
         receipt.get("predecessor_version_doi")
@@ -1590,6 +1625,8 @@ def _verify_canonical_erratum_bundle(  # noqa: PLR0913
         raise ValueError("embedded erratum receipt has an invalid predecessor identity")
     if not isinstance(concept_doi, str):
         raise ValueError("embedded erratum receipt has an invalid concept DOI")
+    if not isinstance(scientific_release_id, str) or not scientific_release_id:
+        raise ValueError("embedded erratum receipt has an invalid scientific release ID")
     cold_documents = _verify_erratum_cold_publication_documents(
         bundle_root / "payload",
         tag=tag,
@@ -1598,6 +1635,7 @@ def _verify_canonical_erratum_bundle(  # noqa: PLR0913
         predecessor_doi=predecessor_doi,
         concept_doi=concept_doi,
         source_sha=source_sha,
+        scientific_release_id=scientific_release_id,
     )
     return {
         "inventory": inventory,

@@ -240,7 +240,8 @@ def test_orca_isolation_unavailable_does_not_retry(
     )
 
     assert velocity == pytest.approx(np.array([0.0, 0.0]))
-    assert metadata["status"] == "policy_step_error_fallback"
+    assert metadata["status"] == "policy_step_isolation_unavailable"
+    assert metadata["fallback_reason"] == "policy step isolation unavailable"
     assert metadata["policy_step_timeout"]["worker_errors"] == 1
     assert metadata["policy_step_timeout"]["step_retries"] == 0
     assert metadata["policy_step_timeout"]["fallback_actions"] == 1

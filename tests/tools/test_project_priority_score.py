@@ -17,11 +17,13 @@ from scripts.tools.project_priority_score import (
     PRIORITY_SCORE_FIELD,
     REQUIRED_NUMBER_FIELDS,
     GhProjectClient,
+    GhProjectTimeoutError,
     MissingProjectScopeError,
     ProjectItemFetchStats,
     ProjectQuotaBlockedError,
     ScoreInputs,
     SyncOptions,
+    SyncPreview,
     _numeric_field_literal,
     build_previews,
     compute_priority_score,
@@ -1160,6 +1162,257 @@ def test_main_non_empty_scope_failure_remains_fail_closed(
         main(["sync"])
 
 
+def test_gh_project_client_timeout_raises_structured_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hung `gh` subprocess must surface command, budget, and phase (issue #8263)."""
+
+    seen: dict[str, object] = {}
+
+    def _hang(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen["timeout"] = kwargs.get("timeout")
+        raise subprocess.TimeoutExpired(cmd=["gh", "project", "item-list"], timeout=120.0)
+
+    monkeypatch.setattr(subprocess, "run", _hang)
+
+    with pytest.raises(GhProjectTimeoutError) as exc_info:
+        GhProjectClient().item_list(owner="ll7", project_number=5, limit=1)
+
+    assert seen["timeout"] == 120.0
+    assert exc_info.value.command[:3] == ("gh", "project", "item-list")
+    assert exc_info.value.timeout_seconds == 120.0
+    assert exc_info.value.phase == "read"
+
+
+def test_gh_project_client_timeout_records_write_phase(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Timeouts during the apply stage must name the write phase (issue #8263)."""
+
+    def _hang(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(cmd=["gh", "project", "item-edit"], timeout=5.0)
+
+    monkeypatch.setattr(subprocess, "run", _hang)
+    client = GhProjectClient(timeout_seconds=5.0)
+    client.current_phase = "write"
+
+    with pytest.raises(GhProjectTimeoutError) as exc_info:
+        client.run("project", "item-edit", "5")
+
+    assert exc_info.value.phase == "write"
+    assert exc_info.value.timeout_seconds == 5.0
+
+
+def test_gh_project_client_rejects_non_positive_timeout() -> None:
+    """A non-positive subprocess budget is a programming error, not a slow API."""
+
+    with pytest.raises(ValueError, match="must be positive"):
+        GhProjectClient(timeout_seconds=0)
+    with pytest.raises(ValueError, match="must be positive"):
+        GhProjectClient(total_budget_seconds=-1)
+
+
+def test_main_only_empty_timeout_is_non_fatal_json_without_writes(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The autopilot auto-fill path reports a timeout and leaves score writes untouched."""
+
+    def _raise(*args: object, **kwargs: object) -> list[dict]:
+        raise GhProjectTimeoutError(
+            command=("gh", "project", "field-list", "5"),
+            timeout_seconds=120.0,
+            phase="read",
+        )
+
+    updates: list[float] = []
+    monkeypatch.setattr(GhProjectClient, "field_list", _raise)
+    monkeypatch.setattr(
+        GhProjectClient,
+        "update_number_field",
+        lambda self, **kwargs: updates.append(float(kwargs["number"])),
+    )
+
+    assert main(["sync", "--only-empty", "--ensure-fields"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "timeout_blocked"
+    assert payload["reason"] == "gh_subprocess_timeout"
+    assert payload["command"][:3] == ["gh", "project", "field-list"]
+    assert payload["timeout_seconds"] == 120.0
+    assert payload["phase"] == "read"
+    assert payload["retryable"] is True
+    assert payload["fallback"] == "live-label ordering"
+    assert payload["non_fatal"] is True
+    assert payload["writes_performed"] is False
+    assert payload["write_ambiguity"] is False
+    assert payload["items"] == []
+    assert updates == []
+
+
+def test_main_non_empty_timeout_remains_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the auto-fill mode converts a `gh` timeout into a success status."""
+
+    monkeypatch.setattr(
+        GhProjectClient,
+        "field_list",
+        lambda self, **kwargs: (_ for _ in ()).throw(
+            GhProjectTimeoutError(
+                command=("gh", "project", "field-list", "5"),
+                timeout_seconds=120.0,
+                phase="read",
+            )
+        ),
+    )
+
+    with pytest.raises(GhProjectTimeoutError):
+        main(["sync"])
+
+
+def test_main_gh_timeout_flag_reaches_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """--gh-timeout configures the per-command subprocess budget."""
+
+    seen: dict[str, float] = {}
+
+    def _fake_sync_scores(client: GhProjectClient, options: SyncOptions) -> list[SyncPreview]:
+        seen["timeout"] = client.timeout_seconds
+        seen["options_timeout"] = options.gh_timeout_seconds
+        seen["total_budget"] = client.total_budget_seconds
+        seen["options_total_budget"] = options.gh_total_budget_seconds
+        return []
+
+    monkeypatch.setattr(project_priority_score, "sync_scores", _fake_sync_scores)
+
+    assert main(["sync", "--only-empty", "--gh-timeout", "5", "--gh-total-budget", "60"]) == 0
+    assert seen["timeout"] == 5.0
+    assert seen["options_timeout"] == 5.0
+    assert seen["total_budget"] == 60.0
+    assert seen["options_total_budget"] == 60.0
+
+
+def test_main_gh_timeout_rejects_non_positive() -> None:
+    """A non-positive --gh-timeout fails closed at argument parsing."""
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["sync", "--gh-timeout", "0"])
+    assert exc_info.value.code == 2
+    with pytest.raises(SystemExit) as exc_info:
+        main(["sync", "--gh-total-budget", "0"])
+    assert exc_info.value.code == 2
+
+
+def test_gh_project_client_total_budget_breach_skips_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An exhausted operation budget fails closed before starting `gh` (issue #8263)."""
+    calls: list[list[str]] = []
+
+    def _record(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(args[0]))  # type: ignore[arg-type]
+        raise AssertionError("subprocess must not start after budget exhaustion")
+
+    monkeypatch.setattr(subprocess, "run", _record)
+    client = GhProjectClient(timeout_seconds=120.0, total_budget_seconds=60.0)
+    client._budget_start -= 61.0
+
+    with pytest.raises(GhProjectTimeoutError) as exc_info:
+        client.run("project", "item-list", "5")
+
+    assert calls == []
+    assert exc_info.value.budget_exhausted is True
+    assert exc_info.value.timeout_seconds == 60.0
+    assert exc_info.value.phase == "read"
+    assert "was not started" in str(exc_info.value)
+
+
+def test_gh_project_client_caps_command_at_remaining_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each command is capped at the remaining operation budget (issue #8263)."""
+    seen: dict[str, float] = {}
+
+    def _record(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        seen["timeout"] = float(kwargs["timeout"])
+        return subprocess.CompletedProcess(args=list(args[0]), returncode=0, stdout="{}")
+
+    monkeypatch.setattr(subprocess, "run", _record)
+    client = GhProjectClient(timeout_seconds=120.0, total_budget_seconds=60.0)
+    client._budget_start -= 55.0
+
+    client.run_json("project", "view", "5")
+
+    assert 0 < seen["timeout"] <= 5.5
+
+
+def test_main_only_empty_budget_breach_reports_unstarted_command(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The auto-fill path reports a budget breach without claiming writes."""
+
+    def _raise(*args: object, **kwargs: object) -> list[dict]:
+        raise GhProjectTimeoutError(
+            command=("gh", "project", "item-list", "5"),
+            timeout_seconds=600.0,
+            phase="read",
+            budget_exhausted=True,
+        )
+
+    monkeypatch.setattr(GhProjectClient, "field_list", _raise)
+
+    assert main(["sync", "--only-empty"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "timeout_blocked"
+    assert payload["budget_exhausted"] is True
+    assert payload["timeout_seconds"] == 600.0
+    assert payload["writes_performed"] is False
+    assert "was not started" in payload["message"]
+
+
+def test_apply_score_updates_reraises_write_phase_timeout() -> None:
+    """A timed-out write must reach the structured summary, not the generic failure."""
+    from types import SimpleNamespace
+
+    client = SimpleNamespace(
+        last_eligibility_plan=None,
+        update_number_field=lambda **kwargs: (_ for _ in ()).throw(
+            GhProjectTimeoutError(
+                command=("gh", "project", "item-edit", "5"),
+                timeout_seconds=120.0,
+                phase="write",
+            )
+        ),
+    )
+    options = SyncOptions(
+        owner="ll7",
+        project_number=5,
+        ensure_fields=False,
+        limit=10,
+        alpha=0.8,
+        round_digits=6,
+        issue_number=None,
+        dry_run=False,
+        skip_statuses=set(),
+    )
+    preview = SimpleNamespace(issue_number=1, new_score=3.0)
+
+    with pytest.raises(GhProjectTimeoutError) as exc_info:
+        project_priority_score._apply_score_updates(
+            client,
+            options,
+            [(preview, {"id": "item-1"})],
+            issue_snapshots={},
+            score_field_id="field-1",
+            project_id="project-1",
+        )
+    assert exc_info.value.phase == "write"
+
+
 def test_main_reports_complete_item_fetch_stats(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -1177,7 +1430,7 @@ def test_main_reports_complete_item_fetch_stats(
         items=[_item(702, improvement=5, **{lower_first_key(EFFORT_FIELD): 8})],
     )
     client.last_item_fetch_stats = ProjectItemFetchStats(pages=32, accumulated_items=3137)
-    monkeypatch.setattr(project_priority_score, "GhProjectClient", lambda: client)
+    monkeypatch.setattr(project_priority_score, "GhProjectClient", lambda **kwargs: client)
 
     assert main(["sync", "--dry-run", "--limit", "1000"]) == 0
 
@@ -1240,7 +1493,12 @@ def test_gh_project_client_retries_user_owned_project_commands_with_at_me(
     calls: list[list[str]] = []
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float,
     ) -> subprocess.CompletedProcess[str]:
         """Fail for explicit user ownership and succeed for @me retry."""
         calls.append(args)
@@ -1281,7 +1539,12 @@ def test_gh_project_client_does_not_retry_unknown_owner_with_at_me(
     calls: list[list[str]] = []
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float,
     ) -> subprocess.CompletedProcess[str]:
         """Always raise an owner-type failure for non-retriable owners."""
         calls.append(args)
@@ -1355,7 +1618,12 @@ def test_update_number_field_uses_exact_graphql_decimal_literal(
     calls: list[list[str]] = []
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float,
     ) -> subprocess.CompletedProcess[str]:
         calls.append(args)
         return subprocess.CompletedProcess(
@@ -1400,7 +1668,12 @@ def test_update_number_field_rejects_malformed_graphql_response(
     """Malformed successful responses never masquerade as a completed write."""
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
             args=args,

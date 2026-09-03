@@ -230,6 +230,12 @@ class GhProjectTimeoutError(RuntimeError):
         self.timeout_seconds = timeout_seconds
         self.phase = phase
         self.budget_exhausted = budget_exhausted
+        self.attempted_rows: list[dict[str, Any]] = []
+        self.attempted_field_names: list[str] = []
+        self.created_field_names: list[str] = []
+        self.completed_write_count = 0
+        self.writes_performed_count = 0
+        self.write_ambiguity: bool | None = None
         if budget_exhausted:
             what = (
                 "gh operation budget exhausted after "
@@ -245,7 +251,7 @@ class GhProjectTimeoutError(RuntimeError):
             )
         super().__init__(
             what
-            + ". No score write is claimed for this command; a timed-out write may still "
+            + ". No write is claimed for this command; a timed-out write may still "
             + "have landed server-side, so retry only after re-reading live state."
         )
 
@@ -541,10 +547,10 @@ class GhProjectClient:
         total_budget_seconds: float = DEFAULT_GH_TOTAL_BUDGET_SECONDS,
     ) -> None:
         """Initialize read telemetry without changing the existing CLI surface."""
-        if timeout_seconds <= 0:
-            raise ValueError("gh subprocess timeout must be positive")
-        if total_budget_seconds <= 0:
-            raise ValueError("gh operation budget must be positive")
+        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+            raise ValueError("gh subprocess timeout must be positive and finite")
+        if not math.isfinite(total_budget_seconds) or total_budget_seconds <= 0:
+            raise ValueError("gh operation budget must be positive and finite")
         self.timeout_seconds = timeout_seconds
         self.total_budget_seconds = total_budget_seconds
         self.current_phase = "read"
@@ -1194,15 +1200,57 @@ def ensure_required_fields(
 ) -> dict[str, dict[str, Any]]:
     """Create missing numeric fields required by the score model."""
 
+    client.current_phase = "read"
     fields = field_map(client.field_list(owner=owner, project_number=project_number))
     created_missing_field = False
+    attempted_field_names: list[str] = []
+    created_field_names: list[str] = []
     for name in REQUIRED_NUMBER_FIELDS:
         if name not in fields:
-            client.ensure_number_field(owner=owner, project_number=project_number, name=name)
+            attempted_field_names.append(name)
+            client.current_phase = "write"
+            try:
+                client.ensure_number_field(owner=owner, project_number=project_number, name=name)
+            except GhProjectTimeoutError as exc:
+                _record_field_creation_progress(
+                    exc,
+                    attempted_field_names=attempted_field_names,
+                    created_field_names=created_field_names,
+                    write_ambiguity=not exc.budget_exhausted,
+                )
+                raise
+            created_field_names.append(name)
             created_missing_field = True
     if created_missing_field:
-        return field_map(client.field_list(owner=owner, project_number=project_number))
+        client.current_phase = "read"
+        try:
+            return field_map(client.field_list(owner=owner, project_number=project_number))
+        except GhProjectTimeoutError as exc:
+            # The schema mutations completed before this read are still part of the
+            # timeout outcome, even though the final field-list is a read operation.
+            _record_field_creation_progress(
+                exc,
+                attempted_field_names=attempted_field_names,
+                created_field_names=created_field_names,
+                write_ambiguity=False,
+            )
+            raise
     return fields
+
+
+def _record_field_creation_progress(
+    error: GhProjectTimeoutError,
+    *,
+    attempted_field_names: Sequence[str],
+    created_field_names: Sequence[str],
+    write_ambiguity: bool,
+) -> None:
+    """Attach schema-mutation progress to a timeout from field creation or re-read."""
+    error.attempted_field_names = list(attempted_field_names)
+    error.created_field_names = list(created_field_names)
+    error.completed_write_count = len(created_field_names)
+    error.writes_performed_count = error.completed_write_count
+    error.write_ambiguity = write_ambiguity
 
 
 def build_previews(
@@ -1310,6 +1358,7 @@ def _project_metadata(
     client: GhProjectClient, options: SyncOptions
 ) -> tuple[dict[str, dict[str, Any]], str]:
     """Resolve project metadata, using a local cache only for no-write reads."""
+    client.current_phase = "read"
     cached = load_project_cache(
         options.cache_file,
         owner=options.owner,
@@ -1502,6 +1551,8 @@ def _build_eligibility_plan(
                 client.issue_snapshot(repo=options.repo, issue_number=preview.issue_number),
                 issue_number=preview.issue_number,
             )
+        except GhProjectTimeoutError:
+            raise
         except (RuntimeError, ValueError, TypeError):
             entries.append(
                 _eligibility_entry(
@@ -1596,6 +1647,8 @@ def _revalidate_guarded_updates(
                 client.issue_snapshot(repo=options.repo, issue_number=preview.issue_number),
                 issue_number=preview.issue_number,
             )
+        except GhProjectTimeoutError:
+            raise
         except (RuntimeError, ValueError, TypeError):
             _mark_drift(plan, issue_number=preview.issue_number, reason_code="issue_state_drift")
             return False
@@ -1609,6 +1662,8 @@ def _revalidate_guarded_updates(
                 issue_number=preview.issue_number,
                 limit=options.limit,
             )
+        except GhProjectTimeoutError:
+            raise
         except (RuntimeError, ValueError, TypeError):
             _mark_drift(
                 plan,
@@ -1679,6 +1734,7 @@ def _apply_score_updates(
 
     if not updates:
         return True
+    client.current_phase = "read"
     if options.only_empty:
         if not _revalidate_guarded_updates(client, options, updates, issue_snapshots):
             return False
@@ -1690,6 +1746,7 @@ def _apply_score_updates(
     plan = client.last_eligibility_plan
     attempted_rows: list[dict[str, Any]] = []
     writes_performed = 0
+    client.current_phase = "write"
     try:
         for preview, item in updates:
             row = {
@@ -1706,9 +1763,20 @@ def _apply_score_updates(
             )
             row["written"] = True
             writes_performed += 1
-    except GhProjectTimeoutError:
+    except GhProjectTimeoutError as exc:
         # A timed-out write must reach the structured top-level timeout summary with its
         # command, budget, and phase instead of being folded into the generic apply failure.
+        exc.attempted_rows = [dict(row) for row in attempted_rows]
+        exc.completed_write_count = writes_performed
+        exc.writes_performed_count = writes_performed
+        exc.write_ambiguity = not exc.budget_exhausted
+        if plan is not None:
+            plan["status"] = "timeout_blocked"
+            plan["attempted_rows"] = [dict(row) for row in attempted_rows]
+            plan["completed_write_count"] = writes_performed
+            plan["writes_performed_count"] = writes_performed
+            plan["writes_performed"] = writes_performed > 0
+            plan["write_ambiguity"] = exc.write_ambiguity
         raise
     except (RuntimeError, ValueError, TypeError) as exc:
         # A rejected write (for example GitHub's numeric-shape enforcement) must
@@ -1803,7 +1871,6 @@ def sync_scores(
         round_digits=options.round_digits,
     )
 
-    client.current_phase = "write"
     if not _apply_score_updates(
         client,
         options,
@@ -1950,6 +2017,16 @@ def _blocked_project_timeout_payload(
 ) -> dict[str, Any]:
     """Build a resumable no-write payload for a `gh` subprocess timeout (issue #8263)."""
     write_phase = error.phase == "write"
+    write_ambiguity = (
+        error.write_ambiguity
+        if error.write_ambiguity is not None
+        else write_phase and not error.budget_exhausted
+    )
+    attempted_rows = [dict(row) for row in error.attempted_rows]
+    attempted_field_names = list(error.attempted_field_names)
+    created_field_names = list(error.created_field_names)
+    completed_write_count = error.completed_write_count or error.writes_performed_count
+    writes_performed_count = completed_write_count
     if error.budget_exhausted:
         headline = (
             "Project #5 priority sync exhausted its bounded operation budget "
@@ -1974,16 +2051,30 @@ def _blocked_project_timeout_payload(
         "retryable": True,
         "items": [],
         "non_fatal": True,
-        "writes_performed": False,
-        "write_ambiguity": write_phase,
+        "attempted_rows": attempted_rows,
+        "attempted_field_names": attempted_field_names,
+        "created_field_names": created_field_names,
+        "completed_field_names": created_field_names,
+        "completed_write_count": completed_write_count,
+        "writes_performed_count": writes_performed_count,
+        "writes_performed": writes_performed_count > 0,
+        "write_ambiguity": write_ambiguity,
         "fallback": "live-label ordering",
         "message": (
             headline
-            + " No score write is claimed."
+            + (
+                f" {writes_performed_count} field-creation write(s) completed before this timeout."
+                if created_field_names
+                else " No field-creation write is claimed to have completed before this timeout."
+                if attempted_field_names
+                else f" {writes_performed_count} score write(s) completed before this timeout."
+                if writes_performed_count
+                else " No score write is claimed to have completed before this timeout."
+            )
             + (
                 " A timed-out write may still have landed server-side; re-read live "
                 "state before retrying."
-                if write_phase
+                if write_ambiguity
                 else ""
             )
             + " Continue with live-label ordering; retry with a larger --gh-timeout "
@@ -2052,10 +2143,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if args.command != "sync":
         raise ValueError(f"unsupported command: {args.command}")
-    if args.gh_timeout <= 0:
-        _build_parser().error("--gh-timeout must be positive")
-    if args.gh_total_budget <= 0:
-        _build_parser().error("--gh-total-budget must be positive")
+    if not math.isfinite(args.gh_timeout) or args.gh_timeout <= 0:
+        _build_parser().error("--gh-timeout must be positive and finite")
+    if not math.isfinite(args.gh_total_budget) or args.gh_total_budget <= 0:
+        _build_parser().error("--gh-total-budget must be positive and finite")
 
     options = SyncOptions(
         owner=args.owner,

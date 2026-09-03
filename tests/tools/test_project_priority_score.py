@@ -1439,6 +1439,79 @@ def test_gh_project_client_caps_command_at_remaining_budget(
     assert 0 < seen["timeout"] <= 5.5
 
 
+@pytest.mark.parametrize(
+    "existing_field_count",
+    [0, 2, len(REQUIRED_NUMBER_FIELDS)],
+    ids=["all-field-writes", "partial-field-writes", "zero-field-writes"],
+)
+@pytest.mark.parametrize("timeout_target", ["project-id", "item-read"])
+def test_later_read_timeout_preserves_field_creation_telemetry(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    existing_field_count: int,
+    timeout_target: str,
+) -> None:
+    """Later read timeouts retain known schema writes and read-phase certainty."""
+
+    existing_fields = list(REQUIRED_NUMBER_FIELDS[:existing_field_count])
+    expected_created_fields = list(REQUIRED_NUMBER_FIELDS[existing_field_count:])
+    created_fields: list[str] = []
+    field_list_calls = 0
+
+    def _run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal field_list_calls
+        command = list(args[0])  # type: ignore[arg-type]
+        if command[1:3] == ["project", "field-list"]:
+            field_list_calls += 1
+            fields = [EFFORT_FIELD, *existing_fields, *created_fields]
+            return subprocess.CompletedProcess(
+                args=command,
+                returncode=0,
+                stdout=json.dumps({"fields": [_field(name) for name in fields]}),
+            )
+        if command[1:3] == ["project", "field-create"]:
+            created_fields.append(command[command.index("--name") + 1])
+            return subprocess.CompletedProcess(args=command, returncode=0, stdout="", stderr="")
+        if command[1:3] == ["project", "view"]:
+            if timeout_target == "project-id":
+                raise subprocess.TimeoutExpired(cmd=command, timeout=kwargs["timeout"])
+            return subprocess.CompletedProcess(
+                args=command,
+                returncode=0,
+                stdout=json.dumps({"id": "project-id"}),
+                stderr="",
+            )
+        if command[1:3] == ["api", "graphql"]:
+            if timeout_target == "item-read":
+                raise subprocess.TimeoutExpired(cmd=command, timeout=kwargs["timeout"])
+            raise AssertionError("unexpected GraphQL command")
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(subprocess, "run", _run)
+
+    assert main(["sync", "--only-empty", "--ensure-fields"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "timeout_blocked"
+    assert payload["phase"] == "read"
+    assert payload["attempted_field_names"] == expected_created_fields
+    assert payload["created_field_names"] == expected_created_fields
+    assert payload["completed_field_names"] == expected_created_fields
+    assert payload["completed_write_count"] == len(expected_created_fields)
+    assert payload["writes_performed_count"] == len(expected_created_fields)
+    assert payload["writes_performed"] is bool(expected_created_fields)
+    assert payload["write_ambiguity"] is False
+    assert "may still have landed" not in payload["message"]
+    if expected_created_fields:
+        assert (
+            f"{len(expected_created_fields)} field-creation write(s) completed"
+            in payload["message"]
+        )
+    assert payload["items"] == []
+    assert created_fields == expected_created_fields
+    assert field_list_calls == (2 if expected_created_fields else 1)
+
+
 def test_ensure_required_fields_marks_field_creation_as_write(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

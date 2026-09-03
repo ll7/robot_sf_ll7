@@ -557,6 +557,13 @@ class GhProjectClient:
         self._budget_start = time.monotonic()
         self.last_item_fetch_stats: ProjectItemFetchStats | None = None
         self.last_eligibility_plan: dict[str, Any] | None = None
+        self._field_creation_progress: dict[str, Any] = {
+            "attempted_field_names": [],
+            "created_field_names": [],
+            "completed_write_count": 0,
+            "writes_performed_count": 0,
+            "write_ambiguity": False,
+        }
 
     def _run_completed(self, *args: str) -> subprocess.CompletedProcess[str]:
         """Run a gh command and raise a high-signal error on failure."""
@@ -1205,6 +1212,12 @@ def ensure_required_fields(
     created_missing_field = False
     attempted_field_names: list[str] = []
     created_field_names: list[str] = []
+    _set_field_creation_progress(
+        client,
+        attempted_field_names=attempted_field_names,
+        created_field_names=created_field_names,
+        write_ambiguity=False,
+    )
     for name in REQUIRED_NUMBER_FIELDS:
         if name not in fields:
             attempted_field_names.append(name)
@@ -1214,12 +1227,19 @@ def ensure_required_fields(
             except GhProjectTimeoutError as exc:
                 _record_field_creation_progress(
                     exc,
+                    client=client,
                     attempted_field_names=attempted_field_names,
                     created_field_names=created_field_names,
                     write_ambiguity=not exc.budget_exhausted,
                 )
                 raise
             created_field_names.append(name)
+            _set_field_creation_progress(
+                client,
+                attempted_field_names=attempted_field_names,
+                created_field_names=created_field_names,
+                write_ambiguity=False,
+            )
             created_missing_field = True
     if created_missing_field:
         client.current_phase = "read"
@@ -1230,6 +1250,7 @@ def ensure_required_fields(
             # timeout outcome, even though the final field-list is a read operation.
             _record_field_creation_progress(
                 exc,
+                client=client,
                 attempted_field_names=attempted_field_names,
                 created_field_names=created_field_names,
                 write_ambiguity=False,
@@ -1241,16 +1262,75 @@ def ensure_required_fields(
 def _record_field_creation_progress(
     error: GhProjectTimeoutError,
     *,
+    client: Any,
     attempted_field_names: Sequence[str],
     created_field_names: Sequence[str],
     write_ambiguity: bool,
 ) -> None:
     """Attach schema-mutation progress to a timeout from field creation or re-read."""
+    _set_field_creation_progress(
+        client,
+        attempted_field_names=attempted_field_names,
+        created_field_names=created_field_names,
+        write_ambiguity=write_ambiguity,
+    )
     error.attempted_field_names = list(attempted_field_names)
     error.created_field_names = list(created_field_names)
     error.completed_write_count = len(created_field_names)
     error.writes_performed_count = error.completed_write_count
     error.write_ambiguity = write_ambiguity
+
+
+def _set_field_creation_progress(
+    client: Any,
+    *,
+    attempted_field_names: Sequence[str],
+    created_field_names: Sequence[str],
+    write_ambiguity: bool,
+) -> None:
+    """Retain schema-mutation progress for later timeout reporting in one sync."""
+    completed_write_count = len(created_field_names)
+    client._field_creation_progress = {
+        "attempted_field_names": list(attempted_field_names),
+        "created_field_names": list(created_field_names),
+        "completed_write_count": completed_write_count,
+        "writes_performed_count": completed_write_count,
+        "write_ambiguity": write_ambiguity,
+    }
+
+
+def _carry_field_creation_progress(
+    client: Any,
+    error: GhProjectTimeoutError,
+) -> None:
+    """Carry known schema writes into a later timeout without masking score writes."""
+    progress = getattr(client, "_field_creation_progress", None)
+    if not isinstance(progress, dict):
+        return
+    attempted_field_names = progress.get("attempted_field_names", [])
+    created_field_names = progress.get("created_field_names", [])
+    if not isinstance(attempted_field_names, list) or not all(
+        isinstance(name, str) for name in attempted_field_names
+    ):
+        attempted_field_names = []
+    if not isinstance(created_field_names, list) or not all(
+        isinstance(name, str) for name in created_field_names
+    ):
+        created_field_names = []
+    error.attempted_field_names = list(attempted_field_names)
+    error.created_field_names = list(created_field_names)
+    if error.attempted_rows:
+        return
+    completed_write_count = progress.get("completed_write_count", len(created_field_names))
+    writes_performed_count = progress.get("writes_performed_count", completed_write_count)
+    if not isinstance(completed_write_count, int) or completed_write_count < 0:
+        completed_write_count = len(created_field_names)
+    if not isinstance(writes_performed_count, int) or writes_performed_count < 0:
+        writes_performed_count = completed_write_count
+    error.completed_write_count = completed_write_count
+    error.writes_performed_count = writes_performed_count
+    write_ambiguity = progress.get("write_ambiguity", False)
+    error.write_ambiguity = write_ambiguity if isinstance(write_ambiguity, bool) else False
 
 
 def build_previews(
@@ -1379,7 +1459,11 @@ def _project_metadata(
             client.field_list(owner=options.owner, project_number=options.project_number)
         )
     )
-    project_id = client.project_id(owner=options.owner, project_number=options.project_number)
+    try:
+        project_id = client.project_id(owner=options.owner, project_number=options.project_number)
+    except GhProjectTimeoutError as exc:
+        _carry_field_creation_progress(client, exc)
+        raise
     return fields, project_id
 
 
@@ -1691,20 +1775,24 @@ def _fetch_score_items(
 ) -> list[dict[str, Any]]:
     """Fetch the targeted item or a proven-complete unscoped item inventory."""
 
-    if options.issue_number is not None:
-        return client.item_list_until_issue(
+    try:
+        if options.issue_number is not None:
+            return client.item_list_until_issue(
+                owner=options.owner,
+                project_number=options.project_number,
+                issue_number=options.issue_number,
+                limit=options.limit,
+            )
+        return client.item_list_paginated(
             owner=options.owner,
             project_number=options.project_number,
-            issue_number=options.issue_number,
+            project_id=project_id,
             limit=options.limit,
+            min_graphql_remaining=options.min_graphql_remaining,
         )
-    return client.item_list_paginated(
-        owner=options.owner,
-        project_number=options.project_number,
-        project_id=project_id,
-        limit=options.limit,
-        min_graphql_remaining=options.min_graphql_remaining,
-    )
+    except GhProjectTimeoutError as exc:
+        _carry_field_creation_progress(client, exc)
+        raise
 
 
 def _index_issue_items(items: Sequence[dict[str, Any]]) -> dict[int, dict[str, Any]]:
@@ -1819,7 +1907,7 @@ def _finalize_eligibility_plan(
         plan["status"] = "no_eligible_items"
 
 
-def sync_scores(
+def _sync_scores(
     client: GhProjectClient,
     options: SyncOptions,
 ) -> list[SyncPreview]:
@@ -1883,6 +1971,24 @@ def sync_scores(
     _finalize_eligibility_plan(client, options, updates=updates)
 
     return score_previews
+
+
+def sync_scores(
+    client: GhProjectClient,
+    options: SyncOptions,
+) -> list[SyncPreview]:
+    """Compute and optionally write scores while retaining timeout telemetry."""
+    _set_field_creation_progress(
+        client,
+        attempted_field_names=[],
+        created_field_names=[],
+        write_ambiguity=False,
+    )
+    try:
+        return _sync_scores(client, options)
+    except GhProjectTimeoutError as exc:
+        _carry_field_creation_progress(client, exc)
+        raise
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -2063,7 +2169,9 @@ def _blocked_project_timeout_payload(
         "message": (
             headline
             + (
-                f" {writes_performed_count} field-creation write(s) completed before this timeout."
+                f" {writes_performed_count} score write(s) completed before this timeout."
+                if attempted_rows
+                else f" {writes_performed_count} field-creation write(s) completed before this timeout."
                 if created_field_names
                 else " No field-creation write is claimed to have completed before this timeout."
                 if attempted_field_names

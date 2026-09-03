@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from scripts.dev.check_fast_lane_routing import (
     FastLanePolicy,
+    _changed_modules,
     audit_changed_modules,
     load_fast_lane_policy,
 )
@@ -18,6 +20,47 @@ def _policy(*fast_files: str) -> FastLanePolicy:
         fast_file_prefixes=(),
         slow_file_overrides=frozenset(),
     )
+
+
+def _git(repo: Path, *args: str) -> str:
+    completed = subprocess.run(
+        ["git", *args],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout.strip()
+
+
+def test_changed_modules_excludes_changes_unique_to_advanced_base(tmp_path: Path) -> None:
+    """A stale ordinary-CAS head must audit only changes introduced on its branch."""
+
+    _git(tmp_path, "init")
+    _git(tmp_path, "config", "user.name", "Fast Lane Test")
+    _git(tmp_path, "config", "user.email", "fast-lane@example.invalid")
+    source_root = tmp_path / "robot_sf"
+    source_root.mkdir()
+    (source_root / "shared.py").write_text("VALUE = 'common'\n", encoding="utf-8")
+    _git(tmp_path, "add", "robot_sf/shared.py")
+    _git(tmp_path, "commit", "-m", "common base")
+    common_sha = _git(tmp_path, "rev-parse", "HEAD")
+
+    _git(tmp_path, "switch", "-c", "feature")
+    (source_root / "feature_only.py").write_text("FEATURE = True\n", encoding="utf-8")
+    _git(tmp_path, "add", "robot_sf/feature_only.py")
+    _git(tmp_path, "commit", "-m", "feature change")
+    feature_sha = _git(tmp_path, "rev-parse", "HEAD")
+
+    _git(tmp_path, "switch", "-c", "advanced-base", common_sha)
+    (source_root / "shared.py").write_text("VALUE = 'base only'\n", encoding="utf-8")
+    _git(tmp_path, "add", "robot_sf/shared.py")
+    _git(tmp_path, "commit", "-m", "base-only change")
+    advanced_base_sha = _git(tmp_path, "rev-parse", "HEAD")
+
+    assert _changed_modules(tmp_path, advanced_base_sha, feature_sha) == [
+        "robot_sf/feature_only.py"
+    ]
 
 
 def test_adversarial_harness_and_atlas_contracts_report_missing_registration() -> None:

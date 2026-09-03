@@ -8,6 +8,9 @@ Usage: scripts/dev/run_worktree_shared_venv.sh [options] -- <uv-run-command> [ar
 Run a targeted validation command from the current checkout while reusing a shared virtualenv.
 The helper pins imports to this worktree by prepending PYTHONPATH=$PWD:$PWD/fast-pysf and sets UV_NO_SYNC=1 so
 `uv run` does not silently resync or rewrite the shared environment.
+Do not start a fresh linked-worktree command with bare `uv run`: it can materialize a partial local
+`.venv` that then shadows the shared environment. Route commands through this wrapper; intentionally
+local environments must be created with `scripts/dev/bootstrap_worktree.sh` first.
 For linked worktrees, the helper also derives a per-worktree COVERAGE_FILE unless one is already
 set, preventing parallel focused pytest runs from sharing output/coverage/.coverage state.
 

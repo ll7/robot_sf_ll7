@@ -1565,6 +1565,7 @@ def test_worktree_shared_venv_helper_has_valid_shell_and_help() -> None:
     assert "PYTHONPATH=$PWD:$PWD/fast-pysf" in help_result.stdout
     assert "UV_PROJECT_ENVIRONMENT" in help_result.stdout
     assert "UV_NO_SYNC=1" in help_result.stdout
+    assert "Do not start a fresh linked-worktree command with bare `uv run`" in help_result.stdout
     assert "COVERAGE_FILE" in help_result.stdout
     assert "full local .venv" in help_result.stdout
     assert "--profile NAME" in help_result.stdout

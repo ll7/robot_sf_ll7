@@ -1700,20 +1700,19 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
     result = retry.result
     snapshot_data_source = "graphql"
     graphql_fallback_diagnostic = ""
-    if result.returncode != 0:
-        if retry.quota_exhausted:
-            # GraphQL quota is spent but REST reads remain available; rebuild the
-            # snapshot payload through REST so hosted-check evidence can still be
-            # refreshed (issue #7705). Fail closed when REST is also unavailable.
-            rest_payload, rest_err = _rest_pr_view_payload(pr_number, repo=repo)
-            if rest_err or not isinstance(rest_payload, dict):
-                return {}, rest_err or "REST snapshot fallback returned no payload"
-            payload = rest_payload
-            snapshot_data_source = "rest_fallback_graphql_quota"
-            graphql_fallback_diagnostic = retry.terminal_diagnostic
-        else:
-            diagnostic = retry.terminal_diagnostic if retry.exhausted else result.stderr.strip()
-            return {}, diagnostic or f"gh pr view failed (exit {result.returncode})"
+    if retry.quota_exhausted:
+        # GraphQL quota is spent but REST reads remain available; rebuild the
+        # snapshot payload through REST so hosted-check evidence can still be
+        # refreshed (issue #7705). Fail closed when REST is also unavailable.
+        rest_payload, rest_err = _rest_pr_view_payload(pr_number, repo=repo)
+        if rest_err or not isinstance(rest_payload, dict):
+            return {}, rest_err or "REST snapshot fallback returned no payload"
+        payload = rest_payload
+        snapshot_data_source = "rest_fallback_graphql_quota"
+        graphql_fallback_diagnostic = retry.terminal_diagnostic
+    elif result.returncode != 0:
+        diagnostic = retry.terminal_diagnostic if retry.exhausted else result.stderr.strip()
+        return {}, diagnostic or f"gh pr view failed (exit {result.returncode})"
     else:
         payload, err = _parse_json(result.stdout)
         if err or not isinstance(payload, dict):
@@ -1911,6 +1910,8 @@ def fetch_merge_queue_strategy(pr_number: str | int, *, repo: str) -> tuple[str 
         timeout=45,
     )
     result = retry.result
+    if retry.quota_exhausted:
+        return None, retry.terminal_diagnostic or "graphql mergeQueue configuration query failed"
     if result.returncode != 0:
         diagnostic = retry.terminal_diagnostic if retry.exhausted else result.stderr.strip()
         return None, diagnostic or "graphql mergeQueue configuration query failed"
@@ -2004,7 +2005,7 @@ def fetch_threads_resolved(pr_number: str | int, *, repo: str) -> tuple[bool | N
         timeout=45,
     )
     result = retry.result
-    if result.returncode != 0:
+    if retry.quota_exhausted or result.returncode != 0:
         return None, _thread_query_failure_diagnostic(retry, result, pr_number, repo=repo)
     payload, err = _parse_json(result.stdout)
     if err or not isinstance(payload, dict):
@@ -2151,7 +2152,7 @@ def _evaluate_live(
             evaluate_merge_gate(
                 snapshot,
                 main_sha=main_sha,
-                threads_resolved=False,
+                threads_resolved=None,
                 reviewers_requested=bool(snapshot["reviewers_requested"]),
                 merge_group_head_sha=merge_group_head_sha,
                 queue_merging_strategy=queue_merging_strategy or "",

@@ -541,6 +541,36 @@ def _blocked_preflight_reasons(blocked_state: dict[str, Any]) -> list[str]:
     return [str(reason) for reason in blocked_state.get("reasons", [])]
 
 
+def _project_review_thread_state(pr: dict[str, Any], status: Any) -> None:
+    """Project non-OK review-thread evidence onto the outer PR route state."""
+    review_thread_status = str(status or "unknown")
+    if review_thread_status == "ok":
+        return
+
+    pr["review_threads"] = review_thread_status
+    pr["review_threads_admission"] = "fail_closed_unknown"
+    preflight = pr.get("preflight")
+    if not isinstance(preflight, dict):
+        preflight = {"status": "unknown", "reasons": []}
+        pr["preflight"] = preflight
+    reasons = preflight.get("reasons")
+    if not isinstance(reasons, list):
+        reasons = []
+        preflight["reasons"] = reasons
+    reason = f"review_threads_{review_thread_status}"
+    if reason not in reasons:
+        reasons.append(reason)
+
+    # Nested thread state is an independent admission dimension. Any non-OK
+    # result therefore overrides the outer route to the established blocked
+    # action, including when another stale or incomplete dimension is present.
+    preflight["status"] = "blocked"
+    pr["next_action"] = "inspect_blocking_preflight"
+    pr["attention"] = "preflight_attention"
+    preflight["review_threads"] = review_thread_status
+    preflight["review_threads_admission"] = "fail_closed_unknown"
+
+
 def _head_preflight(
     *, expected_head_sha: str, head_sha: str
 ) -> tuple[str | None, list[str], bool | None]:
@@ -633,24 +663,19 @@ def _fetch_pr_rest(
         "comments": comments_status,
         "checks": checks_status,
     }
-    payload["review_threads"] = review_thread_status
-    payload["review_threads_admission"] = "fail_closed_unknown"
     payload["route_evidence_only"] = True
+    _project_review_thread_state(payload, review_thread_status)
     preflight = payload.get("preflight")
     if isinstance(preflight, dict):
         reasons = preflight.setdefault("reasons", [])
         for endpoint, status in payload["rest_enrichment"].items():
             if status != "ok" and isinstance(reasons, list):
                 reasons.append(f"rest_{endpoint}_{status}")
-        reason = f"review_threads_{review_thread_status}"
-        if isinstance(reasons, list) and reason not in reasons:
-            reasons.append(reason)
-        preflight["status"] = "blocked"
         preflight["rest_enrichment"] = payload["rest_enrichment"]
-        preflight["review_threads"] = review_thread_status
-        preflight["review_threads_admission"] = "fail_closed_unknown"
-    payload["next_action"] = "inspect_blocking_preflight"
-    payload["attention"] = "preflight_attention"
+        if preflight.get("status") not in {"stale", "blocked"}:
+            preflight["status"] = "blocked"
+            payload["next_action"] = "inspect_blocking_preflight"
+            payload["attention"] = "preflight_attention"
     return payload
 
 
@@ -773,40 +798,40 @@ query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
         timeout=45,
     )
     result = retry.result
+    stderr = result.stderr.strip()
+    if retry.quota_exhausted or _is_graphql_quota_error(stderr):
+        handoff = quota_reset_handoff(
+            retry_command=(
+                shlex.join(
+                    [
+                        "uv",
+                        "run",
+                        "python",
+                        "-m",
+                        "scripts.dev.snapshot_pr_queue",
+                        str(pr_number),
+                        "--review-threads",
+                        "--json",
+                        "--repo",
+                        repo,
+                    ]
+                )
+            ),
+        )
+        return {
+            "status": "unknown_graphql_quota",
+            "unresolved": None,
+            "guidance": (
+                "GraphQL quota exhausted; review threads are GraphQL-only and cannot be "
+                "refreshed via REST. Never admit a PR to merge-ready from this snapshot. "
+                + handoff["handoff"]
+            ),
+            "quota_reset_at": handoff["quota_reset_at"],
+            "reset_in_seconds": handoff["reset_in_seconds"],
+            "retry_after_utc": handoff["retry_after_utc"],
+            "retry_command": handoff["retry_command"],
+        }
     if result.returncode != 0:
-        stderr = result.stderr.strip()
-        if retry.quota_exhausted or _is_graphql_quota_error(stderr):
-            handoff = quota_reset_handoff(
-                retry_command=(
-                    shlex.join(
-                        [
-                            "uv",
-                            "run",
-                            "python",
-                            "-m",
-                            "scripts.dev.snapshot_pr_queue",
-                            str(pr_number),
-                            "--review-threads",
-                            "--json",
-                            "--repo",
-                            repo,
-                        ]
-                    )
-                ),
-            )
-            return {
-                "status": "unknown_graphql_quota",
-                "unresolved": None,
-                "guidance": (
-                    "GraphQL quota exhausted; review threads are GraphQL-only and cannot be "
-                    "refreshed via REST. Never admit a PR to merge-ready from this snapshot. "
-                    + handoff["handoff"]
-                ),
-                "quota_reset_at": handoff["quota_reset_at"],
-                "reset_in_seconds": handoff["reset_in_seconds"],
-                "retry_after_utc": handoff["retry_after_utc"],
-                "retry_command": handoff["retry_command"],
-            }
         if retry.exhausted:
             return {
                 "status": "unknown_graphql_transient",
@@ -1256,6 +1281,13 @@ def fetch_pr(
         timeout=30,
     )
     result = retry.result
+    if retry.quota_exhausted:
+        return _fetch_pr_rest(
+            number,
+            repo=repo,
+            expected_head_sha=expected_head_sha,
+            current_main_sha=current_main_sha,
+        )
     if result.returncode != 0:
         stderr = result.stderr.strip()
         if _is_graphql_quota_error(stderr):
@@ -1459,6 +1491,13 @@ def snapshot_active_prs(*, repo: str, limit: int) -> dict[str, Any]:
     )
     result = retry.result
 
+    if retry.quota_exhausted:
+        return _snapshot_active_rest_fallback(
+            repo=repo,
+            limit=limit,
+            current_main_sha=current_main_sha,
+            fallback_kind="quota",
+        )
     if result.returncode != 0:
         stderr = result.stderr.strip()
         if _is_graphql_quota_error(stderr):
@@ -1567,10 +1606,12 @@ def snapshot_prs(
     if include_review_threads:
         for pr in prs:
             if pr.get("status") == "ok" and isinstance(pr.get("number"), int):
-                pr["review_thread_snapshot"] = _review_thread_snapshot(
+                review_thread_snapshot = _review_thread_snapshot(
                     int(pr["number"]),
                     repo=repo,
                 )
+                pr["review_thread_snapshot"] = review_thread_snapshot
+                _project_review_thread_state(pr, review_thread_snapshot.get("status"))
     return {
         "schema": SCHEMA_VERSION,
         "repo": repo,

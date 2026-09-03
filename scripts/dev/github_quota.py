@@ -108,6 +108,22 @@ def fetch_graphql_reset_at(*, timeout: int = 30) -> int | None:
     return snapshot.graphql_reset_at
 
 
+def _unknown_quota_reset_handoff(*, retry_command: str) -> dict[str, Any]:
+    """Build a retry handoff when the quota reset epoch cannot be trusted."""
+    return {
+        "quota_reset_at": None,
+        "reset_in_seconds": None,
+        "retry_after_utc": None,
+        "retry_command": retry_command,
+        "handoff": (
+            "GraphQL quota exhausted; the quota reset time is unavailable "
+            "(reset epoch was malformed or the rate-limit read failed). Retry later with: "
+            + retry_command
+            + ". Never admit merge-ready from unknown thread state."
+        ),
+    }
+
+
 def quota_reset_handoff(
     *,
     retry_command: str,
@@ -124,23 +140,17 @@ def quota_reset_handoff(
         reset_at = fetch_graphql_reset_at()
     observed_at = time.time() if now is None else now
     if reset_at is None:
-        return {
-            "quota_reset_at": None,
-            "reset_in_seconds": None,
-            "retry_after_utc": None,
-            "retry_command": retry_command,
-            "handoff": (
-                "GraphQL quota exhausted; the quota reset time is unavailable "
-                "(rate-limit read failed). Retry later with: "
-                + retry_command
-                + ". Never admit merge-ready from unknown thread state."
-            ),
-        }
+        return _unknown_quota_reset_handoff(retry_command=retry_command)
+    if type(reset_at) is not int or reset_at < 0:
+        return _unknown_quota_reset_handoff(retry_command=retry_command)
     # Round up so a consumer that waits this many seconds cannot retry just
     # before the integer-second reset epoch. ``retry_after_utc`` remains the
     # authoritative wall-clock value.
-    reset_in_seconds = max(0, math.ceil(reset_at - observed_at))
-    retry_after_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(reset_at))
+    try:
+        reset_in_seconds = max(0, math.ceil(reset_at - observed_at))
+        retry_after_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(reset_at))
+    except (OverflowError, OSError, TypeError, ValueError):
+        return _unknown_quota_reset_handoff(retry_command=retry_command)
     return {
         "quota_reset_at": reset_at,
         "reset_in_seconds": reset_in_seconds,

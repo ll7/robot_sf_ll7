@@ -176,6 +176,9 @@ def test_flat_projection_requires_and_preserves_the_selected_level(
     assert {candidate.candidate_id for candidate in belief.candidate_probabilities} == expected_ids
     assert {candidate.kind for candidate in belief.candidate_probabilities} == {expected_kind}
     assert "hierarchical_projection" in belief.blockers
+    assert "arrival_probability_unestimated" in belief.blockers
+    assert "change_probability_unestimated" in belief.blockers
+    assert belief.change_probability == 0.0
     assert ACTOR_FORBIDDEN_KEYS.isdisjoint(belief.to_dict())
 
 
@@ -187,12 +190,36 @@ def test_flat_projection_rejects_implicit_or_unknown_level() -> None:
 
 @pytest.mark.parametrize(
     "bad_evidence_source",
-    ["oracle_upper_bound", "simulator_truth", "waypoint_truth"],
+    [
+        "oracle_upper_bound",
+        "simulator_truth",
+        "scenario_assigned_route",
+        "assigned_route",
+        "true_goal",
+        "goal_truth",
+        "waypoint_truth",
+        "future_trajectory",
+        "simulator_goal",
+        "simulator_route",
+    ],
 )
 def test_actor_hierarchy_rejects_privileged_evidence_labels(bad_evidence_source: str) -> None:
     """Oracle, simulator, and truth labels cannot enter actor-side hierarchy state."""
     with pytest.raises(ValueError, match="oracle or simulator"):
         _posterior(evidence_source=bad_evidence_source)
+
+
+def test_innovation_is_an_unbounded_diagnostic_and_not_change_probability() -> None:
+    """Slice A keeps NIS-like innovation separate from calibrated change probability."""
+    posterior = replace(_posterior(), innovation=4.2)
+
+    belief = posterior.to_goal_belief_v1("final_destination")
+
+    assert posterior.innovation == pytest.approx(4.2)
+    assert belief.change_probability == 0.0
+    assert "change_probability_unestimated" in belief.blockers
+    with pytest.raises(ValueError, match="innovation must be non-negative"):
+        replace(posterior, innovation=-0.1)
 
 
 def test_parent_links_and_unknown_external_keys_fail_closed() -> None:

@@ -413,6 +413,7 @@ class ObstacleForce:
         self.get_obstacles = sim.get_raw_obstacles
         self.get_peds = sim.peds.pos
         self.get_agent_radius = lambda: sim.peds.agent_radius
+        self._obstacle_force_applied = False
 
     def __call__(self) -> np.ndarray:
         """Compute obstacle forces for each pedestrian.
@@ -428,6 +429,7 @@ class ObstacleForce:
         if len(obstacles) == 0:
             return forces
 
+        factor = float(self.config.factor)
         sigma = self.config.sigma
         threshold = self.config.threshold
 
@@ -438,11 +440,12 @@ class ObstacleForce:
             all_obstacle_forces_surface_distance_unit_normal(
                 forces, ped_positions, obstacles, threshold
             )
-        return forces * self.config.factor
+        if factor != 0.0 and ped_positions.shape[0] > 0:
+            self._obstacle_force_applied = True
+        return forces * factor
 
     def law_metadata(self) -> dict[str, object]:
         """Return the fast-pysf law and site conventions used by this force."""
-        obstacles = self.get_obstacles()
         factor = float(getattr(self.config, "factor", 1.0))
         sigma = float(getattr(self.config, "sigma", 0.0))
         threshold = float(getattr(self.config, "threshold", 0.0))
@@ -454,7 +457,7 @@ class ObstacleForce:
             geometry_convention="map_line_endpoints_orthogonal_vector",
             radius_convention="threshold_plus_agent_radius_sigma",
             enabled=enabled,
-            applied=enabled and obstacles is not None and len(obstacles) > 0,
+            applied=bool(getattr(self, "_obstacle_force_applied", False)),
             resolution_mode=getattr(self.config, "obstacle_force_law_resolution_mode", None),
             parameters={
                 "factor": factor,

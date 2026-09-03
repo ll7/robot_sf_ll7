@@ -648,8 +648,9 @@ class Simulator:
                     # Preserve the compatibility path's best-effort behavior for
                     # legacy force objects with a non-numeric factor.
                     enabled = True
-            raw_obstacles = getattr(self.pysf_sim, "raw_obstacles", ())
-            applied = enabled and len(raw_obstacles) > 0
+            # Older backends expose no evaluation latch, so configuration and
+            # successful application must not be conflated in the record.
+            applied = False
             return obstacle_force_law_metadata(
                 getattr(self.config, "obstacle_force_law", None),
                 site="fast_pysf",

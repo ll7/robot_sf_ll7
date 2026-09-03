@@ -1,6 +1,7 @@
 """Geometry-derived tests for obstacle force calculations."""
 
 import math
+from dataclasses import asdict, replace
 from itertools import pairwise
 
 import numpy as np
@@ -203,6 +204,33 @@ def test_obstacle_force_metadata_hashes_numerical_parameters() -> None:
     assert len(metadata["parameters_sha256"]) == 64
     assert metadata["source_commit"] == "abc123"
     assert metadata["config_hash"] == "cfg123"
+
+
+@pytest.mark.parametrize(
+    ("law_version", "resolution_mode"),
+    [
+        (None, "defaulted_missing"),
+        ("", "historical_unversioned"),
+        (SURFACE_DISTANCE_UNIT_NORMAL_V2, "explicit"),
+    ],
+)
+def test_obstacle_force_config_copy_preserves_selector_provenance(
+    law_version, resolution_mode
+) -> None:
+    """Dataclass copies retain selector provenance without changing serialized values."""
+    config = ObstacleForceConfig(law_version=law_version)
+    copied = replace(config)
+
+    assert copied.obstacle_force_law_resolution_mode == resolution_mode
+    assert copied.law_version == config.law_version
+    assert asdict(copied)["law_version"] == config.law_version
+
+
+def test_obstacle_force_config_copy_with_law_override_is_explicit() -> None:
+    """Replacing the law itself recomputes provenance for the new selector."""
+    copied = replace(ObstacleForceConfig(), law_version=SURFACE_DISTANCE_UNIT_NORMAL_V2)
+
+    assert copied.obstacle_force_law_resolution_mode == "explicit"
 
 
 def test_obstacle_force_component_dispatches_corrected_law_without_changing_default():

@@ -29,12 +29,36 @@ OBSTACLE_FORCE_LAW_SELECTOR_KEYS = (
 )
 
 
+class _ResolvedObstacleForceLaw(str):
+    """String-compatible law value that retains selector-resolution provenance."""
+
+    resolution_mode: str
+
+    def __new__(cls, value: str, resolution_mode: str) -> "_ResolvedObstacleForceLaw":
+        instance = super().__new__(cls, value)
+        instance.resolution_mode = resolution_mode
+        return instance
+
+    def __reduce_ex__(
+        self, protocol: int
+    ) -> tuple[type["_ResolvedObstacleForceLaw"], tuple[str, str]]:
+        """Keep the resolution mode when dataclasses or callers deep-copy the value.
+
+        Returns:
+            The constructor and arguments needed to recreate this resolved value.
+        """
+        del protocol
+        return type(self), (str(self), self.resolution_mode)
+
+
 def _resolve_obstacle_force_law_value(value: Any) -> tuple[str, str]:
     """Resolve one scalar selector and retain how it was supplied.
 
     Returns:
         Tuple of ``(canonical_law, resolution_mode)``.
     """
+    if isinstance(value, _ResolvedObstacleForceLaw):
+        return str(value), value.resolution_mode
     if value is None:
         return DEFAULT_OBSTACLE_FORCE_LAW, "defaulted_missing"
     if not isinstance(value, str):
@@ -67,11 +91,14 @@ def resolve_obstacle_force_law_with_mode(value: Any = None) -> tuple[str, str]:
         ValueError: If a selector is unsupported or recognized aliases conflict.
     """
     if not isinstance(value, Mapping):
-        return _resolve_obstacle_force_law_value(value)
+        resolved, mode = _resolve_obstacle_force_law_value(value)
+        return _ResolvedObstacleForceLaw(resolved, mode), mode
 
     selectors = [(key, value[key]) for key in OBSTACLE_FORCE_LAW_SELECTOR_KEYS if key in value]
     if not selectors:
-        return DEFAULT_OBSTACLE_FORCE_LAW, "defaulted_missing"
+        return _ResolvedObstacleForceLaw(DEFAULT_OBSTACLE_FORCE_LAW, "defaulted_missing"), (
+            "defaulted_missing"
+        )
 
     resolved_selectors: list[tuple[str, Any, str, str]] = []
     for key, candidate in selectors:
@@ -88,7 +115,7 @@ def resolve_obstacle_force_law_with_mode(value: Any = None) -> tuple[str, str]:
     mode = "historical_unversioned"
     if any(selector[3] == "explicit" for selector in resolved_selectors):
         mode = "explicit"
-    return resolved, mode
+    return _ResolvedObstacleForceLaw(resolved, mode), mode
 
 
 def resolve_obstacle_force_law(value: Any = None) -> str:
@@ -346,7 +373,7 @@ class ObstacleForceConfig:
         """Resolve law assignments immediately and retain selector provenance."""
         if name == "law_version":
             resolved, mode = resolve_obstacle_force_law_with_mode(value)
-            object.__setattr__(self, name, resolved)
+            object.__setattr__(self, name, _ResolvedObstacleForceLaw(resolved, mode))
             object.__setattr__(self, "_obstacle_force_law_resolution_mode", mode)
             return
         object.__setattr__(self, name, value)

@@ -1,5 +1,7 @@
 """TODO docstring. Document this module."""
 
+from dataclasses import replace
+
 import pytest
 from pysocialforce.config import (
     LEGACY_SHIFTED_GRADIENT_V1,
@@ -112,6 +114,16 @@ def test_obstacle_force_law_defaults_to_legacy_and_accepts_corrected_opt_in() ->
 
     with pytest.raises(ValueError, match="unsupported obstacle-force law"):
         SimulationSettings(obstacle_force_law="unsupported")
+
+
+def test_obstacle_force_law_copy_preserves_selector_provenance() -> None:
+    """Copying simulation settings must not turn a missing selector into an explicit one."""
+    historical = SimulationSettings(obstacle_force_law="")
+    copied = replace(historical)
+    overridden = replace(SimulationSettings(), obstacle_force_law=SURFACE_DISTANCE_UNIT_NORMAL_V2)
+
+    assert copied.obstacle_force_law_resolution_mode == "historical_unversioned"
+    assert overridden.obstacle_force_law_resolution_mode == "explicit"
 
 
 def test_desired_speed_default_preserves_legacy_behavior():

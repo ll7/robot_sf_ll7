@@ -2168,6 +2168,81 @@ def test_worktree_shared_venv_checks_tool_after_uv_run_prefix(tmp_path: Path) ->
     assert "resolved to 0.16.4 but the active checkout pins ruff==0.16.5" in result.stderr
 
 
+@pytest.mark.parametrize(
+    "uv_options",
+    [
+        ("--no-sync",),
+        ("--extra", "training"),
+        ("--color", "never"),
+        ("--refresh-package", "ruff"),
+        ("--no-build-isolation-package", "robot-sf"),
+    ],
+)
+def test_worktree_shared_venv_checks_tool_after_uv_run_options(
+    tmp_path: Path,
+    uv_options: tuple[str, ...],
+) -> None:
+    """Flags and option values cannot hide a stale nested ``uv run`` tool."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--",
+            "uv",
+            "run",
+            *uv_options,
+            "ruff",
+            "check",
+            "x.py",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "uv-reached" not in result.stderr
+    assert "resolved to 0.16.4 but the active checkout pins ruff==0.16.5" in result.stderr
+
+
+def test_worktree_shared_venv_rejects_unknown_uv_run_option(
+    tmp_path: Path,
+) -> None:
+    """An unknown nested ``uv run`` form fails closed instead of guessing the tool."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--",
+            "uv",
+            "run",
+            "--unknown-option",
+            "ruff",
+            "check",
+            "x.py",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "uv-reached" not in result.stderr
+    assert "could not identify the nested uv tool" in result.stderr
+
+
 def test_worktree_shared_venv_passes_fresh_pinned_tool_with_preflight_line(
     tmp_path: Path,
 ) -> None:

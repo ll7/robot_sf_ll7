@@ -244,15 +244,59 @@ check_shared_venv_freshness() {
   # Pinned tool binaries (issue #8250) are checked below: the requested tool
   # runs from the selected venv, so only its version is compared against the
   # active checkout pin. Interpreters and shells are never gated here.
-  local tool="${cmd[0]:-}"
-  # The helper's documented examples also use ``-- uv run <tool>``. Inspect
-  # that compatibility form so the outer ``uv run`` does not hide the tool
-  # whose selected-venv version will actually be used.
-  if [[ "$tool" == "uv" && "${cmd[1]:-}" == "run" ]]; then
-    tool="${cmd[2]:-}"
-  fi
   local start_ms=""
   start_ms="$(date +%s%3N 2>/dev/null)" || start_ms=""
+  local tool="${cmd[0]:-}"
+  local freshness_parse_error=""
+
+  # The helper's documented examples also use ``-- uv run <tool>``. Walk the
+  # uv-run options so flags or option values cannot hide the tool whose
+  # selected-venv version will actually be used. Unknown options fail closed:
+  # guessing where the nested command starts would make the freshness gate
+  # appear to pass while checking the wrong binary.
+  if [[ "$tool" == "uv" && "${cmd[1]:-}" == "run" ]]; then
+    local uv_run_index=2
+    local uv_run_arg=""
+    tool=""
+    while (( uv_run_index < ${#cmd[@]} )); do
+      uv_run_arg="${cmd[$uv_run_index]}"
+      case "$uv_run_arg" in
+        --)
+          ((uv_run_index++))
+          tool="${cmd[$uv_run_index]:-}"
+          break
+          ;;
+        -m|--module|-s|--script|--gui-script)
+          # These modes execute through Python rather than a selected-venv
+          # tool entry point; preserve the interpreter skip boundary.
+          tool="python"
+          break
+          ;;
+        --extra|--no-extra|--group|--no-group|--only-group|--no-editable-package|--env-file|-w|--with|--with-editable|--with-requirements|--package|--python-platform|--index|--default-index|-i|--index-url|--extra-index-url|-f|--find-links|--index-strategy|--keyring-provider|-P|--upgrade-package|--upgrade-group|--resolution|--prerelease|--fork-strategy|--exclude-newer|--exclude-newer-package|--no-sources-package|--reinstall-package|--refresh-package|--link-mode|-C|--config-setting|--config-settings-package|--no-build-isolation-package|--no-build-package|--no-binary-package|-p|--python|--allow-insecure-host|--cache-dir|--color|--directory|--project|--config-file)
+          if (( uv_run_index + 1 >= ${#cmd[@]} )); then
+            freshness_parse_error="uv run option '$uv_run_arg' is missing its value"
+            break
+          fi
+          ((uv_run_index+=2))
+          ;;
+        --*=*)
+          ((uv_run_index++))
+          ;;
+        --all-extras|--no-dev|--no-default-groups|--all-groups|--only-dev|--no-editable|--exact|--no-env-file|--isolated|--active|--no-sync|--locked|--frozen|--all-packages|--no-project|--no-index|-U|--no-cache|--refresh|--reinstall|--compile-bytecode|--no-build-isolation|--no-build|--no-binary|--upgrade|--no-sources|--managed-python|--no-managed-python|--no-python-downloads|-n|--quiet|-q|--verbose|-v|--system-certs|--offline|--no-progress|--no-config|-h|--help)
+          ((uv_run_index++))
+          ;;
+        -*)
+          freshness_parse_error="unrecognized uv run option '$uv_run_arg'"
+          break
+          ;;
+        *)
+          tool="$uv_run_arg"
+          break
+          ;;
+      esac
+    done
+  fi
+
   local skip_reason=""
   local pin=""
 
@@ -265,6 +309,12 @@ check_shared_venv_freshness() {
       printf 'unknown'
     fi
   }
+
+  if [[ -n "$freshness_parse_error" ]]; then
+    echo "ERROR: Shared-venv tool freshness preflight could not identify the nested uv tool: $freshness_parse_error elapsed_ms=$(freshness_elapsed_ms) venv=$venv_path" >&2
+    echo "Use a supported 'uv run' option form or rerun with --no-freshness-check only after confirming the environment matches." >&2
+    return 2
+  fi
 
   if [[ -z "$tool" ]]; then
     skip_reason="empty-command"

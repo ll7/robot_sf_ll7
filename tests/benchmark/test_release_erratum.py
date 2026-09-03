@@ -89,10 +89,14 @@ def _write_campaign(root: Path) -> None:
         ]
         path.write_text("".join(f"{_canonical_json(row)}\n" for row in rows), encoding="utf-8")
     manifest = {
+        "schema_version": "benchmark-release-manifest.v0.2",
         "release_id": SCIENTIFIC_RELEASE_ID,
         "release_tag": OLD_TAG,
         "source_sha": SOURCE_SHA,
         "provenance": {
+            "doi": "10.5281/zenodo.22227035",
+            "version_doi": "10.5281/zenodo.22227035",
+            "concept_doi": "10.5281/zenodo.22227034",
             "source_sha": SOURCE_SHA,
             "source_commit": SOURCE_SHA,
         },
@@ -1796,6 +1800,52 @@ def test_predecessor_archive_binds_scientific_release_id_to_resolved_manifest(
 
     with pytest.raises(ReleaseErratumError, match="release_id differs"):
         snapshot_predecessor_archive(archive, contract=contract)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("schema", "schema is unsupported"),
+        ("missing_release_id", "release_id differs"),
+        ("version_doi", "version DOI differs"),
+        ("missing_version_doi", "version DOI differs"),
+        ("concept_doi", "concept DOI differs"),
+        ("provenance_release_id", "conflicts with the campaign ID"),
+        ("provenance_release_tag", "conflicts with the predecessor"),
+    ),
+)
+def test_predecessor_archive_rejects_stale_resolved_manifest_identity(
+    tmp_path: Path,
+    mutation: str,
+    message: str,
+) -> None:
+    """The checksum-frozen manifest must authenticate the complete predecessor identity."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    manifest_path = campaign / "release/release_manifest.resolved.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    provenance = manifest["provenance"]
+    if mutation == "schema":
+        manifest["schema_version"] = "benchmark-release-manifest.v0.1"
+    elif mutation == "missing_release_id":
+        manifest.pop("release_id")
+    elif mutation == "version_doi":
+        provenance["version_doi"] = "10.5281/zenodo.22229999"
+    elif mutation == "missing_version_doi":
+        provenance.pop("doi")
+        provenance.pop("version_doi")
+    elif mutation == "concept_doi":
+        provenance["concept_doi"] = "10.5281/zenodo.22229998"
+    elif mutation == "provenance_release_id":
+        provenance["release_id"] = "different_campaign_id"
+    else:
+        provenance["release_tag"] = NEW_TAG
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+
+    with pytest.raises(ReleaseErratumError, match=message):
+        snapshot_predecessor_archive(archive, contract=_contract(archive))
 
 
 def test_predecessor_archive_requires_canonical_resolved_manifest(tmp_path: Path) -> None:

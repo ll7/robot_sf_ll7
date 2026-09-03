@@ -1013,7 +1013,7 @@ def _verify_erratum_manifest_files(
     }
 
 
-def _assert_cold_current_aliases(  # noqa: C901
+def _assert_cold_current_aliases(  # noqa: C901, PLR0913
     payload: Mapping[str, Any],
     *,
     label: str,
@@ -1022,6 +1022,7 @@ def _assert_cold_current_aliases(  # noqa: C901
     concept_doi: str,
     required: bool,
     scientific_release_id: str | None,
+    require_release_id: bool = False,
     source_sha: str | None = None,
 ) -> None:
     """Validate successor publication coordinates and preserved campaign IDs."""
@@ -1074,12 +1075,17 @@ def _assert_cold_current_aliases(  # noqa: C901
             if key in level
         ]
         concept_values = [level["concept_doi"] for level, _, _ in levels if "concept_doi" in level]
+        release_id_values = [
+            level[key] for level, _, _ in levels for key in _ERRATUM_RELEASE_ID_KEYS if key in level
+        ]
         if not tag_values:
             raise ValueError(f"{label} is missing its current release tag")
         if not doi_values:
             raise ValueError(f"{label} is missing its current version DOI")
         if not concept_values:
             raise ValueError(f"{label} is missing its current concept DOI")
+        if require_release_id and not release_id_values:
+            raise ValueError(f"{label} is missing its scientific release ID")
 
 
 def _assert_cold_publication_mapping(
@@ -1113,7 +1119,7 @@ def _assert_cold_publication_mapping(
         raise ValueError(f"{label}.publication contains a stale predecessor DOI alias")
 
 
-def _assert_cold_predecessor_aliases(  # noqa: C901
+def _assert_cold_predecessor_aliases(  # noqa: C901, PLR0913
     payload: Mapping[str, Any],
     *,
     label: str,
@@ -1123,6 +1129,7 @@ def _assert_cold_predecessor_aliases(  # noqa: C901
     source_sha: str,
     scientific_release_id: str,
     require_concept: bool,
+    require_release_id: bool = False,
 ) -> None:
     """Validate an explicitly preserved scientific-execution identity."""
     levels: list[tuple[Mapping[str, Any], str]] = [(payload, label)]
@@ -1152,10 +1159,15 @@ def _assert_cold_predecessor_aliases(  # noqa: C901
 
     tags = [level[key] for level, _ in levels for key in _ERRATUM_CURRENT_TAG_KEYS if key in level]
     dois = [level[key] for level, _ in levels for key in _ERRATUM_CURRENT_DOI_KEYS if key in level]
+    release_ids = [
+        level[key] for level, _ in levels for key in _ERRATUM_RELEASE_ID_KEYS if key in level
+    ]
     if not tags:
         raise ValueError(f"{label} contains an invalid predecessor tag alias")
     if not dois:
         raise ValueError(f"{label} contains an invalid predecessor DOI alias")
+    if require_release_id and not release_ids:
+        raise ValueError(f"{label} is missing its scientific release ID")
     concepts = [level["concept_doi"] for level, _ in levels if "concept_doi" in level]
     if require_concept and not concepts:
         raise ValueError(f"{label} contains an invalid predecessor concept DOI")
@@ -1172,6 +1184,7 @@ def _assert_cold_publication_document(  # noqa: PLR0913
     concept_doi: str,
     source_sha: str,
     scientific_release_id: str,
+    require_root_release_id: bool = False,
 ) -> None:
     """Audit current and explicitly preserved identities in one JSON document."""
     _assert_cold_current_aliases(
@@ -1183,6 +1196,7 @@ def _assert_cold_publication_document(  # noqa: PLR0913
         required=False,
         source_sha=source_sha,
         scientific_release_id=scientific_release_id,
+        require_release_id=require_root_release_id,
     )
     _assert_cold_publication_mapping(
         payload,
@@ -1209,6 +1223,7 @@ def _assert_cold_publication_document(  # noqa: PLR0913
             required=True,
             source_sha=source_sha,
             scientific_release_id=scientific_release_id,
+            require_release_id=key == "resolved_manifest",
         )
         _assert_cold_publication_mapping(
             current,
@@ -1239,6 +1254,7 @@ def _assert_cold_publication_document(  # noqa: PLR0913
             source_sha=source_sha,
             scientific_release_id=scientific_release_id,
             require_concept=key != "scientific_execution_release_identity",
+            require_release_id=key == "scientific_execution_resolved_manifest",
         )
 
 
@@ -1284,6 +1300,7 @@ def _verify_erratum_cold_publication_documents(
             concept_doi=concept_doi,
             source_sha=source_sha,
             scientific_release_id=scientific_release_id,
+            require_root_release_id=relative == "release/release_manifest.resolved.json",
         )
         checked.append(relative)
     return {"status": "pass", "checked_documents": checked}

@@ -16,6 +16,7 @@ from robot_sf.benchmark.post_execution_release_doctor import (
 from robot_sf.benchmark.release_doctor import collect_release_doctor_report
 from robot_sf.benchmark.release_erratum import (
     ERRATUM_CONTRACT_SCHEMA,
+    ErratumContract,
     ReleaseErratumError,
     load_erratum_contract,
 )
@@ -304,6 +305,35 @@ def _release_metadata_kwargs(binding: dict[str, Any] | None) -> dict[str, str]:
     }
 
 
+def _validate_erratum_new_version_arguments(
+    args: argparse.Namespace,
+    release_definition: Any,
+) -> None:
+    """Reject a successor mutation whose explicit inputs conflict with its erratum contract."""
+    if not isinstance(release_definition, ErratumContract):
+        return
+    expected = {
+        "predecessor_deposition_id": int(
+            release_definition.predecessor_version_doi.rsplit(".", 1)[-1]
+        ),
+        "expected_predecessor_doi": release_definition.predecessor_version_doi,
+        "expected_concept_doi": release_definition.concept_doi,
+        "expected_predecessor_tag": release_definition.predecessor_github_release_tag,
+        "expected_source_sha": release_definition.source_sha,
+        "expected_successor_tag": release_definition.successor_github_release_tag,
+    }
+    conflicts = sorted(
+        key
+        for key, expected_value in expected.items()
+        if getattr(args, key, None) != expected_value
+    )
+    if conflicts:
+        raise zenodo_publisher.ZenodoPublisherError(
+            "Zenodo new-version arguments conflict with the release erratum contract: "
+            + ", ".join(conflicts)
+        )
+
+
 def _repo_relative_path(path: Path | None, repo: Path) -> Path | None:
     """Resolve a doctor argument against the explicit ``--repo`` root when relative.
 
@@ -451,6 +481,7 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
         return 0 if report["status"] == "pass" else 2
     try:
         release_context = _load_release_binding(args)
+        release_definition = release_context[0] if release_context is not None else None
         release_binding = release_context[1] if release_context is not None else None
         if args.zenodo_mode in _RELEASE_BOUND_ZENODO_MODES and release_binding is None:
             # Keep this check ahead of build_session: the direct CLI must not
@@ -462,6 +493,8 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
                 f"Zenodo {args.zenodo_mode} requires a validated release manifest or erratum "
                 "contract"
             )
+        if args.zenodo_mode == "new-version":
+            _validate_erratum_new_version_arguments(args, release_definition)
         session = zenodo_publisher.build_session(args.token_file)
         if args.zenodo_mode in {"reserve", "recover"}:
             metadata_kwargs = _release_metadata_kwargs(release_binding)

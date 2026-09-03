@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 from typing import TYPE_CHECKING
@@ -1489,6 +1490,30 @@ def test_main_only_empty_budget_breach_reports_unstarted_command(
     assert payload["timeout_seconds"] == 600.0
     assert payload["writes_performed"] is False
     assert "was not started" in payload["message"]
+
+
+def test_write_budget_breach_is_not_reported_as_ambiguous(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A write-phase budget exhaustion names an unstarted command, not an ambiguous write."""
+
+    error = GhProjectTimeoutError(
+        command=("gh", "api", "graphql"),
+        timeout_seconds=60.0,
+        phase="write",
+        budget_exhausted=True,
+    )
+
+    assert (
+        project_priority_score._handle_only_empty_failure(
+            args=argparse.Namespace(owner="ll7", project_number=5, only_empty=True),
+            error=error,
+        )
+        == 0
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["write_ambiguity"] is False
+    assert "may still have landed" not in payload["message"]
 
 
 def test_apply_score_updates_reraises_write_phase_timeout() -> None:

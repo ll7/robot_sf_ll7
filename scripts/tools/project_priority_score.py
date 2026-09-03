@@ -1730,7 +1730,7 @@ def _apply_score_updates(
             plan["attempted_rows"] = [dict(row) for row in attempted_rows]
             plan["writes_performed_count"] = writes_performed
             plan["writes_performed"] = writes_performed > 0
-            plan["write_ambiguity"] = True
+            plan["write_ambiguity"] = not exc.budget_exhausted
         raise
     except (RuntimeError, ValueError, TypeError) as exc:
         # A rejected write (for example GitHub's numeric-shape enforcement) must
@@ -1971,6 +1971,7 @@ def _blocked_project_timeout_payload(
 ) -> dict[str, Any]:
     """Build a resumable no-write payload for a `gh` subprocess timeout (issue #8263)."""
     write_phase = error.phase == "write"
+    write_ambiguity = write_phase and not error.budget_exhausted
     attempted_rows = [dict(row) for row in error.attempted_rows]
     writes_performed_count = error.writes_performed_count
     if error.budget_exhausted:
@@ -2000,7 +2001,7 @@ def _blocked_project_timeout_payload(
         "attempted_rows": attempted_rows,
         "writes_performed_count": writes_performed_count,
         "writes_performed": writes_performed_count > 0,
-        "write_ambiguity": write_phase,
+        "write_ambiguity": write_ambiguity,
         "fallback": "live-label ordering",
         "message": (
             headline
@@ -2012,7 +2013,7 @@ def _blocked_project_timeout_payload(
             + (
                 " A timed-out write may still have landed server-side; re-read live "
                 "state before retrying."
-                if write_phase
+                if write_ambiguity
                 else ""
             )
             + " Continue with live-label ordering; retry with a larger --gh-timeout "

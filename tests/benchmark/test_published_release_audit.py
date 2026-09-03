@@ -92,6 +92,19 @@ def test_cold_current_aliases_accept_split_identity_and_reject_incomplete_shapes
             scientific_release_id=scientific_release_id,
             require_release_id=True,
         )
+    with pytest.raises(ValueError, match="missing its scientific release ID"):
+        published_audit_module._assert_cold_publication_document(
+            compact_without_id,
+            label="canonical resolved manifest",
+            tag=tag,
+            doi=doi,
+            predecessor_doi="10.5281/zenodo.22227035",
+            predecessor_tag=tag.removesuffix("-erratum.1"),
+            concept_doi=concept,
+            source_sha=source,
+            scientific_release_id=scientific_release_id,
+            require_root_release_id=True,
+        )
 
     invalid = (
         ({"release_tag": tag, "provenance": "bad"}, "object"),
@@ -603,6 +616,8 @@ def _full_erratum_payload(
         "doi": predecessor_doi,
         "version_doi": predecessor_doi,
         "concept_doi": concept_doi,
+        "source_sha": source_sha,
+        "source_commit": source_sha,
     }
     _write_bytes(
         campaign / "release/release_manifest.resolved.json",
@@ -658,6 +673,7 @@ def _full_erratum_payload(
         json.dumps(
             {
                 "benchmark_release": current,
+                "scientific_execution_benchmark_release": execution,
                 "campaign": summary_campaign,
                 "publication_erratum": erratum_block,
             },

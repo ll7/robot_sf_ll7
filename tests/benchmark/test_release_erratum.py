@@ -393,6 +393,8 @@ def _with_bundle_metadata(
         "doi": updated.predecessor_version_doi,
         "version_doi": updated.predecessor_version_doi,
         "concept_doi": updated.concept_doi,
+        "source_sha": updated.source_sha,
+        "source_commit": updated.source_sha,
     }
     current = {
         "release_tag": updated.successor_github_release_tag,
@@ -471,6 +473,7 @@ def _with_bundle_metadata(
         json.dumps(
             {
                 "benchmark_release": current,
+                "scientific_execution_benchmark_release": execution,
                 "campaign": {
                     **current,
                     "scientific_execution_release_identity": {
@@ -1492,6 +1495,8 @@ def test_cold_erratum_receipt_rejects_stale_release_document_alias(tmp_path: Pat
         ("execution_provenance", "provenance contains a stale predecessor DOI"),
         ("derived_validator", "derived revalidation receipt identity is stale"),
         ("summary_source", "stale scientific source SHA"),
+        ("summary_execution_scalar", "scientific_execution_benchmark_release must be an object"),
+        ("summary_execution_stale", "stale predecessor tag alias"),
         ("optional_publication", "publication contains a stale release-tag alias"),
         ("optional_publication_null", "publication must be an object"),
     ],
@@ -1534,10 +1539,15 @@ def test_cold_erratum_receipt_rejects_nested_identity_drift(
         derived = json.loads(derived_path.read_text(encoding="utf-8"))
         derived["validator"]["commit"] = "0" * 40
         derived_path.write_text(json.dumps(derived), encoding="utf-8")
-    elif fault == "summary_source":
+    elif fault in {"summary_source", "summary_execution_scalar", "summary_execution_stale"}:
         summary_path = campaign / "reports/campaign_summary.json"
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
-        summary["campaign"]["scientific_execution_release_identity"]["source_sha"] = "0" * 40
+        if fault == "summary_source":
+            summary["campaign"]["scientific_execution_release_identity"]["source_sha"] = "0" * 40
+        elif fault == "summary_execution_scalar":
+            summary["scientific_execution_benchmark_release"] = "malformed"
+        else:
+            summary["scientific_execution_benchmark_release"]["release_tag"] = NEW_TAG
         summary_path.write_text(json.dumps(summary), encoding="utf-8")
     else:
         manifest = json.loads(
@@ -1810,6 +1820,14 @@ def test_predecessor_archive_binds_scientific_release_id_to_resolved_manifest(
         ("version_doi", "version DOI differs"),
         ("missing_version_doi", "version DOI differs"),
         ("concept_doi", "concept DOI differs"),
+        ("root_release_tag", "release_tag differs"),
+        ("root_source_sha", "source_sha differs"),
+        ("root_source_commit", "manifest.source_commit differs"),
+        ("malformed_provenance", "provenance must be an object"),
+        ("nested_provenance", "unsupported nested provenance"),
+        ("provenance_source_sha", "provenance.source_sha differs"),
+        ("provenance_source_commit", "provenance.source_commit differs"),
+        ("provenance_scientific_source", "provenance.scientific_source_sha differs"),
         ("provenance_release_id", "conflicts with the campaign ID"),
         ("provenance_release_tag", "conflicts with the predecessor"),
     ),
@@ -1825,21 +1843,31 @@ def test_predecessor_archive_rejects_stale_resolved_manifest_identity(
     manifest_path = campaign / "release/release_manifest.resolved.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     provenance = manifest["provenance"]
-    if mutation == "schema":
-        manifest["schema_version"] = "benchmark-release-manifest.v0.1"
-    elif mutation == "missing_release_id":
-        manifest.pop("release_id")
-    elif mutation == "version_doi":
-        provenance["version_doi"] = "10.5281/zenodo.22229999"
-    elif mutation == "missing_version_doi":
-        provenance.pop("doi")
-        provenance.pop("version_doi")
-    elif mutation == "concept_doi":
-        provenance["concept_doi"] = "10.5281/zenodo.22229998"
-    elif mutation == "provenance_release_id":
-        provenance["release_id"] = "different_campaign_id"
+    assignments = {
+        "schema": (manifest, "schema_version", "benchmark-release-manifest.v0.1"),
+        "version_doi": (provenance, "version_doi", "10.5281/zenodo.22229999"),
+        "concept_doi": (provenance, "concept_doi", "10.5281/zenodo.22229998"),
+        "root_release_tag": (manifest, "release_tag", NEW_TAG),
+        "root_source_sha": (manifest, "source_sha", "0" * 40),
+        "root_source_commit": (manifest, "source_commit", "0" * 40),
+        "malformed_provenance": (manifest, "provenance", "malformed"),
+        "nested_provenance": (provenance, "provenance", {}),
+        "provenance_source_sha": (provenance, "source_sha", "0" * 40),
+        "provenance_source_commit": (provenance, "source_commit", "0" * 40),
+        "provenance_scientific_source": (provenance, "scientific_source_sha", "0" * 40),
+        "provenance_release_id": (provenance, "release_id", "different_campaign_id"),
+        "provenance_release_tag": (provenance, "release_tag", NEW_TAG),
+    }
+    removals = {
+        "missing_release_id": ((manifest, "release_id"),),
+        "missing_version_doi": ((provenance, "doi"), (provenance, "version_doi")),
+    }
+    if mutation in assignments:
+        target, key, value = assignments[mutation]
+        target[key] = value
     else:
-        provenance["release_tag"] = NEW_TAG
+        for target, key in removals[mutation]:
+            target.pop(key)
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     archive = tmp_path / "old.tar.gz"
     _archive_campaign(campaign, archive)

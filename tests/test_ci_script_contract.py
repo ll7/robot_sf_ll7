@@ -2243,6 +2243,37 @@ def test_worktree_shared_venv_rejects_unknown_uv_run_option(
     assert "could not identify the nested uv tool" in result.stderr
 
 
+def test_worktree_shared_venv_rejects_unknown_uv_run_equals_option(
+    tmp_path: Path,
+) -> None:
+    """An unknown equals-form option must not hide the actual nested tool."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--",
+            "uv",
+            "run",
+            "--unknown-option=ruff",
+            "check",
+            "x.py",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "uv-reached" not in result.stderr
+    assert "could not identify the nested uv tool" in result.stderr
+
+
 def test_worktree_shared_venv_passes_fresh_pinned_tool_with_preflight_line(
     tmp_path: Path,
 ) -> None:

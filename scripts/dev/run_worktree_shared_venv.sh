@@ -279,7 +279,7 @@ check_shared_venv_freshness() {
           fi
           ((uv_run_index+=2))
           ;;
-        --*=*)
+        --extra=*|--no-extra=*|--group=*|--no-group=*|--only-group=*|--no-editable-package=*|--env-file=*|-w=*|--with=*|--with-editable=*|--with-requirements=*|--package=*|--python-platform=*|--index=*|--default-index=*|-i=*|--index-url=*|--extra-index-url=*|-f=*|--find-links=*|--index-strategy=*|--keyring-provider=*|-P=*|--upgrade-package=*|--upgrade-group=*|--resolution=*|--prerelease=*|--fork-strategy=*|--exclude-newer=*|--exclude-newer-package=*|--no-sources-package=*|--reinstall-package=*|--refresh-package=*|--link-mode=*|-C=*|--config-setting=*|--config-settings-package=*|--no-build-isolation-package=*|--no-build-package=*|--no-binary-package=*|-p=*|--python=*|--allow-insecure-host=*|--cache-dir=*|--color=*|--directory=*|--project=*|--config-file=*)
           ((uv_run_index++))
           ;;
         --all-extras|--no-dev|--no-default-groups|--all-groups|--only-dev|--no-editable|--exact|--no-env-file|--isolated|--active|--no-sync|--locked|--frozen|--all-packages|--no-project|--no-index|-U|--no-cache|--refresh|--reinstall|--compile-bytecode|--no-build-isolation|--no-build|--no-binary|--upgrade|--no-sources|--managed-python|--no-managed-python|--no-python-downloads|-n|--quiet|-q|--verbose|-v|--system-certs|--offline|--no-progress|--no-config|-h|--help)

@@ -184,17 +184,19 @@ def test_clean_runner_bootstraps_and_checks_the_cloned_helper_offline(tmp_path: 
     python312 = shutil.which("python3.12")
     if python312 is None:
         pytest.fail("python3.12 is required to match the GitHub Actions bootstrap runtime")
-    cache_dir = subprocess.run(
-        [uv, "cache", "dir"],
-        check=True,
-        capture_output=True,
-        text=True,
-        env={
-            key: value
-            for key, value in os.environ.items()
-            if key != "XDG_CACHE_HOME" and not key.startswith("UV_") and key != "UV"
-        },
-    ).stdout.strip()
+    cache_dir = os.environ.get("UV_CACHE_DIR", "")
+    if not cache_dir:
+        cache_dir = subprocess.run(
+            [uv, "cache", "dir"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env={
+                key: value
+                for key, value in os.environ.items()
+                if key != "XDG_CACHE_HOME" and not key.startswith("UV_") and key != "UV"
+            },
+        ).stdout.strip()
     assert cache_dir
     tool_bin = tmp_path / "tool-bin"
     tool_bin.mkdir()

@@ -399,6 +399,103 @@ def test_policy_obs_uses_observed_pedestrian_payload() -> None:
     assert original["pedestrians"]["positions"] == [[1.0, 0.0], [5.0, 0.0]]
 
 
+@pytest.mark.parametrize("layout", ["nested", "flat"])
+def test_policy_obs_orders_world_positions_and_rotates_world_velocities(layout: str) -> None:
+    """Policy inputs should preserve world positions and use ego-frame velocities in either layout."""
+    robot_position = np.asarray([10.0, 10.0], dtype=np.float32)
+    heading = np.pi / 2.0
+    observed = {
+        "positions": [[14.0, 10.0], [10.0, 12.0], [11.0, 10.0]],
+        "velocities": [[4.0, 0.0], [0.0, 2.0], [1.0, 0.0]],
+        "ids": ["ped_far", "ped_near", "ped_closest"],
+    }
+    if layout == "nested":
+        original = {
+            "robot": {"position": robot_position, "heading": [heading]},
+            "pedestrians": {
+                "positions": np.zeros((4, 2), dtype=np.float32),
+                "velocities": np.zeros((4, 2), dtype=np.float32),
+                "count": np.asarray([4.0], dtype=np.float32),
+            },
+        }
+        positions_key = ("pedestrians", "positions")
+        velocities_key = ("pedestrians", "velocities")
+    else:
+        original = {
+            "robot_position": robot_position,
+            "robot_heading": np.asarray([heading], dtype=np.float32),
+            "pedestrians_positions": np.zeros((4, 2), dtype=np.float32),
+            "pedestrians_velocities": np.zeros((4, 2), dtype=np.float32),
+            "pedestrians_count": np.asarray([4.0], dtype=np.float32),
+        }
+        positions_key = ("pedestrians_positions",)
+        velocities_key = ("pedestrians_velocities",)
+
+    policy_obs = _apply_observed_pedestrians_to_policy_obs(original, {"observed": observed})
+
+    if len(positions_key) == 2:
+        positions = policy_obs[positions_key[0]][positions_key[1]]
+        velocities = policy_obs[velocities_key[0]][velocities_key[1]]
+    else:
+        positions = policy_obs[positions_key[0]]
+        velocities = policy_obs[velocities_key[0]]
+    np.testing.assert_allclose(
+        positions,
+        [[11.0, 10.0], [10.0, 12.0], [14.0, 10.0], [0.0, 0.0]],
+    )
+    np.testing.assert_allclose(
+        velocities,
+        [[0.0, -1.0], [2.0, 0.0], [0.0, -4.0], [0.0, 0.0]],
+        atol=1e-6,
+    )
+    assert policy_obs["pedestrians"]["count"].tolist() == [3.0]
+
+
+def test_policy_obs_keeps_false_positive_and_delayed_rows_id_aligned() -> None:
+    """Sorting observed rows must not detach delayed/missed actors from their velocities."""
+    original = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+        "pedestrians": {
+            "positions": np.zeros((3, 2), dtype=np.float32),
+            "velocities": np.zeros((3, 2), dtype=np.float32),
+        },
+    }
+    perturbation = {
+        "observed": {
+            "positions": [[4.0, 0.0], [0.5, 0.0]],
+            "velocities": [[40.0, 0.0], [5.0, 0.0]],
+            "ids": ["ped_delayed", "false_positive_0"],
+        }
+    }
+
+    policy_obs = _apply_observed_pedestrians_to_policy_obs(original, perturbation)
+
+    np.testing.assert_allclose(policy_obs["pedestrians"]["positions"][:2], [[0.5, 0.0], [4.0, 0.0]])
+    np.testing.assert_allclose(
+        policy_obs["pedestrians"]["velocities"][:2], [[5.0, 0.0], [40.0, 0.0]]
+    )
+
+
+def test_policy_obs_rejects_misaligned_observed_rows() -> None:
+    """Observed position, velocity, and ID rows must fail closed when counts diverge."""
+    original = {
+        "pedestrians": {
+            "positions": np.zeros((2, 2), dtype=np.float32),
+            "velocities": np.zeros((2, 2), dtype=np.float32),
+        }
+    }
+    perturbation = {
+        "observed": {
+            "positions": [[1.0, 0.0], [2.0, 0.0]],
+            "velocities": [[0.0, 0.0]],
+            "ids": ["ped_0", "ped_1"],
+        }
+    }
+
+    with pytest.raises(ValueError, match="matching row counts"):
+        _apply_observed_pedestrians_to_policy_obs(original, perturbation)
+
+
 def test_policy_obs_pads_variable_observation_to_fixed_actor_capacity() -> None:
     """Perception-limited actor counts must preserve fixed learned-policy shapes."""
     original = {

@@ -15,6 +15,7 @@ import numpy as np
 from robot_sf.benchmark.map_runner.map_runner import (
     _build_env_config,
     _build_policy,
+    _observation_heading,
     _policy_command_to_env_action,
     _scenario_with_episode_seed_defaults,
 )
@@ -628,6 +629,69 @@ def _observation_perturbation_spec(
     )
 
 
+def _observed_pedestrian_arrays_for_policy(
+    obs: Mapping[str, Any],
+    observed: Mapping[str, Any],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Normalize observed pedestrian rows to the Robot SF policy contract.
+
+    Perturbation output is world-frame and row-aligned by pedestrian ID. Sort
+    complete rows by current world-frame distance, then rotate only velocities
+    into the robot ego frame; pedestrian positions remain world-frame values.
+    """
+    raw_positions = np.asarray(observed["positions"], dtype=np.float32).reshape(-1, 2)
+    raw_velocities = np.asarray(observed["velocities"], dtype=np.float32).reshape(-1, 2)
+    if raw_positions.shape[0] != raw_velocities.shape[0]:
+        raise ValueError(
+            "Observed pedestrian positions and velocities must have matching row counts"
+        )
+    if not np.all(np.isfinite(raw_positions)) or not np.all(np.isfinite(raw_velocities)):
+        raise ValueError("Observed pedestrian positions and velocities must be finite")
+
+    raw_ids = observed.get("ids")
+    if raw_ids is None:
+        row_ids: list[Any] = [None] * raw_positions.shape[0]
+    else:
+        try:
+            row_ids = list(raw_ids)
+        except TypeError as exc:
+            raise ValueError("Observed pedestrian IDs must be an iterable") from exc
+        if len(row_ids) != raw_positions.shape[0]:
+            raise ValueError(
+                "Observed pedestrian positions, velocities, and IDs must stay row-aligned"
+            )
+
+    robot = obs.get("robot")
+    if isinstance(robot, Mapping) and "position" in robot:
+        robot_position_source = robot["position"]
+    else:
+        robot_position_source = obs.get("robot_position", [0.0, 0.0])
+    robot_position = np.asarray(robot_position_source, dtype=np.float32).reshape(-1)
+    if robot_position.shape != (2,) or not np.all(np.isfinite(robot_position)):
+        raise ValueError("Robot position must be a finite 2D value")
+
+    rows = list(zip(raw_positions, raw_velocities, row_ids, strict=True))
+    rows.sort(key=lambda row: float(np.linalg.norm(row[0] - robot_position)))
+    if rows:
+        ordered_positions = np.stack([row[0] for row in rows]).astype(np.float32, copy=False)
+        world_velocities = np.stack([row[1] for row in rows]).astype(np.float32, copy=False)
+    else:
+        ordered_positions = np.zeros((0, 2), dtype=np.float32)
+        world_velocities = np.zeros((0, 2), dtype=np.float32)
+
+    heading = _observation_heading(obs)
+    cos_heading = float(np.cos(heading))
+    sin_heading = float(np.sin(heading))
+    ego_velocities = np.empty_like(world_velocities)
+    ego_velocities[:, 0] = (
+        cos_heading * world_velocities[:, 0] + sin_heading * world_velocities[:, 1]
+    )
+    ego_velocities[:, 1] = (
+        -sin_heading * world_velocities[:, 0] + cos_heading * world_velocities[:, 1]
+    )
+    return ordered_positions, ego_velocities
+
+
 def _fit_observed_actor_array(
     observed: np.ndarray,
     template: Any,
@@ -666,8 +730,7 @@ def _apply_observed_pedestrians_to_policy_obs(
     policy_obs = dict(obs)
     pedestrians = dict(policy_obs.get("pedestrians", {}))
     observed = perturbation["observed"]
-    raw_positions = np.asarray(observed["positions"], dtype=np.float32).reshape(-1, 2)
-    raw_velocities = np.asarray(observed["velocities"], dtype=np.float32).reshape(-1, 2)
+    raw_positions, raw_velocities = _observed_pedestrian_arrays_for_policy(obs, observed)
     position_template = pedestrians.get("positions", policy_obs.get("pedestrians_positions"))
     velocity_template = pedestrians.get("velocities", policy_obs.get("pedestrians_velocities"))
     observed_positions = _fit_observed_actor_array(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -34,11 +35,16 @@ def _clean_source(tmp_path: Path) -> Path:
     if _CLEAN_SOURCE is not None:
         return _CLEAN_SOURCE
     source = tmp_path / "clean-source"
+    clone_env = os.environ.copy()
+    # The diagnostic clone exercises source identity and helper behavior; LFS payloads are
+    # intentionally not part of this local forensic fixture.
+    clone_env["GIT_LFS_SKIP_SMUDGE"] = "1"
     result = subprocess.run(
         ["git", "clone", "--quiet", "--no-hardlinks", str(REPO_ROOT), str(source)],
         check=False,
         capture_output=True,
         text=True,
+        env=clone_env,
     )
     if result.returncode != 0:
         raise AssertionError(

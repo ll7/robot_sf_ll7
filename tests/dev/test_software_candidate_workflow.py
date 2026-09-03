@@ -149,11 +149,15 @@ def test_clean_runner_bootstraps_and_checks_the_cloned_helper_offline(tmp_path: 
     if uv is None:
         pytest.fail("uv is required to exercise the clean-runner bootstrap contract")
     clean_repo = tmp_path / "clean-source"
+    clone_env = os.environ.copy()
+    # This fixture validates the clean helper checkout, not availability of unrelated LFS blobs.
+    clone_env["GIT_LFS_SKIP_SMUDGE"] = "1"
     clone_result = subprocess.run(
         ["git", "clone", "--quiet", "--no-hardlinks", str(REPO_ROOT), str(clean_repo)],
         check=False,
         capture_output=True,
         text=True,
+        env=clone_env,
     )
     assert clone_result.returncode == 0, (
         "git clone failed with exit code "

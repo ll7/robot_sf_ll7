@@ -399,6 +399,9 @@ def _write_debug_signal_hook(repo: Path, marker: Path) -> Path:
         '      IFS= read -r _ < "$PR_READY_SIGNAL_WAIT_FIFO" || true\n'
         "    fi\n"
         '    kill -TERM "$$"\n'
+        '    if [[ "${PR_READY_SIGNAL_FAIL_HOOK:-0}" == "1" ]]; then\n'
+        "      return 1\n"
+        "    fi\n"
         "  fi\n"
         "}\n"
         "set -T\n"
@@ -508,12 +511,20 @@ def _stop_process_group(process: subprocess.Popen[str], signum: signal.Signals) 
 
 
 def _collect_process(process: subprocess.Popen[str], *, timeout: float = 10.0) -> tuple[str, str]:
-    """Collect a controlled readiness process, failing without leaving a child behind."""
+    """Collect readiness output without allowing leaked descendants to hold pipes forever."""
     try:
         return process.communicate(timeout=timeout)
     except subprocess.TimeoutExpired as exc:
         _stop_process_group(process, signal.SIGKILL)
-        stdout, stderr = process.communicate()
+        try:
+            stdout, stderr = process.communicate(timeout=1.0)
+        except subprocess.TimeoutExpired as cleanup_exc:
+            for stream in (process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
+            raise AssertionError(
+                f"readiness did not exit within {timeout}s and its output pipes remained open"
+            ) from cleanup_exc
         raise AssertionError(
             f"readiness did not exit within {timeout}s\nstdout={stdout}\nstderr={stderr}"
         ) from exc
@@ -733,6 +744,7 @@ def test_pr_ready_sigterm_before_launcher_registration_is_queued(
     hook_marker = tmp_path / "before-registration-hook"
     hook = _write_debug_signal_hook(preflight_repo, hook_marker)
     receipt = tmp_path / "before-registration-termination.json"
+    release = tmp_path / "core-release"
     env = {
         "BASH_ENV": str(hook),
         "PR_READY_MODE": "interim",
@@ -741,7 +753,7 @@ def test_pr_ready_sigterm_before_launcher_registration_is_queued(
         "PR_READY_SIGNAL_COMMAND_FRAGMENT": "pr_ready_child_pid=$!",
         "PR_READY_SIGNAL_MARKER": str(hook_marker),
         "PR_READY_SIGNAL_CORE_READY": str(tmp_path / "core-ready"),
-        "PR_READY_SIGNAL_CORE_RELEASE": str(tmp_path / "core-release"),
+        "PR_READY_SIGNAL_CORE_RELEASE": str(release),
     }
 
     process = _start_pr_ready(preflight_repo, env_overrides=env)
@@ -755,8 +767,56 @@ def test_pr_ready_sigterm_before_launcher_registration_is_queued(
         assert payload["process"]["child_registration_state"] == "registered"
         assert payload["process"]["child_process_group_exists"] is False
     finally:
+        release.touch()
         _stop_process_group(process, signal.SIGKILL)
-        _collect_process(process)
+        try:
+            _collect_process(process)
+        except AssertionError:
+            pass
+
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="signal and process-group semantics are POSIX-specific"
+)
+def test_pr_ready_sigterm_exit_during_registration_cleans_lane(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """A signal-interrupted registration still runs bounded EXIT cleanup."""
+    _write_signal_lane_stub(preflight_repo)
+    hook_marker = tmp_path / "registration-exit-hook"
+    hook = _write_debug_signal_hook(preflight_repo, hook_marker)
+    receipt = tmp_path / "registration-exit-termination.json"
+    release = tmp_path / "core-release"
+    env = {
+        "BASH_ENV": str(hook),
+        "PR_READY_MODE": "interim",
+        "PR_READY_SKIP_PREFLIGHT": "1",
+        "PR_READY_TERMINATION_RECEIPT": str(receipt),
+        "PR_READY_SIGNAL_COMMAND_FRAGMENT": "pr_ready_child_pid=$!",
+        "PR_READY_SIGNAL_FAIL_HOOK": "1",
+        "PR_READY_SIGNAL_MARKER": str(hook_marker),
+        "PR_READY_SIGNAL_CORE_READY": str(tmp_path / "core-ready"),
+        "PR_READY_SIGNAL_CORE_RELEASE": str(release),
+    }
+
+    process = _start_pr_ready(preflight_repo, env_overrides=env)
+    try:
+        process.wait(timeout=3.0)
+        stdout, stderr = _collect_process(process, timeout=3.0)
+
+        assert hook_marker.is_file()
+        assert process.returncode == 143, stdout + stderr
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        assert payload["cleanup"]["verified"] is True
+        assert payload["process"]["child_registration_state"] == "registered"
+        assert payload["process"]["child_process_group_exists"] is False
+    finally:
+        release.touch()
+        _stop_process_group(process, signal.SIGKILL)
+        try:
+            _collect_process(process, timeout=3.0)
+        except AssertionError:
+            pass
 
 
 @pytest.mark.skipif(

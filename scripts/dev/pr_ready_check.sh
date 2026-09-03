@@ -69,6 +69,7 @@ pr_ready_pending_signal_number=""
 pr_ready_child_pid=""
 pr_ready_child_pgid=""
 pr_ready_child_registration_state="not_started"
+pr_ready_child_launch_started=0
 pr_ready_parent_pgid=""
 pr_ready_cleanup_status="no_child_active"
 pr_ready_termination_receipt="${PR_READY_TERMINATION_RECEIPT:-}"
@@ -281,9 +282,30 @@ handle_pr_ready_signal() {
   exit "$((128 + signal_number))"
 }
 
+pr_ready_finalize_child_registration_for_exit() {
+  # A signal can make Bash leave a signal-interrupted registration command
+  # before start_pr_ready_child() reaches its normal state transition.  Do not
+  # re-queue that signal from EXIT forever: recover the active async job when
+  # possible, seed its bounded direct-child fallback, and let the normal
+  # cleanup path fail closed if no identifier is available.
+  [[ "$pr_ready_child_registration_state" == "registering" ]] || return 0
+  if [[ "$pr_ready_child_launch_started" -eq 1 && -z "$pr_ready_child_pid" ]]; then
+    local recovered_child_pid="${!:-}"
+    if [[ "$recovered_child_pid" =~ ^[1-9][0-9]*$ ]]; then
+      pr_ready_child_pid="$recovered_child_pid"
+      pr_ready_child_pgid="$recovered_child_pid"
+    fi
+  fi
+  if [[ -n "$pr_ready_child_pid" && -z "$pr_ready_child_pgid" ]]; then
+    pr_ready_child_pgid="$pr_ready_child_pid"
+  fi
+  pr_ready_child_registration_state="registered"
+}
+
 pr_ready_exit_without_coverage() {
   local exit_code=$?
   if [[ -n "$pr_ready_pending_signal_number" && "$pr_ready_termination_handled" -eq 0 ]]; then
+    pr_ready_finalize_child_registration_for_exit
     handle_pr_ready_signal "$pr_ready_pending_signal_name" "$pr_ready_pending_signal_number"
   fi
   release_pr_ready_lock || true
@@ -292,6 +314,7 @@ pr_ready_exit_without_coverage() {
 
 start_pr_ready_child() {
   pr_ready_child_registration_state="registering"
+  pr_ready_child_launch_started=1
   python3 - "$@" <<'PY' &
 import os
 import sys
@@ -372,6 +395,7 @@ run_pr_ready_lane() {
   pr_ready_child_pid=""
   pr_ready_child_pgid=""
   pr_ready_child_registration_state="not_started"
+  pr_ready_child_launch_started=0
   return "$lane_status"
 }
 
@@ -868,6 +892,7 @@ cleanup_pr_ready_coverage() {
 cleanup_pr_ready_exit() {
   local exit_code=$?
   if [[ -n "$pr_ready_pending_signal_number" && "$pr_ready_termination_handled" -eq 0 ]]; then
+    pr_ready_finalize_child_registration_for_exit
     handle_pr_ready_signal "$pr_ready_pending_signal_name" "$pr_ready_pending_signal_number"
   fi
   cleanup_pr_ready_coverage || true

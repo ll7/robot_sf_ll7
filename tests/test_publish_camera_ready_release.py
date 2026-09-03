@@ -308,6 +308,29 @@ def test_existing_exact_sha_draft_without_tag_ref_allows_upload(tmp_path: Path) 
     assert len([call for call in calls if call[:3] == ["gh", "release", "upload"]]) == 1
 
 
+def test_existing_exact_sha_draft_rejects_non_404_tag_lookup_failure(tmp_path: Path) -> None:
+    """A transport/server failure is not interpreted as an absent draft tag ref."""
+    existing = json.dumps([[_release_record()]])
+    calls: list[list[str]] = []
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
+        if cmd[:2] == ["gh", "api"]:
+            return subprocess.CompletedProcess(
+                cmd, 1, stdout="", stderr="HTTP 500: Internal Server Error"
+            )
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    with (
+        patch("subprocess.run", side_effect=_fake_run),
+        pytest.raises(SystemExit, match="cannot resolve tag"),
+    ):
+        _run(tmp_path, "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
+
+
 @pytest.mark.parametrize(
     ("release", "message"),
     [

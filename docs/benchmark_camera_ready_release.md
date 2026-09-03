@@ -199,11 +199,15 @@ uv run python scripts/tools/publish_camera_ready_release.py \
 ```
 
 The upload helper requires `--expected-source-sha` for every mutating invocation.
-It uploads only into an unpublished draft whose release target and peeled tag
-ref both resolve to that exact SHA. Use `--create-draft` to create the missing
-tag-targeted draft before the first upload; it fails closed when the tag already
-exists, the release is published, or either target is ambiguous. Existing
-drafts are retry-safe: the helper validates the complete remote asset inventory
+It uploads only into an unpublished draft whose exact `target_commitish` matches
+that SHA. GitHub normally creates the tag ref when the draft is published, so an
+explicit tag-ref 404 is valid while the release remains a draft; if the ref
+already exists, the helper peels it and requires the same exact SHA. Use
+`--create-draft` to create the missing tag-targeted draft before the first
+upload. It retries only a briefly absent post-create listing for a bounded
+interval and fails closed on API errors, a published release, or any ambiguous
+or conflicting identity. Existing drafts are retry-safe: the helper validates
+the complete remote asset inventory
 (`name`, `state=uploaded`, positive `size`, and `sha256:<digest>`) before any
 upload, rejects extras, duplicates, stale bytes, and mismatches, uploads only
 missing assets, and never passes `--clobber`. If all expected assets already

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
 import subprocess
@@ -42,6 +43,12 @@ def _run(tmp_path: Path, *extra: str, summary: dict[str, object] | None = None) 
     """Run the publisher with prerequisites satisfied by a mocked summary."""
     campaign_root = tmp_path / "campaign"
     campaign_root.mkdir()
+    for name, contents in (
+        ("archive.tar.gz", b"archive"),
+        ("checksums.sha256", b"checksums\n"),
+        ("manifest.json", b"{}\n"),
+    ):
+        (campaign_root / name).write_bytes(contents)
     payload = summary or _summary_payload()
     with (
         patch(
@@ -108,13 +115,34 @@ def test_dry_run_plans_draft_create_before_upload(tmp_path: Path) -> None:
 def test_create_draft_then_upload_order(tmp_path: Path) -> None:
     """With --execute-upload, the draft is created before the upload runs."""
     calls: list[list[str]] = []
+    created = False
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal created
         calls.append(list(cmd))
         if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
-            return subprocess.CompletedProcess(cmd, 0, stdout="[[]]", stderr="")
+            release = {
+                "tag_name": _TAG,
+                "draft": True,
+                "target_commitish": _SOURCE_SHA,
+                "assets": [],
+            }
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=json.dumps([[release]] if created else [[]]), stderr=""
+            )
         if cmd[:2] == ["gh", "api"]:
-            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
+            if not created:
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
+            return subprocess.CompletedProcess(
+                cmd,
+                0,
+                stdout=json.dumps(
+                    {"ref": f"refs/tags/{_TAG}", "object": {"sha": _SOURCE_SHA, "type": "commit"}}
+                ),
+                stderr="",
+            )
+        if cmd[:3] == ["gh", "release", "create"]:
+            created = True
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     with patch("subprocess.run", side_effect=_fake_run):
@@ -161,7 +189,16 @@ def test_collision_with_public_release_fails_closed(tmp_path: Path) -> None:
 def test_existing_exact_sha_draft_allows_upload(tmp_path: Path) -> None:
     """An exact-SHA draft is not a blocker; upload proceeds without creation."""
     existing = json.dumps(
-        [[{"tag_name": _TAG, "draft": True, "target_commitish": _SOURCE_SHA}]],
+        [
+            [
+                {
+                    "tag_name": _TAG,
+                    "draft": True,
+                    "target_commitish": _SOURCE_SHA,
+                    "assets": [],
+                }
+            ]
+        ],
     )
     calls: list[list[str]] = []
 
@@ -169,6 +206,15 @@ def test_existing_exact_sha_draft_allows_upload(tmp_path: Path) -> None:
         calls.append(list(cmd))
         if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
             return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
+        if cmd[:2] == ["gh", "api"]:
+            return subprocess.CompletedProcess(
+                cmd,
+                0,
+                stdout=json.dumps(
+                    {"ref": f"refs/tags/{_TAG}", "object": {"sha": _SOURCE_SHA, "type": "commit"}}
+                ),
+                stderr="",
+            )
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     with patch("subprocess.run", side_effect=_fake_run):
@@ -209,13 +255,34 @@ def test_malformed_existing_draft_blocks_upload(
 def test_missing_release_creates_draft(tmp_path: Path) -> None:
     """When the REST release lookup finds nothing, draft creation is planned."""
     calls: list[list[str]] = []
+    created = False
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal created
         calls.append(list(cmd))
         if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
-            return subprocess.CompletedProcess(cmd, 0, stdout="[[]]", stderr="")
+            release = {
+                "tag_name": _TAG,
+                "draft": True,
+                "target_commitish": _SOURCE_SHA,
+                "assets": [],
+            }
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=json.dumps([[release]] if created else [[]]), stderr=""
+            )
         if cmd[:2] == ["gh", "api"]:
-            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
+            if not created:
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
+            return subprocess.CompletedProcess(
+                cmd,
+                0,
+                stdout=json.dumps(
+                    {"ref": f"refs/tags/{_TAG}", "object": {"sha": _SOURCE_SHA, "type": "commit"}}
+                ),
+                stderr="",
+            )
+        if cmd[:3] == ["gh", "release", "create"]:
+            created = True
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
     with patch("subprocess.run", side_effect=_fake_run):
@@ -236,7 +303,9 @@ def test_existing_git_tag_blocks_draft_creation(tmp_path: Path) -> None:
             return subprocess.CompletedProcess(
                 cmd,
                 0,
-                stdout=json.dumps({"object": {"sha": _SOURCE_SHA}}),
+                stdout=json.dumps(
+                    {"ref": f"refs/tags/{_TAG}", "object": {"sha": _SOURCE_SHA, "type": "commit"}}
+                ),
                 stderr="",
             )
         raise AssertionError(f"unexpected command: {cmd}")
@@ -307,19 +376,325 @@ def test_release_identity_derives_title_and_notes() -> None:
     assert "10.5281/zenodo.42" in notes
 
 
-def test_upload_without_create_draft_is_unchanged(tmp_path: Path) -> None:
-    """Existing upload-only behavior is preserved when --create-draft is absent."""
+def test_upload_without_create_draft_requires_expected_source_sha(tmp_path: Path) -> None:
+    """Every mutating upload requires an explicit expected source SHA."""
     calls: list[list[str]] = []
 
     def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         calls.append(list(cmd))
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
+    with patch("subprocess.run", side_effect=_fake_run), pytest.raises(SystemExit):
+        _run(tmp_path, "--execute-upload")
+    assert calls == []
+
+
+def _asset_record(name: str, contents: bytes) -> dict[str, object]:
+    """Build the REST asset record for one local fixture file."""
+    return {
+        "name": name,
+        "state": "uploaded",
+        "size": len(contents),
+        "digest": f"sha256:{hashlib.sha256(contents).hexdigest()}",
+    }
+
+
+def _release_record(
+    *,
+    draft: bool = True,
+    target: str = _SOURCE_SHA,
+    assets: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    """Build an exact-tag release record for mocked REST responses."""
+    return {
+        "tag_name": _TAG,
+        "draft": draft,
+        "target_commitish": target,
+        "assets": assets or [],
+    }
+
+
+def _tag_response(*, sha: str = _SOURCE_SHA, object_type: str = "commit") -> str:
+    """Build a lightweight or annotated tag-ref response."""
+    return json.dumps(
+        {
+            "ref": f"refs/tags/{_TAG}",
+            "object": {"sha": sha, "type": object_type},
+        }
+    )
+
+
+def _run_existing_draft(
+    tmp_path: Path,
+    *,
+    release: dict[str, object],
+    tag_outputs: list[tuple[int, str, str]] | None = None,
+    expect_failure: bool = False,
+) -> tuple[list[list[str]], str]:
+    """Run upload-only against a deterministic mocked exact draft."""
+    calls: list[list[str]] = []
+    tag_results = list(tag_outputs or [(0, _tag_response(), ""), (0, _tag_response(), "")])
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps([[release]]), stderr="")
+        if cmd[:2] == ["gh", "api"]:
+            if not tag_results:
+                raise AssertionError("unexpected extra tag lookup")
+            returncode, stdout, stderr = tag_results.pop(0)
+            return subprocess.CompletedProcess(cmd, returncode, stdout=stdout, stderr=stderr)
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
     with patch("subprocess.run", side_effect=_fake_run):
-        payload = json.loads(_run(tmp_path, "--execute-upload"))
-    assert "draft_create_command" not in payload
-    assert len(calls) == 1
-    assert calls[0][:3] == ["gh", "release", "upload"]
+        try:
+            output = _run(tmp_path, "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+        except SystemExit:
+            if not expect_failure:
+                raise
+            output = ""
+    return calls, output
+
+
+def test_upload_only_rejects_published_release_before_tag_or_upload(tmp_path: Path) -> None:
+    """Upload-only mode cannot mutate a published release."""
+    calls = []
+    release = _release_record(draft=False)
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps([[release]]), stderr="")
+        raise AssertionError(f"unexpected command after published-release blocker: {cmd}")
+
+    with (
+        patch("subprocess.run", side_effect=_fake_run),
+        pytest.raises(SystemExit, match="not a draft"),
+    ):
+        _run(tmp_path, "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
+
+
+def test_upload_only_rejects_wrong_target_release(tmp_path: Path) -> None:
+    """Upload-only mode rejects an exact tag whose draft target is different."""
+    calls = []
+    release = _release_record(target="b" * 40)
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps([[release]]), stderr="")
+        raise AssertionError(f"unexpected command after target blocker: {cmd}")
+
+    with (
+        patch("subprocess.run", side_effect=_fake_run),
+        pytest.raises(SystemExit, match="already exists at target"),
+    ):
+        _run(tmp_path, "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
+
+
+def test_tag_collision_requires_explicit_rest_404(tmp_path: Path) -> None:
+    """A hostile 'not found' string without an HTTP status is not tag absence."""
+    calls: list[list[str]] = []
+    created = False
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal created
+        calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout="[[]]", stderr="")
+        if cmd[:2] == ["gh", "api"]:
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="Not Found")
+        created = True
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    with (
+        patch("subprocess.run", side_effect=_fake_run),
+        pytest.raises(SystemExit, match="cannot resolve tag"),
+    ):
+        _run(
+            tmp_path,
+            "--create-draft",
+            "--expected-source-sha",
+            _SOURCE_SHA,
+            "--execute-upload",
+        )
+    assert not created
+    assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
+
+
+def test_create_draft_rejects_post_create_tag_drift(tmp_path: Path) -> None:
+    """A tag created at the wrong target blocks before the first upload."""
+    calls: list[list[str]] = []
+    created = False
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal created
+        calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            release = {
+                "tag_name": _TAG,
+                "draft": True,
+                "target_commitish": _SOURCE_SHA,
+                "assets": [],
+            }
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=json.dumps([[release]] if created else [[]]), stderr=""
+            )
+        if cmd[:2] == ["gh", "api"]:
+            if not created:
+                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=_tag_response(sha="b" * 40), stderr=""
+            )
+        if cmd[:3] == ["gh", "release", "create"]:
+            created = True
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    with (
+        patch("subprocess.run", side_effect=_fake_run),
+        pytest.raises(SystemExit, match="readback blocked after creation"),
+    ):
+        _run(
+            tmp_path,
+            "--create-draft",
+            "--expected-source-sha",
+            _SOURCE_SHA,
+            "--execute-upload",
+        )
+    assert created
+    assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
+
+
+def test_existing_draft_rejects_extra_asset_before_upload(tmp_path: Path) -> None:
+    """An unexpected remote asset blocks retry-safe draft reuse."""
+    release = _release_record(
+        assets=[_asset_record("archive.tar.gz", b"archive"), _asset_record("stale.txt", b"stale")]
+    )
+    calls, _ = _run_existing_draft(
+        tmp_path, release=release, tag_outputs=[(0, _tag_response(), "")], expect_failure=True
+    )
+    assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
+
+
+def test_existing_draft_rejects_duplicate_asset_before_upload(tmp_path: Path) -> None:
+    """Duplicate remote asset names are ambiguous and block mutation."""
+    archive = _asset_record("archive.tar.gz", b"archive")
+    release = _release_record(assets=[archive, dict(archive)])
+    calls, _ = _run_existing_draft(
+        tmp_path, release=release, tag_outputs=[(0, _tag_response(), "")], expect_failure=True
+    )
+    assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
+
+
+def test_existing_draft_rejects_mismatched_asset_digest_before_upload(tmp_path: Path) -> None:
+    """A same-name remote asset with stale bytes cannot be clobbered."""
+    stale = _asset_record("archive.tar.gz", b"different-bytes")
+    release = _release_record(assets=[stale])
+    calls, _ = _run_existing_draft(
+        tmp_path, release=release, tag_outputs=[(0, _tag_response(), "")], expect_failure=True
+    )
+    assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
+
+
+def test_existing_draft_uploads_only_missing_assets_without_clobber(tmp_path: Path) -> None:
+    """A partial exact draft uploads only absent assets and never uses clobber."""
+    release = _release_record(assets=[_asset_record("archive.tar.gz", b"archive")])
+    calls, output = _run_existing_draft(tmp_path, release=release)
+    upload_calls = [call for call in calls if call[:3] == ["gh", "release", "upload"]]
+    assert len(upload_calls) == 1
+    assert "archive.tar.gz" not in upload_calls[0]
+    assert any(argument.endswith("checksums.sha256") for argument in upload_calls[0])
+    assert any(argument.endswith("manifest.json") for argument in upload_calls[0])
+    assert "--clobber" not in upload_calls[0]
+    payload = json.loads(output)
+    assert payload["missing_upload_assets"] == ["checksums.sha256", "manifest.json"]
+
+
+def test_existing_draft_skips_upload_when_all_assets_match(tmp_path: Path) -> None:
+    """An exactly complete draft is a safe idempotent no-op."""
+    release = _release_record(
+        assets=[
+            _asset_record("archive.tar.gz", b"archive"),
+            _asset_record("checksums.sha256", b"checksums\n"),
+            _asset_record("manifest.json", b"{}\n"),
+        ]
+    )
+    calls, output = _run_existing_draft(tmp_path, release=release)
+    assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
+    payload = json.loads(output)
+    assert payload["upload_skipped"] is True
+
+
+def test_annotated_tag_is_peeled_to_commit(tmp_path: Path) -> None:
+    """Tag admission resolves annotated refs instead of trusting tag-object SHA."""
+    tag_object = "c" * 40
+    calls: list[list[str]] = []
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        if "git/ref/tags" in " ".join(cmd):
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=_tag_response(sha=tag_object, object_type="tag"), stderr=""
+            )
+        if "git/tags/" in " ".join(cmd):
+            return subprocess.CompletedProcess(
+                cmd,
+                0,
+                stdout=json.dumps({"object": {"sha": _SOURCE_SHA, "type": "commit"}}),
+                stderr="",
+            )
+        raise AssertionError(f"unexpected command: {cmd}")
+
+    with patch("subprocess.run", side_effect=_fake_run):
+        target, blocker = publisher._resolve_tag_ref_target(
+            repo="ll7/robot_sf_ll7", tag=_TAG, allow_absent=False
+        )
+    assert blocker is None
+    assert target == _SOURCE_SHA
+    assert len(calls) == 2
+
+
+def test_tag_ref_without_exact_ref_identity_is_rejected() -> None:
+    """A tag-object payload without its requested ref is ambiguous."""
+    result = subprocess.CompletedProcess(
+        ["gh", "api"],
+        0,
+        stdout=json.dumps({"object": {"sha": _SOURCE_SHA, "type": "commit"}}),
+        stderr="",
+    )
+    with patch.object(publisher, "_run_tag_api", return_value=result):
+        target, blocker = publisher._resolve_tag_ref_target(
+            repo="ll7/robot_sf_ll7", tag=_TAG, allow_absent=False
+        )
+    assert target is None
+    assert blocker is not None
+    assert "different ref" in blocker
+
+
+def test_existing_draft_rejects_stale_tag_ref(tmp_path: Path) -> None:
+    """A release target alone is insufficient when the actual tag moved."""
+    release = _release_record()
+    calls: list[list[str]] = []
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps([[release]]), stderr="")
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            stdout=_tag_response(sha="b" * 40),
+            stderr="",
+        )
+
+    with (
+        patch("subprocess.run", side_effect=_fake_run),
+        pytest.raises(SystemExit, match="refusing to mutate"),
+    ):
+        _run(tmp_path, "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
 
 
 def test_publisher_rejects_provisional_sha_in_requested_tag() -> None:

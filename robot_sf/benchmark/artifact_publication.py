@@ -63,6 +63,7 @@ _DEFAULT_ZENODO_METADATA_RELATIVE = Path(
 )
 _BUNDLED_SNQI_WEIGHTS_RELATIVE = Path("release_metadata/snqi/snqi_weights_camera_ready_v3.json")
 _BUNDLED_SNQI_BASELINE_RELATIVE = Path("release_metadata/snqi/snqi_baseline_camera_ready_v3.json")
+_RELEASE_METADATA_NAMESPACE = "release_metadata"
 _REQUIRED_RELEASE_METADATA_ROLES = (
     "release_manifest",
     "release_result",
@@ -72,6 +73,15 @@ _REQUIRED_RELEASE_METADATA_ROLES = (
     "snqi_weights",
     "snqi_baseline",
 )
+_RELEASE_METADATA_PAYLOAD_PATHS = {
+    "release_manifest": "payload/release/release_manifest.resolved.json",
+    "release_result": "payload/release/release_result.json",
+    "citation": "payload/release_metadata/CITATION.cff",
+    "zenodo_metadata": "payload/release_metadata/zenodo_metadata.json",
+    "rights_provenance": "payload/release_metadata/rights_provenance.md",
+    "snqi_weights": "payload/release_metadata/snqi/snqi_weights_camera_ready_v3.json",
+    "snqi_baseline": "payload/release_metadata/snqi/snqi_baseline_camera_ready_v3.json",
+}
 _SNQI_RECOMPUTE_RTOL = 1e-9
 _SNQI_RECOMPUTE_ATOL = 1e-9
 _RECOMMENDED_MANUSCRIPT_USES = {
@@ -489,6 +499,28 @@ def _resolve_repo_file(value: object, *, repo_root: Path) -> Path | None:
     return resolved
 
 
+def _resolve_run_file(value: object, *, run_root: Path) -> Path | None:
+    """Resolve one explicitly run-local release input without following symlinks.
+
+    Returns:
+        A regular file beneath ``run_root``, or ``None`` when the value is absent
+        or unsafe.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    candidate = Path(value.strip())
+    if candidate.is_absolute() or ".." in candidate.parts:
+        return None
+    lexical = Path(run_root.absolute()) / candidate
+    if lexical.is_symlink() or any(parent.is_symlink() for parent in lexical.parents):
+        return None
+    resolved_root = run_root.resolve()
+    resolved = lexical.resolve()
+    if not resolved.is_relative_to(resolved_root) or not resolved.is_file():
+        return None
+    return resolved
+
+
 def _find_release_sha(payloads: list[object]) -> str | None:  # noqa: C901
     """Find an explicitly named 40-character source SHA in release metadata.
 
@@ -603,7 +635,7 @@ evidence.
 """
 
 
-def _resolve_release_publication_metadata(  # noqa: C901
+def _resolve_release_publication_metadata(  # noqa: C901, PLR0912
     run_root: Path,
 ) -> _ReleasePublicationMetadata | None:
     """Resolve the metadata needed to make a benchmark bundle cold-verifiable.
@@ -637,10 +669,15 @@ def _resolve_release_publication_metadata(  # noqa: C901
     if citation_path is None:
         citation_path = _resolve_repo_file("CITATION.cff", repo_root=repo_root)
 
-    metadata_path = _resolve_repo_file(
-        provenance.get("zenodo_metadata_path") or provenance.get("metadata_path"),
-        repo_root=repo_root,
-    )
+    bundle_metadata_value = provenance.get("bundle_zenodo_metadata_path")
+    metadata_path = _resolve_run_file(bundle_metadata_value, run_root=run_root)
+    if bundle_metadata_value is not None and metadata_path is None:
+        raise ValueError("Release bundle-local Zenodo metadata path is unsafe or missing")
+    if metadata_path is None:
+        metadata_path = _resolve_repo_file(
+            provenance.get("zenodo_metadata_path") or provenance.get("metadata_path"),
+            repo_root=repo_root,
+        )
     if metadata_path is None:
         publication = resolved_manifest.get("publication")
         if isinstance(publication, Mapping):
@@ -711,6 +748,28 @@ def _resolve_release_publication_metadata(  # noqa: C901
         rights_provenance=rights_provenance,
         source_paths=source_paths,
     )
+
+
+def _reject_run_local_release_metadata_paths(selected_files: list[Path]) -> None:
+    """Reject run files that could shadow the authoritative release namespace.
+
+    Release bundles materialize ``payload/release_metadata/`` from repository-
+    or explicitly contract-bound sources.  A recursively selected run file at
+    that prefix is therefore ambiguous: the exporter cannot safely distinguish
+    an authoritative copy from an attacker-controlled replacement.  The
+    release contract does not need run-local files in this namespace, so reject
+    the entire namespace instead of trying to establish byte identity here.
+    """
+    reserved = sorted(
+        path.as_posix()
+        for path in selected_files
+        if path.parts and path.parts[0].casefold() == _RELEASE_METADATA_NAMESPACE
+    )
+    if reserved:
+        raise ValueError(
+            "Run-local release_metadata paths are reserved for authoritative publication "
+            "metadata: " + ", ".join(reserved)
+        )
 
 
 def _validate_publication_requirements(run_root: Path, selected_files: list[Path]) -> None:
@@ -1372,6 +1431,8 @@ def export_publication_bundle(  # noqa: C901, PLR0913, PLR0915
         raise ValueError(f"No eligible files found under {run_root}")
     _validate_publication_requirements(run_root, selected_files)
     release_metadata = _resolve_release_publication_metadata(run_root)
+    if release_metadata is not None:
+        _reject_run_local_release_metadata_paths(selected_files)
 
     target_name = bundle_name.strip() if bundle_name else f"{run_root.name}_publication_bundle"
     _validate_bundle_name(target_name)
@@ -1720,28 +1781,183 @@ def _goal_timeout_row_rejection(episodes_path: Path, line_number: int, line: str
     )
 
 
-def _check_goal_timeout_boundary(payload_dir: Path) -> tuple[int, list[str]]:
-    """Find ambiguous goal-reached + timeout rows lacking timing evidence or a note.
+def _goal_timeout_exclusion_header_errors(block: Mapping[str, Any]) -> list[str]:
+    """Return validation errors for the signed exclusion header."""
+    errors: list[str] = []
+    if block.get("status") != "excluded_from_timing_interpretation":
+        errors.append("run_meta goal-timeout exclusion status is invalid")
+    if block.get("raw_episode_rows_unchanged") is not True:
+        errors.append("run_meta goal-timeout exclusion must preserve raw episode rows")
+    if block.get("timing_evidence_fabricated") is not False:
+        errors.append("run_meta goal-timeout exclusion must not fabricate timing evidence")
+    for key in ("note", "policy"):
+        value = block.get(key)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"run_meta goal-timeout exclusion {key} is required")
+    return errors
+
+
+def _goal_timeout_exclusion_identity(
+    item: object,
+    *,
+    index: int,
+) -> tuple[tuple[str, str] | None, str | None]:
+    """Parse one exact ``(arm, episode_id)`` exclusion identity.
 
     Returns:
-        Tuple of (count of ambiguous rows, list of rejection messages).
+        The parsed identity and no error, or no identity and one error.
     """
-    ambiguous = 0
+    if not isinstance(item, Mapping):
+        return None, f"run_meta goal-timeout exclusion row {index} is invalid"
+    arm = item.get("arm")
+    episode_id = item.get("episode_id")
+    if not isinstance(arm, str) or not arm or "/" in arm:
+        return None, f"run_meta goal-timeout exclusion row {index} has an invalid arm"
+    if not isinstance(episode_id, str) or not episode_id:
+        return None, f"run_meta goal-timeout exclusion row {index} has an invalid episode_id"
+    return (arm, episode_id), None
+
+
+def _parse_goal_timeout_exclusion_rows(
+    block: Mapping[str, Any],
+) -> tuple[set[tuple[str, str]], list[str]]:
+    """Parse the exact signed exclusion identities and count.
+
+    Returns:
+        The unique identities and validation errors.
+    """
+    errors: list[str] = []
+    declared: set[tuple[str, str]] = set()
+
+    rows = block.get("excluded_rows")
+    if not isinstance(rows, list):
+        errors.append("run_meta goal-timeout exclusion rows must be a list")
+    else:
+        for index, item in enumerate(rows):
+            identity, error = _goal_timeout_exclusion_identity(item, index=index)
+            if error is not None:
+                errors.append(error)
+                continue
+            if identity is None:
+                errors.append(
+                    f"run_meta goal-timeout exclusion row {index} has no resolved identity"
+                )
+                continue
+            if identity in declared:
+                errors.append("run_meta goal-timeout exclusion contains a duplicate identity")
+            declared.add(identity)
+    declared_count = block.get("excluded_row_count")
+    if (
+        isinstance(declared_count, bool)
+        or not isinstance(declared_count, int)
+        or declared_count != len(declared)
+    ):
+        errors.append("run_meta goal-timeout exclusion count is inconsistent")
+    return declared, errors
+
+
+def _goal_timeout_exclusions_from_run_meta(
+    payload_dir: Path,
+) -> tuple[set[tuple[str, str]], list[str], bool]:
+    """Load one exact signed-provenance exclusion set when declared.
+
+    Returns:
+        Declared ``(arm, episode_id)`` identities, validation errors, and a
+        boolean indicating whether an exclusion block was present.
+    """
+    run_meta_path = payload_dir / "run_meta.json"
+    if not run_meta_path.is_file():
+        return set(), [], False
+    try:
+        run_meta = _read_json_file(run_meta_path)
+    except ValueError as exc:
+        return set(), [f"goal-timeout exclusion metadata is invalid: {exc}"], True
+    block = run_meta.get("goal_timeout_boundary")
+    if block is None:
+        return set(), [], False
+    if not isinstance(block, Mapping):
+        return set(), ["run_meta.goal_timeout_boundary must be an object"], True
+    exclusion_keys = {
+        "status",
+        "excluded_rows",
+        "excluded_row_count",
+        "raw_episode_rows_unchanged",
+    }
+    if exclusion_keys.isdisjoint(block):
+        # The ordinary recovery annotator records aggregate annotation
+        # provenance here; its episode rows carry their own signed notes.
+        return set(), [], False
+    declared, errors = _parse_goal_timeout_exclusion_rows(block)
+    errors[:0] = _goal_timeout_exclusion_header_errors(block)
+    return declared, errors, True
+
+
+def _ambiguous_goal_timeout_rows(
+    payload_dir: Path,
+) -> tuple[set[tuple[str, str]], list[str], list[str]]:
+    """Collect unannotated ambiguous rows and any identity errors.
+
+    Returns:
+        The identities, row rejection messages, and identity errors.
+    """
+    observed: set[tuple[str, str]] = set()
     rejections: list[str] = []
+    identity_errors: list[str] = []
     for episodes_path in sorted(payload_dir.glob("runs/*/episodes.jsonl")):
         try:
             lines = episodes_path.read_text(encoding="utf-8").splitlines()
         except OSError:
             continue
         for line_number, line in enumerate(lines, start=1):
-            line = line.strip()
-            if not line:
+            stripped = line.strip()
+            if not stripped:
                 continue
-            message = _goal_timeout_row_rejection(episodes_path, line_number, line)
-            if message is not None:
-                ambiguous += 1
-                rejections.append(message)
-    return ambiguous, rejections
+            message = _goal_timeout_row_rejection(episodes_path, line_number, stripped)
+            if message is None:
+                continue
+            rejections.append(message)
+            record = json.loads(stripped)
+            episode_id = record.get("episode_id") if isinstance(record, Mapping) else None
+            if not isinstance(episode_id, str) or not episode_id:
+                identity_errors.append(
+                    f"{episodes_path}:{line_number}: ambiguous row lacks episode_id"
+                )
+                continue
+            identity = (episodes_path.parent.name, episode_id)
+            if identity in observed:
+                identity_errors.append(
+                    f"{episodes_path}:{line_number}: duplicate ambiguous goal+timeout "
+                    f"identity {identity!r}"
+                )
+            else:
+                observed.add(identity)
+    return observed, rejections, identity_errors
+
+
+def _check_goal_timeout_boundary(payload_dir: Path) -> tuple[int, list[str]]:
+    """Validate ambiguous goal+timeout rows against row notes or signed exclusions.
+
+    Returns:
+        Tuple of (count of ambiguous rows, list of rejection messages).
+    """
+    declared, declaration_errors, declaration_present = _goal_timeout_exclusions_from_run_meta(
+        payload_dir
+    )
+    observed, row_rejections, identity_errors = _ambiguous_goal_timeout_rows(payload_dir)
+    declaration_errors.extend(identity_errors)
+
+    if not declaration_present:
+        return len(observed), row_rejections + declaration_errors
+    rejections = list(declaration_errors)
+    missing = sorted(observed - declared)
+    unexpected = sorted(declared - observed)
+    if missing:
+        rejections.append(f"run_meta goal-timeout exclusion misses {len(missing)} ambiguous row(s)")
+    if unexpected:
+        rejections.append(
+            f"run_meta goal-timeout exclusion names {len(unexpected)} non-ambiguous row(s)"
+        )
+    return len(observed), rejections
 
 
 def _snqi_planner_key(arm: str) -> str:
@@ -2221,7 +2437,7 @@ def _preflight_check_channels(
         warnings.append("publication_manifest.json omits publication_channels")
 
 
-def _preflight_check_release_metadata(  # noqa: C901
+def _preflight_check_release_metadata(  # noqa: C901, PLR0912
     payload_dir: Path,
     manifest: Mapping[str, Any],
     *,
@@ -2241,6 +2457,17 @@ def _preflight_check_release_metadata(  # noqa: C901
     if not isinstance(files, Mapping):
         violations.append("publication_manifest.release_metadata.files must be an object")
         return
+    manifest_entries = manifest.get("files")
+    manifest_entries_by_path: dict[str, Mapping[str, Any]] = {}
+    if isinstance(manifest_entries, list):
+        for raw_entry in manifest_entries:
+            if not isinstance(raw_entry, Mapping):
+                continue
+            raw_manifest_path = raw_entry.get("path")
+            if not isinstance(raw_manifest_path, str) or not raw_manifest_path.strip():
+                continue
+            normalized_path = raw_manifest_path.removeprefix("payload/")
+            manifest_entries_by_path.setdefault(f"payload/{normalized_path}", raw_entry)
     required_roles = _REQUIRED_RELEASE_METADATA_ROLES if required else tuple(files)
     for role in required_roles:
         entry = files.get(role)
@@ -2252,6 +2479,25 @@ def _preflight_check_release_metadata(  # noqa: C901
         if not isinstance(raw_path, str) or not raw_path.startswith("payload/"):
             violations.append(f"release metadata role {role!r} has an invalid payload path")
             continue
+        expected_path = _RELEASE_METADATA_PAYLOAD_PATHS.get(role)
+        if expected_path is not None and raw_path != expected_path:
+            violations.append(
+                f"release metadata role {role!r} is not at its canonical payload path"
+            )
+        manifest_entry = manifest_entries_by_path.get(raw_path)
+        if manifest_entry is None:
+            violations.append(
+                f"release metadata role {role!r} is not represented in publication manifest files"
+            )
+        elif (
+            raw_path.removeprefix("payload/")
+            .casefold()
+            .startswith(f"{_RELEASE_METADATA_NAMESPACE}/")
+            and manifest_entry.get("kind") != "provenance"
+        ):
+            violations.append(
+                f"release metadata role {role!r} is not marked as authoritative provenance"
+            )
         candidate = (payload_dir.parent / raw_path).resolve()
         if not candidate.is_relative_to(payload_dir.parent) or not candidate.is_file():
             violations.append(f"release metadata role {role!r} payload is missing")
@@ -2259,6 +2505,25 @@ def _preflight_check_release_metadata(  # noqa: C901
         actual_sha = _sha256_file(candidate)
         if not isinstance(declared_sha, str) or declared_sha.lower() != actual_sha:
             violations.append(f"release metadata role {role!r} checksum does not match payload")
+
+    if required and manifest_entries_by_path:
+        reserved_prefix = f"payload/{_RELEASE_METADATA_NAMESPACE}/"
+        declared_reserved_paths = {
+            entry.get("path")
+            for entry in files.values()
+            if isinstance(entry, Mapping)
+            and isinstance(entry.get("path"), str)
+            and entry["path"].startswith(reserved_prefix)
+        }
+        for raw_path in sorted(manifest_entries_by_path):
+            if (
+                raw_path.casefold().startswith(reserved_prefix)
+                and raw_path not in declared_reserved_paths
+            ):
+                violations.append(
+                    "publication manifest contains an unbound file in the reserved "
+                    f"release metadata namespace: {raw_path}"
+                )
 
     if required:
         raw_policy = block.get("raw_artifact_policy")

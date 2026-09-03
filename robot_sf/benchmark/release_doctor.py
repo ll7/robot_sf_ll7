@@ -125,6 +125,10 @@ _PRIVATE_OPS_COMMIT_RE = _COMMIT_SHA_RE
 _PRIVATE_OPS_LEDGER_PATHS = ("ops/jobs/jobs.yaml", "ops/jobs/queue.yaml")
 _RUNTIME_SMOKE_JOB_ID = "14884"
 _RUNTIME_SMOKE_MAX_AGE = timedelta(hours=24)
+_ZENODO_HOOK_BOUNDARY_NOTE = (
+    "read-only GitHub hook snapshot; reactivation or a time-of-check/time-of-use "
+    "change before publication remains outside this receipt"
+)
 
 
 @dataclass(frozen=True)
@@ -2299,6 +2303,37 @@ def _disk_check(path: Path, minimum_free_gib: float) -> ReleaseDoctorCheck:
     )
 
 
+def _validate_github_hook_entry(hook: object) -> tuple[str, bool]:
+    """Return one hook URL and active state from a valid GitHub API entry."""
+    if not isinstance(hook, dict):
+        raise ValueError("hook entry is not an object")
+    active = hook.get("active")
+    config = hook.get("config")
+    if not isinstance(active, bool) or not isinstance(config, dict):
+        raise ValueError("hook entry is malformed")
+    url = config.get("url")
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError("hook entry URL is malformed")
+    return url, active
+
+
+def _zenodo_hook_states(raw_payload: str) -> list[bool]:
+    """Validate a GitHub hook snapshot and return matching Zenodo states.
+
+    Returns:
+        Active flags for validated hooks whose configured URL identifies Zenodo.
+    """
+    payload = json.loads(raw_payload)
+    if not isinstance(payload, list):
+        raise ValueError("hook response is not a list")
+    zenodo_states: list[bool] = []
+    for hook in payload:
+        url, active = _validate_github_hook_entry(hook)
+        if "zenodo" in url.casefold():
+            zenodo_states.append(active)
+    return zenodo_states
+
+
 def _zenodo_check(
     repo: Path,
     token_file: Path | None,
@@ -2325,25 +2360,23 @@ def _zenodo_check(
         checks.append(ReleaseDoctorCheck("zenodo_hook", "fail", "GitHub hook state is unavailable"))
         return checks
     try:
-        payload = json.loads(hooks.stdout)
-        zenodo_hooks = [
-            hook
-            for hook in payload
-            if isinstance(hook, dict)
-            and "zenodo" in str((hook.get("config") or {}).get("url", "")).lower()
-        ]
-        active = any(bool(hook.get("active")) for hook in zenodo_hooks)
-    except (json.JSONDecodeError, AttributeError):
+        zenodo_states = _zenodo_hook_states(hooks.stdout)
+        active = any(zenodo_states)
+    except (json.JSONDecodeError, TypeError, ValueError):
         checks.append(ReleaseDoctorCheck("zenodo_hook", "fail", "GitHub hook state is invalid"))
         return checks
-    passed = not require_hook_disabled or (bool(zenodo_hooks) and not active)
+    # Publication safety requires that no automatic Zenodo hook can fire. An
+    # absent hook is at least as safe as a present inactive hook and is the
+    # expected state after a compromised receiver URL is removed.
+    passed = not require_hook_disabled or not active
     summary = (
         "Zenodo webhook is disabled"
-        if zenodo_hooks and not active
+        if zenodo_states and not active
         else "Zenodo webhook remains active"
         if active
-        else "Zenodo webhook was not found"
+        else "Zenodo webhook is absent"
     )
+    summary = f"{summary}; {_ZENODO_HOOK_BOUNDARY_NOTE}"
     checks.append(ReleaseDoctorCheck("zenodo_hook", "pass" if passed else "fail", summary))
     return checks
 

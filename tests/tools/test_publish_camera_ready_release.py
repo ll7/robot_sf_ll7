@@ -70,6 +70,7 @@ def _make_campaign_tree(tmp_path: Path, *, tag: str) -> Path:
     payloads = {
         "release/release_manifest.resolved.json": {
             "release_tag": tag,
+            "source_sha": commit,
             "provenance": {"doi": "10.5281/zenodo.1234567"},
         },
         "release/release_result.json": campaign,
@@ -168,16 +169,101 @@ def test_publish_camera_ready_release_accepts_campaign_relative_derived_bundle(
     assert payload["manifest_path"].startswith(str(campaign_root))
 
 
+def test_publish_camera_ready_release_erratum_upload_includes_detached_custody(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """Canonical errata upload the detached archive-custody receipt."""
+    source_sha = "a" * 40
+    tag = f"paper-matrix-{source_sha}-erratum.1"
+    campaign_root = _make_campaign_tree(tmp_path, tag=tag)
+    custody = tmp_path / "output" / "benchmarks" / "publication" / "publication_custody.json"
+    _write_json(custody, {"schema_version": "benchmark-publication-custody.v1"})
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+
+    exit_code = publish_camera_ready_release.main(
+        ["--campaign-root", str(campaign_root), "--tag", tag]
+    )
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["upload_assets"][-1] == str(custody)
+    assert str(custody) in payload["upload_command"]
+
+
+def test_publish_camera_ready_release_erratum_requires_detached_custody(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """An erratum cannot produce an unauditable three-asset upload plan."""
+    source_sha = "a" * 40
+    tag = f"paper-matrix-{source_sha}-erratum.1"
+    campaign_root = _make_campaign_tree(tmp_path, tag=tag)
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="not a regular file"):
+        publish_camera_ready_release.main(["--campaign-root", str(campaign_root), "--tag", tag])
+
+
+def test_publish_camera_ready_release_erratum_rejects_symlinked_custody(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The detached custody asset must not escape through a symlink."""
+    source_sha = "a" * 40
+    tag = f"paper-matrix-{source_sha}-erratum.1"
+    campaign_root = _make_campaign_tree(tmp_path, tag=tag)
+    publication_root = tmp_path / "output" / "benchmarks" / "publication"
+    outside = tmp_path / "outside-custody.json"
+    _write_json(outside, {"schema_version": "benchmark-publication-custody.v1"})
+    (publication_root / "publication_custody.json").symlink_to(outside)
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="symlink"):
+        publish_camera_ready_release.main(["--campaign-root", str(campaign_root), "--tag", tag])
+
+
 def test_publish_camera_ready_release_executes_upload(tmp_path: Path, monkeypatch) -> None:
     """Execute mode should call subprocess upload command."""
     campaign_root = _make_campaign_tree(tmp_path, tag="v1.0.1")
     monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
     calls: list[list[str]] = []
+    source_sha = "a" * 40
 
-    def _fake_run(cmd, check):
-        """Capture upload commands without invoking subprocesses."""
-        assert check is True
+    def _fake_run(cmd, check, **kwargs):
+        """Capture release API and upload commands without invoking subprocesses."""
+        assert check is False or check is True
         calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return publish_camera_ready_release.subprocess.CompletedProcess(
+                cmd,
+                0,
+                stdout=json.dumps(
+                    [
+                        [
+                            {
+                                "tag_name": "v1.0.1",
+                                "draft": True,
+                                "target_commitish": source_sha,
+                                "assets": [],
+                            }
+                        ]
+                    ]
+                ),
+                stderr="",
+            )
+        if cmd[:2] == ["gh", "api"]:
+            return publish_camera_ready_release.subprocess.CompletedProcess(
+                cmd,
+                0,
+                stdout=json.dumps(
+                    {
+                        "ref": "refs/tags/v1.0.1",
+                        "object": {"sha": source_sha, "type": "commit"},
+                    }
+                ),
+                stderr="",
+            )
+        return publish_camera_ready_release.subprocess.CompletedProcess(
+            cmd, 0, stdout="", stderr=""
+        )
 
     monkeypatch.setattr(publish_camera_ready_release.subprocess, "run", _fake_run)
 
@@ -187,12 +273,154 @@ def test_publish_camera_ready_release_executes_upload(tmp_path: Path, monkeypatc
             str(campaign_root),
             "--tag",
             "v1.0.1",
+            "--expected-source-sha",
+            source_sha,
             "--execute-upload",
         ]
     )
     assert exit_code == 0
     assert calls
-    assert calls[0][0:4] == ["gh", "release", "upload", "v1.0.1"]
+    upload_calls = [call for call in calls if call[:3] == ["gh", "release", "upload"]]
+    assert len(upload_calls) == 1
+    assert upload_calls[0][0:4] == ["gh", "release", "upload", "v1.0.1"]
+    assert "--clobber" not in upload_calls[0]
+
+
+def test_erratum_execute_binds_custody_before_draft_mutation(tmp_path: Path, monkeypatch) -> None:
+    """Erratum execution validates detached archive custody before GitHub writes."""
+    source_sha = "a" * 40
+    tag = f"paper-matrix-{source_sha}-erratum.1"
+    campaign_root = _make_campaign_tree(tmp_path, tag=tag)
+    publication_root = tmp_path / "output" / "benchmarks" / "publication"
+    archive = publication_root / "bundle.tar.gz"
+    bundle = publication_root / "bundle"
+    custody = publication_root / "publication_custody.json"
+    _write_json(
+        custody,
+        {
+            "schema_version": "benchmark-publication-custody.v1",
+            "bundle_name": bundle.name,
+            "source_execution_commit": source_sha,
+            "archive": {
+                "path": archive.name,
+                "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+                "size_bytes": archive.stat().st_size,
+            },
+            "bundle": {
+                "path": bundle.name,
+                "publication_manifest_sha256": hashlib.sha256(
+                    (bundle / "publication_manifest.json").read_bytes()
+                ).hexdigest(),
+                "checksums_sha256": hashlib.sha256(
+                    (bundle / "checksums.sha256").read_bytes()
+                ).hexdigest(),
+            },
+            "archive_self_digest_policy": "archive digest is external to the bundle; no cycle",
+            "credentials": "not_recorded",
+        },
+    )
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+    calls: list[list[str]] = []
+    created = False
+
+    def _fake_run(cmd, check, **kwargs):
+        nonlocal created
+        calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            release = {
+                "tag_name": tag,
+                "draft": True,
+                "target_commitish": source_sha,
+                "assets": [],
+            }
+            return publish_camera_ready_release.subprocess.CompletedProcess(
+                cmd, 0, stdout=json.dumps([[release]] if created else [[]]), stderr=""
+            )
+        if cmd[:2] == ["gh", "api"]:
+            if not created:
+                return publish_camera_ready_release.subprocess.CompletedProcess(
+                    cmd, 1, stdout="", stderr="HTTP 404: Not Found"
+                )
+            return publish_camera_ready_release.subprocess.CompletedProcess(
+                cmd,
+                0,
+                stdout=json.dumps(
+                    {"ref": f"refs/tags/{tag}", "object": {"sha": source_sha, "type": "commit"}}
+                ),
+                stderr="",
+            )
+        if cmd[:3] == ["gh", "release", "create"]:
+            created = True
+        return publish_camera_ready_release.subprocess.CompletedProcess(
+            cmd, 0, stdout="", stderr=""
+        )
+
+    monkeypatch.setattr(publish_camera_ready_release.subprocess, "run", _fake_run)
+    exit_code = publish_camera_ready_release.main(
+        [
+            "--campaign-root",
+            str(campaign_root),
+            "--tag",
+            tag,
+            "--create-draft",
+            "--expected-source-sha",
+            source_sha,
+            "--execute-upload",
+        ]
+    )
+    assert exit_code == 0
+    upload_calls = [call for call in calls if call[:3] == ["gh", "release", "upload"]]
+    assert len(upload_calls) == 1
+    assert str(custody) in upload_calls[0]
+
+
+def test_erratum_execute_rejects_stale_custody_without_remote_mutation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Stale archive custody blocks before even the draft collision lookup."""
+    source_sha = "a" * 40
+    tag = f"paper-matrix-{source_sha}-erratum.1"
+    campaign_root = _make_campaign_tree(tmp_path, tag=tag)
+    publication_root = tmp_path / "output" / "benchmarks" / "publication"
+    custody = publication_root / "publication_custody.json"
+    _write_json(
+        custody,
+        {
+            "schema_version": "benchmark-publication-custody.v1",
+            "bundle_name": "bundle",
+            "source_execution_commit": source_sha,
+            "archive": {"path": "bundle.tar.gz", "sha256": "0" * 64, "size_bytes": 1},
+            "bundle": {
+                "path": "bundle",
+                "publication_manifest_sha256": "0" * 64,
+                "checksums_sha256": "0" * 64,
+            },
+            "archive_self_digest_policy": "archive digest is external to the bundle; no cycle",
+            "credentials": "not_recorded",
+        },
+    )
+    monkeypatch.setattr(publish_camera_ready_release, "get_repository_root", lambda: tmp_path)
+    calls: list[list[str]] = []
+
+    def _fake_run(cmd, **kwargs):
+        calls.append(list(cmd))
+        raise AssertionError("custody failure must precede remote mutation")
+
+    monkeypatch.setattr(publish_camera_ready_release.subprocess, "run", _fake_run)
+    with pytest.raises(ValueError, match="custody archive"):
+        publish_camera_ready_release.main(
+            [
+                "--campaign-root",
+                str(campaign_root),
+                "--tag",
+                tag,
+                "--create-draft",
+                "--expected-source-sha",
+                source_sha,
+                "--execute-upload",
+            ]
+        )
+    assert calls == []
 
 
 @pytest.mark.parametrize("field", ("archive_path", "checksums_path", "manifest_path"))

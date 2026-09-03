@@ -308,6 +308,7 @@ class BaseEnv(SimulationUICloseMixin, Env):
         *,
         telemetry_path: str | None = None,
         telemetry_episode_id: int | None = None,
+        runtime_metadata: dict[str, Any] | None = None,
     ) -> None:
         """Start recording a new episode with JSONL recorder."""
         if self.jsonl_recorder is not None:
@@ -316,6 +317,7 @@ class BaseEnv(SimulationUICloseMixin, Env):
                 config_hash=config_hash,
                 telemetry_path=telemetry_path,
                 telemetry_episode_id=telemetry_episode_id,
+                runtime_metadata=runtime_metadata,
             )
 
     def record_simulation_step(self, state: VisualizableSimState) -> None:

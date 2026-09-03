@@ -89,10 +89,16 @@ def _reward_function_name(reward_func: Callable[..., object]) -> str:
     return getattr(reward_func, "__name__", type(reward_func).__name__)
 
 
-def _build_reset_info(config, *, map_def, seed: int | None = None) -> dict[str, Any]:
+def _build_reset_info(
+    config,
+    *,
+    map_def,
+    seed: int | None = None,
+    simulator: Any | None = None,
+) -> dict[str, Any]:
     """Return stable reset metadata for pedestrian environments."""
 
-    return build_reset_metadata(config, map_def=map_def, seed=seed)
+    return build_reset_metadata(config, map_def=map_def, seed=seed, simulator=simulator)
 
 
 class PedestrianEnv(SingleAgentEnv):
@@ -472,6 +478,7 @@ class PedestrianEnv(SingleAgentEnv):
             self.config,
             map_def=self.map_def,
             seed=getattr(self, "applied_seed", None),
+            simulator=self.simulator,
         )
 
     def render(self, **kwargs) -> None:

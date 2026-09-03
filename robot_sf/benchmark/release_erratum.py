@@ -1750,14 +1750,8 @@ def _assert_publication_aliases(
         concept_values = [level["concept_doi"] for level in levels if "concept_doi" in level]
         if not concept_values:
             raise ReleaseErratumError(f"{label} contains a stale concept-DOI alias")
-        release_id_values = [
-            level[key]
-            for level in levels
-            for key in ("release_id", "benchmark_release_id")
-            if key in level
-        ]
-        if require_release_id and not release_id_values:
-            raise ReleaseErratumError(f"{label} is missing its scientific release-ID alias")
+    if require_release_id and "release_id" not in payload:
+        raise ReleaseErratumError(f"{label} is missing its scientific release-ID alias")
     _assert_nested_publication_aliases(payload, contract=contract, label=label)
 
 
@@ -1847,13 +1841,7 @@ def _assert_predecessor_execution_aliases(
     if not doi_values:
         raise ReleaseErratumError(f"{label} contains a stale predecessor DOI alias")
 
-    release_id_values = [
-        level[key]
-        for level, _ in levels
-        for key in ("release_id", "benchmark_release_id")
-        if key in level
-    ]
-    if require_release_id and not release_id_values:
+    if require_release_id and "release_id" not in payload:
         raise ReleaseErratumError(f"{label} is missing its scientific release-ID alias")
 
     concept_values = [level["concept_doi"] for level, _ in levels if "concept_doi" in level]

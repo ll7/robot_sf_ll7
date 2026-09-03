@@ -2300,7 +2300,6 @@ def _assert_successor_identity_fields(  # noqa: C901
         levels.append((provenance, f"{label}.provenance", scientific_release_ids))
 
     observed_tags: list[Any] = []
-    observed_release_ids: list[Any] = []
     observed_dois: list[Any] = []
     observed_concepts: list[Any] = []
     for level, level_label, preserve_scientific_ids in levels:
@@ -2322,7 +2321,6 @@ def _assert_successor_identity_fields(  # noqa: C901
             value != contract.scientific_release_id for value in release_id_values
         ):
             raise DerivedReleaseError(f"{level_label} contains a stale scientific release ID")
-        observed_release_ids.extend(release_id_values)
 
         doi_values = [level[key] for key in ("version_doi", "doi") if key in level]
         if any(value != contract.successor_version_doi for value in doi_values):
@@ -2348,7 +2346,7 @@ def _assert_successor_identity_fields(  # noqa: C901
         raise DerivedReleaseError(f"{label} does not name the successor version DOI")
     if not observed_concepts:
         raise DerivedReleaseError(f"{label} does not name the successor concept DOI")
-    if require_release_id and not observed_release_ids:
+    if require_release_id and "release_id" not in payload:
         raise DerivedReleaseError(f"{label} lost scientific release ID")
 
 
@@ -2426,7 +2424,7 @@ def _assert_predecessor_execution_identity(
         for key in ("release_id", "benchmark_release_id")
         if key in level
     ]
-    if (require_release_id and not release_id_values) or any(
+    if (require_release_id and "release_id" not in payload) or any(
         value != contract.scientific_release_id for value in release_id_values
     ):
         raise DerivedReleaseError(f"{label} lost scientific release ID")

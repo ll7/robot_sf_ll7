@@ -219,13 +219,41 @@ def test_create_draft_does_not_retry_release_readback_api_failure(tmp_path: Path
     assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
 
 
-def test_create_draft_admits_when_tag_ref_lookup_has_unparseable_404(tmp_path: Path) -> None:
-    """A draft is admitted when the tag-ref lookup exits non-zero with an unparseable 404.
+def test_create_draft_does_not_retry_malformed_release_readback(tmp_path: Path) -> None:
+    """A malformed post-create record blocks immediately instead of masquerading as absence."""
+    calls: list[list[str]] = []
+    created = False
 
-    Regression test for issue #8355: ``gh api`` can exit non-zero with an
-    unparseable status line while the error body still quotes a 404.  The draft
-    readback must treat this as an absent tag ref rather than a transport error.
-    """
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal created
+        calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            payload = "[[{}]]" if created else "[[]]"
+            return subprocess.CompletedProcess(cmd, 0, stdout=payload, stderr="")
+        if cmd[:2] == ["gh", "api"]:
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
+        if cmd[:3] == ["gh", "release", "create"]:
+            created = True
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    with (
+        patch("subprocess.run", side_effect=_fake_run),
+        patch.object(publisher.time, "sleep") as sleep,
+        pytest.raises(SystemExit, match="invalid release record"),
+    ):
+        _run(
+            tmp_path,
+            "--create-draft",
+            "--expected-source-sha",
+            _SOURCE_SHA,
+            "--execute-upload",
+        )
+    sleep.assert_not_called()
+    assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
+
+
+def test_create_draft_rejects_ambiguous_error_text_containing_404(tmp_path: Path) -> None:
+    """Only an explicit HTTP status may establish that a tag ref is absent."""
     existing = json.dumps([[_release_record()]])
     calls: list[list[str]] = []
 
@@ -234,19 +262,25 @@ def test_create_draft_admits_when_tag_ref_lookup_has_unparseable_404(tmp_path: P
         if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
             return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
         if cmd[:2] == ["gh", "api"]:
-            # Simulate a 404 response with an unparseable status line but
-            # the error body still quotes a 404.
-            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
+            return subprocess.CompletedProcess(
+                cmd,
+                1,
+                stdout="",
+                stderr="transport failed for request trace-404-retry",
+            )
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-    with patch("subprocess.run", side_effect=_fake_run):
+    with (
+        patch("subprocess.run", side_effect=_fake_run),
+        pytest.raises(SystemExit, match="cannot resolve tag"),
+    ):
         _run(
             tmp_path,
             "--expected-source-sha",
             _SOURCE_SHA,
             "--execute-upload",
         )
-    assert len([call for call in calls if call[:3] == ["gh", "release", "upload"]]) == 1
+    assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
 
 
 def test_collision_with_existing_release_on_different_sha_fails_closed(tmp_path: Path) -> None:
@@ -465,7 +499,18 @@ def test_ambiguous_release_lookup_blocks_draft_creation(tmp_path: Path) -> None:
     assert "cannot determine whether release" in str(exc_info.value)
 
 
-@pytest.mark.parametrize("payload", ("{}", "[[null]]", "not-json"))
+@pytest.mark.parametrize(
+    "payload",
+    (
+        "{}",
+        "[[null]]",
+        "[[{}]]",
+        '[[{"tag_name": null}]]',
+        '[[{"tag_name": 123}]]',
+        '[[{"tag_name": ""}]]',
+        "not-json",
+    ),
+)
 def test_malformed_release_listing_blocks_draft_creation(tmp_path: Path, payload: str) -> None:
     """Malformed paginated REST output is never interpreted as release absence."""
 

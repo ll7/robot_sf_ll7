@@ -1477,12 +1477,29 @@ def test_snapshot_claimable_issues_marks_truncated_scan_incomplete(
                 2801: _claim_status(2801),
                 2802: _claim_status(2802),
             }
-            payload = snapshot_issue_batch.snapshot_claimable_issues(
-                repo="ll7/robot_sf_ll7",
-                remote="origin",
-                body_limit=150,
-                limit=2,
-            )
+            with patch(
+                "scripts.dev.snapshot_issue_batch._issue_admission",
+                return_value={
+                    "schema": "goal_issue_admission.v1",
+                    "ok": True,
+                    "outcome": "ready_check_only",
+                    "write_attempted": False,
+                    "source_ref": "origin/main",
+                    "classification": "ready",
+                    "admission_reason": "claimable",
+                    "reasons": [],
+                    "ready": True,
+                    "write_allowed": False,
+                    "claim": _claim_status(2801),
+                    "claim_outcome": "unclaimed",
+                },
+            ):
+                payload = snapshot_issue_batch.snapshot_claimable_issues(
+                    repo="ll7/robot_sf_ll7",
+                    remote="origin",
+                    body_limit=150,
+                    limit=2,
+                )
 
     assert payload["resume_cursor"] == {"source": "rest", "page": 2, "limit": 2}
     assert payload["queue_completeness"] == "incomplete"

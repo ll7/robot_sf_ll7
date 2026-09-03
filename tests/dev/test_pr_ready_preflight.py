@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import signal
@@ -173,6 +174,7 @@ def _make_fake_scripts(repo: Path) -> None:
     """Create no-op stubs for every script ``pr_ready_check.sh`` calls after the preflight."""
     scripts_dir = repo / "scripts" / "dev"
     scripts_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(SCRIPTS_DEV / "pr_ready_termination.py", scripts_dir / "pr_ready_termination.py")
     for name in _POST_PREFLIGHT_SCRIPTS:
         stub = scripts_dir / name
         if name.endswith(".py"):
@@ -255,7 +257,9 @@ def preflight_repo(tmp_path: Path) -> Path:
     # Keep test scaffolding (fake bin/ tools, .home, lane.log) out of the
     # untracked-file set that pr_ready_check.sh treats as real changed-file-proof
     # gaps, so only the files a test deliberately adds exercise the issue #5533 guard.
-    (repo / ".git" / "info" / "exclude").write_text("bin/\n.home/\nlane.log\n", encoding="utf-8")
+    (repo / ".git" / "info" / "exclude").write_text(
+        "bin/\n.home/\nlane.log\noutput/\n", encoding="utf-8"
+    )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "init")
     return repo
@@ -334,6 +338,46 @@ def _write_blocking_lane_stub(repo: Path) -> None:
         ': > "$PR_READY_LOCK_TEST_READY"\n'
         'while [[ ! -e "$PR_READY_LOCK_TEST_RELEASE" ]]; do sleep 0.05; done\n'
         'exit "${PR_READY_LOCK_TEST_EXIT_CODE:-0}"\n',
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+
+
+def _write_signal_lane_stub(repo: Path) -> None:
+    """Make each readiness lane wait on its own marker for signal-path tests."""
+    stub = repo / "scripts" / "dev" / "run_tests_parallel.sh"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'case "${ROBOT_SF_TEST_LANE:-unknown}" in\n'
+        '  core) ready="$PR_READY_SIGNAL_CORE_READY"; release="$PR_READY_SIGNAL_CORE_RELEASE" ;;\n'
+        '  optional) ready="$PR_READY_SIGNAL_OPTIONAL_READY"; release="$PR_READY_SIGNAL_OPTIONAL_RELEASE" ;;\n'
+        '  *) echo "unexpected readiness lane" >&2; exit 44 ;;\n'
+        "esac\n"
+        ': > "$ready"\n'
+        'while [[ ! -e "$release" ]]; do sleep 0.05; done\n',
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+
+
+def _write_startup_interleaving_python3(repo: Path, marker: Path) -> None:
+    """Hold the launcher before ``setsid()`` without creating a descendant."""
+    stub = repo / "bin" / "python3"
+    real_python = repr(sys.executable)
+    marker_path = repr(str(marker))
+    stub.write_text(
+        f"#!{sys.executable}\n"
+        "import os\n"
+        "import sys\n"
+        "import time\n"
+        "from pathlib import Path\n"
+        "\n"
+        'if len(sys.argv) > 2 and sys.argv[1] == "-" and sys.argv[2] == "env":\n'
+        "    time.sleep(0.2)\n"
+        f"    Path({marker_path}).touch()\n"
+        "    time.sleep(60)\n"
+        f"os.execv({real_python}, [{real_python}, *sys.argv[1:]])\n",
         encoding="utf-8",
     )
     stub.chmod(0o755)
@@ -517,6 +561,144 @@ def test_pr_ready_lock_releases_after_signal(preflight_repo: Path, tmp_path: Pat
     finally:
         _stop_process_group(first, signal.SIGKILL)
         _collect_process(first)
+
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="signal and process-group semantics are POSIX-specific"
+)
+def test_pr_ready_sigterm_writes_core_receipt_and_cleans_lane(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """A direct wrapper SIGTERM records the core phase and verifies group cleanup."""
+    _write_signal_lane_stub(preflight_repo)
+    ready = tmp_path / "core-ready"
+    release = tmp_path / "core-release"
+    receipt = tmp_path / "core-termination.json"
+    env = {
+        "PR_READY_MODE": "interim",
+        "PR_READY_TERMINATION_RECEIPT": str(receipt),
+        "PR_READY_SIGNAL_CORE_READY": str(ready),
+        "PR_READY_SIGNAL_CORE_RELEASE": str(release),
+    }
+
+    process = _start_pr_ready(preflight_repo, env_overrides=env)
+    try:
+        _wait_for_marker(ready, process)
+        os.kill(process.pid, signal.SIGTERM)
+        stdout, stderr = _collect_process(process)
+
+        assert process.returncode == 143, stdout + stderr
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        assert payload["phase"] == "core_lane"
+        assert payload["lane"] == "core"
+        assert payload["signal"]["name"] == "SIGTERM"
+        assert payload["signal"]["exit_code"] == 143
+        assert payload["last_progress"]["message"] in {
+            "starting core readiness lane",
+            "core readiness lane running",
+        }
+        assert "received SIGTERM" not in payload["last_progress"]["message"]
+        assert payload["cleanup"]["verified"] is True
+        assert payload["process"]["child_process_group_exists"] is False, payload["process"]
+        assert "environment" not in payload
+        assert "command" not in payload
+        assert "termination receipt:" in stderr
+    finally:
+        _stop_process_group(process, signal.SIGKILL)
+        _collect_process(process)
+
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="signal and process-group semantics are POSIX-specific"
+)
+def test_pr_ready_sigterm_during_launcher_startup_falls_back_to_direct_child(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """A signal before ``setsid()`` remains bounded and verifies direct cleanup."""
+    marker = tmp_path / "launcher-before-setsid"
+    receipt = tmp_path / "startup-termination.json"
+    _write_startup_interleaving_python3(preflight_repo, marker)
+    env = {
+        "PR_READY_MODE": "interim",
+        "PR_READY_SKIP_PREFLIGHT": "1",
+        "PR_READY_TERMINATION_RECEIPT": str(receipt),
+        "PR_READY_STARTUP_MARKER": str(marker),
+    }
+
+    process = _start_pr_ready(preflight_repo, env_overrides=env)
+    try:
+        _wait_for_marker(marker, process)
+        started_at = time.monotonic()
+        os.kill(process.pid, signal.SIGTERM)
+        stdout, stderr = _collect_process(process, timeout=3.0)
+
+        assert time.monotonic() - started_at < 3.0
+        assert process.returncode == 143, stdout + stderr
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        assert payload["last_progress"]["message"] in {
+            "starting core readiness lane",
+            "core readiness lane running",
+        }
+        assert payload["cleanup"] == {
+            "status": "direct_process_terminated_and_verified",
+            "verified": True,
+        }
+        assert payload["process"]["child_process_group_exists"] is False
+        assert "termination receipt:" in stderr
+    finally:
+        _stop_process_group(process, signal.SIGKILL)
+        _collect_process(process)
+
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="signal and process-group semantics are POSIX-specific"
+)
+def test_pr_ready_sigterm_writes_optional_receipt_and_cleans_lane(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """The optional lane has distinct phase context and the same cleanup contract."""
+    _write_signal_lane_stub(preflight_repo)
+    changed_file = preflight_repo / "tests" / "planner" / "test_signal_optional.py"
+    changed_file.parent.mkdir(parents=True, exist_ok=True)
+    changed_file.write_text("def test_signal_optional(): pass\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "optional signal fixture")
+
+    core_ready = tmp_path / "core-ready"
+    core_release = tmp_path / "core-release"
+    optional_ready = tmp_path / "optional-ready"
+    optional_release = tmp_path / "optional-release"
+    receipt = tmp_path / "optional-termination.json"
+    env = {
+        "BASE_REF": "HEAD~1",
+        "PR_READY_MODE": "interim",
+        "PR_READY_SKIP_PREFLIGHT": "1",
+        "PR_READY_TERMINATION_RECEIPT": str(receipt),
+        "PR_READY_SIGNAL_CORE_READY": str(core_ready),
+        "PR_READY_SIGNAL_CORE_RELEASE": str(core_release),
+        "PR_READY_SIGNAL_OPTIONAL_READY": str(optional_ready),
+        "PR_READY_SIGNAL_OPTIONAL_RELEASE": str(optional_release),
+    }
+
+    process = _start_pr_ready(preflight_repo, env_overrides=env)
+    try:
+        _wait_for_marker(core_ready, process)
+        core_release.touch()
+        _wait_for_marker(optional_ready, process)
+        os.kill(process.pid, signal.SIGTERM)
+        stdout, stderr = _collect_process(process)
+
+        assert process.returncode == 143, stdout + stderr
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        assert payload["phase"] == "optional_lane"
+        assert payload["lane"] == "optional"
+        assert payload["signal"]["name"] == "SIGTERM"
+        assert payload["cleanup"]["verified"] is True
+        assert payload["process"]["child_process_group_exists"] is False
+        assert "termination receipt:" in stderr
+    finally:
+        _stop_process_group(process, signal.SIGKILL)
+        _collect_process(process)
 
 
 @pytest.mark.skipif(
@@ -1184,7 +1366,9 @@ def _build_drift_pr_repo(tmp_path: Path, *, main_touches_pr_file: bool) -> tuple
     _make_fake_scripts(repo)
     _wire_real_base_drift(repo)
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-    (repo / ".git" / "info" / "exclude").write_text("bin/\n.home/\nlane.log\n", encoding="utf-8")
+    (repo / ".git" / "info" / "exclude").write_text(
+        "bin/\n.home/\nlane.log\noutput/\n", encoding="utf-8"
+    )
 
     (repo / "shared.py").write_text("print('base')\n", encoding="utf-8")
     (repo / "unrelated.py").write_text("print('base')\n", encoding="utf-8")

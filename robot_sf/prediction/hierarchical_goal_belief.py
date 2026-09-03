@@ -39,6 +39,7 @@ from robot_sf.prediction.goal_belief_contract import (
 
 HIERARCHICAL_GOAL_POSTERIOR_SCHEMA_VERSION = "hierarchical_goal_posterior.v1"
 HIERARCHICAL_PROJECTION_LEVELS = ("active_waypoint", "final_destination")
+_ACTOR_EVIDENCE_SOURCES = frozenset({"upstream_selected"})
 
 
 def _as_sequence(value: Any, field_name: str) -> tuple[Any, ...]:
@@ -271,8 +272,12 @@ class HierarchicalGoalPosteriorV1:
             require_digest(self.candidate_set_digest, "candidate_set_digest"),
         )
         evidence_source = require_text(self.evidence_source, "evidence_source").strip().lower()
-        if is_forbidden_evidence_source(evidence_source):
-            raise ValueError("evidence_source cannot request oracle or simulator values")
+        if (
+            is_forbidden_evidence_source(evidence_source)
+            or evidence_source not in _ACTOR_EVIDENCE_SOURCES
+        ):
+            allowed = ", ".join(sorted(_ACTOR_EVIDENCE_SOURCES))
+            raise ValueError(f"evidence_source must be an actor-safe source: {allowed}")
         object.__setattr__(self, "evidence_source", evidence_source)
         object.__setattr__(
             self,

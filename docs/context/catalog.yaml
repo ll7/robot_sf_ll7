@@ -5299,6 +5299,10 @@ entries:
   status: evidence
   freshness: evidence
   area: release_evidence
+- path: configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json
+  status: current
+  freshness: evidence
+  area: release_evidence
 - path: docs/context/evidence/issue_6481_social_compliance_preflight_receipt.json
   status: evidence
   freshness: evidence

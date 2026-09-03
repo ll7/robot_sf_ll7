@@ -113,7 +113,7 @@ def test_dry_run_plans_draft_create_before_upload(tmp_path: Path) -> None:
 
 
 def test_create_draft_then_upload_order(tmp_path: Path) -> None:
-    """With --execute-upload, the draft is created before the upload runs."""
+    """A newly created draft uploads before GitHub creates its tag ref."""
     calls: list[list[str]] = []
     created = False
 
@@ -131,16 +131,7 @@ def test_create_draft_then_upload_order(tmp_path: Path) -> None:
                 cmd, 0, stdout=json.dumps([[release]] if created else [[]]), stderr=""
             )
         if cmd[:2] == ["gh", "api"]:
-            if not created:
-                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
-            return subprocess.CompletedProcess(
-                cmd,
-                0,
-                stdout=json.dumps(
-                    {"ref": f"refs/tags/{_TAG}", "object": {"sha": _SOURCE_SHA, "type": "commit"}}
-                ),
-                stderr="",
-            )
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
         if cmd[:3] == ["gh", "release", "create"]:
             created = True
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
@@ -152,6 +143,80 @@ def test_create_draft_then_upload_order(tmp_path: Path) -> None:
     assert len(create_calls) == 1
     assert len(upload_calls) == 1
     assert calls.index(create_calls[0]) < calls.index(upload_calls[0])
+
+
+def test_create_draft_retries_eventually_consistent_release_readback(tmp_path: Path) -> None:
+    """A newly created draft may take a bounded interval to appear in the release listing."""
+    calls: list[list[str]] = []
+    created = False
+    missing_reads = 2
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal created, missing_reads
+        calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            if not created or missing_reads > 0:
+                if created:
+                    missing_reads -= 1
+                return subprocess.CompletedProcess(cmd, 0, stdout="[[]]", stderr="")
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout=json.dumps([[_release_record()]]), stderr=""
+            )
+        if cmd[:2] == ["gh", "api"]:
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
+        if cmd[:3] == ["gh", "release", "create"]:
+            created = True
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    with (
+        patch("subprocess.run", side_effect=_fake_run),
+        patch.object(publisher.time, "sleep") as sleep,
+    ):
+        _run(
+            tmp_path,
+            "--create-draft",
+            "--expected-source-sha",
+            _SOURCE_SHA,
+            "--execute-upload",
+        )
+    assert sleep.call_count == 2
+    assert len([call for call in calls if call[:3] == ["gh", "release", "upload"]]) == 1
+
+
+def test_create_draft_does_not_retry_release_readback_api_failure(tmp_path: Path) -> None:
+    """Only a successful listing with no exact draft is retryable; API failures block."""
+    calls: list[list[str]] = []
+    created = False
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal created
+        calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            if created:
+                return subprocess.CompletedProcess(
+                    cmd, 1, stdout="", stderr="HTTP 503: Service Unavailable"
+                )
+            return subprocess.CompletedProcess(cmd, 0, stdout="[[]]", stderr="")
+        if cmd[:2] == ["gh", "api"]:
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
+        if cmd[:3] == ["gh", "release", "create"]:
+            created = True
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    with (
+        patch("subprocess.run", side_effect=_fake_run),
+        patch.object(publisher.time, "sleep") as sleep,
+        pytest.raises(SystemExit, match="cannot determine whether release"),
+    ):
+        _run(
+            tmp_path,
+            "--create-draft",
+            "--expected-source-sha",
+            _SOURCE_SHA,
+            "--execute-upload",
+        )
+    sleep.assert_not_called()
+    assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
 
 
 def test_collision_with_existing_release_on_different_sha_fails_closed(tmp_path: Path) -> None:
@@ -223,6 +288,24 @@ def test_existing_exact_sha_draft_allows_upload(tmp_path: Path) -> None:
     upload_calls = [c for c in calls if c[:3] == ["gh", "release", "upload"]]
     assert create_calls == []
     assert len(upload_calls) == 1
+
+
+def test_existing_exact_sha_draft_without_tag_ref_allows_upload(tmp_path: Path) -> None:
+    """An unpublished exact-target draft is valid before GitHub creates its tag ref."""
+    existing = json.dumps([[_release_record()]])
+    calls: list[list[str]] = []
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
+        if cmd[:2] == ["gh", "api"]:
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    with patch("subprocess.run", side_effect=_fake_run):
+        _run(tmp_path, "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    assert len([call for call in calls if call[:3] == ["gh", "release", "upload"]]) == 1
 
 
 @pytest.mark.parametrize(
@@ -694,6 +777,21 @@ def test_existing_draft_rejects_stale_tag_ref(tmp_path: Path) -> None:
         pytest.raises(SystemExit, match="refusing to mutate"),
     ):
         _run(tmp_path, "--expected-source-sha", _SOURCE_SHA, "--execute-upload")
+    assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
+
+
+def test_existing_draft_rejects_tag_created_at_wrong_target_between_reads(tmp_path: Path) -> None:
+    """A tag that appears after admission is rechecked and cannot redirect the upload."""
+    release = _release_record()
+    calls, _ = _run_existing_draft(
+        tmp_path,
+        release=release,
+        tag_outputs=[
+            (1, "", "HTTP 404: Not Found"),
+            (0, _tag_response(sha="b" * 40), ""),
+        ],
+        expect_failure=True,
+    )
     assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
 
 

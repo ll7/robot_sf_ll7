@@ -1262,8 +1262,13 @@ def test_pr_body_contracts_workflow_runs_strict_pr_body_checker() -> None:
         assert flag in workflow_text
 
 
-def test_pr_ready_check_final_mode_preflights_analytics_dependencies(tmp_path: Path) -> None:
+def test_pr_ready_check_final_mode_preflights_analytics_dependencies(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Final PR proof should fail early when analytics extras are missing."""
+    # A final-readiness parent may skip its own preflights; this child contract
+    # must still exercise the analytics-preflight branch it is testing.
+    monkeypatch.setenv("PR_READY_SKIP_PREFLIGHT", "1")
     repo = tmp_path / "repo"
     stale_repo = tmp_path / "stale-repo"
     script_dir = repo / "scripts" / "dev"
@@ -1315,6 +1320,7 @@ def test_pr_ready_check_final_mode_preflights_analytics_dependencies(tmp_path: P
             **os.environ,
             "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
             "PR_READY_MODE": "final",
+            "PR_READY_SKIP_PREFLIGHT": "0",
             "BASE_REF": "origin/main",
             "REPO_ROOT": str(stale_repo),
         },
@@ -1375,6 +1381,7 @@ def test_pr_ready_check_rejects_process_substitution_body_paths(tmp_path: Path) 
         "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
         "BASE_REF": "HEAD",
         "PR_READY_MODE": "final",
+        "PR_READY_SKIP_PREFLIGHT": "0",
     }
 
     process_substitution = subprocess.run(

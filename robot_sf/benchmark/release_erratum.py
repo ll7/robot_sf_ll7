@@ -769,6 +769,10 @@ def _validate_predecessor_release_manifest(  # noqa: C901, PLR0912
     provenance = _require_mapping(
         manifest.get("provenance"), label="predecessor resolved manifest.provenance"
     )
+    if "provenance" in provenance:
+        raise ReleaseErratumError(
+            "predecessor resolved manifest.provenance contains unsupported nested provenance"
+        )
     levels = (manifest, provenance)
     version_dois = [
         level[key] for level in levels for key in ("doi", "version_doi") if key in level
@@ -797,6 +801,13 @@ def _validate_predecessor_release_manifest(  # noqa: C901, PLR0912
             raise ReleaseErratumError(
                 f"predecessor resolved manifest provenance.{key} differs from the frozen source"
             )
+    for level_label, level in (
+        ("predecessor resolved manifest", manifest),
+        ("predecessor resolved manifest provenance", provenance),
+    ):
+        for key in ("source_commit", "scientific_source_sha"):
+            if key in level and level[key] != contract.source_sha:
+                raise ReleaseErratumError(f"{level_label}.{key} differs from the frozen source")
 
 
 def _read_episode_rows(
@@ -1779,6 +1790,7 @@ def _assert_predecessor_execution_aliases(
     label: str,
     require_concept: bool = False,
     require_release_id: bool = False,
+    require_source: bool = False,
 ) -> None:
     """Require preserved execution coordinates to name only the predecessor.
 
@@ -1833,6 +1845,15 @@ def _assert_predecessor_execution_aliases(
     concept_values = [level["concept_doi"] for level, _ in levels if "concept_doi" in level]
     if require_concept and not concept_values:
         raise ReleaseErratumError(f"{label} contains a stale predecessor concept DOI")
+
+    source_values = [
+        level[key]
+        for level, _ in levels
+        for key in ("source_sha", "source_commit", "scientific_source_sha")
+        if key in level
+    ]
+    if require_source and not source_values:
+        raise ReleaseErratumError(f"{label} is missing its scientific source SHA")
 
 
 def _assert_optional_publication_document_aliases(
@@ -2074,6 +2095,17 @@ def _validate_published_release_documents(
         summary_release,
         contract=contract,
         label="published campaign summary.benchmark_release",
+    )
+    summary_execution_release = _require_mapping(
+        summary.get("scientific_execution_benchmark_release"),
+        label="published campaign summary.scientific_execution_benchmark_release",
+    )
+    _assert_predecessor_execution_aliases(
+        summary_execution_release,
+        contract=contract,
+        label="published campaign summary.scientific_execution_benchmark_release",
+        require_concept=True,
+        require_source=True,
     )
     _assert_publication_aliases(
         summary_campaign,

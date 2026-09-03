@@ -219,6 +219,36 @@ def test_create_draft_does_not_retry_release_readback_api_failure(tmp_path: Path
     assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
 
 
+def test_create_draft_admits_when_tag_ref_lookup_has_unparseable_404(tmp_path: Path) -> None:
+    """A draft is admitted when the tag-ref lookup exits non-zero with an unparseable 404.
+
+    Regression test for issue #8355: ``gh api`` can exit non-zero with an
+    unparseable status line while the error body still quotes a 404.  The draft
+    readback must treat this as an absent tag ref rather than a transport error.
+    """
+    existing = json.dumps([[_release_record()]])
+    calls: list[list[str]] = []
+
+    def _fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(list(cmd))
+        if cmd[:2] == ["gh", "api"] and "--paginate" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout=existing, stderr="")
+        if cmd[:2] == ["gh", "api"]:
+            # Simulate a 404 response with an unparseable status line but
+            # the error body still quotes a 404.
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    with patch("subprocess.run", side_effect=_fake_run):
+        _run(
+            tmp_path,
+            "--expected-source-sha",
+            _SOURCE_SHA,
+            "--execute-upload",
+        )
+    assert len([call for call in calls if call[:3] == ["gh", "release", "upload"]]) == 1
+
+
 def test_collision_with_existing_release_on_different_sha_fails_closed(tmp_path: Path) -> None:
     """An existing release at a different target SHA blocks creation and upload."""
     existing = json.dumps(

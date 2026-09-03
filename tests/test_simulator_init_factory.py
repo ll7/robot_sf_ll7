@@ -241,6 +241,20 @@ def test_simulator_metadata_fallback_respects_zero_obstacle_force_factor() -> No
     assert metadata["applied"] is False
 
 
+def test_simulator_metadata_fallback_preserves_legacy_non_numeric_factor() -> None:
+    """Legacy force objects with a non-numeric factor remain conservatively enabled."""
+    simulator = object.__new__(Simulator)
+    legacy_force = object.__new__(ObstacleForce)
+    legacy_force.config = SimpleNamespace(factor="legacy-default")
+    simulator.pysf_sim = SimpleNamespace(forces=(legacy_force,), raw_obstacles=(object(),))
+    simulator.config = SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.0])
+
+    metadata = simulator.obstacle_force_law_metadata()
+
+    assert metadata["enabled"] is True
+    assert metadata["applied"] is False
+
+
 def test_ped_simulator_keeps_none_response_multipliers() -> None:
     """PedSimulator.__post_init__ preserves the issue #4618 R2 ``None`` divergence."""
     map_def = _minimal_map()

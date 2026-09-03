@@ -12,6 +12,32 @@ set -uo pipefail
 
 label="${1:-uv-sync-diag}"
 
+# Bounded tree sizing (issue #8249): `du` walks scale with cache/venv size and
+# shared-host I/O contention (measured 28s for a 60GB cache against the 30s
+# test budget, so loaded hosts exceed it). Each probe below is capped so this
+# advisory diagnostic stays fast; on timeout it reports
+# `unavailable-timed-out` instead of hanging the caller. Override the cap with
+# ROBOT_SF_DIAG_DU_TIMEOUT_SECONDS (default 10). Hosts without GNU timeout(1)
+# (e.g. macOS) keep the previous unbounded behavior.
+diag_du_timeout="${ROBOT_SF_DIAG_DU_TIMEOUT_SECONDS:-10}"
+if ! [[ "$diag_du_timeout" =~ ^[0-9]+$ ]]; then
+  diag_du_timeout=10
+fi
+# GNU timeout(1) is absent on some hosts (e.g. stock macOS bash 3.2 runners);
+# without it keep the previous unbounded behavior. The function form (rather
+# than an arg array) stays safe under `set -u` on old bash versions.
+du_timeout_secs=""
+if command -v timeout >/dev/null 2>&1; then
+  du_timeout_secs="$diag_du_timeout"
+fi
+bounded_du() {
+  if [[ -n "${du_timeout_secs:-}" ]]; then
+    timeout "$du_timeout_secs" "$@"
+  else
+    "$@"
+  fi
+}
+
 echo "::group::${label}"
 
 echo "uv_sync_diag runner_info"
@@ -74,25 +100,40 @@ if [[ -d "$cache_dir" ]]; then
     # tree up to a dozen times and risking preflight timeouts on large caches.
     # The captured output is then parsed in a single awk pass (pure in-memory,
     # no further disk I/O), preserving the curated key names and ordering.
-    cache_du="$(du -h -d 1 "$cache_dir" 2>/dev/null || true)"
-    printf '%s\n' "$cache_du" | awk -F'\t' -v dir="$cache_dir" '
-        { size[$2] = $1 }
-        END {
-            if (dir in size) print "  cache_total_size=" size[dir]
-            n = split("archive-v0 wheels-v6 wheels-v5 sdists-v9 sdists-v8 simple-v21 simple-v20 builds-v0 environments-v2 environments-v1 interpreter-v4 git-v0", subs, " ")
-            for (i = 1; i <= n; i++) {
-                p = dir "/" subs[i]
-                if (p in size) print "  cache_" subs[i] "_size=" size[p]
+    # The walk itself is capped by bounded_du (issue #8249); exit 124 means the
+    # probe timed out under contention, which is reported, not retried.
+    cache_du=""
+    cache_du_rc=0
+    cache_du="$(bounded_du du -h -d 1 "$cache_dir" 2>/dev/null)" || cache_du_rc=$?
+    if [[ "$cache_du_rc" -eq 124 ]]; then
+        echo "  cache_total_size=unavailable-timed-out"
+        echo "  cache_sizing_note=du exceeded ${diag_du_timeout}s under host contention"
+    else
+        printf '%s\n' "$cache_du" | awk -F'\t' -v dir="$cache_dir" '
+            { size[$2] = $1 }
+            END {
+                if (dir in size) print "  cache_total_size=" size[dir]
+                n = split("archive-v0 wheels-v6 wheels-v5 sdists-v9 sdists-v8 simple-v21 simple-v20 builds-v0 environments-v2 environments-v1 interpreter-v4 git-v0", subs, " ")
+                for (i = 1; i <= n; i++) {
+                    p = dir "/" subs[i]
+                    if (p in size) print "  cache_" subs[i] "_size=" size[p]
+                }
             }
-        }
-    '
+        '
+    fi
 else
     echo "  cache_dir=${cache_dir} (does not exist)"
 fi
 
 echo "uv_sync_diag venv_info"
 if [[ -d .venv ]]; then
-    du -sh .venv 2>/dev/null | awk '{print "  venv_size="$1}' || true
+    venv_du_rc=0
+    venv_du="$(bounded_du du -sh .venv 2>/dev/null)" || venv_du_rc=$?
+    if [[ "$venv_du_rc" -eq 124 ]]; then
+        echo "  venv_size=unavailable-timed-out"
+    else
+        printf '%s\n' "$venv_du" | awk '{print "  venv_size="$1}' || true
+    fi
     if [[ -x .venv/bin/python ]]; then
         echo "  python_version=$(.venv/bin/python --version 2>&1 || true)"
     else

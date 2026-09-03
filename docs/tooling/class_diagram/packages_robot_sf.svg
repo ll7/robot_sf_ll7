@@ -1665,18 +1665,6 @@
 <path fill="none" stroke="black" d="M9098.03,-468.3C9098.03,-475.68 9098.03,-484.48 9098.03,-492.75"/>
 <polygon fill="black" stroke="black" points="9098.03,-502.68 9093.53,-492.68 9098.03,-498.9 9098.03,-492.68 9098.03,-492.68 9098.03,-492.68 9098.03,-498.9 9102.53,-492.68 9098.03,-502.68"/>
 </g>
-<!-- robot_sf.maps.verification.logging -->
-<g id="node113" class="node">
-<title>robot_sf.maps.verification.logging</title>
-<polygon fill="#eedd88" stroke="#eedd88" points="4738.53,-540 4533.53,-540 4533.53,-504 4738.53,-504 4738.53,-540"/>
-<text xml:space="preserve" text-anchor="start" x="4541.53" y="-516.95" font-family="Times,serif" font-size="14.00">robot_sf.maps.verification.logging</text>
-</g>
-<!-- robot_sf.maps.verification.logging&#45;&gt;robot_sf.common.logging -->
-<g id="edge142" class="edge">
-<title>robot_sf.maps.verification.logging&#45;&gt;robot_sf.common.logging</title>
-<path fill="none" stroke="black" d="M4554.61,-540.48C4507.71,-550.55 4448.66,-563.23 4400.34,-573.61"/>
-<polygon fill="black" stroke="black" points="4390.76,-575.66 4399.59,-569.17 4394.46,-574.87 4400.54,-573.57 4400.54,-573.57 4400.54,-573.57 4394.46,-574.87 4401.48,-577.97 4390.76,-575.66"/>
-</g>
 <!-- robot_sf.maps.verification.manifest -->
 <g id="node114" class="node">
 <title>robot_sf.maps.verification.manifest</title>
@@ -2738,12 +2726,6 @@
 <title>robot_sf.research.imitation_report&#45;&gt;robot_sf.research.statistics</title>
 <path fill="none" stroke="black" d="M3745.76,-396.48C3758.13,-405.24 3773.3,-415.96 3786.69,-425.42"/>
 <polygon fill="black" stroke="black" points="3794.62,-431.04 3783.86,-428.94 3791.54,-428.85 3786.46,-425.26 3786.46,-425.26 3786.46,-425.26 3791.54,-428.85 3789.06,-421.59 3794.62,-431.04"/>
-</g>
-<!-- robot_sf.research.logging_config -->
-<g id="node168" class="node">
-<title>robot_sf.research.logging_config</title>
-<polygon fill="#44bb99" stroke="#44bb99" points="13116.03,-36 12920.03,-36 12920.03,0 13116.03,0 13116.03,-36"/>
-<text xml:space="preserve" text-anchor="start" x="12928.03" y="-12.95" font-family="Times,serif" font-size="14.00">robot_sf.research.logging_config</text>
 </g>
 <!-- robot_sf.research.metadata&#45;&gt;robot_sf.common.logging -->
 <g id="edge253" class="edge">

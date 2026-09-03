@@ -33,7 +33,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 
 from robot_sf.benchmark import artifact_publication as artifact_publication_module
 from robot_sf.benchmark import release_acceptance as release_acceptance_module
@@ -48,6 +48,16 @@ from robot_sf.benchmark.camera_ready import _run_state as camera_run_state_modul
 from robot_sf.benchmark.camera_ready._artifacts import _write_snqi_diagnostics_artifacts
 from robot_sf.benchmark.camera_ready_campaign import write_campaign_report
 from robot_sf.benchmark.identity.hash_utils import sha256_file
+from robot_sf.benchmark.release_erratum import (
+    ERRATUM_SCOPE,
+    ErratumContract,
+    ReleaseErratumError,
+    build_erratum_receipt,
+    load_erratum_contract,
+    snapshot_campaign,
+    snapshot_predecessor_archive,
+    validate_erratum_identity_blocks,
+)
 from robot_sf.benchmark.release_protocol import (
     load_release_campaign_config,
     load_release_manifest,
@@ -72,6 +82,8 @@ PRODUCER_SUMS_NAME = "SHA256SUMS"
 PRODUCER_RECEIPT_NAME = "artifact-verification-receipt.json"
 REJECTED_RESULT_RELATIVE = "release/release_result.json"
 DERIVATION_RECEIPT_RELATIVE = "provenance/derived_revalidation_receipt.json"
+ERRATUM_RECEIPT_RELATIVE = "provenance/benchmark_release_erratum.json"
+ERRATUM_METADATA_RELATIVE = "release/zenodo_metadata.erratum.json"
 PUBLICATION_CUSTODY_NAME = "publication_custody.json"
 SNQI_ADVISORY_BOUNDARY = (
     "SNQI calibration failed under warn and remains advisory only; it is not a planner-ranking "
@@ -93,6 +105,8 @@ EXPECTED_GOAL_TIMEOUT_BOUNDARY_ROWS = frozenset(
 )
 EXPECTED_RELEASE_EPISODE_ROWS = 20_160
 EXPECTED_RELEASE_ARMS = 14
+MAX_PRESERVED_RECEIPT_EXPANDED_BYTES = 8 * 1024 * 1024
+_GZIP_INPUT_CHUNK_BYTES = 64 * 1024
 EXPECTED_SOURCE_CAMPAIGN_RELATIVE = Path(
     "output/benchmarks/camera_ready/issue7742_release_full-s30-h600-b1d5ab6de708-v1_20260825"
 )
@@ -402,26 +416,49 @@ def _read_json_bytes(data: bytes, *, label: str) -> dict[str, Any]:
     return payload
 
 
-def _read_single_gzip_member(path: Path) -> bytes:
-    """Read exactly one gzip member and reject truncation or trailing data."""
-    path = _assert_safe_file(path, label="preserved receipt source")
-    try:
-        compressed = path.read_bytes()
-    except OSError as exc:
-        raise DerivedReleaseError("preserved receipt source cannot be read") from exc
+def _read_bounded_single_gzip_payload(handle: BinaryIO) -> bytes:
+    """Stream one gzip member from ``handle`` within the expanded-byte budget."""
     decompressor = zlib.decompressobj(16 + zlib.MAX_WBITS)
-    try:
-        payload = decompressor.decompress(compressed)
-        payload += decompressor.flush()
-    except zlib.error as exc:
-        raise DerivedReleaseError("preserved receipt gzip is invalid") from exc
+    payload = bytearray()
+    while compressed_chunk := handle.read(_GZIP_INPUT_CHUNK_BYTES):
+        remaining = MAX_PRESERVED_RECEIPT_EXPANDED_BYTES - len(payload)
+        payload.extend(decompressor.decompress(compressed_chunk, remaining + 1))
+        if len(payload) > MAX_PRESERVED_RECEIPT_EXPANDED_BYTES:
+            raise DerivedReleaseError(
+                "preserved receipt gzip expanded payload exceeds the safety limit"
+            )
+        if decompressor.eof:
+            if decompressor.unused_data or handle.read(1):
+                raise DerivedReleaseError("preserved receipt gzip has trailing data or members")
+            break
     if not decompressor.eof:
         raise DerivedReleaseError("preserved receipt gzip is truncated")
     if decompressor.unused_data or decompressor.unconsumed_tail:
         raise DerivedReleaseError("preserved receipt gzip has trailing data or members")
+    try:
+        remaining = MAX_PRESERVED_RECEIPT_EXPANDED_BYTES - len(payload)
+        payload.extend(decompressor.flush(remaining + 1))
+    except zlib.error as exc:
+        raise DerivedReleaseError("preserved receipt gzip is invalid") from exc
+    if len(payload) > MAX_PRESERVED_RECEIPT_EXPANDED_BYTES:
+        raise DerivedReleaseError(
+            "preserved receipt gzip expanded payload exceeds the safety limit"
+        )
     if not payload:
         raise DerivedReleaseError("preserved receipt gzip is empty")
-    return payload
+    return bytes(payload)
+
+
+def _read_single_gzip_member(path: Path) -> bytes:
+    """Read one bounded gzip member and reject truncation or trailing data."""
+    path = _assert_safe_file(path, label="preserved receipt source")
+    try:
+        with path.open("rb") as handle:
+            return _read_bounded_single_gzip_payload(handle)
+    except OSError as exc:
+        raise DerivedReleaseError("preserved receipt source cannot be read") from exc
+    except zlib.error as exc:
+        raise DerivedReleaseError("preserved receipt gzip is invalid") from exc
 
 
 def _sha256_bytes(data: bytes) -> str:
@@ -1178,13 +1215,24 @@ def _rebind_one_publication_sidecar(
     }
     boundary = boundary_files.get(relative_path)
     if isinstance(boundary, Mapping):
-        projection_record["goal_timeout_boundary_annotation"] = {
-            "pre_annotation_projection_sha256": boundary.get("source_sha256"),
-            "annotation_count": len(boundary.get("episode_ids", [])),
-            "episode_ids": boundary.get("episode_ids", []),
-            "timing_evidence_fabricated": False,
-            "scientific_fields_changed": False,
-        }
+        if boundary.get("mode") == "excluded_without_row_mutation":
+            projection_record["goal_timeout_boundary_exclusion"] = {
+                "source_sha256": boundary.get("source_sha256"),
+                "derived_sha256": boundary.get("derived_sha256"),
+                "excluded_row_count": len(boundary.get("episode_ids", [])),
+                "episode_ids": boundary.get("episode_ids", []),
+                "raw_episode_rows_unchanged": True,
+                "timing_evidence_fabricated": False,
+                "scientific_fields_changed": False,
+            }
+        else:
+            projection_record["goal_timeout_boundary_annotation"] = {
+                "pre_annotation_projection_sha256": boundary.get("source_sha256"),
+                "annotation_count": len(boundary.get("episode_ids", [])),
+                "episode_ids": boundary.get("episode_ids", []),
+                "timing_evidence_fabricated": False,
+                "scientific_fields_changed": False,
+            }
     derived_artifacts.append(projection_record)
     _write_json(sidecar_path, sidecar)
     return {
@@ -1262,7 +1310,13 @@ def _find_unresolved_goal_timeout_rows(
             episode_id = record.get("episode_id")
             if not isinstance(episode_id, str) or not episode_id.strip():
                 raise DerivedReleaseError("goal+timeout row is missing an episode identity")
-            observed.add((episodes_path.parent.name, episode_id.strip()))
+            identity = (episodes_path.parent.name, episode_id.strip())
+            if identity in observed:
+                raise DerivedReleaseError(
+                    "publication episode projection contains duplicate unresolved "
+                    f"goal+timeout identity {identity!r}"
+                )
+            observed.add(identity)
             planned[episodes_path].append((line_index, line, record))
     return planned, observed
 
@@ -1322,6 +1376,78 @@ def _annotate_publication_goal_timeout_boundaries(
         "annotated_row_count": len(observed),
         "rows": [{"arm": arm, "episode_id": episode_id} for arm, episode_id in sorted(observed)],
         "files": file_evidence,
+        "timing_evidence_fabricated": False,
+        "scientific_fields_changed": False,
+    }
+
+
+def _record_publication_goal_timeout_boundaries_without_row_mutation(
+    campaign_root: Path,
+    *,
+    expected_rows: set[tuple[str, str]] | frozenset[tuple[str, str]] = (
+        EXPECTED_GOAL_TIMEOUT_BOUNDARY_ROWS
+    ),
+) -> dict[str, Any]:
+    """Record reviewed timing exclusions while preserving every episode byte.
+
+    A derived-metadata erratum compares complete scientific rows with its
+    immutable predecessor.  It therefore cannot add even an explanatory field
+    to an episode row.  This path validates the same reviewed identities and
+    terminal semantics as the ordinary recovery annotator, then records the
+    interpretation boundary only in signed run metadata and provenance.
+
+    Returns:
+        Machine-readable reconciliation evidence with unchanged file digests.
+    """
+    planned, observed = _find_unresolved_goal_timeout_rows(campaign_root)
+    if observed != set(expected_rows):
+        raise DerivedReleaseError(
+            "unresolved goal+timeout rows differ from reviewed boundary-row set"
+        )
+
+    file_evidence: list[dict[str, Any]] = []
+    for episodes_path, rows in sorted(planned.items(), key=lambda item: item[0].as_posix()):
+        source_sha256 = sha256_file(episodes_path).lower()
+        episode_ids: list[str] = []
+        for _line_index, _original_line, record in rows:
+            _validate_goal_timeout_annotation_candidate(record)
+            episode_ids.append(str(record["episode_id"]))
+        if sha256_file(episodes_path).lower() != source_sha256:
+            raise DerivedReleaseError("episode projection changed during boundary review")
+        file_evidence.append(
+            {
+                "path": episodes_path.relative_to(campaign_root).as_posix(),
+                "source_sha256": source_sha256,
+                "derived_sha256": source_sha256,
+                "episode_ids": sorted(episode_ids),
+                "mode": "excluded_without_row_mutation",
+            }
+        )
+
+    excluded_rows = [{"arm": arm, "episode_id": episode_id} for arm, episode_id in sorted(observed)]
+    run_meta_path = campaign_root / "run_meta.json"
+    run_meta = _read_json(run_meta_path)
+    run_meta["goal_timeout_boundary"] = {
+        "status": "excluded_from_timing_interpretation",
+        "excluded_row_count": len(observed),
+        "excluded_rows": excluded_rows,
+        "raw_episode_rows_unchanged": True,
+        "timing_evidence_fabricated": False,
+        "note": GOAL_TIMEOUT_BOUNDARY_NOTE,
+        "policy": (
+            "Frozen rows lacking a reached-goal step are excluded from timing-boundary "
+            "interpretation through publication provenance; no episode field or event timing "
+            "is changed or inferred."
+        ),
+    }
+    _write_json(run_meta_path, run_meta)
+    return {
+        "status": "recorded_without_row_mutation",
+        "annotated_row_count": 0,
+        "excluded_row_count": len(observed),
+        "rows": excluded_rows,
+        "files": file_evidence,
+        "raw_episode_rows_unchanged": True,
         "timing_evidence_fabricated": False,
         "scientific_fields_changed": False,
     }
@@ -1535,6 +1661,29 @@ def _assert_distinct_validator_checkout(validator_root: Path, source_root: Path)
         raise DerivedReleaseError(
             "validator checkout must be distinct from frozen source and helper checkout"
         )
+
+
+def _assert_exact_orchestration_checkout(repo_root: Path, expected_commit: str) -> None:
+    """Bind the erratum workflow implementation to one clean exact checkout."""
+    root = _assert_safe_directory(repo_root, label="orchestration repository root")
+    helper = Path(__file__).resolve().parents[2]
+    if root.resolve() != helper:
+        raise DerivedReleaseError(
+            "erratum orchestration root differs from the executing tooling checkout"
+        )
+    actual = _git_value(["rev-parse", "HEAD^{commit}"], cwd=root).lower()
+    if actual != expected_commit:
+        raise DerivedReleaseError("erratum orchestration checkout is not the contracted commit")
+    status = subprocess.run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    if status.returncode != 0 or status.stdout.strip():
+        raise DerivedReleaseError("erratum orchestration checkout is not clean")
 
 
 def _run_exact_validator(
@@ -1790,6 +1939,18 @@ def _set_accepted_release_metadata(
     """Turn only the copied release metadata into an accepted derived result."""
     result_path = campaign_root / "release" / "release_result.json"
     result = dict(_read_json(result_path))
+    derivation = result.get("derivation")
+    derivation = dict(derivation) if isinstance(derivation, Mapping) else {}
+    derivation.update(
+        {
+            "mode": "preserved_rows_corrected_validator",
+            "producer_release_result_sha256": sha256_file(
+                campaign_root / "release" / "producer_release_result.rejected.json"
+            ),
+            "producer_release_status": producer_result.get("release_status"),
+            "snqi_claim_boundary": SNQI_ADVISORY_BOUNDARY,
+        }
+    )
     result.update(
         {
             "status": "benchmark_success",
@@ -1807,14 +1968,7 @@ def _set_accepted_release_metadata(
             "publication_bundle": dict(publication_descriptor),
             "release_acceptance": dict(acceptance),
             "full_release_acceptance": dict(acceptance),
-            "derivation": {
-                "mode": "preserved_rows_corrected_validator",
-                "producer_release_result_sha256": sha256_file(
-                    campaign_root / "release" / "producer_release_result.rejected.json"
-                ),
-                "producer_release_status": producer_result.get("release_status"),
-                "snqi_claim_boundary": SNQI_ADVISORY_BOUNDARY,
-            },
+            "derivation": derivation,
         }
     )
     _write_json(result_path, result)
@@ -1832,7 +1986,31 @@ def _set_accepted_release_metadata(
             "full_release_acceptance_status": "valid",
         }
     )
+    release_tag = str(campaign.get("release_tag") or "").strip()
+    doi = str(campaign.get("doi") or "").strip()
+    repository_url = str(campaign.get("repository_url") or "").strip().rstrip("/")
+    archive_relative = publication_descriptor.get("archive_path")
+    archive_name = (
+        Path(archive_relative).name
+        if isinstance(archive_relative, str) and archive_relative.strip()
+        else ""
+    )
+    if release_tag and repository_url:
+        campaign["release_url"] = f"{repository_url}/releases/tag/{release_tag}"
+        if archive_name:
+            campaign["release_asset_url"] = (
+                f"{repository_url}/releases/download/{release_tag}/{archive_name}"
+            )
+    if doi:
+        campaign["doi_url"] = f"https://doi.org/{doi}"
     summary["campaign"] = campaign
+    artifacts = summary.get("artifacts")
+    artifacts = dict(artifacts) if isinstance(artifacts, Mapping) else {}
+    for key in ("release_url", "release_asset_url", "doi_url"):
+        value = campaign.get(key)
+        if isinstance(value, str) and value:
+            artifacts[key] = value
+    summary["artifacts"] = artifacts
     summary["full_release_acceptance"] = dict(acceptance)
     summary["publication_bundle"] = dict(publication_descriptor)
     _write_json(summary_path, summary)
@@ -1921,6 +2099,578 @@ def _write_derivation_receipt(  # noqa: PLR0913
     _write_json(campaign_root / DERIVATION_RECEIPT_RELATIVE, receipt)
 
 
+def _erratum_identity_block(contract: ErratumContract) -> dict[str, Any]:
+    """Build the complete identity block emitted in derived documents."""
+    return {
+        "correction_id": contract.correction_id,
+        "correction_scope": ERRATUM_SCOPE,
+        "predecessor_version_doi": contract.predecessor_version_doi,
+        "predecessor_github_release_tag": contract.predecessor_github_release_tag,
+        "concept_doi": contract.concept_doi,
+        "source_sha": contract.source_sha,
+        "builder_sha": contract.builder_sha,
+        "validator_sha": contract.validator_sha,
+        "orchestration_sha": contract.orchestration_sha,
+        "scientific_source_unchanged": True,
+        "simulation_rerun": False,
+    }
+
+
+def _rewrite_publication_provenance(
+    payload: Mapping[str, Any] | None, *, contract: ErratumContract
+) -> dict[str, Any]:
+    """Rewrite one current-publication provenance mapping to successor coordinates."""
+    provenance = dict(payload) if isinstance(payload, Mapping) else {}
+    execution_metadata_path = provenance.get("metadata_path")
+    execution_metadata_sha256 = provenance.get("metadata_sha256")
+    if isinstance(execution_metadata_path, str) and execution_metadata_path:
+        provenance.setdefault("scientific_execution_metadata_path", execution_metadata_path)
+    if isinstance(execution_metadata_sha256, str) and execution_metadata_sha256:
+        provenance.setdefault("scientific_execution_metadata_sha256", execution_metadata_sha256)
+    provenance.update(
+        {
+            "release_tag": contract.successor_github_release_tag,
+            "release_id": contract.successor_github_release_tag,
+            "doi": contract.successor_version_doi,
+            "version_doi": contract.successor_version_doi,
+            "concept_doi": contract.concept_doi,
+            "version_record_id": contract.successor_version_doi.rsplit(".", 1)[-1],
+            "concept_record_id": contract.concept_doi.rsplit(".", 1)[-1],
+            "bundle_zenodo_metadata_path": ERRATUM_METADATA_RELATIVE,
+            "metadata_path": ERRATUM_METADATA_RELATIVE,
+            "metadata_sha256": contract.metadata_sha256,
+            "scientific_source_sha": contract.source_sha,
+            "erratum_builder_sha": contract.builder_sha,
+            "erratum_validator_sha": contract.validator_sha,
+            "erratum_orchestration_sha": contract.orchestration_sha,
+        }
+    )
+    return provenance
+
+
+def _rewrite_embedded_publication_identity(
+    payload: Mapping[str, Any], *, contract: ErratumContract
+) -> dict[str, Any]:
+    """Rewrite only publication coordinates in one copied metadata object.
+
+    Returns:
+        A new mapping retaining execution provenance and scientific-manifest hashes.
+    """
+    updated = dict(payload)
+    execution_manifest_path = updated.get("manifest_path")
+    if isinstance(execution_manifest_path, str) and execution_manifest_path:
+        updated["scientific_execution_manifest_path"] = execution_manifest_path
+        updated["manifest_path"] = "release/release_manifest.resolved.json"
+    updated.update(
+        {
+            "release_tag": contract.successor_github_release_tag,
+            "release_id": contract.successor_github_release_tag,
+            "doi": contract.successor_version_doi,
+            "concept_doi": contract.concept_doi,
+            "version_doi": contract.successor_version_doi,
+            "metadata_path": ERRATUM_METADATA_RELATIVE,
+            "metadata_sha256": contract.metadata_sha256,
+        }
+    )
+    updated["publication"] = _rewrite_publication_identity_mapping(
+        updated.get("publication"), contract=contract
+    )
+    if isinstance(updated.get("provenance"), Mapping):
+        updated["provenance"] = _rewrite_publication_provenance(
+            updated["provenance"], contract=contract
+        )
+    return updated
+
+
+def _rewrite_publication_identity_mapping(
+    payload: Mapping[str, Any] | None, *, contract: ErratumContract
+) -> dict[str, Any]:
+    """Rewrite one nested current-publication identity mapping.
+
+    The nested mapping is a publication view, not execution provenance.  It is
+    therefore safe to add the complete coordinate set here: every copied
+    benchmark-release document gets the same machine-readable successor
+    identity while the separately named scientific-execution mappings retain
+    the predecessor coordinates.
+
+    Returns:
+        A copied mapping with canonical successor and predecessor coordinates.
+    """
+    publication = dict(payload) if isinstance(payload, Mapping) else {}
+    publication.update(
+        {
+            "release_tag": contract.successor_github_release_tag,
+            "release_id": contract.successor_github_release_tag,
+            "doi": contract.successor_version_doi,
+            "version_doi": contract.successor_version_doi,
+            "concept_doi": contract.concept_doi,
+            "predecessor_version_doi": contract.predecessor_version_doi,
+            "bundle_metadata_path": ERRATUM_METADATA_RELATIVE,
+            "metadata_path": ERRATUM_METADATA_RELATIVE,
+            "metadata_sha256": contract.metadata_sha256,
+            "correction_scope": "derived_publication_metadata_only",
+        }
+    )
+    return publication
+
+
+def _rewrite_resolved_manifest_publication_identity(
+    payload: Mapping[str, Any], *, contract: ErratumContract
+) -> dict[str, Any]:
+    """Return a successor resolved manifest while retaining scientific identity."""
+    resolved = dict(payload)
+    resolved["release_tag"] = contract.successor_github_release_tag
+    resolved["release_id"] = contract.successor_github_release_tag
+    if "doi" in resolved:
+        resolved["doi"] = contract.successor_version_doi
+    if "version_doi" in resolved:
+        resolved["version_doi"] = contract.successor_version_doi
+    if "concept_doi" in resolved:
+        resolved["concept_doi"] = contract.concept_doi
+    provenance = _rewrite_publication_provenance(resolved.get("provenance"), contract=contract)
+    resolved["provenance"] = provenance
+    publication = _rewrite_publication_identity_mapping(
+        resolved.get("publication"), contract=contract
+    )
+    publication.update(
+        {
+            "channel": provenance.get("publication_channel", "direct_zenodo_benchmark_dataset"),
+            "concept_record_id": contract.concept_doi.rsplit(".", 1)[-1],
+            "version_record_id": contract.successor_version_doi.rsplit(".", 1)[-1],
+        }
+    )
+    resolved["publication"] = publication
+    resolved["erratum"] = _erratum_identity_block(contract)
+    return resolved
+
+
+def _assert_successor_identity_fields(
+    payload: Mapping[str, Any], *, contract: ErratumContract, label: str
+) -> None:
+    """Require one current-publication mapping to name only successor coordinates."""
+    tag_keys = ("release_tag", "release_id", "benchmark_release_tag", "benchmark_release_id")
+    tag_values = [payload[key] for key in tag_keys if key in payload]
+    doi_values = [payload[key] for key in ("version_doi", "doi") if key in payload]
+    concept_values = [payload["concept_doi"]] if "concept_doi" in payload else []
+    provenance = payload.get("provenance")
+    if isinstance(provenance, Mapping):
+        tag_values.extend(provenance[key] for key in tag_keys if key in provenance)
+        doi_values.extend(provenance[key] for key in ("version_doi", "doi") if key in provenance)
+        if "concept_doi" in provenance:
+            concept_values.append(provenance["concept_doi"])
+    if not tag_values or any(
+        value != contract.successor_github_release_tag for value in tag_values
+    ):
+        raise DerivedReleaseError(f"{label} does not name the successor release tag")
+    if not doi_values or any(value != contract.successor_version_doi for value in doi_values):
+        raise DerivedReleaseError(f"{label} does not name the successor version DOI")
+    if not concept_values or any(value != contract.concept_doi for value in concept_values):
+        raise DerivedReleaseError(f"{label} does not name the successor concept DOI")
+    source_values = [
+        payload[key]
+        for key in ("source_sha", "source_commit", "scientific_source_sha")
+        if key in payload
+    ]
+    if any(value != contract.source_sha for value in source_values):
+        raise DerivedReleaseError(f"{label} contains a stale scientific source SHA")
+
+
+def _assert_publication_identity_mapping(
+    payload: Mapping[str, Any], *, contract: ErratumContract, label: str
+) -> None:
+    """Require one nested current-publication mapping to be self-consistent."""
+    publication = payload.get("publication")
+    if not isinstance(publication, Mapping):
+        raise DerivedReleaseError(f"{label} lacks a nested publication identity mapping")
+    _assert_successor_identity_fields(publication, contract=contract, label=f"{label}.publication")
+    expected = {
+        "predecessor_version_doi": contract.predecessor_version_doi,
+        "bundle_metadata_path": ERRATUM_METADATA_RELATIVE,
+        "metadata_path": ERRATUM_METADATA_RELATIVE,
+        "metadata_sha256": contract.metadata_sha256,
+        "correction_scope": "derived_publication_metadata_only",
+    }
+    if any(publication.get(key) != value for key, value in expected.items()):
+        raise DerivedReleaseError(f"{label}.publication identity is stale")
+
+
+def _assert_resolved_erratum_provenance(provenance: Any, *, contract: ErratumContract) -> None:
+    """Require one resolved manifest's provenance to use successor coordinates."""
+    if not isinstance(provenance, Mapping):
+        raise DerivedReleaseError("resolved manifest lacks successor provenance")
+    if provenance.get("version_doi") != contract.successor_version_doi:
+        raise DerivedReleaseError("resolved provenance does not name the successor version DOI")
+    if provenance.get("concept_doi") != contract.concept_doi:
+        raise DerivedReleaseError("resolved provenance does not name the successor concept DOI")
+    if provenance.get("metadata_path") != ERRATUM_METADATA_RELATIVE:
+        raise DerivedReleaseError("resolved provenance metadata path is not bundle-local")
+    if provenance.get("metadata_sha256") != contract.metadata_sha256:
+        raise DerivedReleaseError("resolved provenance metadata digest is stale")
+
+
+def _assert_erratum_manifest_identities(campaign_root: Path, *, contract: ErratumContract) -> None:
+    """Check the resolved and copied manifest identity separations."""
+    resolved = _read_json(campaign_root / "release" / "release_manifest.resolved.json")
+    try:
+        validate_erratum_identity_blocks(
+            resolved,
+            contract=contract,
+            label="resolved manifest",
+        )
+    except ReleaseErratumError as exc:
+        raise DerivedReleaseError(str(exc)) from exc
+    _assert_successor_identity_fields(resolved, contract=contract, label="resolved manifest")
+    _assert_publication_identity_mapping(resolved, contract=contract, label="resolved manifest")
+    _assert_resolved_erratum_provenance(resolved.get("provenance"), contract=contract)
+
+    for relative in ("campaign_manifest.json", "manifest.json", "run_meta.json"):
+        path = campaign_root / relative
+        if not path.is_file():
+            continue
+        payload = _read_json(path)
+        try:
+            validate_erratum_identity_blocks(
+                payload,
+                contract=contract,
+                label=relative,
+            )
+        except ReleaseErratumError as exc:
+            raise DerivedReleaseError(str(exc)) from exc
+        _assert_successor_identity_fields(payload, contract=contract, label=relative)
+        _assert_publication_identity_mapping(payload, contract=contract, label=relative)
+        benchmark_release = payload.get("benchmark_release")
+        execution_release = payload.get("scientific_execution_benchmark_release")
+        if not isinstance(benchmark_release, Mapping) or not isinstance(execution_release, Mapping):
+            raise DerivedReleaseError(f"{relative} does not separate publication and execution")
+        _assert_successor_identity_fields(
+            benchmark_release, contract=contract, label=f"{relative}.benchmark_release"
+        )
+        _assert_publication_identity_mapping(
+            benchmark_release, contract=contract, label=f"{relative}.benchmark_release"
+        )
+        if execution_release.get("release_tag") != contract.predecessor_github_release_tag:
+            raise DerivedReleaseError(f"{relative} lost the predecessor execution tag")
+        if execution_release.get("version_doi") != contract.predecessor_version_doi:
+            raise DerivedReleaseError(f"{relative} lost the predecessor execution DOI")
+        if execution_release.get("concept_doi") != contract.concept_doi:
+            raise DerivedReleaseError(f"{relative} lost the predecessor concept DOI")
+
+
+def _assert_erratum_release_result(campaign_root: Path, *, contract: ErratumContract) -> None:
+    """Check the successor result verdict and retained execution identity."""
+    result = _read_json(campaign_root / "release" / "release_result.json")
+    try:
+        validate_erratum_identity_blocks(
+            result,
+            contract=contract,
+            label="release result",
+        )
+    except ReleaseErratumError as exc:
+        raise DerivedReleaseError(str(exc)) from exc
+    _assert_successor_identity_fields(result, contract=contract, label="release result")
+    _assert_publication_identity_mapping(result, contract=contract, label="release result")
+    for current_key, execution_key in (
+        ("benchmark_release", "scientific_execution_benchmark_release"),
+        ("resolved_manifest", "scientific_execution_resolved_manifest"),
+    ):
+        current = result.get(current_key)
+        execution = result.get(execution_key)
+        if not isinstance(current, Mapping) or not isinstance(execution, Mapping):
+            raise DerivedReleaseError(f"release result does not separate {current_key} identity")
+        _assert_successor_identity_fields(
+            current, contract=contract, label=f"release result {current_key}"
+        )
+        _assert_publication_identity_mapping(
+            current, contract=contract, label=f"release result {current_key}"
+        )
+        if execution.get("release_tag") != contract.predecessor_github_release_tag:
+            raise DerivedReleaseError(f"release result {execution_key} lost predecessor identity")
+        if execution.get("version_doi") != contract.predecessor_version_doi:
+            raise DerivedReleaseError(f"release result {execution_key} lost predecessor DOI")
+        if execution.get("concept_doi") != contract.concept_doi:
+            raise DerivedReleaseError(
+                f"release result {execution_key} lost predecessor concept DOI"
+            )
+    derivation = result.get("derivation")
+    expected_derivation = {
+        "builder_sha": contract.builder_sha,
+        "validator_sha": contract.validator_sha,
+        "orchestration_sha": contract.orchestration_sha,
+        "scientific_source_sha": contract.source_sha,
+        "simulation_rerun": False,
+        "correction_id": contract.correction_id,
+        "predecessor_version_doi": contract.predecessor_version_doi,
+    }
+    if not isinstance(derivation, Mapping) or any(
+        derivation.get(key) != value for key, value in expected_derivation.items()
+    ):
+        raise DerivedReleaseError("erratum release result derivation identity is stale")
+    if (
+        result.get("publication_preflight_status") != "pass"
+        or result.get("publication_preflight_violations") != []
+        or result.get("release_status") != "ok"
+        or result.get("ranking_claims_admitted") is not False
+    ):
+        raise DerivedReleaseError("erratum release result has a contradictory verdict")
+
+
+def _assert_erratum_summary(campaign_root: Path, *, contract: ErratumContract) -> None:
+    """Check all current campaign-summary DOI, tag, and asset coordinates."""
+    summary = _read_json(campaign_root / "reports" / "campaign_summary.json")
+    try:
+        validate_erratum_identity_blocks(
+            summary,
+            contract=contract,
+            label="campaign summary",
+        )
+    except ReleaseErratumError as exc:
+        raise DerivedReleaseError(str(exc)) from exc
+    summary_release = summary.get("benchmark_release")
+    campaign = summary.get("campaign")
+    artifacts = summary.get("artifacts")
+    if not all(isinstance(value, Mapping) for value in (summary_release, campaign, artifacts)):
+        raise DerivedReleaseError("campaign summary lacks successor publication identity")
+    _assert_publication_identity_mapping(summary, contract=contract, label="campaign summary")
+    _assert_successor_identity_fields(
+        summary_release,
+        contract=contract,
+        label="campaign summary benchmark_release",
+    )
+    _assert_publication_identity_mapping(
+        summary_release, contract=contract, label="campaign summary benchmark_release"
+    )
+    _assert_publication_identity_mapping(
+        campaign, contract=contract, label="campaign summary.campaign"
+    )
+    expected_release_url = (
+        "https://github.com/ll7/robot_sf_ll7/releases/tag/" + contract.successor_github_release_tag
+    )
+    expected_doi_url = f"https://doi.org/{contract.successor_version_doi}"
+    if campaign.get("release_tag") != contract.successor_github_release_tag:
+        raise DerivedReleaseError("campaign summary campaign tag is stale")
+    if campaign.get("doi") != contract.successor_version_doi:
+        raise DerivedReleaseError("campaign summary campaign DOI is stale")
+    execution = campaign.get("scientific_execution_release_identity")
+    if (
+        not isinstance(execution, Mapping)
+        or execution.get("release_tag") != contract.predecessor_github_release_tag
+        or execution.get("doi") != contract.predecessor_version_doi
+        or execution.get("source_sha") != contract.source_sha
+    ):
+        raise DerivedReleaseError("campaign summary lost predecessor execution identity")
+    for label, current in (("campaign", campaign), ("artifacts", artifacts)):
+        if current.get("release_url") != expected_release_url:
+            raise DerivedReleaseError(f"campaign summary {label} release URL is stale")
+        if current.get("doi_url") != expected_doi_url:
+            raise DerivedReleaseError(f"campaign summary {label} DOI URL is stale")
+        asset_url = current.get("release_asset_url")
+        expected_asset_prefix = (
+            "https://github.com/ll7/robot_sf_ll7/releases/download/"
+            + contract.successor_github_release_tag
+            + "/"
+        )
+        if not isinstance(asset_url, str) or not asset_url.startswith(expected_asset_prefix):
+            raise DerivedReleaseError(f"campaign summary {label} release asset URL is stale")
+
+
+def _assert_erratum_publication_identity(campaign_root: Path, *, contract: ErratumContract) -> None:
+    """Fail closed on contradictory current-publication coordinates."""
+    _assert_erratum_manifest_identities(campaign_root, contract=contract)
+    _assert_erratum_release_result(campaign_root, contract=contract)
+    _assert_erratum_summary(campaign_root, contract=contract)
+    metadata = campaign_root / ERRATUM_METADATA_RELATIVE
+    if not metadata.is_file() or sha256_file(metadata).lower() != contract.metadata_sha256:
+        raise DerivedReleaseError("erratum metadata copy is missing or stale")
+
+
+def _rewrite_erratum_campaign_summary(campaign_root: Path, *, contract: ErratumContract) -> None:
+    """Rewrite current publication coordinates while retaining execution identity."""
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary = _read_json(summary_path)
+    summary["publication"] = _rewrite_publication_identity_mapping(
+        summary.get("publication"), contract=contract
+    )
+    summary_release = summary.get("benchmark_release")
+    if isinstance(summary_release, Mapping):
+        summary.setdefault("scientific_execution_benchmark_release", dict(summary_release))
+        summary["benchmark_release"] = _rewrite_embedded_publication_identity(
+            summary_release, contract=contract
+        )
+    campaign = summary.get("campaign")
+    campaign = dict(campaign) if isinstance(campaign, Mapping) else {}
+    campaign.setdefault(
+        "scientific_execution_release_identity",
+        {
+            "release_tag": campaign.get("release_tag") or campaign.get("benchmark_release_tag"),
+            "doi": campaign.get("doi"),
+            "manifest_path": campaign.get("benchmark_release_manifest_path"),
+            "invoked_command": campaign.get("invoked_command"),
+            "source_sha": contract.source_sha,
+        },
+    )
+    campaign.update(
+        {
+            "release_tag": contract.successor_github_release_tag,
+            "release_id": contract.successor_github_release_tag,
+            "benchmark_release_tag": contract.successor_github_release_tag,
+            "benchmark_release_id": contract.successor_github_release_tag,
+            "benchmark_release_manifest_path": "release/release_manifest.resolved.json",
+            "doi": contract.successor_version_doi,
+            "version_doi": contract.successor_version_doi,
+            "concept_doi": contract.concept_doi,
+            "doi_url": f"https://doi.org/{contract.successor_version_doi}",
+            "release_url": (
+                "https://github.com/ll7/robot_sf_ll7/releases/tag/"
+                + contract.successor_github_release_tag
+            ),
+        }
+    )
+    campaign["publication"] = _rewrite_publication_identity_mapping(
+        campaign.get("publication"), contract=contract
+    )
+    existing_asset_url = campaign.get("release_asset_url")
+    if isinstance(existing_asset_url, str) and existing_asset_url.rsplit("/", 1)[-1]:
+        campaign["release_asset_url"] = (
+            "https://github.com/ll7/robot_sf_ll7/releases/download/"
+            + contract.successor_github_release_tag
+            + "/"
+            + existing_asset_url.rsplit("/", 1)[-1]
+        )
+    summary["campaign"] = campaign
+    artifacts = summary.get("artifacts")
+    artifacts = dict(artifacts) if isinstance(artifacts, Mapping) else {}
+    artifacts.update(
+        {
+            "doi_url": f"https://doi.org/{contract.successor_version_doi}",
+            "release_url": (
+                "https://github.com/ll7/robot_sf_ll7/releases/tag/"
+                + contract.successor_github_release_tag
+            ),
+        }
+    )
+    if isinstance(campaign.get("release_asset_url"), str):
+        artifacts["release_asset_url"] = campaign["release_asset_url"]
+    summary["artifacts"] = artifacts
+    summary["publication_erratum"] = _erratum_identity_block(contract)
+    _write_json(summary_path, summary)
+
+
+def _apply_erratum_publication_identity(
+    campaign_root: Path,
+    *,
+    contract: ErratumContract,
+) -> dict[str, Any]:
+    """Materialize a successor identity without changing execution provenance.
+
+    Returns:
+        The rewritten resolved manifest used for publication export.
+    """
+    metadata_target = campaign_root / ERRATUM_METADATA_RELATIVE
+    metadata_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(contract.metadata_path, metadata_target)
+    if sha256_file(metadata_target).lower() != contract.metadata_sha256:
+        raise DerivedReleaseError("copied erratum metadata does not match its contract")
+
+    resolved_path = campaign_root / "release" / "release_manifest.resolved.json"
+    resolved = _rewrite_resolved_manifest_publication_identity(
+        _read_json(resolved_path), contract=contract
+    )
+    _write_json(resolved_path, resolved)
+
+    for relative in ("campaign_manifest.json", "manifest.json", "run_meta.json"):
+        path = campaign_root / relative
+        if not path.is_file():
+            continue
+        payload = _read_json(path)
+        payload["release_tag"] = contract.successor_github_release_tag
+        payload["release_id"] = contract.successor_github_release_tag
+        payload["doi"] = contract.successor_version_doi
+        payload["version_doi"] = contract.successor_version_doi
+        payload["concept_doi"] = contract.concept_doi
+        payload["publication"] = _rewrite_publication_identity_mapping(
+            payload.get("publication"), contract=contract
+        )
+        benchmark_release = payload.get("benchmark_release")
+        if isinstance(benchmark_release, Mapping):
+            payload.setdefault("scientific_execution_benchmark_release", dict(benchmark_release))
+            payload["benchmark_release"] = _rewrite_embedded_publication_identity(
+                benchmark_release, contract=contract
+            )
+        payload["publication_erratum"] = _erratum_identity_block(contract)
+        _write_json(path, payload)
+
+    result_path = campaign_root / "release" / "release_result.json"
+    result = _read_json(result_path)
+    result["publication"] = _rewrite_publication_identity_mapping(
+        result.get("publication"), contract=contract
+    )
+    benchmark_release = result.get("benchmark_release")
+    if isinstance(benchmark_release, Mapping):
+        result.setdefault("scientific_execution_benchmark_release", dict(benchmark_release))
+        result["benchmark_release"] = _rewrite_embedded_publication_identity(
+            benchmark_release, contract=contract
+        )
+    nested_resolved = result.get("resolved_manifest")
+    if isinstance(nested_resolved, Mapping):
+        result.setdefault("scientific_execution_resolved_manifest", dict(nested_resolved))
+        result["resolved_manifest"] = _rewrite_resolved_manifest_publication_identity(
+            nested_resolved, contract=contract
+        )
+    result.update(
+        {
+            "release_tag": contract.successor_github_release_tag,
+            "release_id": contract.successor_github_release_tag,
+            "doi": contract.successor_version_doi,
+            "version_doi": contract.successor_version_doi,
+            "concept_doi": contract.concept_doi,
+            "source_commit": contract.source_sha,
+            "publication_preflight_status": "pass",
+            "publication_preflight_violations": [],
+            "release_status": "ok",
+            "ranking_claims_admitted": False,
+        }
+    )
+    derivation = result.get("derivation")
+    derivation = dict(derivation) if isinstance(derivation, Mapping) else {}
+    derivation.update(
+        {
+            "builder_sha": contract.builder_sha,
+            "validator_sha": contract.validator_sha,
+            "orchestration_sha": contract.orchestration_sha,
+            "scientific_source_sha": contract.source_sha,
+            "simulation_rerun": False,
+            "correction_id": contract.correction_id,
+            "predecessor_version_doi": contract.predecessor_version_doi,
+        }
+    )
+    result["derivation"] = derivation
+    _write_json(result_path, result)
+    _rewrite_erratum_campaign_summary(campaign_root, contract=contract)
+    _assert_erratum_publication_identity(campaign_root, contract=contract)
+    return resolved
+
+
+def _write_erratum_receipt(
+    campaign_root: Path,
+    *,
+    contract: ErratumContract,
+    predecessor_snapshot: Any,
+) -> dict[str, Any]:
+    """Write scientific-equality proof before the successor archive is built.
+
+    Returns:
+        The self-contained receipt payload.
+    """
+    successor_snapshot = snapshot_campaign(campaign_root, contract=contract)
+    receipt = build_erratum_receipt(
+        contract=contract,
+        predecessor=predecessor_snapshot,
+        successor=successor_snapshot,
+    )
+    _write_json(campaign_root / ERRATUM_RECEIPT_RELATIVE, receipt)
+    return receipt
+
+
 def _write_custody_receipt(
     publication_dir: Path,
     *,
@@ -1928,6 +2678,7 @@ def _write_custody_receipt(
     archive_path: Path,
     bundle_dir: Path,
     source_sha: str,
+    erratum_receipt: Mapping[str, Any] | None = None,
 ) -> None:
     """Bind the final archive outside the bundle, avoiding a checksum cycle."""
     payload = {
@@ -1948,6 +2699,22 @@ def _write_custody_receipt(
         "archive_self_digest_policy": "archive digest is external to the bundle; no cycle",
         "credentials": "not_recorded",
     }
+    if erratum_receipt is not None:
+        payload["erratum"] = {
+            "correction_id": erratum_receipt.get("correction_id"),
+            "correction_scope": erratum_receipt.get("correction_scope"),
+            "supersedes": erratum_receipt.get("supersedes"),
+            "successor": erratum_receipt.get("successor"),
+            "scientific_equality": erratum_receipt.get("scientific_equality"),
+            "embedded_receipt_path": (f"{bundle_name}/payload/{ERRATUM_RECEIPT_RELATIVE}"),
+            "embedded_receipt_sha256": sha256_file(
+                bundle_dir / "payload" / ERRATUM_RECEIPT_RELATIVE
+            ),
+            "archive_digest_scope": (
+                "detached custody receipt binds the complete archive; the embedded erratum "
+                "receipt cannot self-hash its containing archive"
+            ),
+        }
     _write_json(publication_dir / PUBLICATION_CUSTODY_NAME, payload)
 
 
@@ -2041,6 +2808,9 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     publication_name: str | None = None,
     preserved_receipt_source: Path | None = None,
     recovery_contract: RecoveryContract = DEFAULT_RECOVERY_CONTRACT,
+    erratum_contract: ErratumContract | None = None,
+    predecessor_archive: Path | None = None,
+    orchestration_repository_root: Path | None = None,
 ) -> dict[str, Any]:
     """Run the complete derived validation/build/promotion workflow.
 
@@ -2056,6 +2826,41 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
     validator_repository_root = _assert_safe_directory(
         validator_repository_root, label="validator repository root"
     )
+    if (erratum_contract is None) != (predecessor_archive is None):
+        raise DerivedReleaseError(
+            "erratum contract and predecessor archive must be supplied together"
+        )
+    if (erratum_contract is None) != (orchestration_repository_root is None):
+        raise DerivedReleaseError(
+            "erratum contract and orchestration repository root must be supplied together"
+        )
+    predecessor_snapshot = None
+    if erratum_contract is not None:
+        if erratum_contract.source_sha != recovery_contract.source_sha:
+            raise DerivedReleaseError("erratum and recovery source SHAs differ")
+        if erratum_contract.planner_arms != recovery_contract.arms:
+            raise DerivedReleaseError("erratum and recovery planner-arm counts differ")
+        if erratum_contract.episode_rows != recovery_contract.episode_rows:
+            raise DerivedReleaseError("erratum and recovery episode-row counts differ")
+        if erratum_contract.builder_sha != erratum_contract.validator_sha:
+            raise DerivedReleaseError(
+                "erratum correction builder and validator SHAs must name the same accepted commit"
+            )
+        if erratum_contract.validator_sha != expected_validator_commit:
+            raise DerivedReleaseError(
+                "erratum validator SHA differs from the exact validator commit"
+            )
+        _assert_exact_orchestration_checkout(
+            orchestration_repository_root,  # type: ignore[arg-type]
+            erratum_contract.orchestration_sha,
+        )
+        try:
+            predecessor_snapshot = snapshot_predecessor_archive(
+                predecessor_archive,  # type: ignore[arg-type]
+                contract=erratum_contract,
+            )
+        except ReleaseErratumError as exc:
+            raise DerivedReleaseError(str(exc)) from exc
     manifest_path = Path(manifest_path)
     if not manifest_path.is_absolute():
         manifest_path = source_repository_root / manifest_path
@@ -2171,7 +2976,12 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         publication_inputs = _assert_publication_inputs_from_manifest(
             manifest, resolved_manifest, source_repository_root
         )
-        goal_timeout_reconciliation = _annotate_publication_goal_timeout_boundaries(
+        boundary_reconciler = (
+            _record_publication_goal_timeout_boundaries_without_row_mutation
+            if erratum_contract is not None
+            else _annotate_publication_goal_timeout_boundaries
+        )
+        goal_timeout_reconciliation = boundary_reconciler(
             staging_campaign,
             expected_rows=recovery_contract.goal_timeout_boundary_rows,
         )
@@ -2209,6 +3019,24 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             "scientific_execution_changed": False,
             "simulation_rerun": False,
         }
+        erratum_receipt = None
+        if erratum_contract is not None:
+            resolved_manifest = _apply_erratum_publication_identity(
+                staging_campaign,
+                contract=erratum_contract,
+            )
+            publication_inputs["erratum_zenodo_metadata"] = {
+                "path": ERRATUM_METADATA_RELATIVE,
+                "sha256": erratum_contract.metadata_sha256,
+            }
+            try:
+                erratum_receipt = _write_erratum_receipt(
+                    staging_campaign,
+                    contract=erratum_contract,
+                    predecessor_snapshot=predecessor_snapshot,
+                )
+            except ReleaseErratumError as exc:
+                raise DerivedReleaseError(str(exc)) from exc
         derived_checksums = _write_derived_checksums(staging_campaign)
         _write_derivation_receipt(
             staging_campaign,
@@ -2256,6 +3084,9 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     repository_url=repository_url,
                     publication_relative_dir=publication_name,
                 )
+        if erratum_contract is not None:
+            _assert_erratum_publication_identity(staging_campaign, contract=erratum_contract)
+            _assert_erratum_publication_identity(bundle_dir / "payload", contract=erratum_contract)
         _assert_no_private_absolute_paths(staging_campaign)
         _assert_no_private_absolute_paths(staging_publication)
         _write_custody_receipt(
@@ -2264,6 +3095,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
             archive_path=archive_path,
             bundle_dir=bundle_dir,
             source_sha=recovery_contract.source_sha,
+            erratum_receipt=erratum_receipt,
         )
         # Detect producer mutation before promotion.  This is deliberately the
         # same strict manifest check used before copying.
@@ -2327,6 +3159,7 @@ def build_derived_release(  # noqa: C901, PLR0912, PLR0913, PLR0915
         "publication_reconciliation": publication_reconciliation,
         "validator": validator,
         "publication_inputs": publication_inputs,
+        "erratum_receipt": erratum_receipt,
     }
 
 
@@ -2359,6 +3192,25 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Single-member gzip containing the immutable pre-refresh receipt.",
     )
+    parser.add_argument(
+        "--erratum-contract",
+        type=Path,
+        help="Exact benchmark-release-erratum.v1 successor identity contract.",
+    )
+    parser.add_argument(
+        "--erratum-repository-root",
+        type=Path,
+        help=(
+            "Reviewed identity checkout containing the erratum contract and its "
+            "repository-relative metadata. The executing tooling checkout is separate and "
+            "must equal the contract's orchestration_sha."
+        ),
+    )
+    parser.add_argument(
+        "--predecessor-archive",
+        type=Path,
+        help="Cold-downloaded immutable predecessor publication archive.",
+    )
     return parser
 
 
@@ -2372,6 +3224,26 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.recovery_contract is not None
             else DEFAULT_RECOVERY_CONTRACT
         )
+        erratum_inputs = (
+            args.erratum_contract,
+            args.erratum_repository_root,
+            args.predecessor_archive,
+        )
+        if any(value is not None for value in erratum_inputs) and not all(
+            value is not None for value in erratum_inputs
+        ):
+            raise DerivedReleaseError(
+                "--erratum-contract, --erratum-repository-root, and --predecessor-archive "
+                "must be supplied together"
+            )
+        erratum_contract = (
+            load_erratum_contract(
+                args.erratum_contract,
+                repository_root=args.erratum_repository_root,
+            )
+            if args.erratum_contract is not None
+            else None
+        )
         result = build_derived_release(
             producer_root=args.producer_root,
             acceptance_root=acceptance_root,
@@ -2384,8 +3256,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             publication_name=args.publication_name,
             preserved_receipt_source=args.preserved_receipt,
             recovery_contract=recovery_contract,
+            erratum_contract=erratum_contract,
+            predecessor_archive=args.predecessor_archive,
+            orchestration_repository_root=Path(__file__).resolve().parents[2],
         )
-    except (DerivedReleaseError, OSError, ValueError, PublicationPreflightError) as exc:
+    except (
+        DerivedReleaseError,
+        OSError,
+        ValueError,
+        PublicationPreflightError,
+        ReleaseErratumError,
+    ) as exc:
         print(json.dumps({"status": "rejected", "reason": str(exc)}, indent=2))
         return 2
     # Do not print absolute paths: publication output can live on a private

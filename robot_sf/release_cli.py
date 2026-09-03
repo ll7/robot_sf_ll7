@@ -20,13 +20,113 @@ if TYPE_CHECKING:
     import argparse
 
 
+# A fresh Zenodo deposition or successor draft does not expose its version DOI
+# until the reservation request completes.  Those two modes therefore have an
+# explicit pre-reservation exception; every operation after that point must
+# carry the reviewed manifest binding before an authenticated session is built.
+_RELEASE_BOUND_ZENODO_MODES = frozenset({"recover", "upload", "verify", "publish"})
+
+
+def _add_new_version_arguments(parser: Any) -> None:
+    """Register the identity inputs required before a Zenodo successor mutation."""
+    parser.add_argument("--predecessor-deposition-id", type=int, required=True)
+    parser.add_argument("--expected-predecessor-doi", required=True)
+    parser.add_argument("--expected-concept-doi", required=True)
+    parser.add_argument(
+        "--expected-predecessor-tag",
+        required=True,
+        help="Exact immutable GitHub tag of the published predecessor.",
+    )
+    parser.add_argument(
+        "--expected-source-sha",
+        required=True,
+        help="Exact 40-character scientific source commit.",
+    )
+    parser.add_argument(
+        "--expected-successor-tag",
+        required=True,
+        help="Exact GitHub source tag that the successor metadata must name.",
+    )
+
+
+def _add_published_audit_arguments(parser: Any) -> None:
+    """Register public-audit options, including reviewed erratum pins."""
+    parser.add_argument("--tag", required=True, help="Exact public GitHub release tag.")
+    parser.add_argument("--doi", required=True, help="Exact Zenodo version DOI.")
+    parser.add_argument(
+        "--expected-source-sha",
+        help="Reviewed exact scientific source SHA (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-concept-doi",
+        help="Reviewed Zenodo concept DOI (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-predecessor-doi",
+        help="Reviewed predecessor Zenodo version DOI (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-predecessor-tag",
+        help="Reviewed immutable predecessor GitHub tag (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-predecessor-archive-sha256",
+        "--expected-predecessor-sha256",
+        dest="expected_predecessor_archive_sha256",
+        help="Reviewed predecessor archive SHA-256 (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-predecessor-size-bytes",
+        "--expected-predecessor-archive-size-bytes",
+        dest="expected_predecessor_size_bytes",
+        type=int,
+        help="Reviewed predecessor archive size (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-builder-sha",
+        help="Reviewed accepted validator/builder SHA (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-validator-sha",
+        help="Reviewed accepted validator SHA (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--expected-orchestration-sha",
+        help="Reviewed orchestration SHA (required for canonical erratum tags).",
+    )
+    parser.add_argument(
+        "--repo",
+        default="ll7/robot_sf_ll7",
+        help="GitHub repository in owner/name form (default: ll7/robot_sf_ll7).",
+    )
+    parser.add_argument("--output", type=Path, help="Optional path for the JSON audit receipt.")
+    parser.add_argument(
+        "--max-download-bytes",
+        type=int,
+        default=published_release_audit.DEFAULT_MAX_DOWNLOAD_BYTES,
+        help="Cumulative download limit (default: 2 GiB).",
+    )
+    parser.add_argument(
+        "--download-chunk-size",
+        type=int,
+        default=published_release_audit.DEFAULT_DOWNLOAD_CHUNK_SIZE,
+        help="Streaming chunk size in bytes (default: 1 MiB).",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=published_release_audit.DEFAULT_NETWORK_TIMEOUT,
+        help="Per-request timeout in seconds (default: 60).",
+    )
+
+
 def build_subparser(subparsers: Any) -> None:
     """Register the ``robot-sf release`` command tree."""
     release = subparsers.add_parser("release", help="Benchmark-data release operations.")
     modes = release.add_subparsers(dest="release_cmd", required=True)
     zenodo = modes.add_parser("zenodo", help="Direct Zenodo benchmark-dataset publisher.")
     zenodo_modes = zenodo.add_subparsers(dest="zenodo_mode", required=True)
-    for mode in ("reserve", "recover", "upload", "publish", "verify"):
+    for mode in ("reserve", "recover", "upload", "publish", "verify", "new-version"):
         parser = zenodo_modes.add_parser(mode)
         parser.add_argument("--token-file", type=Path, required=True)
         parser.add_argument("--state", type=Path, required=True)
@@ -34,55 +134,26 @@ def build_subparser(subparsers: Any) -> None:
         parser.add_argument(
             "--manifest",
             type=Path,
-            required=mode == "recover",
-            help="Validated benchmark release manifest to bind Zenodo operations to.",
+            required=mode in _RELEASE_BOUND_ZENODO_MODES,
+            help=(
+                "Validated benchmark release manifest to bind Zenodo operations to. Required "
+                "for recover/upload/verify/publish; reserve and new-version may omit it only "
+                "while the server is assigning a new version DOI."
+            ),
         )
-        if mode in {"reserve", "recover", "publish", "verify"}:
+        if mode in {"reserve", "recover", "publish", "verify", "new-version"}:
             parser.add_argument("--metadata", type=Path, required=True)
         if mode == "recover":
             parser.add_argument("--deposition-id", type=int, required=True)
+        if mode == "new-version":
+            _add_new_version_arguments(parser)
         if mode == "upload":
             parser.add_argument("files", nargs="+", type=Path)
     audit = modes.add_parser(
         "audit-published",
         help="Read-only credential-free audit of a public GitHub/Zenodo release.",
     )
-    audit.add_argument("--tag", required=True, help="Exact public GitHub release tag.")
-    audit.add_argument("--doi", required=True, help="Exact Zenodo version DOI.")
-    audit.add_argument(
-        "--repo",
-        default="ll7/robot_sf_ll7",
-        help="GitHub repository in owner/name form (default: ll7/robot_sf_ll7).",
-    )
-    audit.add_argument("--output", type=Path, help="Optional path for the JSON audit receipt.")
-    audit.add_argument(
-        "--github-api-base",
-        default=published_release_audit.GITHUB_API_BASE,
-        help="Public GitHub API base (HTTPS; useful for controlled test mirrors).",
-    )
-    audit.add_argument(
-        "--zenodo-api-base",
-        default=published_release_audit.ZENODO_API_BASE,
-        help="Public Zenodo API base (HTTPS; useful for controlled test mirrors).",
-    )
-    audit.add_argument(
-        "--max-download-bytes",
-        type=int,
-        default=published_release_audit.DEFAULT_MAX_DOWNLOAD_BYTES,
-        help="Cumulative download limit (default: 2 GiB).",
-    )
-    audit.add_argument(
-        "--download-chunk-size",
-        type=int,
-        default=published_release_audit.DEFAULT_DOWNLOAD_CHUNK_SIZE,
-        help="Streaming chunk size in bytes (default: 1 MiB).",
-    )
-    audit.add_argument(
-        "--timeout",
-        type=float,
-        default=published_release_audit.DEFAULT_NETWORK_TIMEOUT,
-        help="Per-request timeout in seconds (default: 60).",
-    )
+    _add_published_audit_arguments(audit)
     doctor = modes.add_parser("doctor", help="Fail-closed full benchmark-release diagnostics.")
     doctor.add_argument("--repo", type=Path, default=Path.cwd())
     doctor.add_argument(
@@ -158,11 +229,11 @@ def _print(payload: dict[str, Any]) -> None:
 
 
 def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]] | None:
-    """Load and validate an optional benchmark manifest for Zenodo operations.
+    """Load and validate a benchmark manifest for a bound Zenodo operation.
 
     Returns:
         The parsed manifest and credential-free publisher binding, or ``None``
-        for the generic publisher route.
+        for the explicit pre-reservation reserve/new-version route.
     """
     manifest_path = getattr(args, "manifest", None)
     if manifest_path is None:
@@ -245,11 +316,18 @@ def _handle_published_audit(args: argparse.Namespace) -> int:
         tag=args.tag,
         doi=args.doi,
         repo=args.repo,
-        github_api_base=args.github_api_base,
-        zenodo_api_base=args.zenodo_api_base,
         max_download_bytes=args.max_download_bytes,
         download_chunk_size=args.download_chunk_size,
         timeout=args.timeout,
+        expected_source_sha=args.expected_source_sha,
+        expected_concept_doi=args.expected_concept_doi,
+        expected_predecessor_doi=args.expected_predecessor_doi,
+        expected_predecessor_tag=args.expected_predecessor_tag,
+        expected_predecessor_archive_sha256=args.expected_predecessor_archive_sha256,
+        expected_predecessor_size_bytes=args.expected_predecessor_size_bytes,
+        expected_builder_sha=args.expected_builder_sha,
+        expected_validator_sha=args.expected_validator_sha,
+        expected_orchestration_sha=args.expected_orchestration_sha,
     )
     try:
         if args.output is not None:
@@ -323,6 +401,15 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
         release_context = _load_release_binding(args)
         release_manifest = release_context[0] if release_context is not None else None
         release_binding = release_context[1] if release_context is not None else None
+        if args.zenodo_mode in _RELEASE_BOUND_ZENODO_MODES and release_binding is None:
+            # Keep this check ahead of build_session: the direct CLI must not
+            # even construct an authenticated HTTP client for an unbound
+            # post-reservation operation.  ``argparse`` enforces this for
+            # normal invocations; the duplicate guard protects callers that
+            # invoke ``handle`` with a hand-built Namespace.
+            raise zenodo_publisher.ZenodoPublisherError(
+                f"Zenodo {args.zenodo_mode} requires a validated release manifest"
+            )
         session = zenodo_publisher.build_session(args.token_file)
         if args.zenodo_mode in {"reserve", "recover"}:
             metadata_kwargs = (
@@ -353,6 +440,35 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
                 state = zenodo_publisher.reserve(
                     session, metadata, api_base=args.api_base, **operation_kwargs
                 )
+            zenodo_publisher.write_state(args.state, state)
+            _print(state)
+            return 0
+        if args.zenodo_mode == "new-version":
+            metadata_kwargs = (
+                {
+                    "expected_source_tag": release_manifest.release_tag,
+                    "expected_metadata_sha256": release_manifest.metadata_sha256,
+                }
+                if release_manifest is not None
+                else {}
+            )
+            metadata_kwargs["expected_source_tag"] = args.expected_successor_tag
+            metadata = zenodo_publisher.load_dataset_metadata(args.metadata, **metadata_kwargs)
+            operation_kwargs = (
+                {"release_binding": release_binding} if release_binding is not None else {}
+            )
+            state = zenodo_publisher.new_version(
+                session,
+                metadata,
+                predecessor_deposition_id=args.predecessor_deposition_id,
+                expected_predecessor_doi=args.expected_predecessor_doi,
+                expected_concept_doi=args.expected_concept_doi,
+                expected_predecessor_tag=args.expected_predecessor_tag,
+                expected_source_sha=args.expected_source_sha,
+                expected_successor_tag=args.expected_successor_tag,
+                api_base=args.api_base,
+                **operation_kwargs,
+            )
             zenodo_publisher.write_state(args.state, state)
             _print(state)
             return 0

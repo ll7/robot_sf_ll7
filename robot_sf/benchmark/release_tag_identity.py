@@ -152,12 +152,15 @@ def check_tag_source_consistency(
 
 
 def check_canonical_source_tag(tag: str, source_sha: str) -> list[str]:
-    """Require one unambiguous ``<prefix>-<full source SHA>`` identity.
+    """Require one unambiguous source tag, optionally with an erratum suffix.
 
     Semantic and abbreviated tags remain supported by the older prospective
     compatibility checker.  Generated benchmark-data identities use this
     stricter boundary so two SHA tokens, an embedded token, or a stale source
-    cannot acquire a second interpretation.
+    cannot acquire a second interpretation.  An immutable publication erratum
+    may append exactly ``-erratum.<positive integer>`` after the source SHA;
+    this changes publication identity without pretending the scientific source
+    commit changed.
 
     Returns:
         Problem strings; empty only for one exact full-SHA suffix.
@@ -169,11 +172,24 @@ def check_canonical_source_tag(tag: str, source_sha: str) -> list[str]:
         return [
             "release tag must have one canonical full-SHA suffix without surrounding whitespace"
         ]
-    suffix = f"-{source_sha}"
-    prefix = normalized_tag[: -len(suffix)] if normalized_tag.endswith(suffix) else ""
     sha_tokens = re.findall(r"[0-9A-Fa-f]{40,}", normalized_tag)
-    if not prefix or sha_tokens != [source_sha]:
-        return ["release tag must have one canonical full-SHA suffix derived from source_sha"]
-    if derive_sha_tag(prefix, source_sha) != normalized_tag:
-        return ["release tag must have one canonical full-SHA suffix derived from source_sha"]
+    match = re.fullmatch(
+        rf"(?P<prefix>.+)-(?P<sha>{re.escape(source_sha)})"
+        r"(?:-erratum\.(?P<erratum>[1-9][0-9]*))?",
+        normalized_tag,
+    )
+    if match is None or sha_tokens != [source_sha]:
+        return [
+            "release tag must have one canonical full-SHA suffix, optionally followed by "
+            "-erratum.<positive integer>"
+        ]
+    prefix = match.group("prefix")
+    base_tag = derive_sha_tag(prefix, source_sha)
+    expected = (
+        f"{base_tag}-erratum.{match.group('erratum')}"
+        if match.group("erratum") is not None
+        else base_tag
+    )
+    if expected != normalized_tag:
+        return ["release tag is not a canonical source or erratum identity"]
     return []

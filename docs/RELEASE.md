@@ -40,7 +40,8 @@ The smoke is execution evidence only: the Social Navigation Quality Index
 - confirm benchmark fallback policy is fail-closed for benchmark mode
 - confirm a fresh Zenodo concept is reserved for the benchmark-data record; the
   current reservation is concept `10.5281/zenodo.22077447` and version
-  `10.5281/zenodo.22077448`; verify both again after publication; the
+  `10.5281/zenodo.22077448`; run the authenticated `zenodo verify` command
+  again after publication and require a passing published-record receipt; the
   historical concepts `10.5281/zenodo.19482025` and
   `10.5281/zenodo.19563812` must not be reused
 - confirm the dataset metadata is the tracked benchmark-specific file
@@ -372,9 +373,130 @@ uv run robot-sf release zenodo reserve \
 ```
 
 Keep the token file outside Git with mode `0600`. The state file contains no
-credential and binds subsequent `upload`, `verify`, and irreversible `publish`
-operations to the same deposition. Do not run `publish` until the accepted
-20,160-cell campaign bundle has passed independent cold verification.
+credential. This initial `reserve` is intentionally the only unbound
+pre-reservation mutation: Zenodo returns the version DOI as part of the
+response, so freeze that DOI and the concept identity in the reviewed v0.2
+manifest before continuing. The direct CLI requires `--manifest` for every
+post-reservation `recover`, `upload`, `verify`, and irreversible `publish`
+operation and rejects an omitted binding before constructing an authenticated
+HTTP session. Do not run `publish` until the accepted 20,160-cell campaign
+bundle has passed independent cold verification.
+
+### Immutable publication errata
+
+The fresh-concept rule above remains the default for a new benchmark campaign.
+If a published archive has a derived-publication defect but its accepted
+scientific rows are unchanged, do not replace files behind its DOI and do not
+create a dissertation-side overlay. Publish a linked successor version in the
+same Zenodo concept instead:
+
+1. Cold-download the predecessor and verify its recorded byte count and
+   SHA-256 before deriving anything.
+2. Prepare successor metadata with the new GitHub erratum tag and exactly one
+   DOI relation whose relation is `isNewVersionOf` and whose identifier is the
+   predecessor version DOI.
+3. Create the unpublished linked draft with the exact published predecessor:
+
+   ```bash
+   uv run robot-sf release zenodo new-version \
+     --token-file /home/<user>/.config/robot-sf/zenodo.token \
+     --state <credential-free-successor-state.json> \
+     --metadata <successor-zenodo-metadata.json> \
+     --predecessor-deposition-id <predecessor-version-record-id> \
+     --expected-predecessor-doi <predecessor-version-doi> \
+     --expected-concept-doi <unchanged-concept-doi> \
+     --expected-predecessor-tag <exact-published-predecessor-tag> \
+     --expected-source-sha <exact-40-character-scientific-source-sha> \
+     --expected-successor-tag <exact-new-github-tag>
+   ```
+
+   The command reads and validates the published predecessor before invoking
+   Zenodo's new-version action. The predecessor and successor tags are first
+   bound to the exact scientific source SHA, and the successor must equal the
+   predecessor plus `-erratum.1`; all of this is checked before any authenticated
+   request. The command then checks the new draft's distinct DOI,
+   unchanged concept, unpublished state, and metadata readback. It never
+   records the token.
+   When the successor version DOI is not known before the `new-version` action,
+   omit `--manifest` for this one pre-reservation command. If a reviewed
+   manifest already contains the exact returned DOI, passing `--manifest` adds
+   the stricter pre-PUT identity assertion. In either case, continue only with
+   manifest-bound post-reservation operations.
+4. Freeze the returned version DOI, successor tag, predecessor archive digest,
+   scientific source SHA, accepted correction-builder/validator SHA, and exact
+   erratum-orchestration SHA in a reviewed
+   `benchmark-release-erratum.v1` contract. Regenerate the publication layer
+   with `scripts/tools/revalidate_benchmark_release.py --erratum-contract ...
+   --erratum-repository-root <reviewed-identity-checkout> --predecessor-archive ...`.
+   The identity checkout owns the new contract and metadata. Run that command
+   from a separate clean checkout at the exact `orchestration_sha` named by the
+   contract; this avoids an impossible Git self-reference in which a file tries
+   to contain the SHA of its own commit. Both remain separate from the frozen
+   scientific-source checkout and exact historical validator/builder checkout.
+   These identities have different meanings: the scientific source produced
+   the rows, the correction builder/validator accepted the recovered derived
+   verdict, and the orchestration commit implements this successor workflow.
+   Pass the frozen manifest to the direct Zenodo `upload`, `verify`, and
+   `publish` commands; an omitted binding is rejected before any HTTP request.
+5. Require the embedded erratum receipt to prove exact episode-identity,
+   canonical-row, and component-metric equality. Historical non-finite
+   diagnostic floats are preserved as typed `NaN`, positive-infinity, and
+   negative-infinity values; they are not dropped or normalized to finite
+   values. The detached publication
+   custody receipt binds the complete successor archive digest because an
+   archive cannot contain its own digest without a checksum cycle.
+6. Upload the archive plus the detached `publication_manifest.json`,
+   `checksums.sha256`, and `publication_custody.json` assets to both draft
+   channels. Their file-name inventories and bytes must be identical. Verify
+   both drafts from empty directories, and only then publish. The cold audit
+   must receive the predecessor identity and implementation identities as
+   reviewed, external inputs. It must compare those pins before using any
+   successor relation or constructing detached predecessor evidence; the
+   Zenodo `isNewVersionOf` relation and exact `-erratum.1` tag lineage are
+   observations to check, never sources for expected values. It downloads the predecessor archive from both GitHub and Zenodo, requires positive
+   advertised sizes and byte-identical SHA-256 values, opens that detached
+   archive within member-count, per-file, and cumulative expanded-byte budgets,
+   and compares its complete scientific snapshot with the successor. Invalid
+   network receipts retain useful bundle-relative diagnostics without exposing
+   the audit host's temporary filesystem paths.
+   It must also run the publication preflight, authenticate the exact successor
+   archive inventory against the manifest/checksums/custody chain, recompute
+   both scientific digests, and match the embedded correction receipt. A
+   successor receipt cannot authenticate its own predecessor. Leave the
+   predecessor DOI, tag, files, and checksum unchanged.
+
+For the canonical September erratum, supply the reviewed coordinates explicitly
+to the public audit (never copy them from the observed Zenodo relation or the
+successor receipt):
+
+```bash
+uv run robot-sf release audit-published \
+  --tag paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1 \
+  --doi <successor-version-doi> \
+  --expected-source-sha 59577bad289dd692ba3580e1600c4a649ae27880 \
+  --expected-concept-doi 10.5281/zenodo.22227034 \
+  --expected-predecessor-doi 10.5281/zenodo.22227035 \
+  --expected-predecessor-tag paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880 \
+  --expected-predecessor-archive-sha256 e8f301c6f4eae16fdaf83f59b31bef060d84bf5a0e23dfdbf375f834b25d7b4b \
+  --expected-predecessor-size-bytes 54219004 \
+  --expected-builder-sha a4aaf1f06860cf632d0173c5a13e11ad855b6df2 \
+  --expected-validator-sha a4aaf1f06860cf632d0173c5a13e11ad855b6df2 \
+  --expected-orchestration-sha <reviewed-orchestration-sha>
+```
+
+The orchestration value must be the exact reviewed 40-character lowercase SHA;
+it is intentionally not inferred from public release data. The audit compares
+all pins with the public records, release bodies, downloaded predecessor bytes,
+embedded receipt, custody receipt, and scientific snapshots.
+
+This first-successor workflow requires `-erratum.1` after the predecessor tag,
+which already ends in the exact 40-character scientific source SHA. The cold
+auditor recognizes a positive-integer erratum suffix for future format evolution,
+but creating a later successor requires an explicit supported contract update;
+do not improvise a tag chain. The suffix creates a new publication identity; it
+does not change or replace the scientific source commit. A row, component
+metric, source, matrix, or claim-boundary change is not a derived-metadata
+erratum and requires a new scientific campaign decision.
 
 Upload and verify the generated bundle using:
 
@@ -445,7 +567,9 @@ uv run robot-sf release audit-published \
   --output /tmp/published-release-audit.json
 ```
 
-This command performs unauthenticated HTTPS `GET` requests, resolves the
+This command performs unauthenticated HTTPS `GET` requests against the pinned
+production API endpoints `https://api.github.com` and `https://zenodo.org/api`
+(trailing slashes are normalized only), resolves the
 published GitHub release and tag commit, checks the Zenodo version/concept DOI
 and source-tag relation, then streams the public assets into isolated temporary
 directories before calling the offline audit core. Downloads are bounded and

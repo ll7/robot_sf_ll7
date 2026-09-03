@@ -49,6 +49,13 @@ Export bundles are produced by
 - `checksums.sha256`: SHA-256 checksums for payload files.
 - `<bundle_name>.tar.gz`: archive for release upload.
 
+A derived-metadata erratum additionally publishes the bundle-local
+`publication_manifest.json` and `checksums.sha256` as detached assets alongside
+`publication_custody.json`. The custody receipt binds the complete archive
+digest and the embedded erratum receipt without creating a self-checksum cycle.
+All four assets must be uploaded under the same names and with identical bytes
+to the GitHub and Zenodo successor drafts.
+
 When the source campaign contains both
 `release/release_manifest.resolved.json` and `release/release_result.json`, the
 exporter also fails closed on missing release metadata and adds a
@@ -239,8 +246,17 @@ placeholders before citing the bundle as paper-facing evidence.
 5. Upload the exact same archive to the reserved Zenodo draft, run read-only
    `release zenodo verify`, and independently compare GitHub/Zenodo downloads.
 6. Publish the GitHub Release and Zenodo version only after all acceptance and
-   cold-download checks pass. Record the version DOI and parent concept DOI.
+   cold-download checks pass. Immediately rerun the authenticated Zenodo
+   verification against the published record and require a passing receipt
+   before recording the version DOI and parent concept DOI.
 7. Update paper references to the verified Zenodo DOI and benchmark-data asset URL.
+
+The doctor and post-publication checks observe the hook list read-only. Their
+receipt records an instantaneous disabled/absent state, but cannot prevent
+reactivation or another state change in the time-of-check/time-of-use interval
+around publication. Recheck immediately before publishing and preserve this
+residual boundary in the release record; never describe the snapshot as a
+permanent guarantee.
 
 Software/package tags and their DOI records remain separate. This documentation
 does not authorize publishing, credential use, webhook changes, or reusing an

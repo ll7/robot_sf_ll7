@@ -13,17 +13,21 @@ from typing import Any
 
 import pytest
 
+from robot_sf.benchmark import artifact_publication as artifact_publication_module
 from robot_sf.benchmark.artifact_publication import (
     _SNQI_DEFAULT_BASELINE_NAME,
     _SNQI_DEFAULT_WEIGHTS_NAME,
     PUBLICATION_BUNDLE_SCHEMA_VERSION,
+    RELEASE_PUBLICATION_METADATA_SCHEMA_VERSION,
     SIZE_REPORT_SCHEMA_VERSION,
     _build_rights_provenance_statement,
+    _check_goal_timeout_boundary,
     _compute_and_emit_badging_artifacts,
     _find_release_sha,
     _preflight_check_release_metadata,
     _resolve_release_publication_metadata,
     _resolve_repo_file,
+    _resolve_run_file,
     _snqi_load_canonical_basis,
     discover_run_directories,
     export_publication_bundle,
@@ -64,6 +68,139 @@ def test_list_publication_files_respects_video_toggle(tmp_path: Path) -> None:
 
     assert any(path.as_posix().startswith("videos/") for path in with_videos)
     assert not any(path.as_posix().startswith("videos/") for path in without_videos)
+
+
+def test_goal_timeout_boundary_accepts_exact_signed_provenance_exclusion(
+    tmp_path: Path,
+) -> None:
+    """A complete signed exclusion permits unchanged ambiguous scientific rows."""
+    payload = tmp_path / "payload"
+    arm = "guarded_ppo__differential_drive"
+    episode_id = "scenario--132--identity"
+    row = {
+        "episode_id": episode_id,
+        "event_ledger": {"exact_events": {"goal_reached": True, "timeout": True}},
+    }
+    _write(payload / "runs" / arm / "episodes.jsonl", json.dumps(row) + "\n")
+    _write(
+        payload / "run_meta.json",
+        json.dumps(
+            {
+                "goal_timeout_boundary": {
+                    "status": "excluded_from_timing_interpretation",
+                    "excluded_row_count": 1,
+                    "excluded_rows": [{"arm": arm, "episode_id": episode_id}],
+                    "raw_episode_rows_unchanged": True,
+                    "timing_evidence_fabricated": False,
+                    "note": "Exact event ordering is unavailable.",
+                    "policy": "Exclude this reviewed row from timing interpretation.",
+                }
+            }
+        ),
+    )
+
+    count, rejections = _check_goal_timeout_boundary(payload)
+
+    assert count == 1
+    assert rejections == []
+
+
+@pytest.mark.parametrize("varying_field", ["scenario_id", "seed"])
+def test_goal_timeout_boundary_rejects_duplicate_identity_rows(
+    tmp_path: Path, varying_field: str
+) -> None:
+    """One exclusion cannot collapse two rows sharing an arm and episode ID."""
+    payload = tmp_path / "payload"
+    arm = "guarded_ppo__differential_drive"
+    episode_id = "scenario--132--identity"
+    first = {
+        "episode_id": episode_id,
+        "scenario_id": "scenario-a",
+        "seed": 1,
+        "event_ledger": {"exact_events": {"goal_reached": True, "timeout": True}},
+    }
+    second = dict(first)
+    second[varying_field] = "scenario-b" if varying_field == "scenario_id" else 2
+    _write(
+        payload / "runs" / arm / "episodes.jsonl",
+        json.dumps(first) + "\n" + json.dumps(second) + "\n",
+    )
+    _write(
+        payload / "run_meta.json",
+        json.dumps(
+            {
+                "goal_timeout_boundary": {
+                    "status": "excluded_from_timing_interpretation",
+                    "excluded_row_count": 1,
+                    "excluded_rows": [{"arm": arm, "episode_id": episode_id}],
+                    "raw_episode_rows_unchanged": True,
+                    "timing_evidence_fabricated": False,
+                    "note": "Exact event ordering is unavailable.",
+                    "policy": "Exclude reviewed rows from timing interpretation.",
+                }
+            }
+        ),
+    )
+
+    _count, rejections = _check_goal_timeout_boundary(payload)
+
+    assert any("duplicate ambiguous goal+timeout identity" in item for item in rejections)
+
+
+@pytest.mark.parametrize("drift", ["missing", "extra", "mutated"])
+def test_goal_timeout_boundary_rejects_incomplete_or_mutating_exclusion(
+    tmp_path: Path, drift: str
+) -> None:
+    """Signed provenance cannot omit, invent, or claim mutation of scientific rows."""
+    payload = tmp_path / "payload"
+    arm = "guarded_ppo__differential_drive"
+    episode_id = "scenario--132--identity"
+    row = {
+        "episode_id": episode_id,
+        "event_ledger": {"exact_events": {"goal_reached": True, "timeout": True}},
+    }
+    _write(payload / "runs" / arm / "episodes.jsonl", json.dumps(row) + "\n")
+    declared = [] if drift == "missing" else [{"arm": arm, "episode_id": episode_id}]
+    if drift == "extra":
+        declared.append({"arm": arm, "episode_id": "not-ambiguous"})
+    _write(
+        payload / "run_meta.json",
+        json.dumps(
+            {
+                "goal_timeout_boundary": {
+                    "status": "excluded_from_timing_interpretation",
+                    "excluded_row_count": len(declared),
+                    "excluded_rows": declared,
+                    "raw_episode_rows_unchanged": drift != "mutated",
+                    "timing_evidence_fabricated": False,
+                    "note": "Exact event ordering is unavailable.",
+                    "policy": "Exclude reviewed rows from timing interpretation.",
+                }
+            }
+        ),
+    )
+
+    _count, rejections = _check_goal_timeout_boundary(payload)
+
+    assert rejections
+
+
+def test_goal_timeout_exclusion_parser_fails_closed_without_resolved_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An inconsistent row parser result cannot admit an unsigned identity."""
+    monkeypatch.setattr(
+        artifact_publication_module,
+        "_goal_timeout_exclusion_identity",
+        lambda *_args, **_kwargs: (None, None),
+    )
+
+    identities, errors = artifact_publication_module._parse_goal_timeout_exclusion_rows(
+        {"excluded_rows": [{}], "excluded_row_count": 0}
+    )
+
+    assert identities == set()
+    assert errors == ["run_meta goal-timeout exclusion row 0 has no resolved identity"]
 
 
 def test_discover_run_directories_returns_leaf_runs(tmp_path: Path) -> None:
@@ -555,7 +692,12 @@ def test_release_bundle_stages_cold_verification_metadata_and_raw_policy(tmp_pat
     }
     assert metadata["raw_artifact_policy"]["campaign_output"] == "durable-required"
     assert metadata["cold_verification"]["credentials"] == "not_recorded"
-    assert (result.bundle_dir / "payload" / "release_metadata" / "CITATION.cff").is_file()
+    citation = result.bundle_dir / "payload" / "release_metadata" / "CITATION.cff"
+    assert citation.is_file()
+    assert (
+        citation.read_bytes()
+        == (artifact_publication_module.get_repository_root() / "CITATION.cff").read_bytes()
+    )
     assert (result.bundle_dir / "payload" / "release_metadata" / "zenodo_metadata.json").is_file()
     rights = result.bundle_dir / "payload" / "release_metadata" / "rights_provenance.md"
     assert "SNQI" in rights.read_text(encoding="utf-8")
@@ -569,6 +711,43 @@ def test_release_bundle_stages_cold_verification_metadata_and_raw_policy(tmp_pat
     # Raw episode rows are retained even when optional videos are excluded.
     assert (result.bundle_dir / "payload" / "episodes" / "episodes.jsonl").is_file()
     assert not (result.bundle_dir / "payload" / "videos").exists()
+
+    violations: list[str] = []
+    _preflight_check_release_metadata(
+        result.bundle_dir / "payload",
+        manifest,
+        violations=violations,
+    )
+    assert violations == []
+
+
+def test_release_bundle_rejects_run_local_reserved_metadata_namespace(tmp_path: Path) -> None:
+    """A run-local ``release_metadata/*`` file cannot replace authoritative metadata."""
+    run_dir = tmp_path / "benchmarks" / "release_metadata_collision"
+    _make_run(run_dir, with_video=False)
+    _write(
+        run_dir / "release" / "release_manifest.resolved.json",
+        json.dumps(
+            {
+                "metrics": {
+                    "snqi_weights_path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+                    "snqi_baseline_path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+                }
+            }
+        ),
+    )
+    _write(run_dir / "release" / "release_result.json", "{}\n")
+    _write(run_dir / "release_metadata" / "CITATION.cff", "ATTACKER\n")
+
+    with pytest.raises(ValueError, match="Run-local release_metadata paths are reserved"):
+        export_publication_bundle(
+            run_dir,
+            tmp_path / "publication",
+            bundle_name="release_metadata_collision_bundle",
+            include_videos=False,
+        )
+
+    assert not (tmp_path / "publication").exists()
 
 
 def test_release_bundle_snqi_basis_prefers_pinned_payload_assets(
@@ -614,6 +793,23 @@ def test_release_metadata_path_and_source_helpers_fail_closed(tmp_path: Path) ->
     assert _resolve_repo_file("metadata.json", repo_root=repo) == tracked
     assert _find_release_sha([{"nested": [{"public_source_commit": "A" * 40}]}]) == "a" * 40
     assert _find_release_sha([{"commit": "short"}, ["not-a-mapping"]]) is None
+
+
+def test_release_bundle_metadata_path_is_strictly_run_local(tmp_path: Path) -> None:
+    """Derived erratum metadata may be run-local but cannot escape or use symlinks."""
+    run_root = tmp_path / "run"
+    metadata = run_root / "release" / "zenodo_metadata.erratum.json"
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text("{}\n", encoding="utf-8")
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}\n", encoding="utf-8")
+    linked = run_root / "release" / "linked.json"
+    linked.symlink_to(outside)
+
+    assert _resolve_run_file("release/zenodo_metadata.erratum.json", run_root=run_root) == metadata
+    assert _resolve_run_file("../outside.json", run_root=run_root) is None
+    assert _resolve_run_file(str(outside), run_root=run_root) is None
+    assert _resolve_run_file("release/linked.json", run_root=run_root) is None
 
 
 def test_release_rights_statement_uses_safe_defaults() -> None:
@@ -694,3 +890,38 @@ def test_release_metadata_preflight_reports_schema_roles_and_policy(tmp_path: Pa
         violations=violations,
     )
     assert any("invalid payload path" in item for item in violations)
+
+
+def test_release_metadata_preflight_rejects_generic_reserved_namespace_entry(
+    tmp_path: Path,
+) -> None:
+    """Preflight must not admit a run-selected file as authoritative metadata."""
+    payload_dir = tmp_path / "bundle" / "payload"
+    citation = payload_dir / "release_metadata" / "CITATION.cff"
+    citation.parent.mkdir(parents=True)
+    citation.write_text("ATTACKER\n", encoding="utf-8")
+    digest = artifact_publication_module._sha256_file(citation)
+    manifest = {
+        "files": [
+            {
+                "path": "release_metadata/CITATION.cff",
+                "size_bytes": citation.stat().st_size,
+                "sha256": digest,
+                "kind": "misc",
+            }
+        ],
+        "release_metadata": {
+            "schema_version": RELEASE_PUBLICATION_METADATA_SCHEMA_VERSION,
+            "files": {
+                "citation": {
+                    "path": "payload/release_metadata/CITATION.cff",
+                    "sha256": digest,
+                }
+            },
+        },
+    }
+
+    violations: list[str] = []
+    _preflight_check_release_metadata(payload_dir, manifest, violations=violations)
+
+    assert any("not marked as authoritative provenance" in item for item in violations)

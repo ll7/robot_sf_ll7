@@ -783,8 +783,8 @@ class _AuthSession:
     [
         (_result([], returncode=1), False, "fail", "unavailable"),
         (_result([], stdout="not-json"), False, "fail", "invalid"),
-        (_result([], stdout="[]"), False, "pass", "not found"),
-        (_result([], stdout="[]"), True, "fail", "not found"),
+        (_result([], stdout="[]"), False, "pass", "absent"),
+        (_result([], stdout="[]"), True, "pass", "absent"),
         (
             _result([], stdout=json.dumps([{"active": False, "config": {"url": "zenodo"}}])),
             True,
@@ -814,6 +814,63 @@ def test_zenodo_check_sanitizes_auth_and_hook_states(
     assert hook_check.status == expected_status
     assert summary in hook_check.summary
     assert "secret" not in json.dumps([check.summary for check in checks])
+
+
+@pytest.mark.parametrize(
+    "hook_payload",
+    [
+        {},
+        {"hooks": []},
+        None,
+        "[]",
+        [None],
+        [{"active": True}],
+        [{"active": "false", "config": {"url": "https://zenodo.org/hook"}}],
+        [{"active": False, "config": {"url": None}}],
+    ],
+)
+def test_zenodo_check_rejects_malformed_hook_response_shapes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    hook_payload: object,
+) -> None:
+    """Malformed hook snapshots cannot be interpreted as an absent integration."""
+    monkeypatch.setattr(release_doctor, "read_token_file", lambda path: "secret")
+    monkeypatch.setattr(release_doctor, "build_session", lambda path: _AuthSession())
+    stdout = json.dumps(hook_payload)
+    monkeypatch.setattr(release_doctor, "_run", lambda *args: _result([], stdout=stdout))
+
+    checks = release_doctor._zenodo_check(
+        tmp_path,
+        tmp_path / "token",
+        require_hook_disabled=True,
+    )
+
+    hook_check = checks[-1]
+    assert hook_check.name == "zenodo_hook"
+    assert hook_check.status == "fail"
+    assert "invalid" in hook_check.summary
+    assert "secret" not in json.dumps([check.summary for check in checks])
+
+
+def test_final_zenodo_check_records_snapshot_boundary_for_absent_hook(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A passing final hook check records that reactivation remains a TOCTOU risk."""
+    monkeypatch.setattr(release_doctor, "read_token_file", lambda path: "secret")
+    monkeypatch.setattr(release_doctor, "build_session", lambda path: _AuthSession())
+    monkeypatch.setattr(release_doctor, "_run", lambda *args: _result([], stdout="[]"))
+
+    checks = release_doctor._zenodo_check(
+        tmp_path,
+        tmp_path / "token",
+        require_hook_disabled=True,
+    )
+
+    hook_check = checks[-1]
+    assert hook_check.status == "pass"
+    assert "read-only GitHub hook snapshot" in hook_check.summary
+    assert "reactivation" in hook_check.summary
 
 
 def test_zenodo_check_reports_auth_failure_without_token(

@@ -697,6 +697,12 @@ def _run_backlog_mode(args: argparse.Namespace, repo_root: Path) -> int:
         print("TODO-docstring backlog increased relative to baseline:")
         for line in increases:
             print(f"- {line}")
+            rel_path = line.split(":", 1)[0].strip()
+            file_path = repo_root / rel_path
+            if file_path.is_file():
+                for info in _read_defs(file_path):
+                    if _PLACEHOLDER in info.docstring:
+                        print(f"  - {rel_path}:{info.lineno} {info.name} has {_PLACEHOLDER}")
         return 1
     totals = cast("dict[str, int]", report["totals"])
     if not isinstance(totals, dict):

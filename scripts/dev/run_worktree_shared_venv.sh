@@ -43,6 +43,8 @@ Options:
   The wrapped command must begin with an executable after `--`. Nested `uv run` overlay or
   isolated-environment options (`--with*`, `--isolated`, `--python`) are rejected because this
   helper cannot verify freshness for the resulting environment.
+  Absolute or relative paths to `uv` are parsed like the plain `uv run` form; other explicit
+  tool paths retain their compatibility skip boundary.
   -h, --help             Show this help message.
 
 Environment:
@@ -262,7 +264,7 @@ check_shared_venv_freshness() {
   # selected-venv version will actually be used. Unknown options fail closed:
   # guessing where the nested command starts would make the freshness gate
   # appear to pass while checking the wrong binary.
-  if [[ "$tool" == "uv" && "${cmd[1]:-}" == "run" ]]; then
+  if [[ "${tool##*/}" == "uv" && "${cmd[1]:-}" == "run" ]]; then
     local uv_run_index=2
     local uv_run_arg=""
     tool=""
@@ -346,9 +348,6 @@ check_shared_venv_freshness() {
         ;;
     esac
   fi
-  if [[ -z "$skip_reason" && ! -x "$venv_path/bin/$tool" ]]; then
-    skip_reason="not-in-selected-venv"
-  fi
   if [[ -z "$skip_reason" && ! -f "$repo_root/pyproject.toml" ]]; then
     skip_reason="no-pin-manifest"
   fi
@@ -358,6 +357,13 @@ check_shared_venv_freshness() {
     if [[ -z "$pin" ]]; then
       skip_reason="unpinned"
     fi
+  fi
+  if [[ -z "$skip_reason" && ! -x "$venv_path/bin/$tool" ]]; then
+    echo "ERROR: Shared-venv pinned tool is absent from the selected environment: $venv_path/bin/$tool (active checkout pins $tool==$pin)." >&2
+    echo "Selected environment: $venv_path (active checkout: $repo_root)." >&2
+    echo "Remedy: install the pinned tool into the selected environment, re-sync the owning checkout, or pass an explicit --venv containing it." >&2
+    echo "To bypass after confirming the environment matches, rerun with --no-freshness-check." >&2
+    return 2
   fi
   if [[ -n "$skip_reason" ]]; then
     echo "Shared-venv tool freshness preflight skipped: tool=${tool:-none} reason=$skip_reason elapsed_ms=$(freshness_elapsed_ms) venv=$venv_path" >&2

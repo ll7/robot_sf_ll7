@@ -1121,7 +1121,7 @@ def _validate_new_version_tag_lineage(
     )
 
 
-def new_version(  # noqa: PLR0913
+def new_version(  # noqa: C901, PLR0913
     session: _Session,
     metadata: Mapping[str, Any],
     *,
@@ -1135,6 +1135,15 @@ def new_version(  # noqa: PLR0913
     release_binding: Any | None = None,
 ) -> dict[str, Any]:
     """Create a fail-closed successor draft for one published Zenodo version.
+
+    ``release_binding`` is optional only for the initial successor reservation:
+    Zenodo assigns the successor version DOI as part of the ``newversion``
+    action, so that DOI cannot be included in a binding beforehand.  In that
+    explicit pre-reservation mode the returned state is unbound and must be
+    passed through a manifest-bound ``upload``, ``verify``, or ``publish``
+    operation after the returned DOI has been frozen into the release
+    manifest.  When a binding is supplied, the returned draft identity is
+    checked before any metadata mutation.
 
     The legacy deposit API creates the successor through the predecessor's
     ``actions/newversion`` endpoint. The returned ``links.latest_draft`` link
@@ -1230,6 +1239,11 @@ def new_version(  # noqa: PLR0913
         latest_draft_id=latest_draft_id,
         operation="new-version draft",
     )
+    if binding is not None:
+        # This must remain immediately after the generic successor validation:
+        # a server-returned DOI that is valid in isolation but differs from the
+        # reviewed manifest must not reach the metadata PUT below.
+        _assert_deposition_identity(state, binding)
 
     successor_metadata = _metadata_contract(normalized_metadata)
     updated = _json_object(

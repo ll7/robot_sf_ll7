@@ -270,6 +270,45 @@ def test_new_version_accepts_legacy_prereserved_version_doi() -> None:
     assert state["doi"] == "10.5281/zenodo.8"
 
 
+def test_bound_new_version_rejects_returned_doi_before_metadata_put(tmp_path: Path) -> None:
+    """A bound successor DOI mismatch is rejected before any metadata mutation."""
+    metadata = _new_version_metadata()
+    metadata_path = tmp_path / "successor-metadata.json"
+    metadata_path.write_text(json.dumps({"metadata": metadata}), encoding="utf-8")
+    binding = publisher.build_release_binding(
+        {
+            "metadata_path": metadata_path,
+            "metadata_sha256": publisher._sha256_file(metadata_path),
+            "release_tag": SUCCESSOR_TAG,
+            "concept_doi": "10.5281/zenodo.6",
+            "version_doi": "10.5281/zenodo.8",
+        }
+    )
+    mismatched_draft = _successor_draft(
+        deposition_id=9,
+        record_id=9,
+        doi="10.5281/zenodo.9",
+    )
+    session = _new_version_fixture(draft=mismatched_draft)
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="version DOI"):
+        publisher.new_version(
+            session,
+            metadata,
+            predecessor_deposition_id=7,
+            expected_predecessor_doi="10.5281/zenodo.7",
+            expected_concept_doi="10.5281/zenodo.6",
+            expected_predecessor_tag=PREDECESSOR_TAG,
+            expected_source_sha=SOURCE_SHA,
+            expected_successor_tag=SUCCESSOR_TAG,
+            api_base="https://zenodo.org/api",
+            release_binding=binding,
+        )
+
+    assert session.put_kwargs == []
+    assert len(session.puts) == 1
+
+
 @pytest.mark.parametrize(
     "latest_draft",
     [

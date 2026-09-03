@@ -373,9 +373,14 @@ uv run robot-sf release zenodo reserve \
 ```
 
 Keep the token file outside Git with mode `0600`. The state file contains no
-credential and binds subsequent `upload`, `verify`, and irreversible `publish`
-operations to the same deposition. Do not run `publish` until the accepted
-20,160-cell campaign bundle has passed independent cold verification.
+credential. This initial `reserve` is intentionally the only unbound
+pre-reservation mutation: Zenodo returns the version DOI as part of the
+response, so freeze that DOI and the concept identity in the reviewed v0.2
+manifest before continuing. The direct CLI requires `--manifest` for every
+post-reservation `recover`, `upload`, `verify`, and irreversible `publish`
+operation and rejects an omitted binding before constructing an authenticated
+HTTP session. Do not run `publish` until the accepted 20,160-cell campaign
+bundle has passed independent cold verification.
 
 ### Immutable publication errata
 
@@ -412,6 +417,11 @@ same Zenodo concept instead:
    request. The command then checks the new draft's distinct DOI,
    unchanged concept, unpublished state, and metadata readback. It never
    records the token.
+   When the successor version DOI is not known before the `new-version` action,
+   omit `--manifest` for this one pre-reservation command. If a reviewed
+   manifest already contains the exact returned DOI, passing `--manifest` adds
+   the stricter pre-PUT identity assertion. In either case, continue only with
+   manifest-bound post-reservation operations.
 4. Freeze the returned version DOI, successor tag, predecessor archive digest,
    scientific source SHA, accepted correction-builder/validator SHA, and exact
    erratum-orchestration SHA in a reviewed
@@ -426,6 +436,8 @@ same Zenodo concept instead:
    These identities have different meanings: the scientific source produced
    the rows, the correction builder/validator accepted the recovered derived
    verdict, and the orchestration commit implements this successor workflow.
+   Pass the frozen manifest to the direct Zenodo `upload`, `verify`, and
+   `publish` commands; an omitted binding is rejected before any HTTP request.
 5. Require the embedded erratum receipt to prove exact episode-identity,
    canonical-row, and component-metric equality. Historical non-finite
    diagnostic floats are preserved as typed `NaN`, positive-infinity, and

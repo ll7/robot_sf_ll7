@@ -47,7 +47,7 @@ def test_release_cli_dispatches_each_zenodo_mode(
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
         "load_dataset_metadata",
-        lambda path: {"upload_type": "dataset"},
+        lambda path, **kwargs: {"upload_type": "dataset"},
     )
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
@@ -57,22 +57,26 @@ def test_release_cli_dispatches_each_zenodo_mode(
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
         "reserve",
-        lambda session, metadata, api_base: calls.append(("reserve", api_base)) or state,
+        lambda session, metadata, api_base, **kwargs: calls.append(("reserve", api_base)) or state,
     )
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
         "upload",
-        lambda session, loaded, files, api_base: calls.append(("upload", api_base)) or state,
+        lambda session, loaded, files, api_base, **kwargs: (
+            calls.append(("upload", api_base)) or state
+        ),
     )
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
         "publish",
-        lambda session, loaded, metadata, api_base: calls.append(("publish", api_base)) or state,
+        lambda session, loaded, metadata, api_base, **kwargs: (
+            calls.append(("publish", api_base)) or state
+        ),
     )
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
         "verify",
-        lambda session, loaded, metadata, api_base: (
+        lambda session, loaded, metadata, api_base, **kwargs: (
             calls.append(("verify", api_base)) or {"status": "pass", "file_count": 0}
         ),
     )
@@ -81,7 +85,18 @@ def test_release_cli_dispatches_each_zenodo_mode(
         "write_state",
         lambda path, value: calls.append(("write_state", value)),
     )
-    result = release_cli.handle(_args(mode, tmp_path))
+    args = _args(mode, tmp_path)
+    if mode in {"upload", "publish", "verify"}:
+        args.manifest = tmp_path / "manifest.yaml"
+        monkeypatch.setattr(
+            release_cli,
+            "_load_release_binding",
+            lambda value: (
+                SimpleNamespace(release_tag="v1", metadata_sha256="a" * 64),
+                {"release_tag": "v1"},
+            ),
+        )
+    result = release_cli.handle(args)
     assert result == 0
     assert calls[0][0] == mode
     assert "secret" not in capsys.readouterr().out
@@ -189,6 +204,51 @@ def test_release_cli_parser_exposes_new_version_identity_arguments() -> None:
     assert args.manifest is None
 
 
+@pytest.mark.parametrize("mode", ["upload", "verify", "publish"])
+def test_release_cli_parser_requires_manifest_after_reservation(mode: str) -> None:
+    """Post-reservation modes cannot be invoked without a release manifest."""
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+    release_cli.build_subparser(subparsers)
+
+    arguments = [
+        "release",
+        "zenodo",
+        mode,
+        "--token-file",
+        "token",
+        "--state",
+        "state.json",
+    ]
+    if mode in {"verify", "publish"}:
+        arguments.extend(["--metadata", "metadata.json"])
+    else:
+        arguments.append("bundle.tar.gz")
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(arguments)
+
+
+@pytest.mark.parametrize("mode", ["recover", "upload", "verify", "publish"])
+def test_release_cli_rejects_unbound_post_reservation_before_session(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    mode: str,
+) -> None:
+    """Hand-built CLI namespaces also fail before constructing an HTTP session."""
+    args = _args(mode, tmp_path)
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "build_session",
+        lambda path: (_ for _ in ()).throw(AssertionError("unbound mode must not build session")),
+    )
+
+    assert release_cli.handle(args) == 2
+    output = capsys.readouterr().out
+    assert "validated release manifest" in output
+
+
 def test_release_cli_recovers_without_loading_state_or_reserving(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -242,15 +302,29 @@ def test_release_cli_returns_blocked_for_verification_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """A failed remote verification is reported with a non-zero status."""
+    args = _args("verify", tmp_path)
+    args.manifest = tmp_path / "manifest.yaml"
+    monkeypatch.setattr(
+        release_cli,
+        "_load_release_binding",
+        lambda value: (
+            SimpleNamespace(release_tag="v1", metadata_sha256="a" * 64),
+            {"release_tag": "v1"},
+        ),
+    )
     monkeypatch.setattr(release_cli.zenodo_publisher, "build_session", lambda path: object())
     monkeypatch.setattr(release_cli.zenodo_publisher, "load_state", lambda path: {})
-    monkeypatch.setattr(release_cli.zenodo_publisher, "load_dataset_metadata", lambda path: {})
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "load_dataset_metadata",
+        lambda path, **kwargs: {},
+    )
     monkeypatch.setattr(
         release_cli.zenodo_publisher,
         "verify",
         lambda *args, **kwargs: {"status": "fail", "problems": ["mismatch"]},
     )
-    assert release_cli.handle(_args("verify", tmp_path)) == 2
+    assert release_cli.handle(args) == 2
 
 
 def test_release_cli_sanitizes_publisher_errors(

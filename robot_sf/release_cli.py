@@ -20,6 +20,13 @@ if TYPE_CHECKING:
     import argparse
 
 
+# A fresh Zenodo deposition or successor draft does not expose its version DOI
+# until the reservation request completes.  Those two modes therefore have an
+# explicit pre-reservation exception; every operation after that point must
+# carry the reviewed manifest binding before an authenticated session is built.
+_RELEASE_BOUND_ZENODO_MODES = frozenset({"recover", "upload", "verify", "publish"})
+
+
 def _add_new_version_arguments(parser: Any) -> None:
     """Register the identity inputs required before a Zenodo successor mutation."""
     parser.add_argument("--predecessor-deposition-id", type=int, required=True)
@@ -127,8 +134,12 @@ def build_subparser(subparsers: Any) -> None:
         parser.add_argument(
             "--manifest",
             type=Path,
-            required=mode == "recover",
-            help="Validated benchmark release manifest to bind Zenodo operations to.",
+            required=mode in _RELEASE_BOUND_ZENODO_MODES,
+            help=(
+                "Validated benchmark release manifest to bind Zenodo operations to. Required "
+                "for recover/upload/verify/publish; reserve and new-version may omit it only "
+                "while the server is assigning a new version DOI."
+            ),
         )
         if mode in {"reserve", "recover", "publish", "verify", "new-version"}:
             parser.add_argument("--metadata", type=Path, required=True)
@@ -218,11 +229,11 @@ def _print(payload: dict[str, Any]) -> None:
 
 
 def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]] | None:
-    """Load and validate an optional benchmark manifest for Zenodo operations.
+    """Load and validate a benchmark manifest for a bound Zenodo operation.
 
     Returns:
         The parsed manifest and credential-free publisher binding, or ``None``
-        for the generic publisher route.
+        for the explicit pre-reservation reserve/new-version route.
     """
     manifest_path = getattr(args, "manifest", None)
     if manifest_path is None:
@@ -390,6 +401,15 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
         release_context = _load_release_binding(args)
         release_manifest = release_context[0] if release_context is not None else None
         release_binding = release_context[1] if release_context is not None else None
+        if args.zenodo_mode in _RELEASE_BOUND_ZENODO_MODES and release_binding is None:
+            # Keep this check ahead of build_session: the direct CLI must not
+            # even construct an authenticated HTTP client for an unbound
+            # post-reservation operation.  ``argparse`` enforces this for
+            # normal invocations; the duplicate guard protects callers that
+            # invoke ``handle`` with a hand-built Namespace.
+            raise zenodo_publisher.ZenodoPublisherError(
+                f"Zenodo {args.zenodo_mode} requires a validated release manifest"
+            )
         session = zenodo_publisher.build_session(args.token_file)
         if args.zenodo_mode in {"reserve", "recover"}:
             metadata_kwargs = (

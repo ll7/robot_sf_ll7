@@ -241,31 +241,41 @@ uv run robot-sf release zenodo recover \
 uv run robot-sf release zenodo upload \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
+  --manifest "$ZENODO_MANIFEST" \
   output/benchmarks/publication/<campaign_id>_publication_bundle.tar.gz
 
 uv run robot-sf release zenodo verify \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
+  --manifest "$ZENODO_MANIFEST" \
   --metadata "$ZENODO_METADATA"
 
 # Run only after acceptance and independent cold verification pass.
 uv run robot-sf release zenodo publish \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
+  --manifest "$ZENODO_MANIFEST" \
   --metadata "$ZENODO_METADATA"
 
 # Mandatory post-publication check; require a passing published-record receipt.
 uv run robot-sf release zenodo verify \
   --token-file "$ZENODO_TOKEN_FILE" \
   --state "$ZENODO_STATE" \
+  --manifest "$ZENODO_MANIFEST" \
   --metadata "$ZENODO_METADATA"
 ```
 
-`reserve` must return a fresh concept and version DOI; freeze those values in
-the release manifest before the immutable execution point. Use `recover` only
-when that exact unpublished draft still exists and the credential-free local
-state was lost; it never reserves or mutates a deposition and refuses published
-or mismatched drafts. `upload` must send
+`reserve` is the explicit pre-reservation step: it may omit `--manifest` because
+Zenodo assigns the version DOI in its response. Freeze the returned concept and
+version identity in the reviewed release manifest before continuing. The CLI
+requires that manifest for `recover`, `upload`, `verify`, and `publish`, and
+rejects an omitted binding before constructing an authenticated HTTP session.
+The same pre-reservation exception applies to `new-version`: create the linked
+successor draft without `--manifest` when its version DOI is not yet known,
+then freeze that DOI and use the manifest-bound post-reservation commands above.
+Use `recover` only when that exact unpublished draft still exists and the
+credential-free local state was lost; it never reserves or mutates a deposition
+and refuses published or mismatched drafts. `upload` must send
 the byte-identical bundle used for GitHub. `verify` is read-only and must check
 the title, dataset type, GPL-3.0-only license, creator union, exact source tag,
 and concept/version DOI distinction. `publish` is irreversible; never run it

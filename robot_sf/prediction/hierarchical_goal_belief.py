@@ -16,9 +16,11 @@ from typing import Any
 
 from robot_sf.prediction._contract_utils import (
     canonical_json,
+    is_forbidden_evidence_source,
     reject_unknown_keys,
     require_digest,
     require_finite,
+    require_non_negative,
     require_probability,
     require_step_index,
     require_text,
@@ -37,16 +39,6 @@ from robot_sf.prediction.goal_belief_contract import (
 
 HIERARCHICAL_GOAL_POSTERIOR_SCHEMA_VERSION = "hierarchical_goal_posterior.v1"
 HIERARCHICAL_PROJECTION_LEVELS = ("active_waypoint", "final_destination")
-_FORBIDDEN_EVIDENCE_TOKENS = frozenset(
-    {
-        "oracle",
-        "simulator",
-        "true_goal",
-        "route_truth",
-        "waypoint_truth",
-        "force_component",
-    }
-)
 
 
 def _as_sequence(value: Any, field_name: str) -> tuple[Any, ...]:
@@ -271,10 +263,14 @@ class HierarchicalGoalPosteriorV1:
             require_digest(self.candidate_set_digest, "candidate_set_digest"),
         )
         evidence_source = require_text(self.evidence_source, "evidence_source").strip().lower()
-        if any(token in evidence_source for token in _FORBIDDEN_EVIDENCE_TOKENS):
+        if is_forbidden_evidence_source(evidence_source):
             raise ValueError("evidence_source cannot request oracle or simulator values")
         object.__setattr__(self, "evidence_source", evidence_source)
-        object.__setattr__(self, "innovation", require_probability(self.innovation, "innovation"))
+        object.__setattr__(
+            self,
+            "innovation",
+            require_non_negative(self.innovation, "innovation"),
+        )
 
         blocker_values = tuple(
             require_text(blocker, "blockers[]")
@@ -422,7 +418,16 @@ class HierarchicalGoalPosteriorV1:
             GoalCandidateProbability(value.candidate_id, kind, value.probability)
             for value in values
         )
-        blockers = tuple(sorted(set(self.blockers) | {"hierarchical_projection"}))
+        blockers = tuple(
+            sorted(
+                set(self.blockers)
+                | {
+                    "arrival_probability_unestimated",
+                    "change_probability_unestimated",
+                    "hierarchical_projection",
+                }
+            )
+        )
         return GoalBeliefV1(
             timestamp_s=self.timestamp_s,
             step_index=self.step_index,
@@ -437,7 +442,9 @@ class HierarchicalGoalPosteriorV1:
             candidate_probabilities=candidates,
             unknown_candidate_probability=unknown,
             arrival_probability=0.0,
-            change_probability=self.innovation,
+            # ``innovation`` is a non-negative diagnostic magnitude (for example,
+            # an NIS); Slice A does not define a calibrated change probability.
+            change_probability=0.0,
             mode=GoalBeliefMode.CENSORED,
             track_confidence=None,
             censoring_state=CensoringState.CENSORED,

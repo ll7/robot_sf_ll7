@@ -511,10 +511,8 @@ def _validate_successor_metadata_readback(
             )
 
 
-def _validate_new_version_relation(
-    metadata: Mapping[str, Any], *, expected_predecessor_doi: str
-) -> None:
-    """Require exactly one DOI relation to the immutable predecessor version."""
+def _successor_predecessor_doi(metadata: Mapping[str, Any]) -> str | None:
+    """Return a validated predecessor DOI when metadata declares a successor relation."""
     related = metadata.get("related_identifiers")
     predecessor_relations = (
         [
@@ -525,11 +523,25 @@ def _validate_new_version_relation(
         if isinstance(related, list)
         else []
     )
+    if not predecessor_relations:
+        return None
     if (
         len(predecessor_relations) != 1
-        or predecessor_relations[0].get("identifier") != expected_predecessor_doi
+        or not isinstance(predecessor_relations[0].get("identifier"), str)
+        or _ZENODO_DOI_RE.fullmatch(predecessor_relations[0]["identifier"]) is None
         or predecessor_relations[0].get("scheme") != "doi"
     ):
+        raise ZenodoPublisherError(
+            "Zenodo successor metadata must contain exactly one isNewVersionOf predecessor DOI"
+        )
+    return predecessor_relations[0]["identifier"]
+
+
+def _validate_new_version_relation(
+    metadata: Mapping[str, Any], *, expected_predecessor_doi: str
+) -> None:
+    """Require exactly one DOI relation to the immutable predecessor version."""
+    if _successor_predecessor_doi(metadata) != expected_predecessor_doi:
         raise ZenodoPublisherError(
             "Zenodo successor metadata must contain exactly one isNewVersionOf predecessor DOI"
         )
@@ -1049,8 +1061,6 @@ def _reconcile_inherited_draft_files(
     api_base: str,
 ) -> None:
     """Remove only stable, pre-existing extras from a proven successor draft."""
-    if not extra_names:
-        return
     post_upload_inventory = _list_draft_files(
         session,
         deposition_id=deposition_id,
@@ -1061,6 +1071,8 @@ def _reconcile_inherited_draft_files(
         raise ZenodoPublisherError(
             "Zenodo draft file inventory changed unexpectedly after upload; refusing deletion"
         )
+    if not extra_names:
+        return
     if any(post_upload_inventory[name] != initial_inventory[name] for name in sorted(extra_names)):
         raise ZenodoPublisherError(
             "Zenodo inherited draft file identity changed after upload; refusing deletion"
@@ -1511,6 +1523,41 @@ def new_version(  # noqa: C901, PLR0913
     return _seal_state(updated_state)
 
 
+def _restore_recovered_successor_lineage(
+    state: dict[str, Any],
+    metadata: Mapping[str, Any],
+    binding: Mapping[str, Any],
+) -> None:
+    """Restore cleanup provenance when recovered metadata declares a successor."""
+    predecessor_doi = _successor_predecessor_doi(metadata)
+    if predecessor_doi is None:
+        return
+    predecessor_id = int(predecessor_doi.rsplit(".", 1)[-1])
+    predecessor_doi = _validated_version_doi(
+        predecessor_doi,
+        predecessor_id,
+        "recovered predecessor DOI",
+    )
+    source_tag = _source_tag(metadata, require_url_scheme=True)
+    if source_tag != binding["source_tag"]:
+        raise ZenodoPublisherError(
+            "Zenodo recovered successor source tag does not match release binding"
+        )
+    state.update(
+        {
+            "concept_doi": binding["concept_doi"],
+            "predecessor_deposition_id": predecessor_id,
+            "predecessor_doi": predecessor_doi,
+            "predecessor": {
+                "deposition_id": predecessor_id,
+                "doi": predecessor_doi,
+            },
+            "source_tag": source_tag,
+        }
+    )
+    _validate_successor_cleanup_state(state)
+
+
 def recover(
     session: _Session,
     deposition_id: int,
@@ -1523,8 +1570,9 @@ def recover(
 
     Recovery is deliberately read-only: it retrieves the exact deposition ID,
     validates the remote identity and metadata against the frozen release
-    binding, and reconstructs only the credential-free state emitted by
-    :func:`reserve`.
+    binding, and reconstructs credential-free state. When the bound metadata
+    identifies a successor, the predecessor lineage required for safe inherited
+    file reconciliation is restored as well.
 
     Returns:
         Credential-free sealed deposition state.
@@ -1567,6 +1615,8 @@ def recover(
             raise ZenodoPublisherError(
                 f"Zenodo recovered draft metadata.{key} does not match release metadata"
             )
+
+    _restore_recovered_successor_lineage(state, normalized_metadata, binding)
 
     state["release_binding"] = _state_release_binding(
         binding,

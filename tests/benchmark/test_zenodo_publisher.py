@@ -29,12 +29,12 @@ from robot_sf.benchmark.zenodo_publisher import (
 class _Response:
     """Minimal requests-like response fixture."""
 
-    def __init__(self, payload: dict[str, Any], status_code: int = 200) -> None:
+    def __init__(self, payload: Any, status_code: int = 200) -> None:
         self.payload = payload
         self.status_code = status_code
         self.content = json.dumps(payload).encode()
 
-    def json(self) -> dict[str, Any]:
+    def json(self) -> Any:
         """Return the fixture payload."""
         return self.payload
 
@@ -229,7 +229,22 @@ def test_reserve_upload_publish_and_verify_without_credentials_in_state(tmp_path
 
     bundle = tmp_path / "bundle.tar.gz"
     bundle.write_bytes(b"bundle")
-    session.gets = [_Response(_draft_payload())]
+    session.gets = [
+        _Response(_draft_payload()),
+        _Response(
+            [
+                {
+                    "id": "uploaded-file",
+                    "filename": bundle.name,
+                    "links": {
+                        "self": (
+                            "https://zenodo.org/api/deposit/depositions/123/files/uploaded-file"
+                        )
+                    },
+                }
+            ]
+        ),
+    ]
     session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
     state = upload(session, state, [bundle])
     assert state["files"][0]["name"] == bundle.name

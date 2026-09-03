@@ -295,7 +295,9 @@ successor draft without `--manifest` when its version DOI is not yet known,
 then freeze that DOI and use the manifest-bound post-reservation commands above.
 Use `recover` only when that exact unpublished draft still exists and the
 credential-free local state was lost; it never reserves or mutates a deposition
-and refuses published or mismatched drafts. `upload` must send
+and refuses published or mismatched drafts. When the bound metadata declares a
+successor, recovery also reconstructs and validates its predecessor, concept,
+and source-tag lineage so inherited-file cleanup remains available. `upload` must send
 the byte-identical bundle used for GitHub. Zenodo new-version drafts inherit the
 predecessor files. When the sealed state proves exact new-version provenance,
 `upload` validates the complete local and remote inventories, uploads the

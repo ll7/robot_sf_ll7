@@ -197,6 +197,25 @@ def _new_version_metadata() -> dict[str, Any]:
     return metadata
 
 
+def _successor_binding(tmp_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Write metadata and return its exact manifest-style successor binding."""
+    metadata = _new_version_metadata()
+    metadata_path = tmp_path / "successor-metadata.json"
+    metadata_path.write_text(json.dumps({"metadata": metadata}), encoding="utf-8")
+    return (
+        publisher.build_release_binding(
+            {
+                "metadata_path": metadata_path,
+                "metadata_sha256": publisher._sha256_file(metadata_path),
+                "release_tag": SUCCESSOR_TAG,
+                "concept_doi": "10.5281/zenodo.6",
+                "version_doi": "10.5281/zenodo.8",
+            }
+        ),
+        metadata,
+    )
+
+
 def _predecessor_deposition(**updates: Any) -> dict[str, Any]:
     """Return the exact published predecessor required before mutation."""
     metadata = _metadata()
@@ -311,18 +330,7 @@ def test_new_version_accepts_legacy_prereserved_version_doi() -> None:
 
 def test_bound_new_version_rejects_returned_doi_before_metadata_put(tmp_path: Path) -> None:
     """A bound successor DOI mismatch is rejected before any metadata mutation."""
-    metadata = _new_version_metadata()
-    metadata_path = tmp_path / "successor-metadata.json"
-    metadata_path.write_text(json.dumps({"metadata": metadata}), encoding="utf-8")
-    binding = publisher.build_release_binding(
-        {
-            "metadata_path": metadata_path,
-            "metadata_sha256": publisher._sha256_file(metadata_path),
-            "release_tag": SUCCESSOR_TAG,
-            "concept_doi": "10.5281/zenodo.6",
-            "version_doi": "10.5281/zenodo.8",
-        }
-    )
+    binding, metadata = _successor_binding(tmp_path)
     mismatched_draft = _successor_draft(
         deposition_id=9,
         record_id=9,
@@ -346,6 +354,43 @@ def test_bound_new_version_rejects_returned_doi_before_metadata_put(tmp_path: Pa
 
     assert session.put_kwargs == []
     assert len(session.puts) == 1
+
+
+def test_recover_restores_successor_lineage_for_inherited_file_cleanup(tmp_path: Path) -> None:
+    """A recovered successor retains the provenance required to prune inherited files."""
+    binding, metadata = _successor_binding(tmp_path)
+    session = _Session()
+    session.gets = [_Response(_successor_draft(metadata=metadata))]
+
+    state = publisher.recover(session, 8, metadata, release_binding=binding)
+
+    assert state["concept_doi"] == "10.5281/zenodo.6"
+    assert state["predecessor_deposition_id"] == 7
+    assert state["predecessor_doi"] == "10.5281/zenodo.7"
+    assert state["predecessor"] == {
+        "deposition_id": 7,
+        "doi": "10.5281/zenodo.7",
+    }
+    assert state["source_tag"].endswith(SUCCESSOR_TAG)
+
+    bundle = tmp_path / "successor.tar.gz"
+    bundle.write_bytes(b"successor")
+    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
+    uploaded = _draft_file(bundle.name, file_id="successor-file")
+    remote = _successor_draft(metadata=metadata)
+    remote["files"] = [inherited]
+    session.gets = [
+        _Response(remote),
+        _Response([inherited, uploaded]),
+        _Response([uploaded]),
+    ]
+    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
+    session.deletes = [_Response({}, 204)]
+
+    updated = publisher.upload(session, state, [bundle], release_binding=binding)
+
+    assert updated["files"][0]["name"] == bundle.name
+    assert any(url.endswith("/deposit/depositions/8/files/inherited-file") for url in session.urls)
 
 
 @pytest.mark.parametrize(
@@ -978,7 +1023,8 @@ def test_upload_does_not_persist_server_checksum_or_reflected_secret(tmp_path: P
         }
     )
     session = _Session()
-    session.gets = [_Response(_draft())]
+    uploaded = _draft_file(bundle.name, deposition_id=7, file_id="uploaded-file")
+    session.gets = [_Response(_draft()), _Response([uploaded])]
     session.puts = [_Response({"checksum": "Bearer secret-reflection"})]
 
     updated = publisher.upload(session, state, [bundle])
@@ -987,6 +1033,21 @@ def test_upload_does_not_persist_server_checksum_or_reflected_secret(tmp_path: P
     assert "secret-reflection" not in serialized
     assert "zenodo_checksum" not in updated["files"][0]
     assert updated["files"][0]["sha256"] == publisher._sha256_file(bundle)
+
+
+def test_upload_requires_exact_post_upload_inventory_without_extras(tmp_path: Path) -> None:
+    """Even an initially clean draft is reread and must expose every intended upload."""
+    bundle = tmp_path / "successor.tar.gz"
+    bundle.write_bytes(b"successor")
+    session = _Session()
+    session.gets = [_Response(_successor_draft()), _Response([])]
+    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="changed unexpectedly"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.deletes == []
+    assert session.urls[-1] == "https://zenodo.org/api/deposit/depositions/8/files"
 
 
 def test_upload_reconciles_inherited_successor_files(tmp_path: Path) -> None:

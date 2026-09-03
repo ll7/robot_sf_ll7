@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import subprocess
 import time
@@ -217,6 +218,40 @@ PARENT_CLOSE_PATTERN = re.compile(
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess[str]]
 
 
+def _deadline_from_seconds(max_wall_seconds: float | None) -> float | None:
+    """Return an absolute monotonic deadline for an optional audit budget."""
+    if max_wall_seconds is None:
+        return None
+    if not math.isfinite(max_wall_seconds) or max_wall_seconds < 0:
+        raise ValueError("max_wall_seconds must be finite and non-negative")
+    return time.monotonic() + max_wall_seconds
+
+
+def _resolve_deadline(
+    max_wall_seconds: float | None,
+    deadline: float | None,
+) -> float | None:
+    """Resolve either a new relative budget or a shared absolute deadline."""
+    if max_wall_seconds is not None and deadline is not None:
+        raise ValueError("pass max_wall_seconds or deadline, not both")
+    return deadline if deadline is not None else _deadline_from_seconds(max_wall_seconds)
+
+
+def _deadline_expired(deadline: float | None) -> bool:
+    """Return whether a shared audit deadline has elapsed."""
+    return deadline is not None and time.monotonic() >= deadline
+
+
+def _deadline_timeout_result(args: list[str]) -> subprocess.CompletedProcess[str]:
+    """Return the common fail-closed result for work that misses the audit budget."""
+    return subprocess.CompletedProcess(
+        args,
+        124,
+        "",
+        "issue-audit wall-time budget exhausted",
+    )
+
+
 def _run_gh(
     args: list[str],
     input_text: str | None = None,
@@ -256,39 +291,57 @@ def _run_gh(
         )
 
 
-def _deadline_runner(runner: Runner, max_wall_seconds: float | None) -> Runner:
+def _deadline_runner(
+    runner: Runner,
+    max_wall_seconds: float | None = None,
+    *,
+    deadline: float | None = None,
+) -> Runner:
     """Wrap REST calls in an aggregate wall-time budget without weakening fail-closed reads."""
-    if max_wall_seconds is None:
+    effective_deadline = _resolve_deadline(max_wall_seconds, deadline)
+    if effective_deadline is None:
         return runner
-    if max_wall_seconds < 0:
-        raise ValueError("max_wall_seconds must be non-negative")
-    deadline = time.monotonic() + max_wall_seconds
 
     def run(args: list[str], input_text: str | None = None) -> subprocess.CompletedProcess[str]:
-        remaining = deadline - time.monotonic()
+        remaining = effective_deadline - time.monotonic()
         command = ["gh", *args]
         if remaining <= 0:
-            return subprocess.CompletedProcess(
-                command,
-                124,
-                "",
-                "issue-audit wall-time budget exhausted",
-            )
+            return _deadline_timeout_result(command)
         if runner is _run_gh:
             return _run_gh(
                 args,
                 input_text,
                 timeout_seconds=min(DEFAULT_GH_TIMEOUT_SECONDS, remaining),
             )
-        return runner(args, input_text)
+        result = runner(args, input_text)
+        if _deadline_expired(effective_deadline):
+            return _deadline_timeout_result(command)
+        return result
 
     return run
 
 
-def _run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
+def _run_command(
+    args: list[str],
+    *,
+    timeout_seconds: float = 30.0,
+) -> subprocess.CompletedProcess[str]:
     """Run a local discovery command without turning missing optional tools into writes."""
+    if timeout_seconds <= 0:
+        return subprocess.CompletedProcess(
+            args,
+            124,
+            "",
+            "command timed out before it started",
+        )
     try:
-        return subprocess.run(args, capture_output=True, text=True, timeout=30, check=False)
+        return subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            check=False,
+        )
     except FileNotFoundError:
         return subprocess.CompletedProcess(args, 127, "", f"{args[0]} not found on PATH")
     except subprocess.TimeoutExpired as exc:
@@ -298,6 +351,28 @@ def _run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
             "",
             f"{args[0]} command timed out after {exc.timeout}s",
         )
+
+
+def _deadline_command_runner(
+    runner: Callable[[list[str]], subprocess.CompletedProcess[str]],
+    deadline: float | None,
+) -> Callable[[list[str]], subprocess.CompletedProcess[str]]:
+    """Bound local discovery commands and reject results that finish past the deadline."""
+    if deadline is None:
+        return runner
+
+    def run(args: list[str]) -> subprocess.CompletedProcess[str]:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return _deadline_timeout_result(args)
+        if runner is _run_command:
+            return _run_command(args, timeout_seconds=min(30.0, remaining))
+        result = runner(args)
+        if _deadline_expired(deadline):
+            return _deadline_timeout_result(args)
+        return result
+
+    return run
 
 
 def _parse_json(result: subprocess.CompletedProcess[str], *, what: str) -> tuple[Any | None, str]:
@@ -847,11 +922,14 @@ def discover_inventory(
     include_comments: bool = False,
     max_comment_pages: int = DEFAULT_MAX_COMMENT_PAGES,
     max_wall_seconds: float | None = None,
+    deadline: float | None = None,
     runner: Runner | None = None,
     command_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
 ) -> dict[str, Any]:
     """Build the complete read-only inventory consumed by the shared classifier."""
-    rest_runner = _deadline_runner(runner or _run_gh, max_wall_seconds)
+    effective_deadline = _resolve_deadline(max_wall_seconds, deadline)
+    rest_runner = _deadline_runner(runner or _run_gh, deadline=effective_deadline)
+    local_runner = _deadline_command_runner(command_runner or _run_command, effective_deadline)
     issues, issue_meta = discover_open_issues(repo, max_pages=max_pages, runner=rest_runner)
     comment_meta = (
         attach_issue_comments(
@@ -905,9 +983,9 @@ def discover_inventory(
         "timeline": timeline_meta,
     }
     labels, label_meta = discover_repository_labels(repo, max_pages=max_pages, runner=rest_runner)
-    claims, claim_meta = discover_claims(remote, command_runner=command_runner)
-    worktrees, worktree_meta = discover_worktrees(command_runner=command_runner)
-    jobs, job_meta = discover_jobs(command_runner=command_runner)
+    claims, claim_meta = discover_claims(remote, command_runner=local_runner)
+    worktrees, worktree_meta = discover_worktrees(command_runner=local_runner)
+    jobs, job_meta = discover_jobs(command_runner=local_runner)
     return {
         "repo": repo,
         "remote": remote,
@@ -1245,24 +1323,56 @@ def _merged_records(
     issue_number: int, merged_prs: Iterable[Mapping[str, Any]]
 ) -> list[dict[str, Any]]:
     """Return merged PRs with explicit issue references in title/body/branch."""
-    return [
-        dict(pr)
-        for pr in merged_prs
-        if issue_number in set(pr.get("linked_issue_numbers", []))
-        or issue_number in _issue_ref_numbers(pr.get("title"), pr.get("body"), pr.get("head_ref"))
-    ]
+    return [dict(pr) for pr in merged_prs if issue_number in _merged_pr_issue_numbers(pr)]
+
+
+def _merged_pr_issue_numbers(pr: Mapping[str, Any]) -> set[int]:
+    """Return normalized issue references for one merged PR row."""
+    numbers: set[int] = set()
+    raw_linked = pr.get("linked_issue_numbers")
+    if isinstance(raw_linked, (list, tuple, set, frozenset)):
+        for value in raw_linked:
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, int) and value > 0:
+                numbers.add(value)
+            elif isinstance(value, str) and value.isdigit() and int(value) > 0:
+                numbers.add(int(value))
+    numbers.update(_issue_ref_numbers(pr.get("title"), pr.get("body"), pr.get("head_ref")))
+    return numbers
+
+
+def _index_merged_prs(
+    merged_prs: Sequence[Mapping[str, Any]],
+    *,
+    deadline: float | None = None,
+) -> tuple[dict[int, list[dict[str, Any]]], bool]:
+    """Index merged PR references once, returning whether the budget was exhausted."""
+    indexed: dict[int, list[dict[str, Any]]] = {}
+    for pr in merged_prs:
+        if _deadline_expired(deadline):
+            return {}, True
+        row = dict(pr)
+        for issue_number in _merged_pr_issue_numbers(row):
+            indexed.setdefault(issue_number, []).append(row)
+    return indexed, False
 
 
 def closure_evidence(
     issue: Mapping[str, Any],
     *,
     merged_prs: Sequence[Mapping[str, Any]],
+    merged_pr_index: Mapping[int, Sequence[Mapping[str, Any]]] | None = None,
     open_issue_numbers: set[int] | None = None,
 ) -> dict[str, Any]:
     """Evaluate the narrow, documented conditions under which autonomous close is safe."""
     body = str(issue.get("body") or "")
     number = int(issue.get("number", 0))
-    linked = _merged_records(number, merged_prs)
+    linked = (
+        [dict(pr) for pr in merged_pr_index.get(number, ())]
+        if merged_pr_index is not None
+        else _merged_records(number, merged_prs)
+    )
     coverage = {
         "coverage_sources": sorted(
             {str(pr.get("coverage_source") or "global_closed_prs") for pr in linked}
@@ -1452,6 +1562,7 @@ def classify_issue(
     available_labels: set[str] | None = None,
     completion_receipt: Mapping[str, Any] | None = None,
     repository: str = DEFAULT_REPO,
+    merged_pr_index: Mapping[int, Sequence[Mapping[str, Any]]] | None = None,
 ) -> Classification:
     """Classify one issue and plan only evidence-supported autonomous repairs."""
     number = int(issue.get("number", 0))
@@ -1521,9 +1632,13 @@ def classify_issue(
         and not job_inventory_uncertain
         and not parent_issue
     )
+    closure_rows: Sequence[Mapping[str, Any]] = (
+        () if merged_pr_index is not None else list(merged_prs)
+    )
     closure = closure_evidence(
         issue,
-        merged_prs=list(merged_prs),
+        merged_prs=closure_rows,
+        merged_pr_index=merged_pr_index,
         open_issue_numbers=open_issue_numbers,
     )
     if completion_receipt is None:
@@ -1868,10 +1983,13 @@ def build_audit_plan(
     *,
     mode: str = "autonomous",
     max_mutations: int = DEFAULT_MAX_MUTATIONS,
+    max_wall_seconds: float | None = None,
+    deadline: float | None = None,
 ) -> dict[str, Any]:
     """Build the shared issue_audit_plan.v1 from a read-only inventory."""
     if mode not in {"autonomous", "interactive"}:
         raise ValueError("mode must be autonomous or interactive")
+    effective_deadline = _resolve_deadline(max_wall_seconds, deadline)
     issues = [item for item in inventory.get("issues", []) if isinstance(item, Mapping)]
     open_prs = [item for item in inventory.get("open_prs", []) if isinstance(item, Mapping)]
     merged_prs = [item for item in inventory.get("merged_prs", []) if isinstance(item, Mapping)]
@@ -1892,11 +2010,31 @@ def build_audit_plan(
     mutations: list[dict[str, Any]] = []
     pending: list[dict[str, Any]] = []
     blocked_label_report: list[dict[str, Any]] = []
-    for issue in sorted(issues, key=lambda item: int(item.get("number", 0))):
+    ordered_issues = sorted(issues, key=lambda item: int(item.get("number", 0)))
+    merged_pr_index, index_timed_out = _index_merged_prs(
+        merged_prs,
+        deadline=effective_deadline,
+    )
+    classification_timeout_reason = (
+        "issue-audit wall-time budget exhausted while indexing merged-PR references"
+        if index_timed_out
+        else None
+    )
+    for issue in ordered_issues:
+        if classification_timeout_reason is not None:
+            break
+        if _deadline_expired(effective_deadline):
+            classification_timeout_reason = (
+                "issue-audit wall-time budget exhausted "
+                + ("before" if not classifications else "during")
+                + " issue classification"
+            )
+            break
         classified = classify_issue(
             issue,
             open_prs=open_prs,
             merged_prs=merged_prs,
+            merged_pr_index=merged_pr_index,
             claims=claims,
             worktrees=worktrees,
             jobs=jobs,
@@ -1967,6 +2105,11 @@ def build_audit_plan(
                     "safe_mutations_applied": [],
                 }
             )
+        if _deadline_expired(effective_deadline):
+            classification_timeout_reason = (
+                "issue-audit wall-time budget exhausted during issue classification"
+            )
+            break
     inventory_meta = inventory.get("inventory") or {}
     truncated = [
         name
@@ -1980,6 +2123,24 @@ def build_audit_plan(
         for name, meta in inventory_meta.items()
         if isinstance(meta, Mapping) and name == "jobs" and meta.get("available") is False
     ]
+    remaining_issue_numbers = [
+        int(issue.get("number", 0)) for issue in ordered_issues[len(classifications) :]
+    ]
+    classification_timed_out = classification_timeout_reason is not None
+    classification_status = {
+        "status": "timed_out" if classification_timed_out else "complete",
+        "reason": classification_timeout_reason,
+        "classified_issues": len(classifications),
+        "total_issues": len(ordered_issues),
+        "remaining_issue_numbers": remaining_issue_numbers,
+        "resume_from_issue": remaining_issue_numbers[0] if remaining_issue_numbers else None,
+        "mutations_suppressed": classification_timed_out,
+    }
+    if classification_timed_out:
+        # Partial classifications are useful for diagnosis, but no mutation
+        # from an incomplete pass is safe to carry into an apply operation.
+        mutations = []
+        truncated.append("classification")
     if len(mutations) > max_mutations:
         mutations = mutations[:max_mutations]
         truncated.append("mutation_budget")
@@ -1995,6 +2156,7 @@ def build_audit_plan(
             "preserve_state_qualifiers": True,
         },
         "inventory": inventory.get("inventory", {}),
+        "classification_status": classification_status,
         "inventory_coverage": (
             dict(inventory_meta.get("closure_coverage"))
             if isinstance(inventory_meta.get("closure_coverage"), Mapping)
@@ -2732,7 +2894,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--max-wall-seconds",
         type=float,
         default=DEFAULT_MAX_AUDIT_WALL_SECONDS,
-        help="aggregate REST-discovery wall-time budget; zero emits a fail-closed empty plan",
+        help=(
+            "aggregate audit wall-time budget across discovery and classification; "
+            "zero emits a fail-closed empty plan"
+        ),
     )
     plan_parser.add_argument("--output", type=Path)
     apply_parser = subparsers.add_parser("apply", help="apply a previously emitted plan")
@@ -2747,8 +2912,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     envelope_parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     if args.command == "plan":
-        if args.max_wall_seconds < 0:
-            parser.error("--max-wall-seconds must be non-negative")
+        if not math.isfinite(args.max_wall_seconds) or args.max_wall_seconds < 0:
+            parser.error("--max-wall-seconds must be finite and non-negative")
+        deadline = _deadline_from_seconds(args.max_wall_seconds)
         plan = build_audit_plan(
             discover_inventory(
                 args.repo,
@@ -2757,10 +2923,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 max_closed_pr_pages=args.max_closed_pr_pages,
                 include_comments=args.include_comments,
                 max_comment_pages=args.max_comment_pages,
-                max_wall_seconds=args.max_wall_seconds,
+                deadline=deadline,
             ),
             mode=args.mode,
             max_mutations=args.max_mutations,
+            deadline=deadline,
         )
         rendered = json.dumps(plan, indent=2, sort_keys=True) + "\n"
         if args.output:

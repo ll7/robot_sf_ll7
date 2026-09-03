@@ -5,4 +5,4 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./common_setup.sh
 source "$SCRIPT_DIR/common_setup.sh"
 
-uv run python scripts/validation/check_docstring_todos.py --mode ratchet
+uv run python scripts/validation/check_docstring_todos.py --mode ratchet --fail-on-warning "$@"

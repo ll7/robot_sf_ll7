@@ -657,6 +657,10 @@ def test_api_base_normalizes_one_trailing_slash() -> None:
         "http://zenodo.org/api/files/bucket",
         "https://other.example/api/files/bucket",
         "https://zenodo.org/api/files/bucket?access_token=secret",
+        "https://zenodo.org/records/7/files/bundle",
+        "https://zenodo.org/apiary/files/bucket",
+        "https://zenodo.org/api/../records/7/files/bundle",
+        "https://zenodo.org/api/%2e%2e/records/7/files/bundle",
     ],
 )
 def test_upload_rejects_cross_origin_or_credentialed_bucket_before_put(

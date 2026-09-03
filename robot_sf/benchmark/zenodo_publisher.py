@@ -5,12 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import posixpath
 import re
 from collections.abc import Mapping
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Protocol
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 from robot_sf.benchmark.release_tag_identity import check_canonical_source_tag
 from robot_sf.common.optional_import import try_import
@@ -275,6 +276,10 @@ def _validated_remote_url(value: Any, api_base: str, label: str) -> str:
         or not candidate.path
     ):
         raise ZenodoPublisherError(f"Zenodo {label} is not a valid same-origin HTTPS URL")
+    api_path = base.path.rstrip("/")
+    normalized_path = posixpath.normpath(unquote(candidate.path))
+    if normalized_path != api_path and not normalized_path.startswith(f"{api_path}/"):
+        raise ZenodoPublisherError(f"Zenodo {label} is not a valid same-API HTTPS URL")
     return value.strip()
 
 

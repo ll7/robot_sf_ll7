@@ -336,6 +336,10 @@ helper is route evidence only and does not perform GitHub-visible writes.
    unapproved", "pending independent review", or "do not merge" must be re-narrated before
    `merge-ready` is applied, otherwise that sentence is what gets squashed into `main`
    (issues #7448, #7491).
+   Review-only worktrees are not writable publication lanes: create them with
+   `scripts/dev/create_worktree.sh --mode review`, and use the guarded
+   `review_worktree_guard.py integrate` command for any synthetic merge. Do not push an explicit
+   refspec from a review worktree.
 5. Validate per required tier, including the PR title/body contract after reconciliation.
    For any PR whose declared base is older than current `main`, run
    `uv run python scripts/dev/check_base_sensitive_gates.py --pr <number> --json` against the exact

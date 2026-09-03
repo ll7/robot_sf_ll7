@@ -153,3 +153,11 @@ receipt and checks it before launching the command. The check is read-only, fail
 machine-readable. It validates the current working directory, assigned absolute worktree, linked
 Git common directory, branch/ref, and base ancestry. Human callers that omit receipt options retain
 the ordinary path.
+
+## Protected review-worktree guard
+
+Use `create_worktree.sh --mode review` for review-only or synthetic-integration work. It installs
+the worktree-local push guard; `review_worktree_guard.py integrate` then performs an aborting
+no-commit merge and compares all remote refs before returning success. Implementation worktrees
+keep the default pushable behavior. See [`worktree_lifecycle.md`](../../docs/dev/worktree_lifecycle.md)
+for the complete invocation and restoration procedure.

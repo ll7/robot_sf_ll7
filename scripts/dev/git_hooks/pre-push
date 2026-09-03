@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+worktree_root="$(git rev-parse --show-toplevel)"
+exec python3 "$worktree_root/scripts/dev/review_worktree_guard.py" pre-push

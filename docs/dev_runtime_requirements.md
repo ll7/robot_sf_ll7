@@ -54,6 +54,9 @@ scripts/dev/create_worktree.sh --branch issue-123-short-description \
 scripts/dev/run_worktree_shared_venv.sh -- <command>
 ```
 
+For review-only or synthetic-integration work, add `--mode review` and use the guarded integration
+helper described in the [worktree lifecycle guide](./dev/worktree_lifecycle.md).
+
 The creator deliberately does not configure automatic upstream tracking for the new branch. That
 keeps concurrent linked-worktree creation from contending on the shared Git configuration; set a
 remote explicitly when publishing, for example with `git push -u origin <branch>`. This avoids one

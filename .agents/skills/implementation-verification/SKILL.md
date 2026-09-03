@@ -24,12 +24,23 @@ rather than only a global test pass signal.
    - `git status --short --branch`
    - `git diff --stat origin/main...HEAD`
    - `git diff --name-only origin/main...HEAD`
+   - For review-only or synthetic-integration work, create the linked worktree with
+     `scripts/dev/create_worktree.sh --mode review`; do not use an ordinary implementation
+     worktree for a merge probe.
 2. Extract claims from issue/PR body, docs, and changed code/docs.
 3. Map each claim to a concrete evidence surface:
    - scripts, configs, tests, CLI commands, or artifacts.
 4. Validate claim by claim:
    - run minimal targeted checks first,
    - then run `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` when broader validation is required.
+   - Run synthetic integration through:
+
+     ```bash
+     python scripts/dev/review_worktree_guard.py integrate \
+       --worktree <path> --source-ref origin/main --remote origin
+     ```
+
+     The helper owns the no-commit merge, abort, and remote-ref comparison.
 5. Include benchmark safety checks when relevant:
    - explicitly classify fallback/degraded execution as a limitation, never as success.
 6. Record residual gaps where no direct proof path exists.

@@ -32,6 +32,36 @@ New branches are created without automatic upstream tracking. This avoids concur
 contending on the shared repository configuration while they create linked worktrees. Configure a
 remote explicitly when publishing a branch, for example with `git push -u origin <branch>`.
 
+## Protected review worktrees
+
+Review and synthetic-integration worktrees must opt into the protected mode explicitly:
+
+```bash
+scripts/dev/create_worktree.sh \
+  --branch review/pr-123 \
+  --path "$WORKTREE_PARENT/review-pr-123" \
+  --base origin/main \
+  --mode review
+python scripts/dev/review_worktree_guard.py integrate \
+  --worktree "$WORKTREE_PARENT/review-pr-123" \
+  --source-ref origin/main \
+  --remote origin
+```
+
+The creator writes the worktree-local `robot-sf.worktree-mode=review` marker and installs the
+tracked pre-push guard. Configured remote names also receive inert worktree-local push destinations,
+and configured remote URLs receive push-only rewrites, so explicit destination refspecs and
+`--no-verify` cannot mutate those remotes from the protected worktree. Fetches remain available.
+The integration helper snapshots every ref from `git ls-remote --refs`, runs
+`git merge --no-commit --no-ff`, always attempts `git merge --abort`, and exits nonzero unless the
+worktree is clean and the before/after remote snapshots are identical.
+
+Ordinary implementation worktrees retain the default pushable behavior. To deliberately restore a
+previously protected worktree, run `python scripts/dev/review_worktree_guard.py configure
+--worktree <path> --mode implementation`; the helper restores the worktree-local hook and push
+configuration captured when review mode was enabled. Re-fetch `origin/main` before creating a new
+review worktree so its source ref is explicit and current.
+
 ## Delegated-worker isolation receipt
 
 Repository-owned delegated workers should opt into an immutable, credential-free receipt and bind

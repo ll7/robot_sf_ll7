@@ -112,6 +112,52 @@ def test_missing_proof_surface_is_invalid() -> None:
     assert "result_packet" in result.reasons[0]
 
 
+@pytest.mark.parametrize(
+    ("update", "reason_fragment"),
+    [
+        ({"status": "unknown"}, "status"),
+        ({"required": "yes"}, "required"),
+        ({"status": "unavailable"}, "unavailable_reason"),
+        ({"status": "passed", "unavailable_reason": " "}, "unavailable_reason"),
+    ],
+)
+def test_proof_surface_shape_defects_are_invalid(
+    update: dict[str, object], reason_fragment: str
+) -> None:
+    """Malformed proof-surface declarations cannot be treated as admission evidence."""
+    contract = _proof_contract()
+    contract["proof_surfaces"]["analysis"].update(update)
+
+    result = evaluate_answerability(contract)
+
+    assert result.state == "invalid_contract"
+    assert reason_fragment in result.reasons[0]
+
+
+def test_unsupported_proof_surface_is_invalid() -> None:
+    """A proof set cannot smuggle in an unsupported admission surface."""
+    contract = _proof_contract()
+    contract["proof_surfaces"]["unsupported"] = {"status": "passed", "required": True}
+
+    result = evaluate_answerability(contract)
+
+    assert result.state == "invalid_contract"
+    assert "unsupported" in result.reasons[0]
+
+
+def test_strict_admission_requires_declared_proof_surfaces() -> None:
+    """Strict admission requires the canonical proof-surface declarations."""
+    contract = _example_contract()
+    contract["proof_surfaces"] = None
+    contract["design"].update({"mode": "decision_capable", "power_status": "adequate"})
+    contract["artifacts"]["durability_status"] = "ready"
+
+    result = evaluate_answerability(contract, enforce_admission_proof=True)
+
+    assert result.state == "blocked_missing_proof"
+    assert any(surface in result.reasons[0] for surface in DECISION_REQUIRED_PROOF_SURFACES)
+
+
 @pytest.mark.parametrize("status", ["not_run", "unavailable", "failed"])
 def test_required_proof_status_blocks_decision_capable_answerability(status: str) -> None:
     """Required proof cannot be silently promoted to a decision-capable result."""

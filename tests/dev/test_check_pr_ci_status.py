@@ -1429,8 +1429,11 @@ def test_git_remote_owner_name_parses_ssh_and_https(monkeypatch: pytest.MonkeyPa
     assert _git_remote_owner_name() == ("", "")
 
 
+@pytest.mark.parametrize("returncode", [0, 1])
 def test_fetch_ci_status_falls_back_to_rest_on_graphql_quota(
     monkeypatch: pytest.MonkeyPatch,
+    returncode: int,
+    isolated_workflow_id_cache: None,
 ) -> None:
     """A GraphQL quota failure switches the watcher to REST and marks the source."""
     pull = {
@@ -1453,7 +1456,13 @@ def test_fetch_ci_status_falls_back_to_rest_on_graphql_quota(
     reviews = [{"state": "APPROVED"}]
     monkeypatch.setattr(
         "scripts.dev.check_pr_ci_status._gh",
-        MagicMock(return_value=MagicMock(returncode=1, stderr=QUOTA_STDERR, stdout="")),
+        MagicMock(
+            return_value=MagicMock(
+                returncode=returncode,
+                stderr=QUOTA_STDERR if returncode else "",
+                stdout=QUOTA_STDERR if not returncode else "",
+            )
+        ),
     )
     monkeypatch.setattr(
         "scripts.dev.check_pr_ci_status._rest_api_get",

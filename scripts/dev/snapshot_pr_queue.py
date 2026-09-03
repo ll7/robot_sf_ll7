@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -774,11 +775,23 @@ query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
     result = retry.result
     if result.returncode != 0:
         stderr = result.stderr.strip()
-        if _is_graphql_quota_error(stderr):
+        if retry.quota_exhausted or _is_graphql_quota_error(stderr):
             handoff = quota_reset_handoff(
                 retry_command=(
-                    f"uv run python -m scripts.dev.snapshot_pr_queue {pr_number} "
-                    f"--review-threads --json --repo {repo}"
+                    shlex.join(
+                        [
+                            "uv",
+                            "run",
+                            "python",
+                            "-m",
+                            "scripts.dev.snapshot_pr_queue",
+                            str(pr_number),
+                            "--review-threads",
+                            "--json",
+                            "--repo",
+                            repo,
+                        ]
+                    )
                 ),
             )
             return {

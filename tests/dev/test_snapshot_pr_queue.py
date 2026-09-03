@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1591,6 +1592,65 @@ def test_review_thread_snapshot_quota_handoff_unknown_reset_stays_fail_closed() 
     assert snap["retry_after_utc"] is None
     assert "--review-threads" in snap["retry_command"]
     assert "Never admit" in snap["guidance"]
+
+
+def test_review_thread_snapshot_uses_quota_retry_classification_from_stdout() -> None:
+    """A quota diagnostic on stdout still gets the reset-aware fail-closed handoff."""
+    handoff = {
+        "quota_reset_at": None,
+        "reset_in_seconds": None,
+        "retry_after_utc": None,
+        "retry_command": "retry",
+        "handoff": "Never admit merge-ready from unknown thread state.",
+    }
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stdout=QUOTA_STDERR),
+        ),
+        patch(
+            "scripts.dev.snapshot_pr_queue.quota_reset_handoff",
+            return_value=handoff,
+        ) as mock_handoff,
+    ):
+        snap = _review_thread_snapshot(42, repo="ll7/robot_sf_ll7")
+
+    assert snap["status"] == "unknown_graphql_quota"
+    mock_handoff.assert_called_once()
+
+
+def test_review_thread_snapshot_quotes_repo_in_retry_command() -> None:
+    """Copy-paste retry guidance must not turn a repository value into shell syntax."""
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+        ),
+        patch(
+            "scripts.dev.snapshot_pr_queue.quota_reset_handoff",
+            side_effect=lambda *, retry_command: {
+                "quota_reset_at": None,
+                "reset_in_seconds": None,
+                "retry_after_utc": None,
+                "retry_command": retry_command,
+                "handoff": "Never admit merge-ready from unknown thread state.",
+            },
+        ),
+    ):
+        snap = _review_thread_snapshot(42, repo="owner/repo; touch pwned")
+
+    assert shlex.split(snap["retry_command"]) == [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "scripts.dev.snapshot_pr_queue",
+        "42",
+        "--review-threads",
+        "--json",
+        "--repo",
+        "owner/repo; touch pwned",
+    ]
 
 
 def test_review_thread_snapshot_reports_exhausted_graphql_transient() -> None:

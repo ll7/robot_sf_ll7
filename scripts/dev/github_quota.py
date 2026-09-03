@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import subprocess
 import time
 from dataclasses import asdict, dataclass
@@ -135,7 +136,10 @@ def quota_reset_handoff(
                 + ". Never admit merge-ready from unknown thread state."
             ),
         }
-    reset_in_seconds = max(0, int(reset_at - observed_at))
+    # Round up so a consumer that waits this many seconds cannot retry just
+    # before the integer-second reset epoch. ``retry_after_utc`` remains the
+    # authoritative wall-clock value.
+    reset_in_seconds = max(0, math.ceil(reset_at - observed_at))
     retry_after_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(reset_at))
     return {
         "quota_reset_at": reset_at,

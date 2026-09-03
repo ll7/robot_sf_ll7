@@ -57,6 +57,7 @@ import binascii
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field, replace
@@ -1934,10 +1935,21 @@ def fetch_merge_queue_strategy(pr_number: str | int, *, repo: str) -> tuple[str 
 def _quota_exhausted_thread_diagnostic(pr_number: str | int, *, repo: str) -> str:
     """Build the reset-aware handoff for quota-blocked review-thread reads (issue #8282)."""
     handoff = quota_reset_handoff(
-        retry_command=(
-            "uv run python scripts/dev/single_account_merge_receipt.py "
-            f"--repo {repo} --pr {pr_number} --mode report-only "
-            f"--output output/validation/pr-{pr_number}-merge-receipt.json"
+        retry_command=shlex.join(
+            [
+                "uv",
+                "run",
+                "python",
+                "scripts/dev/single_account_merge_receipt.py",
+                "--repo",
+                repo,
+                "--pr",
+                str(pr_number),
+                "--mode",
+                "report-only",
+                "--output",
+                f"output/validation/pr-{pr_number}-merge-receipt.json",
+            ]
         ),
     )
     return handoff["handoff"]

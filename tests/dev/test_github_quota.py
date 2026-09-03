@@ -133,7 +133,7 @@ def test_quota_reset_handoff_names_reset_and_retry_command() -> None:
     """A known reset produces a bounded retry handoff, never an approval (issue #8282)."""
     handoff = quota_reset_handoff(
         retry_command="uv run python -m scripts.dev.snapshot_pr_queue 42 --review-threads --json",
-        now=1_799_999_900.0,
+        now=1_799_999_900.1,
         reset_at=1_800_000_000,
     )
 

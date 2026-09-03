@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import shlex
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -1362,6 +1363,33 @@ def test_fetch_threads_resolved_quota_exhaustion_carries_reset_handoff() -> None
     assert "2027-01-01T00:00:00Z" in error
     assert "single_account_merge_receipt.py" in error
     assert "report-only" in error
+
+
+def test_quota_thread_retry_command_quotes_repo() -> None:
+    """Merge-gate retry guidance must preserve a hostile repository value as one argument."""
+    with patch(
+        "scripts.dev.merge_queue_gate.quota_reset_handoff",
+        side_effect=lambda *, retry_command: {"handoff": retry_command},
+    ) as mock_handoff:
+        merge_queue_gate_module._quota_exhausted_thread_diagnostic(
+            42, repo="owner/repo; touch pwned"
+        )
+
+    command = mock_handoff.call_args.kwargs["retry_command"]
+    assert shlex.split(command) == [
+        "uv",
+        "run",
+        "python",
+        "scripts/dev/single_account_merge_receipt.py",
+        "--repo",
+        "owner/repo; touch pwned",
+        "--pr",
+        "42",
+        "--mode",
+        "report-only",
+        "--output",
+        "output/validation/pr-42-merge-receipt.json",
+    ]
 
 
 @pytest.mark.parametrize(

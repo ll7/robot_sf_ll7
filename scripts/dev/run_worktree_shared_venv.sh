@@ -33,8 +33,9 @@ Options:
                          use all-extras (or a named pyproject extra) when the command needs it.
   --scratch-dir PATH     Use PATH for temporary files and default uv/XDG caches for this run.
   --standalone           Run a command that is verified not to import project packages. This skips
-                         the dependency-profile and project-source checks and does not prepend the
-                         worktree root to PYTHONPATH.
+                         the dependency-profile and project-source checks, but still applies the
+                         pinned-tool freshness gate; it does not prepend the worktree root to
+                         PYTHONPATH.
   --no-freshness-check   Retained for compatibility; checkout-local fast-pysf source already takes
                           precedence over any reused installed copy. Also accepted via
                           ROBOT_SF_VENV_FRESHNESS_CHECK=skip. Bypasses the pinned-tool version
@@ -244,6 +245,12 @@ check_shared_venv_freshness() {
   # runs from the selected venv, so only its version is compared against the
   # active checkout pin. Interpreters and shells are never gated here.
   local tool="${cmd[0]:-}"
+  # The helper's documented examples also use ``-- uv run <tool>``. Inspect
+  # that compatibility form so the outer ``uv run`` does not hide the tool
+  # whose selected-venv version will actually be used.
+  if [[ "$tool" == "uv" && "${cmd[1]:-}" == "run" ]]; then
+    tool="${cmd[2]:-}"
+  fi
   local start_ms=""
   start_ms="$(date +%s%3N 2>/dev/null)" || start_ms=""
   local skip_reason=""
@@ -313,7 +320,7 @@ check_shared_venv_freshness() {
   return 2
 }
 
-if [[ -z "$standalone" && -z "$skip_freshness" && "${ROBOT_SF_VENV_FRESHNESS_CHECK:-}" != "skip" ]]; then
+if [[ -z "$skip_freshness" && "${ROBOT_SF_VENV_FRESHNESS_CHECK:-}" != "skip" ]]; then
   if ! check_shared_venv_freshness "$venv_path"; then
     exit 2
   fi

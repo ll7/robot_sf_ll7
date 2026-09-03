@@ -2109,6 +2109,65 @@ def test_worktree_shared_venv_fails_closed_on_stale_pinned_tool(
     assert "--no-freshness-check" in result.stderr
 
 
+def test_worktree_shared_venv_standalone_fails_closed_on_stale_pinned_tool(
+    tmp_path: Path,
+) -> None:
+    """Standalone mode still enforces the pinned-tool freshness boundary."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--standalone",
+            "--",
+            "ruff",
+            "check",
+            "x.py",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "uv-reached" not in result.stderr
+    assert "resolved to 0.16.4 but the active checkout pins ruff==0.16.5" in result.stderr
+
+
+def test_worktree_shared_venv_checks_tool_after_uv_run_prefix(tmp_path: Path) -> None:
+    """The documented nested ``uv run`` form must not bypass the tool gate."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--",
+            "uv",
+            "run",
+            "ruff",
+            "check",
+            "x.py",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "uv-reached" not in result.stderr
+    assert "resolved to 0.16.4 but the active checkout pins ruff==0.16.5" in result.stderr
+
+
 def test_worktree_shared_venv_passes_fresh_pinned_tool_with_preflight_line(
     tmp_path: Path,
 ) -> None:

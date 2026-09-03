@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import numpy as np
 from pysocialforce.config import SURFACE_DISTANCE_UNIT_NORMAL_V2
+from pysocialforce.forces import ObstacleForce
 
 from robot_sf.common.types import Line2D, Rect
 from robot_sf.gym_env.unified_config import (
@@ -221,6 +222,23 @@ def test_simulator_metadata_fallback_reports_obstacle_application_state() -> Non
     assert metadata["enabled"] is False
     assert metadata["applied"] is False
     assert metadata["resolution_mode"] == "defaulted_missing"
+
+
+def test_simulator_metadata_fallback_respects_zero_obstacle_force_factor() -> None:
+    """The compatibility metadata path treats a zero force factor as disabled."""
+    simulator = object.__new__(Simulator)
+    zero_factor_force = object.__new__(ObstacleForce)
+    zero_factor_force.config = SimpleNamespace(factor=0.0)
+    simulator.pysf_sim = SimpleNamespace(
+        forces=(zero_factor_force,),
+        raw_obstacles=(object(),),
+    )
+    simulator.config = SimulationSettings(difficulty=0, ped_density_by_difficulty=[0.0])
+
+    metadata = simulator.obstacle_force_law_metadata()
+
+    assert metadata["enabled"] is False
+    assert metadata["applied"] is False
 
 
 def test_ped_simulator_keeps_none_response_multipliers() -> None:

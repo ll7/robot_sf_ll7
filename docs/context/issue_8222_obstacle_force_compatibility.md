@@ -2,8 +2,9 @@
 
 > Status: current policy and implementation-context note. This records the bounded option-B
 > compatibility/documentation ruling for [Issue #8222](https://github.com/ll7/robot_sf_ll7/issues/8222)
-> at base-main SHA `31704e5a110e77298390bc53d3f70077991d9d67`. The runtime selector described
-> below is implemented by the separately scoped follow-up [Issue #8277](https://github.com/ll7/robot_sf_ll7/issues/8277).
+> at the integration base SHA `e6faf1caaff480b4ff7c6055a983299b2959d5bf` used for this follow-up.
+> The runtime selector described below is implemented by the separately scoped follow-up
+> [Issue #8277](https://github.com/ll7/robot_sf_ll7/issues/8277).
 
 ## Decision
 

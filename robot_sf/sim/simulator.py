@@ -634,7 +634,20 @@ class Simulator:
         metadata_fn = getattr(self.pysf_sim, "obstacle_force_law_metadata", None)
         if not callable(metadata_fn):
             forces = getattr(self.pysf_sim, "forces", ())
-            enabled = any(isinstance(force, ObstacleForce) for force in forces)
+            obstacle_force = next(
+                (force for force in forces if isinstance(force, ObstacleForce)),
+                None,
+            )
+            enabled = obstacle_force is not None
+            if obstacle_force is not None:
+                try:
+                    enabled = float(
+                        getattr(getattr(obstacle_force, "config", None), "factor", 1.0)
+                    ) != 0.0
+                except (TypeError, ValueError):
+                    # Preserve the compatibility path's best-effort behavior for
+                    # legacy force objects with a non-numeric factor.
+                    enabled = True
             raw_obstacles = getattr(self.pysf_sim, "raw_obstacles", ())
             applied = enabled and len(raw_obstacles) > 0
             return obstacle_force_law_metadata(

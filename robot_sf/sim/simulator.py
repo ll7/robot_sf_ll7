@@ -641,9 +641,10 @@ class Simulator:
             enabled = obstacle_force is not None
             if obstacle_force is not None:
                 try:
-                    enabled = float(
-                        getattr(getattr(obstacle_force, "config", None), "factor", 1.0)
-                    ) != 0.0
+                    enabled = (
+                        float(getattr(getattr(obstacle_force, "config", None), "factor", 1.0))
+                        != 0.0
+                    )
                 except (TypeError, ValueError):
                     # Preserve the compatibility path's best-effort behavior for
                     # legacy force objects with a non-numeric factor.

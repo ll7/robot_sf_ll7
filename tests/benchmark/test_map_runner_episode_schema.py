@@ -329,3 +329,16 @@ def test_obstacle_force_sites_are_serialized_in_episode_metadata() -> None:
     assert runtime["schema_version"] == "obstacle_force_law_runtime_record.v1"
     assert runtime["sites"]["fast_pysf"]["applied"] is True
     assert runtime["sites"]["socnav_social_force"]["applied"] is False
+
+
+def test_obstacle_force_site_conflicts_fail_closed() -> None:
+    """Conflicting same-site snapshots must not silently overwrite provenance."""
+    fast_pysf = _PedSim.obstacle_force_law_metadata()
+    conflicting = dict(fast_pysf, law_version="surface_distance_unit_normal_v2")
+
+    with pytest.raises(ValueError, match="conflicting obstacle-force metadata"):
+        _build_obstacle_force_runtime_record(
+            simulator_metadata=fast_pysf,
+            planner_metadata=conflicting,
+            planner_runtime_snapshot=None,
+        )

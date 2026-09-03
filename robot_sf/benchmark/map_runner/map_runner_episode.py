@@ -1867,7 +1867,14 @@ def _build_obstacle_force_runtime_record(
         ),
     ):
         if candidate is not None:
-            sites[str(candidate["site"])] = candidate
+            site = str(candidate["site"])
+            previous = sites.get(site)
+            if previous is not None and previous != candidate:
+                raise ValueError(
+                    f"conflicting obstacle-force metadata for site {site!r}; "
+                    "refusing to overwrite a runtime snapshot"
+                )
+            sites[site] = candidate
 
     if not sites:
         return None

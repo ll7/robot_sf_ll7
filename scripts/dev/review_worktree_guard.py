@@ -328,11 +328,6 @@ def _prepare_review_barriers(
         )
     rule_key = _url_rule_key(expected_url)
     _worktree_unset(identity, rule_key)
-    # An empty pushInsteadOf prefix is a push-only catch-all. It is required in
-    # addition to the exact configured-URL rules below because Git still
-    # inherits common-config pushurl values, and callers can spell a local URL
-    # with an equivalent relative path.
-    _worktree_add(identity, rule_key, "")
     remotes = _remote_names(identity)
     configured_urls = {
         remote: (
@@ -348,8 +343,9 @@ def _prepare_review_barriers(
         for url in configured_urls[remote]:
             _worktree_add(identity, rule_key, url)
     # Keep the push-only barrier effective for remotes added after review mode
-    # is configured.  The empty prefix is a catch-all for push URLs while
-    # leaving fetch and ls-remote URLs untouched.
+    # is configured. The empty prefix is a catch-all for push URLs while
+    # leaving fetch and ls-remote URLs untouched. It also covers inherited
+    # common-config pushurl values and equivalent local-path spellings.
     _worktree_add(identity, rule_key, "")
     return expected_url
 

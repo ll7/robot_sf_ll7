@@ -2022,6 +2022,211 @@ def test_worktree_shared_venv_freshness_check_env_var_bypasses_stale_env(
     assert "Shared virtualenv is stale" not in result.stderr
 
 
+def _make_pinned_tool_fixture_repo(
+    tmp_path: Path,
+    *,
+    pin: str = "ruff==0.16.5",
+    tool: str = "ruff",
+    resolved_version: str = "0.16.5",
+    with_pyproject: bool = True,
+) -> tuple[Path, Path, dict[str, str]]:
+    """Build a git repo + fake venv for pinned-tool freshness tests (issue #8250).
+
+    The fake venv provides ``bin/python`` (exit-0 stub, satisfying the
+    dependency-profile probe) and ``bin/<tool>`` printing
+    ``"<tool> <resolved_version>"`` for ``--version``. A fake ``uv`` on PATH
+    proves whether the helper reached the underlying command (exit 7) or
+    failed closed in the freshness gate (exit 2).
+    """
+    repo = tmp_path / "repo"
+    fake_bin = repo / "fake-bin"
+    venv = repo / ".venv"
+    fake_bin.mkdir(parents=True)
+    (venv / "bin").mkdir(parents=True)
+
+    if with_pyproject:
+        (repo / "pyproject.toml").write_text(
+            f'[dependency-groups]\ndev = [\n    "pytest>=9.1.1",\n    "{pin}",\n]\n',
+            encoding="utf-8",
+        )
+
+    py = venv / "bin" / "python"
+    py.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    py.chmod(0o755)
+    tool_bin = venv / "bin" / tool
+    tool_bin.write_text(
+        f'#!/usr/bin/env bash\necho "{tool} {resolved_version}"\n',
+        encoding="utf-8",
+    )
+    tool_bin.chmod(0o755)
+
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        '#!/usr/bin/env bash\nprintf "uv-reached %s\\n" "$*" >&2\nexit 7\n',
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    configure_git_identity(repo, name="Agent", email="agent@example.invalid")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "commit", "-m", "pinned-tool fixture"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+    }
+    env.pop("PYTHONPATH", None)
+    return repo, venv, env
+
+
+def test_worktree_shared_venv_fails_closed_on_stale_pinned_tool(
+    tmp_path: Path,
+) -> None:
+    """A stale pinned tool binary must fail closed with the exact remedy (issue #8250)."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--", "ruff", "check", "x.py"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "uv-reached" not in result.stderr
+    assert "resolved to 0.16.4 but the active checkout pins ruff==0.16.5" in result.stderr
+    assert "Remedy:" in result.stderr
+    assert "--no-freshness-check" in result.stderr
+
+
+def test_worktree_shared_venv_passes_fresh_pinned_tool_with_preflight_line(
+    tmp_path: Path,
+) -> None:
+    """A pinned tool matching the checkout pin proceeds with one observable log line."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.5")
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--", "ruff", "check", "x.py"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert "uv-reached" in result.stderr
+    assert "preflight passed: tool=ruff resolved=0.16.5 pin==0.16.5" in result.stderr
+    assert "elapsed_ms=" in result.stderr
+
+
+def test_worktree_shared_venv_skips_unpinned_tool_with_log_line(
+    tmp_path: Path,
+) -> None:
+    """A tool without an exact pin proceeds while staying observable (issue #8250)."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(
+        tmp_path, tool="mytool", resolved_version="1.0.0"
+    )
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--", "mytool", "--help"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert "uv-reached" in result.stderr
+    assert "reason=unpinned" in result.stderr
+
+
+def test_worktree_shared_venv_skips_tool_gate_for_interpreters(
+    tmp_path: Path,
+) -> None:
+    """Interpreter commands keep the #6003 contract even when a stale tool sits in the venv."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--", "python", "-V"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert "uv-reached" in result.stderr
+    assert "reason=interpreter-or-shell" in result.stderr
+
+
+def test_worktree_shared_venv_bypass_flag_skips_stale_pinned_tool(
+    tmp_path: Path,
+) -> None:
+    """--no-freshness-check bypasses the pinned-tool gate after explicit confirmation."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--no-freshness-check",
+            "--",
+            "ruff",
+            "check",
+            "x.py",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert "uv-reached" in result.stderr
+
+
+def test_worktree_shared_venv_skips_tool_gate_without_pin_manifest(
+    tmp_path: Path,
+) -> None:
+    """Checkouts without a pyproject pin manifest fail open with a log line, not a hard error."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(
+        tmp_path, resolved_version="0.16.4", with_pyproject=False
+    )
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--", "ruff", "check", "x.py"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert "uv-reached" in result.stderr
+    assert "reason=no-pin-manifest" in result.stderr
+
+
 def test_gh_comment_has_valid_shell_syntax() -> None:
     """gh_comment.sh should pass bash -n syntax check."""
     syntax = subprocess.run(

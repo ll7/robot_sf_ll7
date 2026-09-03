@@ -1307,3 +1307,42 @@ def test_apply_mode_fails_closed_when_merged_sha_mismatches_receipt(
     captured = json.loads(capsys.readouterr().out)
     assert captured["status"] == "blocked"
     assert "post_merge_sha_mismatch" in captured["reasons"]
+
+
+def test_apply_mode_fails_closed_on_malformed_merge_result(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Malformed receipt state must block terminal recovery instead of raising."""
+    receipt = _receipt()
+    receipt["merge_result"] = "not-an-object"
+    receipt["receipt_digest"] = receipt_module.receipt_digest(receipt)
+    receipt_file = tmp_path / "receipt.json"
+    receipt_file.write_text(json.dumps(receipt), encoding="utf-8")
+
+    post_merge_evidence = _live_evidence(_receipt())
+    post_merge_evidence["pr_state"] = "MERGED"
+    post_merge_evidence["pr_merged_at"] = "2026-09-03T19:53:13Z"
+    post_merge_evidence["merge_commit_sha"] = "8" * 40
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (copy.deepcopy(post_merge_evidence), None),
+    )
+
+    exit_code = receipt_module.main(
+        [
+            "--pr",
+            "42",
+            "--repo",
+            "owner/repo",
+            "--mode",
+            "apply",
+            "--receipt-file",
+            str(receipt_file),
+        ]
+    )
+
+    assert exit_code == 1
+    captured = json.loads(capsys.readouterr().out)
+    assert captured["status"] == "blocked"
+    assert "merge_result_invalid_for_premerge_verification" in captured["reasons"]

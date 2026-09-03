@@ -1408,12 +1408,15 @@ def _compare_live_evidence(  # noqa: C901, PLR0912 - revalidation compares every
         merged_sha = live_evidence.get("merge_commit_sha")
         if not _full_sha(_string(merged_sha)):
             reasons.append("returned_merged_sha_missing_or_malformed")
-        elif (
-            receipt.get("merge_result", {}).get("returned_merged_sha")
-            and _string(receipt["merge_result"]["returned_merged_sha"]).lower()
-            != _string(merged_sha).lower()
-        ):
-            reasons.append("post_merge_sha_mismatch")
+        else:
+            merge_result = receipt.get("merge_result")
+            recorded_sha = (
+                merge_result.get("returned_merged_sha")
+                if isinstance(merge_result, Mapping)
+                else None
+            )
+            if recorded_sha and _string(recorded_sha).lower() != _string(merged_sha).lower():
+                reasons.append("post_merge_sha_mismatch")
     else:
         if (
             _string(live_evidence.get("current_base_sha")).lower()
@@ -2105,9 +2108,9 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901 - CLI modes are ex
             )
         )
         return 1
-    allow_terminal = (
-        args.mode == "apply" or receipt.get("merge_result", {}).get("status") == "merged"
-    )
+    merge_result = receipt.get("merge_result")
+    merge_status = merge_result.get("status") if isinstance(merge_result, Mapping) else None
+    allow_terminal = args.mode == "apply" or merge_status == "merged"
     verification = verify_receipt(
         receipt, live_evidence=evidence, allow_terminal_transition=allow_terminal
     )

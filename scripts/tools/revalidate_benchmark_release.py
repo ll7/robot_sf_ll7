@@ -2244,20 +2244,29 @@ def _rewrite_resolved_manifest_publication_identity(
     return resolved
 
 
+def _identity_levels(payload: Mapping[str, Any], *, label: str) -> list[Mapping[str, Any]]:
+    """Return the root and one canonical provenance level, rejecting ambiguity."""
+    levels: list[Mapping[str, Any]] = [payload]
+    if "provenance" not in payload:
+        return levels
+    provenance = payload["provenance"]
+    if not isinstance(provenance, Mapping):
+        raise DerivedReleaseError(f"{label} has malformed provenance")
+    if "provenance" in provenance:
+        raise DerivedReleaseError(f"{label}.provenance contains unsupported nested provenance")
+    levels.append(provenance)
+    return levels
+
+
 def _assert_successor_identity_fields(
     payload: Mapping[str, Any], *, contract: ErratumContract, label: str
 ) -> None:
     """Require one current-publication mapping to name only successor coordinates."""
     tag_keys = ("release_tag", "release_id", "benchmark_release_tag", "benchmark_release_id")
-    tag_values = [payload[key] for key in tag_keys if key in payload]
-    doi_values = [payload[key] for key in ("version_doi", "doi") if key in payload]
-    concept_values = [payload["concept_doi"]] if "concept_doi" in payload else []
-    provenance = payload.get("provenance")
-    if isinstance(provenance, Mapping):
-        tag_values.extend(provenance[key] for key in tag_keys if key in provenance)
-        doi_values.extend(provenance[key] for key in ("version_doi", "doi") if key in provenance)
-        if "concept_doi" in provenance:
-            concept_values.append(provenance["concept_doi"])
+    levels = _identity_levels(payload, label=label)
+    tag_values = [level[key] for level in levels for key in tag_keys if key in level]
+    doi_values = [level[key] for level in levels for key in ("version_doi", "doi") if key in level]
+    concept_values = [level["concept_doi"] for level in levels if "concept_doi" in level]
     if not tag_values or any(
         value != contract.successor_github_release_tag for value in tag_values
     ):
@@ -2267,9 +2276,10 @@ def _assert_successor_identity_fields(
     if not concept_values or any(value != contract.concept_doi for value in concept_values):
         raise DerivedReleaseError(f"{label} does not name the successor concept DOI")
     source_values = [
-        payload[key]
+        level[key]
+        for level in levels
         for key in ("source_sha", "source_commit", "scientific_source_sha")
-        if key in payload
+        if key in level
     ]
     if any(value != contract.source_sha for value in source_values):
         raise DerivedReleaseError(f"{label} contains a stale scientific source SHA")
@@ -2306,6 +2316,57 @@ def _assert_resolved_erratum_provenance(provenance: Any, *, contract: ErratumCon
         raise DerivedReleaseError("resolved provenance metadata path is not bundle-local")
     if provenance.get("metadata_sha256") != contract.metadata_sha256:
         raise DerivedReleaseError("resolved provenance metadata digest is stale")
+
+
+def _assert_predecessor_execution_identity(
+    payload: Mapping[str, Any],
+    *,
+    contract: ErratumContract,
+    label: str,
+    require_concept: bool = False,
+    require_source: bool = False,
+) -> None:
+    """Require predecessor aliases across a preserved execution document.
+
+    Historical resolved manifests store the release tag and source at the
+    document root, while DOI coordinates are nested in ``provenance``.  Other
+    release documents carry all aliases at the root.  Validate both levels as
+    one identity so either representation remains accepted without allowing
+    conflicting aliases to pass.
+    """
+    levels = _identity_levels(payload, label=label)
+
+    tag_values = [
+        level[key]
+        for level in levels
+        for key in ("release_tag", "release_id", "benchmark_release_tag", "benchmark_release_id")
+        if key in level
+    ]
+    if not tag_values or any(
+        value != contract.predecessor_github_release_tag for value in tag_values
+    ):
+        raise DerivedReleaseError(f"{label} lost predecessor identity")
+
+    doi_values = [level[key] for level in levels for key in ("doi", "version_doi") if key in level]
+    if not doi_values or any(value != contract.predecessor_version_doi for value in doi_values):
+        raise DerivedReleaseError(f"{label} lost predecessor DOI")
+
+    concept_values = [level["concept_doi"] for level in levels if "concept_doi" in level]
+    if (require_concept and not concept_values) or any(
+        value != contract.concept_doi for value in concept_values
+    ):
+        raise DerivedReleaseError(f"{label} lost predecessor concept DOI")
+
+    source_values = [
+        level[key]
+        for level in levels
+        for key in ("source_sha", "source_commit", "scientific_source_sha")
+        if key in level
+    ]
+    if (require_source and not source_values) or any(
+        value != contract.source_sha for value in source_values
+    ):
+        raise DerivedReleaseError(f"{label} contains a stale scientific source SHA")
 
 
 def _assert_erratum_manifest_identities(campaign_root: Path, *, contract: ErratumContract) -> None:
@@ -2348,12 +2409,13 @@ def _assert_erratum_manifest_identities(campaign_root: Path, *, contract: Erratu
         _assert_publication_identity_mapping(
             benchmark_release, contract=contract, label=f"{relative}.benchmark_release"
         )
-        if execution_release.get("release_tag") != contract.predecessor_github_release_tag:
-            raise DerivedReleaseError(f"{relative} lost the predecessor execution tag")
-        if execution_release.get("version_doi") != contract.predecessor_version_doi:
-            raise DerivedReleaseError(f"{relative} lost the predecessor execution DOI")
-        if execution_release.get("concept_doi") != contract.concept_doi:
-            raise DerivedReleaseError(f"{relative} lost the predecessor concept DOI")
+        _assert_predecessor_execution_identity(
+            execution_release,
+            contract=contract,
+            label=f"{relative}.scientific_execution_benchmark_release",
+            require_concept=True,
+            require_source=True,
+        )
 
 
 def _assert_erratum_release_result(campaign_root: Path, *, contract: ErratumContract) -> None:
@@ -2383,14 +2445,13 @@ def _assert_erratum_release_result(campaign_root: Path, *, contract: ErratumCont
         _assert_publication_identity_mapping(
             current, contract=contract, label=f"release result {current_key}"
         )
-        if execution.get("release_tag") != contract.predecessor_github_release_tag:
-            raise DerivedReleaseError(f"release result {execution_key} lost predecessor identity")
-        if execution.get("version_doi") != contract.predecessor_version_doi:
-            raise DerivedReleaseError(f"release result {execution_key} lost predecessor DOI")
-        if execution.get("concept_doi") != contract.concept_doi:
-            raise DerivedReleaseError(
-                f"release result {execution_key} lost predecessor concept DOI"
-            )
+        _assert_predecessor_execution_identity(
+            execution,
+            contract=contract,
+            label=f"release result {execution_key}",
+            require_concept=True,
+            require_source=True,
+        )
     derivation = result.get("derivation")
     expected_derivation = {
         "builder_sha": contract.builder_sha,
@@ -2451,13 +2512,15 @@ def _assert_erratum_summary(campaign_root: Path, *, contract: ErratumContract) -
     if campaign.get("doi") != contract.successor_version_doi:
         raise DerivedReleaseError("campaign summary campaign DOI is stale")
     execution = campaign.get("scientific_execution_release_identity")
-    if (
-        not isinstance(execution, Mapping)
-        or execution.get("release_tag") != contract.predecessor_github_release_tag
-        or execution.get("doi") != contract.predecessor_version_doi
-        or execution.get("source_sha") != contract.source_sha
-    ):
+    if not isinstance(execution, Mapping):
         raise DerivedReleaseError("campaign summary lost predecessor execution identity")
+    _assert_predecessor_execution_identity(
+        execution,
+        contract=contract,
+        label="campaign summary scientific_execution_release_identity",
+        require_concept=False,
+        require_source=True,
+    )
     for label, current in (("campaign", campaign), ("artifacts", artifacts)):
         if current.get("release_url") != expected_release_url:
             raise DerivedReleaseError(f"campaign summary {label} release URL is stale")
@@ -2498,16 +2561,42 @@ def _rewrite_erratum_campaign_summary(campaign_root: Path, *, contract: ErratumC
         )
     campaign = summary.get("campaign")
     campaign = dict(campaign) if isinstance(campaign, Mapping) else {}
-    campaign.setdefault(
-        "scientific_execution_release_identity",
+    execution_levels = _identity_levels(campaign, label="source campaign summary")
+
+    def _first_execution_alias(*keys: str) -> Any:
+        return next(
+            (level[key] for level in execution_levels for key in keys if key in level),
+            None,
+        )
+
+    execution_tag_keys = (
+        "release_tag",
+        "release_id",
+        "benchmark_release_tag",
+        "benchmark_release_id",
+    )
+    execution_identity = {
+        key: value
+        for key in (*execution_tag_keys, "doi", "version_doi", "concept_doi")
+        if (value := _first_execution_alias(key)) is not None
+    }
+    execution_identity.update(
         {
-            "release_tag": campaign.get("release_tag") or campaign.get("benchmark_release_tag"),
-            "doi": campaign.get("doi"),
+            "release_tag": _first_execution_alias(*execution_tag_keys),
+            "doi": _first_execution_alias("doi", "version_doi"),
             "manifest_path": campaign.get("benchmark_release_manifest_path"),
             "invoked_command": campaign.get("invoked_command"),
             "source_sha": contract.source_sha,
-        },
+        }
     )
+    campaign.setdefault(
+        "scientific_execution_release_identity",
+        execution_identity,
+    )
+    if "provenance" in campaign:
+        campaign["provenance"] = _rewrite_publication_provenance(
+            campaign["provenance"], contract=contract
+        )
     campaign.update(
         {
             "release_tag": contract.successor_github_release_tag,

@@ -43,6 +43,154 @@ def _write_bytes(path: Path, data: bytes) -> None:
     path.write_bytes(data)
 
 
+def test_cold_current_aliases_accept_split_identity_and_reject_incomplete_shapes() -> None:
+    """Cold audit accepts canonical nesting while retaining complete identity gates."""
+    source = "59577bad289dd692ba3580e1600c4a649ae27880"
+    tag = f"paper-matrix-v2-h600-s30-2026-09-{source}-erratum.1"
+    doi = "10.5281/zenodo.22265925"
+    concept = "10.5281/zenodo.22227034"
+    split = {
+        "release_tag": tag,
+        "provenance": {"version_doi": doi, "concept_doi": concept},
+    }
+    published_audit_module._assert_cold_current_aliases(
+        split,
+        label="split",
+        tag=tag,
+        doi=doi,
+        concept_doi=concept,
+        required=True,
+        source_sha=source,
+    )
+
+    invalid = (
+        ({"release_tag": tag, "provenance": "bad"}, "object"),
+        ({"provenance": {"version_doi": doi, "concept_doi": concept}}, "release tag"),
+        ({"release_tag": tag, "provenance": {"concept_doi": concept}}, "version DOI"),
+        ({"release_tag": tag, "provenance": {"version_doi": doi}}, "concept DOI"),
+        (
+            {
+                "release_tag": tag,
+                "provenance": {
+                    "version_doi": doi,
+                    "concept_doi": concept,
+                    "provenance": {"version_doi": "10.5281/zenodo.22227035"},
+                },
+            },
+            "nested provenance",
+        ),
+        (
+            {
+                "release_tag": tag,
+                "provenance": {
+                    "version_doi": doi,
+                    "concept_doi": concept,
+                    "scientific_source_sha": "0" * 40,
+                },
+            },
+            "scientific source SHA",
+        ),
+    )
+    for payload, message in invalid:
+        with pytest.raises(ValueError, match=message):
+            published_audit_module._assert_cold_current_aliases(
+                payload,
+                label="invalid",
+                tag=tag,
+                doi=doi,
+                concept_doi=concept,
+                required=True,
+                source_sha=source,
+            )
+
+
+def test_cold_predecessor_aliases_accept_split_identity_and_reject_conflicts() -> None:
+    """Cold audit preserves split execution provenance and rejects ambiguity."""
+    source = "5" * 40
+    tag = f"paper-matrix-v2-h600-s30-2026-09-{source}"
+    doi = "10.5281/zenodo.22227035"
+    concept = "10.5281/zenodo.22227034"
+    split = {
+        "release_tag": tag,
+        "source_sha": source,
+        "provenance": {"version_doi": doi, "concept_doi": concept},
+    }
+    published_audit_module._assert_cold_predecessor_aliases(
+        split,
+        label="split",
+        predecessor_tag=tag,
+        predecessor_doi=doi,
+        concept_doi=concept,
+        source_sha=source,
+        require_concept=True,
+    )
+
+    invalid = (
+        ({"release_tag": tag, "provenance": "bad"}, "object"),
+        ({"provenance": {"version_doi": doi, "concept_doi": concept}}, "tag alias"),
+        ({"release_tag": tag, "provenance": {"concept_doi": concept}}, "DOI alias"),
+        ({"release_tag": tag, "provenance": {"version_doi": doi}}, "concept DOI"),
+        (
+            {
+                "release_tag": tag,
+                "provenance": {"version_doi": "10.5281/zenodo.1", "concept_doi": concept},
+            },
+            "predecessor DOI alias",
+        ),
+        (
+            {
+                "release_tag": tag,
+                "provenance": {
+                    "version_doi": doi,
+                    "concept_doi": concept,
+                    "provenance": {"version_doi": "10.5281/zenodo.22265925"},
+                },
+            },
+            "nested provenance",
+        ),
+    )
+    for payload, message in invalid:
+        with pytest.raises(ValueError, match=message):
+            published_audit_module._assert_cold_predecessor_aliases(
+                payload,
+                label="invalid",
+                predecessor_tag=tag,
+                predecessor_doi=doi,
+                concept_doi=concept,
+                source_sha=source,
+                require_concept=True,
+            )
+
+
+def test_cold_publication_document_rejects_malformed_known_identity_mappings() -> None:
+    """Present publication or execution identity containers must be objects."""
+    source = "59577bad289dd692ba3580e1600c4a649ae27880"
+    predecessor_tag = f"paper-matrix-v2-h600-s30-2026-09-{source}"
+    kwargs = {
+        "label": "document",
+        "tag": f"{predecessor_tag}-erratum.1",
+        "doi": "10.5281/zenodo.22265925",
+        "predecessor_doi": "10.5281/zenodo.22227035",
+        "predecessor_tag": predecessor_tag,
+        "concept_doi": "10.5281/zenodo.22227034",
+        "source_sha": source,
+    }
+    for key in (
+        "publication",
+        "benchmark_release",
+        "resolved_manifest",
+        "campaign",
+        "scientific_execution_benchmark_release",
+        "scientific_execution_resolved_manifest",
+        "scientific_execution_release_identity",
+    ):
+        with pytest.raises(ValueError, match=key):
+            published_audit_module._assert_cold_publication_document(
+                {key: None if key == "publication" else "malformed"},
+                **kwargs,
+            )
+
+
 def _make_bundle(
     path: Path, *, member: str = "manifest.json", data: bytes = b"bundle-bytes"
 ) -> None:
@@ -846,7 +994,7 @@ def test_erratum_audit_rejects_tampered_publication_channel(
     assert any(expected in problem for problem in result["problems"])
 
 
-@pytest.mark.parametrize("tamper", ["root_tag", "nested_doi"])
+@pytest.mark.parametrize("tamper", ["root_tag", "nested_doi", "publication_null"])
 def test_erratum_audit_rejects_stale_optional_publication_document(
     tmp_path: Path, tamper: str
 ) -> None:
@@ -859,8 +1007,10 @@ def test_erratum_audit_rejects_stale_optional_publication_document(
     document = json.loads(payload_files["release/release_manifest.resolved.json"])
     if tamper == "root_tag":
         document["release_tag"] = predecessor_tag
-    else:
+    elif tamper == "nested_doi":
         document["publication"]["version_doi"] = predecessor_doi
+    else:
+        document["publication"] = None
     payload_files["manifest.json"] = json.dumps(document, sort_keys=True).encode()
 
     github = tmp_path / "github"
@@ -885,7 +1035,11 @@ def test_erratum_audit_rejects_stale_optional_publication_document(
     )
 
     assert result["status"] == "fail"
-    expected = "stale release-tag alias" if tamper == "root_tag" else "stale version-DOI alias"
+    expected = {
+        "root_tag": "stale release-tag alias",
+        "nested_doi": "stale version-DOI alias",
+        "publication_null": "publication must be an object",
+    }[tamper]
     assert any(expected in problem for problem in result["problems"])
 
 

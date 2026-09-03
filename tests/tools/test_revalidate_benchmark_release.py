@@ -282,8 +282,10 @@ def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
     assert (campaign / recovery.ERRATUM_METADATA_RELATIVE).read_bytes() == metadata.read_bytes()
 
 
-def test_successor_identity_assertion_rejects_stale_release_id_alias(tmp_path: Path) -> None:
-    source_sha = "5" * 40
+def test_successor_identity_assertion_rejects_stale_or_malformed_aliases(
+    tmp_path: Path,
+) -> None:
+    source_sha = "59577bad289dd692ba3580e1600c4a649ae27880"
     old_tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}"
     new_tag = f"{old_tag}-erratum.1"
     metadata = tmp_path / "metadata.json"
@@ -303,21 +305,65 @@ def test_successor_identity_assertion_rejects_stale_release_id_alias(tmp_path: P
         validator_sha="a" * 40,
         orchestration_sha="b" * 40,
         concept_doi="10.5281/zenodo.22227034",
-        successor_version_doi="10.5281/zenodo.22229999",
+        successor_version_doi="10.5281/zenodo.22265925",
         successor_github_release_tag=new_tag,
         metadata_path=metadata,
         metadata_sha256=_sha256(metadata),
     )
-    payload = {
+    complete = {
         "release_tag": new_tag,
-        "release_id": old_tag,
         "doi": contract.successor_version_doi,
         "version_doi": contract.successor_version_doi,
         "concept_doi": contract.concept_doi,
     }
+    invalid = (
+        ({**complete, "release_id": old_tag}, "successor release tag"),
+        ({**complete, "provenance": "malformed"}, "malformed provenance"),
+        (
+            {**complete, "provenance": {"scientific_source_sha": "0" * 40}},
+            "scientific source SHA",
+        ),
+        (
+            {
+                **complete,
+                "provenance": {"provenance": {"version_doi": contract.predecessor_version_doi}},
+            },
+            "nested provenance",
+        ),
+    )
+    for payload, message in invalid:
+        with pytest.raises(recovery.DerivedReleaseError, match=message):
+            recovery._assert_successor_identity_fields(payload, contract=contract, label="fixture")
 
-    with pytest.raises(recovery.DerivedReleaseError, match="successor release tag"):
-        recovery._assert_successor_identity_fields(payload, contract=contract, label="fixture")
+    predecessor = {
+        "release_tag": old_tag,
+        "source_sha": source_sha,
+        "provenance": {
+            "version_doi": contract.predecessor_version_doi,
+            "concept_doi": contract.concept_doi,
+        },
+    }
+    recovery._assert_predecessor_execution_identity(
+        predecessor,
+        contract=contract,
+        label="predecessor",
+        require_concept=True,
+        require_source=True,
+    )
+    with pytest.raises(recovery.DerivedReleaseError, match="nested provenance"):
+        recovery._assert_predecessor_execution_identity(
+            {
+                **predecessor,
+                "provenance": {
+                    **predecessor["provenance"],
+                    "provenance": {"version_doi": contract.successor_version_doi},
+                },
+            },
+            contract=contract,
+            label="predecessor",
+            require_concept=True,
+            require_source=True,
+        )
 
 
 def test_load_recovery_contract_supports_new_checksum_pinned_campaign(tmp_path: Path) -> None:
@@ -1847,10 +1893,10 @@ def _make_real_erratum_publication_fixture(  # noqa: PLR0915
     tmp_path: Path,
 ) -> dict[str, object]:
     """Build one complete one-cell producer, predecessor, and source fixture."""
-    source_sha = recovery.FROZEN_SOURCE_SHA
-    predecessor_doi = "10.5281/zenodo.7"
-    concept_doi = "10.5281/zenodo.6"
-    successor_doi = "10.5281/zenodo.8"
+    source_sha = "59577bad289dd692ba3580e1600c4a649ae27880"
+    predecessor_doi = "10.5281/zenodo.22227035"
+    concept_doi = "10.5281/zenodo.22227034"
+    successor_doi = "10.5281/zenodo.22265925"
     predecessor_tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}"
     successor_tag = f"{predecessor_tag}-erratum.1"
     builder_sha = "a" * 40
@@ -1954,12 +2000,27 @@ def _make_real_erratum_publication_fixture(  # noqa: PLR0915
         "repository_url": "https://github.com/ll7/robot_sf_ll7",
         "publication_channel": "direct_zenodo_benchmark_dataset",
     }
+    # The real September release's resolved manifest keeps only its release
+    # coordinates and source at the top level.  Its predecessor DOI and
+    # concept DOI are nested in ``provenance``; retain that shape here so the
+    # erratum path exercises the historical document contract rather than a
+    # simplified fixture with duplicated top-level aliases.
     initial_manifest = {
-        **old_release,
+        "schema_version": "benchmark-release-manifest.v0.2",
+        "release_id": predecessor_tag,
+        "release_tag": predecessor_tag,
+        "source_sha": source_sha,
         "provenance": {
-            **old_release,
+            "citation_path": "CITATION.cff",
+            "concept_doi": concept_doi,
+            "doi": predecessor_doi,
             "metadata_path": "old_zenodo_metadata.json",
             "metadata_sha256": _sha256(old_metadata_path),
+            "publication_channel": "direct_zenodo_benchmark_dataset",
+            "repository_url": "https://github.com/ll7/robot_sf_ll7",
+            "source_commit": source_sha,
+            "source_sha": source_sha,
+            "version_doi": predecessor_doi,
         },
         "metrics": {
             "snqi_weights_path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
@@ -1998,6 +2059,13 @@ def _make_real_erratum_publication_fixture(  # noqa: PLR0915
         ),
         "doi_url": f"https://doi.org/{predecessor_doi}",
     }
+    for key in ("release_tag", "doi", "version_doi", "concept_doi"):
+        summary_campaign.pop(key)
+    summary_campaign["provenance"] = {
+        "doi": predecessor_doi,
+        "version_doi": predecessor_doi,
+        "concept_doi": concept_doi,
+    }
     _write(
         producer / "reports/campaign_summary.json",
         json.dumps(
@@ -2032,6 +2100,17 @@ def _make_real_erratum_publication_fixture(  # noqa: PLR0915
         ],
     }
     _write(producer / "reports/snqi_diagnostics.json", json.dumps(diagnostics) + "\n")
+    split_execution_release = {
+        "release_id": predecessor_tag,
+        "release_tag": predecessor_tag,
+        "source_sha": source_sha,
+        "source_commit": source_sha,
+        "provenance": {
+            "doi": predecessor_doi,
+            "version_doi": predecessor_doi,
+            "concept_doi": concept_doi,
+        },
+    }
     _write(
         producer / "run_meta.json",
         json.dumps(
@@ -2041,7 +2120,7 @@ def _make_real_erratum_publication_fixture(  # noqa: PLR0915
                     "branch": "fixture",
                     "commit": source_sha,
                 },
-                "benchmark_release": old_release,
+                "benchmark_release": split_execution_release,
             },
             sort_keys=True,
         )
@@ -2255,9 +2334,29 @@ def test_erratum_build_exports_and_cold_audits_real_publication_path(  # noqa: P
         release_result["scientific_execution_benchmark_release"]["version_doi"]
         == (fixture["predecessor_doi"])
     )
+    execution_resolved = release_result["scientific_execution_resolved_manifest"]
+    assert "version_doi" not in execution_resolved
+    assert "concept_doi" not in execution_resolved
+    assert execution_resolved["release_tag"] == fixture["contract"].predecessor_github_release_tag
+    assert execution_resolved["provenance"]["version_doi"] == fixture["predecessor_doi"]
+    assert execution_resolved["provenance"]["concept_doi"] == erratum_contract.concept_doi
     assert release_result["benchmark_release"]["version_doi"] == fixture["successor_doi"]
     assert (final_campaign / recovery.ERRATUM_RECEIPT_RELATIVE).is_file()
     assert result["erratum_receipt"]["scientific_equality"]["status"] == "identical"
+    run_meta = json.loads((final_campaign / "run_meta.json").read_text(encoding="utf-8"))
+    run_meta_execution = run_meta["scientific_execution_benchmark_release"]
+    assert "version_doi" not in run_meta_execution
+    assert run_meta_execution["release_tag"] == erratum_contract.predecessor_github_release_tag
+    assert run_meta_execution["provenance"]["version_doi"] == fixture["predecessor_doi"]
+    assert run_meta_execution["provenance"]["concept_doi"] == erratum_contract.concept_doi
+    summary = json.loads(
+        (final_campaign / "reports/campaign_summary.json").read_text(encoding="utf-8")
+    )
+    summary_execution = summary["campaign"]["scientific_execution_release_identity"]
+    assert summary_execution["release_tag"] == erratum_contract.predecessor_github_release_tag
+    assert summary_execution["release_id"] == erratum_contract.predecessor_github_release_tag
+    assert summary_execution["doi"] == fixture["predecessor_doi"]
+    assert summary_execution["source_sha"] == fixture["source_sha"]
 
     preflight = recovery.verify_publication_bundle_preflight(publication_bundle)
     assert preflight["status"] == "pass"

@@ -42,8 +42,13 @@ and uses
 [`configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`](configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml).
 Before a full campaign, the four hybrid arms must also pass the predeclared
 [fallback-prone stress smoke](docs/benchmark_release_hybrid_stress_smoke.md).
-The old DOI above is historical; a fresh Zenodo concept is required for the
-current benchmark-data record. Social Navigation Quality Index (SNQI) is
+The old DOI above is historical; the live S30/H600 benchmark-data record is the
+September 2026 erratum successor: concept DOI `10.5281/zenodo.22227034`, version DOI
+`10.5281/zenodo.22265925` (tag
+`paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1`),
+frozen in
+[`configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json`](configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json).
+Social Navigation Quality Index (SNQI) is
 advisory/no-ranking, and the benchmark-data release remains separate from the
 software/package release.
 
@@ -165,8 +170,9 @@ safety validation for autonomous micromobility vehicles. If you are:
   [`docs/contributing_planner.md`](docs/contributing_planner.md) for current extension paths.
 
 - **Citing this work**: use the DOI badge above (`10.5281/zenodo.19563812`) only for the
-  historical release artifact. The current S30/H600 benchmark-data DOI is pending a fresh
-  Zenodo concept; use the exact DOI named by the approved release manifest once assigned.
+  historical release artifact. The current S30/H600 benchmark-data record is the September 2026
+  erratum successor: version DOI `10.5281/zenodo.22265925` (concept DOI `10.5281/zenodo.22227034`),
+  frozen in [`configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json`](configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json).
 
 ## Development workflow
 

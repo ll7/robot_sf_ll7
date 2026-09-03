@@ -18,6 +18,10 @@ Its publication-grade manifest is
 `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`, with fresh
 concept DOI `10.5281/zenodo.22077447` and reserved version DOI
 `10.5281/zenodo.22077448`.
+The live S30/H600 record is the September 2026 erratum successor instead:
+concept DOI `10.5281/zenodo.22227034`, version DOI `10.5281/zenodo.22265925`
+(tag `...-erratum.1`), frozen in
+`configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json`.
 The bounded one-scenario/one-seed preflight and runtime smoke is tracked by
 `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`.
 The separate fallback-prone hybrid stress gate is tracked by
@@ -40,7 +44,9 @@ The smoke is execution evidence only: the Social Navigation Quality Index
 - confirm benchmark fallback policy is fail-closed for benchmark mode
 - confirm a fresh Zenodo concept is reserved for the benchmark-data record; the
   current reservation is concept `10.5281/zenodo.22077447` and version
-  `10.5281/zenodo.22077448`; run the authenticated `zenodo verify` command
+  `10.5281/zenodo.22077448`; the live S30/H600 successor pair is concept
+  `10.5281/zenodo.22227034` and version `10.5281/zenodo.22265925`
+  (see the erratum contract above); run the authenticated `zenodo verify` command
   again after publication and require a passing published-record receipt; the
   historical concepts `10.5281/zenodo.19482025` and
   `10.5281/zenodo.19563812` must not be reused

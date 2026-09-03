@@ -16,6 +16,7 @@ Options:
   --path PATH              New linked-worktree path (its parent must exist).
   --branch BRANCH          New branch name.
   --base REF               Base ref; defaults to origin/main.
+  --mode MODE              Worktree mode: implementation (default) or review.
   --minimum-free-bytes N   Override ROBOT_SF_WORKTREE_MIN_FREE_BYTES.
   --receipt PATH            Write a delegated-worker receipt after creation.
   --task-id ID              Task identifier for --receipt (delegated mode).
@@ -43,6 +44,7 @@ EOF
 worktree_path=""
 branch_name=""
 base_ref="origin/main"
+worktree_mode="implementation"
 minimum_free_bytes="${ROBOT_SF_WORKTREE_MIN_FREE_BYTES:-}"
 receipt_path=""
 task_id=""
@@ -64,6 +66,11 @@ while [[ $# -gt 0 ]]; do
     --base)
       [[ $# -ge 2 ]] || { echo "--base requires a value" >&2; exit 2; }
       base_ref="$2"
+      shift 2
+      ;;
+    --mode)
+      [[ $# -ge 2 ]] || { echo "--mode requires a value" >&2; exit 2; }
+      worktree_mode="$2"
       shift 2
       ;;
     --minimum-free-bytes)
@@ -109,6 +116,11 @@ done
 if [[ -z "$worktree_path" || -z "$branch_name" ]]; then
   echo "--path and --branch are required" >&2
   show_help >&2
+  exit 2
+fi
+
+if [[ "$worktree_mode" != "implementation" && "$worktree_mode" != "review" ]]; then
+  echo "--mode must be implementation or review" >&2
   exit 2
 fi
 
@@ -194,6 +206,17 @@ git worktree prune
 # ``git branch --set-upstream-to``; creation itself must remain safe when
 # several workers create worktrees concurrently.
 git worktree add --no-track -b "$branch_name" "$worktree_path" "$base_ref"
+if [[ "$worktree_mode" == "review" ]]; then
+  review_guard_args=(--worktree "$worktree_path" --mode review)
+  # A review candidate may be created from a base that predates this guard.
+  # Keep the target clean by using the invoking checkout's tracked helper and
+  # hook until the guard itself is present in the selected base.
+  if [[ ! -f "$worktree_path/scripts/dev/review_worktree_guard.py" ||
+        ! -x "$worktree_path/scripts/dev/git_hooks/pre-push" ]]; then
+    review_guard_args+=(--hook-source-root "$SCRIPT_DIR")
+  fi
+  python3 "$SCRIPT_DIR/review_worktree_guard.py" configure "${review_guard_args[@]}"
+fi
 if [[ -n "$receipt_path" ]]; then
   python3 "$SCRIPT_DIR/worktree_receipt.py" create \
     --worktree "$worktree_path" --task-id "$task_id" --base-ref "$base_ref" --output "$receipt_path"

@@ -43,6 +43,7 @@ _DOI_RE = re.compile(r"^10\.5281/zenodo\.([1-9][0-9]*)$")
 _TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]+$")
 _ARCHIVE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _EPISODE_MEMBER_RE = re.compile(r"^[^/]+/payload/runs/([^/]+)/episodes\.jsonl$")
+_PREDECESSOR_RELEASE_MANIFEST_SCHEMA = "benchmark-release-manifest.v0.2"
 _RESOLVED_MANIFEST_MEMBER_RE = re.compile(
     r"^[^/]+/payload/release/release_manifest\.resolved\.json$"
 )
@@ -726,7 +727,7 @@ def _validate_archive_member(member: tarfile.TarInfo) -> None:
         raise ReleaseErratumError("predecessor archive contains a negative member size")
 
 
-def _validate_predecessor_release_manifest(  # noqa: C901
+def _validate_predecessor_release_manifest(  # noqa: C901, PLR0912
     bundle: tarfile.TarFile,
     member: tarfile.TarInfo,
     *,
@@ -751,6 +752,8 @@ def _validate_predecessor_release_manifest(  # noqa: C901
     except (UnicodeError, ValueError, RecursionError) as exc:
         raise ReleaseErratumError("predecessor resolved manifest is not readable JSON") from exc
     manifest = _require_mapping(payload, label="predecessor resolved manifest")
+    if manifest.get("schema_version") != _PREDECESSOR_RELEASE_MANIFEST_SCHEMA:
+        raise ReleaseErratumError("predecessor resolved manifest schema is unsupported")
     if manifest.get("release_id") != contract.scientific_release_id:
         raise ReleaseErratumError(
             "predecessor resolved manifest release_id differs from the scientific release ID"
@@ -766,6 +769,29 @@ def _validate_predecessor_release_manifest(  # noqa: C901
     provenance = _require_mapping(
         manifest.get("provenance"), label="predecessor resolved manifest.provenance"
     )
+    levels = (manifest, provenance)
+    version_dois = [
+        level[key] for level in levels for key in ("doi", "version_doi") if key in level
+    ]
+    if not version_dois or any(value != contract.predecessor_version_doi for value in version_dois):
+        raise ReleaseErratumError(
+            "predecessor resolved manifest version DOI differs from the predecessor"
+        )
+    concept_dois = [level["concept_doi"] for level in levels if "concept_doi" in level]
+    if not concept_dois or any(value != contract.concept_doi for value in concept_dois):
+        raise ReleaseErratumError(
+            "predecessor resolved manifest concept DOI differs from the predecessor lineage"
+        )
+    for key in ("release_id", "benchmark_release_id"):
+        if key in provenance and provenance[key] != contract.scientific_release_id:
+            raise ReleaseErratumError(
+                f"predecessor resolved manifest provenance.{key} conflicts with the campaign ID"
+            )
+    for key in ("release_tag", "benchmark_release_tag"):
+        if key in provenance and provenance[key] != contract.predecessor_github_release_tag:
+            raise ReleaseErratumError(
+                f"predecessor resolved manifest provenance.{key} conflicts with the predecessor"
+            )
     for key in ("source_sha", "source_commit"):
         if provenance.get(key) != contract.source_sha:
             raise ReleaseErratumError(
@@ -1657,6 +1683,7 @@ def _assert_publication_aliases(
     contract: ErratumContract,
     label: str,
     required: bool = True,
+    require_release_id: bool = False,
 ) -> None:
     """Reject any present current-publication alias that remains stale."""
     _assert_current_alias_values(
@@ -1698,6 +1725,14 @@ def _assert_publication_aliases(
         concept_values = [level["concept_doi"] for level in levels if "concept_doi" in level]
         if not concept_values:
             raise ReleaseErratumError(f"{label} contains a stale concept-DOI alias")
+        release_id_values = [
+            level[key]
+            for level in levels
+            for key in ("release_id", "benchmark_release_id")
+            if key in level
+        ]
+        if require_release_id and not release_id_values:
+            raise ReleaseErratumError(f"{label} is missing its scientific release-ID alias")
     _assert_nested_publication_aliases(payload, contract=contract, label=label)
 
 
@@ -1743,6 +1778,7 @@ def _assert_predecessor_execution_aliases(
     contract: ErratumContract,
     label: str,
     require_concept: bool = False,
+    require_release_id: bool = False,
 ) -> None:
     """Require preserved execution coordinates to name only the predecessor.
 
@@ -1785,6 +1821,15 @@ def _assert_predecessor_execution_aliases(
     if not doi_values:
         raise ReleaseErratumError(f"{label} contains a stale predecessor DOI alias")
 
+    release_id_values = [
+        level[key]
+        for level, _ in levels
+        for key in ("release_id", "benchmark_release_id")
+        if key in level
+    ]
+    if require_release_id and not release_id_values:
+        raise ReleaseErratumError(f"{label} is missing its scientific release-ID alias")
+
     concept_values = [level["concept_doi"] for level, _ in levels if "concept_doi" in level]
     if require_concept and not concept_values:
         raise ReleaseErratumError(f"{label} contains a stale predecessor concept DOI")
@@ -1800,7 +1845,12 @@ def _assert_optional_publication_document_aliases(
         if key not in document:
             continue
         current = _require_mapping(document[key], label=f"{label}.{key}")
-        _assert_publication_aliases(current, contract=contract, label=f"{label}.{key}")
+        _assert_publication_aliases(
+            current,
+            contract=contract,
+            label=f"{label}.{key}",
+            require_release_id=key == "resolved_manifest",
+        )
     for key in (
         "scientific_execution_benchmark_release",
         "scientific_execution_resolved_manifest",
@@ -1814,6 +1864,7 @@ def _assert_optional_publication_document_aliases(
             contract=contract,
             label=f"{label}.{key}",
             require_concept=key != "scientific_execution_release_identity",
+            require_release_id=key == "scientific_execution_resolved_manifest",
         )
 
 
@@ -1956,7 +2007,12 @@ def _validate_published_release_documents(
         seen_aliases=seen_aliases,
     )
 
-    _assert_publication_aliases(manifest, contract=contract, label="published resolved manifest")
+    _assert_publication_aliases(
+        manifest,
+        contract=contract,
+        label="published resolved manifest",
+        require_release_id=True,
+    )
     _assert_publication_aliases(result, contract=contract, label="published release result")
     publication = _require_mapping(
         manifest.get("publication"), label="published resolved manifest.publication"
@@ -1976,6 +2032,7 @@ def _validate_published_release_documents(
             nested,
             contract=contract,
             label=f"published release result.{key}",
+            require_release_id=key == "resolved_manifest",
         )
     for key in ("scientific_execution_benchmark_release", "scientific_execution_resolved_manifest"):
         execution = _require_mapping(result.get(key), label=f"published release result.{key}")
@@ -1984,6 +2041,7 @@ def _validate_published_release_documents(
             contract=contract,
             label=f"published release result.{key}",
             require_concept=True,
+            require_release_id=key == "scientific_execution_resolved_manifest",
         )
     result_derivation = _require_mapping(
         result.get("derivation"), label="published release result.derivation"

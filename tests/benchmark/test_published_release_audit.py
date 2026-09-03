@@ -65,6 +65,33 @@ def test_cold_current_aliases_accept_split_identity_and_reject_incomplete_shapes
         source_sha=source,
         scientific_release_id=scientific_release_id,
     )
+    compact_without_id = {
+        "release_tag": tag,
+        "version_doi": doi,
+        "concept_doi": concept,
+    }
+    published_audit_module._assert_cold_current_aliases(
+        compact_without_id,
+        label="legacy compact current identity",
+        tag=tag,
+        doi=doi,
+        concept_doi=concept,
+        required=True,
+        source_sha=source,
+        scientific_release_id=scientific_release_id,
+    )
+    with pytest.raises(ValueError, match="missing its scientific release ID"):
+        published_audit_module._assert_cold_current_aliases(
+            compact_without_id,
+            label="canonical resolved manifest",
+            tag=tag,
+            doi=doi,
+            concept_doi=concept,
+            required=True,
+            source_sha=source,
+            scientific_release_id=scientific_release_id,
+            require_release_id=True,
+        )
 
     invalid = (
         ({"release_tag": tag, "provenance": "bad"}, "object"),
@@ -140,6 +167,33 @@ def test_cold_predecessor_aliases_accept_split_identity_and_reject_conflicts() -
         scientific_release_id=scientific_release_id,
         require_concept=True,
     )
+    compact_without_id = {
+        "release_tag": tag,
+        "version_doi": doi,
+        "concept_doi": concept,
+    }
+    published_audit_module._assert_cold_predecessor_aliases(
+        compact_without_id,
+        label="legacy compact execution identity",
+        predecessor_tag=tag,
+        predecessor_doi=doi,
+        concept_doi=concept,
+        source_sha=source,
+        scientific_release_id=scientific_release_id,
+        require_concept=True,
+    )
+    with pytest.raises(ValueError, match="missing its scientific release ID"):
+        published_audit_module._assert_cold_predecessor_aliases(
+            compact_without_id,
+            label="canonical resolved execution identity",
+            predecessor_tag=tag,
+            predecessor_doi=doi,
+            concept_doi=concept,
+            source_sha=source,
+            scientific_release_id=scientific_release_id,
+            require_concept=True,
+            require_release_id=True,
+        )
 
     invalid = (
         ({"release_tag": tag, "provenance": "bad"}, "object"),
@@ -463,10 +517,17 @@ def _full_erratum_payload(
         )
         predecessor_manifest = json.dumps(
             {
+                "schema_version": "benchmark-release-manifest.v0.2",
                 "release_id": scientific_release_id,
                 "release_tag": predecessor_tag,
                 "source_sha": source_sha,
-                "provenance": {"source_sha": source_sha, "source_commit": source_sha},
+                "provenance": {
+                    "doi": predecessor_doi,
+                    "version_doi": predecessor_doi,
+                    "concept_doi": concept_doi,
+                    "source_sha": source_sha,
+                    "source_commit": source_sha,
+                },
             },
             sort_keys=True,
         ).encode()
@@ -1036,7 +1097,14 @@ def test_erratum_audit_rejects_tampered_publication_channel(
 
 
 @pytest.mark.parametrize(
-    "tamper", ["root_tag", "root_release_id", "nested_doi", "publication_null"]
+    "tamper",
+    [
+        "root_tag",
+        "root_release_id",
+        "nested_doi",
+        "publication_null",
+        "canonical_missing_release_id",
+    ],
 )
 def test_erratum_audit_rejects_stale_optional_publication_document(
     tmp_path: Path, tamper: str
@@ -1054,9 +1122,16 @@ def test_erratum_audit_rejects_stale_optional_publication_document(
         document["release_id"] = tag
     elif tamper == "nested_doi":
         document["publication"]["version_doi"] = predecessor_doi
-    else:
+    elif tamper == "publication_null":
         document["publication"] = None
-    payload_files["manifest.json"] = json.dumps(document, sort_keys=True).encode()
+    else:
+        document.pop("release_id")
+    target = (
+        "release/release_manifest.resolved.json"
+        if tamper == "canonical_missing_release_id"
+        else "manifest.json"
+    )
+    payload_files[target] = json.dumps(document, sort_keys=True).encode()
 
     github = tmp_path / "github"
     zenodo = tmp_path / "zenodo"
@@ -1085,8 +1160,9 @@ def test_erratum_audit_rejects_stale_optional_publication_document(
         "root_release_id": "stale scientific release-ID alias",
         "nested_doi": "stale version-DOI alias",
         "publication_null": "publication must be an object",
+        "canonical_missing_release_id": "missing its scientific release-ID alias",
     }[tamper]
-    assert any(expected in problem for problem in result["problems"])
+    assert any(expected in problem for problem in result["problems"]), result["problems"]
 
 
 def test_cross_channel_byte_identity_passes(tmp_path: Path) -> None:

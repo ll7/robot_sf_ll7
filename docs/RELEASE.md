@@ -441,6 +441,14 @@ same Zenodo concept instead:
    Explicit `publication` mappings carry the successor tag and DOI but do not
    synthesize a tag-shaped `release_id`. This separation is mandatory even when
    the predecessor happened to use the same spelling for its ID and tag.
+   The canonical `release/release_manifest.resolved.json`, canonical
+   `resolved_manifest` copies, and the erratum contract/receipt field
+   `scientific_identity.release_id` must carry that scientific ID. Compact
+   historical execution documents may omit it for compatibility, but the
+   correction workflow must preserve the omission and never synthesize or
+   conflate `release_id` with `release_tag`. A present malformed provenance or
+   publication mapping is invalid predecessor evidence and must fail closed
+   before the derived successor is promoted.
    Pass the frozen manifest or erratum contract to the direct Zenodo `upload`,
    `verify`, and `publish` commands; an omitted binding is rejected before any
    HTTP request. For the September 2026 successor, the exact post-reservation

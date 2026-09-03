@@ -153,3 +153,18 @@ receipt and checks it before launching the command. The check is read-only, fail
 machine-readable. It validates the current working directory, assigned absolute worktree, linked
 Git common directory, branch/ref, and base ancestry. Human callers that omit receipt options retain
 the ordinary path.
+
+## Protected review-worktree guard
+
+Use `create_worktree.sh --mode review` for review-only or synthetic-integration work. It installs
+the worktree-local push guard, URL barriers, and deny-by-default transport policies;
+`review_worktree_guard.py integrate` then performs an aborting no-commit merge, restores
+`ORIG_HEAD`, and compares all remote refs before returning success. Review mode blocks direct
+remote reads as well, so refresh refs before entering it or use the helper. If the selected base
+predates the guard files, the creator temporarily uses the invoking checkout's tracked hook and
+guard; keep that checkout available for the review worktree's lifetime. The barriers cover ordinary
+Git invocation paths, but are not an operating-system sandbox: a deliberate per-command Git
+configuration override can bypass them.
+Implementation worktrees keep the default pushable behavior. See
+[`worktree_lifecycle.md`](../../docs/dev/worktree_lifecycle.md) for the complete invocation and
+restoration procedure.

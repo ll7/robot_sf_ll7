@@ -34,6 +34,11 @@ converge on it.
 | **Benchmark scenario** | A predeclared, versioned situation the robot is evaluated on, governed so results stay comparable across runs (see [`docs/benchmark_governance.md`](./benchmark_governance.md)). |
 | **Claim boundary** | The exact scope of what a result does and does **not** support — stated first in any report so readers know how far to trust it. |
 | **Fail-closed** | When a planner/dependency cannot meet the benchmark contract, the run reports an explicit `not available` / `failed` status instead of silently substituting something else and calling it success. |
+| **Erratum** | A published correction to derived release metadata that supersedes (but retains) the original record. The September 2026 S30/H600 erratum is frozen in `configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json`. |
+| **S30/H600** | The current benchmark-data release shape: 30 seeds (S30) on the H600 scenario set — 14 planner arms × 48 scenarios × 30 seeds (20,160 episode rows). |
+| **Concept / version DOI** | A Zenodo concept DOI names the record family across versions; a version DOI names one immutable deposit. Live S30/H600 pair: concept `10.5281/zenodo.22227034`, version `10.5281/zenodo.22265925`. |
+| **Draft vs published release** | A GitHub draft release is mutable pre-publication staging; a published release (with its tag and Zenodo version DOI) is immutable. Drafts are admitted before tag materialization so checks run on the staged content. |
+| **Orchestration SHA** | The commit hash of the orchestration code that derived a release (here `09f6b1beeff71b4ee30deae7cc2504c0c7310729`), pinned so the derivation is reproducible without rerunning the simulation. |
 
 ## Evidence ladder
 
@@ -59,6 +64,6 @@ Robot SF grades every claim by how strong its evidence is. Always label results 
 
 ---
 
-**Last updated**: 2026-06-22
+**Last updated**: 2026-09-03
 **Source of truth for**: acronyms and project-specific terms on human-facing surfaces (see the
 `## Clarity` rule in [`maintainer_values.md`](./maintainer_values.md#clarity)).

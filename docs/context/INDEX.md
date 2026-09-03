@@ -1,5 +1,12 @@
 # Context Retrieval Index
 
+September 2026 S30/H600 benchmark-data erratum successor: the frozen correction contract
+(version DOI `10.5281/zenodo.22265925`, `...-erratum.1` tag, orchestration SHA
+`09f6b1beeff71b4ee30deae7cc2504c0c7310729`) and the release/audit workflow around it.
+Start from the contract, then the release guide section:
+[benchmark_data_release_s30_h600_2026_09_erratum_1.json](../../configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json),
+[../RELEASE.md](../RELEASE.md), [../benchmark_release_reproducibility.md](../benchmark_release_reproducibility.md).
+
 Issue #8222 obstacle-force compatibility boundary: preserves frozen/unversioned historical laws,
 separates the fast-pysf segment kernel from the vectorized planner point site, and defines the
 opt-in, domain-gated runtime correction boundary. This is a compatibility and implementation-context

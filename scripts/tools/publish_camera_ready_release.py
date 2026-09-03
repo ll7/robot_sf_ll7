@@ -822,9 +822,15 @@ def _parse_release_listing(
         return None, f"cannot parse release lookup for {tag}; refusing to create or upload"
     if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
         return None, f"release lookup for {tag} has an invalid response shape"
-    if any(not isinstance(release, dict) for page in pages for release in page):
+    releases = [release for page in pages for release in page]
+    if any(not isinstance(release, dict) for release in releases):
         return None, f"release lookup for {tag} contains an invalid release record"
-    matches = [release for page in pages for release in page if release.get("tag_name") == tag]
+    if any(
+        not isinstance(release.get("tag_name"), str) or not release["tag_name"]
+        for release in releases
+    ):
+        return None, f"release lookup for {tag} contains an invalid release record"
+    matches = [release for release in releases if release["tag_name"] == tag]
     if len(matches) > 1:
         return None, f"release lookup found multiple releases for tag {tag}; refusing to mutate"
     return (matches[0] if matches else None), None

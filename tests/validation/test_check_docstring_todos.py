@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import textwrap
 from pathlib import Path
 
@@ -512,3 +513,90 @@ def test_verify_baseline_check_working_tree_flag_is_wired(monkeypatch):
         ["check_docstring_todos", "--mode", "verify-baseline"],
     )
     assert check_docstring_todos._parse_args().check_working_tree is False
+
+
+def test_check_docstring_todos_ratchet_script_has_fail_on_warning() -> None:
+    """The dev ratchet script must pass --fail-on-warning to be fail-closed."""
+    script_path = (
+        Path(__file__).resolve().parents[2] / "scripts" / "dev" / "check_docstring_todos_ratchet.sh"
+    )
+    content = script_path.read_text(encoding="utf-8")
+    assert "--mode ratchet" in content
+    assert "--fail-on-warning" in content
+
+
+def test_run_backlog_mode_ratchet_fails_naming_file_and_line_on_increase(tmp_path, capsys) -> None:
+    """Ratchet mode must fail and name the file, line, and symbol when occurrences increase."""
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    tool_py = scripts_dir / "tool.py"
+    tool_py.write_text(
+        textwrap.dedent(
+            '''
+            def newly_added():
+                """TODO docstring."""
+                return 42
+            '''
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(
+        json.dumps({"totals": {"files": 0, "total_occurrences": 0}, "files": {}}),
+        encoding="utf-8",
+    )
+
+    args = argparse.Namespace(
+        mode="ratchet",
+        baseline=Path("baseline.json"),
+        roots=["scripts"],
+        fail_on_warning=True,
+    )
+    rc = check_docstring_todos._run_backlog_mode(args, tmp_path)
+
+    assert rc == 1
+    captured = capsys.readouterr().out
+    assert "TODO-docstring backlog increased relative to baseline:" in captured
+    assert "scripts/tool.py: 1 TODO docstring occurrences (baseline 0, +1)" in captured
+    assert "scripts/tool.py:1 newly_added has TODO docstring" in captured
+
+
+def test_run_backlog_mode_ratchet_passes_when_legacy_unchanged(tmp_path, capsys) -> None:
+    """Ratchet mode must pass when legacy placeholders exist without exceeding the baseline."""
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    tool_py = scripts_dir / "tool.py"
+    tool_py.write_text(
+        textwrap.dedent(
+            '''
+            def legacy_func():
+                """TODO docstring."""
+                return 1
+            '''
+        ).strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "totals": {"files": 1, "total_occurrences": 1},
+                "files": {"scripts/tool.py": 1},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    args = argparse.Namespace(
+        mode="ratchet",
+        baseline=Path("baseline.json"),
+        roots=["scripts"],
+        fail_on_warning=True,
+    )
+    rc = check_docstring_todos._run_backlog_mode(args, tmp_path)
+
+    assert rc == 0
+    captured = capsys.readouterr().out
+    assert "TODO-docstring backlog ratchet passed: 1 files, 1 occurrences." in captured

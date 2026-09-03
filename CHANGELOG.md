@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **September 2026 benchmark-data erratum successor (#8350, #8353, #8357).**
+  The S30/H600 derived-publication-metadata erratum is now the live record:
+  concept DOI `10.5281/zenodo.22227034`, version DOI `10.5281/zenodo.22265925`
+  (tag `...-erratum.1`), frozen in
+  `configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json`
+  with orchestration SHA `09f6b1beeff71b4ee30deae7cc2504c0c7310729`.
+  #8350 admitted the identity repair, #8353 bound the orchestration commit,
+  and #8357 admitted drafts before tag materialization. Docs surfaces now
+  point at the successor instead of "DOI pending".
+
 * **Issue #7742 differential-drive benchmark command repair.** Planner velocity
   commands are now converted to linear/angular accelerations by dividing the
   velocity error by the simulation timestep before the differential-drive

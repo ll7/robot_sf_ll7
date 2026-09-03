@@ -18,6 +18,16 @@ Bounded 14-arm runtime-smoke manifest:
 
 - `configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_runtime_smoke_v0_2.yaml`
 
+Publication-grade release manifest plus the frozen September 2026 erratum successor:
+
+- `configs/benchmarks/releases/benchmark_data_release_s30_h600.yaml`
+- `configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json`
+  (successor tag `paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1`,
+  version DOI `10.5281/zenodo.22265925`, concept DOI `10.5281/zenodo.22227034`,
+  orchestration SHA `09f6b1beeff71b4ee30deae7cc2504c0c7310729`).
+  Reproduce from a clean checkout at the orchestration SHA; a dirty tree voids the
+  derivation receipt.
+
 The smoke keeps `workers: 1`, `horizon: 600`, differential-drive kinematics,
 one scenario, and seed `111`. It checks runtime compatibility only; it is not
 full benchmark evidence and does not authorize planner ranking.
@@ -255,7 +265,8 @@ The following is the historical seven-planner publication snapshot for release
 > published archive and embedded artifacts; it is not an independent numeric subset replay.
 
 
-Historical durable endpoints (release `0.0.2` only):
+Historical durable endpoints (release `0.0.2` only; superseded for S30/H600 by the
+September 2026 erratum successor, version DOI `10.5281/zenodo.22265925`):
 
 - Release: `https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.2`
 - DOI: `https://doi.org/10.5281/zenodo.19563812`

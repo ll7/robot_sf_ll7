@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
+
+import pytest
 
 from scripts.dev.check_fast_lane_routing import (
     FastLanePolicy,
     _changed_modules,
     audit_changed_modules,
     load_fast_lane_policy,
+    main,
 )
 
 
@@ -61,6 +65,47 @@ def test_changed_modules_excludes_changes_unique_to_advanced_base(tmp_path: Path
     assert _changed_modules(tmp_path, advanced_base_sha, feature_sha) == [
         "robot_sf/feature_only.py"
     ]
+
+
+def test_cli_fails_closed_when_base_and_head_have_no_merge_base(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Unrelated histories must return an unavailable routing verdict, not an empty pass."""
+
+    _git(tmp_path, "init")
+    _git(tmp_path, "config", "user.name", "Fast Lane Test")
+    _git(tmp_path, "config", "user.email", "fast-lane@example.invalid")
+    source_root = tmp_path / "robot_sf"
+    source_root.mkdir()
+    (source_root / "base.py").write_text("BASE = True\n", encoding="utf-8")
+    _git(tmp_path, "add", "robot_sf/base.py")
+    _git(tmp_path, "commit", "-m", "base history")
+    base_sha = _git(tmp_path, "rev-parse", "HEAD")
+
+    _git(tmp_path, "switch", "--orphan", "unrelated")
+    source_root.mkdir(exist_ok=True)
+    (source_root / "unrelated.py").write_text("UNRELATED = True\n", encoding="utf-8")
+    _git(tmp_path, "add", "robot_sf/unrelated.py")
+    _git(tmp_path, "commit", "-m", "unrelated history")
+    unrelated_sha = _git(tmp_path, "rev-parse", "HEAD")
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--base-sha",
+                base_sha,
+                "--head-sha",
+                unrelated_sha,
+                "--json",
+            ]
+        )
+        == 2
+    )
+    report = json.loads(capsys.readouterr().out)
+    assert report["passed"] is False
+    assert report["error"]
 
 
 def test_adversarial_harness_and_atlas_contracts_report_missing_registration() -> None:

@@ -282,6 +282,62 @@ def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
     assert (campaign / recovery.ERRATUM_METADATA_RELATIVE).read_bytes() == metadata.read_bytes()
 
 
+def test_resolved_manifest_rewriter_rejects_malformed_source_containers(
+    tmp_path: Path,
+) -> None:
+    """Malformed historical identity containers must not be normalized away."""
+    source_sha = "5" * 40
+    old_tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}"
+    metadata = tmp_path / "metadata.json"
+    _write(metadata, "{}\n")
+    contract = ErratumContract(
+        correction_id="september-2026-derived-metadata-erratum.1",
+        predecessor_version_doi="10.5281/zenodo.22227035",
+        predecessor_archive_sha256="e" * 64,
+        predecessor_archive_size_bytes=54_219_004,
+        predecessor_github_release_tag=old_tag,
+        source_sha=source_sha,
+        planner_arms=14,
+        scenario_count=48,
+        seed_count=30,
+        episode_rows=20_160,
+        builder_sha="a" * 40,
+        validator_sha="a" * 40,
+        orchestration_sha="b" * 40,
+        concept_doi="10.5281/zenodo.22227034",
+        successor_version_doi="10.5281/zenodo.22265925",
+        successor_github_release_tag=f"{old_tag}-erratum.1",
+        metadata_path=metadata,
+        metadata_sha256=_sha256(metadata),
+    )
+    base = {
+        "release_id": old_tag,
+        "release_tag": old_tag,
+        "doi": contract.predecessor_version_doi,
+        "version_doi": contract.predecessor_version_doi,
+        "concept_doi": contract.concept_doi,
+        "source_sha": source_sha,
+    }
+    malformed_provenance = {**base, "provenance": "malformed"}
+    incomplete_identity = {
+        key: value
+        for key, value in base.items()
+        if key not in {"doi", "version_doi", "concept_doi"}
+    }
+    malformed_publication = {**base, "publication": None}
+
+    for payload, message in (
+        (malformed_provenance, "malformed provenance"),
+        (incomplete_identity, "predecessor DOI"),
+        (malformed_publication, "publication must be an object"),
+    ):
+        with pytest.raises(recovery.DerivedReleaseError, match=message):
+            recovery._rewrite_resolved_manifest_publication_identity(
+                payload,
+                contract=contract,
+            )
+
+
 def test_successor_identity_assertion_rejects_stale_or_malformed_aliases(
     tmp_path: Path,
 ) -> None:

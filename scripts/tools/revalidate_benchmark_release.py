@@ -2173,11 +2173,14 @@ def _rewrite_embedded_publication_identity(
         }
     )
     updated["publication"] = _rewrite_publication_identity_mapping(
-        updated.get("publication"), contract=contract
+        _optional_mapping(updated, "publication", label="publication document"),
+        contract=contract,
     )
-    if isinstance(updated.get("provenance"), Mapping):
+    provenance = _optional_mapping(updated, "provenance", label="publication document")
+    if provenance is not None:
         updated["provenance"] = _rewrite_publication_provenance(
-            updated["provenance"], contract=contract
+            provenance,
+            contract=contract,
         )
     return updated
 
@@ -2196,7 +2199,9 @@ def _rewrite_publication_identity_mapping(
     Returns:
         A copied mapping with canonical successor and predecessor coordinates.
     """
-    publication = dict(payload) if isinstance(payload, Mapping) else {}
+    if payload is not None and not isinstance(payload, Mapping):
+        raise DerivedReleaseError("publication identity mapping must be an object")
+    publication = dict(payload) if payload is not None else {}
     publication.update(
         {
             "release_tag": contract.successor_github_release_tag,
@@ -2218,6 +2223,13 @@ def _rewrite_resolved_manifest_publication_identity(
     payload: Mapping[str, Any], *, contract: ErratumContract
 ) -> dict[str, Any]:
     """Return a successor resolved manifest while retaining scientific identity."""
+    _assert_predecessor_execution_identity(
+        payload,
+        contract=contract,
+        label="resolved manifest",
+        require_concept=True,
+        require_source=True,
+    )
     resolved = dict(payload)
     resolved["release_tag"] = contract.successor_github_release_tag
     resolved["release_id"] = contract.successor_github_release_tag
@@ -2230,7 +2242,8 @@ def _rewrite_resolved_manifest_publication_identity(
     provenance = _rewrite_publication_provenance(resolved.get("provenance"), contract=contract)
     resolved["provenance"] = provenance
     publication = _rewrite_publication_identity_mapping(
-        resolved.get("publication"), contract=contract
+        _optional_mapping(resolved, "publication", label="resolved manifest"),
+        contract=contract,
     )
     publication.update(
         {
@@ -2256,6 +2269,18 @@ def _identity_levels(payload: Mapping[str, Any], *, label: str) -> list[Mapping[
         raise DerivedReleaseError(f"{label}.provenance contains unsupported nested provenance")
     levels.append(provenance)
     return levels
+
+
+def _optional_mapping(
+    payload: Mapping[str, Any], key: str, *, label: str
+) -> Mapping[str, Any] | None:
+    """Return one optional object, rejecting explicit null or scalar containers."""
+    if key not in payload:
+        return None
+    value = payload[key]
+    if not isinstance(value, Mapping):
+        raise DerivedReleaseError(f"{label}.{key} must be an object")
+    return value
 
 
 def _assert_successor_identity_fields(
@@ -2551,7 +2576,8 @@ def _rewrite_erratum_campaign_summary(campaign_root: Path, *, contract: ErratumC
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     summary = _read_json(summary_path)
     summary["publication"] = _rewrite_publication_identity_mapping(
-        summary.get("publication"), contract=contract
+        _optional_mapping(summary, "publication", label="campaign summary"),
+        contract=contract,
     )
     summary_release = summary.get("benchmark_release")
     if isinstance(summary_release, Mapping):
@@ -2615,7 +2641,8 @@ def _rewrite_erratum_campaign_summary(campaign_root: Path, *, contract: ErratumC
         }
     )
     campaign["publication"] = _rewrite_publication_identity_mapping(
-        campaign.get("publication"), contract=contract
+        _optional_mapping(campaign, "publication", label="campaign summary.campaign"),
+        contract=contract,
     )
     existing_asset_url = campaign.get("release_asset_url")
     if isinstance(existing_asset_url, str) and existing_asset_url.rsplit("/", 1)[-1]:
@@ -2677,7 +2704,8 @@ def _apply_erratum_publication_identity(
         payload["version_doi"] = contract.successor_version_doi
         payload["concept_doi"] = contract.concept_doi
         payload["publication"] = _rewrite_publication_identity_mapping(
-            payload.get("publication"), contract=contract
+            _optional_mapping(payload, "publication", label=relative),
+            contract=contract,
         )
         benchmark_release = payload.get("benchmark_release")
         if isinstance(benchmark_release, Mapping):
@@ -2691,7 +2719,8 @@ def _apply_erratum_publication_identity(
     result_path = campaign_root / "release" / "release_result.json"
     result = _read_json(result_path)
     result["publication"] = _rewrite_publication_identity_mapping(
-        result.get("publication"), contract=contract
+        _optional_mapping(result, "publication", label="release result"),
+        contract=contract,
     )
     benchmark_release = result.get("benchmark_release")
     if isinstance(benchmark_release, Mapping):

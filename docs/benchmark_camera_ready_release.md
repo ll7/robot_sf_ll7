@@ -180,12 +180,20 @@ uv run python scripts/tools/publish_camera_ready_release.py \
   --execute-upload
 ```
 
-The upload helper uploads into a draft GitHub Release only. Use `--create-draft`
-(which requires `--expected-source-sha`) to create the missing tag-targeted draft
-before the first upload; it fails closed when the tag already exists at a
-different target or a non-draft release is present, and skips creation when an
-exact-SHA draft already exists. Dry-run (without `--execute-upload`) prints the
+The upload helper requires `--expected-source-sha` for every mutating invocation.
+It uploads only into an unpublished draft whose release target and peeled tag
+ref both resolve to that exact SHA. Use `--create-draft` to create the missing
+tag-targeted draft before the first upload; it fails closed when the tag already
+exists, the release is published, or either target is ambiguous. Existing
+drafts are retry-safe: the helper validates the complete remote asset inventory
+(`name`, `state=uploaded`, positive `size`, and `sha256:<digest>`) before any
+upload, rejects extras, duplicates, stale bytes, and mismatches, uploads only
+missing assets, and never passes `--clobber`. If all expected assets already
+match, it skips the upload. Dry-run (without `--execute-upload`) prints the
 planned `gh release create`/`gh release upload` commands without touching GitHub.
+For an erratum, the detached `publication_custody.json` is also checked against
+the local archive, manifest, checksums, source SHA, and canonical custody fields
+before a draft can be created or reused.
 The helper never reserves, uploads to, or publishes Zenodo. Use the direct
 Zenodo CLI for the reserved deposition after the bundle has passed the
 independent cold check:

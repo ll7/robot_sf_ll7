@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
+import time
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -72,6 +75,81 @@ def parse_rate_limit_payload(payload: Any) -> RateLimitSnapshot:
         core_remaining=core_remaining,
         core_reset_at=core_reset_at,
     )
+
+
+def fetch_graphql_reset_at(*, timeout: int = 30) -> int | None:
+    """Return the GraphQL quota reset epoch via REST, or None when unavailable.
+
+    REST ``rate_limit`` stays reachable while GraphQL is exhausted, so this is the
+    reset-aware diagnostic for quota-blocked GraphQL-only evidence such as review
+    threads (issue #8282). Any transport or payload failure returns None; callers
+    stay fail-closed and report the reset as unknown.
+    """
+    try:
+        completed = subprocess.run(
+            ["gh", "api", "rate_limit"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return None
+    snapshot = parse_rate_limit_payload(payload)
+    if snapshot.status != "ok":
+        return None
+    return snapshot.graphql_reset_at
+
+
+def quota_reset_handoff(
+    *,
+    retry_command: str,
+    now: float | None = None,
+    reset_at: int | None = None,
+) -> dict[str, Any]:
+    """Build a bounded retry handoff for GraphQL quota exhaustion (issue #8282).
+
+    The handoff names the quota reset time when the REST ``rate_limit`` read
+    succeeds and always names the exact command to re-run after reset. It never
+    authorizes treating unknown review-thread state as resolved.
+    """
+    if reset_at is None:
+        reset_at = fetch_graphql_reset_at()
+    observed_at = time.time() if now is None else now
+    if reset_at is None:
+        return {
+            "quota_reset_at": None,
+            "reset_in_seconds": None,
+            "retry_after_utc": None,
+            "retry_command": retry_command,
+            "handoff": (
+                "GraphQL quota exhausted; the quota reset time is unavailable "
+                "(rate-limit read failed). Retry later with: "
+                + retry_command
+                + ". Never admit merge-ready from unknown thread state."
+            ),
+        }
+    reset_in_seconds = max(0, int(reset_at - observed_at))
+    retry_after_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(reset_at))
+    return {
+        "quota_reset_at": reset_at,
+        "reset_in_seconds": reset_in_seconds,
+        "retry_after_utc": retry_after_utc,
+        "retry_command": retry_command,
+        "handoff": (
+            "GraphQL quota exhausted; quota resets at "
+            + retry_after_utc
+            + f" (in ~{reset_in_seconds}s). Retry after reset with: "
+            + retry_command
+            + ". Never admit merge-ready from unknown thread state."
+        ),
+    }
 
 
 def graphql_budget_decision(

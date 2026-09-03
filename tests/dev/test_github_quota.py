@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
+from unittest.mock import patch
+
 import pytest
 
 from scripts.dev.github_quota import (
     RateLimitSnapshot,
+    fetch_graphql_reset_at,
     graphql_budget_decision,
     parse_rate_limit_payload,
+    quota_reset_handoff,
 )
 
 
@@ -80,3 +86,74 @@ def test_graphql_budget_decision_rejects_negative_estimates() -> None:
             parse_rate_limit_payload(_payload()),
             expected_graphql_requests=-1,
         )
+
+
+def _rate_limit_completed(
+    stdout: str = "", returncode: int = 0
+) -> subprocess.CompletedProcess[str]:
+    """Build a stubbed `gh api rate_limit` result."""
+    return subprocess.CompletedProcess(
+        args=["gh", "api", "rate_limit"],
+        returncode=returncode,
+        stdout=stdout,
+        stderr="",
+    )
+
+
+def test_fetch_graphql_reset_at_returns_reset_epoch() -> None:
+    """The reset diagnostic reads the REST reset epoch without spending GraphQL."""
+    with patch(
+        "scripts.dev.github_quota.subprocess.run",
+        return_value=_rate_limit_completed(stdout=json.dumps(_payload())),
+    ) as mock_run:
+        assert fetch_graphql_reset_at() == 1_800_000_000
+    assert mock_run.call_args.args[0][:3] == ["gh", "api", "rate_limit"]
+
+
+def test_fetch_graphql_reset_at_fails_closed_on_transport_or_shape() -> None:
+    """Any rate-limit failure yields an unknown reset, never a fabricated epoch."""
+    with patch(
+        "scripts.dev.github_quota.subprocess.run",
+        return_value=_rate_limit_completed(returncode=1),
+    ):
+        assert fetch_graphql_reset_at() is None
+    with patch(
+        "scripts.dev.github_quota.subprocess.run",
+        return_value=_rate_limit_completed(stdout="not json"),
+    ):
+        assert fetch_graphql_reset_at() is None
+    with patch(
+        "scripts.dev.github_quota.subprocess.run",
+        side_effect=subprocess.TimeoutExpired(cmd=["gh"], timeout=30),
+    ):
+        assert fetch_graphql_reset_at() is None
+
+
+def test_quota_reset_handoff_names_reset_and_retry_command() -> None:
+    """A known reset produces a bounded retry handoff, never an approval (issue #8282)."""
+    handoff = quota_reset_handoff(
+        retry_command="uv run python -m scripts.dev.snapshot_pr_queue 42 --review-threads --json",
+        now=1_799_999_900.0,
+        reset_at=1_800_000_000,
+    )
+
+    assert handoff["quota_reset_at"] == 1_800_000_000
+    assert handoff["reset_in_seconds"] == 100
+    assert handoff["retry_after_utc"] == "2027-01-15T08:00:00Z"
+    assert "snapshot_pr_queue 42" in handoff["retry_command"]
+    assert "Never admit" in handoff["handoff"]
+
+
+def test_quota_reset_handoff_unknown_reset_stays_fail_closed() -> None:
+    """An unavailable reset still yields a retry handoff without thread approval."""
+    with patch(
+        "scripts.dev.github_quota.fetch_graphql_reset_at",
+        return_value=None,
+    ):
+        handoff = quota_reset_handoff(retry_command="retry-cmd")
+
+    assert handoff["quota_reset_at"] is None
+    assert handoff["retry_after_utc"] is None
+    assert handoff["retry_command"] == "retry-cmd"
+    assert "reset time is unavailable" in handoff["handoff"]
+    assert "Never admit" in handoff["handoff"]

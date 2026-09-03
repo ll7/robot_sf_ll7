@@ -329,8 +329,6 @@ class HierarchicalGoalPosteriorV1:
                     )
         if set(parent_by_waypoint) != waypoint_ids:
             raise ValueError("waypoint_parent_destination must cover every waypoint exactly")
-        if any(parent not in destination_ids for parent in parent_by_waypoint.values()):
-            raise ValueError("waypoint parent must name a destination candidate")
         object.__setattr__(self, "waypoint_parent_destination", parents)
 
     @property

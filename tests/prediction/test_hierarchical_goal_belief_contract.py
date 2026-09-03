@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import math
+from dataclasses import replace
 
 import pytest
 
@@ -203,6 +204,101 @@ def test_parent_links_and_unknown_external_keys_fail_closed() -> None:
     payload["unexpected"] = True
     with pytest.raises(ValueError, match="unexpected key"):
         HierarchicalGoalPosteriorV1.from_dict(payload)
+
+
+def test_malformed_external_shapes_fail_closed() -> None:
+    """Low-level and top-level payload parsers reject malformed shapes and fields."""
+    with pytest.raises(TypeError, match="must be an object"):
+        HierarchicalProbability.from_dict(None)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="missing a required field"):
+        HierarchicalProbability.from_dict({"candidate_id": "waypoint"})
+    with pytest.raises(TypeError, match="must be an object"):
+        HierarchicalWaypointConditionalV1.from_dict(None)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="missing a required field"):
+        HierarchicalWaypointConditionalV1.from_dict({"destination_id": "destination-a"})
+    with pytest.raises(TypeError, match="must be an object"):
+        HierarchicalGoalPosteriorV1.from_dict(None)  # type: ignore[arg-type]
+
+    payload = _posterior().to_dict()
+    del payload["state_digest"]
+    with pytest.raises(ValueError, match="missing a required field"):
+        HierarchicalGoalPosteriorV1.from_dict(payload)
+
+
+def test_hierarchy_constructor_rejects_invalid_vectors_and_lifecycle_shapes() -> None:
+    """Constructor validation covers duplicate, non-normalized, and malformed hierarchy state."""
+    posterior = _posterior()
+    with pytest.raises(TypeError, match="must be an array"):
+        replace(posterior, destination_probabilities=None)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="must contain HierarchicalProbability"):
+        replace(
+            posterior,
+            destination_probabilities=("not-a-probability",),
+            unknown_destination_probability=1.0,
+            waypoint_conditionals=(),
+            waypoint_parent_destination={},
+        )
+    with pytest.raises(ValueError, match="duplicate candidate IDs"):
+        replace(
+            posterior,
+            destination_probabilities=(
+                HierarchicalProbability("same", 0.3),
+                HierarchicalProbability("same", 0.3),
+            ),
+            unknown_destination_probability=0.4,
+        )
+    with pytest.raises(ValueError, match="plus unknown mass must sum to 1"):
+        replace(
+            posterior,
+            destination_probabilities=(HierarchicalProbability("destination-a", 0.2),),
+            unknown_destination_probability=0.2,
+            waypoint_conditionals=(HierarchicalWaypointConditionalV1("destination-a"),),
+            waypoint_parent_destination={},
+        )
+    with pytest.raises(TypeError, match="waypoint_parent_destination must be an array"):
+        replace(posterior, waypoint_parent_destination="not-a-parent-map")  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="entries must be"):
+        replace(
+            posterior,
+            waypoint_parent_destination=[("waypoint-a-near",)],
+        )
+    with pytest.raises(ValueError, match="duplicate waypoint parent mapping"):
+        replace(
+            posterior,
+            waypoint_parent_destination=[
+                ("waypoint-a-near", "destination-a"),
+                ("waypoint-a-near", "destination-a"),
+                ("waypoint-a-far", "destination-a"),
+                ("waypoint-b", "destination-b"),
+            ],
+        )
+    with pytest.raises(TypeError, match="waypoint_conditionals must contain"):
+        replace(posterior, waypoint_conditionals=("not-a-conditional",))  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="duplicate destination IDs"):
+        replace(
+            posterior,
+            waypoint_conditionals=(
+                HierarchicalWaypointConditionalV1("destination-a"),
+                HierarchicalWaypointConditionalV1("destination-a"),
+            ),
+        )
+    with pytest.raises(ValueError, match="must name exactly"):
+        replace(
+            posterior,
+            waypoint_conditionals=(HierarchicalWaypointConditionalV1("destination-a"),),
+            waypoint_parent_destination={},
+        )
+
+
+def test_hierarchy_constructor_rejects_invalid_metadata() -> None:
+    """Metadata fields remain finite, versioned, and canonical."""
+    posterior = _posterior()
+    with pytest.raises(ValueError, match="schema_version"):
+        replace(posterior, schema_version="hierarchical_goal_posterior.v2")
+    with pytest.raises(ValueError, match="timestamp_s must be non-negative"):
+        replace(posterior, timestamp_s=-0.1)
+    with pytest.raises(ValueError, match="blockers must be unique"):
+        replace(posterior, blockers=("same", "same"))
 
 
 def test_empty_hierarchy_can_represent_unknown_at_both_levels() -> None:

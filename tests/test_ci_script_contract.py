@@ -483,10 +483,10 @@ def test_pytest_coverage_is_explicit_opt_in() -> None:
     assert "ROBOT_SF_PYTEST_COVERAGE" in script_text
     assert "${coverage_requested,,}" not in script_text
     assert 'cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")' in script_text
-    assert (
-        'ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=core "$SCRIPT_DIR/run_tests_parallel.sh" --lane core'
-        in pr_ready_text
-    )
+    assert "run_pr_ready_lane core env" in pr_ready_text
+    assert "ROBOT_SF_PYTEST_COVERAGE=1" in pr_ready_text
+    assert "ROBOT_SF_TEST_LANE=core" in pr_ready_text
+    assert '"$SCRIPT_DIR/run_tests_parallel.sh" --lane core' in pr_ready_text
     assert 'optional_pytest_addopts="${PYTEST_ADDOPTS:-}"' in pr_ready_text
     assert "--cov-append" in pr_ready_text
 
@@ -1111,15 +1111,15 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     for gate in expected_gates:
         assert gate in script_text
     assert "run_pr_ready_lane core env" in script_text
-    assert 'ROBOT_SF_PYTEST_COVERAGE=1' in script_text
-    assert 'ROBOT_SF_TEST_LANE=core' in script_text
+    assert "ROBOT_SF_PYTEST_COVERAGE=1" in script_text
+    assert "ROBOT_SF_TEST_LANE=core" in script_text
     assert '"$SCRIPT_DIR/run_tests_parallel.sh" --lane core' in script_text
     assert "run_pr_ready_lane optional env" in script_text
     assert '"PYTEST_ADDOPTS=$optional_pytest_addopts"' in script_text
-    assert 'ROBOT_SF_TEST_LANE=optional' in script_text
+    assert "ROBOT_SF_TEST_LANE=optional" in script_text
     assert '"$SCRIPT_DIR/run_tests_parallel.sh" --lane optional' in script_text
     assert "trap 'handle_pr_ready_signal SIGTERM 15' TERM" in script_text
-    assert 'pr_ready_termination.py' in script_text
+    assert "pr_ready_termination.py" in script_text
     assert "Optional-extra changed files requiring the predictive lane" in script_text
     assert "No changed files require the optional-extra lane." in script_text
     assert 'git diff --name-only --diff-filter=ACDMRT "$BASE_REF...HEAD"' in script_text
@@ -3593,16 +3593,14 @@ def test_pr_ready_check_optional_lane_defaults_to_worksteal_distribution() -> No
 
     script_text = PR_READY_CHECK.read_text(encoding="utf-8")
 
-    assert 'PYTEST_XDIST_DIST="${PYTEST_XDIST_DIST:-worksteal}"' in script_text, (
+    assert '"PYTEST_XDIST_DIST=${PYTEST_XDIST_DIST:-worksteal}"' in script_text, (
         "optional readiness lane must default PYTEST_XDIST_DIST to worksteal with caller override"
     )
     # The pin belongs only on the optional lane invocation; the core lane keeps its default
     # scheduling so core-lane behavior is unchanged.
-    core_line = next(
-        line
-        for line in script_text.splitlines()
-        if "ROBOT_SF_TEST_LANE=core" in line and "run_tests_parallel.sh" in line
-    )
-    assert "PYTEST_XDIST_DIST" not in core_line, (
+    core_invocation = script_text.split("run_pr_ready_lane core env", 1)[1].split(
+        "if [[ ${#optional_changed_files[@]}", 1
+    )[0]
+    assert "PYTEST_XDIST_DIST" not in core_invocation, (
         "core lane must not change its distribution default"
     )

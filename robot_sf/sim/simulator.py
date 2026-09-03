@@ -628,11 +628,17 @@ class Simulator:
         """Return the active fast-pysf obstacle-law metadata for this simulator."""
         metadata_fn = getattr(self.pysf_sim, "obstacle_force_law_metadata", None)
         if not callable(metadata_fn):
+            forces = getattr(self.pysf_sim, "forces", ())
+            enabled = any(isinstance(force, ObstacleForce) for force in forces)
+            raw_obstacles = getattr(self.pysf_sim, "raw_obstacles", ())
+            applied = enabled and len(raw_obstacles) > 0
             return obstacle_force_law_metadata(
                 getattr(self.config, "obstacle_force_law", None),
                 site="fast_pysf",
                 geometry_convention="map_line_endpoints_orthogonal_vector",
                 radius_convention="threshold_plus_agent_radius_sigma",
+                enabled=enabled,
+                applied=applied,
             )
         return dict(metadata_fn())
 

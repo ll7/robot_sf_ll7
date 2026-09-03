@@ -422,6 +422,7 @@ class ObstacleForce:
 
         ped_positions = self.get_peds()
         forces = np.zeros((ped_positions.shape[0], 2))
+        law_version = resolve_obstacle_force_law(getattr(self.config, "law_version", None))
         obstacles = self.get_obstacles()
         if len(obstacles) == 0:
             return forces
@@ -430,7 +431,6 @@ class ObstacleForce:
         threshold = self.config.threshold
 
         threshold = threshold + self.get_agent_radius() * sigma
-        law_version = resolve_obstacle_force_law(getattr(self.config, "law_version", None))
         if law_version == LEGACY_SHIFTED_GRADIENT_V1:
             all_obstacle_forces(forces, ped_positions, obstacles, threshold)
         else:
@@ -439,13 +439,20 @@ class ObstacleForce:
             )
         return forces * self.config.factor
 
-    def law_metadata(self) -> dict[str, str]:
+    def law_metadata(self) -> dict[str, object]:
         """Return the fast-pysf law and site conventions used by this force."""
+        obstacles = self.get_obstacles()
+        try:
+            enabled = float(getattr(self.config, "factor", 1.0)) != 0.0
+        except (TypeError, ValueError):
+            enabled = True
         return obstacle_force_law_metadata(
             getattr(self.config, "law_version", None),
             site="fast_pysf",
             geometry_convention="map_line_endpoints_orthogonal_vector",
             radius_convention="threshold_plus_agent_radius_sigma",
+            enabled=enabled,
+            applied=enabled and obstacles is not None and len(obstacles) > 0,
         )
 
 

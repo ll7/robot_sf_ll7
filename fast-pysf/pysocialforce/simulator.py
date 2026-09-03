@@ -133,7 +133,7 @@ class Simulator_v2:
             config = SimulatorConfig()
         self.config = config
         self.on_step = on_step
-        self.states, self.groupings, self.behaviors = populate(config, map_definition)
+        self.states, self.groupings, self.behaviors = populate(self.config, map_definition)
         obstacles = (
             [line for o in map_definition.obstacles for line in o.lines]
             if map_definition.obstacles
@@ -143,7 +143,7 @@ class Simulator_v2:
         self.peds: PedState = PedState(
             self.states.raw_states, self.groupings.groups_as_lists, self.config.scene_config
         )
-        self.forces = make_forces(self, config)
+        self.forces = make_forces(self, self.config)
         self.t = 0
 
     @property
@@ -167,13 +167,21 @@ class Simulator_v2:
         """
         return compute_force_components(self.forces, self.peds)
 
-    def obstacle_force_law_metadata(self) -> dict[str, str]:
+    def obstacle_force_law_metadata(self) -> dict[str, object]:
         """Return the configured fast-pysf obstacle-law metadata."""
+        obstacle_force = next(
+            (force for force in self.forces if isinstance(force, forces.ObstacleForce)),
+            None,
+        )
+        if obstacle_force is not None:
+            return obstacle_force.law_metadata()
         return obstacle_force_law_metadata(
             getattr(self.config.obstacle_force_config, "law_version", None),
             site="fast_pysf",
             geometry_convention="map_line_endpoints_orthogonal_vector",
             radius_convention="threshold_plus_agent_radius_sigma",
+            enabled=False,
+            applied=False,
         )
 
     @property
@@ -265,7 +273,7 @@ class Simulator:
         resolution = self.config.scene_config.resolution
         self.env = EnvState(obstacles or [], resolution)
         self.peds: PedState = PedState(state, groups or [], self.config.scene_config)
-        self.forces = make_forces(self, config)
+        self.forces = make_forces(self, self.config)
         self.t = 0
 
     def compute_forces(self):
@@ -288,13 +296,21 @@ class Simulator:
         """
         return compute_force_components(self.forces, self.peds)
 
-    def obstacle_force_law_metadata(self) -> dict[str, str]:
+    def obstacle_force_law_metadata(self) -> dict[str, object]:
         """Return the configured fast-pysf obstacle-law metadata."""
+        obstacle_force = next(
+            (force for force in self.forces if isinstance(force, forces.ObstacleForce)),
+            None,
+        )
+        if obstacle_force is not None:
+            return obstacle_force.law_metadata()
         return obstacle_force_law_metadata(
             getattr(self.config.obstacle_force_config, "law_version", None),
             site="fast_pysf",
             geometry_convention="map_line_endpoints_orthogonal_vector",
             radius_convention="threshold_plus_agent_radius_sigma",
+            enabled=False,
+            applied=False,
         )
 
     @property

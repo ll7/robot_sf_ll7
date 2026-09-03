@@ -102,6 +102,114 @@ def test_obstacle_wrapper_batch_path_forwards_selected_law(monkeypatch):
     assert calls and calls[0][-1] == SURFACE_DISTANCE_UNIT_NORMAL_V2
 
 
+@pytest.mark.parametrize(
+    ("invalid_law", "error_type"),
+    [("surface_distance_v3_typo", ValueError), (object(), TypeError)],
+)
+def test_obstacle_wrapper_scalar_rejects_invalid_law_without_fallback(
+    monkeypatch, invalid_law, error_type
+):
+    """Scalar dispatch must fail closed before calling the numerical kernel."""
+    sim = make_simple_sim()
+    sim.config.obstacle_force_config.law_version = invalid_law
+    wrapper = FastPysfWrapper(sim)
+    called = False
+
+    def fake_dispatch(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        return 0.0, 0.0
+
+    monkeypatch.setattr(wrapper_module.pf_forces, "obstacle_force_for_law", fake_dispatch)
+
+    with pytest.raises(error_type):
+        wrapper.get_forces_at([0.5, 0.0])
+
+    assert called is False
+    assert wrapper._diagnostics["fallback"] is False
+    assert wrapper._diagnostics["fallback_count"] == 0
+    assert wrapper._diagnostics["fallback_reasons"] == {}
+
+
+@pytest.mark.parametrize(
+    ("invalid_law", "error_type"),
+    [("surface_distance_v3_typo", ValueError), (object(), TypeError)],
+)
+def test_obstacle_wrapper_batch_rejects_invalid_law_without_fallback(
+    monkeypatch, invalid_law, error_type
+):
+    """Batched dispatch must reject invalid selectors without a partial result."""
+    sim = make_simple_sim()
+    sim.config.obstacle_force_config.law_version = invalid_law
+    wrapper = FastPysfWrapper(sim)
+    called = False
+
+    def fake_dispatch(*_args, **_kwargs):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(wrapper_module.pf_forces, "all_obstacle_forces_for_law", fake_dispatch)
+
+    with pytest.raises(error_type):
+        wrapper.get_forces_at_points([[0.5, 0.0], [1.5, 0.0]])
+
+    assert called is False
+    assert wrapper._diagnostics["fallback"] is False
+    assert wrapper._diagnostics["fallback_count"] == 0
+    assert wrapper._diagnostics["fallback_reasons"] == {}
+
+
+@pytest.mark.parametrize("error_type", [ValueError, TypeError])
+def test_obstacle_wrapper_scalar_preserves_fallback_for_kernel_input_errors(
+    monkeypatch, error_type
+):
+    """Non-selector scalar kernel errors retain the compatibility fallback."""
+    sim = make_simple_sim()
+    wrapper = FastPysfWrapper(sim)
+    warning = Mock()
+
+    def fail(*_args, **_kwargs):
+        raise error_type("forced obstacle-force input failure")
+
+    monkeypatch.setattr(wrapper_module.logger, "warning", warning)
+    monkeypatch.setattr(wrapper_module.pf_forces, "obstacle_force_for_law", fail)
+
+    result = wrapper._compute_obstacle_force_at_point(np.array([0.5, 0.0]))
+
+    np.testing.assert_array_equal(result, np.zeros(2))
+    diagnostics = wrapper.diagnostics()
+    assert diagnostics["fallback"] is True
+    assert diagnostics["fallback_reason"] == "obstacle_force_dropped"
+    assert diagnostics["fallback_reasons"] == {"obstacle_force_dropped": 1}
+    assert warning.call_count == 1
+
+
+@pytest.mark.parametrize("error_type", [ValueError, TypeError])
+def test_obstacle_wrapper_batch_preserves_fallback_for_kernel_input_errors(monkeypatch, error_type):
+    """Non-selector batched kernel errors retain the pointwise fallback."""
+    sim = make_simple_sim()
+    wrapper = FastPysfWrapper(sim)
+    warning = Mock()
+
+    def fail(*_args, **_kwargs):
+        raise error_type("forced batched obstacle-force input failure")
+
+    monkeypatch.setattr(wrapper_module.logger, "warning", warning)
+    monkeypatch.setattr(wrapper_module.pf_forces, "all_obstacle_forces_for_law", fail)
+
+    result = wrapper._compute_obstacle_forces_at_points(
+        np.array([[0.5, 0.0], [1.5, 0.0]], dtype=float)
+    )
+
+    assert result.shape == (2, 2)
+    assert np.all(np.isfinite(result))
+    diagnostics = wrapper.diagnostics()
+    assert diagnostics["fallback"] is True
+    assert diagnostics["fallback_reason"] == "obstacle_force_batch_pointwise"
+    assert diagnostics["fallback_reasons"] == {"obstacle_force_batch_pointwise": 1}
+    assert warning.call_count == 1
+
+
 def test_get_forces_at_points_matches_pointwise_force_queries():
     """Batched force sampling should preserve point-by-point semantics."""
     sim = make_simple_sim()
@@ -239,7 +347,7 @@ def test_obstacle_force_fallback_is_logged_and_recorded(monkeypatch):
     warning = Mock()
 
     def fail(*_args, **_kwargs):
-        raise ValueError("forced obstacle-force failure")
+        raise FloatingPointError("forced obstacle-force failure")
 
     monkeypatch.setattr(wrapper_module.logger, "warning", warning)
     monkeypatch.setattr(wrapper_module.pf_forces, "obstacle_force_for_law", fail)
@@ -303,7 +411,7 @@ def test_batched_kernel_fallbacks_are_logged_and_recorded(monkeypatch):
     warning = Mock()
 
     def fail(*_args, **_kwargs):
-        raise ValueError("forced batch-kernel failure")
+        raise FloatingPointError("forced batch-kernel failure")
 
     monkeypatch.setattr(wrapper_module.logger, "warning", warning)
     monkeypatch.setattr(wrapper_module.pf_forces, "social_force_single_ped", fail)

@@ -22,9 +22,12 @@ physical, safety, social-behavior, benchmark, or paper-facing validation.
 
 The #8277 implementation resolves unknown explicit selectors fail-closed and emits
 `obstacle_force_law_metadata.v1` with the selected law, site, geometry convention, radius/offset
-convention, and compatibility mode. The fast-pysf map-segment site retains its point, endpoint,
-and segment branches; the planner site retains its occupancy-cell-center point geometry. The
-selectors therefore version dispatch without silently unifying the two sites.
+convention, compatibility mode, and explicit `enabled`/`applied` state. The fast-pysf map-segment
+site retains its point, endpoint, and segment branches; the planner site retains its
+occupancy-cell-center point geometry. The selectors therefore version dispatch without silently
+unifying the two sites. Map-runner episode records persist the site payloads under
+`algorithm_metadata.obstacle_force_law` using `obstacle_force_law_runtime_record.v1`; the ordinary
+robot-environment reset metadata and JSONL sidecar also persist the fast-pysf payload.
 
 ## Current implementation boundary
 

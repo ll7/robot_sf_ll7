@@ -63,11 +63,11 @@ def _validate_probability_vector(
     values: Sequence[HierarchicalProbability],
     unknown: float,
     field_name: str,
-) -> tuple[HierarchicalProbability, ...]:
+) -> tuple[tuple[HierarchicalProbability, ...], float]:
     """Validate identity, finiteness, and normalization for one level.
 
     Returns:
-        The candidates in deterministic identifier order.
+        The candidates in deterministic identifier order and the canonical unknown mass.
     """
     vector = tuple(values)
     if any(type(value) is not HierarchicalProbability for value in vector):
@@ -76,10 +76,18 @@ def _validate_probability_vector(
     if len(identifiers) != len(set(identifiers)):
         raise ValueError(f"{field_name} contains duplicate candidate IDs")
     unknown_probability = require_probability(unknown, f"{field_name}.unknown_probability")
-    total = unknown_probability + sum(value.probability for value in vector)
+    total = math.fsum((unknown_probability, *(value.probability for value in vector)))
     if not math.isclose(total, 1.0, rel_tol=1e-9, abs_tol=1e-9):
         raise ValueError(f"{field_name} probabilities plus unknown mass must sum to 1")
-    return tuple(sorted(vector, key=lambda value: value.candidate_id))
+    if total == 1.0:
+        return tuple(sorted(vector, key=lambda value: value.candidate_id)), unknown_probability
+    normalized = tuple(
+        HierarchicalProbability(value.candidate_id, value.probability / total) for value in vector
+    )
+    return (
+        tuple(sorted(normalized, key=lambda value: value.candidate_id)),
+        unknown_probability / total,
+    )
 
 
 def _normalize_parent_map(
@@ -160,7 +168,7 @@ class HierarchicalWaypointConditionalV1:
             "destination_id",
             require_text(self.destination_id, "destination_id"),
         )
-        probabilities = _validate_probability_vector(
+        probabilities, unknown_probability = _validate_probability_vector(
             _as_sequence(self.waypoint_probabilities, "waypoint_probabilities"),
             self.unknown_waypoint_probability,
             f"waypoint_conditionals[{self.destination_id}]",
@@ -170,7 +178,7 @@ class HierarchicalWaypointConditionalV1:
             self,
             "unknown_waypoint_probability",
             require_probability(
-                self.unknown_waypoint_probability,
+                unknown_probability,
                 "unknown_waypoint_probability",
             ),
         )
@@ -280,7 +288,7 @@ class HierarchicalGoalPosteriorV1:
             raise ValueError("blockers must be unique")
         object.__setattr__(self, "blockers", tuple(sorted(blocker_values)))
 
-        destinations = _validate_probability_vector(
+        destinations, unknown_destination_probability = _validate_probability_vector(
             _as_sequence(self.destination_probabilities, "destination_probabilities"),
             self.unknown_destination_probability,
             "destination_probabilities",
@@ -290,7 +298,7 @@ class HierarchicalGoalPosteriorV1:
             self,
             "unknown_destination_probability",
             require_probability(
-                self.unknown_destination_probability,
+                unknown_destination_probability,
                 "unknown_destination_probability",
             ),
         )

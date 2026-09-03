@@ -235,6 +235,7 @@ def test_fetch_pr_snapshot_preserves_terminal_merged_state() -> None:
     raw_pr = _raw_pr()
     raw_pr["state"] = "CLOSED"
     raw_pr["mergedAt"] = "2026-08-23T19:28:15Z"
+    raw_pr["mergeCommit"] = {"oid": FULL_SHA}
     with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(raw_pr)),
@@ -246,6 +247,7 @@ def test_fetch_pr_snapshot_preserves_terminal_merged_state() -> None:
     assert error is None
     assert snapshot["pr_state"] == "MERGED"
     assert snapshot["pr_merged_at"] == "2026-08-23T19:28:15Z"
+    assert snapshot["merge_commit_sha"] == FULL_SHA
 
 
 def _rest_pull_response(*, head_sha: str = FULL_SHA, body: str = "") -> MagicMock:

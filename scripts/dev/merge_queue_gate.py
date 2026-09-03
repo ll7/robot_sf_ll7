@@ -1632,6 +1632,10 @@ def _rest_pull_core(
         "isDraft": draft_value,
         "headRefOid": head_sha,
         "labels": _rest_labels(labels),
+        "merge_commit_sha": pull.get("merge_commit_sha"),
+        "mergeCommit": (
+            {"oid": pull.get("merge_commit_sha")} if pull.get("merge_commit_sha") else None
+        ),
     }, None
 
 
@@ -1698,7 +1702,7 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
             "--repo",
             repo,
             "--json",
-            "number,title,body,state,mergedAt,isDraft,headRefOid,labels,statusCheckRollup,comments,reviews,reviewRequests",
+            "number,title,body,state,mergedAt,isDraft,headRefOid,labels,statusCheckRollup,comments,reviews,reviewRequests,mergeCommit",
         ],
         timeout=30,
     )
@@ -1748,6 +1752,17 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
     elif pr_state not in {"OPEN", "CLOSED"}:
         return {}, f"gh pr view state field is unsupported: {pr_state}"
 
+    raw_merge_commit = payload.get("mergeCommit")
+    merge_commit_sha = (
+        raw_merge_commit.get("oid")
+        if isinstance(raw_merge_commit, dict)
+        else payload.get("merge_commit_sha")
+    )
+    if not isinstance(merge_commit_sha, str) or not re.fullmatch(
+        r"[0-9a-fA-F]{40}", merge_commit_sha
+    ):
+        merge_commit_sha = None
+
     review_requests = payload.get("reviewRequests")
     if not isinstance(review_requests, list):
         return {}, "gh pr view reviewRequests field is missing or malformed"
@@ -1791,6 +1806,7 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         "number": payload.get("number"),
         "pr_state": pr_state,
         "pr_merged_at": merged_at,
+        "merge_commit_sha": merge_commit_sha,
         "draft": draft_value,
         "head_sha": head_sha,
         "metadata_digest": current_metadata_digest,

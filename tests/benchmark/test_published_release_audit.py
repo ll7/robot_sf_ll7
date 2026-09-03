@@ -105,6 +105,19 @@ def test_cold_current_aliases_accept_split_identity_and_reject_incomplete_shapes
             scientific_release_id=scientific_release_id,
             require_root_release_id=True,
         )
+    with pytest.raises(ValueError, match="missing its scientific release ID"):
+        published_audit_module._assert_cold_publication_document(
+            {**compact_without_id, "benchmark_release_id": scientific_release_id},
+            label="canonical resolved manifest",
+            tag=tag,
+            doi=doi,
+            predecessor_doi="10.5281/zenodo.22227035",
+            predecessor_tag=tag.removesuffix("-erratum.1"),
+            concept_doi=concept,
+            source_sha=source,
+            scientific_release_id=scientific_release_id,
+            require_root_release_id=True,
+        )
     id_only_in_provenance = {
         "release_tag": tag,
         "provenance": {
@@ -239,6 +252,44 @@ def test_cold_predecessor_aliases_accept_split_identity_and_reject_conflicts() -
             scientific_release_id=scientific_release_id,
             require_concept=True,
             require_release_id=True,
+        )
+    id_only_in_provenance = {
+        "release_tag": tag,
+        "source_sha": source,
+        "provenance": {
+            "release_id": scientific_release_id,
+            "version_doi": doi,
+            "concept_doi": concept,
+        },
+    }
+    with pytest.raises(ValueError, match="missing its scientific release ID"):
+        published_audit_module._assert_cold_predecessor_aliases(
+            id_only_in_provenance,
+            label="canonical resolved execution identity",
+            predecessor_tag=tag,
+            predecessor_doi=doi,
+            concept_doi=concept,
+            source_sha=source,
+            scientific_release_id=scientific_release_id,
+            require_concept=True,
+            require_release_id=True,
+            require_source=True,
+        )
+    benchmark_id_only = dict(split)
+    benchmark_id_only.pop("release_id")
+    benchmark_id_only["benchmark_release_id"] = scientific_release_id
+    with pytest.raises(ValueError, match="missing its scientific release ID"):
+        published_audit_module._assert_cold_predecessor_aliases(
+            benchmark_id_only,
+            label="canonical resolved execution identity",
+            predecessor_tag=tag,
+            predecessor_doi=doi,
+            concept_doi=concept,
+            source_sha=source,
+            scientific_release_id=scientific_release_id,
+            require_concept=True,
+            require_release_id=True,
+            require_source=True,
         )
 
     invalid = (
@@ -1213,7 +1264,7 @@ def test_erratum_audit_rejects_stale_optional_publication_document(
         "nested_doi": "stale version-DOI alias",
         "publication_null": "publication must be an object",
         "canonical_missing_release_id": "missing its scientific release-ID alias",
-        "canonical_id_only_in_provenance": "missing its scientific release ID",
+        "canonical_id_only_in_provenance": "missing its scientific release-ID alias",
     }[tamper]
     assert any(expected in problem for problem in result["problems"]), result["problems"]
 

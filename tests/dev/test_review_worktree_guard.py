@@ -167,6 +167,36 @@ def test_ordinary_implementation_worktree_remains_pushable(tmp_path: Path) -> No
         _remove_worktree(repo, worktree, branch)
 
 
+def test_review_configuration_rejects_a_symlinked_worktree_config(tmp_path: Path) -> None:
+    """The guard must not follow a linked worktree config symlink while mutating metadata."""
+    repo, _remote = _fixture_repo(tmp_path)
+    worktree = tmp_path / "review-symlink"
+    branch = "review/symlink"
+    target = tmp_path / "config-target"
+    try:
+        _git(repo, "worktree", "add", "--no-track", "-b", branch, str(worktree), "HEAD")
+        _git(worktree, "config", "extensions.worktreeConfig", "true")
+        config_path = Path(
+            _git(
+                worktree,
+                "rev-parse",
+                "--path-format=absolute",
+                "--git-path",
+                "config.worktree",
+            ).stdout.strip()
+        )
+        target.write_text("", encoding="utf-8")
+        config_path.symlink_to(target)
+
+        result = _configure(worktree, "review")
+
+        assert result.returncode != 0
+        assert "must not be a symlink" in result.stdout
+        assert target.read_text(encoding="utf-8") == ""
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
 def test_integration_aborts_and_compares_remote_refs(tmp_path: Path) -> None:
     """A successful synthetic merge leaves HEAD, status, and remote refs unchanged."""
     repo, _remote = _fixture_repo(tmp_path)

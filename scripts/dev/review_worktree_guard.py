@@ -126,10 +126,13 @@ def _worktree_config_file(identity: dict[str, Path]) -> Path:
     )
     if not config_path.is_absolute():
         config_path = identity["git_dir"] / config_path
-    config_path = config_path.resolve()
-    if config_path.is_symlink():
+    # Some Git versions resolve the final component for ``--git-path``. Check
+    # the canonical per-worktree location before accepting that resolved path,
+    # otherwise a symlinked config could be followed and mutated.
+    canonical_path = identity["git_dir"] / "config.worktree"
+    if canonical_path.is_symlink() or config_path.is_symlink():
         raise GuardError("linked worktree config must not be a symlink")
-    return config_path
+    return config_path.resolve()
 
 
 def _worktree_values(identity: dict[str, Path], key: str) -> list[str]:

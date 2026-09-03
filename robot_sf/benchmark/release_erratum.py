@@ -1512,6 +1512,44 @@ def _assert_publication_url_aliases(  # noqa: C901
     return observed
 
 
+def _assert_nested_publication_aliases(
+    payload: Mapping[str, Any], *, contract: ErratumContract, label: str
+) -> None:
+    """Validate a present nested current-publication identity mapping."""
+    if "publication" not in payload:
+        return
+    publication = payload["publication"]
+    if not isinstance(publication, Mapping):
+        raise ReleaseErratumError(f"{label}.publication must be an object")
+    _assert_current_alias_values(
+        publication,
+        contract=contract,
+        label=f"{label}.publication",
+        required=True,
+    )
+    if "provenance" in publication:
+        provenance = publication["provenance"]
+        if not isinstance(provenance, Mapping):
+            raise ReleaseErratumError(f"{label}.publication.provenance must be an object")
+        if "provenance" in provenance:
+            raise ReleaseErratumError(
+                f"{label}.publication.provenance contains unsupported nested provenance"
+            )
+        _assert_current_alias_values(
+            provenance,
+            contract=contract,
+            label=f"{label}.publication.provenance",
+            required=False,
+        )
+    expected = {
+        "concept_doi": contract.concept_doi,
+        "version_doi": contract.successor_version_doi,
+        "predecessor_version_doi": contract.predecessor_version_doi,
+    }
+    if any(publication.get(key) != value for key, value in expected.items()):
+        raise ReleaseErratumError(f"{label}.publication contains a stale DOI alias")
+
+
 def _assert_publication_aliases(
     payload: Mapping[str, Any],
     *,
@@ -1524,32 +1562,45 @@ def _assert_publication_aliases(
         payload,
         contract=contract,
         label=label,
-        required=required,
+        required=False,
     )
-    provenance = payload.get("provenance")
-    if isinstance(provenance, Mapping):
+    levels = [payload]
+    if "provenance" in payload:
+        provenance = payload["provenance"]
+        if not isinstance(provenance, Mapping):
+            raise ReleaseErratumError(f"{label}.provenance must be an object")
+        if "provenance" in provenance:
+            raise ReleaseErratumError(f"{label}.provenance contains unsupported nested provenance")
+        levels.append(provenance)
         _assert_current_alias_values(
             provenance,
             contract=contract,
             label=f"{label}.provenance",
             required=False,
         )
-    publication = payload.get("publication")
-    if isinstance(publication, Mapping):
-        source_values = [
-            publication[key]
-            for key in ("source_sha", "source_commit", "scientific_source_sha")
-            if key in publication
+    if required:
+        tag_values = [
+            level[key]
+            for level in levels
+            for key in (
+                "release_tag",
+                "release_id",
+                "benchmark_release_tag",
+                "benchmark_release_id",
+            )
+            if key in level
         ]
-        if any(value != contract.source_sha for value in source_values):
-            raise ReleaseErratumError(f"{label}.publication contains a stale scientific source SHA")
-        expected = {
-            "concept_doi": contract.concept_doi,
-            "version_doi": contract.successor_version_doi,
-            "predecessor_version_doi": contract.predecessor_version_doi,
-        }
-        if any(publication.get(key) != value for key, value in expected.items()):
-            raise ReleaseErratumError(f"{label}.publication contains a stale DOI alias")
+        if not tag_values:
+            raise ReleaseErratumError(f"{label} contains a stale release-tag alias")
+        doi_values = [
+            level[key] for level in levels for key in ("doi", "version_doi") if key in level
+        ]
+        if not doi_values:
+            raise ReleaseErratumError(f"{label} contains a stale version-DOI alias")
+        concept_values = [level["concept_doi"] for level in levels if "concept_doi" in level]
+        if not concept_values:
+            raise ReleaseErratumError(f"{label} contains a stale concept-DOI alias")
+    _assert_nested_publication_aliases(payload, contract=contract, label=label)
 
 
 def _assert_predecessor_alias_values(
@@ -1586,22 +1637,82 @@ def _assert_predecessor_alias_values(
 
 
 def _assert_predecessor_execution_aliases(
-    payload: Mapping[str, Any], *, contract: ErratumContract, label: str
+    payload: Mapping[str, Any],
+    *,
+    contract: ErratumContract,
+    label: str,
+    require_concept: bool = False,
 ) -> None:
-    """Require preserved execution coordinates to name only the predecessor."""
-    _assert_predecessor_alias_values(
-        payload,
-        contract=contract,
-        label=label,
-        required=True,
-    )
-    provenance = payload.get("provenance")
-    if isinstance(provenance, Mapping):
+    """Require preserved execution coordinates to name only the predecessor.
+
+    Resolved manifests historically keep their release tag at the document
+    root while storing DOI coordinates in ``provenance``.  Treat those levels
+    as one identity and require the tag and DOI to occur in either level,
+    while still rejecting conflicting aliases wherever they are present. Full
+    release documents require a concept DOI; the compact campaign summary
+    identity may omit it and must opt into that shape explicitly.
+    """
+    levels: list[tuple[Mapping[str, Any], str]] = [(payload, label)]
+    if "provenance" in payload:
+        provenance = payload["provenance"]
+        if not isinstance(provenance, Mapping):
+            raise ReleaseErratumError(f"{label}.provenance must be an object")
+        if "provenance" in provenance:
+            raise ReleaseErratumError(f"{label}.provenance contains unsupported nested provenance")
+        levels.append((provenance, f"{label}.provenance"))
+
+    for level, level_label in levels:
         _assert_predecessor_alias_values(
-            provenance,
+            level,
             contract=contract,
-            label=f"{label}.provenance",
+            label=level_label,
             required=False,
+        )
+
+    tag_values = [
+        level[key]
+        for level, _ in levels
+        for key in ("release_tag", "release_id", "benchmark_release_tag", "benchmark_release_id")
+        if key in level
+    ]
+    if not tag_values:
+        raise ReleaseErratumError(f"{label} contains a stale predecessor tag alias")
+
+    doi_values = [
+        level[key] for level, _ in levels for key in ("doi", "version_doi") if key in level
+    ]
+    if not doi_values:
+        raise ReleaseErratumError(f"{label} contains a stale predecessor DOI alias")
+
+    concept_values = [level["concept_doi"] for level, _ in levels if "concept_doi" in level]
+    if require_concept and not concept_values:
+        raise ReleaseErratumError(f"{label} contains a stale predecessor concept DOI")
+
+
+def _assert_optional_publication_document_aliases(
+    document: Mapping[str, Any], *, contract: ErratumContract, label: str
+) -> None:
+    """Validate all known identity containers in one copied optional document."""
+    _assert_publication_aliases(document, contract=contract, label=label)
+    _assert_current_source_aliases(document, contract=contract, label=label)
+    for key in ("benchmark_release", "resolved_manifest", "campaign"):
+        if key not in document:
+            continue
+        current = _require_mapping(document[key], label=f"{label}.{key}")
+        _assert_publication_aliases(current, contract=contract, label=f"{label}.{key}")
+    for key in (
+        "scientific_execution_benchmark_release",
+        "scientific_execution_resolved_manifest",
+        "scientific_execution_release_identity",
+    ):
+        if key not in document:
+            continue
+        execution = _require_mapping(document[key], label=f"{label}.{key}")
+        _assert_predecessor_execution_aliases(
+            execution,
+            contract=contract,
+            label=f"{label}.{key}",
+            require_concept=key != "scientific_execution_release_identity",
         )
 
 
@@ -1639,15 +1750,21 @@ def _validate_published_erratum_identity_documents(
             seen_aliases=seen_aliases,
         )
     for relative, document in optional_documents.items():
+        label = f"published {relative}"
         validate_erratum_identity_blocks(
             document,
             contract=contract,
-            label=f"published {relative}",
+            label=label,
+        )
+        _assert_optional_publication_document_aliases(
+            document,
+            contract=contract,
+            label=label,
         )
         _assert_publication_url_aliases(
             document,
             contract=contract,
-            label=f"published {relative}",
+            label=label,
             archive_name=archive_name,
             seen_aliases=seen_aliases,
         )
@@ -1665,12 +1782,6 @@ def _validate_published_erratum_identity_documents(
         contract=contract,
         label="published campaign summary.publication_erratum",
     )
-    for relative, document in optional_documents.items():
-        _assert_current_source_aliases(
-            document,
-            contract=contract,
-            label=f"published {relative}",
-        )
 
 
 def _validate_published_erratum_metadata_copy(
@@ -1771,6 +1882,7 @@ def _validate_published_release_documents(
             execution,
             contract=contract,
             label=f"published release result.{key}",
+            require_concept=True,
         )
     result_derivation = _require_mapping(
         result.get("derivation"), label="published release result.derivation"
@@ -1817,6 +1929,7 @@ def _validate_published_release_documents(
         summary_execution,
         contract=contract,
         label="published campaign summary.campaign.scientific_execution_release_identity",
+        require_concept=False,
     )
     if (
         result.get("publication_preflight_status") != "pass"

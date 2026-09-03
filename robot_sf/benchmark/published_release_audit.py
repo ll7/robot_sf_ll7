@@ -1011,7 +1011,7 @@ def _verify_erratum_manifest_files(
     }
 
 
-def _assert_cold_current_aliases(
+def _assert_cold_current_aliases(  # noqa: C901
     payload: Mapping[str, Any],
     *,
     label: str,
@@ -1019,30 +1019,47 @@ def _assert_cold_current_aliases(
     doi: str,
     concept_doi: str,
     required: bool,
+    source_sha: str | None = None,
 ) -> None:
     """Reject predecessor coordinates in one current-publication mapping."""
-    tag_values = [payload[key] for key in _ERRATUM_CURRENT_TAG_KEYS if key in payload]
-    doi_values = [payload[key] for key in _ERRATUM_CURRENT_DOI_KEYS if key in payload]
-    if required and not tag_values:
-        raise ValueError(f"{label} is missing its current release tag")
-    if required and not doi_values:
-        raise ValueError(f"{label} is missing its current version DOI")
-    if any(value != tag for value in tag_values):
-        raise ValueError(f"{label} contains a stale release-tag alias")
-    if any(value != doi for value in doi_values):
-        raise ValueError(f"{label} contains a stale version-DOI alias")
-    if "concept_doi" in payload and payload["concept_doi"] != concept_doi:
-        raise ValueError(f"{label} contains an invalid concept-DOI alias")
-    provenance = payload.get("provenance")
-    if isinstance(provenance, Mapping):
-        _assert_cold_current_aliases(
-            provenance,
-            label=f"{label}.provenance",
-            tag=tag,
-            doi=doi,
-            concept_doi=concept_doi,
-            required=False,
-        )
+    levels: list[tuple[Mapping[str, Any], str]] = [(payload, label)]
+    if "provenance" in payload:
+        provenance = payload["provenance"]
+        if not isinstance(provenance, Mapping):
+            raise ValueError(f"{label}.provenance must be an object")
+        if "provenance" in provenance:
+            raise ValueError(f"{label}.provenance contains unsupported nested provenance")
+        levels.append((provenance, f"{label}.provenance"))
+    for level, level_label in levels:
+        tag_values = [level[key] for key in _ERRATUM_CURRENT_TAG_KEYS if key in level]
+        doi_values = [level[key] for key in _ERRATUM_CURRENT_DOI_KEYS if key in level]
+        if any(value != tag for value in tag_values):
+            raise ValueError(f"{level_label} contains a stale release-tag alias")
+        if any(value != doi for value in doi_values):
+            raise ValueError(f"{level_label} contains a stale version-DOI alias")
+        if "concept_doi" in level and level["concept_doi"] != concept_doi:
+            raise ValueError(f"{level_label} contains an invalid concept-DOI alias")
+        source_values = [
+            level[key]
+            for key in ("source_sha", "source_commit", "scientific_source_sha")
+            if key in level
+        ]
+        if source_sha is not None and any(value != source_sha for value in source_values):
+            raise ValueError(f"{level_label} contains an invalid scientific source SHA")
+    if required:
+        tag_values = [
+            level[key] for level, _ in levels for key in _ERRATUM_CURRENT_TAG_KEYS if key in level
+        ]
+        doi_values = [
+            level[key] for level, _ in levels for key in _ERRATUM_CURRENT_DOI_KEYS if key in level
+        ]
+        concept_values = [level["concept_doi"] for level, _ in levels if "concept_doi" in level]
+        if not tag_values:
+            raise ValueError(f"{label} is missing its current release tag")
+        if not doi_values:
+            raise ValueError(f"{label} is missing its current version DOI")
+        if not concept_values:
+            raise ValueError(f"{label} is missing its current concept DOI")
 
 
 def _assert_cold_publication_mapping(
@@ -1054,11 +1071,12 @@ def _assert_cold_publication_mapping(
     concept_doi: str,
     predecessor_doi: str,
     required: bool,
+    source_sha: str,
 ) -> None:
     """Validate a nested ``publication`` mapping in a downloaded document."""
-    publication = payload.get("publication")
-    if publication is None and not required:
+    if "publication" not in payload and not required:
         return
+    publication = payload.get("publication")
     if not isinstance(publication, Mapping):
         raise ValueError(f"{label}.publication must be an object")
     _assert_cold_current_aliases(
@@ -1068,12 +1086,13 @@ def _assert_cold_publication_mapping(
         doi=doi,
         concept_doi=concept_doi,
         required=True,
+        source_sha=source_sha,
     )
     if publication.get("predecessor_version_doi") != predecessor_doi:
         raise ValueError(f"{label}.publication contains a stale predecessor DOI alias")
 
 
-def _assert_cold_predecessor_aliases(
+def _assert_cold_predecessor_aliases(  # noqa: C901
     payload: Mapping[str, Any],
     *,
     label: str,
@@ -1081,32 +1100,40 @@ def _assert_cold_predecessor_aliases(
     predecessor_doi: str,
     concept_doi: str,
     source_sha: str,
+    require_concept: bool,
 ) -> None:
     """Validate an explicitly preserved scientific-execution identity."""
-    tags = [payload[key] for key in _ERRATUM_CURRENT_TAG_KEYS if key in payload]
-    dois = [payload[key] for key in _ERRATUM_CURRENT_DOI_KEYS if key in payload]
-    if not tags or any(value != predecessor_tag for value in tags):
-        raise ValueError(f"{label} contains an invalid predecessor tag alias")
-    if not dois or any(value != predecessor_doi for value in dois):
-        raise ValueError(f"{label} contains an invalid predecessor DOI alias")
-    if "concept_doi" in payload and payload["concept_doi"] != concept_doi:
-        raise ValueError(f"{label} contains an invalid predecessor concept DOI")
-    for key in ("source_sha", "source_commit", "scientific_source_sha"):
-        if key in payload and payload[key] != source_sha:
-            raise ValueError(f"{label} contains an invalid scientific source SHA")
+    levels: list[tuple[Mapping[str, Any], str]] = [(payload, label)]
     provenance = payload.get("provenance")
-    if isinstance(provenance, Mapping) and any(
-        key in provenance
-        for key in (*_ERRATUM_CURRENT_TAG_KEYS, *_ERRATUM_CURRENT_DOI_KEYS, "concept_doi")
-    ):
-        _assert_cold_predecessor_aliases(
-            provenance,
-            label=f"{label}.provenance",
-            predecessor_tag=predecessor_tag,
-            predecessor_doi=predecessor_doi,
-            concept_doi=concept_doi,
-            source_sha=source_sha,
-        )
+    if "provenance" in payload:
+        if not isinstance(provenance, Mapping):
+            raise ValueError(f"{label}.provenance must be an object")
+        if "provenance" in provenance:
+            raise ValueError(f"{label}.provenance contains unsupported nested provenance")
+        levels.append((provenance, f"{label}.provenance"))
+
+    for level, level_label in levels:
+        tags = [level[key] for key in _ERRATUM_CURRENT_TAG_KEYS if key in level]
+        dois = [level[key] for key in _ERRATUM_CURRENT_DOI_KEYS if key in level]
+        if any(value != predecessor_tag for value in tags):
+            raise ValueError(f"{level_label} contains an invalid predecessor tag alias")
+        if any(value != predecessor_doi for value in dois):
+            raise ValueError(f"{level_label} contains an invalid predecessor DOI alias")
+        if "concept_doi" in level and level["concept_doi"] != concept_doi:
+            raise ValueError(f"{level_label} contains an invalid predecessor concept DOI")
+        for key in ("source_sha", "source_commit", "scientific_source_sha"):
+            if key in level and level[key] != source_sha:
+                raise ValueError(f"{level_label} contains an invalid scientific source SHA")
+
+    tags = [level[key] for level, _ in levels for key in _ERRATUM_CURRENT_TAG_KEYS if key in level]
+    dois = [level[key] for level, _ in levels for key in _ERRATUM_CURRENT_DOI_KEYS if key in level]
+    if not tags:
+        raise ValueError(f"{label} contains an invalid predecessor tag alias")
+    if not dois:
+        raise ValueError(f"{label} contains an invalid predecessor DOI alias")
+    concepts = [level["concept_doi"] for level, _ in levels if "concept_doi" in level]
+    if require_concept and not concepts:
+        raise ValueError(f"{label} contains an invalid predecessor concept DOI")
 
 
 def _assert_cold_publication_document(
@@ -1128,6 +1155,7 @@ def _assert_cold_publication_document(
         doi=doi,
         concept_doi=concept_doi,
         required=False,
+        source_sha=source_sha,
     )
     _assert_cold_publication_mapping(
         payload,
@@ -1137,11 +1165,14 @@ def _assert_cold_publication_document(
         concept_doi=concept_doi,
         predecessor_doi=predecessor_doi,
         required=False,
+        source_sha=source_sha,
     )
     for key in ("benchmark_release", "resolved_manifest", "campaign"):
-        current = payload.get(key)
-        if not isinstance(current, Mapping):
+        if key not in payload:
             continue
+        current = payload[key]
+        if not isinstance(current, Mapping):
+            raise ValueError(f"{label}.{key} must be an object")
         _assert_cold_current_aliases(
             current,
             label=f"{label}.{key}",
@@ -1149,6 +1180,7 @@ def _assert_cold_publication_document(
             doi=doi,
             concept_doi=concept_doi,
             required=True,
+            source_sha=source_sha,
         )
         _assert_cold_publication_mapping(
             current,
@@ -1158,22 +1190,27 @@ def _assert_cold_publication_document(
             concept_doi=concept_doi,
             predecessor_doi=predecessor_doi,
             required=True,
+            source_sha=source_sha,
         )
     for key in (
         "scientific_execution_benchmark_release",
         "scientific_execution_resolved_manifest",
         "scientific_execution_release_identity",
     ):
-        execution = payload.get(key)
-        if isinstance(execution, Mapping):
-            _assert_cold_predecessor_aliases(
-                execution,
-                label=f"{label}.{key}",
-                predecessor_tag=predecessor_tag,
-                predecessor_doi=predecessor_doi,
-                concept_doi=concept_doi,
-                source_sha=source_sha,
-            )
+        if key not in payload:
+            continue
+        execution = payload[key]
+        if not isinstance(execution, Mapping):
+            raise ValueError(f"{label}.{key} must be an object")
+        _assert_cold_predecessor_aliases(
+            execution,
+            label=f"{label}.{key}",
+            predecessor_tag=predecessor_tag,
+            predecessor_doi=predecessor_doi,
+            concept_doi=concept_doi,
+            source_sha=source_sha,
+            require_concept=key != "scientific_execution_release_identity",
+        )
 
 
 def _verify_erratum_cold_publication_documents(

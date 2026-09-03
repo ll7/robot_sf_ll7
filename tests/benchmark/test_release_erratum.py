@@ -19,6 +19,8 @@ from robot_sf.benchmark.release_erratum import (
     ErratumContract,
     PredecessorEvidence,
     ReleaseErratumError,
+    _assert_predecessor_execution_aliases,
+    _assert_publication_aliases,
     _assert_publication_url_aliases,
     build_erratum_receipt,
     compare_scientific_snapshots,
@@ -119,6 +121,173 @@ def _contract(archive: Path) -> ErratumContract:
     )
 
 
+def test_publication_aliases_accept_split_identity_and_reject_incomplete_shapes(
+    tmp_path: Path,
+) -> None:
+    """Current coordinates may span provenance, but none may be absent or malformed."""
+    archive = tmp_path / "predecessor.tar.gz"
+    archive.write_bytes(b"fixture")
+    contract = _contract(archive)
+    split = {
+        "release_tag": contract.successor_github_release_tag,
+        "provenance": {
+            "version_doi": contract.successor_version_doi,
+            "concept_doi": contract.concept_doi,
+        },
+    }
+    _assert_publication_aliases(split, contract=contract, label="split")
+
+    invalid = (
+        ({"release_tag": contract.successor_github_release_tag, "provenance": "bad"}, "object"),
+        (
+            {
+                "provenance": {
+                    "version_doi": contract.successor_version_doi,
+                    "concept_doi": contract.concept_doi,
+                }
+            },
+            "release-tag",
+        ),
+        (
+            {
+                "release_tag": contract.successor_github_release_tag,
+                "provenance": {"concept_doi": contract.concept_doi},
+            },
+            "version-DOI",
+        ),
+        (
+            {
+                "release_tag": contract.successor_github_release_tag,
+                "provenance": {"version_doi": contract.successor_version_doi},
+            },
+            "concept-DOI",
+        ),
+        (
+            {
+                "release_tag": contract.successor_github_release_tag,
+                "provenance": {
+                    "version_doi": contract.successor_version_doi,
+                    "concept_doi": contract.concept_doi,
+                    "provenance": {"version_doi": contract.predecessor_version_doi},
+                },
+            },
+            "nested provenance",
+        ),
+        (
+            {
+                "release_tag": contract.successor_github_release_tag,
+                "version_doi": contract.successor_version_doi,
+                "concept_doi": contract.concept_doi,
+                "publication": "malformed",
+            },
+            "publication must be an object",
+        ),
+        (
+            {
+                "release_tag": contract.successor_github_release_tag,
+                "version_doi": contract.successor_version_doi,
+                "concept_doi": contract.concept_doi,
+                "publication": {
+                    "release_tag": contract.predecessor_github_release_tag,
+                    "version_doi": contract.successor_version_doi,
+                    "concept_doi": contract.concept_doi,
+                    "predecessor_version_doi": contract.predecessor_version_doi,
+                },
+            },
+            "publication contains a stale release-tag alias",
+        ),
+        (
+            {
+                "release_tag": contract.successor_github_release_tag,
+                "version_doi": contract.successor_version_doi,
+                "concept_doi": contract.concept_doi,
+                "publication": {
+                    "release_tag": contract.successor_github_release_tag,
+                    "version_doi": contract.successor_version_doi,
+                    "concept_doi": contract.concept_doi,
+                    "predecessor_version_doi": contract.predecessor_version_doi,
+                    "provenance": {"provenance": {"version_doi": contract.predecessor_version_doi}},
+                },
+            },
+            "publication.provenance contains unsupported nested provenance",
+        ),
+    )
+    for payload, message in invalid:
+        with pytest.raises(ReleaseErratumError, match=message):
+            _assert_publication_aliases(payload, contract=contract, label="invalid")
+
+
+def test_predecessor_aliases_accept_split_identity_and_reject_incomplete_shapes(
+    tmp_path: Path,
+) -> None:
+    """Preserved execution coordinates remain complete across root and provenance."""
+    archive = tmp_path / "predecessor.tar.gz"
+    archive.write_bytes(b"fixture")
+    contract = _contract(archive)
+    split = {
+        "release_tag": contract.predecessor_github_release_tag,
+        "provenance": {
+            "version_doi": contract.predecessor_version_doi,
+            "concept_doi": contract.concept_doi,
+        },
+    }
+    _assert_predecessor_execution_aliases(
+        split,
+        contract=contract,
+        label="split",
+        require_concept=True,
+    )
+
+    invalid = (
+        (
+            {"release_tag": contract.predecessor_github_release_tag, "provenance": "bad"},
+            "object",
+        ),
+        (
+            {
+                "provenance": {
+                    "version_doi": contract.predecessor_version_doi,
+                    "concept_doi": contract.concept_doi,
+                }
+            },
+            "tag alias",
+        ),
+        (
+            {
+                "release_tag": contract.predecessor_github_release_tag,
+                "provenance": {"concept_doi": contract.concept_doi},
+            },
+            "DOI alias",
+        ),
+        (
+            {
+                "release_tag": contract.predecessor_github_release_tag,
+                "provenance": {"version_doi": contract.predecessor_version_doi},
+            },
+            "concept DOI",
+        ),
+        (
+            {
+                "release_tag": contract.predecessor_github_release_tag,
+                "provenance": {
+                    "version_doi": contract.predecessor_version_doi,
+                    "concept_doi": contract.concept_doi,
+                    "provenance": {"version_doi": contract.successor_version_doi},
+                },
+            },
+            "nested provenance",
+        ),
+    )
+    for payload, message in invalid:
+        with pytest.raises(ReleaseErratumError, match=message):
+            _assert_predecessor_execution_aliases(
+                payload,
+                contract=contract,
+                label="invalid",
+                require_concept=True,
+            )
+
+
 def _predecessor_evidence(archive: Path, contract: ErratumContract) -> PredecessorEvidence:
     return PredecessorEvidence(
         archive_path=archive,
@@ -180,6 +349,9 @@ def _with_bundle_metadata(
         "scientific_source_sha": updated.source_sha,
         "provenance": provenance,
         "publication": {
+            "release_tag": updated.successor_github_release_tag,
+            "release_id": updated.successor_github_release_tag,
+            "doi": updated.successor_version_doi,
             "source_sha": updated.source_sha,
             "source_commit": updated.source_sha,
             "scientific_source_sha": updated.source_sha,
@@ -1261,10 +1433,12 @@ def test_cold_erratum_receipt_rejects_stale_release_document_alias(tmp_path: Pat
 @pytest.mark.parametrize(
     ("fault", "match"),
     [
-        ("nested_publication", "publication contains a stale DOI alias"),
+        ("nested_publication", "publication contains a stale version-DOI alias"),
         ("execution_provenance", "provenance contains a stale predecessor DOI"),
         ("derived_validator", "derived revalidation receipt identity is stale"),
         ("summary_source", "stale scientific source SHA"),
+        ("optional_publication", "publication contains a stale release-tag alias"),
+        ("optional_publication_null", "publication must be an object"),
     ],
 )
 def test_cold_erratum_receipt_rejects_nested_identity_drift(
@@ -1305,11 +1479,31 @@ def test_cold_erratum_receipt_rejects_nested_identity_drift(
         derived = json.loads(derived_path.read_text(encoding="utf-8"))
         derived["validator"]["commit"] = "0" * 40
         derived_path.write_text(json.dumps(derived), encoding="utf-8")
-    else:
+    elif fault == "summary_source":
         summary_path = campaign / "reports/campaign_summary.json"
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         summary["campaign"]["scientific_execution_release_identity"]["source_sha"] = "0" * 40
         summary_path.write_text(json.dumps(summary), encoding="utf-8")
+    else:
+        manifest = json.loads(
+            (campaign / "release/release_manifest.resolved.json").read_text(encoding="utf-8")
+        )
+        result = json.loads((campaign / "release/release_result.json").read_text(encoding="utf-8"))
+        optional = {
+            **manifest,
+            "benchmark_release": dict(manifest),
+            "scientific_execution_benchmark_release": result[
+                "scientific_execution_benchmark_release"
+            ],
+            "publication_erratum": manifest["erratum"],
+        }
+        if fault == "optional_publication":
+            optional["benchmark_release"]["publication"]["release_tag"] = (
+                contract.predecessor_github_release_tag
+            )
+        else:
+            optional["publication"] = None
+        (campaign / "run_meta.json").write_text(json.dumps(optional), encoding="utf-8")
 
     with pytest.raises(ReleaseErratumError, match=match):
         validate_erratum_receipt_against_campaign(

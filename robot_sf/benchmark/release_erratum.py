@@ -762,6 +762,20 @@ def _validate_predecessor_release_manifest(  # noqa: C901, PLR0912
         raise ReleaseErratumError(
             "predecessor resolved manifest release_tag differs from the predecessor tag"
         )
+    if (
+        "benchmark_release_id" in manifest
+        and manifest["benchmark_release_id"] != contract.scientific_release_id
+    ):
+        raise ReleaseErratumError(
+            "predecessor resolved manifest benchmark_release_id conflicts with the campaign ID"
+        )
+    if (
+        "benchmark_release_tag" in manifest
+        and manifest["benchmark_release_tag"] != contract.predecessor_github_release_tag
+    ):
+        raise ReleaseErratumError(
+            "predecessor resolved manifest benchmark_release_tag conflicts with the predecessor"
+        )
     if manifest.get("source_sha") != contract.source_sha:
         raise ReleaseErratumError(
             "predecessor resolved manifest source_sha differs from the frozen source"
@@ -1886,6 +1900,7 @@ def _assert_optional_publication_document_aliases(
             label=f"{label}.{key}",
             require_concept=key != "scientific_execution_release_identity",
             require_release_id=key == "scientific_execution_resolved_manifest",
+            require_source=True,
         )
 
 
@@ -2063,6 +2078,7 @@ def _validate_published_release_documents(
             label=f"published release result.{key}",
             require_concept=True,
             require_release_id=key == "scientific_execution_resolved_manifest",
+            require_source=True,
         )
     result_derivation = _require_mapping(
         result.get("derivation"), label="published release result.derivation"
@@ -2121,6 +2137,7 @@ def _validate_published_release_documents(
         contract=contract,
         label="published campaign summary.campaign.scientific_execution_release_identity",
         require_concept=False,
+        require_source=True,
     )
     if (
         result.get("publication_preflight_status") != "pass"

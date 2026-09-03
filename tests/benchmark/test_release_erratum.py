@@ -1581,6 +1581,56 @@ def test_cold_erratum_receipt_rejects_nested_identity_drift(
         )
 
 
+@pytest.mark.parametrize(
+    ("relative", "keys"),
+    (
+        ("release/release_result.json", ("scientific_execution_benchmark_release",)),
+        ("release/release_result.json", ("scientific_execution_resolved_manifest",)),
+        (
+            "reports/campaign_summary.json",
+            ("campaign", "scientific_execution_release_identity"),
+        ),
+    ),
+)
+def test_cold_erratum_receipt_rejects_missing_execution_source(
+    tmp_path: Path,
+    relative: str,
+    keys: tuple[str, ...],
+) -> None:
+    """Every mandatory preserved execution identity carries the frozen source SHA."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.write_text(
+        json.dumps(
+            build_erratum_receipt(contract=contract, predecessor=snapshot, successor=snapshot)
+        ),
+        encoding="utf-8",
+    )
+    document_path = campaign / relative
+    document = json.loads(document_path.read_text(encoding="utf-8"))
+    identity = document
+    for key in keys:
+        identity = identity[key]
+    for key in ("source_sha", "source_commit", "scientific_source_sha"):
+        identity.pop(key, None)
+    document_path.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match="missing its scientific source SHA"):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(archive, contract),
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+
+
 @pytest.mark.parametrize("location", ["root", "provenance", "publication"])
 def test_cold_erratum_receipt_rejects_stale_current_source_alias(
     tmp_path: Path, location: str
@@ -1823,6 +1873,8 @@ def test_predecessor_archive_binds_scientific_release_id_to_resolved_manifest(
         ("root_release_tag", "release_tag differs"),
         ("root_source_sha", "source_sha differs"),
         ("root_source_commit", "manifest.source_commit differs"),
+        ("root_benchmark_release_id", "benchmark_release_id conflicts"),
+        ("root_benchmark_release_tag", "benchmark_release_tag conflicts"),
         ("malformed_provenance", "provenance must be an object"),
         ("nested_provenance", "unsupported nested provenance"),
         ("provenance_source_sha", "provenance.source_sha differs"),
@@ -1850,6 +1902,8 @@ def test_predecessor_archive_rejects_stale_resolved_manifest_identity(
         "root_release_tag": (manifest, "release_tag", NEW_TAG),
         "root_source_sha": (manifest, "source_sha", "0" * 40),
         "root_source_commit": (manifest, "source_commit", "0" * 40),
+        "root_benchmark_release_id": (manifest, "benchmark_release_id", "different_campaign_id"),
+        "root_benchmark_release_tag": (manifest, "benchmark_release_tag", NEW_TAG),
         "malformed_provenance": (manifest, "provenance", "malformed"),
         "nested_provenance": (provenance, "provenance", {}),
         "provenance_source_sha": (provenance, "source_sha", "0" * 40),

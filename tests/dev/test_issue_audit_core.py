@@ -1104,6 +1104,14 @@ def test_deadline_runner_fails_closed_before_the_next_rest_call() -> None:
     assert calls == []
 
 
+def test_deadline_rejects_non_finite_budgets() -> None:
+    """A non-finite CLI budget must not disable the aggregate timeout."""
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        issue_audit_core._deadline_from_seconds(float("nan"))
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        issue_audit_core._deadline_from_seconds(float("inf"))
+
+
 def test_plan_writes_fail_closed_artifact_when_wall_budget_is_zero(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1188,6 +1196,45 @@ def test_classification_timeout_is_explicit_and_suppresses_mutations(
     }
     assert plan["mutations"] == []
     assert "classification" in plan["truncation_or_errors"]
+
+
+def test_final_classification_overrun_cannot_report_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A deadline reached by the final classifier still produces a timeout plan."""
+    checks = 0
+
+    def expire_after_classification(_deadline: float | None) -> bool:
+        nonlocal checks
+        checks += 1
+        return checks >= 2
+
+    monkeypatch.setattr(issue_audit_core, "_deadline_expired", expire_after_classification)
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [_issue(204, body="## Definition of Done\n- [ ] implement the change")],
+            "open_prs": [],
+            "merged_prs": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": ["state:ready"],
+            "inventory": {},
+        },
+        deadline=10.0,
+    )
+
+    assert plan["classification_status"] == {
+        "status": "timed_out",
+        "reason": "issue-audit wall-time budget exhausted during issue classification",
+        "classified_issues": 1,
+        "total_issues": 1,
+        "remaining_issue_numbers": [],
+        "resume_from_issue": None,
+        "mutations_suppressed": True,
+    }
+    assert plan["mutations"] == []
 
 
 def test_build_plan_indexes_merged_pr_references_once(

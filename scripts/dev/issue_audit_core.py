@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import re
 import subprocess
 import time
@@ -221,8 +222,8 @@ def _deadline_from_seconds(max_wall_seconds: float | None) -> float | None:
     """Return an absolute monotonic deadline for an optional audit budget."""
     if max_wall_seconds is None:
         return None
-    if max_wall_seconds < 0:
-        raise ValueError("max_wall_seconds must be non-negative")
+    if not math.isfinite(max_wall_seconds) or max_wall_seconds < 0:
+        raise ValueError("max_wall_seconds must be finite and non-negative")
     return time.monotonic() + max_wall_seconds
 
 
@@ -2104,6 +2105,11 @@ def build_audit_plan(
                     "safe_mutations_applied": [],
                 }
             )
+        if _deadline_expired(effective_deadline):
+            classification_timeout_reason = (
+                "issue-audit wall-time budget exhausted during issue classification"
+            )
+            break
     inventory_meta = inventory.get("inventory") or {}
     truncated = [
         name
@@ -2888,7 +2894,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--max-wall-seconds",
         type=float,
         default=DEFAULT_MAX_AUDIT_WALL_SECONDS,
-        help="aggregate REST-discovery wall-time budget; zero emits a fail-closed empty plan",
+        help=(
+            "aggregate audit wall-time budget across discovery and classification; "
+            "zero emits a fail-closed empty plan"
+        ),
     )
     plan_parser.add_argument("--output", type=Path)
     apply_parser = subparsers.add_parser("apply", help="apply a previously emitted plan")
@@ -2903,8 +2912,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     envelope_parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     if args.command == "plan":
-        if args.max_wall_seconds < 0:
-            parser.error("--max-wall-seconds must be non-negative")
+        if not math.isfinite(args.max_wall_seconds) or args.max_wall_seconds < 0:
+            parser.error("--max-wall-seconds must be finite and non-negative")
         deadline = _deadline_from_seconds(args.max_wall_seconds)
         plan = build_audit_plan(
             discover_inventory(

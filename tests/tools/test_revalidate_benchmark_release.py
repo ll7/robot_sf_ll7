@@ -157,6 +157,7 @@ def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
     metadata = tmp_path / "metadata.json"
     _write(metadata, '{"metadata":{"title":"erratum"}}\n')
     old_release = {
+        "schema_version": "benchmark-release-manifest.v0.2",
         "release_id": scientific_release_id,
         "release_tag": old_tag,
         "doi": "10.5281/zenodo.22227035",
@@ -290,6 +291,90 @@ def test_erratum_identity_rewrites_publication_but_preserves_execution_input(
         )
     assert launch.read_bytes() == launch_before
     assert (campaign / recovery.ERRATUM_METADATA_RELATIVE).read_bytes() == metadata.read_bytes()
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("missing_provenance", "lacks predecessor provenance"),
+        ("malformed_provenance", "lacks predecessor provenance"),
+        ("missing_tag", "lost predecessor identity"),
+        ("missing_release_id", "lost scientific release ID"),
+        ("missing_doi", "lost predecessor DOI"),
+        ("stale_doi", "lost predecessor DOI"),
+        ("missing_concept", "lost predecessor concept DOI"),
+        ("null_publication", "publication identity must be an object"),
+        ("wrong_schema", "schema is unsupported"),
+    ),
+)
+def test_erratum_resolved_manifest_rewrite_rejects_malformed_predecessor_identity(
+    tmp_path: Path,
+    mutation: str,
+    message: str,
+) -> None:
+    """A successor identity cannot be synthesized from incomplete historical evidence."""
+    source_sha = "5" * 40
+    predecessor_tag = f"paper-matrix-v2-h600-s30-2026-09-{source_sha}"
+    scientific_release_id = "paper_matrix_v2_h600_s30_fixture"
+    metadata = tmp_path / "metadata.json"
+    _write(metadata, "{}\n")
+    contract = ErratumContract(
+        correction_id="september-2026-derived-metadata-erratum.1",
+        predecessor_version_doi="10.5281/zenodo.22227035",
+        predecessor_archive_sha256="e" * 64,
+        predecessor_archive_size_bytes=54_219_004,
+        predecessor_github_release_tag=predecessor_tag,
+        source_sha=source_sha,
+        scientific_release_id=scientific_release_id,
+        planner_arms=14,
+        scenario_count=48,
+        seed_count=30,
+        episode_rows=20_160,
+        builder_sha="a" * 40,
+        validator_sha="a" * 40,
+        orchestration_sha="b" * 40,
+        concept_doi="10.5281/zenodo.22227034",
+        successor_version_doi="10.5281/zenodo.22265925",
+        successor_github_release_tag=f"{predecessor_tag}-erratum.1",
+        metadata_path=metadata,
+        metadata_sha256=_sha256(metadata),
+    )
+    resolved = {
+        "schema_version": "benchmark-release-manifest.v0.2",
+        "release_id": scientific_release_id,
+        "release_tag": predecessor_tag,
+        "source_sha": source_sha,
+        "provenance": {
+            "doi": contract.predecessor_version_doi,
+            "version_doi": contract.predecessor_version_doi,
+            "concept_doi": contract.concept_doi,
+            "source_sha": source_sha,
+            "source_commit": source_sha,
+        },
+    }
+    provenance = resolved["provenance"]
+    if mutation == "missing_provenance":
+        resolved.pop("provenance")
+    elif mutation == "malformed_provenance":
+        resolved["provenance"] = None
+    elif mutation == "missing_tag":
+        resolved.pop("release_tag")
+    elif mutation == "missing_release_id":
+        resolved.pop("release_id")
+    elif mutation == "missing_doi":
+        provenance.pop("doi")
+        provenance.pop("version_doi")
+    elif mutation == "stale_doi":
+        provenance["version_doi"] = contract.successor_version_doi
+    elif mutation == "missing_concept":
+        provenance.pop("concept_doi")
+    elif mutation == "null_publication":
+        resolved["publication"] = None
+    else:
+        resolved["schema_version"] = "benchmark-release-manifest.v0.1"
+
+    with pytest.raises(recovery.DerivedReleaseError, match=message):
+        recovery._rewrite_resolved_manifest_publication_identity(resolved, contract=contract)
 
 
 def test_successor_identity_assertion_rejects_stale_or_malformed_aliases(

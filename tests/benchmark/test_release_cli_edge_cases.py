@@ -296,6 +296,52 @@ def test_release_cli_keeps_legacy_v02_manifest_binding() -> None:
     assert binding["version_doi"] == manifest.version_doi
 
 
+@pytest.mark.parametrize(
+    "field",
+    [
+        "predecessor_deposition_id",
+        "expected_predecessor_doi",
+        "expected_concept_doi",
+        "expected_predecessor_tag",
+        "expected_source_sha",
+        "expected_successor_tag",
+    ],
+)
+def test_release_cli_rejects_erratum_new_version_argument_conflicts_before_session(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    field: str,
+) -> None:
+    """Explicit successor inputs cannot contradict a checked-in erratum contract."""
+    payload = json.loads(ERRATUM_CONTRACT_PATH.read_text(encoding="utf-8"))
+    supersedes = payload["supersedes"]
+    scientific = payload["scientific_identity"]
+    successor = payload["successor"]
+    args = _args("new-version", tmp_path)
+    args.manifest = ERRATUM_CONTRACT_PATH
+    args.metadata = Path(successor["metadata_path"])
+    args.predecessor_deposition_id = int(supersedes["version_doi"].rsplit(".", 1)[-1])
+    args.expected_predecessor_doi = supersedes["version_doi"]
+    args.expected_concept_doi = successor["concept_doi"]
+    args.expected_predecessor_tag = supersedes["github_release_tag"]
+    args.expected_source_sha = scientific["source_sha"]
+    args.expected_successor_tag = successor["github_release_tag"]
+    setattr(args, field, -1 if field == "predecessor_deposition_id" else "conflict")
+    monkeypatch.setattr(
+        release_cli.zenodo_publisher,
+        "build_session",
+        lambda path: (_ for _ in ()).throw(
+            AssertionError("conflicting erratum arguments must fail before session construction")
+        ),
+    )
+
+    assert release_cli.handle(args) == 2
+    output = capsys.readouterr().out
+    assert "conflict" in output
+    assert field in output
+
+
 def test_release_cli_rejects_tampered_erratum_before_session(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

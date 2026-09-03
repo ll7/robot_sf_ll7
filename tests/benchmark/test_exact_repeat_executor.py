@@ -1023,7 +1023,9 @@ def test_execute_campaign_prefers_isolation_over_degradation(tmp_path, manifest,
 # --- native PPO determinism (issue #5498 slice) --------------------------
 
 
-def test_native_ppo_target_runs_deterministically_with_real_runner(tmp_path, resolved_bundle):
+def test_native_ppo_target_runs_deterministically_with_real_runner(
+    tmp_path, resolved_bundle, monkeypatch
+):
     """Native PPO executes through run_episode and is bitwise-identical across repeats.
 
     Issue #5498's single-host slice (#5499) recorded the three PPO cells as
@@ -1044,6 +1046,14 @@ def test_native_ppo_target_runs_deterministically_with_real_runner(tmp_path, res
     """
     if not is_runnable_algo("ppo"):
         pytest.skip("ppo baseline not runnable on this host")
+
+    # This gate proves functional exact-repeat determinism, not hosted-runner
+    # wall-clock performance.  Keep production's 0.2 s policy-step budget
+    # unchanged, but give this test enough headroom that transient shared-host
+    # scheduling cannot turn one otherwise native PPO step into fallback output.
+    # Dedicated timeout tests continue to exercise the production fail-closed
+    # behavior with deliberately small budgets.
+    monkeypatch.setattr("robot_sf.benchmark.runner.POLICY_STEP_TIMEOUT_SECS", 2.0)
 
     ppo_target = next(t for t in resolved_bundle["targets"] if t["planner"] == "ppo")
     ppo_bundle = {k: v for k, v in resolved_bundle.items() if k != "bundle_sha256"}
@@ -1066,7 +1076,10 @@ def test_native_ppo_target_runs_deterministically_with_real_runner(tmp_path, res
         )
 
     # Native execution: no degraded/unrunnable disposition, exactly three repeats.
-    assert "disposition" not in result, "native PPO must not be dispositioned as unrunnable"
+    assert "disposition" not in result, (
+        "native PPO must not be dispositioned as unrunnable: "
+        f"{result.get('disposition')}: {result.get('disposition_reason')}"
+    )
     assert result.get("degraded") is not True
     assert len(result["repeats"]) == 3
 

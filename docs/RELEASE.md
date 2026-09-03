@@ -436,8 +436,32 @@ same Zenodo concept instead:
    These identities have different meanings: the scientific source produced
    the rows, the correction builder/validator accepted the recovered derived
    verdict, and the orchestration commit implements this successor workflow.
-   Pass the frozen manifest to the direct Zenodo `upload`, `verify`, and
-   `publish` commands; an omitted binding is rejected before any HTTP request.
+   The resolved manifest's `release_id` remains the exact scientific campaign
+   identifier, while `release_tag` and the DOI fields move to the successor.
+   Explicit `publication` mappings carry the successor tag and DOI but do not
+   synthesize a tag-shaped `release_id`. This separation is mandatory even when
+   the predecessor happened to use the same spelling for its ID and tag.
+   The canonical `release/release_manifest.resolved.json`, canonical
+   `resolved_manifest` copies, and the erratum contract/receipt field
+   `scientific_identity.release_id` must carry that scientific ID. Compact
+   historical execution documents may omit it for compatibility, but the
+   correction workflow must preserve the omission and never synthesize or
+   conflate `release_id` with `release_tag`. A present malformed provenance or
+   publication mapping is invalid predecessor evidence and must fail closed
+   before the derived successor is promoted.
+   Pass the frozen manifest or erratum contract to the direct Zenodo `upload`,
+   `verify`, and `publish` commands; an omitted binding is rejected before any
+   HTTP request. For the September 2026 successor, the exact post-reservation
+   inputs are:
+
+   ```text
+   --manifest configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json
+   --metadata configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1_zenodo_metadata.json
+   ```
+
+   The CLI validates the erratum schema and metadata digest before constructing
+   an authenticated session, then carries the resulting tag, concept DOI,
+   version DOI, and metadata binding through every remote operation.
 5. Require the embedded erratum receipt to prove exact episode-identity,
    canonical-row, and component-metric equality. Historical non-finite
    diagnostic floats are preserved as typed `NaN`, positive-infinity, and

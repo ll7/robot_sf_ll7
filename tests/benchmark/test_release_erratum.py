@@ -38,6 +38,7 @@ BUILDER_SHA = "a4aaf1f06860cf632d0173c5a13e11ad855b6df2"
 ORCHESTRATION_SHA = "b" * 40
 OLD_TAG = f"paper-matrix-v2-h600-s30-2026-09-{SOURCE_SHA}"
 NEW_TAG = f"{OLD_TAG}-erratum.1"
+SCIENTIFIC_RELEASE_ID = "paper_matrix_v2_h600_s30_scientific_fixture"
 ARCHIVE_NAME = "fixture-publication-bundle.tar.gz"
 
 
@@ -87,6 +88,22 @@ def _write_campaign(root: Path) -> None:
             for seed in (111, 112)
         ]
         path.write_text("".join(f"{_canonical_json(row)}\n" for row in rows), encoding="utf-8")
+    manifest = {
+        "schema_version": "benchmark-release-manifest.v0.2",
+        "release_id": SCIENTIFIC_RELEASE_ID,
+        "release_tag": OLD_TAG,
+        "source_sha": SOURCE_SHA,
+        "provenance": {
+            "doi": "10.5281/zenodo.22227035",
+            "version_doi": "10.5281/zenodo.22227035",
+            "concept_doi": "10.5281/zenodo.22227034",
+            "source_sha": SOURCE_SHA,
+            "source_commit": SOURCE_SHA,
+        },
+    }
+    manifest_path = root / "release/release_manifest.resolved.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
 
 def _archive_campaign(campaign: Path, archive: Path) -> None:
@@ -96,6 +113,10 @@ def _archive_campaign(campaign: Path, archive: Path) -> None:
                 path,
                 arcname=f"fixture_bundle/payload/runs/{path.parent.name}/episodes.jsonl",
             )
+        bundle.add(
+            campaign / "release/release_manifest.resolved.json",
+            arcname="fixture_bundle/payload/release/release_manifest.resolved.json",
+        )
 
 
 def _contract(archive: Path) -> ErratumContract:
@@ -106,6 +127,7 @@ def _contract(archive: Path) -> ErratumContract:
         predecessor_archive_size_bytes=archive.stat().st_size,
         predecessor_github_release_tag=OLD_TAG,
         source_sha=SOURCE_SHA,
+        scientific_release_id=SCIENTIFIC_RELEASE_ID,
         planner_arms=2,
         scenario_count=2,
         seed_count=2,
@@ -130,6 +152,7 @@ def test_publication_aliases_accept_split_identity_and_reject_incomplete_shapes(
     contract = _contract(archive)
     split = {
         "release_tag": contract.successor_github_release_tag,
+        "release_id": contract.scientific_release_id,
         "provenance": {
             "version_doi": contract.successor_version_doi,
             "concept_doi": contract.concept_doi,
@@ -139,6 +162,15 @@ def test_publication_aliases_accept_split_identity_and_reject_incomplete_shapes(
 
     invalid = (
         ({"release_tag": contract.successor_github_release_tag, "provenance": "bad"}, "object"),
+        (
+            {
+                "release_tag": contract.successor_github_release_tag,
+                "release_id": contract.successor_github_release_tag,
+                "version_doi": contract.successor_version_doi,
+                "concept_doi": contract.concept_doi,
+            },
+            "scientific release-ID alias",
+        ),
         (
             {
                 "provenance": {
@@ -203,6 +235,21 @@ def test_publication_aliases_accept_split_identity_and_reject_incomplete_shapes(
                 "concept_doi": contract.concept_doi,
                 "publication": {
                     "release_tag": contract.successor_github_release_tag,
+                    "release_id": contract.predecessor_github_release_tag,
+                    "version_doi": contract.successor_version_doi,
+                    "concept_doi": contract.concept_doi,
+                    "predecessor_version_doi": contract.predecessor_version_doi,
+                },
+            },
+            "ambiguous publication release-ID alias",
+        ),
+        (
+            {
+                "release_tag": contract.successor_github_release_tag,
+                "version_doi": contract.successor_version_doi,
+                "concept_doi": contract.concept_doi,
+                "publication": {
+                    "release_tag": contract.successor_github_release_tag,
                     "version_doi": contract.successor_version_doi,
                     "concept_doi": contract.concept_doi,
                     "predecessor_version_doi": contract.predecessor_version_doi,
@@ -226,6 +273,7 @@ def test_predecessor_aliases_accept_split_identity_and_reject_incomplete_shapes(
     contract = _contract(archive)
     split = {
         "release_tag": contract.predecessor_github_release_tag,
+        "release_id": contract.scientific_release_id,
         "provenance": {
             "version_doi": contract.predecessor_version_doi,
             "concept_doi": contract.concept_doi,
@@ -242,6 +290,15 @@ def test_predecessor_aliases_accept_split_identity_and_reject_incomplete_shapes(
         (
             {"release_tag": contract.predecessor_github_release_tag, "provenance": "bad"},
             "object",
+        ),
+        (
+            {
+                "release_tag": contract.predecessor_github_release_tag,
+                "release_id": contract.predecessor_github_release_tag,
+                "version_doi": contract.predecessor_version_doi,
+                "concept_doi": contract.concept_doi,
+            },
+            "scientific release-ID alias",
         ),
         (
             {
@@ -318,7 +375,6 @@ def _with_bundle_metadata(
     )
     provenance = {
         "release_tag": updated.successor_github_release_tag,
-        "release_id": updated.successor_github_release_tag,
         "doi": updated.successor_version_doi,
         "version_doi": updated.successor_version_doi,
         "concept_doi": updated.concept_doi,
@@ -333,14 +389,16 @@ def _with_bundle_metadata(
     }
     execution = {
         "release_tag": updated.predecessor_github_release_tag,
-        "release_id": updated.predecessor_github_release_tag,
+        "release_id": updated.scientific_release_id,
         "doi": updated.predecessor_version_doi,
         "version_doi": updated.predecessor_version_doi,
         "concept_doi": updated.concept_doi,
+        "source_sha": updated.source_sha,
+        "source_commit": updated.source_sha,
     }
     current = {
         "release_tag": updated.successor_github_release_tag,
-        "release_id": updated.successor_github_release_tag,
+        "release_id": updated.scientific_release_id,
         "doi": updated.successor_version_doi,
         "version_doi": updated.successor_version_doi,
         "concept_doi": updated.concept_doi,
@@ -350,7 +408,6 @@ def _with_bundle_metadata(
         "provenance": provenance,
         "publication": {
             "release_tag": updated.successor_github_release_tag,
-            "release_id": updated.successor_github_release_tag,
             "doi": updated.successor_version_doi,
             "source_sha": updated.source_sha,
             "source_commit": updated.source_sha,
@@ -416,6 +473,7 @@ def _with_bundle_metadata(
         json.dumps(
             {
                 "benchmark_release": current,
+                "scientific_execution_benchmark_release": execution,
                 "campaign": {
                     **current,
                     "scientific_execution_release_identity": {
@@ -1437,6 +1495,8 @@ def test_cold_erratum_receipt_rejects_stale_release_document_alias(tmp_path: Pat
         ("execution_provenance", "provenance contains a stale predecessor DOI"),
         ("derived_validator", "derived revalidation receipt identity is stale"),
         ("summary_source", "stale scientific source SHA"),
+        ("summary_execution_scalar", "scientific_execution_benchmark_release must be an object"),
+        ("summary_execution_stale", "stale predecessor tag alias"),
         ("optional_publication", "publication contains a stale release-tag alias"),
         ("optional_publication_null", "publication must be an object"),
     ],
@@ -1479,10 +1539,15 @@ def test_cold_erratum_receipt_rejects_nested_identity_drift(
         derived = json.loads(derived_path.read_text(encoding="utf-8"))
         derived["validator"]["commit"] = "0" * 40
         derived_path.write_text(json.dumps(derived), encoding="utf-8")
-    elif fault == "summary_source":
+    elif fault in {"summary_source", "summary_execution_scalar", "summary_execution_stale"}:
         summary_path = campaign / "reports/campaign_summary.json"
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
-        summary["campaign"]["scientific_execution_release_identity"]["source_sha"] = "0" * 40
+        if fault == "summary_source":
+            summary["campaign"]["scientific_execution_release_identity"]["source_sha"] = "0" * 40
+        elif fault == "summary_execution_scalar":
+            summary["scientific_execution_benchmark_release"] = "malformed"
+        else:
+            summary["scientific_execution_benchmark_release"]["release_tag"] = NEW_TAG
         summary_path.write_text(json.dumps(summary), encoding="utf-8")
     else:
         manifest = json.loads(
@@ -1506,6 +1571,103 @@ def test_cold_erratum_receipt_rejects_nested_identity_drift(
         (campaign / "run_meta.json").write_text(json.dumps(optional), encoding="utf-8")
 
     with pytest.raises(ReleaseErratumError, match=match):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(archive, contract),
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+
+
+@pytest.mark.parametrize(
+    ("relative", "keys"),
+    (
+        ("release/release_result.json", ("scientific_execution_benchmark_release",)),
+        ("release/release_result.json", ("scientific_execution_resolved_manifest",)),
+        (
+            "reports/campaign_summary.json",
+            ("campaign", "scientific_execution_release_identity"),
+        ),
+    ),
+)
+def test_cold_erratum_receipt_rejects_missing_execution_source(
+    tmp_path: Path,
+    relative: str,
+    keys: tuple[str, ...],
+) -> None:
+    """Every mandatory preserved execution identity carries the frozen source SHA."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.write_text(
+        json.dumps(
+            build_erratum_receipt(contract=contract, predecessor=snapshot, successor=snapshot)
+        ),
+        encoding="utf-8",
+    )
+    document_path = campaign / relative
+    document = json.loads(document_path.read_text(encoding="utf-8"))
+    identity = document
+    for key in keys:
+        identity = identity[key]
+    for key in ("source_sha", "source_commit", "scientific_source_sha"):
+        identity.pop(key, None)
+    document_path.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match="missing its scientific source SHA"):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(archive, contract),
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+
+
+@pytest.mark.parametrize(
+    ("relative", "keys"),
+    (
+        ("release/release_manifest.resolved.json", ()),
+        ("release/release_result.json", ("resolved_manifest",)),
+        ("release/release_result.json", ("scientific_execution_resolved_manifest",)),
+    ),
+)
+def test_cold_erratum_receipt_requires_canonical_release_id_at_root(
+    tmp_path: Path,
+    relative: str,
+    keys: tuple[str, ...],
+) -> None:
+    """A provenance-only campaign ID cannot satisfy a canonical root-ID contract."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.write_text(
+        json.dumps(
+            build_erratum_receipt(contract=contract, predecessor=snapshot, successor=snapshot)
+        ),
+        encoding="utf-8",
+    )
+    document_path = campaign / relative
+    document = json.loads(document_path.read_text(encoding="utf-8"))
+    identity = document
+    for key in keys:
+        identity = identity[key]
+    release_id = identity.pop("release_id")
+    identity.setdefault("provenance", {})["release_id"] = release_id
+    document_path.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match="missing its scientific release-ID alias"):
         validate_erratum_receipt_against_campaign(
             receipt_path,
             campaign_root=campaign,
@@ -1733,6 +1895,104 @@ def test_predecessor_archive_rejects_hash_size_and_unsafe_members(tmp_path: Path
         snapshot_predecessor_archive(unsafe, contract=unsafe_contract)
 
 
+def test_predecessor_archive_binds_scientific_release_id_to_resolved_manifest(
+    tmp_path: Path,
+) -> None:
+    """The contract cannot invent a campaign ID absent from predecessor custody."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = replace(_contract(archive), scientific_release_id="different_campaign_id")
+
+    with pytest.raises(ReleaseErratumError, match="release_id differs"):
+        snapshot_predecessor_archive(archive, contract=contract)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("schema", "schema is unsupported"),
+        ("missing_release_id", "release_id differs"),
+        ("version_doi", "version DOI differs"),
+        ("missing_version_doi", "version DOI differs"),
+        ("concept_doi", "concept DOI differs"),
+        ("root_release_tag", "release_tag differs"),
+        ("root_source_sha", "source_sha differs"),
+        ("root_source_commit", "manifest.source_commit differs"),
+        ("root_benchmark_release_id", "benchmark_release_id conflicts"),
+        ("root_benchmark_release_tag", "benchmark_release_tag conflicts"),
+        ("malformed_provenance", "provenance must be an object"),
+        ("nested_provenance", "unsupported nested provenance"),
+        ("provenance_source_sha", "provenance.source_sha differs"),
+        ("provenance_source_commit", "provenance.source_commit differs"),
+        ("provenance_scientific_source", "provenance.scientific_source_sha differs"),
+        ("provenance_release_id", "conflicts with the campaign ID"),
+        ("provenance_release_tag", "conflicts with the predecessor"),
+    ),
+)
+def test_predecessor_archive_rejects_stale_resolved_manifest_identity(
+    tmp_path: Path,
+    mutation: str,
+    message: str,
+) -> None:
+    """The checksum-frozen manifest must authenticate the complete predecessor identity."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    manifest_path = campaign / "release/release_manifest.resolved.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    provenance = manifest["provenance"]
+    assignments = {
+        "schema": (manifest, "schema_version", "benchmark-release-manifest.v0.1"),
+        "version_doi": (provenance, "version_doi", "10.5281/zenodo.22229999"),
+        "concept_doi": (provenance, "concept_doi", "10.5281/zenodo.22229998"),
+        "root_release_tag": (manifest, "release_tag", NEW_TAG),
+        "root_source_sha": (manifest, "source_sha", "0" * 40),
+        "root_source_commit": (manifest, "source_commit", "0" * 40),
+        "root_benchmark_release_id": (manifest, "benchmark_release_id", "different_campaign_id"),
+        "root_benchmark_release_tag": (manifest, "benchmark_release_tag", NEW_TAG),
+        "malformed_provenance": (manifest, "provenance", "malformed"),
+        "nested_provenance": (provenance, "provenance", {}),
+        "provenance_source_sha": (provenance, "source_sha", "0" * 40),
+        "provenance_source_commit": (provenance, "source_commit", "0" * 40),
+        "provenance_scientific_source": (provenance, "scientific_source_sha", "0" * 40),
+        "provenance_release_id": (provenance, "release_id", "different_campaign_id"),
+        "provenance_release_tag": (provenance, "release_tag", NEW_TAG),
+    }
+    removals = {
+        "missing_release_id": ((manifest, "release_id"),),
+        "missing_version_doi": ((provenance, "doi"), (provenance, "version_doi")),
+    }
+    if mutation in assignments:
+        target, key, value = assignments[mutation]
+        target[key] = value
+    else:
+        for target, key in removals[mutation]:
+            target.pop(key)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+
+    with pytest.raises(ReleaseErratumError, match=message):
+        snapshot_predecessor_archive(archive, contract=_contract(archive))
+
+
+def test_predecessor_archive_requires_canonical_resolved_manifest(tmp_path: Path) -> None:
+    """Scientific rows alone cannot authenticate the predecessor campaign identity."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "episodes-only.tar.gz"
+    with tarfile.open(archive, mode="w:gz") as bundle:
+        for path in sorted((campaign / "runs").glob("*/episodes.jsonl")):
+            bundle.add(
+                path,
+                arcname=f"fixture_bundle/payload/runs/{path.parent.name}/episodes.jsonl",
+            )
+
+    with pytest.raises(ReleaseErratumError, match="lacks the canonical resolved manifest"):
+        snapshot_predecessor_archive(archive, contract=_contract(archive))
+
+
 def test_predecessor_archive_rejects_episode_file_outside_canonical_arm_path(
     tmp_path: Path,
 ) -> None:
@@ -1817,6 +2077,7 @@ def _contract_document(
         },
         "scientific_identity": {
             "source_sha": SOURCE_SHA,
+            "release_id": SCIENTIFIC_RELEASE_ID,
             "planner_arms": 14,
             "scenario_count": 48,
             "seed_count": 30,
@@ -1937,6 +2198,7 @@ def test_erratum_contract_loads_exact_linked_identity(tmp_path: Path) -> None:
                 },
                 "scientific_identity": {
                     "source_sha": SOURCE_SHA,
+                    "release_id": SCIENTIFIC_RELEASE_ID,
                     "planner_arms": 14,
                     "scenario_count": 48,
                     "seed_count": 30,
@@ -1969,6 +2231,7 @@ def test_erratum_contract_loads_exact_linked_identity(tmp_path: Path) -> None:
     contract = load_erratum_contract(contract_path, repository_root=tmp_path)
 
     assert contract.source_sha == SOURCE_SHA
+    assert contract.scientific_release_id == SCIENTIFIC_RELEASE_ID
     assert contract.successor_github_release_tag == NEW_TAG
     assert contract.metadata_path == metadata
 
@@ -1997,6 +2260,7 @@ def test_erratum_contract_rejects_missing_predecessor_relation(tmp_path: Path) -
         },
         "scientific_identity": {
             "source_sha": SOURCE_SHA,
+            "release_id": SCIENTIFIC_RELEASE_ID,
             "planner_arms": 14,
             "scenario_count": 48,
             "seed_count": 30,

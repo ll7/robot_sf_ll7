@@ -14,7 +14,14 @@ from robot_sf.benchmark.post_execution_release_doctor import (
     collect_post_execution_release_doctor_report,
 )
 from robot_sf.benchmark.release_doctor import collect_release_doctor_report
+from robot_sf.benchmark.release_erratum import (
+    ERRATUM_CONTRACT_SCHEMA,
+    ErratumContract,
+    ReleaseErratumError,
+    load_erratum_contract,
+)
 from robot_sf.benchmark.release_protocol import load_release_manifest, validate_release_manifest
+from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
     import argparse
@@ -136,9 +143,10 @@ def build_subparser(subparsers: Any) -> None:
             type=Path,
             required=mode in _RELEASE_BOUND_ZENODO_MODES,
             help=(
-                "Validated benchmark release manifest to bind Zenodo operations to. Required "
-                "for recover/upload/verify/publish; reserve and new-version may omit it only "
-                "while the server is assigning a new version DOI."
+                "Validated benchmark release manifest or derived-metadata erratum contract "
+                "that binds Zenodo operations. Required for recover/upload/verify/publish; "
+                "reserve and new-version may omit it only while the server is assigning a new "
+                "version DOI."
             ),
         )
         if mode in {"reserve", "recover", "publish", "verify", "new-version"}:
@@ -229,7 +237,7 @@ def _print(payload: dict[str, Any]) -> None:
 
 
 def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]] | None:
-    """Load and validate a benchmark manifest for a bound Zenodo operation.
+    """Load and validate a release manifest or erratum contract for Zenodo.
 
     Returns:
         The parsed manifest and credential-free publisher binding, or ``None``
@@ -238,7 +246,42 @@ def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]
     manifest_path = getattr(args, "manifest", None)
     if manifest_path is None:
         return None
-    manifest = load_release_manifest(Path(manifest_path).resolve())
+    manifest_input = Path(manifest_path)
+    manifest_path = manifest_input.resolve()
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise zenodo_publisher.ZenodoPublisherError(
+            "release manifest or erratum contract could not be read"
+        ) from exc
+    except (UnicodeError, ValueError):
+        payload = None
+    if isinstance(payload, dict) and payload.get("schema_version") == ERRATUM_CONTRACT_SCHEMA:
+        try:
+            contract = load_erratum_contract(
+                manifest_input,
+                repository_root=get_repository_root(),
+            )
+        except ReleaseErratumError as exc:
+            raise zenodo_publisher.ZenodoPublisherError(
+                f"release erratum contract is invalid: {exc}"
+            ) from exc
+        binding = zenodo_publisher.build_release_binding(
+            {
+                "metadata_path": contract.metadata_path,
+                "metadata_sha256": contract.metadata_sha256,
+                "release_tag": contract.successor_github_release_tag,
+                "concept_doi": contract.concept_doi,
+                "version_doi": contract.successor_version_doi,
+            }
+        )
+        metadata_path = getattr(args, "metadata", None)
+        if metadata_path is not None and Path(metadata_path).resolve() != binding["metadata_path"]:
+            raise zenodo_publisher.ZenodoPublisherError(
+                "Zenodo metadata path does not match the release erratum contract"
+            )
+        return contract, binding
+    manifest = load_release_manifest(manifest_path)
     validation = validate_release_manifest(manifest)
     if validation["status"] != "valid":
         problems = "; ".join(str(problem) for problem in validation["problems"])
@@ -250,6 +293,45 @@ def _load_release_binding(args: argparse.Namespace) -> tuple[Any, dict[str, Any]
             "Zenodo metadata path does not match the release manifest"
         )
     return manifest, binding
+
+
+def _release_metadata_kwargs(binding: dict[str, Any] | None) -> dict[str, str]:
+    """Return the metadata pins shared by both supported release contracts."""
+    if binding is None:
+        return {}
+    return {
+        "expected_source_tag": str(binding["release_tag"]),
+        "expected_metadata_sha256": str(binding["metadata_sha256"]),
+    }
+
+
+def _validate_erratum_new_version_arguments(
+    args: argparse.Namespace,
+    release_definition: Any,
+) -> None:
+    """Reject a successor mutation whose explicit inputs conflict with its erratum contract."""
+    if not isinstance(release_definition, ErratumContract):
+        return
+    expected = {
+        "predecessor_deposition_id": int(
+            release_definition.predecessor_version_doi.rsplit(".", 1)[-1]
+        ),
+        "expected_predecessor_doi": release_definition.predecessor_version_doi,
+        "expected_concept_doi": release_definition.concept_doi,
+        "expected_predecessor_tag": release_definition.predecessor_github_release_tag,
+        "expected_source_sha": release_definition.source_sha,
+        "expected_successor_tag": release_definition.successor_github_release_tag,
+    }
+    conflicts = sorted(
+        key
+        for key, expected_value in expected.items()
+        if getattr(args, key, None) != expected_value
+    )
+    if conflicts:
+        raise zenodo_publisher.ZenodoPublisherError(
+            "Zenodo new-version arguments conflict with the release erratum contract: "
+            + ", ".join(conflicts)
+        )
 
 
 def _repo_relative_path(path: Path | None, repo: Path) -> Path | None:
@@ -399,7 +481,7 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
         return 0 if report["status"] == "pass" else 2
     try:
         release_context = _load_release_binding(args)
-        release_manifest = release_context[0] if release_context is not None else None
+        release_definition = release_context[0] if release_context is not None else None
         release_binding = release_context[1] if release_context is not None else None
         if args.zenodo_mode in _RELEASE_BOUND_ZENODO_MODES and release_binding is None:
             # Keep this check ahead of build_session: the direct CLI must not
@@ -408,18 +490,14 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
             # normal invocations; the duplicate guard protects callers that
             # invoke ``handle`` with a hand-built Namespace.
             raise zenodo_publisher.ZenodoPublisherError(
-                f"Zenodo {args.zenodo_mode} requires a validated release manifest"
+                f"Zenodo {args.zenodo_mode} requires a validated release manifest or erratum "
+                "contract"
             )
+        if args.zenodo_mode == "new-version":
+            _validate_erratum_new_version_arguments(args, release_definition)
         session = zenodo_publisher.build_session(args.token_file)
         if args.zenodo_mode in {"reserve", "recover"}:
-            metadata_kwargs = (
-                {
-                    "expected_source_tag": release_manifest.release_tag,
-                    "expected_metadata_sha256": release_manifest.metadata_sha256,
-                }
-                if release_manifest is not None
-                else {}
-            )
+            metadata_kwargs = _release_metadata_kwargs(release_binding)
             metadata = zenodo_publisher.load_dataset_metadata(args.metadata, **metadata_kwargs)
             operation_kwargs = (
                 {"release_binding": release_binding} if release_binding is not None else {}
@@ -444,14 +522,7 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
             _print(state)
             return 0
         if args.zenodo_mode == "new-version":
-            metadata_kwargs = (
-                {
-                    "expected_source_tag": release_manifest.release_tag,
-                    "expected_metadata_sha256": release_manifest.metadata_sha256,
-                }
-                if release_manifest is not None
-                else {}
-            )
+            metadata_kwargs = _release_metadata_kwargs(release_binding)
             metadata_kwargs["expected_source_tag"] = args.expected_successor_tag
             metadata = zenodo_publisher.load_dataset_metadata(args.metadata, **metadata_kwargs)
             operation_kwargs = (
@@ -484,14 +555,7 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
             _print(state)
             return 0
         if args.zenodo_mode == "publish":
-            metadata_kwargs = (
-                {
-                    "expected_source_tag": release_manifest.release_tag,
-                    "expected_metadata_sha256": release_manifest.metadata_sha256,
-                }
-                if release_manifest is not None
-                else {}
-            )
+            metadata_kwargs = _release_metadata_kwargs(release_binding)
             metadata = zenodo_publisher.load_dataset_metadata(args.metadata, **metadata_kwargs)
             operation_kwargs = (
                 {"release_binding": release_binding} if release_binding is not None else {}
@@ -506,14 +570,7 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
             zenodo_publisher.write_state(args.state, state)
             _print(state)
             return 0
-        metadata_kwargs = (
-            {
-                "expected_source_tag": release_manifest.release_tag,
-                "expected_metadata_sha256": release_manifest.metadata_sha256,
-            }
-            if release_manifest is not None
-            else {}
-        )
+        metadata_kwargs = _release_metadata_kwargs(release_binding)
         metadata = zenodo_publisher.load_dataset_metadata(args.metadata, **metadata_kwargs)
         operation_kwargs = (
             {"release_binding": release_binding} if release_binding is not None else {}

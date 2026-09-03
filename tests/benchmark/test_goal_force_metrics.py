@@ -26,6 +26,8 @@ def test_hand_calculated_vector_and_direction_metrics() -> None:
     assert summary.angular_error_rad == pytest.approx(math.acos(0.8) / 2)
     assert summary.cosine_similarity == pytest.approx((0.8 + 1.0) / 2)
     assert summary.magnitude_mae == pytest.approx(0.5)
+    assert summary.magnitude_count == 2
+    assert summary.relative_magnitude_count == 2
     assert summary.claim_boundary == GOAL_FORCE_METRICS_CLAIM_BOUNDARY
 
 
@@ -42,6 +44,7 @@ def test_censored_rows_are_direction_only_and_missing_truth_is_unavailable() -> 
     assert summary.exact_vector_count == 0
     assert summary.direction_count == 1
     assert summary.magnitude_count == 0
+    assert summary.relative_magnitude_count == 0
     assert summary.vector_mae is None
 
 
@@ -52,6 +55,8 @@ def test_zero_vectors_are_not_fabricated_as_direction_accuracy() -> None:
     assert summary.direction_count == 0
     assert summary.angular_error_rad is None
     assert summary.cosine_similarity is None
+    assert summary.magnitude_count == 1
+    assert summary.relative_magnitude_count == 0
 
 
 def test_rows_and_vectors_fail_closed() -> None:

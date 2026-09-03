@@ -63,7 +63,7 @@ class GoalForceMetricRow:
 
 @dataclass(frozen=True, slots=True)
 class GoalForceMetricSummary:
-    """Deterministic aggregate with separate exact and direction denominators."""
+    """Deterministic aggregate with explicit per-metric denominators."""
 
     schema_version: str
     claim_boundary: str
@@ -73,6 +73,7 @@ class GoalForceMetricSummary:
     exact_vector_count: int
     direction_count: int
     magnitude_count: int
+    relative_magnitude_count: int
     vector_mae: float | None
     vector_rmse: float | None
     component_bias_xy: Vector2 | None
@@ -93,6 +94,7 @@ class GoalForceMetricSummary:
             "exact_vector_count": self.exact_vector_count,
             "direction_count": self.direction_count,
             "magnitude_count": self.magnitude_count,
+            "relative_magnitude_count": self.relative_magnitude_count,
             "vector_mae": self.vector_mae,
             "vector_rmse": self.vector_rmse,
             "component_bias_xy": list(self.component_bias_xy)
@@ -157,7 +159,7 @@ def evaluate_goal_force_rows(rows: Sequence[GoalForceMetricRow]) -> GoalForceMet
             angles.append(math.acos(max(-1.0, min(1.0, cosine))))
 
     def mean(values: list[float]) -> float | None:
-        return sum(values) / len(values) if values else None
+        return math.fsum(values) / len(values) if values else None
 
     component_bias = (
         (mean([value[0] for value in biases]), mean([value[1] for value in biases]))
@@ -173,6 +175,7 @@ def evaluate_goal_force_rows(rows: Sequence[GoalForceMetricRow]) -> GoalForceMet
         exact_vector_count=len(exact_errors),
         direction_count=len(angles),
         magnitude_count=len(magnitudes),
+        relative_magnitude_count=len(relative_magnitudes),
         vector_mae=mean(exact_errors),
         vector_rmse=math.sqrt(mean(exact_squared_errors)) if exact_squared_errors else None,
         component_bias_xy=component_bias,

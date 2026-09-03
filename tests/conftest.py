@@ -619,6 +619,10 @@ _FAST_FILES = {
     # Public API facade tests must run in PR fast shards so their coverage
     # proves the changed lazy exports, facade, and episode record round-trip.
     "test_public_api.py",
+    # Planner-worker exception classification is a deterministic benchmark
+    # control-plane contract; keep it in PR fast shards so changed runner lines
+    # are covered without admitting any benchmark result.
+    "test_runner_exception_logging.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

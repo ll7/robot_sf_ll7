@@ -11,6 +11,7 @@ import pytest
 from robot_sf.prediction import (
     ACTOR_FORBIDDEN_KEYS,
     HIERARCHICAL_GOAL_POSTERIOR_SCHEMA_VERSION,
+    GoalBeliefSource,
     GoalCandidateKind,
     HierarchicalGoalPosteriorV1,
     HierarchicalProbability,
@@ -238,6 +239,7 @@ def test_flat_projection_requires_and_preserves_the_selected_level(
     assert "arrival_probability_unestimated" in belief.blockers
     assert "change_probability_unestimated" in belief.blockers
     assert belief.change_probability == 0.0
+    assert belief.source is GoalBeliefSource.OBSERVATION_ONLY
     assert ACTOR_FORBIDDEN_KEYS.isdisjoint(belief.to_dict())
 
 
@@ -260,11 +262,14 @@ def test_flat_projection_rejects_implicit_or_unknown_level() -> None:
         "future_trajectory",
         "simulator_goal",
         "simulator_route",
+        "ground_truth",
+        "expert_demonstration",
+        "assigned_route_v2",
     ],
 )
 def test_actor_hierarchy_rejects_privileged_evidence_labels(bad_evidence_source: str) -> None:
     """Oracle, simulator, and truth labels cannot enter actor-side hierarchy state."""
-    with pytest.raises(ValueError, match="oracle or simulator"):
+    with pytest.raises(ValueError, match="actor-safe source"):
         _posterior(evidence_source=bad_evidence_source)
 
 

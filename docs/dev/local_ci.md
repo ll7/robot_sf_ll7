@@ -20,6 +20,27 @@ scripts/dev/run_worktree_shared_venv.sh -- \
   uv run pytest tests/test_ci_script_contract.py -q
 ```
 
+## Readiness count selectors
+
+When reporting readiness counts, name the exact selector so another contributor can reproduce the
+same scope. The readiness contract selector is:
+
+```bash
+uv run pytest -q tests/test_ci_script_contract.py
+```
+
+The combined readiness reliability selector is:
+
+```bash
+uv run pytest -q \
+  tests/dev/test_pr_ready_preflight.py \
+  tests/dev/test_pr_ready_termination.py \
+  tests/test_ci_script_contract.py
+```
+
+Use `--collect-only -q` with either selector to inspect its collected-test count without running
+the tests. Do not label a partial or historical count as the readiness suite without its selector.
+
 ## Proportional checks
 
 ```bash
@@ -93,6 +114,10 @@ When readiness is terminated, it writes a private bounded receipt to
 the active phase and lane, last progress, process-group cleanup verification, and a small host/cgroup
 resource snapshot; it deliberately omits command lines and the environment. Set
 `PR_READY_TERMINATION_RECEIPT` to choose an absolute or worktree-relative output path.
+Group-cleanup verification requires `child_registration_state: registered`, both registered child
+identifiers, and a negative process-group existence probe. On foreground-only hosts, a registered
+direct child may still report direct-process cleanup without a process-group identifier; that status
+does not claim descendant cleanup. Unknown or contradictory registration state remains unverified.
 
 On a host where the shared NVIDIA CUDA (Compute Unified Device Architecture) probe reports a usable
 graphics processing unit (GPU), the optional and `all` lanes default to one in-process worker

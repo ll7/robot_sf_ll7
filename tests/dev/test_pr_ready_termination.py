@@ -80,6 +80,7 @@ def test_unverified_cleanup_with_missing_pgid_is_not_verified(
             mode="interim",
             child_pid=1234,
             child_process_group_id=None,
+            child_registration_state="registered",
         )
     )
 
@@ -107,6 +108,7 @@ def test_verified_group_cleanup_is_downgraded_when_group_still_exists(
                 mode="interim",
                 child_pid=1234,
                 child_process_group_id=1234,
+                child_registration_state="registered",
             )
         )
 
@@ -128,7 +130,135 @@ def test_no_child_cleanup_is_verified_without_process_identifiers() -> None:
             last_progress_at_utc="2026-09-03T06:00:00Z",
             cleanup_status="no_child_active",
             mode="interim",
+            child_registration_state="not_started",
         )
     )
 
     assert receipt["cleanup"]["verified"] is True
+
+
+@pytest.mark.parametrize(
+    ("child_pid", "child_process_group_id"),
+    [("not-a-pid", None), (None, "not-a-pgid"), (0, None)],
+)
+def test_no_child_cleanup_rejects_invalid_process_identifiers(
+    child_pid: object, child_process_group_id: object
+) -> None:
+    """Explicit but invalid identifiers cannot be treated as an absent child."""
+    receipt = build_receipt(
+        TerminationContext(
+            signal_number=15,
+            phase="preflight",
+            lane="none",
+            last_progress="preflight",
+            last_progress_at_utc="2026-09-03T06:00:00Z",
+            cleanup_status="no_child_active",
+            mode="interim",
+            child_pid=child_pid,
+            child_process_group_id=child_process_group_id,
+            child_registration_state="not_started",
+        )
+    )
+
+    assert receipt["cleanup"] == {
+        "status": "process_group_cleanup_unverified",
+        "verified": False,
+    }
+
+
+def test_direct_cleanup_preserves_foreground_fallback_without_pgid() -> None:
+    """A registered direct child can verify its own cleanup when no PGID is available."""
+    receipt = build_receipt(
+        TerminationContext(
+            signal_number=15,
+            phase="core_lane",
+            lane="core",
+            last_progress="core readiness lane running",
+            last_progress_at_utc="2026-09-03T06:00:00Z",
+            cleanup_status="direct_process_terminated_and_verified",
+            mode="interim",
+            child_pid=1234,
+            child_process_group_id=None,
+            child_registration_state="registered",
+        )
+    )
+
+    assert receipt["cleanup"] == {
+        "status": "direct_process_terminated_and_verified",
+        "verified": True,
+    }
+
+
+def test_direct_cleanup_rejects_invalid_pgid(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An invalid supplied PGID cannot be confused with the documented foreground fallback."""
+    monkeypatch.setattr(pr_ready_termination, "_process_group_exists", lambda _: None)
+    receipt = build_receipt(
+        TerminationContext(
+            signal_number=15,
+            phase="core_lane",
+            lane="core",
+            last_progress="core readiness lane running",
+            last_progress_at_utc="2026-09-03T06:00:00Z",
+            cleanup_status="direct_process_terminated_and_verified",
+            mode="interim",
+            child_pid=1234,
+            child_process_group_id="not-a-pgid",
+            child_registration_state="registered",
+        )
+    )
+
+    assert receipt["cleanup"] == {
+        "status": "process_group_cleanup_unverified",
+        "verified": False,
+    }
+
+
+@pytest.mark.parametrize("registration_state", ["registering", "registered", "unknown"])
+def test_no_child_cleanup_requires_explicit_not_started_state(
+    registration_state: str,
+) -> None:
+    """An incomplete or unknown lifecycle state cannot masquerade as no active child."""
+    receipt = build_receipt(
+        TerminationContext(
+            signal_number=15,
+            phase="core_lane",
+            lane="core",
+            last_progress="starting core readiness lane",
+            last_progress_at_utc="2026-09-03T06:00:00Z",
+            cleanup_status="no_child_active",
+            mode="interim",
+            child_registration_state=registration_state,
+        )
+    )
+
+    assert receipt["cleanup"] == {
+        "status": "process_group_cleanup_unverified",
+        "verified": False,
+    }
+    assert receipt["process"]["child_registration_state"] == registration_state
+
+
+@pytest.mark.parametrize(
+    "cleanup_status",
+    [
+        "direct_process_terminated_and_verified",
+        "process_group_terminated_and_verified",
+    ],
+)
+def test_verified_cleanup_requires_registered_child_identifiers(cleanup_status: str) -> None:
+    """Verified cleanup is rejected when registration has not completed or IDs are absent."""
+    receipt = build_receipt(
+        TerminationContext(
+            signal_number=15,
+            phase="core_lane",
+            lane="core",
+            last_progress="starting core readiness lane",
+            last_progress_at_utc="2026-09-03T06:00:00Z",
+            cleanup_status=cleanup_status,
+            mode="interim",
+            child_registration_state="registering",
+        )
+    )
+
+    assert receipt["cleanup"]["verified"] is False
+    assert receipt["cleanup"]["status"] == "process_group_cleanup_unverified"

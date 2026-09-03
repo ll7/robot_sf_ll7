@@ -1126,7 +1126,6 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     assert 'git diff --name-only --diff-filter=ACDMRT "$BASE_REF...HEAD"' in script_text
     assert "format_changed_files=()" in script_text
     assert '[[ "$changed_file" == *.py && -f "$changed_file" ]]' in script_text
-
     freshness_call = 'uv run python "$SCRIPT_DIR/pr_ready_freshness.py" "${freshness_args[@]}"'
     assert 'freshness_args=(write --base-ref "$BASE_REF")' in script_text
     assert freshness_call in script_text
@@ -1138,6 +1137,45 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     assert script_text.find("followup_args+=(--require-body)") < script_text.find(
         'uv run python "$SCRIPT_DIR/check_pr_followups.py" "${followup_args[@]}"'
     )
+
+
+def test_pr_ready_check_registration_and_count_contracts_are_explicit() -> None:
+    """Readiness must serialize launcher registration and document reproducible count scopes."""
+    script_text = PR_READY_CHECK.read_text(encoding="utf-8")
+    local_ci_text = (ROOT / "docs" / "dev" / "local_ci.md").read_text(encoding="utf-8")
+    scripts_readme_text = (ROOT / "scripts" / "dev" / "README.md").read_text(encoding="utf-8")
+
+    for marker in (
+        'pr_ready_child_registration_state="not_started"',
+        'pr_ready_child_registration_state="registering"',
+        'pr_ready_child_registration_state="registered"',
+        'if [[ "$pr_ready_child_registration_state" == "registering" ]]',
+        '--child-registration-state "$pr_ready_child_registration_state"',
+    ):
+        assert marker in script_text
+    assert script_text.find('pr_ready_child_registration_state="registering"') < script_text.find(
+        "python3 - \"$@\" <<'PY' &"
+    )
+    registration_start = script_text.index("start_pr_ready_child()")
+    registration_text = script_text[registration_start:]
+    assert registration_text.find(
+        'pr_ready_child_registration_state="registered"'
+    ) < registration_text.find(
+        'handle_pr_ready_signal "$pr_ready_pending_signal_name" "$pr_ready_pending_signal_number"'
+    )
+
+    assert "## Readiness count selectors" in local_ci_text
+    for selector in (
+        "tests/test_ci_script_contract.py",
+        "tests/dev/test_pr_ready_preflight.py",
+        "tests/dev/test_pr_ready_termination.py",
+    ):
+        assert selector in local_ci_text
+    assert "--collect-only -q" in local_ci_text
+    assert "child_registration_state: registered" in local_ci_text
+    assert "foreground-only hosts" in local_ci_text
+    assert "does not claim descendant cleanup" in local_ci_text
+    assert "readiness-count-selectors" in scripts_readme_text
 
 
 def test_pr_ready_check_captures_validated_base_sha_for_drift_guard(tmp_path: Path) -> None:

@@ -1,5 +1,6 @@
 """Focused tests for the independent continuous goal-force metric slice."""
 
+import json
 import math
 
 import pytest
@@ -98,9 +99,28 @@ def test_norm_epsilon_boundary_is_counted_and_serialized() -> None:
     assert summary.to_dict()["relative_magnitude_excluded_count"] == 1
 
 
+def test_extreme_finite_opposite_vectors_are_stable_and_strict_json_safe() -> None:
+    component = 1e200
+    summary = evaluate_goal_force_rows(
+        [GoalForceMetricRow((component, component), (-component, -component))]
+    )
+
+    expected_error = math.hypot(2.0 * component, 2.0 * component)
+    assert summary.vector_l2_mae == pytest.approx(expected_error)
+    assert summary.vector_l2_rmse == pytest.approx(expected_error)
+    assert summary.angular_error_rad == pytest.approx(math.pi)
+    assert summary.cosine_similarity == pytest.approx(-1.0)
+    json.dumps(summary.to_dict(), allow_nan=False)
+
+
+def test_unrepresentable_derived_metric_fails_closed_as_unavailable() -> None:
+    with pytest.raises(ValueError, match="result unavailable"):
+        evaluate_goal_force_rows([GoalForceMetricRow((1e308, 0.0), (-1e308, 0.0))])
+
+
 def test_rows_and_vectors_fail_closed() -> None:
     with pytest.raises(ValueError, match="exactly two"):
-        GoalForceMetricRow((1.0, 2.0, 3.0), (1.0, 2.0))
+        GoalForceMetricRow((1.0, 2.0, 3.0), (1.0, 2.0))  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="GoalForceMetricRow"):
         evaluate_goal_force_rows([{"predicted_force_xy": (1.0, 0.0)}])  # type: ignore[list-item]
     with pytest.raises(ValueError, match="finite"):

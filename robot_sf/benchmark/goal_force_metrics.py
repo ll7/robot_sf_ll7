@@ -194,11 +194,13 @@ def evaluate_goal_force_rows(rows: Sequence[GoalForceMetricRow]) -> GoalForceMet
     def mean(values: list[float]) -> float | None:
         return math.fsum(values) / len(values) if values else None
 
-    component_bias = (
-        (mean([value[0] for value in biases]), mean([value[1] for value in biases]))
-        if biases
-        else None
-    )
+    component_bias: Vector2 | None = None
+    if biases:
+        component_bias_x = mean([value[0] for value in biases])
+        component_bias_y = mean([value[1] for value in biases])
+        assert component_bias_x is not None and component_bias_y is not None
+        component_bias = (component_bias_x, component_bias_y)
+    squared_error_mean = mean(exact_squared_errors)
     return GoalForceMetricSummary(
         schema_version=GOAL_FORCE_METRICS_SCHEMA_VERSION,
         claim_boundary=GOAL_FORCE_METRICS_CLAIM_BOUNDARY,
@@ -213,7 +215,7 @@ def evaluate_goal_force_rows(rows: Sequence[GoalForceMetricRow]) -> GoalForceMet
         relative_magnitude_count=len(relative_magnitudes),
         relative_magnitude_excluded_count=relative_magnitude_excluded_count,
         vector_l2_mae=mean(exact_errors),
-        vector_l2_rmse=math.sqrt(mean(exact_squared_errors)) if exact_squared_errors else None,
+        vector_l2_rmse=math.sqrt(squared_error_mean) if squared_error_mean is not None else None,
         component_bias_xy=component_bias,
         angular_error_rad=mean(angles),
         cosine_similarity=mean(cosines),

@@ -11,7 +11,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import numpy as np
-from pysocialforce.config import SURFACE_DISTANCE_UNIT_NORMAL_V2
+from pysocialforce.config import SURFACE_DISTANCE_UNIT_NORMAL_V2, ObstacleForceConfig
 from pysocialforce.forces import ObstacleForce
 
 from robot_sf.common.types import Line2D, Rect
@@ -253,6 +253,38 @@ def test_simulator_metadata_fallback_preserves_legacy_non_numeric_factor() -> No
 
     assert metadata["enabled"] is True
     assert metadata["applied"] is False
+
+
+def test_simulator_reset_clears_obstacle_force_application_latch() -> None:
+    """A fresh episode must not inherit obstacle-force application metadata."""
+
+    class _Peds:
+        agent_radius = 0.35
+
+        @staticmethod
+        def pos() -> np.ndarray:
+            return np.array([[2.0, 2.0]], dtype=float)
+
+    class _Simulation:
+        peds = _Peds()
+
+        @staticmethod
+        def get_raw_obstacles() -> np.ndarray:
+            return np.array([[1.0, 1.0, 1.0, 1.0, 0.0, 1.0]], dtype=float)
+
+    force = ObstacleForce(ObstacleForceConfig(), _Simulation())
+    force()
+    assert force.law_metadata()["applied"] is True
+
+    simulator = object.__new__(Simulator)
+    simulator.pysf_sim = SimpleNamespace(
+        forces=(force,),
+        obstacle_force_law_metadata=force.law_metadata,
+    )
+
+    simulator._reset_social_force_state()
+
+    assert simulator.obstacle_force_law_metadata()["applied"] is False
 
 
 def test_ped_simulator_keeps_none_response_multipliers() -> None:

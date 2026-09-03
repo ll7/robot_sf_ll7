@@ -92,7 +92,12 @@ def test_item_list_fails_closed_at_limit(monkeypatch: pytest.MonkeyPatch) -> Non
     """Exactly ``limit`` project items raise so a partial sync never runs."""
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
             args=args, returncode=0, stdout=_items_payload(3), stderr=""
@@ -111,7 +116,12 @@ def test_item_list_passes_below_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     """Fewer items than the cap return cleanly with no raise."""
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
             args=args, returncode=0, stdout=_items_payload(2), stderr=""
@@ -134,7 +144,12 @@ def test_paginated_item_list_accepts_full_page_with_explicit_completion(
     items = [_graphql_item(index) for index in range(item_count)]
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         calls.append(args)
         return subprocess.CompletedProcess(
@@ -179,7 +194,12 @@ def test_paginated_item_list_accumulates_cursor_pages(
     }
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         calls.append(args)
         cursor = next(
@@ -213,7 +233,12 @@ def test_paginated_item_list_rejects_repeated_cursor(
     """A cursor loop fails closed before a partial score calculation can start."""
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         index = 1 if not any(argument.startswith("after=") for argument in args) else 2
         payload = _graphql_items_payload(
@@ -263,7 +288,12 @@ def test_paginated_item_list_blocks_before_a_page_when_quota_is_low(
     page = _graphql_items_payload([_graphql_item(1)], has_next_page=True, end_cursor="cursor-1")
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         calls.append(args)
         return subprocess.CompletedProcess(args=args, returncode=0, stdout=page, stderr="")
@@ -309,7 +339,12 @@ def test_paginated_item_list_rejects_missing_or_malformed_page_metadata(
     )
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(args=args, returncode=0, stdout=payload, stderr="")
 
@@ -358,7 +393,12 @@ def test_paginated_item_list_normalizes_project_field_values(
     payload = _graphql_items_payload([item], has_next_page=False, end_cursor=None)
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(args=args, returncode=0, stdout=payload, stderr="")
 
@@ -385,7 +425,12 @@ def test_targeted_lookup_uses_server_query_when_supported(
     calls: list[list[str]] = []
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         calls.append(args)
         items = [{"id": "item250", "content": {"type": "Issue", "number": 250}}]
@@ -417,7 +462,12 @@ def test_targeted_lookup_falls_back_when_query_flag_is_unsupported(
     calls: list[list[str]] = []
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         calls.append(args)
         if "--query" in args:
@@ -457,7 +507,12 @@ def test_targeted_lookup_does_not_hide_non_query_failures(
     """Authentication and other command failures remain fail-closed errors."""
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         raise subprocess.CalledProcessError(
             1,
@@ -477,7 +532,12 @@ def test_targeted_lookup_missing_issue_returns_empty(monkeypatch: pytest.MonkeyP
     """A missing issue yields an empty list, not an ambiguous full scan."""
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
             args=args, returncode=0, stdout=json.dumps({"items": []}), stderr=""
@@ -497,7 +557,12 @@ def test_targeted_lookup_fails_closed_when_query_is_capped(
     """A capped query cannot claim that a missing exact issue is absent."""
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
             args=args, returncode=0, stdout=_items_payload(2), stderr=""
@@ -519,7 +584,12 @@ def test_full_project_sync_still_fails_closed(monkeypatch: pytest.MonkeyPatch) -
     """
 
     def _fake_run(
-        args: list[str], *, check: bool, capture_output: bool, text: bool
+        args: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(
             args=args, returncode=0, stdout=_items_payload(400), stderr=""

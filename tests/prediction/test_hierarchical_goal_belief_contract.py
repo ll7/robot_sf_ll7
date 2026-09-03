@@ -98,6 +98,29 @@ def test_hierarchy_has_independent_normalization_and_expected_marginal() -> None
     assert sum(value.probability for value in marginal) + unknown == pytest.approx(1.0)
 
 
+def test_tolerated_roundoff_is_canonicalized_before_flat_projection() -> None:
+    """A tolerated normalization epsilon cannot make a derived probability invalid."""
+    posterior = HierarchicalGoalPosteriorV1(
+        track_id="track-roundoff",
+        tracking_epoch_id="epoch-1",
+        timestamp_s=0.0,
+        step_index=0,
+        destination_probabilities=(HierarchicalProbability("destination", 0.9999999995),),
+        unknown_destination_probability=1e-9,
+        waypoint_conditionals=(HierarchicalWaypointConditionalV1("destination"),),
+        waypoint_parent_destination={},
+        config_hash=HASH,
+        candidate_set_digest="b" * 64,
+    )
+
+    projected = posterior.to_goal_belief_v1("active_waypoint")
+
+    assert projected.unknown_candidate_probability <= 1.0
+    assert sum(
+        candidate.probability for candidate in projected.candidate_probabilities
+    ) + projected.unknown_candidate_probability == pytest.approx(1.0)
+
+
 def test_serialization_is_strict_deterministic_and_round_trips() -> None:
     """The actor payload has a stable digest and rejects tampered state."""
     posterior = _posterior()

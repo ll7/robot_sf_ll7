@@ -361,26 +361,93 @@ def _write_signal_lane_stub(repo: Path) -> None:
     stub.chmod(0o755)
 
 
-def _write_startup_interleaving_python3(repo: Path, marker: Path) -> None:
-    """Hold the launcher before ``setsid()`` without creating a descendant."""
+def _write_startup_interleaving_python3(repo: Path, marker: Path, release: Path) -> None:
+    """Hold the launcher before ``setsid()`` without relying on a timing window."""
     stub = repo / "bin" / "python3"
     real_python = repr(sys.executable)
     marker_path = repr(str(marker))
+    release_path = repr(str(release))
     stub.write_text(
         f"#!{sys.executable}\n"
         "import os\n"
         "import sys\n"
-        "import time\n"
         "from pathlib import Path\n"
         "\n"
         'if len(sys.argv) > 2 and sys.argv[1] == "-" and sys.argv[2] == "env":\n'
-        "    time.sleep(0.2)\n"
         f"    Path({marker_path}).touch()\n"
-        "    time.sleep(60)\n"
+        f'    with open({release_path}, "rb") as handle:\n'
+        "        handle.read(1)\n"
         f"os.execv({real_python}, [{real_python}, *sys.argv[1:]])\n",
         encoding="utf-8",
     )
     stub.chmod(0o755)
+
+
+def _write_debug_signal_hook(repo: Path, marker: Path) -> Path:
+    """Deliver SIGTERM from a Bash DEBUG trap at a selected registration command."""
+    hook = repo / ".home" / "pr-ready-debug-signal.bash"
+    hook.parent.mkdir(parents=True, exist_ok=True)
+    hook.write_text(
+        "pr_ready_debug_signal() {\n"
+        '  if [[ "${pr_ready_child_registration_state:-}" == "registering" && '
+        '-n "${PR_READY_SIGNAL_COMMAND_FRAGMENT:-}" && '
+        '"$BASH_COMMAND" == *"${PR_READY_SIGNAL_COMMAND_FRAGMENT}"* && '
+        '-n "${PR_READY_SIGNAL_MARKER:-}" && '
+        '! -e "$PR_READY_SIGNAL_MARKER" ]]; then\n'
+        '    : > "$PR_READY_SIGNAL_MARKER"\n'
+        '    if [[ -n "${PR_READY_SIGNAL_WAIT_FIFO:-}" ]]; then\n'
+        '      IFS= read -r _ < "$PR_READY_SIGNAL_WAIT_FIFO" || true\n'
+        "    fi\n"
+        '    kill -TERM "$$"\n'
+        "  fi\n"
+        "}\n"
+        "set -T\n"
+        "trap pr_ready_debug_signal DEBUG\n",
+        encoding="utf-8",
+    )
+    return hook
+
+
+def _write_descendant_lane_stub(repo: Path) -> None:
+    """Create a lane whose descendant proves process-group cleanup reaches children."""
+    stub = repo / "scripts" / "dev" / "run_tests_parallel.sh"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "sleep 60 &\n"
+        "descendant_pid=$!\n"
+        'printf "%s\\n" "$descendant_pid" > "$PR_READY_DESCENDANT_PID"\n'
+        'trap \'kill -TERM "$descendant_pid" 2>/dev/null || true; '
+        'wait "$descendant_pid" 2>/dev/null || true; exit 143\' TERM\n'
+        ': > "$PR_READY_SIGNAL_CORE_READY"\n'
+        'if [[ -n "${PR_READY_SIGNAL_WAIT_FIFO:-}" ]]; then\n'
+        '  printf "ready\\n" > "$PR_READY_SIGNAL_WAIT_FIFO"\n'
+        "fi\n"
+        'wait "$descendant_pid"\n',
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+
+
+def _wait_for_process_exit(pid: int, *, timeout: float = 3.0) -> None:
+    """Wait for a test descendant to exit, treating a zombie as non-running."""
+    deadline = time.monotonic() + timeout
+    proc_stat = Path(f"/proc/{pid}/stat")
+    while True:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        except PermissionError:
+            break
+        if proc_stat.is_file():
+            state = proc_stat.read_text(encoding="utf-8").rsplit(")", 1)[-1].split()[0]
+            if state == "Z":
+                return
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(0.02)
+    raise AssertionError(f"descendant process {pid} survived cleanup")
 
 
 def _wait_for_marker(
@@ -600,6 +667,7 @@ def test_pr_ready_sigterm_writes_core_receipt_and_cleans_lane(
         assert "received SIGTERM" not in payload["last_progress"]["message"]
         assert payload["cleanup"]["verified"] is True
         assert payload["process"]["child_process_group_exists"] is False, payload["process"]
+        assert payload["process"]["child_registration_state"] == "registered"
         assert "environment" not in payload
         assert "command" not in payload
         assert "termination receipt:" in stderr
@@ -614,10 +682,12 @@ def test_pr_ready_sigterm_writes_core_receipt_and_cleans_lane(
 def test_pr_ready_sigterm_during_launcher_startup_falls_back_to_direct_child(
     preflight_repo: Path, tmp_path: Path
 ) -> None:
-    """A signal before ``setsid()`` remains bounded and verifies direct cleanup."""
+    """A signal during registration remains bounded and verifies direct cleanup."""
     marker = tmp_path / "launcher-before-setsid"
+    release = tmp_path / "launcher-before-setsid-release"
+    os.mkfifo(release)
     receipt = tmp_path / "startup-termination.json"
-    _write_startup_interleaving_python3(preflight_repo, marker)
+    _write_startup_interleaving_python3(preflight_repo, marker, release)
     env = {
         "PR_READY_MODE": "interim",
         "PR_READY_SKIP_PREFLIGHT": "1",
@@ -639,12 +709,94 @@ def test_pr_ready_sigterm_during_launcher_startup_falls_back_to_direct_child(
             "starting core readiness lane",
             "core readiness lane running",
         }
-        assert payload["cleanup"] == {
-            "status": "direct_process_terminated_and_verified",
-            "verified": True,
+        assert payload["cleanup"]["status"] in {
+            "direct_process_killed_and_verified",
+            "direct_process_terminated_and_verified",
         }
+        assert payload["cleanup"]["verified"] is True
         assert payload["process"]["child_process_group_exists"] is False
+        assert payload["process"]["child_registration_state"] == "registered"
         assert "termination receipt:" in stderr
+    finally:
+        _stop_process_group(process, signal.SIGKILL)
+        _collect_process(process)
+
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="signal and process-group semantics are POSIX-specific"
+)
+def test_pr_ready_sigterm_before_launcher_registration_is_queued(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """A signal before the launcher command cannot strand the child after registration."""
+    _write_signal_lane_stub(preflight_repo)
+    hook_marker = tmp_path / "before-registration-hook"
+    hook = _write_debug_signal_hook(preflight_repo, hook_marker)
+    receipt = tmp_path / "before-registration-termination.json"
+    env = {
+        "BASH_ENV": str(hook),
+        "PR_READY_MODE": "interim",
+        "PR_READY_SKIP_PREFLIGHT": "1",
+        "PR_READY_TERMINATION_RECEIPT": str(receipt),
+        "PR_READY_SIGNAL_COMMAND_FRAGMENT": "pr_ready_child_pid=$!",
+        "PR_READY_SIGNAL_MARKER": str(hook_marker),
+        "PR_READY_SIGNAL_CORE_READY": str(tmp_path / "core-ready"),
+        "PR_READY_SIGNAL_CORE_RELEASE": str(tmp_path / "core-release"),
+    }
+
+    process = _start_pr_ready(preflight_repo, env_overrides=env)
+    try:
+        stdout, stderr = _collect_process(process, timeout=3.0)
+
+        assert hook_marker.is_file()
+        assert process.returncode == 143, stdout + stderr
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        assert payload["cleanup"]["verified"] is True
+        assert payload["process"]["child_registration_state"] == "registered"
+        assert payload["process"]["child_process_group_exists"] is False
+    finally:
+        _stop_process_group(process, signal.SIGKILL)
+        _collect_process(process)
+
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="signal and process-group semantics are POSIX-specific"
+)
+def test_pr_ready_sigterm_between_pid_and_pgid_cleans_descendant(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """A signal between PID and PGID assignment cleans the whole registered group."""
+    _write_descendant_lane_stub(preflight_repo)
+    hook_marker = tmp_path / "between-registration-hook"
+    hook = _write_debug_signal_hook(preflight_repo, hook_marker)
+    wait_fifo = tmp_path / "between-registration-ready.fifo"
+    os.mkfifo(wait_fifo)
+    descendant_pid_file = tmp_path / "descendant.pid"
+    receipt = tmp_path / "between-registration-termination.json"
+    env = {
+        "BASH_ENV": str(hook),
+        "PR_READY_MODE": "interim",
+        "PR_READY_SKIP_PREFLIGHT": "1",
+        "PR_READY_TERMINATION_RECEIPT": str(receipt),
+        "PR_READY_SIGNAL_COMMAND_FRAGMENT": 'pr_ready_child_pgid="$pr_ready_child_pid"',
+        "PR_READY_SIGNAL_MARKER": str(hook_marker),
+        "PR_READY_SIGNAL_WAIT_FIFO": str(wait_fifo),
+        "PR_READY_SIGNAL_CORE_READY": str(tmp_path / "core-ready"),
+        "PR_READY_DESCENDANT_PID": str(descendant_pid_file),
+    }
+
+    process = _start_pr_ready(preflight_repo, env_overrides=env)
+    try:
+        stdout, stderr = _collect_process(process, timeout=3.0)
+
+        assert hook_marker.is_file()
+        assert process.returncode == 143, stdout + stderr
+        descendant_pid = int(descendant_pid_file.read_text(encoding="utf-8"))
+        _wait_for_process_exit(descendant_pid)
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        assert payload["cleanup"]["verified"] is True
+        assert payload["process"]["child_registration_state"] == "registered"
+        assert payload["process"]["child_process_group_exists"] is False
     finally:
         _stop_process_group(process, signal.SIGKILL)
         _collect_process(process)

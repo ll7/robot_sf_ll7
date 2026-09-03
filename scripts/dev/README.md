@@ -19,6 +19,10 @@ needs a stable handoff path. The receipt never includes the command line or
 environment, and readiness still returns the conventional signal status (143
 for `SIGTERM`, the termination signal).
 
+When quoting readiness counts, use the named selectors in
+[`docs/dev/local_ci.md`](../../docs/dev/local_ci.md#readiness-count-selectors),
+including `--collect-only -q` when only the collected count is needed.
+
 The native merge queue enforcement path is
 [`merge_queue_gate.py`](merge_queue_gate.py), invoked by
 [`.github/workflows/merge-queue-gate.yml`](../../.github/workflows/merge-queue-gate.yml)

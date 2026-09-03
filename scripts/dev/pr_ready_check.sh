@@ -68,6 +68,7 @@ pr_ready_pending_signal_name=""
 pr_ready_pending_signal_number=""
 pr_ready_child_pid=""
 pr_ready_child_pgid=""
+pr_ready_child_registration_state="not_started"
 pr_ready_parent_pgid=""
 pr_ready_cleanup_status="no_child_active"
 pr_ready_termination_receipt="${PR_READY_TERMINATION_RECEIPT:-}"
@@ -95,20 +96,38 @@ pr_ready_process_group_for_pid() {
 pr_ready_process_group_alive() {
   local process_group_id="$1"
   [[ "$process_group_id" =~ ^[1-9][0-9]*$ ]] || return 1
-  kill -0 -- "-$process_group_id" 2>/dev/null
+  kill -0 -- "-$process_group_id" 2>/dev/null || return 1
+  if command -v ps >/dev/null 2>&1; then
+    # ``kill -0`` also succeeds for a zombie group leader until the parent
+    # reaps it.  The signal handler owns that wait, so only live group members
+    # should keep bounded cleanup polling active.
+    ps -eo pgid=,stat= 2>/dev/null |
+      awk -v process_group_id="$process_group_id" \
+        '$1 == process_group_id && $2 !~ /^Z/ { found=1 } END { exit found ? 0 : 1 }'
+    return $?
+  fi
+  return 0
 }
 
 pr_ready_process_alive() {
   local pid="$1"
   [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
-  kill -0 "$pid" 2>/dev/null
+  kill -0 "$pid" 2>/dev/null || return 1
+  if command -v ps >/dev/null 2>&1; then
+    local process_state
+    process_state="$(ps -o stat= -p "$pid" 2>/dev/null | awk 'NF { print $1; exit }')"
+    [[ -n "$process_state" && "$process_state" != Z* ]]
+    return $?
+  fi
+  return 0
 }
 
 pr_ready_wait_for_group_exit() {
   local process_group_id="$1"
+  local max_attempts="${2:-100}"
   local attempts=0
   while pr_ready_process_group_alive "$process_group_id"; do
-    if (( attempts >= 100 )); then
+    if (( attempts >= max_attempts )); then
       return 1
     fi
     sleep 0.05
@@ -119,9 +138,10 @@ pr_ready_wait_for_group_exit() {
 
 pr_ready_wait_for_process_exit() {
   local pid="$1"
+  local max_attempts="${2:-100}"
   local attempts=0
   while pr_ready_process_alive "$pid"; do
-    if (( attempts >= 100 )); then
+    if (( attempts >= max_attempts )); then
       return 1
     fi
     sleep 0.05
@@ -132,8 +152,13 @@ pr_ready_wait_for_process_exit() {
 
 pr_ready_cleanup_direct_child() {
   local child_pid="$1"
+  # Keep the direct fallback short enough that a signal received during the
+  # fork()/setsid() window still reaches the bounded KILL escalation promptly.
+  # The normal process-group path retains the longer 5-second observation
+  # window; this path is only used when group cleanup is unavailable.
+  local direct_term_attempts=20
   if pr_ready_process_alive "$child_pid" && kill -TERM "$child_pid" 2>/dev/null; then
-    if pr_ready_wait_for_process_exit "$child_pid"; then
+    if pr_ready_wait_for_process_exit "$child_pid" "$direct_term_attempts"; then
       pr_ready_cleanup_status="direct_process_terminated_and_verified"
       return 0
     fi
@@ -143,7 +168,7 @@ pr_ready_cleanup_direct_child() {
   fi
 
   kill -KILL "$child_pid" 2>/dev/null || true
-  if pr_ready_wait_for_process_exit "$child_pid"; then
+  if pr_ready_wait_for_process_exit "$child_pid" "$direct_term_attempts"; then
     pr_ready_cleanup_status="direct_process_killed_and_verified"
   else
     pr_ready_cleanup_status="direct_process_cleanup_unverified"
@@ -194,7 +219,12 @@ terminate_pr_ready_child() {
     fi
     if [[ "$pr_ready_cleanup_status" == direct_process_*_and_verified ]] &&
       pr_ready_process_group_alive "$child_pgid"; then
-      pr_ready_cleanup_status="process_group_cleanup_unverified"
+      # A group member can still be observed during the handoff from group to
+      # direct-child cleanup.  Give that already-signalled group a short,
+      # bounded grace window before declaring the receipt unverified.
+      if ! pr_ready_wait_for_group_exit "$child_pgid" 20; then
+        pr_ready_cleanup_status="process_group_cleanup_unverified"
+      fi
     fi
   else
     pr_ready_cleanup_direct_child "$child_pid"
@@ -209,6 +239,19 @@ handle_pr_ready_signal() {
   local signal_name="$1"
   local signal_number="$2"
   [[ "$pr_ready_termination_handled" -eq 0 ]] || return 0
+
+  # A signal can arrive after the launcher fork but before the shell has
+  # registered its PID/PGID.  Queue it until registration is complete so the
+  # handler cannot mistake an incomplete identifier set for "no child" or
+  # clean only a direct child while descendants remain alive.
+  if [[ "$pr_ready_child_registration_state" == "registering" ]]; then
+    if [[ -z "$pr_ready_pending_signal_number" ]]; then
+      pr_ready_pending_signal_name="$signal_name"
+      pr_ready_pending_signal_number="$signal_number"
+    fi
+    return 0
+  fi
+
   pr_ready_termination_handled=1
   pr_ready_pending_signal_name=""
   pr_ready_pending_signal_number=""
@@ -225,7 +268,8 @@ handle_pr_ready_signal() {
     --mode "${pr_ready_mode_lower:-unknown}" \
     --controller-pid "$$" \
     --child-pid "$pr_ready_child_pid" \
-    --child-pgid "$pr_ready_child_pgid" 2>&1)"; then
+    --child-pgid "$pr_ready_child_pgid" \
+    --child-registration-state "$pr_ready_child_registration_state" 2>&1)"; then
     printf 'PR readiness received %s; termination receipt: %s\n' "$signal_name" "$receipt_output" >&2
   else
     printf 'PR readiness received %s, but could not write termination receipt at %s.\n' \
@@ -247,6 +291,7 @@ pr_ready_exit_without_coverage() {
 }
 
 start_pr_ready_child() {
+  pr_ready_child_registration_state="registering"
   python3 - "$@" <<'PY' &
 import os
 import sys
@@ -265,13 +310,36 @@ PY
   local observed_pgid
   local attempt
   for attempt in {1..100}; do
-    observed_pgid="$(pr_ready_process_group_for_pid "$pr_ready_child_pid" || true)"
+    observed_pgid=""
+    # Keep the assignment itself in an ``if`` condition.  A controller-group
+    # signal can terminate ps/awk while this command substitution is running;
+    # the conditional form prevents ``set -e`` from exiting before the
+    # queued signal reaches the registered cleanup path.
+    if observed_pgid="$(pr_ready_process_group_for_pid "$pr_ready_child_pid")"; then
+      :
+    fi
     if [[ -n "$observed_pgid" && "$observed_pgid" != "$pr_ready_parent_pgid" ]]; then
       pr_ready_child_pgid="$observed_pgid"
       break
     fi
-    sleep 0.01
+    # Once a signal is queued, the seeded child PID/PGID pair is the complete
+    # bounded fallback for this interleaving.  Do not spend the remainder of
+    # the discovery window polling a launcher that may still be pre-exec; the
+    # pending handler will verify group cleanup when the group is observable
+    # and otherwise fall back to the known direct child.
+    if [[ -n "$pr_ready_pending_signal_number" ]]; then
+      break
+    fi
+    # A controller-group signal can interrupt this helper before registration
+    # completes.  Keep the bounded poll alive so the queued signal is flushed
+    # after the launcher has either exposed its group or reached direct-child
+    # fallback; ``set -e`` must not strand that launcher on status 143.
+    sleep 0.01 || true
   done
+  pr_ready_child_registration_state="registered"
+  if [[ -n "$pr_ready_pending_signal_number" ]]; then
+    handle_pr_ready_signal "$pr_ready_pending_signal_name" "$pr_ready_pending_signal_number"
+  fi
 }
 
 run_pr_ready_lane() {
@@ -303,6 +371,7 @@ run_pr_ready_lane() {
   fi
   pr_ready_child_pid=""
   pr_ready_child_pgid=""
+  pr_ready_child_registration_state="not_started"
   return "$lane_status"
 }
 

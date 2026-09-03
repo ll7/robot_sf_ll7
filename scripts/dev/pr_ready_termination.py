@@ -18,6 +18,7 @@ SCHEMA_VERSION = "pr_ready_termination.v1"
 MAX_TEXT_LENGTH = 200
 READ_LIMIT_BYTES = 8192
 CGROUP_ROOT = Path("/sys/fs/cgroup")
+CHILD_REGISTRATION_STATES = frozenset({"not_started", "registering", "registered"})
 
 
 def _bounded_text(value: object, default: str = "unknown") -> str:
@@ -35,6 +36,11 @@ def _positive_int(value: object) -> int | None:
     except (TypeError, ValueError):
         return None
     return parsed if parsed > 0 else None
+
+
+def _identifier_is_absent(value: object) -> bool:
+    """Distinguish an omitted identifier from a supplied invalid identifier."""
+    return value is None or (isinstance(value, str) and not value.strip())
 
 
 def _read_limited(path: Path) -> str | None:
@@ -172,12 +178,22 @@ class TerminationContext:
     controller_pid: object = None
     child_pid: object = None
     child_process_group_id: object = None
+    child_registration_state: object = "unknown"
+
+
+def _registration_state(value: object) -> str:
+    """Normalize the shell lifecycle state, rejecting unknown states fail-closed."""
+    state = str(value) if value is not None else "unknown"
+    return state if state in CHILD_REGISTRATION_STATES else "unknown"
 
 
 def build_receipt(context: TerminationContext) -> dict[str, Any]:
     """Build the bounded receipt without collecting command or environment data."""
     child_pid_value = _positive_int(context.child_pid)
     process_group_value = _positive_int(context.child_process_group_id)
+    child_pid_absent = _identifier_is_absent(context.child_pid)
+    process_group_absent = _identifier_is_absent(context.child_process_group_id)
+    registration_state = _registration_state(context.child_registration_state)
     process_group_exists = _process_group_exists(process_group_value)
     direct_cleanup_verified_statuses = {
         "direct_process_already_exited_and_verified",
@@ -191,16 +207,24 @@ def build_receipt(context: TerminationContext) -> dict[str, Any]:
     }
     cleanup_verified = False
     if context.cleanup_status == "no_child_active":
-        cleanup_verified = process_group_value is None or process_group_exists is False
+        cleanup_verified = (
+            registration_state == "not_started" and child_pid_absent and process_group_absent
+        )
     elif context.cleanup_status in process_group_cleanup_verified_statuses:
         cleanup_verified = (
-            child_pid_value is not None
+            registration_state == "registered"
+            and child_pid_value is not None
             and process_group_value is not None
             and process_group_exists is False
         )
     elif context.cleanup_status in direct_cleanup_verified_statuses:
-        cleanup_verified = child_pid_value is not None and (
-            process_group_value is None or process_group_exists is False
+        cleanup_verified = (
+            registration_state == "registered"
+            and child_pid_value is not None
+            and (
+                process_group_absent
+                or (process_group_value is not None and process_group_exists is False)
+            )
         )
     cleanup_status = _bounded_text(context.cleanup_status)
     if (
@@ -230,6 +254,7 @@ def build_receipt(context: TerminationContext) -> dict[str, Any]:
             "child_pid": child_pid_value,
             "child_process_group_id": process_group_value,
             "child_process_group_exists": process_group_exists,
+            "child_registration_state": registration_state,
         },
         "resources": _resource_snapshot(),
         "security": {
@@ -293,6 +318,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--controller-pid")
     parser.add_argument("--child-pid")
     parser.add_argument("--child-pgid")
+    parser.add_argument("--child-registration-state", default="unknown")
     return parser
 
 
@@ -311,6 +337,7 @@ def main(argv: list[str] | None = None) -> int:
             controller_pid=args.controller_pid,
             child_pid=args.child_pid,
             child_process_group_id=args.child_pgid,
+            child_registration_state=args.child_registration_state,
         )
     )
     try:

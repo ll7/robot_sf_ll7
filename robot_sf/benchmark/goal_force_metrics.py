@@ -133,11 +133,11 @@ def evaluate_goal_force_rows(rows: Sequence[GoalForceMetricRow]) -> GoalForceMet
 
     for row in normalized_rows:
         truth = row.oracle_force_xy
+        if row.censored:
+            censored_count += 1
         if truth is None:
             unavailable_count += 1
             continue
-        if row.censored:
-            censored_count += 1
         dx = row.predicted_force_xy[0] - truth[0]
         dy = row.predicted_force_xy[1] - truth[1]
         predicted_norm = _norm(row.predicted_force_xy)

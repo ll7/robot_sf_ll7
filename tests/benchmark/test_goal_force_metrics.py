@@ -33,11 +33,11 @@ def test_censored_rows_are_direction_only_and_missing_truth_is_unavailable() -> 
     summary = evaluate_goal_force_rows(
         [
             GoalForceMetricRow((2.0, 0.0), (1.0, 0.0), censored=True),
-            GoalForceMetricRow((1.0, 0.0), None),
+            GoalForceMetricRow((1.0, 0.0), None, censored=True),
         ]
     )
 
-    assert summary.censored_count == 1
+    assert summary.censored_count == 2
     assert summary.unavailable_count == 1
     assert summary.exact_vector_count == 0
     assert summary.direction_count == 1

@@ -224,6 +224,50 @@ def test_review_mode_blocks_a_remote_added_after_configuration(tmp_path: Path) -
         _remove_worktree(repo, worktree, branch)
 
 
+def test_review_mode_blocks_preconfigured_custom_transport(tmp_path: Path, monkeypatch) -> None:
+    """A common-config custom transport cannot bypass the review barrier."""
+    repo, _remote = _fixture_repo(tmp_path)
+    helper_dir = tmp_path / "custom-transport-bin"
+    helper_dir.mkdir()
+    invoked = tmp_path / "custom-transport-invoked"
+    helper = helper_dir / "git-remote-foo"
+    helper.write_text(
+        '#!/bin/sh\nprintf invoked > "$REVIEW_GUARD_CUSTOM_HELPER_SENTINEL"\nexit 97\n',
+        encoding="utf-8",
+    )
+    helper.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{helper_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("REVIEW_GUARD_CUSTOM_HELPER_SENTINEL", str(invoked))
+    _git(repo, "config", "protocol.foo.allow", "always")
+    worktree = tmp_path / "review-custom-transport"
+    branch = "review/custom-transport"
+    try:
+        _git(repo, "worktree", "add", "--no-track", "-b", branch, str(worktree), "HEAD")
+        configured = _configure(worktree, "review")
+        assert configured.returncode == 0, configured.stderr
+        assert _git(worktree, "config", "--get", "protocol.foo.allow").stdout.strip() == "never"
+        _git(worktree, "remote", "add", "custom", "foo::custom-target")
+        before = _remote_refs(worktree)
+
+        result = _git(
+            worktree,
+            "push",
+            "--no-verify",
+            "custom",
+            "HEAD:refs/heads/custom-protocol-bypass",
+            check=False,
+        )
+
+        assert result.returncode != 0, result.stdout + result.stderr
+        assert not invoked.exists(), result.stdout + result.stderr
+        assert _remote_refs(worktree) == before
+        restored = _configure(worktree, "implementation")
+        assert restored.returncode == 0, restored.stderr
+        assert _git(worktree, "config", "--get", "protocol.foo.allow").stdout.strip() == "always"
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
 def test_create_review_worktree_bootstraps_from_invoking_checkout(tmp_path: Path) -> None:
     """A base without the new helper can still be protected without dirtying the target."""
     repo, _remote = _fixture_repo(tmp_path)

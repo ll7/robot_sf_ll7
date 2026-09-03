@@ -64,7 +64,11 @@ deliberate per-command Git configuration override can bypass it.
 If the selected base predates the guard files, `create_worktree.sh --mode review` keeps the target
 clean and temporarily points its worktree-local hooks path at the invoking checkout's tracked
 guard and hook. Keep that invoking checkout available until the review worktree is restored or
-removed; once the guard is present in the base, the target uses its own tracked files.
+removed; once the guard is present in the base, the target uses its own tracked files. In this
+fallback, invoke the integration helper by its absolute path in the invoking checkout, for
+example `python "$MAIN_REPO_ROOT/scripts/dev/review_worktree_guard.py" integrate --worktree
+<review-worktree> --source-ref origin/main --remote origin`; the target does not contain the
+helper yet.
 The integration helper snapshots every ref from `git ls-remote --refs`, runs
 `git merge --no-commit --no-ff`, always attempts `git merge --abort`, restores the pre-probe
 `ORIG_HEAD` pseudo-ref, and exits nonzero unless the worktree is clean and the before/after remote

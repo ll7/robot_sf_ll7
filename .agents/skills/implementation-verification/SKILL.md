@@ -36,11 +36,13 @@ rather than only a global test pass signal.
    - Run synthetic integration through:
 
      ```bash
-     python scripts/dev/review_worktree_guard.py integrate \
+     python <guard-source-root>/scripts/dev/review_worktree_guard.py integrate \
        --worktree <path> --source-ref origin/main --remote origin
      ```
 
-     The helper owns the no-commit merge, abort, and remote-ref comparison.
+     The helper owns the no-commit merge, abort, and remote-ref comparison. For a review worktree
+     whose base predates the guard files, `<guard-source-root>` is the invoking checkout that
+     supplied the fallback hook/helper; the target worktree itself does not contain the script yet.
 5. Include benchmark safety checks when relevant:
    - explicitly classify fallback/degraded execution as a limitation, never as success.
 6. Record residual gaps where no direct proof path exists.

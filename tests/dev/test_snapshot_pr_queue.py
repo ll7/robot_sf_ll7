@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1536,14 +1537,120 @@ def test_fetch_pr_non_quota_error_still_returns_generic_error() -> None:
 
 def test_review_thread_snapshot_reports_unknown_graphql_quota() -> None:
     """Review threads are GraphQL-only; under quota they are unknown (fail-closed)."""
-    with patch(
-        "scripts.dev.snapshot_pr_queue._gh",
-        return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+    handoff = {
+        "quota_reset_at": 1_800_000_000,
+        "reset_in_seconds": 42,
+        "retry_after_utc": "2027-01-01T00:00:00Z",
+        "retry_command": "uv run python -m scripts.dev.snapshot_pr_queue 42 --review-threads --json --repo ll7/robot_sf_ll7",
+        "handoff": "GraphQL quota exhausted; quota resets at 2027-01-01T00:00:00Z (in ~42s).",
+    }
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+        ),
+        patch(
+            "scripts.dev.snapshot_pr_queue.quota_reset_handoff",
+            return_value=handoff,
+        ) as mock_handoff,
     ):
         snap = _review_thread_snapshot(42, repo="ll7/robot_sf_ll7")
+    mock_handoff.assert_called_once()
     assert snap["status"] == "unknown_graphql_quota"
     assert snap["unresolved"] is None
     assert "merge-ready" in snap["guidance"]
+    assert "2027-01-01T00:00:00Z" in snap["guidance"]
+    assert snap["quota_reset_at"] == 1_800_000_000
+    assert snap["reset_in_seconds"] == 42
+    assert snap["retry_after_utc"] == "2027-01-01T00:00:00Z"
+    assert snap["retry_command"].endswith("--repo ll7/robot_sf_ll7")
+    assert "Never admit" in snap["guidance"]
+
+
+def test_review_thread_snapshot_quota_handoff_unknown_reset_stays_fail_closed() -> None:
+    """An unavailable reset read still yields a bounded retry handoff, never approval."""
+    handoff = {
+        "quota_reset_at": None,
+        "reset_in_seconds": None,
+        "retry_after_utc": None,
+        "retry_command": "uv run python -m scripts.dev.snapshot_pr_queue 7 --review-threads --json --repo o/r",
+        "handoff": "GraphQL quota exhausted; the quota reset time is unavailable.",
+    }
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+        ),
+        patch(
+            "scripts.dev.snapshot_pr_queue.quota_reset_handoff",
+            return_value=handoff,
+        ),
+    ):
+        snap = _review_thread_snapshot(7, repo="o/r")
+    assert snap["status"] == "unknown_graphql_quota"
+    assert snap["quota_reset_at"] is None
+    assert snap["retry_after_utc"] is None
+    assert "--review-threads" in snap["retry_command"]
+    assert "Never admit" in snap["guidance"]
+
+
+def test_review_thread_snapshot_uses_quota_retry_classification_from_stdout() -> None:
+    """A quota diagnostic on stdout still gets the reset-aware fail-closed handoff."""
+    handoff = {
+        "quota_reset_at": None,
+        "reset_in_seconds": None,
+        "retry_after_utc": None,
+        "retry_command": "retry",
+        "handoff": "Never admit merge-ready from unknown thread state.",
+    }
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stdout=QUOTA_STDERR),
+        ),
+        patch(
+            "scripts.dev.snapshot_pr_queue.quota_reset_handoff",
+            return_value=handoff,
+        ) as mock_handoff,
+    ):
+        snap = _review_thread_snapshot(42, repo="ll7/robot_sf_ll7")
+
+    assert snap["status"] == "unknown_graphql_quota"
+    mock_handoff.assert_called_once()
+
+
+def test_review_thread_snapshot_quotes_repo_in_retry_command() -> None:
+    """Copy-paste retry guidance must not turn a repository value into shell syntax."""
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+        ),
+        patch(
+            "scripts.dev.snapshot_pr_queue.quota_reset_handoff",
+            side_effect=lambda *, retry_command: {
+                "quota_reset_at": None,
+                "reset_in_seconds": None,
+                "retry_after_utc": None,
+                "retry_command": retry_command,
+                "handoff": "Never admit merge-ready from unknown thread state.",
+            },
+        ),
+    ):
+        snap = _review_thread_snapshot(42, repo="owner/repo; touch pwned")
+
+    assert shlex.split(snap["retry_command"]) == [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "scripts.dev.snapshot_pr_queue",
+        "42",
+        "--review-threads",
+        "--json",
+        "--repo",
+        "owner/repo; touch pwned",
+    ]
 
 
 def test_review_thread_snapshot_reports_exhausted_graphql_transient() -> None:

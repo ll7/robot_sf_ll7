@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import shlex
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -1331,6 +1332,64 @@ def test_fetch_threads_resolved_retries_transient_graphql_and_fails_closed() -> 
     assert resolved_state is None
     assert error is not None
     assert "after 3 attempts" in error
+
+
+def test_fetch_threads_resolved_quota_exhaustion_carries_reset_handoff() -> None:
+    """Quota-blocked thread reads stay fail-closed but name the reset and retry (issue #8282)."""
+    handoff = {
+        "quota_reset_at": 1_800_000_000,
+        "reset_in_seconds": 30,
+        "retry_after_utc": "2027-01-01T00:00:00Z",
+        "retry_command": "uv run python scripts/dev/single_account_merge_receipt.py --repo owner/repo --pr 42 --mode report-only --output output/validation/pr-42-merge-receipt.json",
+        "handoff": "GraphQL quota exhausted; quota resets at 2027-01-01T00:00:00Z (in ~30s). Retry after reset with: uv run python scripts/dev/single_account_merge_receipt.py --repo owner/repo --pr 42 --mode report-only --output output/validation/pr-42-merge-receipt.json. Never admit merge-ready from unknown thread state.",
+    }
+    with (
+        patch(
+            "scripts.dev.merge_queue_gate._gh",
+            return_value=_gh_response(
+                returncode=1, stderr="GraphQL: API rate limit already exceeded."
+            ),
+        ),
+        patch(
+            "scripts.dev.merge_queue_gate.quota_reset_handoff",
+            return_value=handoff,
+        ) as mock_handoff,
+    ):
+        resolved_state, error = fetch_threads_resolved(42, repo="owner/repo")
+
+    mock_handoff.assert_called_once()
+    assert resolved_state is None
+    assert error is not None
+    assert "2027-01-01T00:00:00Z" in error
+    assert "single_account_merge_receipt.py" in error
+    assert "report-only" in error
+
+
+def test_quota_thread_retry_command_quotes_repo() -> None:
+    """Merge-gate retry guidance must preserve a hostile repository value as one argument."""
+    with patch(
+        "scripts.dev.merge_queue_gate.quota_reset_handoff",
+        side_effect=lambda *, retry_command: {"handoff": retry_command},
+    ) as mock_handoff:
+        merge_queue_gate_module._quota_exhausted_thread_diagnostic(
+            42, repo="owner/repo; touch pwned"
+        )
+
+    command = mock_handoff.call_args.kwargs["retry_command"]
+    assert shlex.split(command) == [
+        "uv",
+        "run",
+        "python",
+        "scripts/dev/single_account_merge_receipt.py",
+        "--repo",
+        "owner/repo; touch pwned",
+        "--pr",
+        "42",
+        "--mode",
+        "report-only",
+        "--output",
+        "output/validation/pr-42-merge-receipt.json",
+    ]
 
 
 @pytest.mark.parametrize(

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +22,7 @@ from scripts.dev.check_pr_ci_status import (
     _rollup_status,
 )
 from scripts.dev.github_graphql_retry import run_with_retry
+from scripts.dev.github_quota import quota_reset_handoff
 from scripts.dev.pr_loop_policy import (
     BASE_POLICY_RE,
     GATE_VERDICT_RE,
@@ -773,14 +775,37 @@ query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
     result = retry.result
     if result.returncode != 0:
         stderr = result.stderr.strip()
-        if _is_graphql_quota_error(stderr):
+        if retry.quota_exhausted or _is_graphql_quota_error(stderr):
+            handoff = quota_reset_handoff(
+                retry_command=(
+                    shlex.join(
+                        [
+                            "uv",
+                            "run",
+                            "python",
+                            "-m",
+                            "scripts.dev.snapshot_pr_queue",
+                            str(pr_number),
+                            "--review-threads",
+                            "--json",
+                            "--repo",
+                            repo,
+                        ]
+                    )
+                ),
+            )
             return {
                 "status": "unknown_graphql_quota",
                 "unresolved": None,
                 "guidance": (
                     "GraphQL quota exhausted; review threads are GraphQL-only and cannot be "
-                    "refreshed via REST. Never admit a PR to merge-ready from this snapshot."
+                    "refreshed via REST. Never admit a PR to merge-ready from this snapshot. "
+                    + handoff["handoff"]
                 ),
+                "quota_reset_at": handoff["quota_reset_at"],
+                "reset_in_seconds": handoff["reset_in_seconds"],
+                "retry_after_utc": handoff["retry_after_utc"],
+                "retry_command": handoff["retry_command"],
             }
         if retry.exhausted:
             return {

@@ -18,6 +18,7 @@ from __future__ import annotations
 import fnmatch
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -178,6 +179,17 @@ def _entry_in(
 # ---------------------------------------------------------------------------
 # Pure-function unit tests
 # ---------------------------------------------------------------------------
+
+
+def test_build_minimal_env_pins_current_checkout_sources(monkeypatch):
+    """The sanitized child environment must not select a stale installed checkout."""
+    monkeypatch.setenv("PYTHONPATH", "/tmp/untrusted-caller-path")
+
+    env = guard.build_minimal_env()
+
+    assert env["PYTHONPATH"] == os.pathsep.join(
+        (str(guard.REPO_ROOT.resolve()), str((guard.REPO_ROOT / "fast-pysf").resolve()))
+    )
 
 
 def test_re_safety_flags_unsafe_commands():

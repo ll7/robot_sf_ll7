@@ -295,8 +295,18 @@ successor draft without `--manifest` when its version DOI is not yet known,
 then freeze that DOI and use the manifest-bound post-reservation commands above.
 Use `recover` only when that exact unpublished draft still exists and the
 credential-free local state was lost; it never reserves or mutates a deposition
-and refuses published or mismatched drafts. `upload` must send
-the byte-identical bundle used for GitHub. `verify` is read-only and must check
+and refuses published or mismatched drafts. When the bound metadata declares a
+successor, recovery also reconstructs and validates its predecessor, concept,
+and source-tag lineage so inherited-file cleanup remains available. `upload` must send
+the byte-identical bundle used for GitHub. Zenodo new-version drafts inherit the
+predecessor files. When the sealed state proves exact new-version provenance,
+`upload` validates the complete local and remote inventories, uploads the
+intended files, re-reads the draft, deletes only stable inherited filenames from
+the unpublished successor, and requires an exact final filename inventory. It
+never addresses the published predecessor. Unexpected files in an ordinary
+fresh reservation, malformed or changed remote identities, non-204 deletion
+responses, and inventory races remain blocking; rerun the same upload after a
+partial network interruption. `verify` is read-only and must check
 the title, dataset type, GPL-3.0-only license, creator union, exact source tag,
 and concept/version DOI distinction. `publish` is irreversible; never run it
 for a draft with missing files, unaccepted rows, or an unresolved DOI.

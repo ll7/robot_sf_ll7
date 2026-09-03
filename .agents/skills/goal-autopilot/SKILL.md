@@ -46,9 +46,9 @@ covering PR rather than treating a loose keyword, a change in the same file, or 
 output alone as duplicate evidence.
 
 Two regression fixtures are required:
-- #5145 / PR #4958 `PosixPath` serialization: stale because current main already replaced
+- Issue #5145 / PR #4958 `PosixPath` serialization: stale because current main already replaced
   `json.dumps(asdict(arm_params))` with the tested subprocess-boundary serializer.
-- #5480 / PR #5486 `_run_batch_sequential` 3-tuple return: #5480 was dispatched after PR #5486
+- Issue #5480 / PR #5486 `_run_batch_sequential` 3-tuple return: Issue #5480 was dispatched after PR #5486
   merged under #5482 (not #5480), so an issue-number-only merged-PR search missed it; the covering
   PR is found only by mapping the named failing test
   `test_run_batch_sequential_worker_failure_logs_warning` and its
@@ -109,6 +109,12 @@ In token-efficient mode:
   `terminal_state` for `timeout`, `exception`, `non_zero_exit`, `missing_artifact`, and
   `route_not_started` outcomes, plus `unavailable` when the wrapper did not provide enough
   terminal detail. It also records per-attempt `scope_check` and `compact_artifacts` fields.
+  It additionally records `attempted_routes[*].delegation` and a `delegation_recovery.v1`
+  `recovery` object. A pre-start `startup_backend_404` is a bounded retry recommendation only;
+  the manifest never sleeps or spawns a worker. Once the retry budget is exhausted, or when a
+  worker task fails, consume `recovery.fallback` and route to manual/local review with
+  `independent_review_authorized: false`. A successful worker already observed suppresses later
+  retries so the parent does not duplicate work.
   The manifest's compact bundle names `status.txt` and `validation.txt` explicitly, or records
   their missing/unavailable reason during migration.
   `scope_violation` is a route-hygiene failure: it covers target-worktree mismatch and artifacts

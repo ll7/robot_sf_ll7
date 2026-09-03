@@ -207,6 +207,10 @@ Treat it as a reviewer-lens pass, not another full test suite:
   manifests should include per-attempt artifact presence for `result.json`, `RESULT.md`,
   `diffstat.txt`, `status.txt`, and `validation.txt`; wrapper success, zero exit, and manifest
   presence are still route evidence only, not task acceptance.
+- Consume the additive `delegation_recovery.v1` record when present: classify a pre-start
+  `startup_backend_404` separately from `worker_task_failure`, honor only its bounded retry
+  recommendation, and route exhausted or failed delegation to manual/local review with
+  `independent_review_authorized: false`.
 
 For a bounded inactivity check, pass one or more JSON observation files to the canonical snapshot
 with `--worker-observation <path>`, or call `classify_worker_inactivity` from

@@ -1576,6 +1576,13 @@ permission-denied/headless failure remains `inconclusive`; readers must downgrad
 reported `confirmed` value. This is still route evidence only, not task acceptance or research
 evidence.
 
+They also expose additive `delegation` records per attempt and a bounded `delegation_recovery.v1`
+`recovery` object. A pre-start `startup_backend_404` is distinct from a `worker_task_failure` and
+may recommend one next startup attempt, but the manifest does not sleep or spawn a worker. Once
+the hard retry budget is exhausted, `recovery.fallback` requires manual or local review and keeps
+`independent_review_authorized` false; a successful prior worker suppresses later retries to avoid
+duplicate work.
+
 ### PR Review: Route Efficiency
 
 When reviewing PRs with route-efficiency changes, ensure:
@@ -1593,6 +1600,9 @@ When reviewing PRs with route-efficiency changes, ensure:
   inconsistent, failed, or suspicious.
 - [ ] **Visible evidence warning**: Confirm the report still displays the route-evidence-only
   warning and does not let route metrics replace manual diff inspection or local validation.
+- [ ] **Startup recovery boundary**: Confirm a pre-start backend 404 is not relabeled as a worker
+  task failure, retry recommendations are bounded, and a failed delegation cannot supply accepted
+  review evidence or `merge-ready` authorization.
 
 ### Shared model routing
 

@@ -298,6 +298,11 @@ inert tooling half now and leave only the claim-bearing artifact for the author.
      git worktree and validate in order: `result.json`, `RESULT.md`, `diffstat.txt`, and
      `validation.json`; inspect route evidence first, then run targeted local checks before raw logs;
      `RESULT.md` and `REVIEW.json` must never be staged or committed,
+   - treat `routed_worker_manifest.py` `delegation_recovery.v1` output as route evidence only:
+     classify a pre-start `startup_backend_404` separately from a worker-task failure, honor its
+     bounded retry recommendation without duplicating a successful worker, and use the explicit
+     manual/local fallback when the budget is exhausted; failed delegation never authorizes an
+     accepted review or `merge-ready`,
    - cap parent-thread raw output at about 200 lines; use `rg -l`, `rg --files`, bounded `sed -n`,
      and private artifacts instead of broad `rg -n .` or full file reads,
    - classify findings as fixable now, deferred, or blocker.

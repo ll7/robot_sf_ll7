@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/**"
+      - ".github/actions/**"
       - ".github/actionlint.yaml"
       - "scripts/dev/check_github_actions_workflows.sh"
       - "tests/dev/test_actionlint_contract.py"
@@ -12,6 +13,7 @@ on:
       - main
     paths:
       - ".github/workflows/**"
+      - ".github/actions/**"
       - ".github/actionlint.yaml"
       - "scripts/dev/check_github_actions_workflows.sh"
       - "tests/dev/test_actionlint_contract.py"

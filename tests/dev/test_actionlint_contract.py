@@ -269,6 +269,7 @@ def test_actionlint_workflow_contract() -> None:
 
     expected_paths = {
         ".github/workflows/**",
+        ".github/actions/**",
         ".github/actionlint.yaml",
         "scripts/dev/check_github_actions_workflows.sh",
         "tests/dev/test_actionlint_contract.py",

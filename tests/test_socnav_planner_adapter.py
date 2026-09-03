@@ -297,12 +297,18 @@ def test_social_force_adapter_responds_to_obstacle_in_grid():
     adapter = SocialForcePlannerAdapter(cfg)
     obs_free = _with_occupancy_grid(_make_obs(goal=(5.0, 0.0), heading=0.0))
     v_free, w_free = adapter.plan(obs_free)
+    assert adapter.diagnostics()["obstacle_force_law"]["enabled"] is True
+    assert adapter.diagnostics()["obstacle_force_law"]["applied"] is False
     obs_blocked = _with_occupancy_grid(
         _make_obs(goal=(5.0, 0.0), heading=0.0),
         obstacle_cells=[(2, 3)],
     )
     v_blocked, w_blocked = adapter.plan(obs_blocked)
     assert v_blocked < v_free or abs(w_blocked) > abs(w_free) + 1e-3
+    assert adapter.diagnostics()["obstacle_force_law"]["applied"] is True
+
+    adapter.reset(seed=7)
+    assert adapter.diagnostics()["obstacle_force_law"]["applied"] is False
 
 
 def test_orca_adapter(monkeypatch):

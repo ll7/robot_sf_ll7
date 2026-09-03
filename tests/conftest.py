@@ -601,6 +601,13 @@ _FAST_FILES = {
     "test_socnav_planner_adapter.py",
     "test_fast_pysf_wrapper.py",
     "test_simulator_init_factory.py",
+    # Reset metadata and JSONL recording tests provide deterministic contract
+    # coverage for persisted obstacle-force runtime metadata.
+    "test_reset_metadata.py",
+    "test_jsonl_recording.py",
+    # Pedestrian reset compatibility covers the simulator metadata forwarding
+    # branch in the changed environment reset path.
+    "test_pedestrian_env_compat.py",
     # The evaluator-only oracle channel test is a one-step deterministic contract
     # for changed environment plumbing; keep it in PR fast shards so changed
     # coverage proves the info-only branch.

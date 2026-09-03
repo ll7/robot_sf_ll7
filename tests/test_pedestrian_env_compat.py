@@ -184,7 +184,10 @@ def test_pedestrian_env_records_and_resets(tmp_path, monkeypatch) -> None:
             "time_per_step_in_secs",
             "max_sim_steps",
             "seed",
+            "obstacle_force_law",
         }
+        assert info["obstacle_force_law"]["schema_version"] == "obstacle_force_law_metadata.v1"
+        assert info["obstacle_force_law"]["site"] == "fast_pysf"
 
         action = env.action_space.sample()
         _obs, _reward, _terminated, _truncated, step_info = env.step(action)

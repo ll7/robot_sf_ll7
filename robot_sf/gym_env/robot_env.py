@@ -399,7 +399,11 @@ def _coerce_finite_float(value: Any) -> float | None:
 
 
 def _build_reset_info(
-    env_config: EnvSettings, *, map_def, applied_seed: int | None
+    env_config: EnvSettings,
+    *,
+    map_def,
+    applied_seed: int | None,
+    simulator: Any | None = None,
 ) -> dict[str, Any]:
     """Return a stable, non-placeholder reset metadata payload.
 
@@ -407,7 +411,12 @@ def _build_reset_info(
     downstream debugging and reproducibility.
     """
 
-    return build_reset_metadata(env_config, map_def=map_def, seed=applied_seed)
+    return build_reset_metadata(
+        env_config,
+        map_def=map_def,
+        seed=applied_seed,
+        simulator=simulator,
+    )
 
 
 def _extract_reward_terms(meta: dict[str, Any]) -> dict[str, float]:
@@ -1207,6 +1216,15 @@ class RobotEnv(BaseEnv):
             obs = self._attach_asymmetric_critic_state(obs)
             self._latest_observation = obs
 
+            info = _build_reset_info(
+                self.config,
+                map_def=self.map_def,
+                applied_seed=self.applied_seed,
+                simulator=self.simulator,
+            )
+            info["action_latency"] = self.env_config.sim_config.action_latency_metadata()
+            _attach_goal_posterior_planner_input(info, self.env_config, self.simulator)
+
             # Handle recording for both systems
             if self.recording_enabled:
                 if self.use_jsonl_recording:
@@ -1230,18 +1248,16 @@ class RobotEnv(BaseEnv):
                         config_hash=config_hash,
                         telemetry_path=telemetry_path,
                         telemetry_episode_id=telemetry_episode_id,
+                        runtime_metadata=(
+                            {"obstacle_force_law": info["obstacle_force_law"]}
+                            if "obstacle_force_law" in info
+                            else None
+                        ),
                     )
                 else:
                     # Legacy pickle recording
                     self.save_recording()
 
-            info = _build_reset_info(
-                self.config,
-                map_def=self.map_def,
-                applied_seed=self.applied_seed,
-            )
-            info["action_latency"] = self.env_config.sim_config.action_latency_metadata()
-            _attach_goal_posterior_planner_input(info, self.env_config, self.simulator)
             # Reset telemetry timing on new episode
             self._last_wall_time = time.perf_counter()
             self._frame_idx = 0

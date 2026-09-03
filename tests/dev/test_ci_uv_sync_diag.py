@@ -185,6 +185,51 @@ def test_ci_uv_sync_diag_cache_sizing_is_single_pass(tmp_path: Path) -> None:
     assert "cache_git-v0_size=1.0K" in output
 
 
+def test_ci_uv_sync_diag_du_timeout_reports_unavailable(tmp_path: Path) -> None:
+    """Slow `du` walks under host contention must not hang the probe (issue #8249).
+
+    A 60GB cache measured 28s for one `du` pass against the 30s test budget, so
+    loaded hosts exceed it. With a slow-`du` shim and a 1s probe budget, the
+    script must still exit 0 quickly with timed-out markers. Completion inside
+    the outer 30s budget is itself the boundedness proof.
+    """
+    timeout_bin = shutil.which("timeout")
+    if timeout_bin is None:
+        pytest.skip("GNU timeout(1) is required for the du-budget probe")
+    script = _script_path()
+    bash_path = shutil.which("bash")
+    assert bash_path, "bash is required for this test"
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    slow_du = fake_bin / "du"
+    slow_du.write_text("#!/usr/bin/env bash\nsleep 30\n", encoding="utf-8")
+    slow_du.chmod(0o755)
+
+    cache_dir = tmp_path / "uv-cache"
+    cache_dir.mkdir()
+    (tmp_path / ".venv" / "bin").mkdir(parents=True)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    env["UV_CACHE_DIR"] = str(cache_dir)
+    env["ROBOT_SF_DIAG_DU_TIMEOUT_SECONDS"] = "1"
+
+    result = subprocess.run(
+        [bash_path, str(script), "du-timeout-test"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+        cwd=tmp_path,  # .venv dir present here, so both du probes fire
+        timeout=30,
+    )
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert "cache_total_size=unavailable-timed-out" in result.stdout
+    assert "venv_size=unavailable-timed-out" in result.stdout
+    assert "::endgroup::" in result.stdout
+
+
 def test_workflow_uv_cache_is_pruned_by_setup_uv() -> None:
     """CI must use setup-uv's pruned cache without a second unbounded payload cache.
 

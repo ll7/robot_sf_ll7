@@ -66,6 +66,7 @@ class _Session:
         self.posts: list[_Response] = []
         self.gets: list[_Response] = []
         self.puts: list[_Response] = []
+        self.deletes: list[_Response] = []
 
     def post(self, url: str, **kwargs: Any) -> _Response:
         """Consume a queued POST response."""
@@ -81,6 +82,11 @@ class _Session:
         """Consume a queued PUT response."""
         del url, kwargs
         return self.puts.pop(0)
+
+    def delete(self, url: str, **kwargs: Any) -> _Response:
+        """Consume a queued DELETE response."""
+        del url, kwargs
+        return self.deletes.pop(0)
 
 
 def _binding_and_metadata() -> tuple[dict[str, Any], dict[str, Any]]:
@@ -198,10 +204,6 @@ def test_all_zenodo_modes_preserve_manifest_binding(tmp_path: Path) -> None:
 
     bundle = tmp_path / "bundle.tar.gz"
     bundle.write_bytes(b"manifest-bound bundle")
-    session.gets = [_Response(_deposition_payload(binding))]
-    session.puts = [_Response({"checksum": "md5:fixture"})]
-    state = upload(session, state, [bundle], release_binding=binding)
-
     remote_draft = _deposition_payload(binding)
     remote_draft["metadata"] = {
         **metadata,
@@ -216,6 +218,14 @@ def test_all_zenodo_modes_preserve_manifest_binding(tmp_path: Path) -> None:
             },
         }
     ]
+    session.gets = [
+        _Response(_deposition_payload(binding)),
+        _Response(remote_draft),
+        _Response(remote_draft),
+    ]
+    session.puts = [_Response({"checksum": "md5:fixture"})]
+    state = upload(session, state, [bundle], release_binding=binding)
+
     session.gets = [
         _Response(remote_draft),
         _Response({}, content=bundle.read_bytes()),
@@ -262,10 +272,6 @@ def test_recover_restores_manifest_bound_state_for_upload_and_verify(tmp_path: P
 
     bundle = tmp_path / "bundle.tar.gz"
     bundle.write_bytes(b"recovered draft bundle")
-    session.gets = [_Response(draft)]
-    session.puts = [_Response({"checksum": "md5:fixture"})]
-    state = upload(session, state, [bundle], release_binding=binding)
-
     remote_draft = dict(draft)
     remote_draft["files"] = [
         {
@@ -276,6 +282,10 @@ def test_recover_restores_manifest_bound_state_for_upload_and_verify(tmp_path: P
             },
         }
     ]
+    session.gets = [_Response(draft), _Response(remote_draft), _Response(remote_draft)]
+    session.puts = [_Response({"checksum": "md5:fixture"})]
+    state = upload(session, state, [bundle], release_binding=binding)
+
     session.gets = [
         _Response(remote_draft),
         _Response({}, content=bundle.read_bytes()),

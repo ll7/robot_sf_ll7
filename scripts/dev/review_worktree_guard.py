@@ -6,6 +6,9 @@ references.  ``configure --mode review`` stores the mode in the linked
 worktree's private Git config, installs the tracked pre-push hook, and routes
 configured push destinations to a non-repository URL.  The second barrier
 covers explicit refspecs and ``--no-verify`` pushes to configured remotes.
+This is a Git-level workflow guard, not an operating-system sandbox; a caller
+who deliberately overrides Git command-line configuration or ``--receive-pack``
+can bypass these local barriers.
 
 ``integrate`` is the canonical read-only merge probe.  It snapshots all refs
 reported by ``git ls-remote --refs`` before and after a ``--no-commit --no-ff``

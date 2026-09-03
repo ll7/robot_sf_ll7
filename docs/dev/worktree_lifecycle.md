@@ -53,8 +53,10 @@ tracked pre-push guard. Configured remote names also receive inert worktree-loca
 and a nonexistent worktree-local receive-pack command. A push-only catch-all rewrite (plus exact
 configured-URL rules) routes direct push URLs to an inert path. Together these barriers cover
 inherited `pushurl` values, equivalent local-path spellings, explicit destination refspecs, and
-`--no-verify` without mutating a configured remote from the protected worktree. Fetches remain
-available.
+`--no-verify` for ordinary Git invocation paths without mutating a configured remote from the
+protected worktree. Fetches remain available. This is a Git-level workflow guard, not an
+operating-system sandbox: a deliberate per-command Git configuration or `--receive-pack` override
+can bypass these local barriers, so do not use review mode as a hostile-process security boundary.
 The integration helper snapshots every ref from `git ls-remote --refs`, runs
 `git merge --no-commit --no-ff`, always attempts `git merge --abort`, and exits nonzero unless the
 worktree is clean and the before/after remote snapshots are identical.

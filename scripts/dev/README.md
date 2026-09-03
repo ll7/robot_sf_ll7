@@ -11,6 +11,14 @@ source of truth.
 entry point for ordinary PR work. CI workflows and the documented PR process
 own the required checks that run for every applicable change.
 
+If readiness receives a termination signal, it preserves a private,
+bounded receipt under `output/validation/pr_ready/` with the active phase,
+lane, process-group cleanup result, and small host/cgroup resource snapshot.
+Set `PR_READY_TERMINATION_RECEIPT=/absolute/path/receipt.json` when a caller
+needs a stable handoff path. The receipt never includes the command line or
+environment, and readiness still returns the conventional signal status (143
+for `SIGTERM`, the termination signal).
+
 The native merge queue enforcement path is
 [`merge_queue_gate.py`](merge_queue_gate.py), invoked by
 [`.github/workflows/merge-queue-gate.yml`](../../.github/workflows/merge-queue-gate.yml)

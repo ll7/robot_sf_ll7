@@ -328,6 +328,7 @@ def test_collect_live_state_records_explicit_closing_pr(monkeypatch) -> None:
 
     monkeypatch.setattr(gate, "_json_command", fake_json)
     monkeypatch.setattr(gate, "_fetch_refs", lambda **_: ("base-a", "branch-a"))
+    monkeypatch.setattr(gate, "_fetch_claim_ref", lambda **_: {"exists": False, "sha": None})
     monkeypatch.setattr(gate, "_git_output", lambda *_: "head-a")
     monkeypatch.setattr(gate, "_tree_state", lambda: "clean")
 
@@ -416,6 +417,7 @@ def test_collect_live_state_falls_back_to_rest_per_remote_field(monkeypatch) -> 
         ],
     )
     monkeypatch.setattr(gate, "_fetch_refs", lambda **_: ("base-a", "branch-a"))
+    monkeypatch.setattr(gate, "_fetch_claim_ref", lambda **_: {"exists": False, "sha": None})
     monkeypatch.setattr(gate, "_git_output", lambda *_: "head-a")
     monkeypatch.setattr(gate, "_tree_state", lambda: "clean")
 
@@ -465,6 +467,7 @@ def test_collect_live_state_uses_configured_rest_page_budget(monkeypatch) -> Non
     monkeypatch.setattr(gate, "_closing_prs_rest", closing_prs_rest)
     monkeypatch.setattr(gate, "_open_covering_prs_rest", open_covering_prs_rest)
     monkeypatch.setattr(gate, "_fetch_refs", lambda **_: ("base-a", "branch-a"))
+    monkeypatch.setattr(gate, "_fetch_claim_ref", lambda **_: {"exists": False, "sha": None})
     monkeypatch.setattr(gate, "_git_output", lambda *_: "head-a")
     monkeypatch.setattr(gate, "_tree_state", lambda: "clean")
 
@@ -1375,6 +1378,7 @@ def test_collect_live_state_records_ancestry_block(monkeypatch) -> None:
     monkeypatch.setattr(gate, "_git_output", lambda *_: "c" * 40)
     monkeypatch.setattr(gate, "_tree_state", lambda: "clean")
     monkeypatch.setattr(gate, "_fetch_refs", lambda **_: ("base-a", "branch-a"))
+    monkeypatch.setattr(gate, "_fetch_claim_ref", lambda **_: {"exists": False, "sha": None})
     monkeypatch.setattr(
         gate,
         "_json_command",

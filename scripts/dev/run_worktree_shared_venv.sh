@@ -33,12 +33,18 @@ Options:
                          use all-extras (or a named pyproject extra) when the command needs it.
   --scratch-dir PATH     Use PATH for temporary files and default uv/XDG caches for this run.
   --standalone           Run a command that is verified not to import project packages. This skips
-                         the dependency-profile and project-source checks and does not prepend the
-                         worktree root to PYTHONPATH.
+                         the dependency-profile and project-source checks, but still applies the
+                         pinned-tool freshness gate; it does not prepend the worktree root to
+                         PYTHONPATH.
   --no-freshness-check   Retained for compatibility; checkout-local fast-pysf source already takes
                           precedence over any reused installed copy. Also accepted via
                           ROBOT_SF_VENV_FRESHNESS_CHECK=skip. Bypasses the pinned-tool version
                           gate as well; use only after confirming the environment matches.
+  The wrapped command must begin with an executable after `--`. Nested `uv run` overlay or
+  isolated-environment options (`--with*`, `--isolated`, `--python`) are rejected because this
+  helper cannot verify freshness for the resulting environment.
+  Absolute or relative paths to `uv` are parsed like the plain `uv run` form; other explicit
+  tool paths retain their compatibility skip boundary.
   -h, --help             Show this help message.
 
 Environment:
@@ -186,6 +192,11 @@ if [[ ${#cmd[@]} -eq 0 ]]; then
   show_help >&2
   exit 2
 fi
+if [[ "${cmd[0]}" == -* ]]; then
+  echo "ERROR: the wrapped command must start with an executable, not an option: ${cmd[0]}" >&2
+  echo "Put wrapper options before '--' and provide the command after it." >&2
+  exit 2
+fi
 
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
@@ -243,9 +254,67 @@ check_shared_venv_freshness() {
   # Pinned tool binaries (issue #8250) are checked below: the requested tool
   # runs from the selected venv, so only its version is compared against the
   # active checkout pin. Interpreters and shells are never gated here.
-  local tool="${cmd[0]:-}"
   local start_ms=""
   start_ms="$(date +%s%3N 2>/dev/null)" || start_ms=""
+  local tool="${cmd[0]:-}"
+  local freshness_parse_error=""
+
+  # The helper's documented examples also use ``-- uv run <tool>``. Walk the
+  # uv-run options so flags or option values cannot hide the tool whose
+  # selected-venv version will actually be used. Unknown options fail closed:
+  # guessing where the nested command starts would make the freshness gate
+  # appear to pass while checking the wrong binary.
+  if [[ "${tool##*/}" == "uv" && "${cmd[1]:-}" == "run" ]]; then
+    local uv_run_index=2
+    local uv_run_arg=""
+    tool=""
+    while (( uv_run_index < ${#cmd[@]} )); do
+      uv_run_arg="${cmd[$uv_run_index]}"
+      case "$uv_run_arg" in
+        --)
+          ((uv_run_index++))
+          tool="${cmd[$uv_run_index]:-}"
+          break
+          ;;
+        -m|--module|-s|--script|--gui-script)
+          # These modes execute through Python rather than a selected-venv
+          # tool entry point; preserve the interpreter skip boundary.
+          tool="python"
+          break
+          ;;
+        --isolated|--with|--with-editable|--with-requirements|-w|-p|--python)
+          freshness_parse_error="unsupported environment-changing uv run option '$uv_run_arg'"
+          break
+          ;;
+        --with=*|--with-editable=*|--with-requirements=*|--isolated=*|-w=*|-p=*|--python=*)
+          freshness_parse_error="unsupported environment-changing uv run option '$uv_run_arg'"
+          break
+          ;;
+        --extra|--no-extra|--group|--no-group|--only-group|--no-editable-package|--env-file|--package|--python-platform|--index|--default-index|-i|--index-url|--extra-index-url|-f|--find-links|--index-strategy|--keyring-provider|-P|--upgrade-package|--upgrade-group|--resolution|--prerelease|--fork-strategy|--exclude-newer|--exclude-newer-package|--no-sources-package|--reinstall-package|--refresh-package|--link-mode|-C|--config-setting|--config-settings-package|--no-build-isolation-package|--no-build-package|--no-binary-package|--allow-insecure-host|--cache-dir|--color|--directory|--project|--config-file)
+          if (( uv_run_index + 1 >= ${#cmd[@]} )); then
+            freshness_parse_error="uv run option '$uv_run_arg' is missing its value"
+            break
+          fi
+          ((uv_run_index+=2))
+          ;;
+        --extra=*|--no-extra=*|--group=*|--no-group=*|--only-group=*|--no-editable-package=*|--env-file=*|-w=*|--with=*|--with-editable=*|--with-requirements=*|--package=*|--python-platform=*|--index=*|--default-index=*|-i=*|--index-url=*|--extra-index-url=*|-f=*|--find-links=*|--index-strategy=*|--keyring-provider=*|-P=*|--upgrade-package=*|--upgrade-group=*|--resolution=*|--prerelease=*|--fork-strategy=*|--exclude-newer=*|--exclude-newer-package=*|--no-sources-package=*|--reinstall-package=*|--refresh-package=*|--link-mode=*|-C=*|--config-setting=*|--config-settings-package=*|--no-build-isolation-package=*|--no-build-package=*|--no-binary-package=*|-p=*|--python=*|--allow-insecure-host=*|--cache-dir=*|--color=*|--directory=*|--project=*|--config-file=*)
+          ((uv_run_index++))
+          ;;
+        --all-extras|--no-dev|--no-default-groups|--all-groups|--only-dev|--no-editable|--exact|--no-env-file|--isolated|--active|--no-sync|--locked|--frozen|--all-packages|--no-project|--no-index|-U|--no-cache|--refresh|--reinstall|--compile-bytecode|--no-build-isolation|--no-build|--no-binary|--upgrade|--no-sources|--managed-python|--no-managed-python|--no-python-downloads|-n|--quiet|-q|--verbose|-v|--system-certs|--offline|--no-progress|--no-config|-h|--help)
+          ((uv_run_index++))
+          ;;
+        -*)
+          freshness_parse_error="unrecognized uv run option '$uv_run_arg'"
+          break
+          ;;
+        *)
+          tool="$uv_run_arg"
+          break
+          ;;
+      esac
+    done
+  fi
+
   local skip_reason=""
   local pin=""
 
@@ -258,6 +327,12 @@ check_shared_venv_freshness() {
       printf 'unknown'
     fi
   }
+
+  if [[ -n "$freshness_parse_error" ]]; then
+    echo "ERROR: Shared-venv tool freshness preflight could not identify the nested uv tool: $freshness_parse_error elapsed_ms=$(freshness_elapsed_ms) venv=$venv_path" >&2
+    echo "Use a supported 'uv run' option form or rerun with --no-freshness-check only after confirming the environment matches." >&2
+    return 2
+  fi
 
   if [[ -z "$tool" ]]; then
     skip_reason="empty-command"
@@ -273,9 +348,6 @@ check_shared_venv_freshness() {
         ;;
     esac
   fi
-  if [[ -z "$skip_reason" && ! -x "$venv_path/bin/$tool" ]]; then
-    skip_reason="not-in-selected-venv"
-  fi
   if [[ -z "$skip_reason" && ! -f "$repo_root/pyproject.toml" ]]; then
     skip_reason="no-pin-manifest"
   fi
@@ -285,6 +357,13 @@ check_shared_venv_freshness() {
     if [[ -z "$pin" ]]; then
       skip_reason="unpinned"
     fi
+  fi
+  if [[ -z "$skip_reason" && ! -x "$venv_path/bin/$tool" ]]; then
+    echo "ERROR: Shared-venv pinned tool is absent from the selected environment: $venv_path/bin/$tool (active checkout pins $tool==$pin)." >&2
+    echo "Selected environment: $venv_path (active checkout: $repo_root)." >&2
+    echo "Remedy: install the pinned tool into the selected environment, re-sync the owning checkout, or pass an explicit --venv containing it." >&2
+    echo "To bypass after confirming the environment matches, rerun with --no-freshness-check." >&2
+    return 2
   fi
   if [[ -n "$skip_reason" ]]; then
     echo "Shared-venv tool freshness preflight skipped: tool=${tool:-none} reason=$skip_reason elapsed_ms=$(freshness_elapsed_ms) venv=$venv_path" >&2
@@ -313,7 +392,7 @@ check_shared_venv_freshness() {
   return 2
 }
 
-if [[ -z "$standalone" && -z "$skip_freshness" && "${ROBOT_SF_VENV_FRESHNESS_CHECK:-}" != "skip" ]]; then
+if [[ -z "$skip_freshness" && "${ROBOT_SF_VENV_FRESHNESS_CHECK:-}" != "skip" ]]; then
   if ! check_shared_venv_freshness "$venv_path"; then
     exit 2
   fi

@@ -35,6 +35,9 @@ Environment variables:
                       when parallel workers crash (issue #5633), separating an
                       env crash from real failures. Disabled by default; the
                       gate stays fail-closed and only reports the diagnostic.
+  PR_READY_TERMINATION_RECEIPT
+                      Optional absolute or worktree-relative path for the bounded
+                      receipt written when readiness receives a termination signal.
 EOF
 }
 
@@ -55,6 +58,253 @@ export PR_READY_MODE="${PR_READY_MODE:-}"
 export PR_READY_SKIP_PREFLIGHT="${PR_READY_SKIP_PREFLIGHT:-0}"
 export PR_READY_PR_BODY_FILE="${PR_READY_PR_BODY_FILE:-}"
 export PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES="${PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES:-1}"
+
+pr_ready_phase="startup"
+pr_ready_active_lane="none"
+pr_ready_last_progress="initializing readiness wrapper"
+pr_ready_last_progress_at_utc="unknown"
+pr_ready_termination_handled=0
+pr_ready_pending_signal_name=""
+pr_ready_pending_signal_number=""
+pr_ready_child_pid=""
+pr_ready_child_pgid=""
+pr_ready_parent_pgid=""
+pr_ready_cleanup_status="no_child_active"
+pr_ready_termination_receipt="${PR_READY_TERMINATION_RECEIPT:-}"
+if [[ -z "$pr_ready_termination_receipt" ]]; then
+  pr_ready_termination_stamp="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || printf 'unknown')"
+  pr_ready_termination_receipt="${REPO_ROOT}/output/validation/pr_ready/"
+  pr_ready_termination_receipt+="pr_ready_termination_${pr_ready_termination_stamp}_$$.json"
+elif [[ "$pr_ready_termination_receipt" != /* ]]; then
+  pr_ready_termination_receipt="$REPO_ROOT/$pr_ready_termination_receipt"
+fi
+
+mark_pr_ready_progress() {
+  pr_ready_phase="${1:-unknown}"
+  pr_ready_active_lane="${2:-none}"
+  pr_ready_last_progress="${3:-unknown}"
+  pr_ready_last_progress_at_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || printf 'unknown')"
+}
+
+pr_ready_process_group_for_pid() {
+  local pid="$1"
+  command -v ps >/dev/null 2>&1 || return 0
+  ps -o pgid= -p "$pid" 2>/dev/null | awk 'NF { print $1; exit }'
+}
+
+pr_ready_process_group_alive() {
+  local process_group_id="$1"
+  [[ "$process_group_id" =~ ^[1-9][0-9]*$ ]] || return 1
+  kill -0 -- "-$process_group_id" 2>/dev/null
+}
+
+pr_ready_process_alive() {
+  local pid="$1"
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null
+}
+
+pr_ready_wait_for_group_exit() {
+  local process_group_id="$1"
+  local attempts=0
+  while pr_ready_process_group_alive "$process_group_id"; do
+    if (( attempts >= 100 )); then
+      return 1
+    fi
+    sleep 0.05
+    attempts=$((attempts + 1))
+  done
+  return 0
+}
+
+pr_ready_wait_for_process_exit() {
+  local pid="$1"
+  local attempts=0
+  while pr_ready_process_alive "$pid"; do
+    if (( attempts >= 100 )); then
+      return 1
+    fi
+    sleep 0.05
+    attempts=$((attempts + 1))
+  done
+  return 0
+}
+
+pr_ready_cleanup_direct_child() {
+  local child_pid="$1"
+  if pr_ready_process_alive "$child_pid" && kill -TERM "$child_pid" 2>/dev/null; then
+    if pr_ready_wait_for_process_exit "$child_pid"; then
+      pr_ready_cleanup_status="direct_process_terminated_and_verified"
+      return 0
+    fi
+  elif ! pr_ready_process_alive "$child_pid"; then
+    pr_ready_cleanup_status="direct_process_already_exited_and_verified"
+    return 0
+  fi
+
+  kill -KILL "$child_pid" 2>/dev/null || true
+  if pr_ready_wait_for_process_exit "$child_pid"; then
+    pr_ready_cleanup_status="direct_process_killed_and_verified"
+  else
+    pr_ready_cleanup_status="direct_process_cleanup_unverified"
+  fi
+}
+
+pr_ready_finalize_group_cleanup() {
+  local child_pid="$1"
+  local verified_status="$2"
+  if pr_ready_process_alive "$child_pid"; then
+    # A group can disappear while the seeded child is still crossing the
+    # fork()/setsid() boundary.  The missing group is not proof that this
+    # known child exited, so use the bounded direct-child fallback.
+    pr_ready_cleanup_direct_child "$child_pid"
+  else
+    pr_ready_cleanup_status="$verified_status"
+  fi
+}
+
+terminate_pr_ready_child() {
+  local child_pid="$pr_ready_child_pid"
+  local child_pgid="$pr_ready_child_pgid"
+  pr_ready_cleanup_status="no_child_active"
+  [[ -z "$child_pid" ]] && return 0
+
+  if [[ -n "$child_pgid" && "$child_pgid" != "$pr_ready_parent_pgid" ]]; then
+    if kill -TERM -- "-$child_pgid" 2>/dev/null; then
+      if pr_ready_wait_for_group_exit "$child_pgid"; then
+        pr_ready_finalize_group_cleanup "$child_pid" "process_group_terminated_and_verified"
+      else
+        kill -KILL -- "-$child_pgid" 2>/dev/null || true
+        if pr_ready_wait_for_group_exit "$child_pgid"; then
+          pr_ready_finalize_group_cleanup "$child_pid" "process_group_killed_and_verified"
+        else
+          pr_ready_cleanup_direct_child "$child_pid"
+        fi
+      fi
+    else
+      # The launcher can still be between fork() and setsid(). A failed group
+      # signal must not leave that direct child running or make the final wait
+      # unbounded; retry group KILL, then fall back to the known child PID.
+      kill -KILL -- "-$child_pgid" 2>/dev/null || true
+      if pr_ready_wait_for_group_exit "$child_pgid"; then
+        pr_ready_finalize_group_cleanup "$child_pid" "process_group_killed_and_verified"
+      else
+        pr_ready_cleanup_direct_child "$child_pid"
+      fi
+    fi
+    if [[ "$pr_ready_cleanup_status" == direct_process_*_and_verified ]] &&
+      pr_ready_process_group_alive "$child_pgid"; then
+      pr_ready_cleanup_status="process_group_cleanup_unverified"
+    fi
+  else
+    pr_ready_cleanup_direct_child "$child_pid"
+  fi
+  # Do not turn a failed cleanup into an unbounded signal-path wait.
+  if [[ "$pr_ready_cleanup_status" != *"unverified"* ]]; then
+    wait "$child_pid" 2>/dev/null || true
+  fi
+}
+
+handle_pr_ready_signal() {
+  local signal_name="$1"
+  local signal_number="$2"
+  [[ "$pr_ready_termination_handled" -eq 0 ]] || return 0
+  pr_ready_termination_handled=1
+  pr_ready_pending_signal_name=""
+  pr_ready_pending_signal_number=""
+  terminate_pr_ready_child
+  local receipt_output=""
+  if receipt_output="$(python3 "$SCRIPT_DIR/pr_ready_termination.py" \
+    --output "$pr_ready_termination_receipt" \
+    --signal-number "$signal_number" \
+    --phase "$pr_ready_phase" \
+    --lane "$pr_ready_active_lane" \
+    --last-progress "$pr_ready_last_progress" \
+    --last-progress-at-utc "$pr_ready_last_progress_at_utc" \
+    --cleanup-status "$pr_ready_cleanup_status" \
+    --mode "${pr_ready_mode_lower:-unknown}" \
+    --controller-pid "$$" \
+    --child-pid "$pr_ready_child_pid" \
+    --child-pgid "$pr_ready_child_pgid" 2>&1)"; then
+    printf 'PR readiness received %s; termination receipt: %s\n' "$signal_name" "$receipt_output" >&2
+  else
+    printf 'PR readiness received %s, but could not write termination receipt at %s.\n' \
+      "$signal_name" "$pr_ready_termination_receipt" >&2
+    if [[ -n "$receipt_output" ]]; then
+      printf '%s\n' "$receipt_output" >&2
+    fi
+  fi
+  exit "$((128 + signal_number))"
+}
+
+pr_ready_exit_without_coverage() {
+  local exit_code=$?
+  if [[ -n "$pr_ready_pending_signal_number" && "$pr_ready_termination_handled" -eq 0 ]]; then
+    handle_pr_ready_signal "$pr_ready_pending_signal_name" "$pr_ready_pending_signal_number"
+  fi
+  release_pr_ready_lock || true
+  return "$exit_code"
+}
+
+start_pr_ready_child() {
+  python3 - "$@" <<'PY' &
+import os
+import sys
+
+try:
+    os.setsid()
+except (AttributeError, OSError):
+    pass
+os.execvp(sys.argv[1], sys.argv[1:])
+PY
+  pr_ready_child_pid=$!
+  # The launcher calls setsid() before exec, so its PID is the expected
+  # process-group ID.  Seed this value before polling: a signal can arrive
+  # while the launcher is still crossing that boundary.
+  pr_ready_child_pgid="$pr_ready_child_pid"
+  local observed_pgid
+  local attempt
+  for attempt in {1..100}; do
+    observed_pgid="$(pr_ready_process_group_for_pid "$pr_ready_child_pid" || true)"
+    if [[ -n "$observed_pgid" && "$observed_pgid" != "$pr_ready_parent_pgid" ]]; then
+      pr_ready_child_pgid="$observed_pgid"
+      break
+    fi
+    sleep 0.01
+  done
+}
+
+run_pr_ready_lane() {
+  local lane="$1"
+  shift
+  mark_pr_ready_progress "${lane}_lane" "$lane" "starting ${lane} readiness lane"
+  start_pr_ready_child "$@"
+  mark_pr_ready_progress "${lane}_lane" "$lane" "${lane} readiness lane running"
+  local lane_status=0
+  if wait "$pr_ready_child_pid"; then
+    lane_status=0
+  else
+    lane_status=$?
+  fi
+  if [[ -z "$pr_ready_pending_signal_number" ]]; then
+    case "$lane_status" in
+      129) pr_ready_pending_signal_name="SIGHUP"; pr_ready_pending_signal_number=1 ;;
+      130) pr_ready_pending_signal_name="SIGINT"; pr_ready_pending_signal_number=2 ;;
+      131) pr_ready_pending_signal_name="SIGQUIT"; pr_ready_pending_signal_number=3 ;;
+      143) pr_ready_pending_signal_name="SIGTERM"; pr_ready_pending_signal_number=15 ;;
+    esac
+  fi
+  if [[ -n "$pr_ready_pending_signal_number" ]]; then
+    handle_pr_ready_signal "$pr_ready_pending_signal_name" "$pr_ready_pending_signal_number"
+  fi
+  if [[ "$pr_ready_termination_handled" -eq 0 ]]; then
+    pr_ready_last_progress="${lane} readiness lane exited with status ${lane_status}"
+    pr_ready_last_progress_at_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || printf 'unknown')"
+  fi
+  pr_ready_child_pid=""
+  pr_ready_child_pgid=""
+  return "$lane_status"
+}
 
 validate_pr_body_file() {
   local body_file="$PR_READY_PR_BODY_FILE"
@@ -329,16 +579,18 @@ PY
   return 1
 }
 
-# Close the lock explicitly on normal exit and trapped signals.  SIGKILL cannot
+# Close the lock explicitly on normal exit and trapped signals. SIGKILL cannot
 # run a trap, but the kernel still releases the descriptor-bound lock when this
 # shell terminates; the persistent anchor file is never used as a held-lock
-# indicator.
-trap release_pr_ready_lock EXIT
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 131' QUIT
-trap 'exit 143' TERM
+# indicator. Termination handlers also preserve bounded diagnostic context.
+trap pr_ready_exit_without_coverage EXIT
+trap 'handle_pr_ready_signal SIGHUP 1' HUP
+trap 'handle_pr_ready_signal SIGINT 2' INT
+trap 'handle_pr_ready_signal SIGQUIT 3' QUIT
+trap 'handle_pr_ready_signal SIGTERM 15' TERM
 acquire_pr_ready_worktree_lock
+pr_ready_parent_pgid="$(pr_ready_process_group_for_pid "$$" || true)"
+mark_pr_ready_progress "preflight" "none" "readiness lock acquired; entering preflight"
 
 # Friction guard for issue #5533: untracked new files are invisible to the
 # committed-HEAD diff gates (changed-file coverage, docstring TODO diff). They
@@ -375,11 +627,13 @@ if [[ "$pr_ready_final" == "1" && "$(worktree_state)" != "clean" ]]; then
 fi
 
 if [[ "$pr_ready_final" == "1" ]]; then
+  mark_pr_ready_progress "preflight" "none" "checking final-readiness dependencies"
   preflight_check_test_deps
   preflight_check_fast_pysf
   preflight_check_cuda_runtime
 fi
 
+mark_pr_ready_progress "base_resolution" "none" "resolving readiness base reference"
 resolve_base_ref
 
 if [[ "$pr_ready_final" != "1" && "$(worktree_state)" != "clean" ]]; then
@@ -405,6 +659,7 @@ if [[ "$pr_ready_final" != "1" && "$(worktree_state)" != "clean" ]]; then
   fi
 fi
 
+mark_pr_ready_progress "changed_file_scope" "none" "classifying changed files for readiness lanes"
 changed_files=()
 core_changed_files=()
 optional_changed_files=()
@@ -487,6 +742,7 @@ if [[ -n "$VALIDATED_BASE_SHA" ]]; then
   printf 'Validated base SHA for this run: %s\n' "${VALIDATED_BASE_SHA:0:8}" >&2
 fi
 
+mark_pr_ready_progress "validation_setup" "none" "running follow-up and evidence preflight checks"
 followup_args=()
 if [[ "$pr_ready_final" == "1" ]]; then
   followup_args+=(--require-body)
@@ -542,6 +798,9 @@ cleanup_pr_ready_coverage() {
 }
 cleanup_pr_ready_exit() {
   local exit_code=$?
+  if [[ -n "$pr_ready_pending_signal_number" && "$pr_ready_termination_handled" -eq 0 ]]; then
+    handle_pr_ready_signal "$pr_ready_pending_signal_name" "$pr_ready_pending_signal_number"
+  fi
   cleanup_pr_ready_coverage || true
   release_pr_ready_lock || true
   return "$exit_code"
@@ -563,9 +822,13 @@ printf 'Running core readiness lane.\n' >&2
 # subprocess-based contract tests intentionally assert their non-advisory exit
 # codes and inherit the readiness environment.
 unset PR_READY_ADVISORY
-ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=core "$SCRIPT_DIR/run_tests_parallel.sh" --lane core
+run_pr_ready_lane core env \
+  ROBOT_SF_PYTEST_COVERAGE=1 \
+  ROBOT_SF_TEST_LANE=core \
+  "$SCRIPT_DIR/run_tests_parallel.sh" --lane core
 if [[ ${#optional_changed_files[@]} -gt 0 ]]; then
   printf 'Running optional-extra lane for predictive/optional changed files.\n' >&2
+  mark_pr_ready_progress "optional_preflight" "optional" "checking optional-lane dependencies"
   if [[ "$PR_READY_SKIP_PREFLIGHT" == "1" ]]; then
     printf 'Skipping optional dependency preflight because PR_READY_SKIP_PREFLIGHT=1.\n' >&2
   else
@@ -615,7 +878,12 @@ if [[ ${#optional_changed_files[@]} -gt 0 ]]; then
   if [[ " $optional_pytest_addopts " != *" --cov-append "* ]]; then
     optional_pytest_addopts="${optional_pytest_addopts:+$optional_pytest_addopts }--cov-append"
   fi
-  PYTEST_ADDOPTS="$optional_pytest_addopts" ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=optional PYTEST_XDIST_DIST="${PYTEST_XDIST_DIST:-worksteal}" "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional
+  run_pr_ready_lane optional env \
+    "PYTEST_ADDOPTS=$optional_pytest_addopts" \
+    ROBOT_SF_PYTEST_COVERAGE=1 \
+    ROBOT_SF_TEST_LANE=optional \
+    "PYTEST_XDIST_DIST=${PYTEST_XDIST_DIST:-worksteal}" \
+    "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional
 else
   if [[ "$pr_ready_final" == "1" ]]; then
     printf 'No changed files require the optional-extra lane.\n' >&2
@@ -623,6 +891,7 @@ else
     printf 'No committed changed files require the optional-extra lane.\n' >&2
   fi
 fi
+mark_pr_ready_progress "post_lane_checks" "none" "running post-lane readiness checks"
 "$SCRIPT_DIR/check_changed_coverage.sh"
 "$SCRIPT_DIR/check_docstring_todos_diff.sh"
 "$SCRIPT_DIR/check_docstring_todos_ratchet.sh"

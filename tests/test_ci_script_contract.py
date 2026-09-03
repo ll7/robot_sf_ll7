@@ -27,6 +27,7 @@ Excluded (no usage/help support at all):
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import tomllib
 from pathlib import Path
@@ -483,10 +484,10 @@ def test_pytest_coverage_is_explicit_opt_in() -> None:
     assert "ROBOT_SF_PYTEST_COVERAGE" in script_text
     assert "${coverage_requested,,}" not in script_text
     assert 'cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")' in script_text
-    assert (
-        'ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=core "$SCRIPT_DIR/run_tests_parallel.sh" --lane core'
-        in pr_ready_text
-    )
+    assert "run_pr_ready_lane core env" in pr_ready_text
+    assert "ROBOT_SF_PYTEST_COVERAGE=1" in pr_ready_text
+    assert "ROBOT_SF_TEST_LANE=core" in pr_ready_text
+    assert '"$SCRIPT_DIR/run_tests_parallel.sh" --lane core' in pr_ready_text
     assert 'optional_pytest_addopts="${PYTEST_ADDOPTS:-}"' in pr_ready_text
     assert "--cov-append" in pr_ready_text
 
@@ -1110,14 +1111,16 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     ]
     for gate in expected_gates:
         assert gate in script_text
-    assert (
-        'ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=core "$SCRIPT_DIR/run_tests_parallel.sh" --lane core'
-        in script_text
-    )
-    assert (
-        'PYTEST_ADDOPTS="$optional_pytest_addopts" ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=optional PYTEST_XDIST_DIST="${PYTEST_XDIST_DIST:-worksteal}" "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional'
-        in script_text
-    )
+    assert "run_pr_ready_lane core env" in script_text
+    assert "ROBOT_SF_PYTEST_COVERAGE=1" in script_text
+    assert "ROBOT_SF_TEST_LANE=core" in script_text
+    assert '"$SCRIPT_DIR/run_tests_parallel.sh" --lane core' in script_text
+    assert "run_pr_ready_lane optional env" in script_text
+    assert '"PYTEST_ADDOPTS=$optional_pytest_addopts"' in script_text
+    assert "ROBOT_SF_TEST_LANE=optional" in script_text
+    assert '"$SCRIPT_DIR/run_tests_parallel.sh" --lane optional' in script_text
+    assert "trap 'handle_pr_ready_signal SIGTERM 15' TERM" in script_text
+    assert "pr_ready_termination.py" in script_text
     assert "Optional-extra changed files requiring the predictive lane" in script_text
     assert "No changed files require the optional-extra lane." in script_text
     assert 'git diff --name-only --diff-filter=ACDMRT "$BASE_REF...HEAD"' in script_text
@@ -2029,11 +2032,12 @@ def _make_pinned_tool_fixture_repo(
     tool: str = "ruff",
     resolved_version: str = "0.16.5",
     with_pyproject: bool = True,
+    install_tool: bool = True,
 ) -> tuple[Path, Path, dict[str, str]]:
     """Build a git repo + fake venv for pinned-tool freshness tests (issue #8250).
 
     The fake venv provides ``bin/python`` (exit-0 stub, satisfying the
-    dependency-profile probe) and ``bin/<tool>`` printing
+    dependency-profile probe) and optionally ``bin/<tool>`` printing
     ``"<tool> <resolved_version>"`` for ``--version``. A fake ``uv`` on PATH
     proves whether the helper reached the underlying command (exit 7) or
     failed closed in the freshness gate (exit 2).
@@ -2053,12 +2057,13 @@ def _make_pinned_tool_fixture_repo(
     py = venv / "bin" / "python"
     py.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     py.chmod(0o755)
-    tool_bin = venv / "bin" / tool
-    tool_bin.write_text(
-        f'#!/usr/bin/env bash\necho "{tool} {resolved_version}"\n',
-        encoding="utf-8",
-    )
-    tool_bin.chmod(0o755)
+    if install_tool:
+        tool_bin = venv / "bin" / tool
+        tool_bin.write_text(
+            f'#!/usr/bin/env bash\necho "{tool} {resolved_version}"\n',
+            encoding="utf-8",
+        )
+        tool_bin.chmod(0o755)
 
     fake_uv = fake_bin / "uv"
     fake_uv.write_text(
@@ -2107,6 +2112,427 @@ def test_worktree_shared_venv_fails_closed_on_stale_pinned_tool(
     assert "resolved to 0.16.4 but the active checkout pins ruff==0.16.5" in result.stderr
     assert "Remedy:" in result.stderr
     assert "--no-freshness-check" in result.stderr
+
+
+def test_worktree_shared_venv_standalone_fails_closed_on_stale_pinned_tool(
+    tmp_path: Path,
+) -> None:
+    """Standalone mode still enforces the pinned-tool freshness boundary."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--standalone",
+            "--",
+            "ruff",
+            "check",
+            "x.py",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "uv-reached" not in result.stderr
+    assert "resolved to 0.16.4 but the active checkout pins ruff==0.16.5" in result.stderr
+
+
+def test_worktree_shared_venv_fails_closed_when_pinned_tool_is_absent(
+    tmp_path: Path,
+) -> None:
+    """A pinned tool missing from the selected env must not fall through to PATH."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, install_tool=False)
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--standalone",
+            "--",
+            "ruff",
+            "--version",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "uv-reached" not in result.stderr
+    assert "pinned tool is absent from the selected environment" in result.stderr
+    assert f"{venv}/bin/ruff" in result.stderr
+
+
+def test_worktree_shared_venv_skips_absent_unpinned_tool(
+    tmp_path: Path,
+) -> None:
+    """An absent tool without an exact pin keeps the existing compatibility skip."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(
+        tmp_path,
+        tool="mytool",
+        install_tool=False,
+    )
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--venv", str(venv), "--standalone", "--", "mytool"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert "uv-reached" in result.stderr
+    assert "tool=mytool reason=unpinned" in result.stderr
+
+
+def test_worktree_shared_venv_rejects_option_as_wrapped_command(
+    tmp_path: Path,
+) -> None:
+    """An option after the wrapper separator cannot bypass freshness as the command name."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--standalone",
+            "--",
+            "--no-sync",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "must start with an executable, not an option: --no-sync" in result.stderr
+    assert "uv-reached" not in result.stderr
+
+
+def test_worktree_shared_venv_checks_tool_after_uv_run_prefix(tmp_path: Path) -> None:
+    """The documented nested ``uv run`` form must not bypass the tool gate."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--",
+            "uv",
+            "run",
+            "ruff",
+            "check",
+            "x.py",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "uv-reached" not in result.stderr
+    assert "resolved to 0.16.4 but the active checkout pins ruff==0.16.5" in result.stderr
+
+
+def test_worktree_shared_venv_checks_tool_after_explicit_uv_path(tmp_path: Path) -> None:
+    """An explicit uv executable path must retain nested freshness parsing."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+    explicit_uv = repo / "fake-bin" / "uv"
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--standalone",
+            "--",
+            str(explicit_uv),
+            "run",
+            "--no-sync",
+            "ruff",
+            "--version",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "uv-reached" not in result.stderr
+    assert "resolved to 0.16.4 but the active checkout pins ruff==0.16.5" in result.stderr
+
+
+def test_worktree_shared_venv_rejects_overlay_after_explicit_uv_path(tmp_path: Path) -> None:
+    """Explicit uv paths must reject unsupported nested environment changes."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path)
+    explicit_uv = repo / "fake-bin" / "uv"
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--standalone",
+            "--",
+            str(explicit_uv),
+            "run",
+            "--with=tomli",
+            "ruff",
+            "--version",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "uv-reached" not in result.stderr
+    assert "unsupported environment-changing uv run option '--with=tomli'" in result.stderr
+
+
+def test_worktree_shared_venv_preserves_explicit_non_uv_path_skip(
+    tmp_path: Path,
+) -> None:
+    """Explicit non-uv tool paths retain their compatibility skip boundary."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+    explicit_tool = venv / "bin" / "ruff"
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--standalone",
+            "--",
+            str(explicit_tool),
+            "--version",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert "uv-reached" in result.stderr
+    assert "tool=" + str(explicit_tool) + " reason=explicit-path" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "uv_options",
+    [
+        ("--no-sync",),
+        ("--extra", "training"),
+        ("--color", "never"),
+        ("--refresh-package", "ruff"),
+        ("--no-build-isolation-package", "robot-sf"),
+    ],
+)
+def test_worktree_shared_venv_checks_tool_after_uv_run_options(
+    tmp_path: Path,
+    uv_options: tuple[str, ...],
+) -> None:
+    """Flags and option values cannot hide a stale nested ``uv run`` tool."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--",
+            "uv",
+            "run",
+            *uv_options,
+            "ruff",
+            "check",
+            "x.py",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "uv-reached" not in result.stderr
+    assert "resolved to 0.16.4 but the active checkout pins ruff==0.16.5" in result.stderr
+
+
+def test_worktree_shared_venv_rejects_unknown_uv_run_option(
+    tmp_path: Path,
+) -> None:
+    """An unknown nested ``uv run`` form fails closed instead of guessing the tool."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--",
+            "uv",
+            "run",
+            "--unknown-option",
+            "ruff",
+            "check",
+            "x.py",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "uv-reached" not in result.stderr
+    assert "could not identify the nested uv tool" in result.stderr
+
+
+def test_worktree_shared_venv_rejects_unknown_uv_run_equals_option(
+    tmp_path: Path,
+) -> None:
+    """An unknown equals-form option must not hide the actual nested tool."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.4")
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--",
+            "uv",
+            "run",
+            "--unknown-option=ruff",
+            "check",
+            "x.py",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "uv-reached" not in result.stderr
+    assert "could not identify the nested uv tool" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "uv_option",
+    [
+        ("--with", "tomli"),
+        ("--with=tomli",),
+        ("--with-editable", "."),
+        ("--with-requirements", "missing.txt"),
+        ("--isolated",),
+        ("--isolated=true",),
+        ("--python", "3.13"),
+        ("--python=3.13",),
+        ("-p", "3.13"),
+        ("-p=3.13",),
+    ],
+)
+def test_worktree_shared_venv_rejects_environment_changing_uv_run_options(
+    tmp_path: Path,
+    uv_option: tuple[str, ...],
+) -> None:
+    """Freshness must not inspect the selected venv for an overlay or isolated run."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.5")
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--standalone",
+            "--",
+            "uv",
+            "run",
+            *uv_option,
+            "ruff",
+            "check",
+            "x.py",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "unsupported environment-changing uv run option" in result.stderr
+    assert "uv-reached" not in result.stderr
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="real uv is not installed")
+def test_worktree_shared_venv_rejects_overlay_before_real_uv_run(tmp_path: Path) -> None:
+    """With real uv available, an unsupported overlay is rejected before uv can run it."""
+    repo, venv, env = _make_pinned_tool_fixture_repo(tmp_path, resolved_version="0.16.5")
+    real_uv = Path(shutil.which("uv") or "uv")
+    env["PATH"] = f"{real_uv.parent}{os.pathsep}{os.defpath}"
+
+    result = subprocess.run(
+        [
+            str(RUN_WORKTREE_SHARED_VENV),
+            "--venv",
+            str(venv),
+            "--standalone",
+            "--",
+            "uv",
+            "run",
+            "--with=tomli",
+            "ruff",
+            "--version",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "unsupported environment-changing uv run option '--with=tomli'" in result.stderr
 
 
 def test_worktree_shared_venv_passes_fresh_pinned_tool_with_preflight_line(
@@ -3796,16 +4222,14 @@ def test_pr_ready_check_optional_lane_defaults_to_worksteal_distribution() -> No
 
     script_text = PR_READY_CHECK.read_text(encoding="utf-8")
 
-    assert 'PYTEST_XDIST_DIST="${PYTEST_XDIST_DIST:-worksteal}"' in script_text, (
+    assert '"PYTEST_XDIST_DIST=${PYTEST_XDIST_DIST:-worksteal}"' in script_text, (
         "optional readiness lane must default PYTEST_XDIST_DIST to worksteal with caller override"
     )
     # The pin belongs only on the optional lane invocation; the core lane keeps its default
     # scheduling so core-lane behavior is unchanged.
-    core_line = next(
-        line
-        for line in script_text.splitlines()
-        if "ROBOT_SF_TEST_LANE=core" in line and "run_tests_parallel.sh" in line
-    )
-    assert "PYTEST_XDIST_DIST" not in core_line, (
+    core_invocation = script_text.split("run_pr_ready_lane core env", 1)[1].split(
+        "if [[ ${#optional_changed_files[@]}", 1
+    )[0]
+    assert "PYTEST_XDIST_DIST" not in core_invocation, (
         "core lane must not change its distribution default"
     )

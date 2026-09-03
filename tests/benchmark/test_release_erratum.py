@@ -1631,6 +1631,53 @@ def test_cold_erratum_receipt_rejects_missing_execution_source(
         )
 
 
+@pytest.mark.parametrize(
+    ("relative", "keys"),
+    (
+        ("release/release_manifest.resolved.json", ()),
+        ("release/release_result.json", ("resolved_manifest",)),
+        ("release/release_result.json", ("scientific_execution_resolved_manifest",)),
+    ),
+)
+def test_cold_erratum_receipt_requires_canonical_release_id_at_root(
+    tmp_path: Path,
+    relative: str,
+    keys: tuple[str, ...],
+) -> None:
+    """A provenance-only campaign ID cannot satisfy a canonical root-ID contract."""
+    campaign = tmp_path / "campaign"
+    _write_campaign(campaign)
+    archive = tmp_path / "old.tar.gz"
+    _archive_campaign(campaign, archive)
+    contract = _with_bundle_metadata(campaign, _contract(archive))
+    snapshot = snapshot_campaign(campaign, contract=contract)
+    receipt_path = campaign / "provenance/benchmark_release_erratum.json"
+    receipt_path.write_text(
+        json.dumps(
+            build_erratum_receipt(contract=contract, predecessor=snapshot, successor=snapshot)
+        ),
+        encoding="utf-8",
+    )
+    document_path = campaign / relative
+    document = json.loads(document_path.read_text(encoding="utf-8"))
+    identity = document
+    for key in keys:
+        identity = identity[key]
+    release_id = identity.pop("release_id")
+    identity.setdefault("provenance", {})["release_id"] = release_id
+    document_path.write_text(json.dumps(document), encoding="utf-8")
+
+    with pytest.raises(ReleaseErratumError, match="missing its scientific release-ID alias"):
+        validate_erratum_receipt_against_campaign(
+            receipt_path,
+            campaign_root=campaign,
+            metadata_path=contract.metadata_path,
+            predecessor_evidence=_predecessor_evidence(archive, contract),
+            expected_tag=NEW_TAG,
+            expected_doi=contract.successor_version_doi,
+        )
+
+
 @pytest.mark.parametrize("location", ["root", "provenance", "publication"])
 def test_cold_erratum_receipt_rejects_stale_current_source_alias(
     tmp_path: Path, location: str

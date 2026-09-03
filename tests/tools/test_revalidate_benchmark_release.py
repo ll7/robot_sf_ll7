@@ -351,6 +351,7 @@ def test_rewrite_publication_provenance_rejects_non_mapping(tmp_path: Path) -> N
         ("malformed_provenance", "lacks predecessor provenance"),
         ("missing_tag", "lost predecessor identity"),
         ("missing_release_id", "lost scientific release ID"),
+        ("release_id_only_in_provenance", "lost scientific release ID"),
         ("missing_doi", "lost predecessor DOI"),
         ("stale_doi", "lost predecessor DOI"),
         ("missing_concept", "lost predecessor concept DOI"),
@@ -412,6 +413,8 @@ def test_erratum_resolved_manifest_rewrite_rejects_malformed_predecessor_identit
         resolved.pop("release_tag")
     elif mutation == "missing_release_id":
         resolved.pop("release_id")
+    elif mutation == "release_id_only_in_provenance":
+        provenance["release_id"] = resolved.pop("release_id")
     elif mutation == "missing_doi":
         provenance.pop("doi")
         provenance.pop("version_doi")
@@ -482,6 +485,18 @@ def test_successor_identity_assertion_rejects_stale_or_malformed_aliases(
         with pytest.raises(recovery.DerivedReleaseError, match=message):
             recovery._assert_successor_identity_fields(payload, contract=contract, label="fixture")
 
+    for misplaced_release_id in (
+        {**complete, "provenance": {"release_id": contract.scientific_release_id}},
+        {**complete, "benchmark_release_id": contract.scientific_release_id},
+    ):
+        with pytest.raises(recovery.DerivedReleaseError, match="lost scientific release ID"):
+            recovery._assert_successor_identity_fields(
+                misplaced_release_id,
+                contract=contract,
+                label="canonical resolved manifest",
+                require_release_id=True,
+            )
+
     predecessor = {
         "release_tag": old_tag,
         "source_sha": source_sha,
@@ -497,6 +512,21 @@ def test_successor_identity_assertion_rejects_stale_or_malformed_aliases(
         require_concept=True,
         require_source=True,
     )
+    with pytest.raises(recovery.DerivedReleaseError, match="lost scientific release ID"):
+        recovery._assert_predecessor_execution_identity(
+            {
+                **predecessor,
+                "provenance": {
+                    **predecessor["provenance"],
+                    "release_id": contract.scientific_release_id,
+                },
+            },
+            contract=contract,
+            label="canonical resolved execution identity",
+            require_concept=True,
+            require_source=True,
+            require_release_id=True,
+        )
     with pytest.raises(recovery.DerivedReleaseError, match="nested provenance"):
         recovery._assert_predecessor_execution_identity(
             {

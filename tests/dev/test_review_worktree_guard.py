@@ -100,6 +100,7 @@ def test_create_review_worktree_blocks_refspecs_and_no_verify(tmp_path: Path) ->
     worktree = tmp_path / "review"
     branch = "review/guard"
     try:
+        _git(repo, "config", "remote.origin.pushurl", str(remote))
         created = subprocess.run(
             [
                 str(CREATE_WORKTREE),
@@ -137,6 +138,12 @@ def test_create_review_worktree_blocks_refspecs_and_no_verify(tmp_path: Path) ->
             ],
             ["push", "--no-verify", "origin", "HEAD:refs/heads/no-verify"],
             ["push", "--no-verify", str(remote), "HEAD:refs/heads/url-explicit"],
+            [
+                "push",
+                "--no-verify",
+                os.path.relpath(remote, worktree),
+                "HEAD:refs/heads/relative-url",
+            ],
         )
         for command in attempts:
             result = _git(worktree, *command, check=False)

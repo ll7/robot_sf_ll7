@@ -195,6 +195,11 @@ def _blocked_url(identity: dict[str, Path]) -> str:
     return blocked_path.resolve().as_uri()
 
 
+def _blocked_receivepack(identity: dict[str, Path]) -> str:
+    """Return a nonexistent per-worktree receive-pack command path."""
+    return str(identity["git_dir"] / ".robot-sf-review-push-blocked-receive-pack")
+
+
 def _url_rule_key(blocked_url: str) -> str:
     return f"url.{blocked_url}.pushInsteadOf"
 
@@ -207,6 +212,9 @@ def _capture_backup(identity: dict[str, Path], original_mode: str | None) -> dic
         "core_hooks_path": _worktree_values(identity, "core.hooksPath"),
         "remote_pushurls": {
             remote: _worktree_values(identity, f"remote.{remote}.pushurl") for remote in remotes
+        },
+        "remote_receivepacks": {
+            remote: _worktree_values(identity, f"remote.{remote}.receivepack") for remote in remotes
         },
         "remote_urls": {remote: _remote_urls(identity, remote) for remote in remotes},
     }
@@ -246,6 +254,14 @@ def _load_backup(identity: dict[str, Path]) -> dict[str, Any] | None:
         for remote, values in remote_pushurls.items()
     ):
         raise GuardError("review guard backup has malformed remote.pushurl values")
+    remote_receivepacks = backup.get("remote_receivepacks", {})
+    if not isinstance(remote_receivepacks, dict) or any(
+        not isinstance(remote, str)
+        or not isinstance(values, list)
+        or not all(isinstance(value, str) for value in values)
+        for remote, values in remote_receivepacks.items()
+    ):
+        raise GuardError("review guard backup has malformed remote.receivepack values")
     remote_urls = backup.get("remote_urls")
     if not isinstance(remote_urls, dict) or any(
         not isinstance(remote, str)
@@ -304,8 +320,19 @@ def _prepare_review_barriers(
     if original_mode == REVIEW_MODE and not blocked_values:
         raise GuardError("review mode is set but its blocked push URL is missing")
     _worktree_set(identity, BLOCKED_URL_KEY, expected_url)
+    blocked_receivepack = _blocked_receivepack(identity)
+    blocked_receivepack_path = Path(blocked_receivepack)
+    if blocked_receivepack_path.exists() or blocked_receivepack_path.is_symlink():
+        raise GuardError(
+            f"review guard receive-pack barrier path already exists: {blocked_receivepack}"
+        )
     rule_key = _url_rule_key(expected_url)
     _worktree_unset(identity, rule_key)
+    # An empty pushInsteadOf prefix is a push-only catch-all. It is required in
+    # addition to the exact configured-URL rules below because Git still
+    # inherits common-config pushurl values, and callers can spell a local URL
+    # with an equivalent relative path.
+    _worktree_add(identity, rule_key, "")
     remotes = _remote_names(identity)
     configured_urls = {
         remote: (
@@ -317,6 +344,7 @@ def _prepare_review_barriers(
     }
     for remote in remotes:
         _worktree_set(identity, f"remote.{remote}.pushurl", expected_url)
+        _worktree_set(identity, f"remote.{remote}.receivepack", blocked_receivepack)
         for url in configured_urls[remote]:
             _worktree_add(identity, rule_key, url)
     # Keep the push-only barrier effective for remotes added after review mode
@@ -355,6 +383,10 @@ def _restore_implementation_mode(
         key = f"remote.{remote}.pushurl"
         _worktree_unset(identity, key)
         for value in backup["remote_pushurls"].get(remote, []):
+            _worktree_add(identity, key, value)
+        key = f"remote.{remote}.receivepack"
+        _worktree_unset(identity, key)
+        for value in backup.get("remote_receivepacks", {}).get(remote, []):
             _worktree_add(identity, key, value)
     _worktree_unset(identity, "core.hooksPath")
     for value in backup["core_hooks_path"]:

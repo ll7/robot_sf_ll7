@@ -49,9 +49,12 @@ python scripts/dev/review_worktree_guard.py integrate \
 ```
 
 The creator writes the worktree-local `robot-sf.worktree-mode=review` marker and installs the
-tracked pre-push guard. Configured remote names also receive inert worktree-local push destinations,
-and configured remote URLs receive push-only rewrites, so explicit destination refspecs and
-`--no-verify` cannot mutate those remotes from the protected worktree. Fetches remain available.
+tracked pre-push guard. Configured remote names also receive inert worktree-local push destinations
+and a nonexistent worktree-local receive-pack command. A push-only catch-all rewrite (plus exact
+configured-URL rules) routes direct push URLs to an inert path. Together these barriers cover
+inherited `pushurl` values, equivalent local-path spellings, explicit destination refspecs, and
+`--no-verify` without mutating a configured remote from the protected worktree. Fetches remain
+available.
 The integration helper snapshots every ref from `git ls-remote --refs`, runs
 `git merge --no-commit --no-ff`, always attempts `git merge --abort`, and exits nonzero unless the
 worktree is clean and the before/after remote snapshots are identical.

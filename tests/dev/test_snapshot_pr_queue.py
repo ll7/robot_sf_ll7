@@ -1875,6 +1875,29 @@ def test_fetch_pr_rest_rest_fallback_failure_is_labeled() -> None:
     assert payload["error_kind"] == "graphql_quota_exhausted"
 
 
+def test_fetch_pr_transient_rest_fallback_failure_is_not_evaluated() -> None:
+    """A transient REST fallback failure remains unevaluated, not quota-specific."""
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            side_effect=[
+                _resp(returncode=1, stderr="HTTP 503 Service Unavailable"),
+                _resp(returncode=1, stderr="HTTP 503 Service Unavailable"),
+                _resp(returncode=1, stderr="HTTP 503 Service Unavailable"),
+                _resp(returncode=1, stderr="not found"),
+            ],
+        ),
+        patch("scripts.dev.github_graphql_retry.time.sleep", lambda _seconds: None),
+    ):
+        payload = fetch_pr(5, repo="ll7/robot_sf_ll7")
+
+    assert payload["status"] == "error"
+    assert payload["error_kind"] == "graphql_transient_exhausted"
+    assert payload["data_source"] == "rest_fallback_graphql_transient"
+    assert payload["review_threads"] == "unknown_graphql_transient"
+    assert payload["review_threads_admission"] == "not_evaluated"
+
+
 @pytest.mark.parametrize("returncode", [0, 1])
 def test_fetch_pr_classifies_stdout_quota_as_graphql_quota_fallback(returncode: int) -> None:
     """Quota text from the preceding ``gh pr view`` stdout keeps quota semantics."""

@@ -307,7 +307,9 @@ def _rest_fallback_row_error(
         "data_source": data_source,
         "route_evidence_only": True,
         "review_threads": review_threads,
-        "review_threads_admission": "fail_closed_unknown",
+        "review_threads_admission": (
+            "fail_closed_unknown" if review_threads == "unknown_graphql_quota" else "not_evaluated"
+        ),
     }
 
 

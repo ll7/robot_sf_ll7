@@ -673,6 +673,27 @@ def _peel_annotated_tag(
     return None, f"tag {tag} annotated target is too deeply nested"
 
 
+def _is_not_found_result(
+    result: subprocess.CompletedProcess[str],
+    status: int | None,
+) -> bool:
+    """Return True when a GitHub response represents a missing resource.
+
+    A ``gh api`` call can exit non-zero with an unparseable status line when a
+    remote resource is absent.  Treat both an explicit 404 and a non-zero exit
+    whose error body quotes a 404 as absence so the caller can fail closed on
+    genuine transport/server errors while still admitting missing refs.
+    """
+    if status == 404:
+        return True
+    if status is not None:
+        return False
+    if result.returncode == 0:
+        return False
+    error_text = _text_output(result.stderr or result.stdout)
+    return bool(re.search(r"\b404\b", error_text))
+
+
 def _resolve_tag_ref_target(
     *,
     repo: str,
@@ -689,7 +710,7 @@ def _resolve_tag_ref_target(
     result = _run_tag_api(repo, f"git/ref/tags/{quote(tag, safe='')}")
     status = _http_status_code(result)
     if result.returncode != 0 or (status is not None and not 200 <= status < 300):
-        if allow_absent and status == 404:
+        if allow_absent and _is_not_found_result(result, status):
             return None, None
         detail = _text_output(result.stderr or result.stdout).strip()
         return None, f"cannot resolve tag {tag}: {detail or 'unknown REST/API error'}"

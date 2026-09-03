@@ -18,6 +18,8 @@ from typing import Any
 import yaml
 from jsonschema import Draft202012Validator, ValidationError
 
+from scripts.analysis import build_ch7_evidence_package as v1_package_builder
+from scripts.analysis import build_ch7_evidence_package_v2 as v2_package_builder
 from scripts.analysis import verify_ch7_evidence_admission as admission
 from scripts.analysis import verify_ch7_source_registry as source_registry
 
@@ -45,6 +47,8 @@ V2_SAFE_METRICS = (
 V2_PORTFOLIO_REPO_PATH = "configs/analysis/ch7_worked_example_portfolio.v2.yaml"
 V2_PORTFOLIO_PATH = Path(__file__).parents[2] / V2_PORTFOLIO_REPO_PATH
 V2_PORTFOLIO_SHA256 = "ebf2e943b6cea7e647f71171c08e904edf19b818cd2e1853ee5409a80d74f010"
+V2_CLAIM_BOUNDARY = v2_package_builder.CLAIM_BOUNDARY
+V2_TERMINAL_LABEL_NORMALIZATION = v1_package_builder.terminal_label_normalization()
 
 
 class Ch7EvidenceAdmissionV2Error(ValueError):
@@ -66,6 +70,39 @@ def _verify_source_registry_binding(manifest: Mapping[str, Any]) -> dict[str, An
             "v2 package source registry binding differs from registry"
         )
     return expected
+
+
+def _verify_v2_source_binding(
+    manifest: Mapping[str, Any], registry_binding: Mapping[str, Any]
+) -> None:
+    """Bind every v2 source digest to the verified v1 member snapshot."""
+
+    durable_sources = registry_binding.get("durable_sources")
+    if not isinstance(durable_sources, list):
+        raise Ch7EvidenceAdmissionV2Error("source registry durable package snapshot is missing")
+    v1_sources = [
+        item
+        for item in durable_sources
+        if isinstance(item, Mapping) and item.get("package_id") == "ch7-evidence-package-v1"
+    ]
+    if len(v1_sources) != 1:
+        raise Ch7EvidenceAdmissionV2Error("source registry v1 package snapshot is ambiguous")
+    member_sha256sums = v1_sources[0].get("member_sha256sums")
+    if not isinstance(member_sha256sums, Mapping):
+        raise Ch7EvidenceAdmissionV2Error("source registry v1 member snapshot is missing")
+    expected = {
+        "v1_package_sha256sums": v1_sources[0].get("sha256sums_sha256"),
+        "v1_manifest_sha256": member_sha256sums.get("manifest.json"),
+        "v1_audit_member_sha256": member_sha256sums.get("audit/campaign_atlas.csv"),
+        "v1_reduced_atlas_member_sha256": member_sha256sums.get("publication/reduced_atlas.json"),
+    }
+    actual = manifest.get("source")
+    if not isinstance(actual, Mapping) or any(
+        actual.get(key) != value for key, value in expected.items()
+    ):
+        raise Ch7EvidenceAdmissionV2Error(
+            "v2 source binding differs from the registry v1 member snapshot"
+        )
 
 
 def _verify_check_only_members(package: Path) -> str:
@@ -161,7 +198,7 @@ def _load_portfolio_selection() -> tuple[dict[str, Any], list[dict[str, Any]]]:
             "metric": metric,
             "issue": 7042,
             "status": "excluded",
-            "reason": "collision-related metric naming remains blocked; v2 does not quote this field",
+            "reason": v2_package_builder.EXCLUDED_METRIC_REASON,
         }
         for metric in excluded
     ]
@@ -208,17 +245,17 @@ def _verify_manifest_projection(
         raise Ch7EvidenceAdmissionV2Error("v2 manifest portfolio binding is not approved")
     if manifest.get("projection") != expected_projection:
         raise Ch7EvidenceAdmissionV2Error("v2 manifest projection differs from the portfolio")
+    if manifest.get("claim_boundary") != V2_CLAIM_BOUNDARY:
+        raise Ch7EvidenceAdmissionV2Error("v2 manifest claim boundary changed")
+    if manifest.get("terminal_label_normalization") != V2_TERMINAL_LABEL_NORMALIZATION:
+        raise Ch7EvidenceAdmissionV2Error("v2 manifest terminal-label mapping changed")
     metrics = manifest.get("metrics")
     if not isinstance(metrics, Mapping) or metrics.get("included") != list(V2_SAFE_METRICS):
         raise Ch7EvidenceAdmissionV2Error("v2 manifest safe metric boundary changed")
     excluded = metrics.get("excluded")
     if not isinstance(excluded, list):
         raise Ch7EvidenceAdmissionV2Error("v2 manifest excluded metric boundary is missing")
-    if [
-        (item.get("metric"), item.get("issue"), item.get("status"))
-        for item in excluded
-        if isinstance(item, Mapping)
-    ] != [(item["metric"], item["issue"], item["status"]) for item in expected_excluded]:
+    if excluded != list(expected_excluded):
         raise Ch7EvidenceAdmissionV2Error("v2 manifest excluded metric boundary changed")
     return excluded
 
@@ -237,10 +274,7 @@ def _verify_atlas_json(
         / "robot_sf/benchmark/schemas/ch7-reduced-publication-atlas.v3.json",
         "v2 reduced atlas",
     )
-    if atlas.get("projections") != expected_projection:
-        raise Ch7EvidenceAdmissionV2Error("v2 atlas projection differs from the portfolio")
-    if atlas.get("excluded_metrics") != excluded:
-        raise Ch7EvidenceAdmissionV2Error("v2 atlas excluded metric boundary differs from manifest")
+    _verify_atlas_metadata(atlas, expected_projection, excluded)
     cells = atlas.get("cells")
     if not isinstance(cells, list):
         raise Ch7EvidenceAdmissionV2Error("v2 atlas cells are missing")
@@ -272,6 +306,23 @@ def _verify_atlas_json(
         if any(metric not in cell for metric in V2_SAFE_METRICS):
             raise Ch7EvidenceAdmissionV2Error("v2 atlas cell is missing a safe metric")
     return expected_cells
+
+
+def _verify_atlas_metadata(
+    atlas: Mapping[str, Any],
+    expected_projection: Mapping[str, Any],
+    excluded: Sequence[Mapping[str, Any]],
+) -> None:
+    """Verify the metadata that defines the v2 atlas interpretation."""
+
+    if atlas.get("projections") != expected_projection:
+        raise Ch7EvidenceAdmissionV2Error("v2 atlas projection differs from the portfolio")
+    if atlas.get("excluded_metrics") != excluded:
+        raise Ch7EvidenceAdmissionV2Error("v2 atlas excluded metric boundary differs from manifest")
+    if atlas.get("claim_boundary") != V2_CLAIM_BOUNDARY:
+        raise Ch7EvidenceAdmissionV2Error("v2 atlas claim boundary changed")
+    if atlas.get("terminal_label_normalization") != V2_TERMINAL_LABEL_NORMALIZATION:
+        raise Ch7EvidenceAdmissionV2Error("v2 atlas terminal-label mapping changed")
 
 
 def _verify_atlas_csv(
@@ -336,6 +387,8 @@ def _verify_projection_binding(
         raise Ch7EvidenceAdmissionV2Error("v2 projection binding safe metrics changed")
     if binding.get("excluded_metrics") != excluded:
         raise Ch7EvidenceAdmissionV2Error("v2 projection binding exclusions differ from manifest")
+    if binding.get("claim_boundary") != V2_CLAIM_BOUNDARY:
+        raise Ch7EvidenceAdmissionV2Error("v2 projection binding claim boundary changed")
     source = manifest.get("source")
     source_binding = binding.get("source_package")
     if not isinstance(source, Mapping) or not isinstance(source_binding, Mapping):
@@ -420,6 +473,7 @@ def diagnose_v2_package(package: Path) -> dict[str, Any]:
     manifest = _read_object(package / "manifest.json", "v2 package manifest")
     _validate(manifest, PACKAGE_SCHEMA, "v2 package manifest")
     registry_binding = _verify_source_registry_binding(manifest)
+    _verify_v2_source_binding(manifest, registry_binding)
     _verify_projection_contract(package, manifest)
     if (
         manifest.get("status") != "blocked_pending_domain_approval"
@@ -491,29 +545,30 @@ def diagnose_v2_package(package: Path) -> dict[str, Any]:
     }
 
 
-def verify_v2_admission(package: Path, receipt: Path) -> dict[str, Any]:
-    """Verify an admitted v2 package against its exact external receipt."""
+def _verify_admitted_manifest(manifest: Mapping[str, Any]) -> None:
+    """Require the manifest state that is eligible for external admission."""
 
-    try:
-        sums_sha, _listed = admission._verify_members(
-            package, label="Chapter 7 v2 evidence package"
-        )
-    except admission.Ch7EvidenceAdmissionError as exc:
-        raise Ch7EvidenceAdmissionV2Error(f"package member verification failed: {exc}") from exc
-    package = package.resolve()
-    manifest = _read_object(package / "manifest.json", "v2 package manifest")
-    _validate(manifest, PACKAGE_SCHEMA, "v2 package manifest")
-    _verify_projection_contract(package, manifest)
-    registry_binding = _verify_source_registry_binding(manifest)
+    admission_block = manifest.get("admission")
     if (
         manifest.get("status") != "admitted"
         or manifest.get("admission_status") != "admitted"
         or manifest.get("source_integrity_gate") != "passed"
-        or manifest.get("admission", {}).get("status") != "admitted"
+        or not isinstance(admission_block, Mapping)
+        or admission_block.get("status") != "admitted"
     ):
         raise Ch7EvidenceAdmissionV2Error("v2 package is not in an admitted state")
-    receipt_payload = _read_object(receipt, "v2 admission receipt")
-    _validate(receipt_payload, RECEIPT_SCHEMA, "v2 admission receipt")
+
+
+def _verify_receipt_bindings(
+    package: Path,
+    manifest: Mapping[str, Any],
+    receipt_payload: Mapping[str, Any],
+    *,
+    sums_sha: str,
+    registry_binding: Mapping[str, Any],
+) -> str:
+    """Verify receipt bindings against the package and the canonical source registry."""
+
     package_binding = receipt_payload["package"]
     if package_binding["sha256sums_sha256"] != sums_sha:
         raise Ch7EvidenceAdmissionV2Error("receipt does not bind package SHA256SUMS")
@@ -530,18 +585,50 @@ def verify_v2_admission(package: Path, receipt: Path) -> dict[str, Any]:
     ):
         if source_binding[field] != expected_source[field]:
             raise Ch7EvidenceAdmissionV2Error(f"receipt source binding differs: {field}")
+    if source_binding["source_registry_sha256"] != registry_binding["registry_sha256"]:
+        raise Ch7EvidenceAdmissionV2Error("receipt source binding differs: source_registry_sha256")
     if (
         source_binding["portfolio_config_sha256"]
         != manifest["inputs"]["portfolio_config"]["sha256"]
     ):
         raise Ch7EvidenceAdmissionV2Error("receipt portfolio binding differs from manifest")
-    if receipt_payload["scope"]["claim_boundary"] != manifest["claim_boundary"]:
+    if receipt_payload["scope"]["claim_boundary"] != V2_CLAIM_BOUNDARY:
         raise Ch7EvidenceAdmissionV2Error("receipt claim boundary differs from manifest")
+    if receipt_payload["scope"]["forbidden_claims"] != list(V2_FORBIDDEN_CLAIMS):
+        raise Ch7EvidenceAdmissionV2Error("receipt forbidden-claim boundary is not canonical")
     expected_roles = {
         role: {"grain": details["grain"]} for role, details in manifest["roles"].items()
     }
     if receipt_payload["roles"]["available"] != expected_roles:
         raise Ch7EvidenceAdmissionV2Error("receipt role scope differs from manifest")
+    return manifest_sha
+
+
+def verify_v2_admission(package: Path, receipt: Path) -> dict[str, Any]:
+    """Verify an admitted v2 package against its exact external receipt."""
+
+    try:
+        sums_sha, _listed = admission._verify_members(
+            package, label="Chapter 7 v2 evidence package"
+        )
+    except admission.Ch7EvidenceAdmissionError as exc:
+        raise Ch7EvidenceAdmissionV2Error(f"package member verification failed: {exc}") from exc
+    package = package.resolve()
+    manifest = _read_object(package / "manifest.json", "v2 package manifest")
+    _validate(manifest, PACKAGE_SCHEMA, "v2 package manifest")
+    _verify_projection_contract(package, manifest)
+    registry_binding = _verify_source_registry_binding(manifest)
+    _verify_v2_source_binding(manifest, registry_binding)
+    _verify_admitted_manifest(manifest)
+    receipt_payload = _read_object(receipt, "v2 admission receipt")
+    _validate(receipt_payload, RECEIPT_SCHEMA, "v2 admission receipt")
+    manifest_sha = _verify_receipt_bindings(
+        package,
+        manifest,
+        receipt_payload,
+        sums_sha=sums_sha,
+        registry_binding=registry_binding,
+    )
     return {
         "status": "admitted",
         "package_sha256sums_sha256": sums_sha,
@@ -553,7 +640,7 @@ def verify_v2_admission(package: Path, receipt: Path) -> dict[str, Any]:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--package", type=Path, required=True)
+    parser.add_argument("--package", "--package-dir", dest="package", type=Path, required=True)
     parser.add_argument("--receipt", type=Path)
     parser.add_argument(
         "--check-only",

@@ -29,6 +29,43 @@ RECORD_HASH_ALGORITHM = "canonical-json-sha256-without-record_sha256.v1"
 RETRIEVAL_PROTOCOL = "git-commit-tree-v1"
 REPOSITORY_NAME = "ll7/robot_sf_ll7"
 REPOSITORY_URL = "https://github.com/ll7/robot_sf_ll7"
+SOURCE_COMMIT = "a1892cf453973cd19e7bbba158a9f4132009bcee"
+APPROVAL_COMMENT_ID = 5323629170
+APPROVAL_METADATA = {
+    "issue": 7411,
+    "comment_id": APPROVAL_COMMENT_ID,
+    "comment_url": f"{REPOSITORY_URL}/issues/7411#issuecomment-{APPROVAL_COMMENT_ID}",
+    "decision": "use-commit-pinned-repository-registry",
+}
+RIGHTS_METADATA = {
+    "status": "not_evaluated_by_this_record",
+    "basis": (
+        "This record verifies public access and immutable repository retention only; "
+        "member-level redistribution rights are not evaluated."
+    ),
+}
+PACKAGE_CONTRACTS: dict[str, dict[str, Any]] = {
+    "ch7-evidence-package-v1": {
+        "role": "v1_source_package",
+        "path": "docs/context/evidence/issue_6792_ch7_evidence_package_v1",
+        "media_type": "application/vnd.robot-sf.ch7-evidence-package.v1+directory",
+        "required_members": [
+            "manifest.json",
+            "audit/campaign_atlas.csv",
+            "publication/reduced_atlas.json",
+        ],
+    },
+    "ch7-evidence-package-v2": {
+        "role": "v2_projection_package",
+        "path": "docs/context/evidence/issue_7322_ch7_evidence_package_v2",
+        "media_type": "application/vnd.robot-sf.ch7-evidence-package.v2+directory",
+        "required_members": [
+            "manifest.json",
+            "publication/reduced_atlas.json",
+            "source/projection_binding.json",
+        ],
+    },
+}
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_OBJECT_RE = re.compile(r"^[0-9a-f]{40}$")
 
@@ -191,6 +228,9 @@ def _validate_record(  # noqa: C901, PLR0912
     recorded_hash = _require_sha256(record.get("record_sha256"), "record_sha256")
     if record_sha256(record) != recorded_hash:
         raise SourceRegistryMismatchError("source registry record self-hash mismatch")
+    approval = record.get("approval")
+    if not isinstance(approval, Mapping) or dict(approval) != APPROVAL_METADATA:
+        raise SourceRegistryBlockedError("Chapter 7 source record approval is not authorized")
     repository = record.get("repository")
     if not isinstance(repository, Mapping):
         raise SourceRegistryBlockedError("Chapter 7 source record repository metadata is missing")
@@ -206,24 +246,44 @@ def _validate_record(  # noqa: C901, PLR0912
         raise SourceRegistryBlockedError("source record retrieval protocol is unsupported")
     if retrieval.get("public_access") is not True:
         raise SourceRegistryBlockedError("source record does not declare public access")
-    if not isinstance(retrieval.get("retention"), str) or not retrieval["retention"]:
+    if retrieval.get("retention") != "immutable_repository_history":
         raise SourceRegistryBlockedError("source record retention metadata is missing")
-    if not isinstance(retrieval.get("rights"), Mapping):
-        raise SourceRegistryBlockedError("source record rights metadata is missing")
+    if retrieval.get("rights") != RIGHTS_METADATA:
+        raise SourceRegistryBlockedError(
+            "source record rights metadata must remain unevaluated by custody verification"
+        )
     packages = record.get("packages")
     if not isinstance(packages, list) or len(packages) != 2:
         raise SourceRegistryBlockedError("source record must contain exactly v1 and v2 packages")
     if not all(isinstance(package, Mapping) for package in packages):
         raise SourceRegistryBlockedError("source record contains a malformed package entry")
-    package_ids: set[str] = set()
+    package_ids: list[str] = []
     for package in packages:
         package_id = package.get("package_id")
         if not isinstance(package_id, str) or not package_id:
             raise SourceRegistryBlockedError("source record contains a malformed package ID")
-        package_ids.add(package_id)
-    if package_ids != {"ch7-evidence-package-v1", "ch7-evidence-package-v2"}:
-        raise SourceRegistryBlockedError("source record must contain the v1 and v2 package IDs")
+        package_ids.append(package_id)
+    if package_ids != list(PACKAGE_CONTRACTS):
+        raise SourceRegistryBlockedError(
+            "source record must contain the canonical v1 and v2 package order"
+        )
     return commit, retrieval, list(packages)
+
+
+def _verify_commit_object(repository_root: Path, commit: str) -> None:
+    """Require the pinned identifier to resolve to the authorized Git commit object."""
+
+    object_type = (
+        _git_bytes(repository_root, ("cat-file", "-t", commit), "repository.commit")
+        .decode("ascii", errors="replace")
+        .strip()
+    )
+    if object_type != "commit":
+        raise SourceRegistryBlockedError(
+            f"repository.commit resolves to git object type {object_type!r}, expected 'commit'"
+        )
+    if commit != SOURCE_COMMIT:
+        raise SourceRegistryBlockedError("repository.commit is not the approved immutable commit")
 
 
 def _verify_package_snapshot(  # noqa: C901, PLR0912
@@ -236,20 +296,26 @@ def _verify_package_snapshot(  # noqa: C901, PLR0912
     package_id = package.get("package_id")
     if not isinstance(package_id, str) or not package_id:
         raise SourceRegistryBlockedError("source package identifier is missing")
+    contract = PACKAGE_CONTRACTS.get(package_id)
+    if contract is None:
+        raise SourceRegistryBlockedError(f"source package ID is not authorized: {package_id}")
     path = _safe_relative_path(package.get("path"), f"{package_id}.path")
-    if package.get("commit") != commit:
+    if path != contract["path"]:
+        raise SourceRegistryBlockedError(f"{package_id} path is not its authorized package path")
+    if package.get("role") != contract["role"]:
+        raise SourceRegistryBlockedError(f"{package_id} role is not authorized")
+    if package.get("media_type") != contract["media_type"]:
+        raise SourceRegistryBlockedError(f"{package_id} media type is not authorized")
+    if package.get("commit") != commit or package.get("commit") != SOURCE_COMMIT:
         raise SourceRegistryBlockedError(f"{package_id} is not pinned to the record commit")
-    if package.get("media_type") not in {
-        "application/vnd.robot-sf.ch7-evidence-package.v1+directory",
-        "application/vnd.robot-sf.ch7-evidence-package.v2+directory",
-    }:
-        raise SourceRegistryBlockedError(f"{package_id} media type is unsupported")
     if package.get("public_access") is not True:
         raise SourceRegistryBlockedError(f"{package_id} does not declare public access")
-    if not isinstance(package.get("retention"), str) or not package["retention"]:
+    if package.get("retention") != "immutable_repository_history":
         raise SourceRegistryBlockedError(f"{package_id} retention metadata is missing")
-    if not isinstance(package.get("rights"), Mapping):
-        raise SourceRegistryBlockedError(f"{package_id} rights metadata is missing")
+    if package.get("rights") != RIGHTS_METADATA:
+        raise SourceRegistryBlockedError(
+            f"{package_id} rights metadata must remain unevaluated by custody verification"
+        )
     if package.get("retrieval_protocol") != retrieval["protocol"]:
         raise SourceRegistryBlockedError(f"{package_id} retrieval protocol changed")
     expected_uri = f"{REPOSITORY_URL}/tree/{commit}/{path}"
@@ -280,8 +346,8 @@ def _verify_package_snapshot(  # noqa: C901, PLR0912
     if normalized_members != observed_members:
         raise SourceRegistryMismatchError(f"{package_id} member SHA-256 map mismatch")
     required_members = package.get("required_members")
-    if not isinstance(required_members, list) or not required_members:
-        raise SourceRegistryBlockedError(f"{package_id} required members are missing")
+    if required_members != contract["required_members"]:
+        raise SourceRegistryBlockedError(f"{package_id} required-member contract changed")
     for member in required_members:
         member_path = _safe_relative_path(member, f"{package_id} required member")
         if member_path not in observed_members:
@@ -295,6 +361,7 @@ def _verify_package_snapshot(  # noqa: C901, PLR0912
     return {
         "package_id": package_id,
         "path": path,
+        "member_sha256sums": dict(sorted(observed_members.items())),
         "tree_sha": tree_sha,
         "sha256sums_sha256": sums_sha,
         "durable_uri": expected_uri,
@@ -315,6 +382,7 @@ def verify_source_registry(
     registry_sha = _sha256_file(path)
     record = _validate_registry(registry)
     commit, retrieval, packages = _validate_record(record)
+    _verify_commit_object(repository_root, commit)
     if len(packages) != 2:
         raise SourceRegistryBlockedError(
             "Chapter 7 source record contains malformed package entries"

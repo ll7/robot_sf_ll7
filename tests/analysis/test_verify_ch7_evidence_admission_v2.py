@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import copy
 import csv
 import json
 from pathlib import Path
@@ -13,6 +14,7 @@ from jsonschema import Draft202012Validator
 
 from scripts.analysis import build_ch7_evidence_package_v2 as builder
 from scripts.analysis import verify_ch7_evidence_admission_v2 as verifier
+from scripts.analysis import verify_ch7_source_registry as source_registry
 
 SOURCE_PACKAGE = (
     Path(__file__).parents[2] / "docs/context/evidence/issue_6792_ch7_evidence_package_v1"
@@ -43,12 +45,13 @@ def _valid_receipt() -> dict[str, object]:
             "decision": "approve",
         },
         "scope": {
-            "claim_boundary": "release-cell descriptive v2 projection",
+            "claim_boundary": builder.CLAIM_BOUNDARY,
             "forbidden_claims": [
                 "matched_comparison",
                 "causal_divergence",
                 "counterfactual_branching",
                 "trajectory_divergence",
+                "universal_planner_ranking",
                 "collision_metric_semantics",
             ],
         },
@@ -65,6 +68,65 @@ def _valid_receipt() -> dict[str, object]:
             "source_registry_key": "issue-7087/source-registry-v2",
         },
     }
+
+
+def _write_json(path: Path, payload: object) -> None:
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _admitted_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[Path, Path, dict[str, object], dict[str, object]]:
+    package = tmp_path / "admitted-package"
+    builder.build_ch7_evidence_package_v2(source_package=SOURCE_PACKAGE, output=package)
+    manifest = json.loads((package / "manifest.json").read_text(encoding="utf-8"))
+    manifest["status"] = "admitted"
+    manifest["admission_status"] = "admitted"
+    manifest["source_integrity_gate"] = "passed"
+    manifest["admission"]["status"] = "admitted"
+    _write_json(package / "manifest.json", manifest)
+
+    sums_sha = verifier._sha256_file(package / "SHA256SUMS")
+    receipt = _valid_receipt()
+    receipt["package"] = {
+        "sha256sums_sha256": sums_sha,
+        "manifest_sha256": verifier._sha256_file(package / "manifest.json"),
+    }
+    receipt["source"] = {
+        key: manifest["source"][key]
+        for key in (
+            "v1_package_sha256sums",
+            "v1_manifest_sha256",
+            "v1_audit_member_sha256",
+            "v1_reduced_atlas_member_sha256",
+        )
+    }
+    receipt["source"].update(
+        {
+            "portfolio_config_sha256": manifest["inputs"]["portfolio_config"]["sha256"],
+            "source_registry_sha256": manifest["source_registry"]["registry_sha256"],
+        }
+    )
+    receipt["scope"] = {
+        "claim_boundary": builder.CLAIM_BOUNDARY,
+        "forbidden_claims": list(verifier.V2_FORBIDDEN_CLAIMS),
+    }
+    receipt["roles"] = {
+        "available": {
+            role: {"grain": details["grain"]} for role, details in manifest["roles"].items()
+        }
+    }
+    receipt_path = tmp_path / "receipt.json"
+    _write_json(receipt_path, receipt)
+
+    def _fake_verify_members(_root: Path, **_kwargs: object) -> tuple[str, list[str]]:
+        return sums_sha, []
+
+    monkeypatch.setattr(verifier.admission, "_verify_members", _fake_verify_members)
+    return package, receipt_path, receipt, manifest
 
 
 def test_v2_admission_schema_is_versioned_and_strict() -> None:
@@ -100,6 +162,17 @@ def test_check_only_accepts_fresh_and_durable_reviewed_packages(tmp_path: Path) 
     durable = Path(__file__).parents[2] / "docs/context/evidence/issue_7322_ch7_evidence_package_v2"
     durable_diagnostic = verifier.diagnose_v2_package(durable)
     assert durable_diagnostic["package"] == fresh_diagnostic["package"]
+
+
+def test_admission_accepts_canonical_admitted_fixture(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package, receipt_path, _receipt, manifest = _admitted_fixture(tmp_path, monkeypatch)
+
+    result = verifier.verify_v2_admission(package, receipt_path)
+
+    assert result["status"] == "admitted"
+    assert result["source_registry_sha256"] == manifest["source_registry"]["registry_sha256"]
 
 
 def test_check_only_rejects_semantically_tampered_atlas_with_updated_checksum(
@@ -210,7 +283,90 @@ def test_check_only_cli_emits_a_machine_readable_diagnostic(
     output = tmp_path / "package"
     builder.build_ch7_evidence_package_v2(source_package=SOURCE_PACKAGE, output=output)
 
-    assert verifier.main(["--package", str(output), "--check-only"]) == 0
+    assert verifier.main(["--package-dir", str(output), "--check-only"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["schema_version"] == "ch7-evidence-admission-diagnostic.v1"
     assert payload["diagnostics"]["admission_authorized"] is False
+
+
+def test_admission_rejects_zeroed_receipt_registry_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _package, receipt_path, receipt, _manifest = _admitted_fixture(tmp_path, monkeypatch)
+    receipt["source"]["source_registry_sha256"] = "0" * 64
+    _write_json(receipt_path, receipt)
+
+    with pytest.raises(
+        verifier.Ch7EvidenceAdmissionV2Error,
+        match="receipt source binding differs: source_registry_sha256",
+    ):
+        verifier.verify_v2_admission(_package, receipt_path)
+
+
+def test_admission_rejects_altered_v1_source_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package, receipt_path, receipt, _manifest = _admitted_fixture(tmp_path, monkeypatch)
+    receipt["source"]["v1_audit_member_sha256"] = "0" * 64
+    _write_json(receipt_path, receipt)
+
+    with pytest.raises(
+        verifier.Ch7EvidenceAdmissionV2Error,
+        match="receipt source binding differs: v1_audit_member_sha256",
+    ):
+        verifier.verify_v2_admission(package, receipt_path)
+
+
+def test_v2_source_hashes_must_match_registry_v1_member_snapshot(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    builder.build_ch7_evidence_package_v2(source_package=SOURCE_PACKAGE, output=package)
+    manifest = json.loads((package / "manifest.json").read_text(encoding="utf-8"))
+    registry_binding = source_registry.verify_source_registry()
+    mutated = copy.deepcopy(manifest)
+    mutated["source"]["v1_audit_member_sha256"] = "0" * 64
+
+    with pytest.raises(
+        verifier.Ch7EvidenceAdmissionV2Error,
+        match="v2 source binding differs from the registry v1 member snapshot",
+    ):
+        verifier._verify_v2_source_binding(mutated, registry_binding)
+
+
+def test_admission_rejects_five_of_six_forbidden_claims(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package, receipt_path, receipt, _manifest = _admitted_fixture(tmp_path, monkeypatch)
+    receipt["scope"]["forbidden_claims"] = list(verifier.V2_FORBIDDEN_CLAIMS[:-1])
+    _write_json(receipt_path, receipt)
+
+    with pytest.raises(verifier.Ch7EvidenceAdmissionV2Error, match="validation failed"):
+        verifier.verify_v2_admission(package, receipt_path)
+
+
+def test_admission_rejects_widened_claim_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package, receipt_path, receipt, _manifest = _admitted_fixture(tmp_path, monkeypatch)
+    receipt["scope"]["claim_boundary"] = f"{builder.CLAIM_BOUNDARY} Also publish rankings."
+    _write_json(receipt_path, receipt)
+
+    with pytest.raises(verifier.Ch7EvidenceAdmissionV2Error, match="validation failed"):
+        verifier.verify_v2_admission(package, receipt_path)
+
+
+def test_admission_rejects_noncanonical_terminal_label_mapping(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package, _receipt_path, _receipt, manifest = _admitted_fixture(tmp_path, monkeypatch)
+    manifest["terminal_label_normalization"]["precedence"] = [
+        "collision_event",
+        "route_complete",
+        "timeout",
+        "unavailable",
+    ]
+    _write_json(package / "manifest.json", manifest)
+
+    with pytest.raises(
+        verifier.Ch7EvidenceAdmissionV2Error, match="terminal-label mapping changed"
+    ):
+        verifier.verify_v2_admission(package, _receipt_path)

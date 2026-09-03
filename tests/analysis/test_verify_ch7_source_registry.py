@@ -41,6 +41,11 @@ def test_valid_registry_retrieves_both_pinned_package_trees() -> None:
         "ch7-evidence-package-v2",
     }
     assert result["retrieval"]["protocol"] == registry.RETRIEVAL_PROTOCOL
+    assert result["retrieval"]["rights"] == registry.RIGHTS_METADATA
+    v1 = next(item for item in result["durable_sources"] if item["package_id"].endswith("-v1"))
+    assert v1["member_sha256sums"]["manifest.json"] == (
+        "39885f8a5abcd5acb1d02db9fa51ea03fd914460415babe0ede0a7744d9a35d1"
+    )
 
 
 def test_missing_registry_is_unavailable(tmp_path: Path) -> None:
@@ -102,6 +107,119 @@ def test_moving_commit_reference_is_blocked(tmp_path: Path) -> None:
     _write_registry(path, payload)
 
     with pytest.raises(registry.SourceRegistryBlockedError, match="immutable"):
+        registry.verify_source_registry(registry_path=path)
+
+
+def test_repository_commit_must_resolve_to_a_commit_object(tmp_path: Path) -> None:
+    payload = copy.deepcopy(_registry_payload())
+    records = payload["durable_records"]
+    assert isinstance(records, list)
+    record = records[0]
+    assert isinstance(record, dict)
+    repository = record["repository"]
+    assert isinstance(repository, dict)
+    repository["commit"] = (
+        registry._git_bytes(ROOT, ("rev-parse", f"{registry.SOURCE_COMMIT}^{{tree}}"), "test tree")
+        .decode("ascii")
+        .strip()
+    )
+    _reseal(payload)
+    path = tmp_path / "registry.json"
+    _write_registry(path, payload)
+
+    with pytest.raises(registry.SourceRegistryBlockedError, match="expected 'commit'"):
+        registry.verify_source_registry(registry_path=path)
+
+
+def test_package_entries_must_remain_in_canonical_order(tmp_path: Path) -> None:
+    payload = copy.deepcopy(_registry_payload())
+    records = payload["durable_records"]
+    assert isinstance(records, list)
+    record = records[0]
+    assert isinstance(record, dict)
+    packages = record["packages"]
+    assert isinstance(packages, list)
+    packages.reverse()
+    _reseal(payload)
+    path = tmp_path / "registry.json"
+    _write_registry(path, payload)
+
+    with pytest.raises(
+        registry.SourceRegistryBlockedError, match="canonical v1 and v2 package order"
+    ):
+        registry.verify_source_registry(registry_path=path)
+
+
+def test_package_id_binds_role_path_media_and_required_members(tmp_path: Path) -> None:
+    payload = copy.deepcopy(_registry_payload())
+    records = payload["durable_records"]
+    assert isinstance(records, list)
+    record = records[0]
+    assert isinstance(record, dict)
+    packages = record["packages"]
+    assert isinstance(packages, list)
+    v1, v2 = packages
+    assert isinstance(v1, dict)
+    assert isinstance(v2, dict)
+    for field in (
+        "role",
+        "path",
+        "media_type",
+        "required_members",
+        "tree_sha",
+        "sha256sums_path",
+        "sha256sums_sha256",
+        "member_sha256sums",
+        "durable_uri",
+    ):
+        v1[field] = copy.deepcopy(v2[field])
+    _reseal(payload)
+    path = tmp_path / "registry.json"
+    _write_registry(path, payload)
+
+    with pytest.raises(registry.SourceRegistryBlockedError, match="authorized package path|role"):
+        registry.verify_source_registry(registry_path=path)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("issue", 6792), ("comment_id", 1), ("decision", "approve")],
+)
+def test_approval_metadata_must_match_authorized_decision(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    payload = copy.deepcopy(_registry_payload())
+    records = payload["durable_records"]
+    assert isinstance(records, list)
+    record = records[0]
+    assert isinstance(record, dict)
+    approval = record["approval"]
+    assert isinstance(approval, dict)
+    approval[field] = value
+    _reseal(payload)
+    path = tmp_path / "registry.json"
+    _write_registry(path, payload)
+
+    with pytest.raises(registry.SourceRegistryBlockedError, match="approval is not authorized"):
+        registry.verify_source_registry(registry_path=path)
+
+
+def test_rights_metadata_does_not_claim_member_redistribution_clearance(tmp_path: Path) -> None:
+    payload = copy.deepcopy(_registry_payload())
+    records = payload["durable_records"]
+    assert isinstance(records, list)
+    record = records[0]
+    assert isinstance(record, dict)
+    retrieval = record["retrieval"]
+    assert isinstance(retrieval, dict)
+    rights = retrieval["rights"]
+    assert isinstance(rights, dict)
+    rights["status"] = "public_repository_history"
+    _reseal(payload)
+    path = tmp_path / "registry.json"
+    _write_registry(path, payload)
+
+    with pytest.raises(registry.SourceRegistryBlockedError, match="rights metadata"):
         registry.verify_source_registry(registry_path=path)
 
 

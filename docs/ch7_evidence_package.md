@@ -142,8 +142,10 @@ The v2 manifest also carries a `source_registry` binding. The existing
 record `issue-7411-ch7-v1-v2-source.v1` pins both compact package trees to
 commit `a1892cf453973cd19e7bbba158a9f4132009bcee`, their Git tree identities,
 package `SHA256SUMS` digests, and every listed member digest. The record also
-states the public-access, repository-history retention, rights, and
-`git-commit-tree-v1` retrieval metadata. The v2 manifest's own bytes remain
+binds the authorized #7411 approval tuple and package contracts, and records
+public access plus immutable repository-history retention. Its rights field is
+explicitly `not_evaluated_by_this_record`; custody verification does not grant
+member-level redistribution clearance. The v2 manifest's own bytes remain
 covered by its current package `SHA256SUMS`; the registry's v2 pointer is the
 immutable pre-binding source snapshot, which avoids a circular registry/package
 self-hash.

@@ -95,6 +95,10 @@ CLAIM_BOUNDARY = (
     "the closed #7042 ruling; no such field is quoted. No trace-level, causal, universal-ranking, "
     "or admission claim is produced by this builder."
 )
+EXCLUDED_METRIC_REASON = (
+    "collision-related metrics and SNQI are excluded by the closed #7042 ruling; "
+    "v2 does not quote this field"
+)
 
 
 class Ch7EvidencePackageV2Error(ValueError):
@@ -476,7 +480,7 @@ def _excluded_metric_records() -> list[dict[str, Any]]:
             "metric": metric,
             "issue": 7042,
             "status": "excluded",
-            "reason": "collision-related metrics and SNQI are excluded by the closed #7042 ruling; v2 does not quote this field",
+            "reason": EXCLUDED_METRIC_REASON,
         }
         for metric in EXCLUDED_METRICS
     ]

@@ -39,8 +39,8 @@
         "public_access": true,
         "retention": "immutable_repository_history",
         "rights": {
-          "status": "public_repository_history",
-          "basis": "tracked repository bytes under the repository license"
+          "status": "not_evaluated_by_this_record",
+          "basis": "This record verifies public access and immutable repository retention only; member-level redistribution rights are not evaluated."
         },
         "tree_uri_template": "https://github.com/ll7/robot_sf_ll7/tree/{commit}/{path}",
         "raw_uri_template": "https://github.com/ll7/robot_sf_ll7/raw/{commit}/{path}"
@@ -86,8 +86,8 @@
           "public_access": true,
           "retention": "immutable_repository_history",
           "rights": {
-            "status": "public_repository_history",
-            "basis": "tracked repository bytes under the repository license"
+            "status": "not_evaluated_by_this_record",
+            "basis": "This record verifies public access and immutable repository retention only; member-level redistribution rights are not evaluated."
           },
           "retrieval_protocol": "git-commit-tree-v1",
           "durable_uri": "https://github.com/ll7/robot_sf_ll7/tree/a1892cf453973cd19e7bbba158a9f4132009bcee/docs/context/evidence/issue_6792_ch7_evidence_package_v1"
@@ -119,15 +119,15 @@
           "public_access": true,
           "retention": "immutable_repository_history",
           "rights": {
-            "status": "public_repository_history",
-            "basis": "tracked repository bytes under the repository license"
+            "status": "not_evaluated_by_this_record",
+            "basis": "This record verifies public access and immutable repository retention only; member-level redistribution rights are not evaluated."
           },
           "retrieval_protocol": "git-commit-tree-v1",
           "durable_uri": "https://github.com/ll7/robot_sf_ll7/tree/a1892cf453973cd19e7bbba158a9f4132009bcee/docs/context/evidence/issue_7322_ch7_evidence_package_v2"
         }
       ],
       "record_hash_algorithm": "canonical-json-sha256-without-record_sha256.v1",
-      "record_sha256": "014be4f69c42370e6be9cffc409e5dd41125ca6e079b5cf5bd21aa8c93c3966d"
+      "record_sha256": "73f9237bbb7de82af0145f43e50534f995c7f039751c3b44c802370ce9f1e679"
     }
   ]
 }

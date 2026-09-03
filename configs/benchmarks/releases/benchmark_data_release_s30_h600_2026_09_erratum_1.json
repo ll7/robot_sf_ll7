@@ -1,0 +1,38 @@
+{
+  "schema_version": "benchmark-release-erratum.v1",
+  "correction_id": "september-2026-derived-metadata-erratum.1",
+  "correction_scope": "derived_publication_metadata_only",
+  "supersedes": {
+    "version_doi": "10.5281/zenodo.22227035",
+    "archive_sha256": "e8f301c6f4eae16fdaf83f59b31bef060d84bf5a0e23dfdbf375f834b25d7b4b",
+    "archive_size_bytes": 54219004,
+    "github_release_tag": "paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880",
+    "old_publication_retained": true
+  },
+  "scientific_identity": {
+    "source_sha": "59577bad289dd692ba3580e1600c4a649ae27880",
+    "planner_arms": 14,
+    "scenario_count": 48,
+    "seed_count": 30,
+    "episode_rows": 20160
+  },
+  "derivation": {
+    "builder_sha": "a4aaf1f06860cf632d0173c5a13e11ad855b6df2",
+    "validator_sha": "a4aaf1f06860cf632d0173c5a13e11ad855b6df2",
+    "orchestration_sha": "b5865ac5c8f0297a7f8423a22ef4ba2ce1072019",
+    "simulation_rerun": false
+  },
+  "successor": {
+    "concept_doi": "10.5281/zenodo.22227034",
+    "version_doi": "10.5281/zenodo.22265925",
+    "github_release_tag": "paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1",
+    "metadata_path": "configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1_zenodo_metadata.json",
+    "metadata_sha256": "0a86f188c44d83949715e2d457c3b6154a511fbf041527a3e669d4995bdc6b2b"
+  },
+  "corrected_verdict": {
+    "publication_preflight_status": "pass",
+    "publication_preflight_violations": [],
+    "release_status": "ok",
+    "ranking_claims_admitted": false
+  }
+}

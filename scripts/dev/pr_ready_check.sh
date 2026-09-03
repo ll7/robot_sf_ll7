@@ -150,6 +150,19 @@ pr_ready_cleanup_direct_child() {
   fi
 }
 
+pr_ready_finalize_group_cleanup() {
+  local child_pid="$1"
+  local verified_status="$2"
+  if pr_ready_process_alive "$child_pid"; then
+    # A group can disappear while the seeded child is still crossing the
+    # fork()/setsid() boundary.  The missing group is not proof that this
+    # known child exited, so use the bounded direct-child fallback.
+    pr_ready_cleanup_direct_child "$child_pid"
+  else
+    pr_ready_cleanup_status="$verified_status"
+  fi
+}
+
 terminate_pr_ready_child() {
   local child_pid="$pr_ready_child_pid"
   local child_pgid="$pr_ready_child_pgid"
@@ -159,11 +172,11 @@ terminate_pr_ready_child() {
   if [[ -n "$child_pgid" && "$child_pgid" != "$pr_ready_parent_pgid" ]]; then
     if kill -TERM -- "-$child_pgid" 2>/dev/null; then
       if pr_ready_wait_for_group_exit "$child_pgid"; then
-        pr_ready_cleanup_status="process_group_terminated_and_verified"
+        pr_ready_finalize_group_cleanup "$child_pid" "process_group_terminated_and_verified"
       else
         kill -KILL -- "-$child_pgid" 2>/dev/null || true
         if pr_ready_wait_for_group_exit "$child_pgid"; then
-          pr_ready_cleanup_status="process_group_killed_and_verified"
+          pr_ready_finalize_group_cleanup "$child_pid" "process_group_killed_and_verified"
         else
           pr_ready_cleanup_direct_child "$child_pid"
         fi
@@ -174,7 +187,7 @@ terminate_pr_ready_child() {
       # unbounded; retry group KILL, then fall back to the known child PID.
       kill -KILL -- "-$child_pgid" 2>/dev/null || true
       if pr_ready_wait_for_group_exit "$child_pgid"; then
-        pr_ready_cleanup_status="process_group_killed_and_verified"
+        pr_ready_finalize_group_cleanup "$child_pid" "process_group_killed_and_verified"
       else
         pr_ready_cleanup_direct_child "$child_pid"
       fi

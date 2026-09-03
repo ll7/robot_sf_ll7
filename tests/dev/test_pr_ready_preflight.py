@@ -361,6 +361,28 @@ def _write_signal_lane_stub(repo: Path) -> None:
     stub.chmod(0o755)
 
 
+def _write_startup_interleaving_python3(repo: Path, marker: Path) -> None:
+    """Hold the launcher before ``setsid()`` without creating a descendant."""
+    stub = repo / "bin" / "python3"
+    real_python = repr(sys.executable)
+    marker_path = repr(str(marker))
+    stub.write_text(
+        f"#!{sys.executable}\n"
+        "import os\n"
+        "import sys\n"
+        "import time\n"
+        "from pathlib import Path\n"
+        "\n"
+        'if len(sys.argv) > 2 and sys.argv[1] == "-" and sys.argv[2] == "env":\n'
+        "    time.sleep(0.2)\n"
+        f"    Path({marker_path}).touch()\n"
+        "    time.sleep(60)\n"
+        f"os.execv({real_python}, [{real_python}, *sys.argv[1:]])\n",
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+
+
 def _wait_for_marker(
     marker: Path, process: subprocess.Popen[str], *, timeout: float = 10.0
 ) -> None:
@@ -580,6 +602,48 @@ def test_pr_ready_sigterm_writes_core_receipt_and_cleans_lane(
         assert payload["process"]["child_process_group_exists"] is False, payload["process"]
         assert "environment" not in payload
         assert "command" not in payload
+        assert "termination receipt:" in stderr
+    finally:
+        _stop_process_group(process, signal.SIGKILL)
+        _collect_process(process)
+
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="signal and process-group semantics are POSIX-specific"
+)
+def test_pr_ready_sigterm_during_launcher_startup_falls_back_to_direct_child(
+    preflight_repo: Path, tmp_path: Path
+) -> None:
+    """A signal before ``setsid()`` remains bounded and verifies direct cleanup."""
+    marker = tmp_path / "launcher-before-setsid"
+    receipt = tmp_path / "startup-termination.json"
+    _write_startup_interleaving_python3(preflight_repo, marker)
+    env = {
+        "PR_READY_MODE": "interim",
+        "PR_READY_SKIP_PREFLIGHT": "1",
+        "PR_READY_TERMINATION_RECEIPT": str(receipt),
+        "PR_READY_STARTUP_MARKER": str(marker),
+    }
+
+    process = _start_pr_ready(preflight_repo, env_overrides=env)
+    try:
+        _wait_for_marker(marker, process)
+        started_at = time.monotonic()
+        os.kill(process.pid, signal.SIGTERM)
+        stdout, stderr = _collect_process(process, timeout=3.0)
+
+        assert time.monotonic() - started_at < 3.0
+        assert process.returncode == 143, stdout + stderr
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+        assert payload["last_progress"]["message"] in {
+            "starting core readiness lane",
+            "core readiness lane running",
+        }
+        assert payload["cleanup"] == {
+            "status": "direct_process_terminated_and_verified",
+            "verified": True,
+        }
+        assert payload["process"]["child_process_group_exists"] is False
         assert "termination receipt:" in stderr
     finally:
         _stop_process_group(process, signal.SIGKILL)

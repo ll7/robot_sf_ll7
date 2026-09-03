@@ -86,6 +86,37 @@ def test_unverified_cleanup_with_missing_pgid_is_not_verified(
     assert receipt["cleanup"]["verified"] is False
 
 
+def test_verified_group_cleanup_is_downgraded_when_group_still_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A contradictory live PGID cannot retain a verified group-cleanup claim."""
+    for process_group_exists in (True, None):
+        monkeypatch.setattr(
+            pr_ready_termination,
+            "_process_group_exists",
+            lambda _, exists=process_group_exists: exists,
+        )
+        receipt = build_receipt(
+            TerminationContext(
+                signal_number=15,
+                phase="core_lane",
+                lane="core",
+                last_progress="core readiness lane running",
+                last_progress_at_utc="2026-09-03T06:00:00Z",
+                cleanup_status="process_group_killed_and_verified",
+                mode="interim",
+                child_pid=1234,
+                child_process_group_id=1234,
+            )
+        )
+
+        assert receipt["process"]["child_process_group_exists"] is process_group_exists
+        assert receipt["cleanup"] == {
+            "status": "process_group_cleanup_unverified",
+            "verified": False,
+        }
+
+
 def test_no_child_cleanup_is_verified_without_process_identifiers() -> None:
     """No active child remains a verified cleanup result without a PGID."""
     receipt = build_receipt(

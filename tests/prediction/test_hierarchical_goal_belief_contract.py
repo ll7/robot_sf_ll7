@@ -99,7 +99,7 @@ def test_hierarchy_has_independent_normalization_and_expected_marginal() -> None
 
 
 def test_tolerated_roundoff_is_canonicalized_before_flat_projection() -> None:
-    """A tolerated normalization epsilon cannot make a derived probability invalid."""
+    """Tolerated normalization drift cannot make a derived probability invalid."""
     posterior = HierarchicalGoalPosteriorV1(
         track_id="track-roundoff",
         tracking_epoch_id="epoch-1",
@@ -119,6 +119,42 @@ def test_tolerated_roundoff_is_canonicalized_before_flat_projection() -> None:
     assert sum(
         candidate.probability for candidate in projected.candidate_probabilities
     ) + projected.unknown_candidate_probability == pytest.approx(1.0)
+
+    destination_count = 17
+    destinations = tuple(
+        HierarchicalProbability(f"destination-{index:02d}", 0.9 / destination_count)
+        for index in range(destination_count)
+    )
+    all_unknown_conditionals = tuple(
+        HierarchicalWaypointConditionalV1(destination.candidate_id) for destination in destinations
+    )
+    cardinality_posterior = HierarchicalGoalPosteriorV1(
+        track_id="track-cardinality-roundoff",
+        tracking_epoch_id="epoch-1",
+        timestamp_s=0.0,
+        step_index=0,
+        destination_probabilities=destinations,
+        unknown_destination_probability=0.1,
+        waypoint_conditionals=all_unknown_conditionals,
+        waypoint_parent_destination={},
+        config_hash=HASH,
+        candidate_set_digest="b" * 64,
+    )
+
+    marginal, unknown = cardinality_posterior.active_waypoint_marginal()
+    cardinality_projected = cardinality_posterior.to_goal_belief_v1("active_waypoint")
+
+    assert marginal == ()
+    assert unknown == 1.0
+    assert cardinality_projected.candidate_probabilities == ()
+    assert cardinality_projected.unknown_candidate_probability == 1.0
+
+    reordered = replace(
+        cardinality_posterior,
+        destination_probabilities=tuple(reversed(destinations)),
+        waypoint_conditionals=tuple(reversed(all_unknown_conditionals)),
+    )
+    assert reordered.to_json() == cardinality_posterior.to_json()
 
 
 def test_serialization_is_strict_deterministic_and_round_trips() -> None:

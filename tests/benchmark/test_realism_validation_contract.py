@@ -22,6 +22,7 @@ from robot_sf.sim.pedestrian_model_variants import SOCIAL_FORCE_DEFAULT, SUPPORT
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = REPO_ROOT / "configs" / "benchmark" / "realism_validation_contract.v1.yaml"
+CONTEXT_NOTE_PATH = REPO_ROOT / "docs" / "context" / "realism_validation_preregistration.md"
 
 
 def test_shipped_contract_freezes_held_out_realism_validation_plan() -> None:
@@ -44,6 +45,25 @@ def test_shipped_contract_freezes_held_out_realism_validation_plan() -> None:
     assert contract.promotion_rule.comparator_arm == SOCIAL_FORCE_DEFAULT
     assert contract.promotion_rule.held_out_only is True
     assert contract.segmentation.frame_window_s > 0.0
+
+
+def test_preregistration_note_freezes_author_packet_and_external_boundary() -> None:
+    """The canonical note names the revival packet without making a real-data claim."""
+
+    note = CONTEXT_NOTE_PATH.read_text(encoding="utf-8")
+
+    for required_text in (
+        "BLOCKED_EXTERNAL",
+        "#6530",
+        "SDD scene IDs",
+        "checksums",
+        "Metres-per-pixel",
+        "source frame rate",
+        "y-axis direction",
+        "license acknowledgement",
+        "no real-data or paper-facing claim",
+    ):
+        assert required_text in note
 
 
 def test_overlapping_calibration_and_held_out_scenes_fail_closed() -> None:

@@ -1,12 +1,16 @@
-# Issue #8246 interaction-conditioned realism validation preregistration
+# Realism validation preregistration (Issue #8246)
+
+Plain-language summary: this note freezes the interaction-conditioned, held-out-by-scene
+contract needed before a future staged-data run can be interpreted as pedestrian-model validation.
 
 Date: 2026-09-01
 
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/8246>
 
-Status: implementation and synthetic-fixture proof complete; external-data execution is
-`blocked-external-input` by issue #6530. This note does not report a Stanford Drone Dataset (SDD)
-result or a paper-facing realism claim.
+Status: implementation and synthetic-fixture proof complete; terminal state is
+`BLOCKED_EXTERNAL` (serialized as `blocked-external-input`) until external-data gate #6530 is
+staged. This note does not report a Stanford Drone Dataset (SDD) result or a paper-facing realism
+claim.
 
 ## Purpose
 
@@ -41,7 +45,8 @@ The shipped YAML declares:
 
 - calibration scenes `bookstore_calibration` and `coupa_calibration`;
 - held-out scenes `death_circle_held_out` and `gates_held_out`, disjoint from calibration;
-- constant velocity, `social_force_default`, and the registered HSF model variants as baseline arms;
+- constant velocity, `social_force_default`, and the registered HSF model variants as baseline
+  arms;
 - trajectory RMSE, fundamental-diagram, lane-formation, speed-distribution, and proxemic-
   distribution metric families;
 - per-class minimum independent event counts, with sparse classes reported as
@@ -49,8 +54,8 @@ The shipped YAML declares:
 - a held-out-only promotion rule compared with `social_force_default`, including a maximum allowed
   free-walking regression and required interaction classes.
 
-ORCA is deliberately excluded from this hierarchy. The contract is metadata-only until the external
-data gate is satisfied.
+ORCA is deliberately excluded from this hierarchy. The contract is metadata-only until the
+external data gate is satisfied.
 
 ## Required SDD author packet before revival
 

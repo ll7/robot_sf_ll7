@@ -425,7 +425,7 @@ def rewrite_outputs(
 # ---------------------------------------------------------------------------
 
 
-def build_minimal_env() -> dict[str, str]:
+def build_minimal_env(repo_root: Path = REPO_ROOT) -> dict[str, str]:
     """Build a minimal credential-free environment for executed commands."""
     env: dict[str, str] = {}
     for key in ENV_ALLOWLIST:
@@ -434,7 +434,13 @@ def build_minimal_env() -> dict[str, str]:
     for key in ENV_UV_ALLOWLIST:
         if key in os.environ:
             env[key] = os.environ[key]
-    env.setdefault("VIRTUAL_ENV", str((REPO_ROOT / ".venv").resolve()))
+    # The installed editable project can point at another checkout when this guard runs from a
+    # linked worktree that reuses a shared virtualenv. Pin imports explicitly to the checkout whose
+    # registry and inputs are being validated; do not inherit an arbitrary caller PYTHONPATH.
+    env["PYTHONPATH"] = os.pathsep.join(
+        (str(repo_root.resolve()), str((repo_root / "fast-pysf").resolve()))
+    )
+    env.setdefault("VIRTUAL_ENV", str((repo_root / ".venv").resolve()))
     env.update(ENV_FORCE)
     return env
 
@@ -746,7 +752,7 @@ def run_one_command(
     benign_roots = _benign_write_roots(temp_root, trace_file, repo_root)
     declared_temp_paths = [(temp_root / Path(o)).resolve() for o in expected_outputs]
     cwd = _resolve_working_dir(entry["working_dir"])
-    env = build_minimal_env()
+    env = build_minimal_env(repo_root)
 
     start = time.monotonic()
     exit_code, timed_out = _run_under_strace(rewritten, cwd, env, timeout_seconds, trace_file)

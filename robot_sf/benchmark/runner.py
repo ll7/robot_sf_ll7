@@ -119,6 +119,26 @@ if TYPE_CHECKING:
 DEFAULT_BENCHMARK_ROBOT_RADIUS_M = 0.3
 DEFAULT_BENCHMARK_PED_RADIUS_M = 0.35
 
+# These messages identify failures at the planner worker boundary. Preserve
+# them in fallback metadata so exact-repeat execution can distinguish an
+# isolation failure from a genuine planner-policy error.
+_PROCESS_ISOLATION_FAILURE_SIGNATURES = (
+    "planner step worker was unavailable",
+    "planner step worker exited before returning an action",
+    "planner step worker exited without returning an action",
+    "planner step worker failed to start",
+    "planner step worker failed to initialize",
+    "policy_step_isolation_unavailable",
+    "policy step isolation unavailable",
+)
+
+
+def _is_process_isolation_error(exc: BaseException) -> bool:
+    """Return whether an exception identifies a planner-worker failure."""
+    return isinstance(exc, RuntimeError) and any(
+        signature in str(exc) for signature in _PROCESS_ISOLATION_FAILURE_SIGNATURES
+    )
+
 
 def _apply_track_metadata_to_scenarios(
     scenarios: list[dict[str, Any]],
@@ -1337,8 +1357,12 @@ def _step_planner_with_retry(
                 )
                 continue
             timeout_metadata["fallback_actions"] += 1
-            metadata["status"] = "policy_step_error_fallback"
-            metadata["fallback_reason"] = "policy_step_error"
+            if _is_process_isolation_error(exc):
+                metadata["status"] = "policy_step_isolation_unavailable"
+                metadata["fallback_reason"] = str(exc)
+            else:
+                metadata["status"] = "policy_step_error_fallback"
+                metadata["fallback_reason"] = "policy_step_error"
             logger.opt(exception=True).warning("Planner step failed unexpectedly: {}", exc)
             return {"vx": 0.0, "vy": 0.0}
 

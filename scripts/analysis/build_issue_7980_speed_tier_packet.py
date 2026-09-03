@@ -61,6 +61,16 @@ EXPECTED_CLASSIFICATIONS = {
     "inconclusive",
     "intervention_not_activated",
 }
+EXPECTED_CLASSIFICATION_COUNTS = {
+    "no_material_shift": 10,
+    "inconclusive": 8,
+    "intervention_not_activated": 6,
+}
+EXPECTED_NONACTIVATED_IDS = frozenset(
+    f"prediction_planner__{tier}__{metric}"
+    for tier in ("cap_3_0", "cap_4_0")
+    for metric in ("collision_rate", "near_miss_rate", "success_rate")
+)
 EXPECTED_SYNTHESIS_SCHEMA = "robot_sf.issue_5578_speed_tier_synthesis_adapter.v1"
 EXPECTED_EVIDENCE_STATUS = "native_grid_synthesis_complete_provenance_unverified"
 SOURCE_RECEIPT_SCHEMA = "issue_7980_source_ingestion_receipt.v1"
@@ -582,6 +592,29 @@ def _require_finite(row: Mapping[str, Any], fields: Sequence[str], test_id: str)
             raise ValueError(f"{test_id}: {field} must be finite")
 
 
+def _validate_synthesis_row_identity(row: Mapping[str, Any]) -> str:
+    """Require a source row ID to agree with its planner, tier, and metric fields."""
+
+    test_id = row.get("test_id")
+    if not isinstance(test_id, str) or not test_id:
+        raise ValueError("every synthesis decision row needs a non-empty string test_id")
+    row_identity: dict[str, str] = {}
+    for field in ("planner_id", "speed_tier_id", "metric"):
+        value = row.get(field)
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"{test_id}: {field} must be a non-empty string")
+        row_identity[field] = value
+    expected_test_id = (
+        f"{row_identity['planner_id']}__{row_identity['speed_tier_id']}__{row_identity['metric']}"
+    )
+    if test_id != expected_test_id:
+        raise ValueError(
+            f"{test_id}: test_id must match planner_id, speed_tier_id, and metric "
+            f"({expected_test_id})"
+        )
+    return test_id
+
+
 def _validate_synthesis_row(
     raw_row: object,
     *,
@@ -592,9 +625,10 @@ def _validate_synthesis_row(
     if not isinstance(raw_row, dict):
         raise ValueError("every synthesis decision row must be an object")
     row = dict(raw_row)
-    test_id = str(row["test_id"])
+    test_id = _validate_synthesis_row_identity(row)
     _require_finite(row, numeric_fields, test_id)
-    if int(row["n_scenarios"]) != 6:
+    n_scenarios = row.get("n_scenarios")
+    if isinstance(n_scenarios, bool) or not isinstance(n_scenarios, int) or n_scenarios != 6:
         raise ValueError(f"{test_id}: n_scenarios must equal the frozen six-scenario suite")
     classification = row.get("classification")
     if classification not in EXPECTED_CLASSIFICATIONS:
@@ -611,6 +645,31 @@ def _validate_synthesis_row(
     ):
         raise ValueError(f"{test_id}: activation diagnostics disagree with decision row")
     return row
+
+
+def _validate_classification_accounting(
+    rows: Sequence[Mapping[str, Any]], recovery_manifest: Mapping[str, Any]
+) -> None:
+    """Require the frozen classification counts and inactive-row roster."""
+
+    expected_counts = recovery_manifest["descriptive_synthesis"]["classification_counts"]
+    if expected_counts != EXPECTED_CLASSIFICATION_COUNTS:
+        raise ValueError(
+            "recovery manifest classification accounting does not match the frozen 10/8/6 "
+            "issue #7980 contract"
+        )
+    observed_counts = Counter(str(row["classification"]) for row in rows)
+    if dict(observed_counts) != expected_counts:
+        raise ValueError(
+            f"classification accounting mismatch: {dict(observed_counts)} != {expected_counts}"
+        )
+    observed_nonactivated_ids = {
+        row["test_id"] for row in rows if not row["intervention_activated"]
+    }
+    if observed_nonactivated_ids != EXPECTED_NONACTIVATED_IDS:
+        raise ValueError(
+            "non-activated source rows must match the six prediction_planner cap-3/cap-4 contrasts"
+        )
 
 
 def _validate_synthesis(
@@ -662,8 +721,6 @@ def _validate_synthesis(
             f"unexpected={sorted(observed_ids - expected_ids)}"
         )
 
-    expected_counts = recovery_manifest["descriptive_synthesis"]["classification_counts"]
-    observed_counts: Counter[str] = Counter()
     numeric_fields = (
         "n_scenarios",
         "pooled_delta_mean",
@@ -684,13 +741,8 @@ def _validate_synthesis(
     validated_rows: list[dict[str, Any]] = []
     for raw_row in rows:
         row = _validate_synthesis_row(raw_row, numeric_fields=numeric_fields)
-        classification = str(row["classification"])
-        observed_counts[str(classification)] += 1
         validated_rows.append(row)
-    if dict(observed_counts) != expected_counts:
-        raise ValueError(
-            f"classification accounting mismatch: {dict(observed_counts)} != {expected_counts}"
-        )
+    _validate_classification_accounting(validated_rows, recovery_manifest)
     return (
         sorted(validated_rows, key=lambda item: str(item["test_id"])),
         paired_denominator,

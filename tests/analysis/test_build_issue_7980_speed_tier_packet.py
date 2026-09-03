@@ -458,6 +458,70 @@ def test_validation_rejects_activation_classification_disagreement() -> None:
         )
 
 
+def test_validation_rejects_non_integral_scenario_count() -> None:
+    """Do not truncate a non-integral scenario count into the frozen six-scenario contract."""
+
+    synthesis, synthesis_sha, recovery, preregistration = _validation_inputs()
+    synthesis["decision_table"][0]["n_scenarios"] = 6.5
+
+    with pytest.raises(ValueError, match="n_scenarios must equal"):
+        _validate_synthesis(
+            synthesis,
+            synthesis_sha256=synthesis_sha,
+            recovery_manifest=recovery,
+            preregistration=preregistration,
+        )
+
+
+def test_validation_rejects_row_identity_mismatch() -> None:
+    """Keep source row IDs bound to their planner, tier, and metric fields."""
+
+    synthesis, synthesis_sha, recovery, preregistration = _validation_inputs()
+    synthesis["decision_table"][0]["metric"] = "success_rate"
+
+    with pytest.raises(ValueError, match="test_id must match"):
+        _validate_synthesis(
+            synthesis,
+            synthesis_sha256=synthesis_sha,
+            recovery_manifest=recovery,
+            preregistration=preregistration,
+        )
+
+
+def test_validation_rejects_non_prediction_inactive_rows() -> None:
+    """Keep the six invalid rows bound to the non-activated prediction-planner contrasts."""
+
+    synthesis, synthesis_sha, recovery, preregistration = _validation_inputs()
+    active = next(row for row in synthesis["decision_table"] if row["planner_id"] == "orca")
+    inactive = next(
+        row
+        for row in synthesis["decision_table"]
+        if row["classification"] == "intervention_not_activated"
+    )
+    active["classification"], inactive["classification"] = (
+        inactive["classification"],
+        active["classification"],
+    )
+    active["intervention_activated"], inactive["intervention_activated"] = (
+        inactive["intervention_activated"],
+        active["intervention_activated"],
+    )
+    active["activation_diagnostics_summary"]["intervention_activated"] = active[
+        "intervention_activated"
+    ]
+    inactive["activation_diagnostics_summary"]["intervention_activated"] = inactive[
+        "intervention_activated"
+    ]
+
+    with pytest.raises(ValueError, match="non-activated source rows must match"):
+        _validate_synthesis(
+            synthesis,
+            synthesis_sha256=synthesis_sha,
+            recovery_manifest=recovery,
+            preregistration=preregistration,
+        )
+
+
 def test_independent_source_crosswalk_validates_rows_without_packet_reuse() -> None:
     """Require a separately supplied fixture crosswalk without upgrading evidence status."""
 

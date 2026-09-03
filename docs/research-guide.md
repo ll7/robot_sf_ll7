@@ -88,6 +88,9 @@ benchmark or paper-facing evidence.** Match the claim to the proof.
 - [Benchmark Docker Reproduction Path](./benchmark_docker_repro.md) — pinned Docker benchmark smoke.
 - [Benchmark Observation Visibility](./benchmark_observation_visibility.md) — planner-facing FOV and
   occlusion filtering.
+- [September 2026 S30/H600 erratum successor](./RELEASE.md) — live benchmark-data record
+  (version DOI `10.5281/zenodo.22265925`), frozen in
+  `configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json`.
 - [Multi-AMV Benchmark](./multi_amv_benchmark.md) — minimal multi-robot scenario surface.
 
 ## 7. Reproducibility and provenance

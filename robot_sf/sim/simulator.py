@@ -413,6 +413,11 @@ def _build_pysf_simulation(  # noqa: PLR0913
     pysf_config.scene_config.dt_secs = config.time_per_step_in_secs
     pysf_config.scene_config.integration_scheme = config.pedestrian_integration_scheme
     pysf_config.obstacle_force_config.law_version = getattr(config, "obstacle_force_law", None)
+    pysf_config.obstacle_force_config._obstacle_force_law_resolution_mode = getattr(
+        config,
+        "obstacle_force_law_resolution_mode",
+        pysf_config.obstacle_force_config.obstacle_force_law_resolution_mode,
+    )
     _apply_ped_desired_speed_config(pysf_config, config)
     spawn_config = PedSpawnConfig(
         config.peds_per_area_m2,
@@ -629,9 +634,24 @@ class Simulator:
         metadata_fn = getattr(self.pysf_sim, "obstacle_force_law_metadata", None)
         if not callable(metadata_fn):
             forces = getattr(self.pysf_sim, "forces", ())
-            enabled = any(isinstance(force, ObstacleForce) for force in forces)
-            raw_obstacles = getattr(self.pysf_sim, "raw_obstacles", ())
-            applied = enabled and len(raw_obstacles) > 0
+            obstacle_force = next(
+                (force for force in forces if isinstance(force, ObstacleForce)),
+                None,
+            )
+            enabled = obstacle_force is not None
+            if obstacle_force is not None:
+                try:
+                    enabled = (
+                        float(getattr(getattr(obstacle_force, "config", None), "factor", 1.0))
+                        != 0.0
+                    )
+                except (TypeError, ValueError):
+                    # Preserve the compatibility path's best-effort behavior for
+                    # legacy force objects with a non-numeric factor.
+                    enabled = True
+            # Older backends expose no evaluation latch, so configuration and
+            # successful application must not be conflated in the record.
+            applied = False
             return obstacle_force_law_metadata(
                 getattr(self.config, "obstacle_force_law", None),
                 site="fast_pysf",
@@ -639,6 +659,11 @@ class Simulator:
                 radius_convention="threshold_plus_agent_radius_sigma",
                 enabled=enabled,
                 applied=applied,
+                resolution_mode=getattr(
+                    self.config,
+                    "obstacle_force_law_resolution_mode",
+                    None,
+                ),
             )
         return dict(metadata_fn())
 

@@ -2,8 +2,9 @@
 
 > Status: current policy and implementation-context note. This records the bounded option-B
 > compatibility/documentation ruling for [Issue #8222](https://github.com/ll7/robot_sf_ll7/issues/8222)
-> at current-main SHA `6e15eab1c0013486daccef9c239737c292ec3ab4`. The runtime selector described
-> below is implemented by the separately scoped follow-up [Issue #8277](https://github.com/ll7/robot_sf_ll7/issues/8277).
+> at the integration base SHA `b5865ac5c8f0297a7f8423a22ef4ba2ce1072019` used for this follow-up.
+> The runtime selector described below is implemented by the separately scoped follow-up
+> [Issue #8277](https://github.com/ll7/robot_sf_ll7/issues/8277).
 
 ## Decision
 
@@ -20,14 +21,16 @@ The runtime identifiers are:
 These names are runtime compatibility selectors, not released model versions and not evidence of
 physical, safety, social-behavior, benchmark, or paper-facing validation.
 
-The #8277 implementation resolves unknown explicit selectors fail-closed and emits
-`obstacle_force_law_metadata.v1` with the selected law, site, geometry convention, radius/offset
-convention, compatibility mode, and explicit `enabled`/`applied` state. The fast-pysf map-segment
-site retains its point, endpoint, and segment branches; the planner site retains its
-occupancy-cell-center point geometry. The selectors therefore version dispatch without silently
-unifying the two sites. Map-runner episode records persist the site payloads under
-`algorithm_metadata.obstacle_force_law` using `obstacle_force_law_runtime_record.v1`; the ordinary
-robot-environment reset metadata and JSONL sidecar also persist the fast-pysf payload.
+The #8277 implementation resolves unknown explicit selectors fail-closed, rejects conflicting
+selector aliases, and emits `obstacle_force_law_metadata.v2` with the selected law, resolution
+mode, site, geometry convention, radius/offset convention, compatibility mode, explicit
+`enabled`/`applied` state, and a hash of the numerical parameters. The fast-pysf map-segment site
+retains its point, endpoint, and segment branches; the planner site retains its occupancy-cell
+center point geometry. The selectors therefore version dispatch without silently unifying the two
+sites. Map-runner episode records persist the site payloads under
+`algorithm_metadata.obstacle_force_law` using `obstacle_force_law_runtime_record.v1`, and attach
+the record-level configuration hash and source commit. The ordinary robot-environment reset
+metadata and JSONL sidecar also persist the fast-pysf payload.
 
 ## Current implementation boundary
 

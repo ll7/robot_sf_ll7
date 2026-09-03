@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 from pysocialforce.config import (
     LEGACY_SHIFTED_GRADIENT_V1,
+    OBSTACLE_FORCE_DISTANCE_FLOOR,
     obstacle_force_law_metadata,
     resolve_obstacle_force_law,
 )
@@ -33,11 +34,13 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
                 "Install the fast-pysf dependency."
             )
         self._obstacle_force_applied = False
+        self._obstacle_force_runtime_parameters: dict[str, Any] = {}
 
     def reset(self, *, seed: int | None = None) -> None:
         """Reset episode-local obstacle-force application diagnostics."""
         del seed
         self._obstacle_force_applied = False
+        self._obstacle_force_runtime_parameters = {}
 
     def plan_velocity_world(self, observation: dict) -> np.ndarray:
         """Compute a world-frame translational velocity using the social-force model.
@@ -212,7 +215,12 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
 
         robot_radius = float(self._as_1d_float(robot_state.get("radius", [0.0]), pad=1)[0])
         obstacle_factor = float(self.config.social_force_obstacle_factor)
-        self._obstacle_force_applied = self._obstacle_force_enabled()
+        self._obstacle_force_runtime_parameters["robot_radius"] = robot_radius
+        cell_radius = self._obstacle_force_runtime_parameters.get("cell_radius")
+        if cell_radius is not None:
+            self._obstacle_force_runtime_parameters["effective_offset"] = robot_radius + float(
+                cell_radius
+            )
         # Vectorized point-obstacle force broadcast (issue #5412). The scalar loop
         # built a degenerate single-point line ``(cx, cy, cx, cy)`` per obstacle
         # and called ``sf_forces.obstacle_force``. That degenerate line exercises
@@ -229,10 +237,11 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         diff = (robot_pos[np.newaxis, :] - centers).astype(float)  # (M, 2)
         if law_version != LEGACY_SHIFTED_GRADIENT_V1:
             force = sf_forces.surface_distance_unit_normal_force_vectors(diff, ped_radius)
+            self._obstacle_force_applied = self._obstacle_force_enabled()
             return np.sum(force, axis=0) * obstacle_factor
 
         raw_dist = np.sqrt(diff[:, 0] ** 2 + diff[:, 1] ** 2)
-        obst_dist = np.maximum(raw_dist - ped_radius, 1e-5)
+        obst_dist = np.maximum(raw_dist - ped_radius, OBSTACLE_FORCE_DISTANCE_FLOOR)
         finite = np.isfinite(obst_dist)
         if not np.any(finite):
             return np.zeros(2, dtype=float)
@@ -242,6 +251,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         grad = diff_f / obst_dist_f[:, np.newaxis]
         force = der_potential[:, np.newaxis] * grad
         total = np.sum(force, axis=0)
+        self._obstacle_force_applied = self._obstacle_force_enabled()
         return total * obstacle_factor
 
     def _obstacle_force_enabled(self) -> bool:
@@ -407,6 +417,20 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         if payload is None:
             return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
         grid, meta, channel_idx, resolution = payload
+        origin = self._as_1d_float(meta.get("origin", [0.0, 0.0]), pad=2)
+        use_ego = bool(self._as_1d_float(meta.get("use_ego_frame", [0.0]), pad=1)[0] > 0.5)
+        self._obstacle_force_runtime_parameters.update(
+            {
+                "grid_resolution": float(resolution),
+                "grid_origin": [float(origin[0]), float(origin[1])],
+                "grid_frame": "ego" if use_ego else "world",
+                "obstacle_channel_index": int(channel_idx),
+                "cell_radius": 0.5
+                * np.sqrt(2.0)
+                * float(resolution)
+                * float(self.config.social_force_obstacle_radius_scale),
+            }
+        )
 
         obstacle_mask = grid[channel_idx] >= float(self.config.social_force_obstacle_threshold)
         if not np.any(obstacle_mask):
@@ -416,9 +440,7 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         if indices.size == 0:
             return np.zeros((0, 2), dtype=float), np.zeros((0,), dtype=float)
 
-        origin = self._as_1d_float(meta.get("origin", [0.0, 0.0]), pad=2)
         centers = self._grid_cell_centers(indices, origin, resolution)
-        use_ego = bool(self._as_1d_float(meta.get("use_ego_frame", [0.0]), pad=1)[0] > 0.5)
         if use_ego:
             centers = self._ego_centers_to_world(centers, robot_pos, robot_heading)
 
@@ -459,13 +481,31 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
 
     def obstacle_force_law_metadata(self) -> dict[str, Any]:
         """Return planner obstacle-law metadata without making an evidence claim."""
+        config = getattr(self, "config", None)
+        parameters: dict[str, Any] | None = None
+        if config is not None:
+            parameters = {
+                "force_factor": float(config.social_force_obstacle_factor),
+                "obstacle_threshold": float(config.social_force_obstacle_threshold),
+                "obstacle_range": float(config.social_force_obstacle_range),
+                "obstacle_max_points": int(config.social_force_obstacle_max_points),
+                "radius_scale": float(config.social_force_obstacle_radius_scale),
+                "distance_floor": OBSTACLE_FORCE_DISTANCE_FLOOR,
+            }
+            parameters.update(getattr(self, "_obstacle_force_runtime_parameters", {}))
         return obstacle_force_law_metadata(
-            getattr(getattr(self, "config", None), "social_force_obstacle_law", None),
+            getattr(config, "social_force_obstacle_law", None),
             site="socnav_social_force",
             geometry_convention="occupancy_cell_centers",
             radius_convention="cell_derived_radius_plus_robot_radius",
-            enabled=self._obstacle_force_enabled(),
+            enabled=self._obstacle_force_enabled() if config is not None else True,
             applied=bool(getattr(self, "_obstacle_force_applied", False)),
+            resolution_mode=getattr(
+                config,
+                "obstacle_force_law_resolution_mode",
+                None,
+            ),
+            parameters=parameters,
         )
 
 

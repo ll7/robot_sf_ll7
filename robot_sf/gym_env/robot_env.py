@@ -419,6 +419,22 @@ def _build_reset_info(
     )
 
 
+def _jsonl_runtime_metadata(
+    info: dict[str, Any],
+    config_hash: str,
+) -> dict[str, Any] | None:
+    """Build JSONL runtime metadata with the episode configuration hash.
+
+    Returns:
+        Runtime metadata for the obstacle-force site, or ``None`` when absent.
+    """
+    if "obstacle_force_law" not in info:
+        return None
+    obstacle_metadata = dict(info["obstacle_force_law"])
+    obstacle_metadata.setdefault("config_hash", config_hash)
+    return {"obstacle_force_law": obstacle_metadata}
+
+
 def _extract_reward_terms(meta: dict[str, Any]) -> dict[str, float]:
     """Extract finite reward-term scalars for telemetry replay.
 
@@ -1248,11 +1264,7 @@ class RobotEnv(BaseEnv):
                         config_hash=config_hash,
                         telemetry_path=telemetry_path,
                         telemetry_episode_id=telemetry_episode_id,
-                        runtime_metadata=(
-                            {"obstacle_force_law": info["obstacle_force_law"]}
-                            if "obstacle_force_law" in info
-                            else None
-                        ),
+                        runtime_metadata=_jsonl_runtime_metadata(info, config_hash),
                     )
                 else:
                     # Legacy pickle recording

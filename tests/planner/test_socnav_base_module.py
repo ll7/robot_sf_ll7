@@ -1,5 +1,6 @@
 """Focused coverage for the extracted SocNav base/config module."""
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -57,6 +58,14 @@ def test_config_default_construction() -> None:
     assert config.forecast_variant == "none"
     # The facade alias is the same class, so instances are interchangeable.
     assert isinstance(socnav.SocNavPlannerConfig(), base.SocNavPlannerConfig)
+
+
+def test_obstacle_force_law_copy_preserves_selector_provenance() -> None:
+    """Copying SocNav config must preserve missing-selector provenance."""
+    config = base.SocNavPlannerConfig(social_force_obstacle_law="")
+    copied = replace(config)
+
+    assert copied.obstacle_force_law_resolution_mode == "historical_unversioned"
 
 
 def test_policy_wraps_adapter() -> None:

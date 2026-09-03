@@ -186,7 +186,8 @@ def test_pedestrian_env_records_and_resets(tmp_path, monkeypatch) -> None:
             "seed",
             "obstacle_force_law",
         }
-        assert info["obstacle_force_law"]["schema_version"] == "obstacle_force_law_metadata.v1"
+        assert info["obstacle_force_law"]["schema_version"] == "obstacle_force_law_metadata.v2"
+        assert info["obstacle_force_law"]["resolution_mode"] == "defaulted_missing"
         assert info["obstacle_force_law"]["site"] == "fast_pysf"
 
         action = env.action_space.sample()

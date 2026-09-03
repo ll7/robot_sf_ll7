@@ -11,6 +11,7 @@ from pysocialforce.config import (
 )
 
 from robot_sf.planner import socnav as _socnav_module
+from robot_sf.planner import socnav_social_force as _social_force_module
 from robot_sf.planner.socnav import (
     HRVOPlannerAdapter,
     ORCAPlannerAdapter,
@@ -308,6 +309,31 @@ def test_social_force_adapter_responds_to_obstacle_in_grid():
     assert adapter.diagnostics()["obstacle_force_law"]["applied"] is True
 
     adapter.reset(seed=7)
+    assert adapter.diagnostics()["obstacle_force_law"]["applied"] is False
+
+
+def test_social_force_obstacle_application_latch_requires_successful_evaluation(monkeypatch):
+    """A failed obstacle kernel must not leave an applied-force metadata latch behind."""
+    adapter = SocialForcePlannerAdapter(
+        SocNavPlannerConfig(social_force_obstacle_law=SURFACE_DISTANCE_UNIT_NORMAL_V2)
+    )
+    obs = _with_occupancy_grid(
+        _make_obs(goal=(5.0, 0.0), heading=0.0),
+        obstacle_cells=[(2, 3)],
+    )
+
+    def fail(*_args, **_kwargs):
+        raise ValueError("synthetic obstacle-kernel failure")
+
+    monkeypatch.setattr(
+        _social_force_module.sf_forces,
+        "surface_distance_unit_normal_force_vectors",
+        fail,
+    )
+
+    with pytest.raises(ValueError, match="synthetic obstacle-kernel failure"):
+        adapter.plan(obs)
+
     assert adapter.diagnostics()["obstacle_force_law"]["applied"] is False
 
 

@@ -7,7 +7,10 @@ import importlib
 from .config import (
     DEFAULT_OBSTACLE_FORCE_LAW,
     LEGACY_SHIFTED_GRADIENT_V1,
+    OBSTACLE_FORCE_DISTANCE_FLOOR,
     OBSTACLE_FORCE_LAW_METADATA_SCHEMA,
+    OBSTACLE_FORCE_LAW_RESOLUTION_MODES,
+    OBSTACLE_FORCE_LAW_SELECTOR_KEYS,
     OBSTACLE_FORCE_LAW_VERSIONS,
     SURFACE_DISTANCE_UNIT_NORMAL_V2,
     DesiredForceConfig,
@@ -21,6 +24,7 @@ from .config import (
     SocialForceConfig,
     obstacle_force_law_metadata,
     resolve_obstacle_force_law,
+    resolve_obstacle_force_law_with_mode,
 )
 from .force_trace import (
     ForceComponentOperation,

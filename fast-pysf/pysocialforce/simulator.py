@@ -13,7 +13,11 @@ from warnings import warn
 import numpy as np
 
 from pysocialforce import forces
-from pysocialforce.config import SimulatorConfig, obstacle_force_law_metadata
+from pysocialforce.config import (
+    OBSTACLE_FORCE_DISTANCE_FLOOR,
+    SimulatorConfig,
+    obstacle_force_law_metadata,
+)
 from pysocialforce.force_trace import ForceComputationResult, compute_force_components
 from pysocialforce.map_config import MapDefinition
 from pysocialforce.ped_behavior import PedestrianBehavior
@@ -53,6 +57,22 @@ class ForceContext(Protocol):
 
 
 ForceFactory = Callable[[ForceContext, SimulatorConfig], list[forces.Force]]
+
+
+def _obstacle_force_parameters(config: SimulatorConfig, agent_radius: float) -> dict[str, float]:
+    """Return the fast-pysf obstacle parameters used by the configured site."""
+    obstacle_config = config.obstacle_force_config
+    threshold = float(obstacle_config.threshold)
+    sigma = float(obstacle_config.sigma)
+    radius = float(agent_radius)
+    return {
+        "factor": float(obstacle_config.factor),
+        "sigma": sigma,
+        "threshold": threshold,
+        "agent_radius": radius,
+        "effective_offset": threshold + radius * sigma,
+        "distance_floor": OBSTACLE_FORCE_DISTANCE_FLOOR,
+    }
 
 
 def _sum_forces_explicitly(force_list: list[forces.Force], ped_state: PedState) -> np.ndarray:
@@ -182,6 +202,15 @@ class Simulator_v2:
             radius_convention="threshold_plus_agent_radius_sigma",
             enabled=False,
             applied=False,
+            resolution_mode=getattr(
+                self.config.obstacle_force_config,
+                "obstacle_force_law_resolution_mode",
+                None,
+            ),
+            parameters=_obstacle_force_parameters(
+                self.config,
+                float(getattr(self.peds, "agent_radius", 0.0)),
+            ),
         )
 
     @property
@@ -311,6 +340,15 @@ class Simulator:
             radius_convention="threshold_plus_agent_radius_sigma",
             enabled=False,
             applied=False,
+            resolution_mode=getattr(
+                self.config.obstacle_force_config,
+                "obstacle_force_law_resolution_mode",
+                None,
+            ),
+            parameters=_obstacle_force_parameters(
+                self.config,
+                float(getattr(self.peds, "agent_radius", 0.0)),
+            ),
         )
 
     @property

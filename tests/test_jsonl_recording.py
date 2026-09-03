@@ -92,8 +92,10 @@ def test_jsonl_recording_basic():
         assert metadata["scenario"] == "test_scenario"
         assert metadata["seed"] == 42
         obstacle_metadata = metadata["runtime_metadata"]["obstacle_force_law"]
-        assert obstacle_metadata["schema_version"] == "obstacle_force_law_metadata.v1"
+        assert obstacle_metadata["schema_version"] == "obstacle_force_law_metadata.v2"
         assert obstacle_metadata["site"] == "fast_pysf"
+        assert obstacle_metadata["resolution_mode"] == "defaulted_missing"
+        assert obstacle_metadata["config_hash"] == metadata["config_hash"]
         assert isinstance(obstacle_metadata["enabled"], bool)
         assert isinstance(obstacle_metadata["applied"], bool)
 

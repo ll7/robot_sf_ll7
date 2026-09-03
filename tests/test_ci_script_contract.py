@@ -1110,14 +1110,16 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     ]
     for gate in expected_gates:
         assert gate in script_text
-    assert (
-        'ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=core "$SCRIPT_DIR/run_tests_parallel.sh" --lane core'
-        in script_text
-    )
-    assert (
-        'PYTEST_ADDOPTS="$optional_pytest_addopts" ROBOT_SF_PYTEST_COVERAGE=1 ROBOT_SF_TEST_LANE=optional PYTEST_XDIST_DIST="${PYTEST_XDIST_DIST:-worksteal}" "$SCRIPT_DIR/run_tests_parallel.sh" --lane optional'
-        in script_text
-    )
+    assert "run_pr_ready_lane core env" in script_text
+    assert 'ROBOT_SF_PYTEST_COVERAGE=1' in script_text
+    assert 'ROBOT_SF_TEST_LANE=core' in script_text
+    assert '"$SCRIPT_DIR/run_tests_parallel.sh" --lane core' in script_text
+    assert "run_pr_ready_lane optional env" in script_text
+    assert '"PYTEST_ADDOPTS=$optional_pytest_addopts"' in script_text
+    assert 'ROBOT_SF_TEST_LANE=optional' in script_text
+    assert '"$SCRIPT_DIR/run_tests_parallel.sh" --lane optional' in script_text
+    assert "trap 'handle_pr_ready_signal SIGTERM 15' TERM" in script_text
+    assert 'pr_ready_termination.py' in script_text
     assert "Optional-extra changed files requiring the predictive lane" in script_text
     assert "No changed files require the optional-extra lane." in script_text
     assert 'git diff --name-only --diff-filter=ACDMRT "$BASE_REF...HEAD"' in script_text

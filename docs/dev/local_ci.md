@@ -88,6 +88,12 @@ The lock uses the host Python implementation's kernel-backed `fcntl` primitive o
 hosts. If that primitive cannot be initialized, readiness fails closed instead of running without
 the worktree lock.
 
+When readiness is terminated, it writes a private bounded receipt to
+`output/validation/pr_ready/` before returning the conventional signal status. The receipt records
+the active phase and lane, last progress, process-group cleanup verification, and a small host/cgroup
+resource snapshot; it deliberately omits command lines and the environment. Set
+`PR_READY_TERMINATION_RECEIPT` to choose an absolute or worktree-relative output path.
+
 On a host where the shared NVIDIA CUDA (Compute Unified Device Architecture) probe reports a usable
 graphics processing unit (GPU), the optional and `all` lanes default to one in-process worker
 because some optional subprocess tests share GPU memory. This is a local readiness safety policy,

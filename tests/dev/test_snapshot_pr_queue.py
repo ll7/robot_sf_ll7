@@ -1234,7 +1234,7 @@ def test_fetch_pr_falls_back_to_rest_on_graphql_quota() -> None:
     assert payload["checks"]["overall"] == "success"
 
 
-@pytest.mark.parametrize("returncode", [1])
+@pytest.mark.parametrize("returncode", [0, 1])
 def test_snapshot_active_prs_falls_back_to_bounded_rest_and_enriches_rows(
     returncode: int,
 ) -> None:
@@ -1691,7 +1691,7 @@ def test_review_thread_snapshot_quota_handoff_unknown_reset_stays_fail_closed() 
     assert "Never admit" in snap["guidance"]
 
 
-@pytest.mark.parametrize("returncode", [1])
+@pytest.mark.parametrize("returncode", [0, 1])
 def test_review_thread_snapshot_uses_quota_retry_classification_from_stdout(
     returncode: int,
 ) -> None:
@@ -1875,7 +1875,7 @@ def test_fetch_pr_rest_rest_fallback_failure_is_labeled() -> None:
     assert payload["error_kind"] == "graphql_quota_exhausted"
 
 
-@pytest.mark.parametrize("returncode", [1])
+@pytest.mark.parametrize("returncode", [0, 1])
 def test_fetch_pr_classifies_stdout_quota_as_graphql_quota_fallback(returncode: int) -> None:
     """Quota text from the preceding ``gh pr view`` stdout keeps quota semantics."""
     with patch(

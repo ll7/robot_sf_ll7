@@ -289,8 +289,8 @@ def test_fetch_pr_snapshot_rest_fallback_when_graphql_quota_exhausted() -> None:
     unavailable snapshot.
     """
     quota_error = _gh_response(
-        stderr="gh: GraphQL: API rate limit already exceeded (403)",
-        returncode=1,
+        stdout="gh: GraphQL: API rate limit already exceeded (403)",
+        returncode=0,
     )
     with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
         mock_gh.side_effect = [
@@ -1305,6 +1305,20 @@ def test_fetch_merge_queue_strategy_rejects_partial_graphql_errors() -> None:
     assert "incomplete" in error
 
 
+def test_fetch_merge_queue_strategy_classifies_stdout_quota_before_json_parsing() -> None:
+    """A quota diagnostic on stdout stays a quota failure even with exit code zero."""
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(
+            stdout="GraphQL: API rate limit already exceeded.",
+            returncode=0,
+        )
+        strategy, error = fetch_merge_queue_strategy(42, repo="owner/repo")
+
+    assert strategy is None
+    assert error is not None
+    assert "GraphQL quota exhausted" in error
+
+
 def test_fetch_threads_resolved_rejects_partial_graphql_errors() -> None:
     """Partial GraphQL data cannot hide an unresolved review thread."""
     payload = _review_threads_payload(nodes=[], total_count=0, has_next_page=False)
@@ -1347,7 +1361,7 @@ def test_fetch_threads_resolved_quota_exhaustion_carries_reset_handoff() -> None
         patch(
             "scripts.dev.merge_queue_gate._gh",
             return_value=_gh_response(
-                returncode=1, stderr="GraphQL: API rate limit already exceeded."
+                returncode=0, stdout="GraphQL: API rate limit already exceeded."
             ),
         ),
         patch(
@@ -1363,6 +1377,49 @@ def test_fetch_threads_resolved_quota_exhaustion_carries_reset_handoff() -> None
     assert "2027-01-01T00:00:00Z" in error
     assert "single_account_merge_receipt.py" in error
     assert "report-only" in error
+
+
+def test_evaluate_live_query_failure_preserves_unknown_thread_audit() -> None:
+    """A failed thread query must audit unknown state, not unresolved state."""
+    base_sha = "b" * 40
+    title = "live gate"
+    body = "final body"
+    digest = metadata_digest(title, body)
+    snapshot = {
+        "number": 42,
+        "title": title,
+        "body": body,
+        "head_sha": FULL_SHA,
+        "base_sha": base_sha,
+        "labels": ["merge-ready"],
+        "draft": False,
+        "checks": {"overall": "success"},
+        "changed_coverage": {"status": "success", "head_sha": FULL_SHA},
+        "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+        "metadata_digest": digest,
+        "metadata_verdicts": [metadata_trailer(digest)],
+        "reviewers_requested": False,
+    }
+    with (
+        patch.object(
+            merge_queue_gate_module,
+            "fetch_pr_snapshot",
+            return_value=(snapshot, None),
+        ),
+        patch.object(merge_queue_gate_module, "fetch_main_sha", return_value=base_sha),
+        patch.object(
+            merge_queue_gate_module,
+            "fetch_threads_resolved",
+            return_value=(None, "quota handoff"),
+        ),
+    ):
+        audit, error = merge_queue_gate_module._evaluate_live(42, repo="owner/repo")
+
+    assert audit.thread_resolution == "not_evaluated"
+    assert "review_threads_not_evaluated" in audit.reasons
+    assert "unresolved_review_threads" not in audit.reasons
+    assert audit.passed is False
+    assert error == "thread resolution query failed: quota handoff"
 
 
 def test_quota_thread_retry_command_quotes_repo() -> None:

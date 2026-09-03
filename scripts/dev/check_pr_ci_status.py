@@ -1085,8 +1085,11 @@ def _gh_view_error_payload(
     starvation_seconds: float = DEFAULT_QUEUE_STARVATION_SECONDS,
 ) -> dict[str, Any]:
     """Map a failed GraphQL-backed PR read to a truthful payload."""
+    quota_exhausted = _is_graphql_quota_error(stderr) or (
+        retry is not None and retry.quota_exhausted
+    )
     if not allow_rest_fallback:
-        if _is_graphql_quota_error(stderr):
+        if quota_exhausted:
             error_kind = "graphql_quota_exhausted"
         elif retry is not None and retry.exhausted:
             error_kind = "graphql_transient_exhausted"
@@ -1097,9 +1100,10 @@ def _gh_view_error_payload(
             "error_kind": error_kind,
             "error": stderr or f"gh returned exit code {returncode}",
         }
-    if _is_graphql_quota_error(stderr):
+    if quota_exhausted:
         return _fetch_ci_status_rest(
             pr_number,
+            fallback_diagnostic=stderr,
             actions_stale_after_seconds=actions_stale_after_seconds,
             starvation_seconds=starvation_seconds,
         )
@@ -1154,6 +1158,16 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
         **_ci_retry_kwargs(max_attempts),
     )
     result = retry.result
+    if retry.quota_exhausted:
+        return _gh_view_error_payload(
+            pr_number,
+            retry.terminal_diagnostic,
+            result.returncode,
+            retry=retry,
+            allow_rest_fallback=allow_rest_fallback,
+            actions_stale_after_seconds=actions_stale_after_seconds,
+            starvation_seconds=starvation_seconds,
+        )
     if result.returncode != 0:
         stderr = result.stderr.strip()
         return _gh_view_error_payload(

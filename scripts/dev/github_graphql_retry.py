@@ -8,6 +8,7 @@ their existing fail-closed behavior when the bounded retry budget is exhausted.
 
 from __future__ import annotations
 
+import json
 import re
 import time
 from dataclasses import dataclass
@@ -36,6 +37,35 @@ def is_quota_exhausted(result: subprocess.CompletedProcess[Any]) -> bool:
     Returns:
         bool: True when the diagnostic names a GraphQL or GitHub API rate limit.
     """
+    # A successful JSON response may legitimately contain user-controlled text
+    # such as a PR body or comment mentioning a rate limit.  Keep compatibility
+    # with callers that surface a plain diagnostic with exit code zero, but never
+    # classify structured successful output as transport quota exhaustion.
+    if result.returncode == 0:
+        try:
+            payload = json.loads(str(result.stdout or ""))
+        except (TypeError, json.JSONDecodeError):
+            pass
+        else:
+            # ``gh api graphql`` can expose protocol errors as a successful
+            # JSON envelope.  Inspect only its top-level GraphQL ``errors``
+            # field so a rate-limit phrase inside ordinary user content still
+            # remains ordinary successful output.
+            if isinstance(payload, dict) and isinstance(payload.get("errors"), list):
+                error_text = "\n".join(
+                    str(error.get("message") or error) if isinstance(error, dict) else str(error)
+                    for error in payload["errors"]
+                )
+                lowered = error_text.lower()
+                if "rate limit" in lowered or "rate_limit" in lowered:
+                    if (
+                        "graphql" in lowered
+                        or "api rate limit" in lowered
+                        or "too many requests" in lowered
+                        or "secondary rate limit" in lowered
+                    ):
+                        return True
+            return False
     text = f"{result.stderr or ''}\n{result.stdout or ''}".lower()
     if "rate limit" not in text and "rate_limit" not in text:
         return False

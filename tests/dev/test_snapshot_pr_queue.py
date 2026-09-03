@@ -12,8 +12,11 @@ from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 from scripts.dev.snapshot_pr_queue import (
     COMMENT_BODY_LIMIT,
     _pr_payload_from_dict,
+    _project_review_thread_state,
+    _refresh_route_hint,
     _rest_open_pr_list,
     _rest_paginated_check_runs,
+    _review_thread_snapshot,
     main,
     snapshot_active_prs,
     snapshot_prs,
@@ -692,6 +695,101 @@ def test_snapshot_prs_handles_null_review_thread_graphql_fields() -> None:
     assert "refusing a thread-free result" in snapshot["error"]
 
 
+def test_snapshot_prs_rejects_non_boolean_review_thread_resolution() -> None:
+    """Malformed GraphQL resolution flags remain unevaluated instead of coercing truthiness."""
+    pr_payload = _base_freshness_pr(number=2697)
+    thread_payload = {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "reviewThreads": {
+                        "totalCount": 1,
+                        "pageInfo": {"hasNextPage": False},
+                        "nodes": [{"id": "thread-1", "isResolved": "false"}],
+                    }
+                }
+            }
+        }
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.side_effect = [
+            MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr=""),
+            MagicMock(returncode=0, stdout=json.dumps(thread_payload), stderr=""),
+        ]
+        payload = snapshot_prs([2697], repo="ll7/robot_sf_ll7", include_review_threads=True)
+
+    pr = payload["prs"][0]
+    assert pr["review_thread_snapshot"]["status"] == "incomplete"
+    assert pr["review_thread_snapshot"]["unresolved"] is None
+    assert pr["review_threads_admission"] == "not_evaluated"
+    assert pr["preflight"]["review_threads_admission"] == "not_evaluated"
+    assert pr["next_action"] == "inspect_blocking_preflight"
+
+
+def test_review_thread_projection_preserves_stale_base_precedence() -> None:
+    """Unknown nested evidence must not hide the more specific stale-base action."""
+    pr = _pr_payload_from_dict(
+        _base_freshness_pr(number=2698),
+        base_sha="old-base",
+        current_main_sha="main-sha",
+        default_number=2698,
+        expected_head_sha="head-sha",
+    )
+
+    _project_review_thread_state(pr, "unknown_graphql_quota")
+    _refresh_route_hint(pr)
+
+    assert pr["preflight"]["status"] == "stale"
+    assert pr["next_action"] == "refresh_pr_base_before_review_or_merge"
+    assert pr["attention"] == "stale_attention"
+
+
+def test_review_thread_projection_preserves_explicit_blocker_precedence() -> None:
+    """An explicit policy blocker remains owner-gated when thread evidence is unknown."""
+    pr_data = _base_freshness_pr(number=2699)
+    pr_data["labels"] = [{"name": "state:blocked"}]
+    pr = _pr_payload_from_dict(
+        pr_data,
+        base_sha="main-sha",
+        current_main_sha="main-sha",
+        default_number=2699,
+        expected_head_sha="head-sha",
+    )
+
+    _project_review_thread_state(pr, "incomplete")
+    _refresh_route_hint(pr)
+
+    assert pr["preflight"]["status"] == "blocked"
+    assert pr["next_action"] == "await_blocker_owner_or_approval"
+    assert pr["attention"] == "blocked_attention"
+
+
+def test_successful_review_thread_refresh_clears_prior_unknown_projection() -> None:
+    """A later complete thread read removes only the stale fallback projection."""
+    pr = _pr_payload_from_dict(
+        _base_freshness_pr(number=2700),
+        base_sha="main-sha",
+        current_main_sha="main-sha",
+        default_number=2700,
+        expected_head_sha="head-sha",
+    )
+    _project_review_thread_state(pr, "unknown_graphql_quota")
+    assert pr["preflight"]["status"] == "blocked"
+
+    _project_review_thread_state(pr, "ok")
+    _refresh_route_hint(pr)
+
+    assert "review_threads" not in pr
+    assert "review_threads_admission" not in pr
+    assert "review_threads" not in pr["preflight"]
+    assert "review_threads_admission" not in pr["preflight"]
+    assert not any(
+        str(reason).startswith("review_threads_") for reason in pr["preflight"]["reasons"]
+    )
+    assert pr["preflight"]["status"] == "healthy"
+    assert pr["next_action"] == "merge_readiness_local_check"
+
+
 def test_raw_review_comments_artifact_writes_full_payload(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """Raw review comments are opt-in and written to an artifact path."""
     artifact = tmp_path / "raw-review-comments.json"
@@ -1000,11 +1098,7 @@ def test_snapshot_prs_extracts_gate_verdicts_from_long_bodies() -> None:
 
 # Issue #6564: GraphQL quota exhaustion REST fallback tests (deterministic, no live GitHub).
 
-from scripts.dev.snapshot_pr_queue import (  # noqa: E402
-    _is_graphql_quota_error,
-    _review_thread_snapshot,
-    fetch_pr,
-)
+from scripts.dev.snapshot_pr_queue import _is_graphql_quota_error, fetch_pr  # noqa: E402
 
 QUOTA_STDERR = "GraphQL: API rate limit already exceeded."
 
@@ -1140,7 +1234,10 @@ def test_fetch_pr_falls_back_to_rest_on_graphql_quota() -> None:
     assert payload["checks"]["overall"] == "success"
 
 
-def test_snapshot_active_prs_falls_back_to_bounded_rest_and_enriches_rows() -> None:
+@pytest.mark.parametrize("returncode", [0, 1])
+def test_snapshot_active_prs_falls_back_to_bounded_rest_and_enriches_rows(
+    returncode: int,
+) -> None:
     """Active discovery should use bounded REST and preserve fail-closed row evidence."""
     rest_rows = [
         {"number": 42, "head": {"sha": "head-42"}},
@@ -1186,7 +1283,7 @@ def test_snapshot_active_prs_falls_back_to_bounded_rest_and_enriches_rows() -> N
     with (
         patch(
             "scripts.dev.snapshot_pr_queue._gh",
-            return_value=_resp(returncode=1, stderr=QUOTA_STDERR),
+            return_value=_resp(returncode=returncode, stdout=QUOTA_STDERR),
         ),
         patch("scripts.dev.snapshot_pr_queue._rest_api_get", side_effect=rest_get) as mock_rest,
     ):
@@ -1517,7 +1614,7 @@ def test_fetch_pr_rest_reports_head_mismatch_without_mixing_commits() -> None:
     ):
         payload = fetch_pr(7, repo="ll7/robot_sf_ll7", expected_head_sha="differenthead")
     assert payload["status"] == "ok"
-    assert payload["preflight"]["status"] == "blocked"
+    assert payload["preflight"]["status"] == "stale"
     assert "head_sha_mismatch" in payload["preflight"]["reasons"]
     assert "review_threads_unknown_graphql_quota" in payload["preflight"]["reasons"]
     assert payload["preflight"]["head_sha_matches_expected"] is False
@@ -1594,7 +1691,10 @@ def test_review_thread_snapshot_quota_handoff_unknown_reset_stays_fail_closed() 
     assert "Never admit" in snap["guidance"]
 
 
-def test_review_thread_snapshot_uses_quota_retry_classification_from_stdout() -> None:
+@pytest.mark.parametrize("returncode", [0, 1])
+def test_review_thread_snapshot_uses_quota_retry_classification_from_stdout(
+    returncode: int,
+) -> None:
     """A quota diagnostic on stdout still gets the reset-aware fail-closed handoff."""
     handoff = {
         "quota_reset_at": None,
@@ -1606,7 +1706,7 @@ def test_review_thread_snapshot_uses_quota_retry_classification_from_stdout() ->
     with (
         patch(
             "scripts.dev.snapshot_pr_queue._gh",
-            return_value=_resp(returncode=1, stdout=QUOTA_STDERR),
+            return_value=_resp(returncode=returncode, stdout=QUOTA_STDERR),
         ),
         patch(
             "scripts.dev.snapshot_pr_queue.quota_reset_handoff",
@@ -1617,6 +1717,48 @@ def test_review_thread_snapshot_uses_quota_retry_classification_from_stdout() ->
 
     assert snap["status"] == "unknown_graphql_quota"
     mock_handoff.assert_called_once()
+
+
+def test_review_thread_snapshot_ignores_rate_limit_text_in_success_payload() -> None:
+    """A valid GraphQL payload containing rate-limit words is ordinary evidence."""
+    thread_payload = {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "reviewThreads": {
+                        "totalCount": 1,
+                        "pageInfo": {"hasNextPage": False},
+                        "nodes": [
+                            {
+                                "id": "thread-1",
+                                "isResolved": True,
+                                "path": "README.md",
+                                "line": 1,
+                                "comments": {
+                                    "totalCount": 1,
+                                    "nodes": [
+                                        {
+                                            "author": {"login": "reviewer"},
+                                            "body": "Document the API rate limit.",
+                                            "createdAt": "2026-09-03T00:00:00Z",
+                                        }
+                                    ],
+                                },
+                            }
+                        ],
+                    }
+                }
+            }
+        }
+    }
+    with patch(
+        "scripts.dev.snapshot_pr_queue._gh",
+        return_value=_resp(returncode=0, stdout=json.dumps(thread_payload)),
+    ):
+        snap = _review_thread_snapshot(42, repo="ll7/robot_sf_ll7")
+
+    assert snap["status"] == "ok"
+    assert snap["unresolved"] == 0
 
 
 def test_review_thread_snapshot_quotes_repo_in_retry_command() -> None:
@@ -1653,6 +1795,55 @@ def test_review_thread_snapshot_quotes_repo_in_retry_command() -> None:
     ]
 
 
+def test_snapshot_prs_projects_unknown_review_threads_to_outer_fail_closed_route() -> None:
+    """Nested unknown thread evidence must block the outer route and action."""
+    pr_payload = _base_freshness_pr(number=8336)
+    pr_payload["headRefOid"] = "abc123"
+    handoff = {
+        "quota_reset_at": None,
+        "reset_in_seconds": None,
+        "retry_after_utc": None,
+        "retry_command": "retry",
+        "handoff": "Never admit merge-ready from unknown thread state.",
+    }
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            side_effect=[
+                _resp(stdout=json.dumps(pr_payload)),
+                _resp(returncode=1, stdout=QUOTA_STDERR),
+            ],
+        ),
+        patch(
+            "scripts.dev.snapshot_pr_queue.quota_reset_handoff",
+            return_value=handoff,
+        ),
+    ):
+        payload = snapshot_prs(
+            [8336],
+            repo="ll7/robot_sf_ll7",
+            expected_head_sha="abc123",
+            include_review_threads=True,
+        )
+
+    pr = payload["prs"][0]
+    assert pr["review_thread_snapshot"]["status"] == "unknown_graphql_quota"
+    assert pr["review_threads"] == "unknown_graphql_quota"
+    assert pr["review_threads_admission"] == "fail_closed_unknown"
+    assert pr["preflight"]["status"] == "blocked"
+    assert pr["preflight"]["review_threads"] == "unknown_graphql_quota"
+    assert pr["preflight"]["review_threads_admission"] == "fail_closed_unknown"
+    assert "review_threads_unknown_graphql_quota" in pr["preflight"]["reasons"]
+    assert pr["next_action"] == "inspect_blocking_preflight"
+    assert pr["attention"] == "preflight_attention"
+    assert payload["route_health_overview"] == {
+        "healthy": 0,
+        "stale": 0,
+        "blocked": 1,
+        "unknown": 0,
+    }
+
+
 def test_review_thread_snapshot_reports_exhausted_graphql_transient() -> None:
     """Persistent transient GraphQL failure leaves review-thread evidence unknown."""
     with (
@@ -1682,3 +1873,44 @@ def test_fetch_pr_rest_rest_fallback_failure_is_labeled() -> None:
         payload = fetch_pr(5, repo="ll7/robot_sf_ll7")
     assert payload["status"] == "error"
     assert payload["error_kind"] == "graphql_quota_exhausted"
+
+
+def test_fetch_pr_transient_rest_fallback_failure_is_not_evaluated() -> None:
+    """A transient REST fallback failure remains unevaluated, not quota-specific."""
+    with (
+        patch(
+            "scripts.dev.snapshot_pr_queue._gh",
+            side_effect=[
+                _resp(returncode=1, stderr="HTTP 503 Service Unavailable"),
+                _resp(returncode=1, stderr="HTTP 503 Service Unavailable"),
+                _resp(returncode=1, stderr="HTTP 503 Service Unavailable"),
+                _resp(returncode=1, stderr="not found"),
+            ],
+        ),
+        patch("scripts.dev.github_graphql_retry.time.sleep", lambda _seconds: None),
+    ):
+        payload = fetch_pr(5, repo="ll7/robot_sf_ll7")
+
+    assert payload["status"] == "error"
+    assert payload["error_kind"] == "graphql_transient_exhausted"
+    assert payload["data_source"] == "rest_fallback_graphql_transient"
+    assert payload["review_threads"] == "unknown_graphql_transient"
+    assert payload["review_threads_admission"] == "not_evaluated"
+
+
+@pytest.mark.parametrize("returncode", [0, 1])
+def test_fetch_pr_classifies_stdout_quota_as_graphql_quota_fallback(returncode: int) -> None:
+    """Quota text from the preceding ``gh pr view`` stdout keeps quota semantics."""
+    with patch(
+        "scripts.dev.snapshot_pr_queue._gh",
+        side_effect=[
+            _resp(returncode=returncode, stdout=QUOTA_STDERR),  # gh pr view -> quota on stdout
+            _resp(returncode=1, stderr="not found"),  # REST pulls -> fail
+        ],
+    ):
+        payload = fetch_pr(5, repo="ll7/robot_sf_ll7")
+
+    assert payload["status"] == "error"
+    assert payload["error_kind"] == "graphql_quota_exhausted"
+    assert payload["data_source"] == "rest_fallback_graphql_quota"
+    assert payload["review_threads"] == "unknown_graphql_quota"

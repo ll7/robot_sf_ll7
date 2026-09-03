@@ -157,3 +157,18 @@ def test_quota_reset_handoff_unknown_reset_stays_fail_closed() -> None:
     assert handoff["retry_command"] == "retry-cmd"
     assert "reset time is unavailable" in handoff["handoff"]
     assert "Never admit" in handoff["handoff"]
+
+
+@pytest.mark.parametrize("reset_at", [10**100, -1, 1.5])
+def test_quota_reset_handoff_malformed_or_overflow_epoch_stays_unknown(
+    reset_at: int | float,
+) -> None:
+    """Malformed or unrepresentable reset epochs cannot become retry evidence."""
+    handoff = quota_reset_handoff(retry_command="retry-cmd", now=0, reset_at=reset_at)
+
+    assert handoff["quota_reset_at"] is None
+    assert handoff["reset_in_seconds"] is None
+    assert handoff["retry_after_utc"] is None
+    assert handoff["retry_command"] == "retry-cmd"
+    assert "reset time is unavailable" in handoff["handoff"]
+    assert "Never admit" in handoff["handoff"]

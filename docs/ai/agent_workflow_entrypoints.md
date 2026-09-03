@@ -56,6 +56,24 @@ resolution/advice. Until then, continue with compact local snapshots and record
 `route-unavailable`; route output remains evidence only and never substitutes for local diff,
 validation, benchmark, evidence, or merge acceptance.
 
+### Delegated-worker startup recovery
+
+The routed-worker manifest records startup failures separately from failures after a worker has
+started. Build or update it from the bounded attempt records with:
+
+```bash
+uv run python -m scripts.dev.routed_worker_manifest \
+  --attempts-json <attempts.json> --chosen-index <index> \
+  --target-repo <linked-worktree> --max-recovery-attempts 2
+```
+
+When `worker_started` is false and the attempt carries an HTTP 404 from the Codex responses
+backend, the manifest emits `startup_backend_404` and a single next-attempt recommendation. The
+recommendation is data only: it does not sleep or spawn a worker. After the retry budget is
+exhausted, or for a non-retryable startup/task failure, `recovery.fallback` requires manual or
+local review and keeps `independent_review_authorized` false. A successful prior worker suppresses
+later retries to avoid duplicate work; every route manifest remains route evidence only.
+
 ### handoff.v2 request format
 
 The accepted handoff input is a flat `handoff.v2` request (there is no nested `packet`):

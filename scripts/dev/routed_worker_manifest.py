@@ -37,6 +37,21 @@ REQUIRED_ARTIFACTS = {
     "status": "status.txt",
     "validation": "validation.txt",
 }
+RECOVERY_SCHEMA = "delegation_recovery.v1"
+DEFAULT_MAX_RECOVERY_ATTEMPTS = 2
+MAX_RECOVERY_ATTEMPTS = 3
+_STARTUP_BACKEND_404_FAILURE_CLASSES = frozenset(
+    {
+        "startup_backend_404",
+        "worker_startup_backend_404",
+        "backend_http_404",
+    }
+)
+_BACKEND_RESPONSE_MARKERS = (
+    "backend-api/codex/responses",
+    "/codex/responses",
+)
+_TRANSIENT_STARTUP_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 
 class TerminalFailure(enum.StrEnum):
@@ -122,6 +137,196 @@ class ScopeCheck:
     spill_detail: str | None
     authorized_root: str | None = None
     spill_paths: tuple[str, ...] = ()
+
+
+def _http_status(attempt: dict[str, Any]) -> int | None:
+    """Return a bounded HTTP status from common route-attempt fields."""
+    for key in ("http_status", "status_code"):
+        value = attempt.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            return value if 100 <= value <= 599 else None
+        if isinstance(value, str) and value.strip().isdigit():
+            parsed = int(value.strip())
+            return parsed if 100 <= parsed <= 599 else None
+    return None
+
+
+def _worker_started(attempt: dict[str, Any]) -> bool | None:
+    """Resolve explicit worker-start evidence without inferring success from exit status."""
+    if "worker_started" in attempt:
+        value = attempt["worker_started"]
+        return value if isinstance(value, bool) else None
+    return bool(attempt.get("run_dir"))
+
+
+def _failure_class(attempt: dict[str, Any]) -> str:
+    """Return a normalized producer failure class for matching known signatures."""
+    value = attempt.get("failure_class")
+    return str(value).strip().lower() if value is not None else ""
+
+
+def classify_delegation_attempt(attempt: dict[str, Any]) -> dict[str, Any]:
+    """Classify startup versus task failures for one delegated-worker attempt.
+
+    This is route evidence only.  A backend 404 is recognized as a startup failure only when the
+    worker did not start, preventing a task that happens to mention HTTP 404 from being relabeled.
+    The returned retryability is a bounded recommendation for a caller; this function never sleeps,
+    spawns a worker, or authorizes review evidence.
+    """
+    started = _worker_started(attempt)
+    status = _http_status(attempt)
+    failure_class = _failure_class(attempt)
+    text = " ".join(
+        str(attempt.get(key, ""))
+        for key in ("stderr", "stdout", "error", "message")
+        if attempt.get(key) is not None
+    ).lower()
+
+    if started is None:
+        return {
+            "phase": "unknown",
+            "classification": "unavailable",
+            "signature": "worker_start_state_unknown",
+            "retryable": False,
+            "review_evidence_status": "unavailable",
+            "reason": "worker_started must be an explicit boolean when supplied",
+        }
+
+    if not started:
+        backend_404 = (
+            status == 404
+            or failure_class in _STARTUP_BACKEND_404_FAILURE_CLASSES
+            or ("404" in text and any(marker in text for marker in _BACKEND_RESPONSE_MARKERS))
+        )
+        if backend_404:
+            return {
+                "phase": "worker_startup",
+                "classification": "startup_backend_404",
+                "signature": "codex_responses_backend_http_404",
+                "retryable": True,
+                "review_evidence_status": "none",
+                "reason": (
+                    "Codex responses backend returned HTTP 404 before worker startup; one bounded "
+                    "retry may distinguish transient routing from endpoint incompatibility"
+                ),
+            }
+        if status in _TRANSIENT_STARTUP_STATUSES:
+            return {
+                "phase": "worker_startup",
+                "classification": "startup_transient",
+                "signature": f"worker_startup_http_{status}",
+                "retryable": True,
+                "review_evidence_status": "none",
+                "reason": "transient HTTP failure occurred before worker startup",
+            }
+        return {
+            "phase": "worker_startup",
+            "classification": "startup_failure",
+            "signature": "worker_startup_failure",
+            "retryable": False,
+            "review_evidence_status": "none",
+            "reason": "worker did not start; no independent review evidence exists",
+        }
+
+    returncode = attempt.get("returncode")
+    if returncode is None:
+        return {
+            "phase": "worker_task",
+            "classification": "unavailable",
+            "signature": "worker_terminal_state_unknown",
+            "retryable": False,
+            "review_evidence_status": "unavailable",
+            "reason": "worker terminal status is missing; success cannot be inferred",
+        }
+    if returncode != 0 or failure_class not in {"", "none", "success"}:
+        return {
+            "phase": "worker_task",
+            "classification": "worker_task_failure",
+            "signature": "worker_task_failure",
+            "retryable": False,
+            "review_evidence_status": "none",
+            "reason": "worker started but the task did not complete successfully",
+        }
+    return {
+        "phase": "none",
+        "classification": "none",
+        "signature": "worker_started",
+        "retryable": False,
+        "review_evidence_status": "requires_parent_validation",
+        "reason": "worker completed; artifacts still require parent validation",
+    }
+
+
+def build_delegation_recovery(
+    attempts: list[dict[str, Any]],
+    *,
+    max_attempts: int = DEFAULT_MAX_RECOVERY_ATTEMPTS,
+) -> dict[str, Any]:
+    """Build a bounded retry/fallback recommendation without executing the recommendation."""
+    if not 1 <= max_attempts <= MAX_RECOVERY_ATTEMPTS:
+        raise ValueError(f"max_attempts must be between 1 and {MAX_RECOVERY_ATTEMPTS}")
+    if not attempts:
+        return {
+            "schema": RECOVERY_SCHEMA,
+            "max_attempts": max_attempts,
+            "attempts_observed": 0,
+            "retry_recommended": False,
+            "next_action": "start_worker",
+            "reason": "no route attempt has been observed",
+            "fallback": {
+                "required": False,
+                "mode": "none",
+                "aggregation": "unavailable",
+                "independent_review_authorized": False,
+            },
+        }
+
+    classifications = [classify_delegation_attempt(attempt) for attempt in attempts]
+    successful_worker_seen = any(
+        classification["classification"] == "none" for classification in classifications
+    )
+    last = classifications[-1]
+    if successful_worker_seen:
+        retry_recommended = False
+        next_action = "do_not_retry"
+        reason = "a successful worker attempt was already observed; avoid duplicate work"
+        fallback_required = False
+        fallback_mode = "parent_review"
+        fallback_aggregation = "requires_parent_validation"
+    elif len(attempts) < max_attempts and last["retryable"]:
+        retry_recommended = True
+        next_action = "retry_worker_start_once"
+        reason = "bounded startup retry remains; no worker success has been observed"
+        fallback_required = False
+        fallback_mode = "manual_or_local_review_if_retry_fails"
+        fallback_aggregation = "inconclusive"
+    else:
+        retry_recommended = False
+        next_action = "manual_or_local_review_required"
+        reason = (
+            "startup retry budget is exhausted or the failure is not retryable; delegation "
+            "cannot supply independent review evidence"
+        )
+        fallback_required = True
+        fallback_mode = "manual_or_local_review"
+        fallback_aggregation = "inconclusive"
+
+    return {
+        "schema": RECOVERY_SCHEMA,
+        "max_attempts": max_attempts,
+        "attempts_observed": len(attempts),
+        "retry_recommended": retry_recommended,
+        "next_action": next_action,
+        "reason": reason,
+        "fallback": {
+            "required": fallback_required,
+            "mode": fallback_mode,
+            "aggregation": fallback_aggregation,
+            "independent_review_authorized": False,
+        },
+    }
 
 
 def _git_rev_parse(target_repo: Path, *arguments: str) -> tuple[str | None, str | None]:
@@ -498,6 +703,7 @@ def build_routing_manifest(
     chosen_index: int,
     target_repo: str | Path = ".",
     task_class: str | None = None,
+    max_recovery_attempts: int = DEFAULT_MAX_RECOVERY_ATTEMPTS,
 ) -> dict[str, Any]:
     """Build a routed-worker manifest for every attempt and the chosen route."""
     if not attempts:
@@ -566,6 +772,7 @@ def build_routing_manifest(
             terminal_state=terminal_state,
             compact_artifacts=compact_artifacts,
         )
+        delegation = classify_delegation_attempt(attempt)
         manifest_attempts.append(
             {
                 "attempt_index": index,
@@ -580,10 +787,15 @@ def build_routing_manifest(
                 "aggregation": output_contract["aggregation"],
                 "aggregation_reason": output_contract["reason"],
                 "output_contract": output_contract,
+                "delegation": delegation,
             }
         )
 
     chosen_attempt = manifest_attempts[chosen_index]
+    recovery = build_delegation_recovery(
+        attempts,
+        max_attempts=max_recovery_attempts,
+    )
     return {
         "schema": SCHEMA_VERSION,
         "task_class": task_class,
@@ -600,6 +812,7 @@ def build_routing_manifest(
         "aggregation": chosen_attempt["aggregation"],
         "aggregation_reason": chosen_attempt["aggregation_reason"],
         "chosen_output_contract": chosen_attempt["output_contract"],
+        "recovery": recovery,
     }
 
 
@@ -610,6 +823,7 @@ def write_routing_manifest(
     target_repo: str | Path = ".",
     task_class: str | None = None,
     filename: str = "routing_manifest.json",
+    max_recovery_attempts: int = DEFAULT_MAX_RECOVERY_ATTEMPTS,
 ) -> Path:
     """Write the routing manifest into the chosen attempt run directory."""
     manifest = build_routing_manifest(
@@ -617,6 +831,7 @@ def write_routing_manifest(
         chosen_index=chosen_index,
         target_repo=target_repo,
         task_class=task_class,
+        max_recovery_attempts=max_recovery_attempts,
     )
     chosen_run_dir = manifest["chosen_run_dir"]
     if not chosen_run_dir:
@@ -636,6 +851,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--chosen-index", type=int, required=True)
     parser.add_argument("--target-repo", default=".")
     parser.add_argument("--task-class")
+    parser.add_argument(
+        "--max-recovery-attempts",
+        type=int,
+        default=DEFAULT_MAX_RECOVERY_ATTEMPTS,
+        help="Bound the retry recommendation; this command never executes retries.",
+    )
     return parser.parse_args()
 
 
@@ -648,6 +869,7 @@ def main() -> int:
         chosen_index=args.chosen_index,
         target_repo=args.target_repo,
         task_class=args.task_class,
+        max_recovery_attempts=args.max_recovery_attempts,
     )
     print(output_path)
     return 0

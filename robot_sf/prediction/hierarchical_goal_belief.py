@@ -145,6 +145,7 @@ class HierarchicalProbability:
         Returns:
             A validated probability entry.
         """
+        value = _as_mapping(value, "hierarchical_probability")
         allowed = {"candidate_id", "probability"}
         reject_unknown_keys(value, allowed, "hierarchical_probability")
         if set(value) != allowed:
@@ -199,6 +200,7 @@ class HierarchicalWaypointConditionalV1:
         Returns:
             A validated conditional waypoint distribution.
         """
+        value = _as_mapping(value, "waypoint_conditional")
         allowed = {
             "destination_id",
             "waypoint_probabilities",
@@ -410,9 +412,8 @@ class HierarchicalGoalPosteriorV1:
         """
         if level not in HIERARCHICAL_PROJECTION_LEVELS:
             raise ValueError("level must be one of: " + ", ".join(HIERARCHICAL_PROJECTION_LEVELS))
-        projection_level = level
 
-        if projection_level == "final_destination":
+        if level == "final_destination":
             values = self.destination_probabilities
             unknown = self.unknown_destination_probability
             kind = GoalCandidateKind.FINAL_DESTINATION

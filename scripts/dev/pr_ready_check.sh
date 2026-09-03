@@ -130,6 +130,26 @@ pr_ready_wait_for_process_exit() {
   return 0
 }
 
+pr_ready_cleanup_direct_child() {
+  local child_pid="$1"
+  if pr_ready_process_alive "$child_pid" && kill -TERM "$child_pid" 2>/dev/null; then
+    if pr_ready_wait_for_process_exit "$child_pid"; then
+      pr_ready_cleanup_status="direct_process_terminated_and_verified"
+      return 0
+    fi
+  elif ! pr_ready_process_alive "$child_pid"; then
+    pr_ready_cleanup_status="direct_process_already_exited_and_verified"
+    return 0
+  fi
+
+  kill -KILL "$child_pid" 2>/dev/null || true
+  if pr_ready_wait_for_process_exit "$child_pid"; then
+    pr_ready_cleanup_status="direct_process_killed_and_verified"
+  else
+    pr_ready_cleanup_status="direct_process_cleanup_unverified"
+  fi
+}
+
 terminate_pr_ready_child() {
   local child_pid="$pr_ready_child_pid"
   local child_pgid="$pr_ready_child_pgid"
@@ -145,50 +165,31 @@ terminate_pr_ready_child() {
         if pr_ready_wait_for_group_exit "$child_pgid"; then
           pr_ready_cleanup_status="process_group_killed_and_verified"
         else
-          pr_ready_cleanup_status="process_group_cleanup_unverified"
+          pr_ready_cleanup_direct_child "$child_pid"
         fi
-      fi
-    elif ! pr_ready_process_group_alive "$child_pgid"; then
-      if pr_ready_process_alive "$child_pid"; then
-        if kill -TERM "$child_pid" 2>/dev/null; then
-          if pr_ready_wait_for_process_exit "$child_pid"; then
-            pr_ready_cleanup_status="direct_process_terminated_and_verified"
-          else
-            kill -KILL "$child_pid" 2>/dev/null || true
-            if pr_ready_wait_for_process_exit "$child_pid"; then
-              pr_ready_cleanup_status="direct_process_killed_and_verified"
-            else
-              pr_ready_cleanup_status="direct_process_cleanup_unverified"
-            fi
-          fi
-        else
-          pr_ready_cleanup_status="direct_process_cleanup_unverified"
-        fi
-      else
-        pr_ready_cleanup_status="process_group_already_exited_and_verified"
       fi
     else
+      # The launcher can still be between fork() and setsid(). A failed group
+      # signal must not leave that direct child running or make the final wait
+      # unbounded; retry group KILL, then fall back to the known child PID.
+      kill -KILL -- "-$child_pgid" 2>/dev/null || true
+      if pr_ready_wait_for_group_exit "$child_pgid"; then
+        pr_ready_cleanup_status="process_group_killed_and_verified"
+      else
+        pr_ready_cleanup_direct_child "$child_pid"
+      fi
+    fi
+    if [[ "$pr_ready_cleanup_status" == direct_process_*_and_verified ]] &&
+      pr_ready_process_group_alive "$child_pgid"; then
       pr_ready_cleanup_status="process_group_cleanup_unverified"
     fi
   else
-    if kill -TERM "$child_pid" 2>/dev/null; then
-      if pr_ready_wait_for_process_exit "$child_pid"; then
-        pr_ready_cleanup_status="direct_process_terminated_and_verified"
-      else
-        kill -KILL "$child_pid" 2>/dev/null || true
-        if pr_ready_wait_for_process_exit "$child_pid"; then
-          pr_ready_cleanup_status="direct_process_killed_and_verified"
-        else
-          pr_ready_cleanup_status="direct_process_cleanup_unverified"
-        fi
-      fi
-    elif ! pr_ready_process_alive "$child_pid"; then
-      pr_ready_cleanup_status="direct_process_already_exited_and_verified"
-    else
-      pr_ready_cleanup_status="direct_process_cleanup_unverified"
-    fi
+    pr_ready_cleanup_direct_child "$child_pid"
   fi
-  wait "$child_pid" 2>/dev/null || true
+  # Do not turn a failed cleanup into an unbounded signal-path wait.
+  if [[ "$pr_ready_cleanup_status" != *"unverified"* ]]; then
+    wait "$child_pid" 2>/dev/null || true
+  fi
 }
 
 handle_pr_ready_signal() {
@@ -198,8 +199,6 @@ handle_pr_ready_signal() {
   pr_ready_termination_handled=1
   pr_ready_pending_signal_name=""
   pr_ready_pending_signal_number=""
-  pr_ready_last_progress="received ${signal_name}; terminating active readiness lane"
-  pr_ready_last_progress_at_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || printf 'unknown')"
   terminate_pr_ready_child
   local receipt_output=""
   if receipt_output="$(python3 "$SCRIPT_DIR/pr_ready_termination.py" \
@@ -285,8 +284,10 @@ run_pr_ready_lane() {
   if [[ -n "$pr_ready_pending_signal_number" ]]; then
     handle_pr_ready_signal "$pr_ready_pending_signal_name" "$pr_ready_pending_signal_number"
   fi
-  pr_ready_last_progress="${lane} readiness lane exited with status ${lane_status}"
-  pr_ready_last_progress_at_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || printf 'unknown')"
+  if [[ "$pr_ready_termination_handled" -eq 0 ]]; then
+    pr_ready_last_progress="${lane} readiness lane exited with status ${lane_status}"
+    pr_ready_last_progress_at_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || printf 'unknown')"
+  fi
   pr_ready_child_pid=""
   pr_ready_child_pgid=""
   return "$lane_status"

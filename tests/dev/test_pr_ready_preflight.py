@@ -571,6 +571,11 @@ def test_pr_ready_sigterm_writes_core_receipt_and_cleans_lane(
         assert payload["lane"] == "core"
         assert payload["signal"]["name"] == "SIGTERM"
         assert payload["signal"]["exit_code"] == 143
+        assert payload["last_progress"]["message"] in {
+            "starting core readiness lane",
+            "core readiness lane running",
+        }
+        assert "received SIGTERM" not in payload["last_progress"]["message"]
         assert payload["cleanup"]["verified"] is True
         assert payload["process"]["child_process_group_exists"] is False, payload["process"]
         assert "environment" not in payload

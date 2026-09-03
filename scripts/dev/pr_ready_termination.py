@@ -179,9 +179,17 @@ def build_receipt(context: TerminationContext) -> dict[str, Any]:
     child_pid_value = _positive_int(context.child_pid)
     process_group_value = _positive_int(context.child_process_group_id)
     process_group_exists = _process_group_exists(process_group_value)
-    cleanup_verified = process_group_value is None or process_group_exists is False
-    if child_pid_value is None and context.cleanup_status != "no_child_active":
-        cleanup_verified = False
+    cleanup_verified_statuses = {
+        "direct_process_already_exited_and_verified",
+        "direct_process_killed_and_verified",
+        "direct_process_terminated_and_verified",
+        "process_group_already_exited_and_verified",
+        "process_group_killed_and_verified",
+        "process_group_terminated_and_verified",
+    }
+    cleanup_verified = context.cleanup_status in cleanup_verified_statuses
+    if child_pid_value is None:
+        cleanup_verified = context.cleanup_status == "no_child_active"
     return {
         "schema": SCHEMA_VERSION,
         "status": "terminated",

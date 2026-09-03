@@ -416,6 +416,7 @@ def test_collect_live_state_falls_back_to_rest_per_remote_field(monkeypatch) -> 
         ],
     )
     monkeypatch.setattr(gate, "_fetch_refs", lambda **_: ("base-a", "branch-a"))
+    monkeypatch.setattr(gate, "_fetch_claim_ref", lambda **_: {"exists": False, "sha": None})
     monkeypatch.setattr(gate, "_git_output", lambda *_: "head-a")
     monkeypatch.setattr(gate, "_tree_state", lambda: "clean")
 

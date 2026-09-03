@@ -759,7 +759,13 @@ def _require_exact_draft(
     tag: str,
     expected_source_sha: str,
 ) -> tuple[dict[str, object] | None, str | None]:
-    """Require one exact unpublished draft and an exact peeled tag target."""
+    """Require one exact unpublished draft and an optional exact peeled tag target.
+
+    GitHub normally materializes a release tag when an unpublished draft is
+    published, not when the draft is created.  An explicit tag ref is still
+    checked when present, while an explicit REST 404 is the normal resumable
+    state for an exact unpublished draft.
+    """
     release, blocker = _query_release_listing(repo=repo, tag=tag)
     if blocker is not None:
         return None, blocker
@@ -768,10 +774,10 @@ def _require_exact_draft(
     blocker = _release_target_blocker(release, tag=tag, source_sha=expected_source_sha)
     if blocker is not None:
         return None, blocker
-    tag_target, tag_blocker = _resolve_tag_ref_target(repo=repo, tag=tag, allow_absent=False)
+    tag_target, tag_blocker = _resolve_tag_ref_target(repo=repo, tag=tag, allow_absent=True)
     if tag_blocker is not None:
         return None, tag_blocker
-    if tag_target != expected_source_sha:
+    if tag_target is not None and tag_target != expected_source_sha:
         return (
             None,
             f"tag {tag} resolves to {tag_target!r}, not the required "

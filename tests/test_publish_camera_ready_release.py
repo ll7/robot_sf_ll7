@@ -113,7 +113,7 @@ def test_dry_run_plans_draft_create_before_upload(tmp_path: Path) -> None:
 
 
 def test_create_draft_then_upload_order(tmp_path: Path) -> None:
-    """With --execute-upload, the draft is created before the upload runs."""
+    """A newly created exact draft uploads even before GitHub materializes its tag ref."""
     calls: list[list[str]] = []
     created = False
 
@@ -131,16 +131,7 @@ def test_create_draft_then_upload_order(tmp_path: Path) -> None:
                 cmd, 0, stdout=json.dumps([[release]] if created else [[]]), stderr=""
             )
         if cmd[:2] == ["gh", "api"]:
-            if not created:
-                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
-            return subprocess.CompletedProcess(
-                cmd,
-                0,
-                stdout=json.dumps(
-                    {"ref": f"refs/tags/{_TAG}", "object": {"sha": _SOURCE_SHA, "type": "commit"}}
-                ),
-                stderr="",
-            )
+            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="HTTP 404: Not Found")
         if cmd[:3] == ["gh", "release", "create"]:
             created = True
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
@@ -223,6 +214,43 @@ def test_existing_exact_sha_draft_allows_upload(tmp_path: Path) -> None:
     upload_calls = [c for c in calls if c[:3] == ["gh", "release", "upload"]]
     assert create_calls == []
     assert len(upload_calls) == 1
+
+
+def test_existing_exact_sha_draft_without_tag_ref_allows_upload(tmp_path: Path) -> None:
+    """An exact unpublished draft remains resumable while its tag ref is absent."""
+    release = _release_record()
+    calls, output = _run_existing_draft(
+        tmp_path,
+        release=release,
+        tag_outputs=[
+            (1, "", "HTTP 404: Not Found"),
+            (1, "", "HTTP 404: Not Found"),
+        ],
+    )
+
+    upload_calls = [call for call in calls if call[:3] == ["gh", "release", "upload"]]
+    assert len(upload_calls) == 1
+    payload = json.loads(output)
+    assert payload["missing_upload_assets"] == [
+        "archive.tar.gz",
+        "checksums.sha256",
+        "manifest.json",
+    ]
+
+
+def test_existing_exact_sha_draft_rejects_ambiguous_missing_tag_response(
+    tmp_path: Path,
+) -> None:
+    """A bare not-found message is not enough to admit an absent tag ref."""
+    release = _release_record()
+    calls, _ = _run_existing_draft(
+        tmp_path,
+        release=release,
+        tag_outputs=[(1, "", "Not Found")],
+        expect_failure=True,
+    )
+
+    assert not any(call[:3] == ["gh", "release", "upload"] for call in calls)
 
 
 @pytest.mark.parametrize(

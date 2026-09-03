@@ -340,6 +340,31 @@ def test_runner_materializes_blocked_report_for_schema_invalid_trace(
     assert "schema validation" in report["runner_errors"][0]["reason"]
 
 
+def test_runtime_checkpoint_refs_require_a_paired_registry_match() -> None:
+    """Runtime checkpoint provenance must be present and match the declared digest."""
+    digest = "a" * 64
+    traces = {
+        condition: {
+            "planner_summary": {
+                "checkpoint_provenance": {
+                    "checkpoint_sha256": digest,
+                    "hash_source": "computed_resolved_file",
+                    "load_succeeded": True,
+                }
+            }
+        }
+        for condition in ("perfect_perception", "sensor_limited")
+    }
+
+    refs = comparator_runner._runtime_checkpoint_refs(traces, expected_sha256=digest)
+
+    assert refs["checkpoint_sha256_runtime"] == digest
+    assert refs["checkpoint_sha256_matches_declared"] == "true"
+
+    refs = comparator_runner._runtime_checkpoint_refs(traces, expected_sha256="b" * 64)
+    assert refs["checkpoint_sha256_matches_declared"] == "false"
+
+
 def test_non_finite_config_is_rejected_before_execution(tmp_path: Path) -> None:
     """YAML NaN values cannot enter config provenance or generated commands."""
     config_path = REPO_ROOT / "configs/benchmarks/issue_7318_calf_legnav_comparator_smoke.yaml"

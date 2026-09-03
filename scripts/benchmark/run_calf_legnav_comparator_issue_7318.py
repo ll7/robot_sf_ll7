@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -16,6 +17,10 @@ from jsonschema import Draft202012Validator
 
 from robot_sf.benchmark.calf_legnav_comparator import (
     build_calf_legnav_comparator_report,
+)
+from scripts.validation.run_policy_search_candidate import (
+    _resolve_path,
+    load_candidate_definition,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -45,22 +50,134 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _json_sha256(payload: Any) -> str:
+    """Return a stable digest for one resolved JSON-compatible configuration."""
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _registry_checkpoint_sha256(registry_path: Path, model_id: str) -> str:
+    """Return the durable registry digest for a resolved learned model."""
+    registry = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
+    models = registry.get("models")
+    if not isinstance(models, list):
+        raise ValueError(f"Model registry has no models list: {registry_path}")
+    for entry in models:
+        if not isinstance(entry, dict) or str(entry.get("model_id", "")) != model_id:
+            continue
+        release = entry.get("github_release")
+        declared = release.get("sha256") if isinstance(release, dict) else None
+        if not isinstance(declared, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", declared):
+            raise ValueError(f"Model registry entry has no valid checkpoint SHA-256: {model_id}")
+        return declared.lower()
+    raise ValueError(f"Model ID is absent from the model registry: {model_id}")
+
+
 def _input_refs(config_path: Path, config: dict[str, Any]) -> dict[str, str]:
-    """Return stable input paths and digests, or raise on missing provenance inputs."""
+    """Return resolved input lineage and digests, or raise on missing provenance inputs."""
     scenario_matrix = _repo_path(str(config["scenario_matrix"]))
     candidate_registry = _repo_path(str(config["candidate_registry"]))
+    _, candidate_payload, resolved_config, candidate_config_path = load_candidate_definition(
+        candidate_registry,
+        str(config["candidate"]),
+    )
+    base_config_path = _resolve_path(
+        candidate_config_path.parent,
+        candidate_payload.get("base_config_path"),
+    )
+    if base_config_path is None:
+        raise ValueError(f"Candidate has no resolvable base configuration: {config['candidate']}")
+    model_id = resolved_config.get("model_id")
+    if not isinstance(model_id, str) or not model_id.strip():
+        raise ValueError(f"Resolved candidate has no model_id: {config['candidate']}")
+    model_registry = REPO_ROOT / "model/registry.yaml"
     refs = {
         "config": _display_path(config_path),
         "scenario_matrix": _display_path(scenario_matrix),
         "candidate_registry": _display_path(candidate_registry),
+        "candidate_config": _display_path(candidate_config_path),
+        "base_config": _display_path(base_config_path),
+        "model_registry": _display_path(model_registry),
+        "checkpoint_model_id": model_id,
+        "checkpoint_hash_source_declared": "model_registry.github_release.sha256",
+        "checkpoint_sha256_declared": _registry_checkpoint_sha256(model_registry, model_id),
+        "resolved_algo_config_sha256": _json_sha256(resolved_config),
     }
     for name, path in (
         ("config", config_path),
         ("scenario_matrix", scenario_matrix),
         ("candidate_registry", candidate_registry),
+        ("candidate_config", candidate_config_path),
+        ("base_config", base_config_path),
+        ("model_registry", model_registry),
     ):
         refs[f"{name}_sha256"] = _sha256(path)
     return refs
+
+
+def _runtime_checkpoint_refs(
+    traces: dict[str, dict[str, Any]],
+    *,
+    expected_sha256: str | None = None,
+) -> dict[str, str]:
+    """Return paired runtime checkpoint hashes and their registry-match verdict."""
+    runtime_hashes: dict[str, str] = {}
+    runtime_sources: dict[str, str] = {}
+    for condition in ("perfect_perception", "sensor_limited"):
+        summary = traces.get(condition, {}).get("planner_summary")
+        provenance = summary.get("checkpoint_provenance") if isinstance(summary, dict) else None
+        raw_sha256 = provenance.get("checkpoint_sha256") if isinstance(provenance, dict) else None
+        raw_source = provenance.get("hash_source") if isinstance(provenance, dict) else None
+        if (
+            isinstance(raw_sha256, str)
+            and re.fullmatch(r"[0-9a-fA-F]{64}", raw_sha256)
+            and isinstance(raw_source, str)
+            and raw_source
+            and provenance.get("load_succeeded") is True
+        ):
+            runtime_hashes[condition] = raw_sha256.lower()
+            runtime_sources[condition] = raw_source
+        else:
+            runtime_hashes[condition] = "unavailable"
+            runtime_sources[condition] = "unavailable"
+
+    refs = {
+        "checkpoint_sha256_runtime_perfect_perception": runtime_hashes["perfect_perception"],
+        "checkpoint_sha256_runtime_sensor_limited": runtime_hashes["sensor_limited"],
+        "checkpoint_hash_source_runtime_perfect_perception": runtime_sources["perfect_perception"],
+        "checkpoint_hash_source_runtime_sensor_limited": runtime_sources["sensor_limited"],
+    }
+    paired_hash = runtime_hashes["perfect_perception"]
+    if paired_hash != "unavailable" and paired_hash == runtime_hashes["sensor_limited"]:
+        refs["checkpoint_sha256_runtime"] = paired_hash
+    else:
+        refs["checkpoint_sha256_runtime"] = "unavailable"
+    refs["checkpoint_sha256_matches_declared"] = str(
+        expected_sha256 is not None and refs["checkpoint_sha256_runtime"] == expected_sha256.lower()
+    ).lower()
+    return refs
+
+
+def _runtime_provenance_error(input_refs: dict[str, str]) -> dict[str, Any] | None:
+    """Return a blocker when runtime and declared checkpoint provenance disagree."""
+    if input_refs.get("checkpoint_sha256_runtime") == "unavailable":
+        return {
+            "condition": "inputs",
+            "status": "blocked",
+            "reason": (
+                "paired runtime checkpoint provenance is unavailable or did not expose "
+                "the same computed digest for both conditions"
+            ),
+            "command": ["_runtime_checkpoint_refs"],
+        }
+    if input_refs.get("checkpoint_sha256_matches_declared") != "true":
+        return {
+            "condition": "inputs",
+            "status": "blocked",
+            "reason": "runtime checkpoint digest does not match the model registry digest",
+            "command": ["_runtime_checkpoint_refs"],
+        }
+    return None
 
 
 def _load_config(path: Path) -> dict[str, Any]:
@@ -324,6 +441,13 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         input_refs = _input_refs(config_path, config)
+        input_refs.update(
+            _runtime_checkpoint_refs(
+                traces,
+                expected_sha256=input_refs.get("checkpoint_sha256_declared"),
+            )
+        )
+        runtime_provenance_error = _runtime_provenance_error(input_refs)
     except (OSError, ValueError) as exc:
         runner_errors.append(
             {
@@ -338,6 +462,7 @@ def main(argv: list[str] | None = None) -> int:
             "scenario_matrix": _display_path(_repo_path(str(config["scenario_matrix"]))),
             "candidate_registry": _display_path(_repo_path(str(config["candidate_registry"]))),
         }
+        runtime_provenance_error = None
     try:
         report = build_calf_legnav_comparator_report(
             traces["perfect_perception"],
@@ -383,6 +508,11 @@ def main(argv: list[str] | None = None) -> int:
         report["status"] = "blocked"
         report["runner_errors"] = runner_errors
         _validate_report(report)
+    if runtime_provenance_error is not None:
+        runner_errors.append(runtime_provenance_error)
+    if runner_errors:
+        report["status"] = "blocked"
+        report["runner_errors"] = runner_errors
     (output_dir / "summary.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     (output_dir / "README.md").write_text(_markdown(report), encoding="utf-8")
     print(

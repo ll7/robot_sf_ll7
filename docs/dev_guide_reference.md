@@ -1013,6 +1013,10 @@ the payload instead records `checks.pending_reason: "runner_queue_starvation"`, 
 age, queued check names, and their actionable run URLs. Use `--queue-starvation-seconds` to tune
 that diagnostic threshold for a known environment. This is an external queue blocker only:
 `checks.overall` remains `pending`, and neither the monitor nor merge admission treats it as success.
+For Actions lifecycle age warnings, queued and setup phases prefer the current job's
+`created_at`, then fall back to the workflow timestamp; this avoids aging a newly queued job from
+an older parent workflow. The human `actions_gate_age` summary counts the corresponding
+`age_warnings` entries and names them, while missing timestamps remain unaged and fail-closed.
 The workflow also runs a separate `reproducibility-check-reconciliation` job after the diagnostic.
 That job invokes `scripts/dev/reconcile_reproducibility_check_run.py`, which identifies the exact
 Actions job by workflow run, attempt, and head SHA. It patches a check-run only when that exact job

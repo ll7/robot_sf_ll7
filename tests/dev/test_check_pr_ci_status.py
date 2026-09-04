@@ -1928,6 +1928,94 @@ def test_fetch_ci_status_reports_actions_queue_age_and_manual_recovery(
     assert stale_run["replacement_command"] == "gh run rerun 123"
 
 
+def test_fetch_ci_status_prefers_queued_job_creation_over_workflow_age(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A newer queued job timestamp prevents an old workflow from creating a false stale gate."""
+    payload = {
+        "number": 7003,
+        "title": "newly queued job",
+        "state": "OPEN",
+        "mergeable": "UNKNOWN",
+        "headRefName": "newly-queued-job",
+        "headRefOid": FULL_SHA,
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "CI",
+                "status": "queued",
+                "conclusion": "",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/127/job/460",
+            }
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    api_payloads = {
+        "actions/runs/127": {
+            "status": "queued",
+            "created_at": "1970-01-01T00:00:00Z",
+            "head_sha": FULL_SHA,
+        },
+        "actions/jobs/460": {
+            "status": "queued",
+            "created_at": "1970-01-01T00:13:20Z",
+            "conclusion": None,
+        },
+    }
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status._rest_api_get", api_payloads.get)
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status.time.time", lambda: 1000.0)
+
+    data = _fetch_ci_status("7003", actions_stale_after_seconds=900)
+
+    lifecycle = data["checks"]["actions_lifecycle"]
+    assert lifecycle["by_phase"] == {"queued": 1}
+    item = lifecycle["items"][0]
+    assert item["age_source"] == "job_created_at"
+    assert item["age_seconds"] == 200
+    assert item["stale"] is False
+    assert lifecycle["stale_count"] == 0
+    assert "pending_reason" not in data["checks"]
+
+
+def test_format_human_actions_gate_age_counts_age_warnings() -> None:
+    """Human diagnostics should count and name stale lifecycle entries, not propagation entries."""
+    output = _format_human(
+        {
+            "status": "ok",
+            "pr": 7004,
+            "title": "stale queued gate",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "branch": "stale-queued-gate",
+            "head_sha": FULL_SHA,
+            "checks": {
+                "total": 1,
+                "overall": "pending",
+                "by_conclusion": {"": 1},
+                "by_status": {"queued": 1},
+                "pending_reason": "actions_gate_age",
+                "age_warnings": [
+                    {
+                        "name": "ci",
+                        "phase": "queued",
+                        "age_seconds": 901,
+                        "run_id": 128,
+                        "job_id": 461,
+                    }
+                ],
+            },
+        }
+    )
+
+    assert "pending_reason: actions_gate_age  |  affected checks: 1" in output
+    assert "ci: queued age=901s | run 128 job 461" in output
+
+
 def test_actions_recovery_blocks_mutation_when_run_head_is_not_proven(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

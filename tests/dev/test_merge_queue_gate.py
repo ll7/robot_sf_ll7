@@ -1408,7 +1408,11 @@ def test_evaluate_live_query_failure_preserves_unknown_thread_audit() -> None:
             "fetch_pr_snapshot",
             return_value=(snapshot, None),
         ),
-        patch.object(merge_queue_gate_module, "get_pr_commit_messages", return_value=""),
+        patch.object(
+            merge_queue_gate_module,
+            "get_pr_commit_messages",
+            return_value="repair commit\n",
+        ),
         patch.object(merge_queue_gate_module, "fetch_main_sha", return_value=base_sha),
         patch.object(
             merge_queue_gate_module,
@@ -1682,7 +1686,11 @@ def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> 
 
     with (
         patch("scripts.dev.merge_queue_gate._gh") as mock_gh,
-        patch.object(merge_queue_gate_module, "get_pr_commit_messages", return_value=""),
+        patch.object(
+            merge_queue_gate_module,
+            "get_pr_commit_messages",
+            return_value="repair commit\n",
+        ),
     ):
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
@@ -1718,7 +1726,11 @@ def test_from_event_accepts_branch_name_queue_ref(tmp_path) -> None:
 
     with (
         patch("scripts.dev.merge_queue_gate._gh") as mock_gh,
-        patch.object(merge_queue_gate_module, "get_pr_commit_messages", return_value=""),
+        patch.object(
+            merge_queue_gate_module,
+            "get_pr_commit_messages",
+            return_value="repair commit\n",
+        ),
     ):
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),

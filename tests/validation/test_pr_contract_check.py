@@ -59,9 +59,15 @@ def test_find_title_issues() -> None:
 
 def test_has_declaration_for_issue() -> None:
     """Test has_declaration_for_issue checks body matches."""
-    body = "We reference Refs #123 here."
+    body = (
+        "We reference Refs #123 here, close: #456, and fix ll7/robot_sf_ll7#789. "
+        "Resolves https://github.com/ll7/robot_sf_ll7/issues/1011."
+    )
     assert pr_contract_check.has_declaration_for_issue("123", body) is True
-    assert pr_contract_check.has_declaration_for_issue("456", body) is False
+    assert pr_contract_check.has_declaration_for_issue("456", body) is True
+    assert pr_contract_check.has_declaration_for_issue("789", body) is True
+    assert pr_contract_check.has_declaration_for_issue("1011", body) is True
+    assert pr_contract_check.has_declaration_for_issue("999", body) is False
 
 
 @patch("subprocess.run")
@@ -175,20 +181,29 @@ def test_get_pr_commit_messages_uses_paginated_commit_api(mock_run: MagicMock) -
     )
 
 
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_pr_commit_messages_rejects_empty_success(mock_run: MagicMock) -> None:
+    """A successful empty response is unavailable evidence, not a verified commit list."""
+    mock_run.return_value = MagicMock(returncode=0, stdout=" \n")
+
+    assert pr_contract_check.get_pr_commit_messages("8451", "ll7/robot_sf_ll7") is None
+
+
 @patch("scripts.ci.pr_contract_check.get_issue_metadata")
 def test_check_closes_discipline_fails_closed_when_commit_source_unavailable(
     mock_metadata: MagicMock,
 ) -> None:
     """A live PR check cannot silently skip commit-message closure references."""
-    blockers = pr_contract_check.check_closes_discipline(
-        "No semantic closing reference in the body.",
-        "ll7/robot_sf_ll7",
-        commit_messages=None,
-        commit_messages_checked=True,
-    )
+    for commit_messages in (None, "", " \n"):
+        blockers = pr_contract_check.check_closes_discipline(
+            "No semantic closing reference in the body.",
+            "ll7/robot_sf_ll7",
+            commit_messages=commit_messages,
+            commit_messages_checked=True,
+        )
 
-    assert len(blockers) == 1
-    assert "commit messages" in blockers[0]
+        assert len(blockers) == 1
+        assert "commit messages" in blockers[0]
     mock_metadata.assert_not_called()
 
 

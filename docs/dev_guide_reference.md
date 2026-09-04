@@ -732,8 +732,9 @@ before the queue auto-merges a PR:
 - **Audit record**: the job emits a `merge_queue_gate.v1` audit with the evaluated head SHA, the
   source-head SHA encoded in the queue ref and its binding verdict, queue merging strategy, base
   SHA, label set, metadata digest and metadata-verdict status, gate-verdict status, staleness
-  verdict, CI conclusion, and reviewer-thread resolution plus requested-reviewer status, so every
-  merge decision is inspectable and reproducible.
+  verdict, CI conclusion, reviewer-thread resolution plus requested-reviewer status, and the
+  current closing-discipline status/blockers from PR commit and issue metadata, so every merge
+  decision is inspectable and reproducible.
 - **Self-test**: `uv run python scripts/dev/merge_queue_gate.py --self-test` exercises the
   fail-closed contract deterministically (the issue #6274 validation scenarios).
 

@@ -117,7 +117,10 @@ def find_title_issues(title: str) -> list[str]:
 def has_declaration_for_issue(issue: str, body: str) -> bool:
     """Check if there is a closes or refs declaration for the given issue."""
     pattern = re.compile(
-        rf"\b(?:closes?|fixes?|resolves?|refs?|references?)\s+`?(?:#|https?://github\.com/[^/\s]+/[^/\s]+/issues/)?{issue}\b",
+        rf"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?|references?)\s*:?\s*`?"
+        rf"(?:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#|"
+        rf"https?://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/|#)"
+        rf"{re.escape(issue)}\b",
         re.IGNORECASE,
     )
     return bool(pattern.search(body))
@@ -171,7 +174,7 @@ def get_issue_labels(issue: str, repo: str) -> list[str]:
 
 
 def get_pr_commit_messages(pr_number: str, repo: str) -> str | None:
-    """Return all commit messages for a PR, or ``None`` when the API read fails."""
+    """Return non-empty commit messages for a PR, or ``None`` when unavailable."""
     try:
         result = subprocess.run(
             [
@@ -189,7 +192,7 @@ def get_pr_commit_messages(pr_number: str, repo: str) -> str | None:
         )
         if result.returncode != 0:
             return None
-        return result.stdout
+        return result.stdout if result.stdout.strip() else None
     except _BEST_EFFORT_ERRORS:
         return None
 
@@ -295,7 +298,7 @@ def check_closes_discipline(
     blockers: list[str] = []
     sources = [("PR body", body)]
     if commit_messages_checked:
-        if commit_messages is None:
+        if not isinstance(commit_messages, str) or not commit_messages.strip():
             blockers.append(
                 f"BLOCKER: {CLOSES_DISCIPLINE_TAG} Could not verify PR commit messages before "
                 "evaluating semantic closing references. The check fails closed; retry when "

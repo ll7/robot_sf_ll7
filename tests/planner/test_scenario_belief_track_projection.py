@@ -7,6 +7,7 @@ evidence.
 
 from __future__ import annotations
 
+import builtins
 import json
 from dataclasses import replace
 from types import SimpleNamespace
@@ -14,6 +15,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+import robot_sf.planner.scenario_belief_adapter as adapter
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.planner.scenario_belief_adapter import (
     BELIEF_AWARE_PLANNER_INPUT_SCHEMA_VERSION,
@@ -21,6 +23,8 @@ from robot_sf.planner.scenario_belief_adapter import (
     BeliefAwarePlannerInput,
     PlannerTrackBelief,
     project_belief_aware_planner_input,
+    project_scenario_belief_for_belief_aware_planner,
+    project_scenario_belief_for_planner,
 )
 from robot_sf.representation import VisibilityState, scenario_belief_from_simulator_oracle
 
@@ -53,6 +57,22 @@ def _belief_fixture():
         last_observed_age_s=0.25,
     )
     return replace(belief, sim_time_s=0.5, agents=(belief.agents[0], occluded))
+
+
+def _standalone_track(**overrides):
+    """Build a valid standalone planner track for validation-edge tests."""
+    values = {
+        "track_id": "ped_000",
+        "mean_state": np.zeros(5),
+        "covariance": np.eye(5),
+        "confidence": 1.0,
+        "existence_probability": 1.0,
+        "visibility": True,
+        "age_steps": 0,
+        "source": "unit_test",
+    }
+    values.update(overrides)
+    return PlannerTrackBelief(**values)
 
 
 def test_projection_retains_visible_and_occluded_tracks_by_canonical_id() -> None:
@@ -248,3 +268,276 @@ def test_identity_lifecycle_limitation_is_explicit() -> None:
     assert projected.diagnostics["retirement_tracking"] == (
         "unavailable_at_scenario_belief_boundary"
     )
+
+
+def test_lazy_representation_import_fails_closed(monkeypatch) -> None:
+    """Optional representation imports should report unavailable instead of leaking ImportError."""
+    original_import = builtins.__import__
+
+    def blocked_import(name, *args, **kwargs):
+        if name.startswith("robot_sf.representation.scenario_belief"):
+            raise ModuleNotFoundError("scenario belief dependencies blocked")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", blocked_import)
+    assert adapter._load_scenario_belief_types() is None
+
+
+def test_legacy_projection_fails_closed_for_malformed_inputs() -> None:
+    """The legacy sidecar adapter distinguishes malformed observations and reports."""
+    malformed_observation = SimpleNamespace(to_socnav_struct=lambda: {})
+    result = project_scenario_belief_for_planner(
+        malformed_observation,
+        planner_key="stream_gap",
+    )
+    assert result.compatibility["reason"] == "malformed_legacy_observation"
+
+    malformed_count = SimpleNamespace(
+        to_socnav_struct=lambda: {"pedestrians": {"count": ["not-a-number"]}}
+    )
+    result = project_scenario_belief_for_planner(malformed_count, planner_key="stream_gap")
+    assert result.compatibility["reason"] == "malformed_pedestrian_count"
+
+    incomplete_report = SimpleNamespace(
+        to_socnav_struct=lambda: {"pedestrians": {"count": np.asarray([1.0])}},
+        to_uncertainty_report=lambda: {"agents": []},
+    )
+    result = project_scenario_belief_for_planner(incomplete_report, planner_key="stream_gap")
+    assert result.compatibility["reason"] == "malformed_uncertainty_report"
+    assert adapter._pedestrian_count({"pedestrians": []}) is None
+    assert adapter._pedestrian_count({"pedestrians": {"count": []}}) is None
+
+
+def test_projection_invalid_belief_fallbacks_and_alias(monkeypatch) -> None:
+    """Typed projection failures retain an explicit status and safe legacy fallback."""
+    belief = _belief_fixture()
+    original_loader = adapter._load_scenario_belief_types
+    monkeypatch.setattr(adapter, "_load_scenario_belief_types", lambda: None)
+    unavailable = project_belief_aware_planner_input(
+        belief,
+        planner_name="BeliefGuidedLocalPlanner",
+    )
+    assert unavailable.diagnostics["fallback_reason"] == (
+        "scenario_belief_representation_unavailable"
+    )
+    monkeypatch.setattr(adapter, "_load_scenario_belief_types", original_loader)
+
+    unsupported = project_belief_aware_planner_input(
+        object(),
+        planner_name="BeliefGuidedLocalPlanner",
+    )
+    assert unsupported.diagnostics["fallback_reason"] == "belief_type_unsupported"
+
+    bad_time = project_belief_aware_planner_input(
+        replace(belief, sim_time_s=-0.1),
+        planner_name="BeliefGuidedLocalPlanner",
+    )
+    assert bad_time.diagnostics["status"] == "invalid_belief"
+    assert "sim_time_s" in bad_time.diagnostics["fallback_reason"]
+
+    duplicate = replace(
+        belief,
+        agents=(belief.agents[0], replace(belief.agents[1], entity_id=belief.agents[0].entity_id)),
+    )
+    duplicate_result = project_belief_aware_planner_input(
+        duplicate,
+        planner_name="BeliefGuidedLocalPlanner",
+    )
+    assert duplicate_result.diagnostics["status"] == "invalid_belief"
+    assert "duplicate track_id" in duplicate_result.diagnostics["fallback_reason"]
+
+    alias = project_scenario_belief_for_belief_aware_planner(
+        belief,
+        planner_key="BeliefGuidedLocalPlanner",
+    )
+    assert (
+        alias.to_dict()
+        == project_belief_aware_planner_input(
+            belief,
+            planner_name="BeliefGuidedLocalPlanner",
+        ).to_dict()
+    )
+
+    def fail_legacy(_belief):
+        raise RuntimeError("legacy observation unavailable")
+
+    monkeypatch.setattr(type(belief), "to_socnav_struct", fail_legacy)
+    legacy_failure = project_belief_aware_planner_input(
+        belief,
+        planner_name="BeliefGuidedLocalPlanner",
+    )
+    assert legacy_failure.diagnostics["fallback_reason"] == "legacy_observation_unavailable"
+
+
+def test_validation_helpers_reject_malformed_values() -> None:
+    """Array, covariance, probability, integer, and ID validators fail closed."""
+
+    class _BadArray:
+        def __array__(self):
+            raise TypeError("cannot convert")
+
+    with pytest.raises(ValueError, match="numeric array"):
+        adapter._readonly_float_array("state", _BadArray(), shape=(2,))
+    with pytest.raises(ValueError, match="shape"):
+        adapter._readonly_float_array("state", [1.0], shape=(2,))
+    with pytest.raises(ValueError, match="numeric dtype"):
+        adapter._readonly_float_array("state", ["x", "y"], shape=(2,))
+    with pytest.raises(ValueError, match="finite"):
+        adapter._readonly_float_array("state", [np.nan, 1.0], shape=(2,))
+
+    with pytest.raises(ValueError, match="numeric"):
+        adapter._readonly_covariance([[1.0], [1.0, 2.0]])
+    assert adapter._readonly_covariance(np.eye(4)).shape == (5, 5)
+    with pytest.raises(ValueError, match="numeric"):
+        adapter._readonly_covariance(np.full((5, 5), "x", dtype=object))
+    with pytest.raises(ValueError, match="shape"):
+        adapter._readonly_covariance(np.eye(3))
+    nonfinite_covariance = np.eye(5)
+    nonfinite_covariance[0, 0] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        adapter._readonly_covariance(nonfinite_covariance)
+    asymmetric_covariance = np.eye(5)
+    asymmetric_covariance[0, 1] = 1.0
+    with pytest.raises(ValueError, match="symmetric"):
+        adapter._readonly_covariance(asymmetric_covariance)
+
+    with pytest.raises(ValueError, match="finite value"):
+        adapter._validate_probability("probability", object())
+    with pytest.raises(ValueError, match="finite value"):
+        adapter._validate_probability("probability", 2.0)
+    with pytest.raises(ValueError, match="finite value"):
+        adapter._validate_probability("probability", np.nan)
+
+    with pytest.raises(ValueError, match="non-negative integer"):
+        adapter._validate_nonnegative_int("steps", object())
+    with pytest.raises(ValueError, match="non-negative integer"):
+        adapter._validate_nonnegative_int("steps", -1)
+    with pytest.raises(ValueError, match="non-negative integer"):
+        adapter._validate_nonnegative_int("steps", 1.5)
+    with pytest.raises(ValueError, match="track_id"):
+        adapter._validate_track_id(True)
+    with pytest.raises(ValueError, match="track_id"):
+        adapter._validate_track_id("")
+    with pytest.raises(ValueError, match="track_id"):
+        adapter._validate_track_id(1.5)
+
+
+def test_typed_input_validation_and_json_edges() -> None:
+    """Typed records own nested values and reject invalid mappings or JSON payloads."""
+    track = _standalone_track()
+    wrapper = BeliefAwarePlannerInput(
+        legacy_observation={
+            "scalar": np.float32(1.0),
+            "nested": (np.asarray([2.0]), [np.asarray([3.0])]),
+        },
+        tracks={"ped_000": track},
+        belief_step=0,
+        diagnostics={"status": "projected"},
+    )
+    assert wrapper.projection == wrapper.diagnostics
+    assert wrapper.legacy_observation["scalar"] == 1.0
+
+    assert adapter._runtime_value_is_finite(np.asarray([1], dtype=np.int64))
+    assert not adapter._runtime_value_is_finite(np.asarray([np.inf]))
+    assert not adapter._runtime_value_is_finite(np.float32(np.nan))
+    assert adapter._runtime_value_is_finite({"values": [1.0, (2.0,)]})
+    assert not adapter._runtime_value_is_finite({"values": [float("nan")]})
+    assert adapter._json_safe(np.float32(1.25)) == pytest.approx(1.25)
+    with pytest.raises(ValueError, match="NaN or Inf"):
+        adapter._json_safe(float("nan"))
+
+    with pytest.raises(TypeError, match="legacy_observation"):
+        BeliefAwarePlannerInput(legacy_observation=None, tracks={}, belief_step=0)
+    with pytest.raises(TypeError, match="tracks"):
+        BeliefAwarePlannerInput(legacy_observation={}, tracks=None, belief_step=0)
+    with pytest.raises(ValueError, match="schema_version"):
+        BeliefAwarePlannerInput(legacy_observation={}, tracks={}, belief_step=0, schema_version="")
+    with pytest.raises(TypeError, match="diagnostics"):
+        BeliefAwarePlannerInput(legacy_observation={}, tracks={}, belief_step=0, diagnostics=None)
+    with pytest.raises(TypeError, match="PlannerTrackBelief"):
+        BeliefAwarePlannerInput(legacy_observation={}, tracks={"bad": object()}, belief_step=0)
+
+    numeric_track = _standalone_track(track_id=1)
+    text_track = _standalone_track(track_id="1")
+    colliding = BeliefAwarePlannerInput(
+        legacy_observation={},
+        tracks={1: numeric_track, "1": text_track},
+        belief_step=0,
+    )
+    with pytest.raises(ValueError, match="collide"):
+        colliding.to_dict()
+
+    non_json = BeliefAwarePlannerInput(
+        legacy_observation={},
+        tracks={},
+        belief_step=0,
+        diagnostics={"unserializable": object()},
+    )
+    with pytest.raises(ValueError, match="JSON-safe"):
+        non_json.to_dict()
+
+
+def test_track_field_and_time_validation_edges() -> None:
+    """Planner-track fields and canonical time metadata reject unsafe values."""
+    for overrides, match in (
+        ({"visibility": "yes"}, "visibility"),
+        ({"source": ""}, "source"),
+        ({"visibility_state": ""}, "visibility_state"),
+        ({"identity_lifecycle_token": ""}, "identity_lifecycle_token"),
+    ):
+        with pytest.raises(ValueError, match=match):
+            _standalone_track(**overrides)
+
+    with pytest.raises(ValueError, match="belief time metadata"):
+        adapter._belief_step(SimpleNamespace(sim_time_s="bad", timestep_s=0.1))
+    with pytest.raises(ValueError, match="sim_time_s"):
+        adapter._belief_step(SimpleNamespace(sim_time_s=-1.0, timestep_s=0.1))
+    with pytest.raises(ValueError, match="timestep_s"):
+        adapter._belief_step(SimpleNamespace(sim_time_s=0.0, timestep_s=-1.0))
+    with pytest.raises(ValueError, match="positive"):
+        adapter._belief_step(SimpleNamespace(sim_time_s=1.0, timestep_s=0.0))
+    with pytest.raises(ValueError, match="aligned"):
+        adapter._belief_step(SimpleNamespace(sim_time_s=0.15, timestep_s=0.1))
+    assert adapter._belief_step(SimpleNamespace(sim_time_s=0.0, timestep_s=0.0)) == 0
+    assert adapter._belief_step(SimpleNamespace(sim_time_s=0.2, timestep_s=0.1)) == 2
+
+    with pytest.raises(ValueError, match="last_observed_age_s must be numeric"):
+        adapter._age_steps(object(), 0.1)
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        adapter._age_steps(-1.0, 0.1)
+    with pytest.raises(ValueError, match="positive observation age"):
+        adapter._age_steps(1.0, 0.0)
+    assert adapter._age_steps(0.0, 0.0) == 0
+    assert adapter._age_steps(0.21, 0.1) == 3
+
+
+def test_entity_projection_rejects_malformed_public_fields() -> None:
+    """Entity-to-track projection validates every public state and provenance field."""
+    agent = _belief_fixture().agents[0]
+
+    def project(candidate):
+        return adapter._planner_track_from_entity(
+            candidate,
+            timestep_s=0.1,
+            visibility_type=VisibilityState,
+        )
+
+    with pytest.raises(ValueError, match="entity_id"):
+        project(replace(agent, entity_id=object()))
+    with pytest.raises(ValueError, match="visibility_state"):
+        project(replace(agent, visibility_state="visible"))
+    with pytest.raises(ValueError, match="state or covariance"):
+        project(replace(agent, position=SimpleNamespace(mean_xy=(0.0, 0.0))))
+    with pytest.raises(ValueError, match="two coordinates"):
+        project(replace(agent, position=replace(agent.position, mean_xy=(0.0,))))
+    with pytest.raises(ValueError, match="2x2"):
+        project(
+            replace(
+                agent,
+                position=replace(agent.position, covariance_xy=((1.0, 0.0, 0.0),) * 3),
+            )
+        )
+    with pytest.raises(ValueError, match="radius"):
+        project(replace(agent, radius="bad"))
+    with pytest.raises(ValueError, match="source adapter"):
+        project(replace(agent, source=replace(agent.source, adapter="")))

@@ -1021,6 +1021,11 @@ def test_pr_ready_sigterm_writes_optional_receipt_and_cleans_lane(
         core_release.touch()
         _wait_for_marker(optional_ready, process)
         os.kill(process.pid, signal.SIGTERM)
+        # If the readiness controller fails before its child process-group
+        # cleanup completes, the fixture lane must still be released before
+        # bounded pipe collection. Otherwise the orphaned lane keeps the test's
+        # pipes open and masks the cleanup assertion with a collector timeout.
+        optional_release.touch()
         stdout, stderr = _collect_process(process)
 
         assert process.returncode == 143, stdout + stderr
@@ -1033,6 +1038,7 @@ def test_pr_ready_sigterm_writes_optional_receipt_and_cleans_lane(
         assert "termination receipt:" in stderr
     finally:
         _stop_process_group(process, signal.SIGKILL)
+        optional_release.touch()
         _collect_process(process)
 
 

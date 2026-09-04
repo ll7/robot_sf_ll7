@@ -965,6 +965,50 @@ def test_guarded_apply_failure_returns_the_observed_receipt() -> None:
     assert failed["merge_result"]["status"] == "failed"
 
 
+def test_guarded_apply_failure_preserves_post_error_reconciliation() -> None:
+    """A failed merge PUT records PR and main readbacks without retrying the PUT."""
+    receipt = _receipt()
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    main_sha = "f" * 40
+
+    def failed_api(
+        method: str, path: str, payload: dict[str, Any] | None
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        calls.append((method, path, payload))
+        if method == "PUT":
+            return None, "gh: Server Error (HTTP 502)"
+        if path.endswith("/pulls/42"):
+            return {
+                "state": "open",
+                "merged": False,
+                "head": {"sha": HEAD_SHA},
+                "merge_commit_sha": None,
+            }, None
+        return {
+            "ref": "refs/heads/main",
+            "object": {"sha": main_sha, "type": "commit"},
+        }, None
+
+    failed, error = apply_guarded_merge(
+        receipt, repository="owner/repo", api=failed_api, observed_at=OBSERVED_AT
+    )
+
+    assert error == "gh: Server Error (HTTP 502)"
+    assert failed is not None
+    assert calls == [
+        ("PUT", "repos/owner/repo/pulls/42/merge", {"sha": HEAD_SHA, "merge_method": "squash"}),
+        ("GET", "repos/owner/repo/pulls/42", None),
+        ("GET", "repos/owner/repo/git/ref/heads/main", None),
+    ]
+    response = failed["merge_result"]["response"]
+    assert response["error"] == "gh: Server Error (HTTP 502)"
+    reconciliation = response["post_error_reconciliation"]
+    assert reconciliation["status"] == "unconfirmed"
+    assert reconciliation["expected_head_sha"] == HEAD_SHA
+    assert reconciliation["pr_readback"]["state"] == "open"
+    assert reconciliation["main_ref_readback"]["object"]["sha"] == main_sha
+
+
 def test_validate_mode_is_read_only(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     receipt = _receipt()
     receipt_file = tmp_path / "receipt.json"

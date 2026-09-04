@@ -1539,7 +1539,7 @@ def apply_guarded_merge(
         {"sha": head_sha, "merge_method": "squash"},
     )
     if error:
-        # Verify whether the PR actually transitioned to merged despite the PUT error (e.g. timeout or already merged)
+        # Verify whether the PR actually transitioned to merged despite the PUT error (e.g. timeout or already merged).
         verified, verify_error = api("GET", f"repos/{repository}/pulls/{pr_number}", None)
         if (
             not verify_error
@@ -1573,8 +1573,21 @@ def apply_guarded_merge(
                     "merge_commit_sha": merged_sha,
                     "receipt": merged_receipt,
                 }, None
+        main_ref, main_ref_error = api("GET", f"repos/{repository}/git/ref/heads/main", None)
+        reconciliation: dict[str, Any] = {
+            "status": "unconfirmed",
+            "expected_head_sha": head_sha,
+            "pr_readback": copy.deepcopy(verified),
+            "pr_readback_error": verify_error,
+            "main_ref_readback": copy.deepcopy(main_ref),
+            "main_ref_readback_error": main_ref_error,
+        }
+        failure_response = {
+            "error": error,
+            "post_error_reconciliation": reconciliation,
+        }
         return record_merge_result(
-            receipt, status="failed", response={"error": error}, observed_at=observed_at
+            receipt, status="failed", response=failure_response, observed_at=observed_at
         ), error
     if not isinstance(response, Mapping) or response.get("merged") is not True:
         message = (

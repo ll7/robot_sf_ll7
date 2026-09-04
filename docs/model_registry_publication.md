@@ -157,7 +157,10 @@ GitHub-release model downloads use a bounded three-attempt retry policy for HTTP
 responses. A numeric or HTTP-date `Retry-After` header is honored, capped at 30 seconds; malformed
 or missing headers use the local backoff. Every downloaded artifact is still checksum-verified
 before atomic publication. A cache entry is reused only when its registry-pinned SHA-256 matches;
-an invalid entry is replaced, never trusted.
+an invalid entry is replaced, never trusted. This verification also applies when a GitHub-release
+entry's `local_path` points into `output/model_cache/<model_id>/`. Entries whose local path
+intentionally names an unpacked in-tree checkpoint while the release asset is an archive retain that
+local checkpoint contract.
 
 CI may use the repository's pre-populated, SHA-keyed model cache (`actions/cache`) as an optimization,
 but this path does not add credentials, a mirror, or a redistribution authorization. If the public

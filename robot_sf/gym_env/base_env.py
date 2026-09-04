@@ -181,6 +181,9 @@ class BaseEnv(SimulationUICloseMixin, Env):
         # Initialize the list to store recorded states
         self.recorded_states: list[VisualizableSimState] = []
         self.recording_enabled = recording_enabled
+        # Successful legacy pickle saves; distinguishes the expected first-reset
+        # flush (no episode recorded yet) from a suspicious post-save empty save.
+        self._legacy_recording_saves = 0
 
         # Route recordings through the canonical artifact tree (or override) by default.
         self._recording_dir = resolve_artifact_path(recording_dir)
@@ -290,8 +293,11 @@ class BaseEnv(SimulationUICloseMixin, Env):
             target_path = resolve_artifact_path(filename)
 
         if len(self.recorded_states) == 0:
-            logger.warning("No states recorded, skipping save")
-            # TODO: First env.reset will always have no recorded states
+            if self._legacy_recording_saves == 0:
+                # First reset flushes before any episode was recorded; expected.
+                logger.debug("No recorded states yet, skipping save")
+            else:
+                logger.warning("No states recorded since last save, skipping save")
             return
 
         target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -301,6 +307,7 @@ class BaseEnv(SimulationUICloseMixin, Env):
             logger.info("Recording saved to {target_path}", target_path=f"{target_path}")
             logger.info("Reset state list")
             self.recorded_states = []
+            self._legacy_recording_saves += 1
 
     def start_episode_recording(
         self,

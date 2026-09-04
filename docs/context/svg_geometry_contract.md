@@ -26,9 +26,9 @@ extended 2.135 m past the map `viewBox` into the northern boundary wall.
 
 ## The two contracts
 
-- `legacy` (default): ancestor transforms are ignored, reproducing the
-  historical as-run coordinates exactly. All existing call sites keep this
-  behavior unless they opt in.
+- `legacy` (default): ancestor transforms are ignored, preserving the
+  historical transform-ignoring geometry and simulation inputs. All existing
+  call sites keep this behavior unless they opt in.
 - `corrected`: nested ancestor `translate(...)` transforms apply to parsed
   paths, rectangles, and circles. Any other transform class (`scale`, `rotate`,
   `skew`, `matrix`) or malformed transform fails closed with `ValueError`
@@ -41,8 +41,9 @@ Selection: `SvgMapConverter(svg_file, geometry_contract=...)`,
 
 ## Compatibility boundary
 
-- Every `MapDefinition` records `svg_geometry_contract`. Legacy and corrected
-  rows must never be pooled as comparable evidence.
+- Every `MapDefinition` records `svg_geometry_contract`. The label distinguishes
+  legacy and corrected executions; downstream consumers must partition them or
+  establish explicit compatibility before pooling rows as comparable evidence.
 - Existing frozen results and figures that ran on the legacy loader remain
   labeled legacy/as-run and are not retroactively corrected.
 - The low-tier bottleneck cell authored no pedestrian markers (`diss#2144`);

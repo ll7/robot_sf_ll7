@@ -3,7 +3,7 @@
 `SvgMapConverter` historically ignored ancestor `transform` attributes, silently
 displacing every transformed element. The corrected geometry contract applies
 nested `translate(...)` transforms and fails closed on anything else, while the
-legacy contract reproduces the historical transform-ignoring coordinates exactly.
+legacy contract preserves the historical transform-ignoring geometry.
 """
 
 from __future__ import annotations
@@ -57,8 +57,8 @@ def _zone_bounds(zone) -> tuple[float, float, float, float]:
     return min(xs), min(ys), max(xs), max(ys)
 
 
-def test_nested_translate_rect_exact(tmp_path: Path):
-    """Nested translations accumulate exactly for rectangles."""
+def test_nested_translate_rect(tmp_path: Path):
+    """Nested translations accumulate for rectangles."""
     svg = _write_svg(
         tmp_path,
         "nested_rect.svg",
@@ -70,8 +70,8 @@ def test_nested_translate_rect_exact(tmp_path: Path):
     assert _zone_bounds(md.ped_spawn_zones[0]) == pytest.approx((14.0, 16.0, 18.0, 20.0))
 
 
-def test_nested_translate_path_exact(tmp_path: Path):
-    """Nested translations accumulate exactly for path waypoints."""
+def test_nested_translate_path(tmp_path: Path):
+    """Nested translations accumulate for path waypoints."""
     svg = _write_svg(
         tmp_path,
         "nested_path.svg",
@@ -85,8 +85,8 @@ def test_nested_translate_path_exact(tmp_path: Path):
     assert flat == pytest.approx([4.0, 6.0, 14.0, 6.0])
 
 
-def test_nested_translate_circle_exact(tmp_path: Path):
-    """Nested translations accumulate exactly for circle centers."""
+def test_nested_translate_circle(tmp_path: Path):
+    """Nested translations accumulate for circle centers."""
     svg = _write_svg(
         tmp_path,
         "nested_circle.svg",
@@ -131,7 +131,7 @@ def test_element_own_transform_applies(tmp_path: Path):
 
 
 def test_legacy_ignores_nested_translate(tmp_path: Path):
-    """The legacy contract reproduces transform-ignoring coordinates exactly."""
+    """The legacy contract preserves transform-ignoring geometry."""
     svg = _write_svg(
         tmp_path,
         "legacy_nested.svg",
@@ -187,6 +187,25 @@ def test_map_definition_rejects_unknown_contract(tmp_path: Path):
 
 
 @pytest.mark.parametrize(
+    ("transform", "expected"),
+    [
+        ("translate(1)", (1.0, 0.0)),
+        ("translate(1 2)", (1.0, 2.0)),
+        ("translate(1, 2)", (1.0, 2.0)),
+        ("translate(1.e2)", (100.0, 0.0)),
+        ("translate(1,2) translate(3,4)", (4.0, 6.0)),
+    ],
+)
+def test_valid_translate_syntax_is_consumed_as_a_complete_list(
+    transform: str, expected: tuple[float, float]
+) -> None:
+    """Valid SVG number forms and transform-list separators are accepted."""
+    assert SvgMapConverter._parse_translate_offset(transform, source="test") == pytest.approx(
+        expected
+    )
+
+
+@pytest.mark.parametrize(
     "transform",
     [
         "scale(2)",
@@ -199,6 +218,7 @@ def test_map_definition_rejects_unknown_contract(tmp_path: Path):
         "translate(foo,2)",
         "translate(1px,2)",
         "translate(1;2)",
+        "translate(1.2.3)",
         "translate(1,2,3)",
         "translate()",
         "translate(1,2) scale(3)",
@@ -236,7 +256,7 @@ def test_unsupported_transform_on_self_fails_closed(tmp_path: Path):
 
 
 def test_legacy_tolerates_unsupported_transform(tmp_path: Path):
-    """Legacy mode keeps byte-exact historical behavior, even for scale."""
+    """Legacy mode preserves historical transform-ignoring behavior, even for scale."""
     svg = _write_svg(
         tmp_path,
         "legacy_scale.svg",
@@ -285,7 +305,7 @@ TRANSFORMED_MAPS = [
 
 @pytest.mark.parametrize("map_name", TRANSFORMED_MAPS)
 def test_corrected_matches_authored_geometry(map_name: str):
-    """Corrected coordinates equal the authored file geometry for every transformed map."""
+    """Corrected coordinates match authored geometry within numeric tolerance."""
     md = SvgMapConverter(
         str(SVG_DIR / map_name), geometry_contract="corrected"
     ).get_map_definition()
@@ -303,7 +323,7 @@ def test_corrected_matches_authored_geometry(map_name: str):
 
 @pytest.mark.parametrize("map_name", TRANSFORMED_MAPS)
 def test_legacy_reproduces_historical_coordinates(map_name: str):
-    """Legacy coordinates equal raw attributes, ignoring ancestor transforms."""
+    """Legacy coordinates match raw attributes within numeric tolerance."""
     root = ET.parse(str(SVG_DIR / map_name)).getroot()
     raw: dict[str, tuple[float, float, float, float]] = {}
     for rect in root.findall(".//svg:rect", SVG_NS):
@@ -335,8 +355,23 @@ def test_corrected_bottleneck_removes_wall_and_spawn_overlaps():
     assert goal[3] <= 40.0, "pedestrian goal still leaves the map viewBox"
 
 
+def test_corrected_bottleneck_translates_real_pedestrian_route():
+    """Corrected mode shifts the authored pedestrian route with its group."""
+    map_path = str(SVG_DIR / "classic_bottleneck.svg")
+    legacy = SvgMapConverter(map_path, geometry_contract="legacy").get_map_definition()
+    corrected = SvgMapConverter(map_path, geometry_contract="corrected").get_map_definition()
+
+    legacy_route = legacy.ped_routes[0]
+    corrected_route = corrected.ped_routes[0]
+    expected = [(x, y - 4.3651647) for x, y in legacy_route.waypoints]
+
+    assert corrected_route.source_label == legacy_route.source_label == "ped_route_0_0"
+    assert corrected_route.waypoints != legacy_route.waypoints
+    assert corrected_route.waypoints == pytest.approx(expected)
+
+
 def test_legacy_bottleneck_keeps_historical_overlaps():
-    """Legacy bottleneck geometry keeps the reported as-run overlaps exactly."""
+    """Legacy bottleneck geometry keeps the reported as-run overlaps."""
     md = SvgMapConverter(
         str(SVG_DIR / "classic_bottleneck.svg"), geometry_contract="legacy"
     ).get_map_definition()

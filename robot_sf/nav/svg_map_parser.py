@@ -27,13 +27,14 @@ Supported SVG Elements and Labels:
 
 Geometry contracts (issue #8314):
     - 'legacy' (default): ancestor SVG transforms are ignored, reproducing the
-      historical as-run coordinates exactly.
+      historical transform-ignoring geometry and simulation inputs.
     - 'corrected': nested ancestor ``translate(...)`` transforms are applied to
       parsed paths, rectangles, and circles. Any other transform class
       (scale, rotate, skew, matrix) or malformed transform fails closed with
       ``ValueError`` instead of being silently ignored.
     The active contract is recorded on ``MapDefinition.svg_geometry_contract``
-    so legacy and corrected rows cannot be pooled accidentally.
+    so downstream consumers can partition legacy and corrected rows before
+    comparing or pooling them.
 
 Typical Usage:
     # Load a single SVG map
@@ -158,8 +159,8 @@ class SvgMapConverter:
 
         Args:
             svg_file: Path to the SVG file to parse.
-            geometry_contract: ``"legacy"`` reproduces the historical
-                transform-ignoring coordinates exactly. ``"corrected"`` applies
+            geometry_contract: ``"legacy"`` preserves the historical
+                transform-ignoring geometry. ``"corrected"`` applies
                 nested ancestor ``translate(...)`` transforms and fails closed
                 on any other transform class (issue #8314).
 
@@ -373,11 +374,8 @@ class SvgMapConverter:
         """Shift parsed absolute waypoints by an ancestor translation.
 
         Returns:
-            tuple[tuple[float, float], ...]: Shifted waypoints, or the input
-                unchanged for a near-zero translation.
+            tuple[tuple[float, float], ...]: Shifted waypoints.
         """
-        if abs(dx) < 1e-12 and abs(dy) < 1e-12:
-            return coordinates
         return tuple((x + dx, y + dy) for x, y in coordinates)
 
     @staticmethod
@@ -1944,8 +1942,8 @@ def convert_map(
 
     Args:
         svg_file: Path to the SVG file to convert.
-        geometry_contract: ``"legacy"`` reproduces the historical
-            transform-ignoring coordinates exactly. ``"corrected"`` applies
+        geometry_contract: ``"legacy"`` preserves the historical
+            transform-ignoring geometry. ``"corrected"`` applies
             nested ancestor ``translate(...)`` transforms and fails closed on
             any other transform class (issue #8314).
 

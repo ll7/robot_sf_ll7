@@ -18,8 +18,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 
 @dataclass
@@ -35,12 +38,93 @@ class Sample:
     duration_seconds: float
 
 
+class SlowTestCaptureError(ValueError):
+    """Raised when a slow-test capture violates the JSON input contract."""
+
+
+def _invalid(path: Path, message: str) -> SlowTestCaptureError:
+    """Build a path-qualified validation error for a capture."""
+    return SlowTestCaptureError(f"capture '{path}': {message}")
+
+
+def _read_json(path: Path) -> Any:
+    """Read and decode one capture, converting boundary failures to clean errors."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise _invalid(path, f"unable to read file: {exc}") from exc
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise _invalid(path, f"invalid JSON at line {exc.lineno}, column {exc.colno}") from exc
+    except ValueError as exc:
+        raise _invalid(path, f"invalid JSON: {exc}") from exc
+
+
+def _validated_duration(path: Path, index: int, value: Any) -> float:
+    """Validate and normalize a JSON duration without accepting booleans or strings."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise _invalid(
+            path,
+            f"sample {index} field 'duration_seconds' must be a finite, "
+            "non-negative number (booleans and strings are not accepted)",
+        )
+    try:
+        duration = float(value)
+    except (OverflowError, ValueError) as exc:
+        raise _invalid(
+            path,
+            f"sample {index} field 'duration_seconds' must be a finite, non-negative number",
+        ) from exc
+    if not math.isfinite(duration) or duration < 0:
+        raise _invalid(
+            path,
+            f"sample {index} field 'duration_seconds' must be a finite, non-negative number",
+        )
+    return duration
+
+
+def _sample_rows(path: Path, raw: Any) -> list[Any]:
+    """Validate the accepted top-level shapes and return their sample rows."""
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, dict):
+        if "samples" not in raw:
+            raise _invalid(path, "top level must be a list or contain a 'samples' list")
+        data = raw["samples"]
+        if not isinstance(data, list):
+            raise _invalid(path, "field 'samples' must be a list")
+        return data
+    raise _invalid(path, "top level must be a list or an object containing a 'samples' list")
+
+
+def _validated_sample(path: Path, index: int, entry: Any) -> Sample:
+    """Validate one row and construct its normalized sample."""
+    if not isinstance(entry, dict):
+        raise _invalid(path, f"sample {index} must be an object")
+    if "test_identifier" not in entry:
+        raise _invalid(path, f"sample {index} is missing required field 'test_identifier'")
+    identifier = entry["test_identifier"]
+    if not isinstance(identifier, str) or not identifier.strip():
+        raise _invalid(
+            path,
+            f"sample {index} field 'test_identifier' must be a non-empty string",
+        )
+    if "duration_seconds" not in entry:
+        raise _invalid(path, f"sample {index} is missing required field 'duration_seconds'")
+    return Sample(
+        test_identifier=identifier,
+        duration_seconds=_validated_duration(path, index, entry["duration_seconds"]),
+    )
+
+
 def load_any(path: Path) -> list[Sample]:
     """Load slow-test timing samples from a JSON capture.
 
     Accepts either a simple list of sample objects or an object containing a
-    ``"samples"`` list. Entries missing ``test_identifier`` or
-    ``duration_seconds`` are skipped.
+    ``"samples"`` list. Every row is validated before it is returned; malformed
+    rows and duplicate identifiers are rejected instead of being skipped or
+    overwritten.
 
     Args:
         path: Path to the JSON capture file.
@@ -48,19 +132,19 @@ def load_any(path: Path) -> list[Sample]:
     Returns:
         Parsed :class:`Sample` instances in file order.
     """
-    raw = json.loads(path.read_text(encoding="utf-8"))
-    data = raw["samples"] if isinstance(raw, dict) and "samples" in raw else raw
+    data = _sample_rows(path, _read_json(path))
     out: list[Sample] = []
-    for entry in data:
-        try:
-            out.append(
-                Sample(
-                    test_identifier=entry["test_identifier"],
-                    duration_seconds=float(entry["duration_seconds"]),
-                ),
+    seen: dict[str, int] = {}
+    for index, entry in enumerate(data):
+        sample = _validated_sample(path, index, entry)
+        if sample.test_identifier in seen:
+            raise _invalid(
+                path,
+                f"sample {index} has duplicate test_identifier {sample.test_identifier!r} "
+                f"from sample {seen[sample.test_identifier]}; duplicate identifiers are rejected",
             )
-        except KeyError:
-            continue
+        seen[sample.test_identifier] = index
+        out.append(sample)
     return out
 
 
@@ -73,7 +157,15 @@ def index_by(samples: list[Sample]) -> dict[str, float]:
     Returns:
         Mapping of test identifier to duration in seconds.
     """
-    return {s.test_identifier: s.duration_seconds for s in samples}
+    indexed: dict[str, float] = {}
+    for sample in samples:
+        if sample.test_identifier in indexed:
+            raise SlowTestCaptureError(
+                f"duplicate test_identifier {sample.test_identifier!r}; "
+                "duplicate identifiers are rejected",
+            )
+        indexed[sample.test_identifier] = sample.duration_seconds
+    return indexed
 
 
 def main(argv=None) -> int:
@@ -93,8 +185,12 @@ def main(argv=None) -> int:
     p.add_argument("--before", required=True)
     p.add_argument("--after", required=True)
     args = p.parse_args(argv)
-    before = index_by(load_any(Path(args.before)))
-    after = index_by(load_any(Path(args.after)))
+    try:
+        before = index_by(load_any(Path(args.before)))
+        after = index_by(load_any(Path(args.after)))
+    except SlowTestCaptureError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     deltas = []
     for test_id, new_dur in after.items():
         old_dur = before.get(test_id)

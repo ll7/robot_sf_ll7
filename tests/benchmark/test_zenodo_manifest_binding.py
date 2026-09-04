@@ -212,9 +212,12 @@ def test_all_zenodo_modes_preserve_manifest_binding(tmp_path: Path) -> None:
 
     bundle = tmp_path / "bundle.tar.gz"
     bundle.write_bytes(b"manifest-bound bundle")
+    remote_after_upload = _deposition_payload(binding)
+    remote_after_upload["files"] = [_draft_file(binding, bundle.name)]
     session.gets = [
         _Response(_deposition_payload(binding)),
-        _Response([_draft_file(binding, bundle.name)]),
+        _Response(remote_after_upload),
+        _Response(remote_after_upload),
     ]
     session.puts = [_Response({"checksum": "md5:fixture"})]
     state = upload(session, state, [bundle], release_binding=binding)
@@ -279,9 +282,12 @@ def test_recover_restores_manifest_bound_state_for_upload_and_verify(tmp_path: P
 
     bundle = tmp_path / "bundle.tar.gz"
     bundle.write_bytes(b"recovered draft bundle")
+    remote_after_upload = dict(draft)
+    remote_after_upload["files"] = [_draft_file(binding, bundle.name)]
     session.gets = [
         _Response(draft),
-        _Response([_draft_file(binding, bundle.name)]),
+        _Response(remote_after_upload),
+        _Response(remote_after_upload),
     ]
     session.puts = [_Response({"checksum": "md5:fixture"})]
     state = upload(session, state, [bundle], release_binding=binding)

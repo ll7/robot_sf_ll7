@@ -291,6 +291,32 @@ def test_merge_queue_gate_requires_newest_exact_head_success() -> None:
     assert summarize_merge_queue_gate([older], head_sha=head_sha)["status"] == "success"
 
 
+def test_merge_queue_gate_rejects_malformed_newest_run_instead_of_using_old_success() -> None:
+    """Malformed latest check data must not hide behind an older green run."""
+    head_sha = "a" * 40
+    older = {
+        "id": 100,
+        "name": "merge-queue-gate",
+        "workflow_name": "Merge Queue Gate",
+        "status": "completed",
+        "conclusion": "success",
+        "completed_at": "2026-08-17T10:00:00Z",
+        "head_sha": head_sha,
+    }
+    malformed_newer = {
+        **older,
+        "id": "not-a-check-run-id",
+        "status": "queued",
+        "conclusion": None,
+        "completed_at": None,
+        "started_at": "2026-08-17T11:00:00Z",
+    }
+
+    summary = summarize_merge_queue_gate([older, malformed_newer], head_sha=head_sha)
+
+    assert summary["status"] == "malformed"
+
+
 def test_merge_queue_gate_rejects_missing_workflow_identity() -> None:
     """A job name alone cannot prove the exact required workflow context."""
     head_sha = "a" * 40
@@ -375,6 +401,38 @@ def test_workflow_resolution_requires_matching_run_head() -> None:
         == ""
     )
     assert calls == ["repos/owner/repo/actions/runs/123"]
+
+
+def test_workflow_resolution_does_not_cache_incomplete_payloads() -> None:
+    """An incomplete run response must be retried within the same snapshot."""
+    calls: list[str] = []
+    responses = [
+        {},
+        {"name": "Merge Queue Gate", "head_sha": "a" * 40},
+    ]
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        calls.append(path)
+        return responses.pop(0), None
+
+    check_run = {
+        "details_url": "https://github.com/owner/repo/actions/runs/701/job/702",
+        "head_sha": "a" * 40,
+    }
+    cache: dict[str, dict[str, Any]] = {}
+
+    assert (
+        _resolve_check_run_workflow_name(check_run, repo="owner/repo", api=fake_api, cache=cache)
+        == ""
+    )
+    assert (
+        _resolve_check_run_workflow_name(check_run, repo="owner/repo", api=fake_api, cache=cache)
+        == "Merge Queue Gate"
+    )
+    assert calls == [
+        "repos/owner/repo/actions/runs/701",
+        "repos/owner/repo/actions/runs/701",
+    ]
 
 
 def test_explicit_holds_and_withdrawn_review_carriers_fail_closed() -> None:

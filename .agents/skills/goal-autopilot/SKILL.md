@@ -434,6 +434,11 @@ When a PR reaches `awaiting_ci` and the local proof bar is otherwise ready:
      --json
    ```
 
+   The wall cap covers nested `gh` reads as well as polling sleeps. A nested-read timeout is a
+   local fail-closed error (exit code 1); an inter-poll pending timeout remains exit code 2. The
+   monitor never cancels remote checks, and POSIX timed-out `gh` process groups include local
+   descendant cleanup.
+
    For a non-blocking current-state snapshot, prefer:
 
    ```bash

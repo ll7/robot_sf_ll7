@@ -100,6 +100,24 @@ def test_nested_translate_circle_exact(tmp_path: Path):
     assert [(c.cx, c.cy) for c in starts] == pytest.approx([(14.0, 16.0)])
 
 
+def test_corrected_parser_exercises_all_structured_debug_counts(tmp_path: Path):
+    """The corrected parser visits every element-count logging branch."""
+    svg = _write_svg(
+        tmp_path,
+        "structured_debug_counts.svg",
+        _nested_group(
+            '<path inkscape:label="ped_route_0_0" d="M 0 0 L 10 0" />'
+            '<rect inkscape:label="ped_spawn_zone" x="10" y="10" width="4" height="4" />'
+            '<circle inkscape:label="single_ped_a_start" cx="10" cy="10" r="0.5" />'
+        ),
+    )
+    converter = SvgMapConverter(svg, geometry_contract="corrected")
+
+    assert len(converter.path_info) == 2
+    assert len(converter.rect_info) == 4
+    assert len(converter.circle_info) == 1
+
+
 def test_element_own_transform_applies(tmp_path: Path):
     """A transform directly on the element itself also applies."""
     svg = _write_svg(

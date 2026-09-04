@@ -9,8 +9,8 @@
       "occurrences": 0
     },
     "scripts": {
-      "files": 19,
-      "occurrences": 323
+      "files": 18,
+      "occurrences": 307
     },
     "tests": {
       "files": 180,
@@ -32,7 +32,6 @@
     "scripts/tools/analyze_imitation_results.py": 24,
     "scripts/tools/check_artifact_root.py": 16,
     "scripts/tools/compare_training_runs.py": 2,
-    "scripts/tools/migrate_artifacts.py": 16,
     "scripts/training/train_ppo.py": 11,
     "scripts/training/train_ppo_with_pretrained_policy.py": 6,
     "scripts/validation/performance_smoke_test.py": 26,
@@ -226,7 +225,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 199,
-    "total_occurrences": 1566
+    "files": 198,
+    "total_occurrences": 1550
   }
 }

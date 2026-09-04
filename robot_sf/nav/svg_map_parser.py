@@ -1034,8 +1034,10 @@ class SvgMapConverter:
         """
         paths, rects, circles = self._iter_elements_with_offsets()
         logger.debug(
-            f"Found {len(paths)} paths, {len(rects)} rects, {len(circles)} circles "
-            "in the SVG file (corrected geometry contract)"
+            "Found {} paths, {} rects, {} circles in the SVG file (corrected geometry contract)",
+            len(paths),
+            len(rects),
+            len(circles),
         )
 
         path_info: list[SvgPath] = []
@@ -1058,11 +1060,11 @@ class SvgMapConverter:
                 parsed_circle.cy += dy
                 circle_info.append(parsed_circle)
 
-        logger.debug(f"Parsed {len(path_info)} paths in the SVG file")
+        logger.debug("Parsed {} paths in the SVG file", len(path_info))
         self.path_info = path_info
-        logger.debug(f"Parsed {len(rect_info)} rects in the SVG file")
+        logger.debug("Parsed {} rects in the SVG file", len(rect_info))
         self.rect_info = rect_info
-        logger.debug(f"Parsed {len(circle_info)} circles in the SVG file")
+        logger.debug("Parsed {} circles in the SVG file", len(circle_info))
         self.circle_info = circle_info
 
     def _apply_viewbox_offset(self, offset_x: float, offset_y: float) -> None:

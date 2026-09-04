@@ -1000,3 +1000,15 @@ def test_upsert_registry_entry_requires_model_id(tmp_path: Path) -> None:
             {"local_path": "output/model_cache/demo/model.zip"},
             registry_path=tmp_path / "registry.yaml",
         )
+
+
+def test_predictive_proxy_registry_paths_match_release_assets() -> None:
+    """Predictive proxy cache pointers should name their release assets exactly."""
+    registry_path = Path(__file__).resolve().parents[2] / "model" / "registry.yaml"
+    entries = registry.load_registry(registry_path)
+
+    for model_id in ("predictive_proxy_selected_v1", "predictive_proxy_selected_v2_full"):
+        entry = entries[model_id]
+        release = entry["github_release"]
+        assert Path(entry["local_path"]).parts[:3] == ("output", "model_cache", model_id)
+        assert Path(entry["local_path"]).name == release["asset_name"]

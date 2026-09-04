@@ -401,7 +401,7 @@
           "kind": "path",
           "label": "held-out step-three run plan",
           "path": "docs/context/evidence/issue_3275_same_planner_held_out/step3_run_plan.json",
-          "sha256": "8df2f62d2f318bfe5460157c9f38389ac3d319d004611f75d049ad27b680518e"
+          "sha256": "fa77e3b857dcd0eac488442613629173c1ee7b35a1d648b258fcc1ed47e06d83"
         },
         {
           "kind": "path",
@@ -471,7 +471,7 @@
         {
           "path": "docs/context/evidence/issue_3275_same_planner_held_out/SHA256SUMS",
           "role": "same-planner held-out preflight checksum sidecar",
-          "sha256": "cbf101cd379edacb20b18985fe8595339360945def0e2c3605390d3ecc64190c",
+          "sha256": "8e58666a2a449ce2ae61d363ce1fc79641914913acb0dd657464192754839c1f",
           "status": "available"
         },
         {

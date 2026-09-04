@@ -53,7 +53,10 @@ uv run python scripts/dev/watch_pr_ci_status.py <pr-number> --post-merge-commit-
 
 This mode polls the exact commit check-runs and fails closed on a malformed or mismatched response.
 It proves workflow state only; it is not benchmark, research, release, or provenance evidence.
-Keep the merge receipt and exact commit SHA as the authoritative merge record.
+Keep the merge receipt and exact commit SHA as the authoritative merge record. If a merge request
+returns a transport or server error before the PR becomes terminal, preserve the receipt's
+`post_error_reconciliation` evidence as `unconfirmed`; the current-`main` ref is diagnostic only
+and does not establish that the merge succeeded or authorize a retry.
 
 ## Intended Design Alignment
 

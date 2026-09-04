@@ -64,6 +64,12 @@ therefore fails closed.
 This qualifies only the gate's `stale_merge_base` reason; every additional gate reason remains
 blocking. Report and validate modes are read-only.
 
+If the merge PUT returns a transport or server error and the immediate PR readback is not
+terminal, the receipt records a bounded `post_error_reconciliation` object with the PR readback
+and one read-only current-`main` ref readback. Treat that result as `unconfirmed`: preserve the
+original error, do not infer success from the `main` ref, and do not retry without a new external
+state change.
+
 The authority fixture at
 `scripts/dev/single_account_merge_authority_fixture.v1.json` enumerates the allowed callers
 and is checked in tests. Do not add a second direct merge endpoint or a raw merge command to

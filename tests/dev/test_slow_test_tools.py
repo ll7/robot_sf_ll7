@@ -42,10 +42,10 @@ def test_collect_stdin_collapses_phases_and_sorts_by_max_duration() -> None:
         COLLECT_SCRIPT,
         input_text=(
             "random pytest output\n"
+            "0.750s call tests/test_demo.py::test_slow\n"
             "0.250s setup tests/test_demo.py::test_fast\n"
             "1.500s call tests/test_demo.py::test_fast\n"
             "0.100s teardown tests/test_demo.py::test_fast\n"
-            "0.750s call tests/test_demo.py::test_slow\n"
         ),
     )
 
@@ -87,6 +87,39 @@ def test_collect_rejects_overflowing_duration_line() -> None:
     """A matched duration that would serialize as infinity fails closed."""
     with pytest.raises(SlowTestCollectionError, match="duration_seconds"):
         parse([f"{'9' * 400}s call tests/test_demo.py::test_overflow"])
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "-1.0s call tests/test_demo.py::test_negative",
+        "nonsense.s call tests/test_demo.py::test_invalid",
+        "1.0s call",
+    ],
+)
+def test_collect_rejects_malformed_duration_rows_at_cli_boundary(tmp_path: Path, line: str) -> None:
+    """Duration-looking malformed rows fail with the input path and no traceback."""
+    source = tmp_path / "malformed-durations.log"
+    source.write_text(line + "\n", encoding="utf-8")
+
+    result = _run(COLLECT_SCRIPT, "--input", str(source))
+
+    assert result.returncode == 2
+    assert str(source) in result.stderr
+    assert "duration_seconds" in result.stderr or "test_identifier" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert len(result.stderr.strip().splitlines()) == 1
+
+
+def test_collect_accepts_scientific_duration_without_skipping_it(tmp_path: Path) -> None:
+    """A finite numeric duration in scientific notation remains a valid sample."""
+    source = tmp_path / "scientific-duration.log"
+    source.write_text("1e3s call tests/test_demo.py::test_scientific\n", encoding="utf-8")
+
+    result = _run(COLLECT_SCRIPT, "--input", str(source))
+
+    assert result.returncode == 0
+    assert json.loads(result.stdout)[0]["duration_seconds"] == 1000.0
 
 
 def test_compare_accepts_list_and_samples_wrapper(tmp_path: Path) -> None:
@@ -146,36 +179,75 @@ def test_compare_invalid_json_is_one_clean_diagnostic(tmp_path: Path) -> None:
     assert len(result.stderr.strip().splitlines()) == 1
 
 
+def test_compare_rejects_oversized_numeric_without_traceback(tmp_path: Path) -> None:
+    """Python's integer digit limit is reported as a clean capture error."""
+    before = tmp_path / "before.json"
+    after = tmp_path / "after.json"
+    before.write_text(
+        '{"samples":[{"test_identifier":"x","duration_seconds":' + "9" * 5000 + "}]}",
+        encoding="utf-8",
+    )
+    _write_json(after, [])
+
+    result = _run(COMPARE_SCRIPT, "--before", str(before), "--after", str(after))
+
+    assert result.returncode == 2
+    assert "invalid JSON" in result.stderr
+    assert "Traceback" not in result.stderr
+    assert len(result.stderr.strip().splitlines()) == 1
+
+
 @pytest.mark.parametrize(
-    ("payload", "message"),
+    ("payload", "message", "bad_side"),
     [
-        ({"metadata": {}}, "top level must be a list"),
-        ({"samples": {"test_identifier": "x"}}, "field 'samples' must be a list"),
-        (42, "top level must be a list"),
-        ({"samples": ["not an object"]}, "sample 0 must be an object"),
-        ({"samples": [{"duration_seconds": 1.0}]}, "missing required field 'test_identifier'"),
-        ({"samples": [{"test_identifier": "", "duration_seconds": 1.0}]}, "non-empty string"),
-        ({"samples": [{"test_identifier": "  ", "duration_seconds": 1.0}]}, "non-empty string"),
-        ({"samples": [{"test_identifier": "x"}]}, "missing required field 'duration_seconds'"),
+        ({"metadata": {}}, "top level must be a list", "before"),
+        ({"samples": {"test_identifier": "x"}}, "field 'samples' must be a list", "after"),
+        (42, "top level must be a list", "before"),
+        ({"samples": ["not an object"]}, "sample 0 must be an object", "after"),
+        (
+            {"samples": [{"duration_seconds": 1.0}]},
+            "missing required field 'test_identifier'",
+            "before",
+        ),
+        (
+            {"samples": [{"test_identifier": "", "duration_seconds": 1.0}]},
+            "non-empty string",
+            "after",
+        ),
+        (
+            {"samples": [{"test_identifier": "  ", "duration_seconds": 1.0}]},
+            "non-empty string",
+            "before",
+        ),
+        (
+            {"samples": [{"test_identifier": "x"}]},
+            "missing required field 'duration_seconds'",
+            "after",
+        ),
         (
             {"samples": [{"test_identifier": "x", "duration_seconds": "1.0"}]},
             "finite, non-negative number",
+            "before",
         ),
         (
             {"samples": [{"test_identifier": "x", "duration_seconds": True}]},
             "booleans and strings are not accepted",
+            "after",
         ),
         (
             {"samples": [{"test_identifier": "x", "duration_seconds": -1.0}]},
             "finite, non-negative number",
+            "before",
         ),
         (
             {"samples": [{"test_identifier": "x", "duration_seconds": float("nan")}]},
             "finite, non-negative number",
+            "after",
         ),
         (
             {"samples": [{"test_identifier": "x", "duration_seconds": float("inf")}]},
             "finite, non-negative number",
+            "before",
         ),
         (
             {
@@ -185,6 +257,7 @@ def test_compare_invalid_json_is_one_clean_diagnostic(tmp_path: Path) -> None:
                 ]
             },
             "duplicate test_identifier",
+            "after",
         ),
     ],
 )
@@ -192,12 +265,13 @@ def test_compare_rejects_malformed_capture(
     tmp_path: Path,
     payload: object,
     message: str,
+    bad_side: str,
 ) -> None:
-    """Every malformed top-level, row, and field shape fails closed with one message."""
+    """Every malformed shape fails closed regardless of before/after position."""
     before = tmp_path / "before.json"
     after = tmp_path / "after.json"
-    _write_json(before, payload)
-    _write_json(after, [])
+    _write_json(before, payload if bad_side == "before" else [])
+    _write_json(after, payload if bad_side == "after" else [])
 
     result = _run(COMPARE_SCRIPT, "--before", str(before), "--after", str(after))
 

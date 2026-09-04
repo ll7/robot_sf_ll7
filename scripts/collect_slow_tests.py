@@ -37,7 +37,7 @@ from datetime import (
 from pathlib import Path
 
 LINE_RE = re.compile(
-    r"^(?P<seconds>\d+(?:\.\d+)?)s\s+(?P<phase>call|setup|teardown)\s+(?P<nodeid>.+)$",
+    r"^(?P<seconds>[^\s]+)s\s+(?P<phase>call|setup|teardown)(?:\s+(?P<nodeid>.*))?$",
 )
 
 
@@ -57,8 +57,14 @@ def parse(lines: list[str]) -> list[dict[str, object]]:
         m = LINE_RE.match(line.strip())
         if not m:
             continue
-        secs = float(m.group("seconds"))
-        nodeid = m.group("nodeid").strip()
+        try:
+            secs = float(m.group("seconds"))
+        except ValueError as exc:
+            raise SlowTestCollectionError(
+                f"line {line_number} field 'duration_seconds' must be a finite, "
+                "non-negative number",
+            ) from exc
+        nodeid = (m.group("nodeid") or "").strip()
         if not nodeid:
             raise SlowTestCollectionError(
                 f"line {line_number} has an empty test_identifier; expected a pytest node id",
@@ -102,7 +108,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         data = parse(_read_lines(args.input))
     except SlowTestCollectionError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        message = str(exc)
+        if args.input and not message.startswith("unable to read"):
+            message = f"input file '{args.input}': {message}"
+        print(f"error: {message}", file=sys.stderr)
         return 2
     json.dump(data, sys.stdout, indent=2)
     return 0

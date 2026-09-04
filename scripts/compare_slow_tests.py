@@ -57,6 +57,8 @@ def _read_json(path: Path) -> Any:
         return json.loads(text)
     except json.JSONDecodeError as exc:
         raise _invalid(path, f"invalid JSON at line {exc.lineno}, column {exc.colno}") from exc
+    except ValueError as exc:
+        raise _invalid(path, f"invalid JSON: {exc}") from exc
 
 
 def _validated_duration(path: Path, index: int, value: Any) -> float:

@@ -19,6 +19,10 @@ from tests.support.environment_guards import configure_git_identity
 
 ROOT = Path(__file__).resolve().parents[2]
 
+# PR #8440 is the known pre-guard regression: its merge reference closed the
+# incident in #8414 before the two-green reconciler criterion was established.
+KNOWN_HISTORICAL_MAIN_CI_CLOSING_GUARD_HITS = {8440: {"8414"}}
+
 
 def _valid_review_sidecar(artifact: Path, artifact_path: str) -> dict[str, object]:
     """Build a valid immutable-evidence review sidecar payload for a fixture artifact."""
@@ -55,7 +59,7 @@ def test_has_declaration_for_issue() -> None:
 
 @patch("subprocess.run")
 def test_check_closes_discipline(mock_run: MagicMock) -> None:
-    """Test check_closes_discipline blocks closing epic issues."""
+    """Test check_closes_discipline protects special issue lifecycles."""
     # Test case 1: Issue has no epic label
     mock_run.return_value = MagicMock(returncode=0, stdout='{"labels": [{"name": "bug"}]}')
     blockers = pr_contract_check.check_closes_discipline("Closes #123", "ll7/robot_sf_ll7")
@@ -66,6 +70,48 @@ def test_check_closes_discipline(mock_run: MagicMock) -> None:
     blockers = pr_contract_check.check_closes_discipline("Closes #123", "ll7/robot_sf_ll7")
     assert len(blockers) == 1
     assert "epic" in blockers[0]
+
+    # A canonical marker blocks all semantic closing keywords, including a repair PR.
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps(
+            {"labels": [], "body": "<!-- ll7-main-red-incident:v1 -->\nAutomated incident."}
+        ),
+    )
+    blockers = pr_contract_check.check_closes_discipline("Fixes #8414", "ll7/robot_sf_ll7")
+    assert len(blockers) == 1
+    assert "main continuous-integration (CI) incident" in blockers[0]
+    assert "Refs #8414" in blockers[0]
+    assert "two consecutive decisive green runs" in blockers[0]
+
+    # The compatibility label protects marker-less incidents as well.
+    mock_run.return_value = MagicMock(
+        returncode=0, stdout=json.dumps({"labels": [{"name": "ll7-main-red-incident:v1"}]})
+    )
+    blockers = pr_contract_check.check_closes_discipline("Resolves #8441", "ll7/robot_sf_ll7")
+    assert len(blockers) == 1
+    assert "main continuous-integration (CI) incident" in blockers[0]
+
+    # A failed metadata read is unknown, not evidence that semantic closure is safe.
+    mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="API unavailable")
+    blockers = pr_contract_check.check_closes_discipline("Closes #999", "ll7/robot_sf_ll7")
+    assert len(blockers) == 1
+    assert "fails closed" in blockers[0]
+
+
+def test_check_closes_discipline_allows_non_closing_reference() -> None:
+    """``Refs`` keeps GitHub from closing an incident before reconciliation."""
+    assert not pr_contract_check.check_closes_discipline("Refs #8414", "ll7/robot_sf_ll7")
+
+
+def test_build_comment_body_marks_main_ci_closing_guard_failure() -> None:
+    """The summary row reports incident-closure blockers as failed."""
+    blocker = (
+        f"BLOCKER: {pr_contract_check.CLOSES_DISCIPLINE_TAG} PR body attempts to close "
+        "a canonical main-CI incident."
+    )
+    comment = pr_contract_check.build_comment_body([blocker], [], [], "🔴 FAILED")
+    assert "| 1. Closes-discipline | ❌ FAILED |" in comment
 
 
 def test_check_closure_declaration() -> None:
@@ -567,7 +613,26 @@ def test_regression_last_20_merged_prs() -> None:
         blockers, _, _ = pr_contract_check.run_all_checks(
             title, body, changed_files, "ll7/robot_sf_ll7", "origin/main", None
         )
-        assert not blockers, f"PR #{number} ('{title}') triggered false blockers: {blockers}"
+        metadata_unavailable = next(
+            (blocker for blocker in blockers if "Could not verify issue" in blocker), None
+        )
+        if metadata_unavailable is not None:
+            # The production rule intentionally fails closed. A local regression sweep must not
+            # turn a temporary GitHub/API rate limit into a false code failure.
+            pytest.skip(f"Skipping live PR regression sweep: {metadata_unavailable}")
+        expected_incident_issues = KNOWN_HISTORICAL_MAIN_CI_CLOSING_GUARD_HITS.get(number, set())
+        for issue in expected_incident_issues:
+            assert any(f"incident issue #{issue}" in blocker for blocker in blockers), (
+                f"PR #{number} no longer exposes its known historical guard hit"
+            )
+        unexpected_blockers = [
+            blocker
+            for blocker in blockers
+            if not any(f"incident issue #{issue}" in blocker for issue in expected_incident_issues)
+        ]
+        assert not unexpected_blockers, (
+            f"PR #{number} ('{title}') triggered unexpected blockers: {unexpected_blockers}"
+        )
 
 
 class TestPlaceholderDocstringRatchet:

@@ -2594,6 +2594,14 @@ workflow uses the existing `main_ci_incident_reconcile.py` signal and requires
 two newer consecutive decisive green runs before it posts an evidence comment
 and closes an incident as completed. Active, pending, malformed, or
 concurrent-change cases remain open.
+Cancelled or superseded runs are neutral: they count as neither green nor red
+and cannot satisfy either slot in the two-green streak.
+
+To preserve that evidence boundary, pull requests must use `Refs #N` for these
+incidents instead of GitHub's semantic closing keywords (`Closes`, `Fixes`, or
+`Resolves`). The blocking PR Contract Check rejects semantic closure for either
+the canonical body marker or its compatibility label, leaving the scheduled
+reconciler as the sole closer after the two-green criterion is met.
 
 The helper is report-only unless `--apply` is supplied, so an offline or local
 inspection can use:

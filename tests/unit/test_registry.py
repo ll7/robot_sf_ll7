@@ -346,7 +346,6 @@ models:
     )
 
 
-
 def test_resolve_model_path_downloads_github_release_asset(
     monkeypatch,
     tmp_path: Path,

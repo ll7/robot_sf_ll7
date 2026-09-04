@@ -259,12 +259,23 @@ def resolve_model_path(
 
     entry = get_registry_entry(model_id, registry_path)
     local_path = entry.get("local_path")
+    registry_model_id = str(entry.get("model_id", model_id))
     if local_path:
         resolved = Path(local_path)
         if not resolved.is_absolute():
             resolved = Path.cwd() / resolved
         if resolved.exists():
-            return resolved
+            release = entry.get("github_release")
+            if release is None or not _is_release_cache_path(resolved, model_id=registry_model_id):
+                return resolved
+            if isinstance(release, dict):
+                expected_sha256 = _github_release_expected_sha256(release)
+                if not expected_sha256:
+                    raise ValueError(
+                        f"Registry entry '{registry_model_id}' github_release.sha256 is required."
+                    )
+                if _cached_release_path_is_valid(resolved, expected_sha256):
+                    return resolved
 
     if bool(entry.get("local_only")):
         raise _local_only_resolution_error(
@@ -413,6 +424,23 @@ def _cached_release_path_is_valid(path: Path, expected_sha256: str) -> bool:
     if resolved_cached_path not in _LOGGED_CACHED_MODEL_ARTIFACTS:
         _LOGGED_CACHED_MODEL_ARTIFACTS.add(resolved_cached_path)
         logger.info("Using cached model artifact: {}", path)
+    return True
+
+
+def _is_release_cache_path(path: Path, *, model_id: str) -> bool:
+    """Return whether a local registry path is inside its release cache directory.
+
+    Release metadata can describe an archive whose usable local path is an unpacked checkpoint
+    prefix (for example, a TensorFlow ``.meta`` file). Only paths in the conventional model cache
+    are verified against the release archive checksum; those unpacked local contracts must continue
+    to resolve directly.
+    """
+    cache_root = Path(os.path.abspath(Path.cwd() / "output" / "model_cache" / model_id))
+    candidate = Path(os.path.abspath(path))
+    try:
+        candidate.relative_to(cache_root)
+    except ValueError:
+        return False
     return True
 
 

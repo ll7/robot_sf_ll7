@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 from pathlib import Path
@@ -273,6 +274,76 @@ def test_resolve_model_path_prefers_existing_local_path(tmp_path: Path) -> None:
 
     resolved = registry.resolve_model_path("local_model", registry_path=registry_path)
     assert resolved == local_model
+
+
+def test_resolve_model_path_verifies_existing_release_cache(monkeypatch, tmp_path: Path) -> None:
+    """Release-backed cache paths must not bypass their registry checksum."""
+    monkeypatch.chdir(tmp_path)
+    payload = b"verified-checkpoint"
+    expected_sha = hashlib.sha256(payload).hexdigest()
+    cached = tmp_path / "output/model_cache/public_model/public_model-model.zip"
+    cached.parent.mkdir(parents=True)
+    cached.write_bytes(b"substituted-checkpoint")
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        f"""
+version: 1
+models:
+  - model_id: public_model
+    local_path: output/model_cache/public_model/public_model-model.zip
+    github_release:
+      repo: ll7/robot_sf_ll7
+      tag: artifact/models-test
+      asset_name: public_model-model.zip
+      sha256: {expected_sha}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(FileNotFoundError, match="not found locally"):
+        registry.resolve_model_path(
+            "public_model", registry_path=registry_path, allow_download=False
+        )
+
+    cached.write_bytes(payload)
+    resolved = registry.resolve_model_path(
+        "public_model", registry_path=registry_path, allow_download=False
+    )
+    assert resolved == cached
+
+
+def test_resolve_model_path_preserves_unpacked_release_local_path(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Unpacked local paths remain usable when release metadata names an archive bundle."""
+    monkeypatch.chdir(tmp_path)
+    local_model = tmp_path / "model/checkpoint/network.meta"
+    local_model.parent.mkdir(parents=True)
+    local_model.write_text("unpacked-checkpoint", encoding="utf-8")
+    registry_path = tmp_path / "registry.yaml"
+    registry_path.write_text(
+        """
+version: 1
+models:
+  - model_id: bundled_model
+    local_path: model/checkpoint/network.meta
+    github_release:
+      repo: ll7/robot_sf_ll7
+      tag: artifact/models-test
+      asset_name: bundled_model-checkpoint.tar.gz
+      sha256: 0000000000000000000000000000000000000000000000000000000000000000
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        registry.resolve_model_path(
+            "bundled_model", registry_path=registry_path, allow_download=False
+        )
+        == local_model
+    )
 
 
 def test_resolve_model_path_downloads_github_release_asset(

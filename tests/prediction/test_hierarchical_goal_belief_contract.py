@@ -319,6 +319,9 @@ def test_malformed_external_shapes_fail_closed() -> None:
 def test_hierarchy_constructor_rejects_invalid_vectors_and_lifecycle_shapes() -> None:
     """Constructor validation covers duplicate, non-normalized, and malformed hierarchy state."""
     posterior = _posterior()
+    for candidate_id in ("unknown", "UNKNOWN"):
+        with pytest.raises(ValueError, match="reserved"):
+            HierarchicalProbability(candidate_id, 0.5)
     with pytest.raises(TypeError, match="must be an array"):
         replace(posterior, destination_probabilities=None)  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="must contain HierarchicalProbability"):

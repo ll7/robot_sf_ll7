@@ -875,11 +875,12 @@ def _actions_lifecycle_age_source(
     job = job or {}
     if phase == "queued":
         candidates = (
-            (run.get("created_at"), "workflow_created_at"),
             (job.get("created_at"), "job_created_at"),
+            (run.get("created_at"), "workflow_created_at"),
         )
     elif phase == "setup":
         candidates = (
+            (job.get("created_at"), "job_created_at"),
             (run.get("run_started_at"), "workflow_started_at"),
             (run.get("created_at"), "workflow_created_at"),
         )
@@ -1004,6 +1005,7 @@ def _annotate_actions_lifecycle(  # noqa: C901 - explicit fail-closed diagnostic
                 "job_status": str((job or {}).get("status", "") or "") or None,
                 "run_created_at": str((run or {}).get("created_at", "") or "") or None,
                 "run_started_at": str((run or {}).get("run_started_at", "") or "") or None,
+                "job_created_at": str((job or {}).get("created_at", "") or "") or None,
                 "job_started_at": str((job or {}).get("started_at", "") or "") or None,
                 "run_head_sha": run_head_sha or None,
                 "exact_head_sha_matches": exact_head_matches,
@@ -1421,6 +1423,19 @@ def _append_pending_reason(
             url = queued.get("details_url")
             suffix = f"  |  {url}" if url else ""
             lines.append(f"    - {queued.get('name', 'unknown')}{suffix}")
+        return
+
+    if pending_reason == "actions_gate_age":
+        age_warnings = checks.get("age_warnings", [])
+        if not isinstance(age_warnings, list):
+            age_warnings = []
+        lines.append(f"  pending_reason: {pending_reason}  |  affected checks: {len(age_warnings)}")
+        for warning in age_warnings:
+            lines.append(
+                f"    - {warning.get('name', 'unknown')}: "
+                f"{warning.get('phase', 'unknown')} age={warning.get('age_seconds', 'unknown')}s "
+                f"| run {warning.get('run_id', 'unknown')} job {warning.get('job_id', 'unknown')}"
+            )
         return
 
     lag_details = checks.get("status_propagation_lag", [])

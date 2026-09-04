@@ -638,6 +638,10 @@ _FAST_FILES = {
     # control-plane contract; keep it in PR fast shards so changed runner lines
     # are covered without admitting any benchmark result.
     "test_runner_exception_logging.py",
+    # Recording-save policy tests are deterministic branch contracts (uninitialized
+    # shells, no environments) for the changed recording-save path; keep them in
+    # PR fast shards for the exact-head changed-coverage gate (issue #8422).
+    "test_recording_save_policy.py",
 }
 _SLOW_FILE_OVERRIDES = {
     "test_edge_cases_recording.py",

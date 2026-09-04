@@ -98,8 +98,13 @@ def test_empty_save_first_reset_is_debug_not_warning():
             path.unlink()
 
 
+@pytest.mark.slow
 def test_pedestrian_empty_save_first_reset_is_debug(tmp_path, monkeypatch):
-    """PedestrianEnv mirrors the first-reset debug / post-save warning split (#8422)."""
+    """PedestrianEnv mirrors the first-reset debug / post-save warning split (#8422).
+
+    Slow integration counterpart to the fast branch pins in
+    ``tests/test_recording_save_policy.py``.
+    """
     monkeypatch.setenv("ROBOT_SF_ARTIFACT_ROOT", str(tmp_path))
     from robot_sf.gym_env.pedestrian_env import PedestrianEnv
 
@@ -131,18 +136,3 @@ def test_pedestrian_empty_save_first_reset_is_debug(tmp_path, monkeypatch):
             env.exit()
     finally:
         logger.remove(handler_id)
-
-
-def test_single_agent_delegation_forwards_save_counter(tmp_path):
-    """Delegation shim forwards/restores the save counter without AttributeError."""
-    from robot_sf.gym_env.abstract_envs import SingleAgentEnv
-
-    class _Stub:
-        recorded_states: list = []
-        map_def = None
-        _legacy_recording_saves = 0
-
-    stub = _Stub()
-    SingleAgentEnv.save_recording(stub, str(tmp_path / "delegated.pkl"))
-    assert stub._legacy_recording_saves == 0
-    assert not (tmp_path / "delegated.pkl").exists()

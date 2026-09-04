@@ -77,7 +77,11 @@ from robot_sf.nav.obstacle import Obstacle, obstacle_from_svgrectangle
 _LOGGED_OBSTACLE_PATH_EVENTS: set[tuple[str, str, str]] = set()
 
 _SVG_NAMESPACE = "http://www.w3.org/2000/svg"
-_TRANSLATE_FUNCTION = re.compile(r"translate\s*\(\s*([^)]*)\)")
+_SVG_NUMBER = r"[+-]?(?:(?:\d+(?:\.\d*)?)|(?:\.\d+))(?:[eE][+-]?\d+)?"
+_TRANSFORM_FUNCTION = re.compile(r"(?P<name>[A-Za-z]+)\s*\((?P<arguments>[^()]*)\)")
+_TRANSLATE_ARGUMENTS = re.compile(
+    rf"^\s*(?P<x>{_SVG_NUMBER})(?:(?:\s*,\s*|\s+)(?P<y>{_SVG_NUMBER}))?\s*$"
+)
 
 
 def _log_obstacle_path_event_once(
@@ -206,6 +210,58 @@ class SvgMapConverter:
             )
 
     @staticmethod
+    def _parse_translate_arguments(match: re.Match[str], *, source: str) -> tuple[float, float]:
+        """Parse one validated ``translate(...)`` function's arguments.
+
+        Returns:
+            tuple[float, float]: The finite ``(x, y)`` translation values.
+        """
+        argument_match = _TRANSLATE_ARGUMENTS.fullmatch(match.group("arguments"))
+        if argument_match is None:
+            raise ValueError(
+                f"Malformed translate transform {match.group(0)!r} on {source}; "
+                "expected translate(tx[, ty]) with finite numbers."
+            )
+        x = float(argument_match.group("x"))
+        y_value = argument_match.group("y")
+        y = float(y_value) if y_value is not None else 0.0
+        if not isfinite(x) or not isfinite(y):
+            raise ValueError(
+                f"Malformed translate transform {match.group(0)!r} on {source}; "
+                "expected translate(tx[, ty]) with finite numbers."
+            )
+        return x, y
+
+    @staticmethod
+    def _advance_transform_cursor(transform_value: str, cursor: int, *, source: str) -> int:
+        """Consume one valid separator between transform functions.
+
+        Returns:
+            int: Cursor positioned at the next transform function or at the end.
+        """
+        separator_start = cursor
+        while cursor < len(transform_value) and transform_value[cursor] in " \t\r\n":
+            cursor += 1
+        if cursor >= len(transform_value):
+            return cursor
+        if transform_value[cursor] == ",":
+            cursor += 1
+            while cursor < len(transform_value) and transform_value[cursor] in " \t\r\n":
+                cursor += 1
+            if cursor >= len(transform_value) or transform_value[cursor] == ",":
+                raise ValueError(
+                    f"Malformed SVG transform {transform_value!r} on {source}; "
+                    "expected transform functions separated by whitespace or one comma."
+                )
+            return cursor
+        if cursor == separator_start:
+            raise ValueError(
+                f"Malformed SVG transform {transform_value!r} on {source}; "
+                "expected transform functions separated by whitespace or one comma."
+            )
+        return cursor
+
+    @staticmethod
     def _parse_translate_offset(transform_value: str | None, *, source: str) -> tuple[float, float]:
         """Parse an SVG transform attribute restricted to ``translate(...)``.
 
@@ -225,32 +281,38 @@ class SvgMapConverter:
             return (0.0, 0.0)
         dx = 0.0
         dy = 0.0
-        consumed: list[tuple[int, int]] = []
-        for match in _TRANSLATE_FUNCTION.finditer(transform_value):
-            numbers = [
-                float(number)
-                for number in re.findall(
-                    r"[+-]?(?:\d+\.\d+|\d+|\.\d+)(?:[eE][+-]?\d+)?", match.group(1)
-                )
-            ]
-            if len(numbers) not in (1, 2) or not all(isfinite(n) for n in numbers):
-                raise ValueError(
-                    f"Malformed translate transform {match.group(0)!r} on {source}; "
-                    "expected translate(tx[, ty]) with finite numbers."
-                )
-            dx += numbers[0]
-            dy += numbers[1] if len(numbers) > 1 else 0.0
-            consumed.append(match.span())
-        remainder_parts: list[str] = []
+        function_count = 0
         cursor = 0
-        for start, end in consumed:
-            remainder_parts.append(transform_value[cursor:start])
-            cursor = end
-        remainder_parts.append(transform_value[cursor:])
-        if "".join(remainder_parts).strip(" \t\r\n,"):
+        while cursor < len(transform_value) and transform_value[cursor] in " \t\r\n":
+            cursor += 1
+        if cursor < len(transform_value) and transform_value[cursor] == ",":
             raise ValueError(
-                f"Unsupported SVG transform {transform_value!r} on {source}; "
-                "only translate(...) is supported under the corrected geometry contract."
+                f"Malformed SVG transform {transform_value!r} on {source}; "
+                "expected a transform function list."
+            )
+        while cursor < len(transform_value):
+            match = _TRANSFORM_FUNCTION.match(transform_value, cursor)
+            if match is None:
+                raise ValueError(
+                    f"Malformed SVG transform {transform_value!r} on {source}; "
+                    "expected a transform function list."
+                )
+            function_count += 1
+            if match.group("name") != "translate":
+                raise ValueError(
+                    f"Unsupported SVG transform {transform_value!r} on {source}; "
+                    "only translate(...) is supported under the corrected geometry contract."
+                )
+            own_dx, own_dy = SvgMapConverter._parse_translate_arguments(match, source=source)
+            dx += own_dx
+            dy += own_dy
+            cursor = SvgMapConverter._advance_transform_cursor(
+                transform_value, match.end(), source=source
+            )
+        if function_count == 0:
+            raise ValueError(
+                f"Malformed SVG transform {transform_value!r} on {source}; "
+                "expected at least one translate(...) function."
             )
         return (dx, dy)
 

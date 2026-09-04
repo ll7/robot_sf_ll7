@@ -149,6 +149,39 @@ def test_nested_translate_path(tmp_path: Path):
     assert flat == pytest.approx([4.0, 6.0, 14.0, 6.0])
 
 
+def test_sub_threshold_translate_path_preserves_contracts(tmp_path: Path):
+    """Corrected mode applies tiny translations while legacy mode ignores them."""
+    dx, dy = 5e-13, -7e-13
+    assert abs(dx) < 1e-12
+    assert abs(dy) < 1e-12
+    svg = _write_svg(
+        tmp_path,
+        "sub_threshold_path.svg",
+        (
+            f'<g transform="translate({dx},{dy})">'
+            '<path inkscape:label="ped_route_0_0" d="M 0 0 L 1 1" />'
+            "</g>"
+        ),
+    )
+
+    legacy_route = next(
+        route
+        for route in SvgMapConverter(svg, geometry_contract="legacy").path_info
+        if route.label == "ped_route_0_0"
+    )
+    corrected_route = next(
+        route
+        for route in SvgMapConverter(svg, geometry_contract="corrected").path_info
+        if route.label == "ped_route_0_0"
+    )
+
+    assert legacy_route.coordinates == ((0.0, 0.0), (1.0, 1.0))
+    assert corrected_route.coordinates == tuple(
+        (x + dx, y + dy) for x, y in legacy_route.coordinates
+    )
+    assert corrected_route.coordinates != legacy_route.coordinates
+
+
 def test_nested_translate_circle(tmp_path: Path):
     """Nested translations accumulate for circle centers."""
     svg = _write_svg(

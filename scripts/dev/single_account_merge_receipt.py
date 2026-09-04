@@ -34,6 +34,7 @@ AUTHORITY_FIXTURE_SCHEMA = "single_account_merge_authority_fixture.v1"
 PROVENANCE_SCHEMA = "single_account_merge_evidence_provenance.v1"
 PROVENANCE_DATA_SOURCES = frozenset({"graphql", "rest_fallback_graphql_quota"})
 PROVENANCE_THREAD_STATUSES = frozenset({"separate_query", "resolved", "unresolved", "unavailable"})
+CLOSING_DISCIPLINE_STATUSES = frozenset({"passed", "blocked", "unavailable"})
 
 SUCCESS_CONCLUSIONS = frozenset({"success", "neutral", "skipped"})
 PENDING_STATUSES = frozenset(
@@ -118,6 +119,84 @@ def _full_sha(value: Any) -> bool:
 def _digest(value: Any) -> bool:
     """Return whether *value* is a full SHA-256 digest."""
     return isinstance(value, str) and bool(_DIGEST_RE.fullmatch(value))
+
+
+def _normalize_closing_discipline(value: Any) -> dict[str, Any]:
+    """Normalize the explicit semantic-closing evidence carried by a receipt."""
+    if not isinstance(value, Mapping):
+        return {
+            "status": "unavailable",
+            "blockers": ["closing discipline evidence was not provided"],
+        }
+    status = value.get("status")
+    blockers = value.get("blockers")
+    if status not in CLOSING_DISCIPLINE_STATUSES:
+        status = "unavailable"
+        blockers = ["closing discipline result is missing or malformed"]
+    elif not isinstance(blockers, list) or not all(
+        isinstance(item, str) and item for item in blockers
+    ):
+        status = "unavailable"
+        blockers = ["closing discipline blockers are missing or malformed"]
+
+    normalized: dict[str, Any] = {"status": status, "blockers": list(blockers)}
+    for key in ("head_sha", "body_sha256"):
+        raw = value.get(key)
+        if isinstance(raw, str) and raw:
+            normalized[key] = raw
+    sources = value.get("sources")
+    if isinstance(sources, Mapping) and all(
+        isinstance(sources.get(key), str) and sources.get(key)
+        for key in ("pull_request", "commits", "issues")
+    ):
+        normalized["sources"] = {
+            key: str(sources[key]) for key in ("pull_request", "commits", "issues")
+        }
+    return normalized
+
+
+def build_closing_discipline_evidence(
+    pr_number: int | str, *, repository: str, head_sha: str, body: str
+) -> dict[str, Any]:
+    """Recheck live PR text, paginated commits, and current issue metadata.
+
+    The merge gate owns the semantic check itself.  This wrapper binds its result
+    to the exact PR head and body that were read by the caller, so a receipt cannot
+    carry a bare ``status: passed`` detached from the live PR snapshot.
+    """
+    evidence: dict[str, Any] = {
+        "status": "unavailable",
+        "blockers": [],
+        "head_sha": head_sha,
+        "body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest()
+        if isinstance(body, str)
+        else "",
+        "sources": {
+            "pull_request": "live_pr_snapshot",
+            "commits": "paginated_pr_commits",
+            "issues": "current_issue_metadata",
+        },
+    }
+    if not _full_sha(head_sha) or not isinstance(body, str):
+        evidence["blockers"] = ["live PR head or body is missing or malformed"]
+        return evidence
+
+    from scripts.dev.merge_queue_gate import _fetch_live_closing_discipline
+
+    status, blockers = _fetch_live_closing_discipline(
+        pr_number,
+        repo=repository,
+        body=body,
+    )
+    evidence["status"] = status if status in CLOSING_DISCIPLINE_STATUSES else "unavailable"
+    evidence["blockers"] = list(blockers)
+    if evidence["status"] == "passed" and evidence["blockers"]:
+        evidence["status"] = "unavailable"
+        evidence["blockers"] = [
+            "passed closing discipline returned blockers",
+            *evidence["blockers"],
+        ]
+    return evidence
 
 
 def _identity(record: Mapping[str, Any]) -> str:
@@ -1096,6 +1175,7 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
     expected_head_cas: Any = None,
     ordinary_cas: Mapping[str, Any] | None = None,
     gate_audit: Mapping[str, Any] | None = None,
+    closing_discipline: Mapping[str, Any] | None = None,
     evidence_provenance: Any = None,
     pr_state: str | None = None,
     pr_merged_at: str | None = None,
@@ -1122,6 +1202,7 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
         if ordinary_cas is not None
         else {"status": "not_required", "reason_codes": []}
     )
+    normalized_closing_discipline = _normalize_closing_discipline(closing_discipline)
     receipt: dict[str, Any] = {
         "schema": RECEIPT_SCHEMA,
         "repository": repository,
@@ -1140,6 +1221,7 @@ def build_receipt(  # noqa: PLR0913 - schema fields are intentionally explicit a
         "expected_head_cas": {"request": cas, "status": "not_applied"},
         "ordinary_cas": normalized_ordinary_cas,
         "gate_audit": copy.deepcopy(dict(gate_audit)) if gate_audit is not None else None,
+        "closing_discipline": normalized_closing_discipline,
         "pr_state": _string(pr_state).upper() or None,
         "pr_merged_at": pr_merged_at,
         "observed_at": timestamp,
@@ -1202,6 +1284,45 @@ def _premerge_reasons(  # noqa: C901, PLR0912, PLR0915 - every waiver/hold dimen
                 reasons.append("merge_queue_gate_not_passed")
                 reasons.extend(f"merge_queue_gate_{reason}" for reason in gate_reasons)
                 reasons.extend(ordinary_cas_reasons)
+
+    closing_discipline = receipt.get("closing_discipline")
+    if not isinstance(closing_discipline, Mapping):
+        reasons.append("closing_discipline_not_verified")
+    else:
+        closing_status = closing_discipline.get("status")
+        closing_blockers = closing_discipline.get("blockers")
+        if closing_status != "passed":
+            reasons.append(
+                {
+                    "blocked": "closing_discipline_blocked",
+                    "unavailable": "closing_discipline_unavailable",
+                }.get(str(closing_status), "closing_discipline_not_verified")
+            )
+        if not isinstance(closing_blockers, list) or not all(
+            isinstance(item, str) and item for item in closing_blockers
+        ):
+            reasons.append("closing_discipline_not_verified")
+        elif closing_status == "passed" and closing_blockers:
+            reasons.append("closing_discipline_not_verified")
+        if closing_status == "passed":
+            if (
+                _string(closing_discipline.get("head_sha")).lower()
+                != _string(receipt.get("head_sha")).lower()
+            ):
+                reasons.append("closing_discipline_head_mismatch")
+            if not _digest(_string(closing_discipline.get("body_sha256"))):
+                reasons.append("closing_discipline_body_digest_missing")
+            sources = closing_discipline.get("sources")
+            if not isinstance(sources, Mapping) or {
+                sources.get("pull_request"),
+                sources.get("commits"),
+                sources.get("issues"),
+            } != {
+                "live_pr_snapshot",
+                "paginated_pr_commits",
+                "current_issue_metadata",
+            }:
+                reasons.append("closing_discipline_sources_missing")
 
     checks = (
         receipt.get("required_checks")
@@ -1327,6 +1448,7 @@ def validate_receipt(receipt: Any) -> dict[str, Any]:
         "holds",
         "waiver",
         "expected_head_cas",
+        "closing_discipline",
         "observed_at",
         "merge_result",
         "receipt_digest",
@@ -1403,6 +1525,10 @@ def _compare_live_evidence(  # noqa: C901, PLR0912 - revalidation compares every
         live_evidence.get("evidence_provenance")
     ) != _canonical_json(receipt.get("evidence_provenance")):
         reasons.append("live_evidence_provenance_changed")
+    if _canonical_json(live_evidence.get("closing_discipline")) != _canonical_json(
+        receipt.get("closing_discipline")
+    ):
+        reasons.append("live_closing_discipline_changed")
 
     if is_terminal_merged:
         merged_sha = live_evidence.get("merge_commit_sha")
@@ -1519,6 +1645,19 @@ def record_merge_result(
     return result
 
 
+def _verify_live_premerge_receipt(receipt: Mapping[str, Any], *, repository: str) -> str | None:
+    """Re-read live merge evidence before the receipt owner issues its write."""
+    live_evidence, live_error = build_live_evidence(
+        int(receipt["pr_number"]), repository=repository
+    )
+    if live_error or not isinstance(live_evidence, Mapping):
+        return "live pre-merge recheck unavailable: " + (live_error or "evidence was not an object")
+    live_verification = verify_receipt(receipt, live_evidence=live_evidence)
+    if live_verification.get("passed") is not True:
+        return "live pre-merge recheck blocked: " + ", ".join(live_verification.get("reasons", []))
+    return None
+
+
 def apply_guarded_merge(
     receipt: Mapping[str, Any],
     *,
@@ -1532,6 +1671,10 @@ def apply_guarded_merge(
         return None, "receipt blocked: " + ", ".join(verification.get("reasons", []))
     pr_number = receipt.get("pr_number")
     head_sha = _string(receipt.get("head_sha"))
+
+    live_error = _verify_live_premerge_receipt(receipt, repository=repository)
+    if live_error:
+        return None, live_error
 
     response, error = api(
         "PUT",
@@ -1738,7 +1881,6 @@ def build_live_evidence(
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Re-read canonical merge-gate evidence for a report/validate/apply run."""
     from scripts.dev.merge_queue_gate import (  # local import avoids a module cycle for pure helpers
-        _fetch_live_closing_discipline,
         evaluate_merge_gate,
         fetch_main_sha,
         fetch_pr_snapshot,
@@ -1748,15 +1890,13 @@ def build_live_evidence(
     snapshot, error = fetch_pr_snapshot(pr_number, repo=repository)
     if error or not snapshot:
         return None, error or "PR snapshot unavailable"
-    closing_discipline_status, closing_discipline_blockers = _fetch_live_closing_discipline(
+    closing_discipline = build_closing_discipline_evidence(
         pr_number,
-        repo=repository,
+        repository=repository,
+        head_sha=_string(snapshot.get("head_sha")),
         body=str(snapshot.get("body") or ""),
     )
-    snapshot["closing_discipline"] = {
-        "status": closing_discipline_status,
-        "blockers": closing_discipline_blockers,
-    }
+    snapshot["closing_discipline"] = closing_discipline
     current_base_sha = fetch_main_sha(repo=repository)
     if not current_base_sha:
         return None, "current main SHA unavailable"
@@ -1860,6 +2000,7 @@ def build_live_evidence(
         "evidence_provenance": evidence_provenance,
         "ordinary_cas": ordinary_cas,
         "gate_audit": gate.to_dict(),
+        "closing_discipline": closing_discipline,
     }, None
 
 
@@ -1900,6 +2041,7 @@ def build_receipt_from_stack_entry(
         waiver=waiver,
         expected_head_cas={"expected_base_sha": current_base_sha},
         gate_audit=entry.get("merge_queue_gate"),
+        closing_discipline=entry.get("closing_discipline"),
         pr_state=_string(entry.get("state")) or None,
         pr_merged_at=entry.get("merged_at"),
         observed_at=observed_at,

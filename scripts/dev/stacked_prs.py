@@ -64,6 +64,7 @@ from scripts.dev.pr_loop_policy import (  # noqa: E402
 from scripts.dev.pr_metadata import metadata_digest  # noqa: E402
 from scripts.dev.single_account_merge_receipt import (  # noqa: E402
     apply_guarded_merge,
+    build_closing_discipline_evidence,
     build_receipt_from_stack_entry,
     classify_implementation_review,
     derive_holds,
@@ -570,6 +571,25 @@ def _merge_queue_gate_reasons(entry: dict[str, Any]) -> list[str]:
     return []
 
 
+def _closing_discipline_reasons(entry: dict[str, Any]) -> list[str]:
+    """Require an explicit semantic-closing result before a stack is merge-ready."""
+    value = entry.get("closing_discipline")
+    if not isinstance(value, Mapping):
+        return ["closing_discipline_not_verified"]
+    status = value.get("status")
+    blockers = value.get("blockers")
+    if status != "passed":
+        return [
+            {
+                "blocked": "closing_discipline_blocked",
+                "unavailable": "closing_discipline_unavailable",
+            }.get(str(status), "closing_discipline_not_verified")
+        ]
+    if not isinstance(blockers, list) or blockers:
+        return ["closing_discipline_not_verified"]
+    return []
+
+
 def _review_reasons(entry: dict[str, Any]) -> list[str]:
     """Return fail-closed reasons for current review and metadata evidence."""
     reasons: list[str] = []
@@ -609,6 +629,7 @@ def _entry_reasons(entry: dict[str, Any]) -> list[str]:
     for hold in entry.get("explicit_holds", []):
         reasons.append(f"explicit_hold:{hold}")
     reasons.extend(_merge_queue_gate_reasons(entry))
+    reasons.extend(_closing_discipline_reasons(entry))
     reasons.extend(_review_reasons(entry))
     if entry.get("base_alignment") != "aligned":
         reasons.append("stack_base_not_aligned")
@@ -722,6 +743,12 @@ def build_stack_status(
                 "error": thread_error,
             },
             "metadata_digest": metadata,
+            "closing_discipline": build_closing_discipline_evidence(
+                pr["number"],
+                repository=repo,
+                head_sha=pr["head_sha"],
+                body=pr["body"],
+            ),
             **gate,
         }
         review_evidence = {

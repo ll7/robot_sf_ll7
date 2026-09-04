@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -33,6 +34,17 @@ CURRENT_BASE_SHA = "c" * 40
 METADATA_DIGEST = "d" * 64
 REVIEW_DIGEST = "e" * 64
 OBSERVED_AT = "2026-08-21T00:00:00Z"
+CLOSING_DISCIPLINE = {
+    "status": "passed",
+    "blockers": [],
+    "head_sha": HEAD_SHA,
+    "body_sha256": hashlib.sha256(b"final body").hexdigest(),
+    "sources": {
+        "pull_request": "live_pr_snapshot",
+        "commits": "paginated_pr_commits",
+        "issues": "current_issue_metadata",
+    },
+}
 
 
 def _clear_holds() -> dict[str, dict[str, Any]]:
@@ -118,6 +130,7 @@ def _receipt(*, holds: dict[str, dict[str, Any]] | None = None, **overrides: Any
         "holds": holds or _clear_holds(),
         "observed_at": OBSERVED_AT,
         "gate_audit": {"schema": "merge_queue_gate.v1", "passed": True},
+        "closing_discipline": copy.deepcopy(CLOSING_DISCIPLINE),
         "pr_state": "OPEN",
         "pr_merged_at": None,
     }
@@ -144,6 +157,7 @@ def _live_evidence(receipt: dict[str, Any]) -> dict[str, Any]:
         "holds": copy.deepcopy(receipt["holds"]),
         "ordinary_cas": copy.deepcopy(receipt["ordinary_cas"]),
         "gate_audit": copy.deepcopy(receipt["gate_audit"]),
+        "closing_discipline": copy.deepcopy(receipt["closing_discipline"]),
     }
     if "evidence_provenance" in receipt:
         evidence["evidence_provenance"] = copy.deepcopy(receipt["evidence_provenance"])
@@ -937,15 +951,24 @@ def test_recorded_merge_sha_preserves_digest_and_post_merge_incident_boundary() 
     assert incident["waiver_reuse"] == "blocked"
 
 
-def test_guarded_apply_is_one_put_then_closed_merged_readback() -> None:
+def test_guarded_apply_is_one_put_then_closed_merged_readback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     receipt = _receipt()
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
+    events: list[str] = []
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (events.append("live") or _live_evidence(receipt), None),
+    )
 
     def fake_api(
         method: str, path: str, payload: dict[str, Any] | None
     ) -> tuple[dict[str, Any], None]:
         calls.append((method, path, payload))
         if method == "PUT":
+            events.append("put")
             return {"merged": True, "sha": "f" * 40}, None
         return {"state": "closed", "merged": True}, None
 
@@ -958,11 +981,19 @@ def test_guarded_apply_is_one_put_then_closed_merged_readback() -> None:
         ("PUT", "repos/owner/repo/pulls/42/merge", {"sha": HEAD_SHA, "merge_method": "squash"}),
         ("GET", "repos/owner/repo/pulls/42", None),
     ]
+    assert events[:2] == ["live", "put"]
     assert merged["receipt"]["merge_result"]["returned_merged_sha"] == "f" * 40
 
 
-def test_guarded_apply_failure_returns_the_observed_receipt() -> None:
+def test_guarded_apply_failure_returns_the_observed_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     receipt = _receipt()
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (_live_evidence(receipt), None),
+    )
 
     def failed_api(
         method: str, path: str, payload: dict[str, Any] | None
@@ -976,11 +1007,18 @@ def test_guarded_apply_failure_returns_the_observed_receipt() -> None:
     assert failed["merge_result"]["status"] == "failed"
 
 
-def test_guarded_apply_failure_preserves_post_error_reconciliation() -> None:
+def test_guarded_apply_failure_preserves_post_error_reconciliation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A failed merge PUT records PR and main readbacks without retrying the PUT."""
     receipt = _receipt()
     calls: list[tuple[str, str, dict[str, Any] | None]] = []
     main_sha = "f" * 40
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (_live_evidence(receipt), None),
+    )
 
     def failed_api(
         method: str, path: str, payload: dict[str, Any] | None
@@ -1018,6 +1056,82 @@ def test_guarded_apply_failure_preserves_post_error_reconciliation() -> None:
     assert reconciliation["expected_head_sha"] == HEAD_SHA
     assert reconciliation["pr_readback"]["state"] == "open"
     assert reconciliation["main_ref_readback"]["object"]["sha"] == main_sha
+
+
+def test_guarded_apply_rejects_success_gate_without_closing_discipline() -> None:
+    """A legacy-looking success gate cannot reach the merge write boundary."""
+    receipt = _receipt()
+    receipt.pop("closing_discipline")
+    receipt["receipt_digest"] = receipt_digest(receipt)
+    calls: list[tuple[str, str]] = []
+
+    def fake_api(
+        method: str, path: str, payload: dict[str, Any] | None
+    ) -> tuple[dict[str, Any], None]:
+        calls.append((method, path))
+        return {}, None
+
+    merged, error = apply_guarded_merge(receipt, repository="owner/repo", api=fake_api)
+
+    assert merged is None
+    assert "receipt_field_missing:closing_discipline" in (error or "")
+    assert calls == []
+
+
+def test_guarded_apply_rechecks_live_closing_discipline_before_put(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A live semantic-close change blocks the final write even after receipt validation."""
+    receipt = _receipt()
+    live = _live_evidence(receipt)
+    live["closing_discipline"] = {
+        **live["closing_discipline"],
+        "status": "blocked",
+        "blockers": ["current issue metadata changed"],
+    }
+    monkeypatch.setattr(
+        receipt_module,
+        "build_live_evidence",
+        lambda *args, **kwargs: (live, None),
+    )
+    calls: list[tuple[str, str]] = []
+
+    def fake_api(
+        method: str, path: str, payload: dict[str, Any] | None
+    ) -> tuple[dict[str, Any], None]:
+        calls.append((method, path))
+        return {}, None
+
+    merged, error = apply_guarded_merge(receipt, repository="owner/repo", api=fake_api)
+
+    assert merged is None
+    assert "live_closing_discipline_changed" in (error or "")
+    assert calls == []
+
+
+def test_closing_discipline_evidence_binds_live_pr_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[int | str, str, str]] = []
+
+    def fake_recheck(pr_number: int | str, *, repo: str, body: str) -> tuple[str, list[str]]:
+        calls.append((pr_number, repo, body))
+        return "passed", []
+
+    monkeypatch.setattr("scripts.dev.merge_queue_gate._fetch_live_closing_discipline", fake_recheck)
+
+    evidence = receipt_module.build_closing_discipline_evidence(
+        42,
+        repository="owner/repo",
+        head_sha=HEAD_SHA,
+        body="final body",
+    )
+
+    assert calls == [(42, "owner/repo", "final body")]
+    assert evidence["status"] == "passed"
+    assert evidence["head_sha"] == HEAD_SHA
+    assert evidence["sources"]["commits"] == "paginated_pr_commits"
+    assert evidence["sources"]["issues"] == "current_issue_metadata"
 
 
 def test_validate_mode_is_read_only(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

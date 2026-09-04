@@ -774,8 +774,11 @@ base predates current `main`. That proof binds the complete normalized changed-f
 base/head/current-main content refs for changed Python test marker candidates (including both paths
 of renamed candidates), a verified current-main commit ref, the full trusted exact-head policy
 carrier, and immediate current-main/head CAS; a 3,000-file-capped inventory fails closed, and the
-proof can qualify only a lone `stale_merge_base` gate reason. The receipt digest covers the
-pre-merge observation and is preserved when GitHub returns the merge commit SHA.
+proof can qualify only a lone `stale_merge_base` gate reason. The receipt carries a required
+`closing_discipline` audit field. A passing result is bound to the live PR head and body digest and
+records that paginated PR commit metadata and current issue metadata were checked; blocked or
+unavailable results remain fail-closed. The receipt digest covers the pre-merge observation and is
+preserved when GitHub returns the merge commit SHA.
 
 When the GraphQL-backed PR snapshot is rate-limited, `--mode report-only` and `--mode validate`
 reuse the bounded REST snapshot path for ordinary PR, label, comment, review, requested-reviewer,
@@ -795,10 +798,12 @@ Use the three explicit modes as follows:
 - `--mode validate --receipt-file <path>` rereads live state and compares it with the immutable
   receipt; a changed head, base, metadata, check, review, thread, requested reviewer, hold, or
   ordinary-CAS proof blocks.
-- `--mode apply --receipt-file <path>` repeats validation and then lets the receipt owner issue
-  exactly one expected-head squash merge, rereading the closed/merged PR and recording the
-  returned SHA. `scripts/dev/stacked_prs.py merge-cascade --apply` is the stack coordinator and
-  delegates its root merge to the same owner.
+- `--mode apply --receipt-file <path>` repeats validation, rereads the live PR body/head and
+  rechecks paginated commit metadata plus current issue metadata immediately before letting the
+  receipt owner issue exactly one expected-head squash merge, then rereads the closed/merged PR
+  and records the returned SHA. `scripts/dev/stacked_prs.py merge-cascade --apply` is the stack
+  coordinator and delegates its root merge to the same owner; its stack receipt must carry the
+  same explicit closing-discipline result.
 
 The only permitted waiver is the bounded absence of a distinct human implementation reviewer,
 and it requires an actor, reason, and timestamp. It cannot waive a required hosted check,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 from typing import TYPE_CHECKING, Any
@@ -121,6 +122,17 @@ def _ready_entry(number: int, *, head_ref: str, head_sha: str, base_ref: str) ->
             "name": "merge-queue-gate",
             "head_sha": head_sha,
             "exact_head": True,
+        },
+        "closing_discipline": {
+            "status": "passed",
+            "blockers": [],
+            "head_sha": head_sha,
+            "body_sha256": hashlib.sha256(b"body").hexdigest(),
+            "sources": {
+                "pull_request": "live_pr_snapshot",
+                "commits": "paginated_pr_commits",
+                "issues": "current_issue_metadata",
+            },
         },
     }
 
@@ -283,7 +295,7 @@ def test_explicit_holds_and_withdrawn_review_carriers_fail_closed() -> None:
     )
 
 
-def test_status_positive_control_requires_current_merge_queue_gate() -> None:
+def test_status_positive_control_requires_current_merge_queue_gate(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     main_sha = "m" * 40
     head_sha = "a" * 40
     title = "feat: stack 1"
@@ -339,6 +351,21 @@ def test_status_positive_control_requires_current_merge_queue_gate() -> None:
         assert method == "GET"
         assert payload is None
         return payloads[path], None
+
+    monkeypatch.setattr(
+        "scripts.dev.stacked_prs.build_closing_discipline_evidence",
+        lambda *args, **kwargs: {
+            "status": "passed",
+            "blockers": [],
+            "head_sha": head_sha,
+            "body_sha256": hashlib.sha256(body.encode()).hexdigest(),
+            "sources": {
+                "pull_request": "live_pr_snapshot",
+                "commits": "paginated_pr_commits",
+                "issues": "current_issue_metadata",
+            },
+        },
+    )
 
     result = build_stack_status(
         "owner/repo",
@@ -499,6 +526,20 @@ def test_status_rejects_unknown_threads_without_remote_writes(monkeypatch) -> No
             None,
         ),
     )
+    monkeypatch.setattr(
+        "scripts.dev.stacked_prs.build_closing_discipline_evidence",
+        lambda *args, **kwargs: {
+            "status": "passed",
+            "blockers": [],
+            "head_sha": root_sha,
+            "body_sha256": hashlib.sha256(b"body").hexdigest(),
+            "sources": {
+                "pull_request": "live_pr_snapshot",
+                "commits": "paginated_pr_commits",
+                "issues": "current_issue_metadata",
+            },
+        },
+    )
     result = build_stack_status(
         "owner/repo",
         [1],
@@ -624,6 +665,38 @@ def test_merge_cascade_requires_all_exact_heads_before_mutating(monkeypatch) -> 
     assert calls == []
 
 
+def test_merge_cascade_rejects_status_success_without_closing_result(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    entry = _ready_entry(1, head_ref="root", head_sha="a" * 40, base_ref="main")
+    entry.pop("closing_discipline")
+    snapshot = {
+        "schema": "stacked_prs.v1",
+        "status": "ok",
+        "main": {"sha": "1" * 40},
+        "entries": [entry],
+        "all_merge_ready": True,
+    }
+    monkeypatch.setattr(
+        "scripts.dev.stacked_prs.build_stack_status", lambda *args, **kwargs: snapshot
+    )
+    calls: list[tuple[str, str]] = []
+
+    def fake_api(method: str, path: str, body: dict[str, Any] | None) -> tuple[Any, None]:
+        calls.append((method, path))
+        return {}, None
+
+    result = merge_cascade(
+        "owner/repo",
+        [1],
+        expected_heads={1: entry["head_sha"]},
+        apply=True,
+        api=fake_api,
+    )
+
+    assert result["status"] == "blocked"
+    assert "closing_discipline_unavailable" in result["receipt"]["reason_codes"]
+    assert calls == []
+
+
 def test_merge_cascade_squashes_root_then_explicitly_retargets_next(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     root_sha = "a" * 40
     next_sha = "c" * 40
@@ -641,6 +714,17 @@ def test_merge_cascade_squashes_root_then_explicitly_retargets_next(monkeypatch)
     monkeypatch.setattr(
         "scripts.dev.stacked_prs.build_stack_status", lambda *args, **kwargs: snapshot
     )
+    captured_receipt: dict[str, Any] = {}
+
+    def fake_apply(receipt: dict[str, Any], **kwargs: Any) -> tuple[dict[str, Any], None]:
+        captured_receipt.update(receipt)
+        return {
+            "pr": receipt["pr_number"],
+            "merge_commit_sha": "d" * 40,
+            "receipt": receipt,
+        }, None
+
+    monkeypatch.setattr("scripts.dev.stacked_prs.apply_guarded_merge", fake_apply)
     root_payload = _pr_payload(
         1,
         head_ref=parent_ref,
@@ -684,10 +768,8 @@ def test_merge_cascade_squashes_root_then_explicitly_retargets_next(monkeypatch)
 
     assert result["status"] == "merged_waiting_for_ci"
     assert result["base_advance"] == {"mode": "explicit", "base_ref": "main"}
-    assert [call[0:2] for call in calls].count(("PUT", "repos/owner/repo/pulls/1/merge")) == 1
-    merge_call = next(call for call in calls if call[0] == "PUT")
-    assert merge_call[2] == {"sha": root_sha, "merge_method": "squash"}
-    assert not any(call[0] == "PUT" and "/pulls/2/merge" in call[1] for call in calls)
+    assert captured_receipt["closing_discipline"]["status"] == "passed"
+    assert not any(call[0] == "PUT" and "/merge" in call[1] for call in calls)
 
 
 def test_cli_json_status_error_is_machine_readable(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]

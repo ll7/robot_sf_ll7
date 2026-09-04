@@ -395,13 +395,13 @@
           "kind": "path",
           "label": "same-planner held-out contract",
           "path": "docs/context/issue_3275_same_planner_contract.md",
-          "sha256": "f4deb9fb1eda2e609fdb6234498b6af0fc6ba304417d66f6fa1f0064786edcac"
+          "sha256": "95abe9e22c9ff8fc81532d9281511f7efe2ab30bb01d86ea9b08c9d507a15a4b"
         },
         {
           "kind": "path",
           "label": "held-out step-three run plan",
           "path": "docs/context/evidence/issue_3275_same_planner_held_out/step3_run_plan.json",
-          "sha256": "fa77e3b857dcd0eac488442613629173c1ee7b35a1d648b258fcc1ed47e06d83"
+          "sha256": "3b802fcc6f4d44b528e5d379217c72a87dd5e8b824db33f27954f42ad0e7e862"
         },
         {
           "kind": "path",
@@ -471,7 +471,7 @@
         {
           "path": "docs/context/evidence/issue_3275_same_planner_held_out/SHA256SUMS",
           "role": "same-planner held-out preflight checksum sidecar",
-          "sha256": "8e58666a2a449ce2ae61d363ce1fc79641914913acb0dd657464192754839c1f",
+          "sha256": "9d7a84cc7006ad5b4afe62d72454f6e97d147509ff81aecac59d8bfe1e0383b9",
           "status": "available"
         },
         {

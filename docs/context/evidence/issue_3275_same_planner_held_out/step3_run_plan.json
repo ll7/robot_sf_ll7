@@ -27,7 +27,7 @@
     "upstream_command_space": "velocity_vector_xy"
   },
   "frozen_contract_path": "configs/adversarial/issue_3275_same_planner_contract.json",
-  "frozen_contract_sha256": "f666262e60aed050b38356e17210835dbc8a8aa92f11ad2f3eec015f454f286e",
+  "frozen_contract_sha256": "8d80b34496b4668ea12cbd13a25da604acf28a1af34ca688956ed7799cc340a1",
   "objective": "certified_failure_outcome proposal-vs-random comparison over the predeclared disjoint candidate pool under identical frozen per-arm budget.",
   "output_locations": {
     "comparison_report": "<step3 output>/report.json",

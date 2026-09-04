@@ -50,15 +50,15 @@ class AnalysisTracker:
         enable_tensorboard: bool,
         tensorboard_logdir: Path | None,
     ) -> None:
-        """TODO docstring. Document this function.
+        """Initialize the analysis run tracker session.
 
         Args:
-            tracker_root: TODO docstring.
-            run_id_hint: TODO docstring.
-            initiator: TODO docstring.
-            enable_report_step: TODO docstring.
-            enable_tensorboard: TODO docstring.
-            tensorboard_logdir: TODO docstring.
+            tracker_root: Root directory for run tracking artifacts.
+            run_id_hint: Optional run identifier hint to assign to this session.
+            initiator: Optional initiator or user identity launching the run.
+            enable_report_step: Whether to register the report generation pipeline step.
+            enable_tensorboard: Whether to enable TensorBoard telemetry mirroring.
+            tensorboard_logdir: Optional custom log directory for TensorBoard logs.
         """
         self.enabled = bool(tracker_root or run_id_hint or enable_tensorboard)
         self.config: RunTrackerConfig | None = None
@@ -104,13 +104,13 @@ class AnalysisTracker:
         self._sampler.start()
 
     def has_step(self, step_id: str) -> bool:
-        """TODO docstring. Document this function.
+        """Check whether a pipeline step exists in this tracker session.
 
         Args:
-            step_id: TODO docstring.
+            step_id: Identifier of the step to query.
 
         Returns:
-            TODO docstring.
+            True if the step exists and tracking is enabled, False otherwise.
         """
         return bool(
             self.enabled
@@ -120,11 +120,10 @@ class AnalysisTracker:
 
     @property
     def run_directory(self) -> Path | None:
-        """TODO docstring. Document this function.
-
+        """Return the directory containing run tracking artifacts, if enabled.
 
         Returns:
-            TODO docstring.
+            Path to the run artifact directory, or None if tracking is disabled.
         """
         if not self.enabled or not self.writer:
             return None
@@ -132,10 +131,10 @@ class AnalysisTracker:
 
     @contextmanager
     def step(self, step_id: str):
-        """TODO docstring. Document this function.
+        """Context manager tracking the lifecycle and outcome of a pipeline step.
 
         Args:
-            step_id: TODO docstring.
+            step_id: Identifier of the step to execute and track.
         """
         if not self.enabled or not self.progress or not self.has_step(step_id):
             yield
@@ -151,10 +150,10 @@ class AnalysisTracker:
             self.progress.complete_step(step_id)
 
     def finish(self, summary: dict[str, Any] | None = None) -> None:
-        """TODO docstring. Document this function.
+        """Mark the tracker session as successfully completed.
 
         Args:
-            summary: TODO docstring.
+            summary: Optional summary payload describing final results.
         """
         if not self.enabled:
             return
@@ -162,10 +161,10 @@ class AnalysisTracker:
         self._close()
 
     def fail(self, summary: dict[str, Any] | None = None) -> None:
-        """TODO docstring. Document this function.
+        """Mark the tracker session as failed.
 
         Args:
-            summary: TODO docstring.
+            summary: Optional summary payload describing the failure context.
         """
         if not self.enabled:
             return
@@ -173,10 +172,10 @@ class AnalysisTracker:
         self._close()
 
     def _heartbeat(self, status: PipelineRunStatus) -> None:
-        """TODO docstring. Document this function.
+        """Record an intermediate status update for the run tracker session.
 
         Args:
-            status: TODO docstring.
+            status: Current pipeline run status to record.
         """
         if not self.enabled:
             return
@@ -188,11 +187,11 @@ class AnalysisTracker:
         *,
         summary: dict[str, Any] | None = None,
     ) -> None:
-        """TODO docstring. Document this function.
+        """Persist a snapshot record of the pipeline run status and progress.
 
         Args:
-            status: TODO docstring.
-            summary: TODO docstring.
+            status: Pipeline run status to record.
+            summary: Optional summary metadata to include in the record.
         """
         if not self.enabled or not self.progress:
             return
@@ -209,7 +208,7 @@ class AnalysisTracker:
         self.writer.append_run_record(record)
 
     def _close(self) -> None:
-        """TODO docstring. Document this function."""
+        """Flush and stop background telemetry samplers and adapters."""
         if self._sampler:
             self._sampler.stop(flush_final=True)
             self._sampler = None

@@ -380,6 +380,9 @@ _FAST_FILES = {
     "test_compare_coverage_cli.py",
     "test_open_coverage_report.py",
     "test_pytest_config_contract.py",
+    # Canonical logging helper tests provide changed-line coverage when the
+    # deprecated research logging shim is retired (issue #8378).
+    "test_logging_config.py",
     # Algorithm metadata facade tests are deterministic contract coverage for
     # the changed benchmark producer; keep them in the exact-head fast lane.
     "test_algorithm_metadata.py",

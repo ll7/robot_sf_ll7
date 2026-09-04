@@ -156,3 +156,25 @@ def get_logger(name: str) -> loguru.Logger:
         >>> logger.info("Processing metrics", seed=42)
     """
     return logger.bind(module=name)
+
+
+def log_seed_failure(seed: int | str | None, policy_type: str | None, reason: str) -> None:
+    """Emit a standardized warning for seed-level failures.
+
+    Canonical home of the helper previously defined in the retired
+    ``robot_sf.research.logging_config`` shim. The locked contract is one
+    ``logger.warning`` event with the literal message ``"Seed run failed or
+    missing"`` and stable ``seed``/``policy_type``/``reason`` fields; a
+    ``None`` policy type is normalized to ``"unknown"``.
+
+    Args:
+        seed: Failing seed, forwarded verbatim (may be ``None``).
+        policy_type: Policy type label, or ``None`` for unknown.
+        reason: Failure reason, preserved exactly.
+    """
+    logger.warning(
+        "Seed run failed or missing",
+        seed=seed,
+        policy_type=policy_type or "unknown",
+        reason=reason,
+    )

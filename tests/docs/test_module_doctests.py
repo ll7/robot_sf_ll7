@@ -37,13 +37,11 @@ DOCTEST_OPTIONFLAGS = doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
 # Curated allowlist: pure, lightweight modules with deterministic, passing doctests.
 DOCTEST_MODULES = [
     "robot_sf.common.logging",
-    "robot_sf.maps.verification.logging",
     "robot_sf.nav.obstacle",
     "robot_sf.nav.occupancy_grid",
     "robot_sf.nav.occupancy_grid_rasterization",
     "robot_sf.nav.occupancy_grid_utils",
     "robot_sf.research.artifact_paths",
-    "robot_sf.research.logging_config",
     "robot_sf.sensor.fusion_adapter",
     "robot_sf.sensor.registry",
 ]

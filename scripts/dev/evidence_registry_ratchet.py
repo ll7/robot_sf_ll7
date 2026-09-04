@@ -1145,7 +1145,11 @@ def _report_check(
             "single command\n"
             "    uv run python scripts/dev/evidence_registry_ratchet.py --write-baseline\n"
             "then commit scripts/validation/evidence_registry_baseline.json in this PR. "
-            "The baseline is derived data -- never hand-edit it (issue #6839).",
+            "The baseline is derived data -- never hand-edit it (issue #6839). "
+            "If the mismatch is confined to declared hashes in tracked example "
+            "data, refresh them instead with "
+            "uv run python scripts/dev/refresh_evidence_hashes.py --write "
+            "--path <evidence-file>.",
             file=sys.stderr,
         )
         return 1

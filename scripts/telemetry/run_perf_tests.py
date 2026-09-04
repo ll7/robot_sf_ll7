@@ -116,16 +116,16 @@ def _write_summary(
     scenario: str | None,
     result: performance_smoke_test.SmokeTestResult,
 ) -> Path:
-    """TODO docstring. Document this function.
+    """Write a JSON summary of a performance smoke-test result.
 
     Args:
-        run_directory: TODO docstring.
-        run_id: TODO docstring.
-        scenario: TODO docstring.
-        result: TODO docstring.
+        run_directory: Directory in which to write the summary file.
+        run_id: Run identifier added to the serialized result.
+        scenario: Optional scenario label added to the summary.
+        result: Structured smoke-test result to serialize.
 
     Returns:
-        TODO docstring.
+        Path to the written ``perf_test_results.json`` file.
     """
     payload = result.to_dict()
     payload["run_id"] = run_id
@@ -145,17 +145,17 @@ def _build_manifest_summary(
     step_samples: int,
     recommendation_count: int,
 ) -> dict[str, Any]:
-    """TODO docstring. Document this function.
+    """Build the summary mapping stored in the pipeline run record.
 
     Args:
-        result: TODO docstring.
-        summary_path: TODO docstring.
-        scenario: TODO docstring.
-        num_resets: TODO docstring.
-        recommendation_count: TODO docstring.
+        result: Smoke-test result supplying metrics, thresholds, and status labels.
+        summary_path: Path to the JSON summary recorded in the mapping.
+        scenario: Optional scenario label; ``"default"`` is used when absent.
+        num_resets: Number of environment resets measured by the smoke test.
+        recommendation_count: Number of recommendations generated for the run.
 
     Returns:
-        TODO docstring.
+        Manifest summary fields derived from the result and run metadata.
     """
     summary: dict[str, Any] = {
         "scenario": scenario or "default",
@@ -182,14 +182,14 @@ def _resolve_output_destination(
     config: RunTrackerConfig,
     hint: str | None,
 ) -> tuple[RunTrackerConfig, str]:
-    """TODO docstring. Document this function.
+    """Resolve an output hint into a tracker configuration and run identifier.
 
     Args:
-        config: TODO docstring.
-        hint: TODO docstring.
+        config: Base run-tracker configuration for the output destination.
+        hint: Optional run identifier or artifact path hint.
 
     Returns:
-        TODO docstring.
+        The run-tracker configuration and run identifier selected for the output.
     """
     run_id = generate_run_id("perf")
     if not hint:
@@ -213,13 +213,13 @@ def _resolve_output_destination(
 
 
 def _map_test_status(label: str) -> PerformanceTestStatus:
-    """TODO docstring. Document this function.
+    """Map a smoke-test status label to a performance-test status.
 
     Args:
-        label: TODO docstring.
+        label: Status label to normalize; empty or unknown labels fail.
 
     Returns:
-        TODO docstring.
+        ``PASSED`` for ``PASS``, ``SOFT_BREACH`` for ``WARN``, otherwise ``FAILED``.
     """
     normalized = label.strip().upper() if label else "FAIL"
     if normalized == "PASS":
@@ -230,13 +230,13 @@ def _map_test_status(label: str) -> PerformanceTestStatus:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """TODO docstring. Document this function.
+    """Parse command-line arguments for the telemetry performance-test wrapper.
 
     Args:
-        argv: TODO docstring.
+        argv: Optional argument list; ``None`` reads the process command line.
 
     Returns:
-        TODO docstring.
+        Parsed command-line options.
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -270,13 +270,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """TODO docstring. Document this function.
+    """Run the performance-test CLI and return its exit status.
 
     Args:
-        argv: TODO docstring.
+        argv: Optional argument list passed to :func:`parse_args`.
 
     Returns:
-        TODO docstring.
+        Smoke-test exit code, or ``2`` for invalid arguments or runtime failure.
     """
     args = parse_args(argv)
     try:

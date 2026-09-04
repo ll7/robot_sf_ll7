@@ -159,7 +159,9 @@ _OPTIMIZED_GUARD_SCRIPT = textwrap.dedent(
     )
 
     original_converter = svg.SvgMapConverter
-    svg.SvgMapConverter = lambda _path: SimpleNamespace(map_definition=object())
+    svg.SvgMapConverter = lambda _path, *, geometry_contract: SimpleNamespace(
+        map_definition=object()
+    )
     try:
         converted = svg.convert_map("unused.svg")
         if converted is not None:

@@ -8,6 +8,8 @@ import json
 import subprocess
 from typing import TYPE_CHECKING, Any
 
+import pytest
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -237,6 +239,7 @@ def test_merge_queue_gate_requires_newest_exact_head_success() -> None:
     older = {
         "id": 1,
         "name": "merge-queue-gate",
+        "workflow_name": "Merge Queue Gate",
         "status": "completed",
         "conclusion": "success",
         "completed_at": "2026-08-17T10:00:00Z",
@@ -267,6 +270,27 @@ def test_merge_queue_gate_requires_newest_exact_head_success() -> None:
         == "malformed"
     )
     assert summarize_merge_queue_gate([older], head_sha=head_sha)["status"] == "success"
+
+
+def test_merge_queue_gate_rejects_missing_workflow_identity() -> None:
+    """A job name alone cannot prove the exact required workflow context."""
+    head_sha = "a" * 40
+    summary = summarize_merge_queue_gate(
+        [
+            {
+                "id": 4,
+                "name": "merge-queue-gate",
+                "status": "completed",
+                "conclusion": "success",
+                "completed_at": "2026-08-17T12:00:00Z",
+                "head_sha": head_sha,
+            }
+        ],
+        head_sha=head_sha,
+    )
+
+    assert summary["status"] == "mismatch"
+    assert summary["workflow_name"] is None
 
 
 def test_explicit_holds_and_withdrawn_review_carriers_fail_closed() -> None:
@@ -317,7 +341,21 @@ def test_explicit_holds_and_withdrawn_review_carriers_fail_closed() -> None:
     )
 
 
-def test_status_positive_control_requires_current_merge_queue_gate(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+@pytest.mark.parametrize(
+    ("actions_run", "expected_status", "expected_workflow_name", "expected_merge_ready"),
+    [
+        ({"workflow_id": 987, "name": "Merge Queue Gate"}, "success", "Merge Queue Gate", True),
+        ({"workflow_id": 988, "name": "Other Workflow"}, "mismatch", "Other Workflow", False),
+        (None, "mismatch", None, False),
+    ],
+)
+def test_status_resolves_gate_workflow_from_actions_run_and_fails_closed(
+    monkeypatch,
+    actions_run: dict[str, Any] | None,
+    expected_status: str,
+    expected_workflow_name: str | None,
+    expected_merge_ready: bool,
+) -> None:  # type: ignore[no-untyped-def]
     main_sha = "m" * 40
     head_sha = "a" * 40
     title = "feat: stack 1"
@@ -360,6 +398,7 @@ def test_status_positive_control_requires_current_merge_queue_gate(monkeypatch) 
                 {
                     "id": 2,
                     "name": "merge-queue-gate",
+                    "details_url": "https://github.com/owner/repo/actions/runs/123/job/456",
                     "status": "completed",
                     "conclusion": "success",
                     "head_sha": head_sha,
@@ -369,9 +408,14 @@ def test_status_positive_control_requires_current_merge_queue_gate(monkeypatch) 
         },
     }
 
-    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, str | None]:
         assert method == "GET"
         assert payload is None
+        if path == "repos/owner/repo/actions/runs/123":
+            return (
+                actions_run,
+                None if actions_run is not None else "Actions run lookup unavailable",
+            )
         return payloads[path], None
 
     monkeypatch.setattr(
@@ -397,9 +441,11 @@ def test_status_positive_control_requires_current_merge_queue_gate(monkeypatch) 
     )
 
     entry = result["entries"][0]
-    assert entry["merge_queue_gate"]["status"] == "success"
-    assert entry["explicit_holds"] == []
-    assert entry["merge_ready"] is True
+    assert entry["merge_queue_gate"]["status"] == expected_status
+    assert entry["merge_queue_gate"].get("workflow_name") == expected_workflow_name
+    if expected_merge_ready:
+        assert entry["explicit_holds"] == []
+    assert entry["merge_ready"] is expected_merge_ready
 
 
 def test_review_digest_changes_when_review_content_changes() -> None:

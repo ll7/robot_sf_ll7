@@ -1152,6 +1152,86 @@ def test_resolve_map_definition_rejects_non_svg_contract(
         )
 
 
+def test_resolve_map_definition_loads_contract_specific_geometry(tmp_path: Path) -> None:
+    """Sequential SVG loads retain the requested contract in geometry and metadata."""
+    map_file = Path(__file__).resolve().parents[2] / "maps/svg_maps/classic_bottleneck.svg"
+    scenario_path = tmp_path / "scenario.yaml"
+    scenario_loader._load_map_definition.cache_clear()
+    try:
+        legacy = resolve_map_definition(
+            str(map_file), scenario_path=scenario_path, geometry_contract="legacy"
+        )
+        corrected = resolve_map_definition(
+            str(map_file), scenario_path=scenario_path, geometry_contract="corrected"
+        )
+    finally:
+        scenario_loader._load_map_definition.cache_clear()
+
+    assert legacy is not None
+    assert corrected is not None
+    assert legacy.svg_geometry_contract == "legacy"
+    assert corrected.svg_geometry_contract == "corrected"
+    assert legacy.ped_spawn_zones != corrected.ped_spawn_zones
+
+
+def test_map_definition_cache_keys_include_geometry_contract(tmp_path: Path) -> None:
+    """Repeated loads return the matching contract-specific cached object."""
+    map_file = Path(__file__).resolve().parents[2] / "maps/svg_maps/classic_bottleneck.svg"
+    scenario_path = tmp_path / "scenario.yaml"
+    scenario_loader._load_map_definition.cache_clear()
+    try:
+        legacy = resolve_map_definition(
+            str(map_file), scenario_path=scenario_path, geometry_contract="legacy"
+        )
+        corrected = resolve_map_definition(
+            str(map_file), scenario_path=scenario_path, geometry_contract="corrected"
+        )
+        legacy_again = resolve_map_definition(
+            str(map_file), scenario_path=scenario_path, geometry_contract="legacy"
+        )
+        corrected_again = resolve_map_definition(
+            str(map_file), scenario_path=scenario_path, geometry_contract="corrected"
+        )
+    finally:
+        scenario_loader._load_map_definition.cache_clear()
+
+    assert legacy is not None
+    assert corrected is not None
+    assert legacy_again is legacy
+    assert corrected_again is corrected
+    assert legacy_again is not corrected_again
+
+
+def test_build_robot_config_rejects_unknown_contract_with_scenario_name(
+    tmp_path: Path,
+) -> None:
+    """Unknown contract names identify the scenario that supplied them."""
+    with pytest.raises(
+        ValueError, match=r"Scenario 'unknown_geometry'.*unknown map_geometry_contract"
+    ):
+        build_robot_config_from_scenario(
+            {
+                "name": "unknown_geometry",
+                "map_geometry_contract": "future",
+            },
+            scenario_path=tmp_path / "scenario.yaml",
+        )
+
+
+def test_build_robot_config_rejects_corrected_non_svg_map(tmp_path: Path) -> None:
+    """Corrected SVG semantics cannot be silently attached to a YAML map."""
+    map_file = Path(__file__).resolve().parents[2] / "maps/imported/ovgu_campus_walk.yaml"
+    with pytest.raises(ValueError, match="only supported for SVG maps"):
+        build_robot_config_from_scenario(
+            {
+                "name": "yaml_geometry",
+                "map_file": str(map_file),
+                "map_geometry_contract": "corrected",
+            },
+            scenario_path=tmp_path / "scenario.yaml",
+        )
+
+
 def test_build_robot_config_rejects_corrected_without_explicit_svg_map(
     tmp_path: Path,
 ) -> None:

@@ -45,8 +45,8 @@ its current evidence is synthetic implementation-integrity proof and the externa
 blocked.
 
 The SVG geometry-contract boundary (legacy as-run vs corrected authored coordinates) is documented
-in [svg_geometry_contract.md](svg_geometry_contract.md); legacy and corrected rows must never be
-pooled as comparable evidence.
+in [svg_geometry_contract.md](svg_geometry_contract.md); consumers must partition legacy and
+corrected rows or establish explicit compatibility before pooling them as comparable evidence.
 
 Use this directory for non-trivial insights, decisions, tradeoffs, validation notes, and execution
 context that future contributors or agents are likely to need again.

@@ -39,9 +39,10 @@ implementation-only; external-data execution remains blocked by #6530:
 
 Issue #8314 SVG geometry contract: the map loader ignored authored ancestor
 transforms, displacing bottleneck pedestrian geometry 4.37 m. The `legacy`
-contract preserves as-run coordinates and the `corrected` contract applies
-nested `translate(...)` while failing closed on other transforms. Legacy and
-corrected rows must never be pooled:
+contract preserves historical transform-ignoring geometry and the `corrected`
+contract applies nested `translate(...)` while failing closed on other
+transforms. The recorded contract label lets consumers partition legacy and
+corrected rows before comparing or pooling them:
 [svg_geometry_contract.md](svg_geometry_contract.md).
 
 Issue #8205 observation-derived tracker goal-belief adapter: a default-off, actor-safe bridge

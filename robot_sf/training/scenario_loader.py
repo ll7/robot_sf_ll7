@@ -1194,7 +1194,8 @@ def _load_map_definition(map_path: str, geometry_contract: str = "legacy") -> Ma
     8 unique maps were active in the same training session.
 
     Returns:
-        MapDefinition | None: Parsed map definition for SVG maps, else ``None``.
+        MapDefinition | None: Parsed map definition for a supported SVG, JSON, or
+            YAML map, else ``None``.
     """
 
     if geometry_contract not in SUPPORTED_GEOMETRY_CONTRACTS:
@@ -1573,6 +1574,12 @@ def resolve_map_definition(
     map_file: str | None, *, scenario_path: Path, geometry_contract: str = "legacy"
 ) -> MapDefinition | None:
     """Resolve and load a map definition from a scenario map file reference.
+
+    Args:
+        map_file: SVG, JSON, or YAML map path from the scenario.
+        scenario_path: Scenario manifest used to resolve relative map paths.
+        geometry_contract: SVG geometry contract; non-SVG maps accept only
+            ``"legacy"``.
 
     Returns:
         MapDefinition | None: Loaded map definition when the file exists, otherwise ``None``.

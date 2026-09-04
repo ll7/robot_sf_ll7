@@ -382,6 +382,7 @@ def _checkpoint_traces(
     requested: str | None,
     observed: str | None,
     *,
+    requested_model_id: str | None = "predictive_proxy_selected_v2_full",
     load_status: str = "loaded",
     fallback_used: bool = False,
 ) -> dict[str, dict[str, Any]]:
@@ -395,6 +396,7 @@ def _checkpoint_traces(
                     "load_succeeded": True,
                 },
                 "foresight_prediction": {
+                    "requested_model_id": requested_model_id,
                     "load_status": load_status,
                     "fallback_used": fallback_used,
                     "requested_checkpoint_sha256": requested,
@@ -415,12 +417,15 @@ def test_runtime_predictive_checkpoint_refs_require_paired_registry_match() -> N
         traces,
         expected_sha256="a" * 64,
         expected_predictive_sha256=nested_digest,
+        expected_predictive_model_id="predictive_proxy_selected_v2_full",
     )
 
     assert refs["predictive_checkpoint_sha256_requested_perfect_perception"] == nested_digest
     assert refs["predictive_checkpoint_sha256_observed_sensor_limited"] == nested_digest
     assert refs["predictive_checkpoint_sha256_runtime"] == nested_digest
     assert refs["predictive_checkpoint_sha256_matches_declared"] == "true"
+    assert refs["predictive_checkpoint_model_id_runtime"] == "predictive_proxy_selected_v2_full"
+    assert refs["predictive_checkpoint_model_id_matches_declared"] == "true"
     assert comparator_runner._runtime_provenance_error(refs) is None
 
 
@@ -432,12 +437,14 @@ def test_runtime_predictive_checkpoint_digest_mismatch_blocks() -> None:
         _checkpoint_traces(requested, observed),
         expected_sha256="a" * 64,
         expected_predictive_sha256=requested,
+        expected_predictive_model_id="predictive_proxy_selected_v2_full",
     )
 
     error = comparator_runner._runtime_provenance_error(
         {
             **refs,
             "predictive_checkpoint_sha256_declared": requested,
+            "predictive_checkpoint_model_id": "predictive_proxy_selected_v2_full",
         }
     )
 
@@ -446,6 +453,33 @@ def test_runtime_predictive_checkpoint_digest_mismatch_blocks() -> None:
     assert error is not None
     assert error["status"] == "blocked"
     assert "predictive foresight checkpoint digest" in error["reason"]
+
+
+def test_runtime_predictive_checkpoint_model_id_mismatch_blocks() -> None:
+    """Matching checkpoint bytes cannot mask a mismatched requested model identity."""
+    digest = "b" * 64
+    expected_model_id = "predictive_proxy_selected_v2_full"
+    refs = comparator_runner._runtime_checkpoint_refs(
+        _checkpoint_traces(digest, digest, requested_model_id="different_model"),
+        expected_sha256="a" * 64,
+        expected_predictive_sha256=digest,
+        expected_predictive_model_id=expected_model_id,
+    )
+
+    error = comparator_runner._runtime_provenance_error(
+        {
+            **refs,
+            "predictive_checkpoint_sha256_declared": digest,
+            "predictive_checkpoint_model_id": expected_model_id,
+        }
+    )
+
+    assert refs["predictive_checkpoint_sha256_matches_declared"] == "true"
+    assert refs["predictive_checkpoint_model_id_runtime"] == "different_model"
+    assert refs["predictive_checkpoint_model_id_matches_declared"] == "false"
+    assert error is not None
+    assert error["status"] == "blocked"
+    assert "model identity" in error["reason"]
 
 
 @pytest.mark.parametrize(
@@ -466,12 +500,14 @@ def test_runtime_predictive_checkpoint_unavailable_blocks(
         ),
         expected_sha256="a" * 64,
         expected_predictive_sha256=digest,
+        expected_predictive_model_id="predictive_proxy_selected_v2_full",
     )
 
     error = comparator_runner._runtime_provenance_error(
         {
             **refs,
             "predictive_checkpoint_sha256_declared": digest,
+            "predictive_checkpoint_model_id": "predictive_proxy_selected_v2_full",
         }
     )
 

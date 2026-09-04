@@ -176,13 +176,20 @@ def test_bundle_source_basenames_must_be_unique() -> None:
         )
 
 
-def _row(seed: int, *, delta: float = 0.0, status: str = "native") -> dict:
+def _row(
+    seed: int,
+    *,
+    delta: float = 0.0,
+    status: str = "successful_evidence",
+    execution_mode: str = "native",
+) -> dict:
     """Return one complete synthetic parity row."""
     return {
         "planner_key": "ppo",
         "scenario_id": "fixture.scenario",
         "seed": seed,
         "row_status": status,
+        "execution_mode": execution_mode,
         "benchmark_success": True,
         "benchmark_success_basis": "all",
         "termination_reason": "success",
@@ -226,8 +233,21 @@ def test_compare_parity_rows_rejects_status_and_metric_drift(tmp_path: Path) -> 
     report = compare_parity_rows(before, after)
 
     assert report["status"] == "failed"
-    assert any("non-native" in blocker for blocker in report["blockers"])
+    assert any("status drift" in blocker for blocker in report["blockers"])
     assert any("metric drift" in blocker for blocker in report["blockers"])
+
+
+def test_compare_parity_rows_uses_execution_mode_for_native_admission(tmp_path: Path) -> None:
+    """Native execution is a separate field from the evidence row status."""
+    before = tmp_path / "before.jsonl"
+    after = tmp_path / "after.jsonl"
+    _write_rows(before, [_row(111)])
+    _write_rows(after, [_row(111, execution_mode="adapter")])
+
+    report = compare_parity_rows(before, after)
+
+    assert report["status"] == "failed"
+    assert any("non-native execution" in blocker for blocker in report["blockers"])
 
 
 def test_compare_parity_rows_rejects_coerced_identity_and_status_types(tmp_path: Path) -> None:

@@ -501,6 +501,7 @@ def _validate_protocol_shape(protocol: Mapping[str, Any]) -> None:
         raise ValueError("parity row identity must be planner_key/scenario_id/seed")
     if protocol.get("required_status_fields") != [
         "row_status",
+        "execution_mode",
         "benchmark_success",
         "benchmark_success_basis",
         "termination_reason",
@@ -722,10 +723,11 @@ def _compare_status_fields(
 ) -> list[str]:
     """Return status-field parity blockers for one row."""
     blockers: list[str] = []
-    if before_row.get("row_status") != "native" or after_row.get("row_status") != "native":
-        blockers.append(f"non-native row is not admissible for parity: {key!r}")
+    if before_row.get("execution_mode") != "native" or after_row.get("execution_mode") != "native":
+        blockers.append(f"non-native execution is not admissible for parity: {key!r}")
     expected_types: dict[str, type] = {
         "row_status": str,
+        "execution_mode": str,
         "benchmark_success": bool,
         "benchmark_success_basis": str,
         "termination_reason": str,

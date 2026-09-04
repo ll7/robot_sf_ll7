@@ -122,6 +122,7 @@ parity_protocol:
   row_identity: [planner_key, scenario_id, seed]
   required_status_fields:
     - row_status
+    - execution_mode
     - benchmark_success
     - benchmark_success_basis
     - termination_reason

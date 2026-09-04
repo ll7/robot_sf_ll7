@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 from typing import TYPE_CHECKING, Any
-from unittest.mock import patch
 
 import pytest
 
@@ -49,31 +48,47 @@ class _Session:
         self.headers: dict[str, str] = {}
         self.gets: list[_Response] = []
         self.posts: list[_Response] = []
-        self.puts: list[_Response] = []
-        self.deletes: list[_Response] = []
+        self.puts: list[Any] = []
+        self.deletes: list[Any] = []
         self.urls: list[str] = []
+        self.methods: list[str] = []
         self.put_kwargs: list[dict[str, Any]] = []
+        self.delete_kwargs: list[dict[str, Any]] = []
 
     def get(self, url: str, **kwargs: Any) -> _Response:
         """Consume one GET fixture."""
         self.urls.append(url)
-        return self.gets.pop(0)
+        self.methods.append("GET")
+        result = self.gets.pop(0)
+        if isinstance(result, BaseException):
+            raise result
+        return result
 
     def post(self, url: str, **kwargs: Any) -> _Response:
         """Consume one POST fixture."""
         self.urls.append(url)
+        self.methods.append("POST")
         return self.posts.pop(0)
 
     def put(self, url: str, **kwargs: Any) -> _Response:
         """Consume one PUT fixture."""
         self.urls.append(url)
+        self.methods.append("PUT")
         self.put_kwargs.append(kwargs)
-        return self.puts.pop(0)
+        result = self.puts.pop(0)
+        if isinstance(result, BaseException):
+            raise result
+        return result
 
     def delete(self, url: str, **kwargs: Any) -> _Response:
         """Consume one DELETE fixture."""
         self.urls.append(url)
-        return self.deletes.pop(0)
+        self.methods.append("DELETE")
+        self.delete_kwargs.append(kwargs)
+        result = self.deletes.pop(0)
+        if isinstance(result, BaseException):
+            raise result
+        return result
 
 
 def _metadata() -> dict[str, Any]:
@@ -107,38 +122,6 @@ def _draft(*, submitted: bool = False, metadata: dict[str, Any] | None = None) -
         "links": {"bucket": "https://zenodo.org/api/files/bucket"},
         "files": [],
     }
-
-
-def _draft_file(name: str, *, deposition_id: int = 8, file_id: str = "file-1") -> dict[str, Any]:
-    """Return one legacy deposition-file resource with an exact self link."""
-    return {
-        "id": file_id,
-        "filename": name,
-        "links": {
-            "self": (f"https://zenodo.org/api/deposit/depositions/{deposition_id}/files/{file_id}")
-        },
-    }
-
-
-def _successor_state() -> dict[str, Any]:
-    """Return sealed state carrying exact new-version predecessor provenance."""
-    return publisher._seal_state(
-        {
-            "schema_version": publisher.ZENODO_STATE_SCHEMA,
-            "deposition_id": 8,
-            "record_id": 8,
-            "concept_record_id": "6",
-            "doi": "10.5281/zenodo.8",
-            "submitted": False,
-            "state": "unsubmitted",
-            "files": [],
-            "concept_doi": "10.5281/zenodo.6",
-            "predecessor_deposition_id": 7,
-            "predecessor_doi": "10.5281/zenodo.7",
-            "predecessor": {"deposition_id": 7, "doi": "10.5281/zenodo.7"},
-            "source_tag": ("https://github.com/ll7/robot_sf_ll7/releases/tag/" + SUCCESSOR_TAG),
-        }
-    )
 
 
 def _published_record(files: list[dict[str, Any]]) -> dict[str, Any]:
@@ -195,25 +178,6 @@ def _new_version_metadata() -> dict[str, Any]:
         },
     ]
     return metadata
-
-
-def _successor_binding(tmp_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Write metadata and return its exact manifest-style successor binding."""
-    metadata = _new_version_metadata()
-    metadata_path = tmp_path / "successor-metadata.json"
-    metadata_path.write_text(json.dumps({"metadata": metadata}), encoding="utf-8")
-    return (
-        publisher.build_release_binding(
-            {
-                "metadata_path": metadata_path,
-                "metadata_sha256": publisher._sha256_file(metadata_path),
-                "release_tag": SUCCESSOR_TAG,
-                "concept_doi": "10.5281/zenodo.6",
-                "version_doi": "10.5281/zenodo.8",
-            }
-        ),
-        metadata,
-    )
 
 
 def _predecessor_deposition(**updates: Any) -> dict[str, Any]:
@@ -284,6 +248,682 @@ def _new_version_with_metadata(session: _Session, metadata: dict[str, Any]) -> d
     )
 
 
+def _successor_state(**updates: Any) -> dict[str, Any]:
+    """Return a sealed state with the exact lineage emitted by ``new_version``."""
+    payload: dict[str, Any] = {
+        "schema_version": publisher.ZENODO_STATE_SCHEMA,
+        "deposition_id": 8,
+        "record_id": 8,
+        "concept_record_id": "6",
+        "concept_doi": "10.5281/zenodo.6",
+        "doi": "10.5281/zenodo.8",
+        "submitted": False,
+        "state": "unsubmitted",
+        "files": [],
+        "predecessor_deposition_id": 7,
+        "predecessor_doi": "10.5281/zenodo.7",
+        "predecessor": {"deposition_id": 7, "doi": "10.5281/zenodo.7"},
+        "source_tag": ("https://github.com/ll7/robot_sf_ll7/releases/tag/" + SUCCESSOR_TAG),
+    }
+    payload.update(updates)
+    return publisher._seal_state(payload)
+
+
+def _successor_release_binding(**updates: Any) -> dict[str, Any]:
+    """Return a complete valid release binding for direct validator tests."""
+    binding: dict[str, Any] = {
+        "metadata_sha256": "0" * 64,
+        "metadata_contract_sha256": "1" * 64,
+        "release_tag": SUCCESSOR_TAG,
+        "concept_doi": "10.5281/zenodo.6",
+        "version_doi": "10.5281/zenodo.8",
+    }
+    binding.update(updates)
+    return binding
+
+
+def _successor_binding(tmp_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Write metadata and return its exact manifest-style successor binding."""
+    metadata = _new_version_metadata()
+    metadata_path = tmp_path / "successor-metadata.json"
+    metadata_path.write_text(json.dumps({"metadata": metadata}), encoding="utf-8")
+    return (
+        publisher.build_release_binding(
+            {
+                "metadata_path": metadata_path,
+                "metadata_sha256": publisher._sha256_file(metadata_path),
+                "release_tag": SUCCESSOR_TAG,
+                "concept_doi": "10.5281/zenodo.6",
+                "version_doi": "10.5281/zenodo.8",
+            }
+        ),
+        metadata,
+    )
+
+
+def _remote_file(name: str, file_id: str, *, size: int = 1) -> dict[str, Any]:
+    """Return one strict legacy deposition-file representation."""
+    return {
+        "filename": name,
+        "id": file_id,
+        "filesize": size,
+        "links": {"self": f"https://zenodo.org/api/files/bucket/{name}"},
+    }
+
+
+def _successor_payload(files: list[dict[str, Any]], **updates: Any) -> dict[str, Any]:
+    """Return a successor draft with a supplied remote inventory."""
+    payload = _successor_draft()
+    payload["files"] = files
+    payload.update(updates)
+    return payload
+
+
+def _intended_remote_files(names: list[str]) -> list[dict[str, Any]]:
+    """Return remote entries for intended names without deletion authority."""
+    return [{"filename": name, "size": 1, "links": {}} for name in names]
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"concept_doi": "not-a-doi"},
+        {"predecessor": None},
+        {"source_tag": None},
+        {"concept_doi": 6},
+        {"source_tag": 6},
+        {"source_tag": "not-a-release-tag"},
+    ],
+)
+def test_successor_state_validator_rejects_malformed_lineage_before_remote_use(
+    updates: dict[str, Any],
+) -> None:
+    """The successor validator rejects malformed sealed lineage independently of HTTP state."""
+    state = dict(_successor_state())
+    state.update(updates)
+
+    with pytest.raises(publisher.ZenodoPublisherError):
+        publisher._validate_successor_state(state)
+
+
+@pytest.mark.parametrize(
+    "binding",
+    [
+        "malformed",
+        {},
+        _successor_release_binding(metadata_sha256="not-a-sha"),
+        _successor_release_binding(release_tag=6),
+        _successor_release_binding(release_tag="another-release"),
+        _successor_release_binding(concept_doi="10.5281/zenodo.7"),
+    ],
+)
+def test_successor_state_validator_rejects_malformed_release_binding(
+    binding: Any,
+) -> None:
+    """A sealed successor cannot use incomplete or conflicting release binding metadata."""
+    state = dict(_successor_state(release_binding=binding))
+
+    with pytest.raises(publisher.ZenodoPublisherError):
+        publisher._validate_successor_state(state)
+
+
+@pytest.mark.parametrize(
+    "links",
+    [
+        None,
+        {
+            "self": "https://zenodo.org/api/deposit/depositions/7",
+            "bucket": "https://zenodo.org/api/files/bucket",
+        },
+        {"bucket": "https://zenodo.org/api/files/bucket/extra"},
+    ],
+)
+def test_upload_rejects_malformed_deposition_links_before_put(links: Any, tmp_path: Path) -> None:
+    """The exact deposition response must provide structurally valid successor links."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    remote = _successor_payload([])
+    remote["links"] = links
+    session = _Session()
+    session.gets = [_Response(remote)]
+
+    with pytest.raises(publisher.ZenodoPublisherError):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.methods == ["GET"]
+    assert session.deletes == []
+
+
+@pytest.mark.parametrize(
+    "remote_file",
+    [
+        {"filename": ".", "id": "file-id", "links": {}},
+        {"filename": "inherited.tar.gz", "id": ".", "links": {}},
+    ],
+)
+def test_upload_rejects_dot_remote_names_and_ids_before_put(
+    remote_file: dict[str, Any], tmp_path: Path
+) -> None:
+    """Dot segments cannot become remote inventory or deletion targets."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    session = _Session()
+    session.gets = [_Response(_successor_payload([remote_file]))]
+
+    with pytest.raises(publisher.ZenodoPublisherError):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.methods == ["GET"]
+    assert session.deletes == []
+
+
+@pytest.mark.parametrize("invalid_kind", ["duplicate", "missing", "empty", "symlink", "control"])
+def test_upload_local_preflight_rejects_invalid_inventory_before_any_remote_write(
+    tmp_path: Path, invalid_kind: str
+) -> None:
+    """Every structurally invalid local input fails before the first API mutation."""
+    if invalid_kind == "duplicate":
+        left = tmp_path / "left" / "bundle.tar.gz"
+        right = tmp_path / "right" / "bundle.tar.gz"
+        left.parent.mkdir()
+        right.parent.mkdir()
+        left.write_bytes(b"left")
+        right.write_bytes(b"right")
+        files = [left, right]
+    elif invalid_kind == "missing":
+        files = [tmp_path / "missing.tar.gz"]
+    elif invalid_kind == "empty":
+        empty = tmp_path / "empty.tar.gz"
+        empty.write_bytes(b"")
+        files = [empty]
+    elif invalid_kind == "symlink":
+        target = tmp_path / "target.tar.gz"
+        target.write_bytes(b"target")
+        link = tmp_path / "link.tar.gz"
+        link.symlink_to(target)
+        files = [link]
+    else:
+        invalid = tmp_path / "bad\nname.tar.gz"
+        invalid.write_bytes(b"invalid")
+        files = [invalid]
+
+    session = _Session()
+    with pytest.raises(publisher.ZenodoPublisherError):
+        publisher.upload(session, _successor_state(), files)
+
+    assert session.urls == []
+    assert session.methods == []
+    assert session.deletes == []
+
+
+def test_upload_local_drift_after_preflight_causes_no_remote_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A file changing after hashing is caught before the first PUT."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"before")
+    original_preflight = publisher._preflight_upload_inventory
+
+    def drift_after_preflight(files: list[Path]) -> dict[str, dict[str, Any]]:
+        inventory = original_preflight(files)
+        bundle.write_bytes(b"after")
+        return inventory
+
+    monkeypatch.setattr(publisher, "_preflight_upload_inventory", drift_after_preflight)
+    session = _Session()
+    session.gets = [_Response(_successor_payload([]))]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="local file changed"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.methods == ["GET"]
+    assert session.deletes == []
+
+
+def test_upload_normal_draft_extra_does_not_grant_delete_authority(tmp_path: Path) -> None:
+    """Only a sealed new-version successor may authorize inherited-file deletion."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    normal_state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "concept_record_id": "6",
+            "doi": "10.5281/zenodo.7",
+            "submitted": False,
+            "state": "unsubmitted",
+            "files": [],
+        }
+    )
+    remote = _draft()
+    remote["files"] = [_remote_file("inherited.tar.gz", "old-id")]
+    session = _Session()
+    session.gets = [_Response(remote)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="deletion authority"):
+        publisher.upload(session, normal_state, [bundle])
+
+    assert session.methods == ["GET"]
+    assert session.deletes == []
+
+
+@pytest.mark.parametrize(
+    "remote_files",
+    [
+        None,
+        [{"filename": "inherited.tar.gz", "name": "different.tar.gz", "links": {}}],
+        [
+            {"filename": "inherited.tar.gz", "links": {}},
+            {"name": "inherited.tar.gz", "links": {}},
+        ],
+        [
+            {"filename": "first.tar.gz", "id": "same-id", "links": {}},
+            {"filename": "second.tar.gz", "id": "same-id", "links": {}},
+        ],
+        [{"filename": "inherited.tar.gz", "id": "../predecessor", "links": {}}],
+        [{"filename": "inherited.tar.gz", "links": {"self": "https://evil.example/file"}}],
+        [{"filename": "inherited.tar.gz", "links": {}}],
+    ],
+)
+def test_upload_rejects_malformed_initial_inventory_before_any_mutation(
+    remote_files: Any, tmp_path: Path
+) -> None:
+    """Malformed or unaddressable inherited entries cannot reach PUT or DELETE."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    remote = _successor_payload(remote_files)
+    session = _Session()
+    session.gets = [_Response(remote)]
+
+    with pytest.raises(publisher.ZenodoPublisherError):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert "PUT" not in session.methods
+    assert "DELETE" not in session.methods
+
+
+@pytest.mark.parametrize(
+    "state_updates",
+    [
+        {"deposition_id": 7},
+        {"record_id": 7},
+        {"concept_record_id": "7"},
+        {"concept_doi": "10.5281/zenodo.7"},
+        {"doi": "10.5281/zenodo.7"},
+        {"predecessor_deposition_id": 8},
+        {"predecessor_doi": "10.5281/zenodo.9"},
+        {"predecessor": {"deposition_id": 8, "doi": "10.5281/zenodo.8"}},
+        {"state": "inprogress"},
+    ],
+)
+def test_upload_rejects_invalid_sealed_successor_identity_before_remote_mutation(
+    state_updates: dict[str, Any], tmp_path: Path
+) -> None:
+    """Successor lineage and lifecycle fields cannot authorize an unsafe operation."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    raw_state = dict(_successor_state())
+    raw_state.pop("integrity")
+    raw_state.update(state_updates)
+    session = _Session()
+
+    with pytest.raises(publisher.ZenodoPublisherError):
+        publisher.upload(session, publisher._seal_state(raw_state), [bundle])
+
+    assert session.urls == []
+    assert session.methods == []
+
+
+@pytest.mark.parametrize("field", ["id", "record_id", "conceptrecid", "conceptdoi", "doi"])
+def test_upload_rejects_remote_successor_identity_drift_before_put(
+    field: str, tmp_path: Path
+) -> None:
+    """The exact successor response identity remains bound before any PUT."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    remote = _successor_payload([])
+    if field == "id":
+        remote["id"] = 9
+    elif field == "record_id":
+        remote["record_id"] = 9
+        remote["doi"] = "10.5281/zenodo.9"
+        remote["metadata"]["prereserve_doi"] = {"doi": "10.5281/zenodo.9"}
+    elif field == "conceptrecid":
+        remote["conceptrecid"] = "9"
+    elif field == "conceptdoi":
+        remote["conceptdoi"] = "10.5281/zenodo.9"
+    else:
+        remote["doi"] = "10.5281/zenodo.9"
+    session = _Session()
+    session.gets = [_Response(remote)]
+
+    with pytest.raises(publisher.ZenodoPublisherError):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.methods == ["GET"]
+    assert session.deletes == []
+
+
+@pytest.mark.parametrize(
+    "submitted,state", [(False, "inprogress"), (False, "error"), (True, "done")]
+)
+def test_upload_rejects_unstable_or_published_successor_before_put(
+    submitted: bool, state: str, tmp_path: Path
+) -> None:
+    """Every remote reconciliation snapshot must remain a stable unpublished draft."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    remote = _successor_payload([], submitted=submitted, state=state)
+    session = _Session()
+    session.gets = [_Response(remote)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="unpublished draft"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.methods == ["GET"]
+    assert session.deletes == []
+
+
+def test_successor_upload_prunes_inherited_archive_and_returns_credential_free_receipt(
+    tmp_path: Path,
+) -> None:
+    """A valid successor converges to the exact intended inventory without predecessor writes."""
+    names = ["README.md", "benchmark.tar.gz", "manifest.json", "provenance.json"]
+    paths = []
+    for name in names:
+        path = tmp_path / name
+        path.write_bytes(name.encode())
+        paths.append(path)
+    intended = _intended_remote_files(names)
+    inherited = _remote_file("the-old-predecessor-archive.tar.gz", "old-file-id")
+    initial = _successor_payload([inherited])
+    post_upload = _successor_payload([*intended, inherited])
+    pre_delete = _successor_payload([*intended, inherited])
+    final = _successor_payload(intended)
+    session = _Session()
+    session.gets = [
+        _Response(initial),
+        _Response(post_upload),
+        _Response(pre_delete),
+        _Response(inherited),
+        _Response(final),
+        _Response(final),
+    ]
+    session.puts = [_Response({}, status_code=201) for _ in names]
+    session.deletes = [_Response({}, status_code=204)]
+
+    updated = publisher.upload(session, _successor_state(), paths)
+
+    assert [
+        url for method, url in zip(session.methods, session.urls, strict=True) if method == "PUT"
+    ] == [f"https://zenodo.org/api/files/bucket/{name}" for name in sorted(names)]
+    mutation_urls = [
+        url
+        for method, url in zip(session.methods, session.urls, strict=True)
+        if method in {"PUT", "DELETE"}
+    ]
+    delete_urls = [
+        url for method, url in zip(session.methods, session.urls, strict=True) if method == "DELETE"
+    ]
+    assert mutation_urls[-1] == "https://zenodo.org/api/deposit/depositions/8/files/old-file-id"
+    assert all(not url.endswith(f"/{name}") for url in delete_urls for name in names)
+    assert all("/depositions/7" not in url for url in mutation_urls)
+    assert all("/api/records/" not in url for url in mutation_urls)
+    assert "POST" not in session.methods
+    assert session.delete_kwargs == [{"timeout": 60, "allow_redirects": False}]
+    assert updated["files"] == [
+        {
+            "name": name,
+            "size": (tmp_path / name).stat().st_size,
+            "sha256": publisher._sha256_file(tmp_path / name),
+        }
+        for name in sorted(names)
+    ]
+    receipt = updated["reconciliation_receipt"]
+    assert receipt["status"] == "converged"
+    assert receipt["successor_deposition_id"] == 8
+    assert receipt["predecessor_deposition_id"] == 7
+    assert receipt["deleted_filenames"] == ["the-old-predecessor-archive.tar.gz"]
+    publisher._verify_integrity(
+        receipt,
+        key="integrity",
+        schema=publisher.ZENODO_RECONCILIATION_SCHEMA,
+    )
+    serialized = json.dumps(updated, sort_keys=True)
+    assert "old-file-id" not in serialized
+    assert "authorization" not in serialized.casefold()
+    assert "verification_receipt" not in updated
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="verification receipt"):
+        publisher.publish(session, updated, _metadata())
+    assert "POST" not in session.methods
+
+
+def test_successor_upload_does_not_delete_a_new_concurrent_extra(tmp_path: Path) -> None:
+    """An extra appearing after the initial read is never granted delete authority."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    inherited = _remote_file("inherited.tar.gz", "old-id")
+    concurrent = _remote_file("concurrent.tar.gz", "new-id")
+    post_upload = _successor_payload(
+        [*_intended_remote_files([bundle.name]), inherited, concurrent]
+    )
+    session = _Session()
+    session.gets = [
+        _Response(_successor_payload([inherited])),
+        _Response(post_upload),
+    ]
+    session.puts = [_Response({}, status_code=201)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="new unexplained extra"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.methods == ["GET", "PUT", "GET"]
+    assert session.deletes == []
+
+
+def test_successor_upload_failed_put_does_not_start_deletion(tmp_path: Path) -> None:
+    """A failed PUT stops reconciliation before any destructive operation."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    session = _Session()
+    session.gets = [_Response(_successor_payload([]))]
+    session.puts = [_Response({}, status_code=500)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="upload bundle.tar.gz"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.methods == ["GET", "PUT"]
+    assert session.deletes == []
+
+
+def test_successor_upload_mismatched_target_get_does_not_delete(tmp_path: Path) -> None:
+    """A file-target GET must confirm both the planned ID and extra filename."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    inherited = _remote_file("inherited.tar.gz", "old-id")
+    post_upload = _successor_payload([*_intended_remote_files([bundle.name]), inherited])
+    invalid_target = _remote_file("inherited.tar.gz", "different-id")
+    session = _Session()
+    session.gets = [
+        _Response(_successor_payload([inherited])),
+        _Response(post_upload),
+        _Response(post_upload),
+        _Response(invalid_target),
+        _Response(post_upload),
+    ]
+    session.puts = [_Response({}, status_code=201)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="deletion target"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert "DELETE" not in session.methods
+    assert session.deletes == []
+
+
+@pytest.mark.parametrize("delete_failure", ["lost", "404"])
+def test_successor_upload_resolves_ambiguous_delete_only_from_fresh_readback(
+    delete_failure: str, tmp_path: Path
+) -> None:
+    """A lost or 404 DELETE is accepted only after a fresh exact-successor read."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    inherited = _remote_file("inherited.tar.gz", "old-id")
+    exact = _successor_payload(_intended_remote_files([bundle.name]))
+    with_extra = _successor_payload([*_intended_remote_files([bundle.name]), inherited])
+    session = _Session()
+    session.gets = [
+        _Response(_successor_payload([inherited])),
+        _Response(with_extra),
+        _Response(with_extra),
+        _Response(inherited),
+        _Response(exact),
+        _Response(exact),
+    ]
+    session.puts = [_Response({}, status_code=201)]
+    session.deletes = [
+        RuntimeError("lost DELETE response")
+        if delete_failure == "lost"
+        else _Response({}, status_code=404)
+    ]
+
+    updated = publisher.upload(session, _successor_state(), [bundle])
+
+    assert updated["reconciliation_receipt"]["deleted_filenames"] == ["inherited.tar.gz"]
+    assert len(session.deletes) == 0
+    assert session.methods.count("DELETE") == 1
+    assert session.methods[-2:] == ["GET", "GET"]
+
+
+@pytest.mark.parametrize("delete_status", [403, 500])
+def test_successor_upload_halts_after_non_successful_delete(
+    delete_status: int, tmp_path: Path
+) -> None:
+    """A refused or ambiguous deletion stops without attempting another delete."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    inherited = _remote_file("inherited.tar.gz", "old-id")
+    with_extra = _successor_payload([*_intended_remote_files([bundle.name]), inherited])
+    session = _Session()
+    session.gets = [
+        _Response(_successor_payload([inherited])),
+        _Response(with_extra),
+        _Response(with_extra),
+        _Response(inherited),
+        _Response(with_extra),
+    ]
+    session.puts = [_Response({}, status_code=201)]
+    session.deletes = [_Response({}, status_code=delete_status)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="successor"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.methods.count("DELETE") == 1
+    assert session.deletes == []
+
+
+def test_successor_upload_retries_partial_put_from_fresh_remote_inventory(tmp_path: Path) -> None:
+    """A retry re-PUTs every intended file after a mid-upload failure."""
+    names = ["a.bin", "b.bin"]
+    paths = []
+    for name in names:
+        path = tmp_path / name
+        path.write_bytes(name.encode())
+        paths.append(path)
+    inherited = _remote_file("inherited.tar.gz", "old-id")
+    first_session = _Session()
+    first_session.gets = [_Response(_successor_payload([inherited]))]
+    first_session.puts = [_Response({}, status_code=201), RuntimeError("failed PUT")]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="upload b.bin"):
+        publisher.upload(first_session, _successor_state(), paths)
+    assert "DELETE" not in first_session.methods
+
+    intended = _intended_remote_files(names)
+    second_session = _Session()
+    second_session.gets = [
+        _Response(_successor_payload([intended[0], inherited])),
+        _Response(_successor_payload([*intended, inherited])),
+        _Response(_successor_payload([*intended, inherited])),
+        _Response(inherited),
+        _Response(_successor_payload(intended)),
+        _Response(_successor_payload(intended)),
+    ]
+    second_session.puts = [_Response({}, status_code=201) for _ in names]
+    second_session.deletes = [_Response({}, status_code=204)]
+
+    updated = publisher.upload(second_session, _successor_state(), paths)
+
+    assert [
+        url
+        for method, url in zip(second_session.methods, second_session.urls, strict=True)
+        if method == "PUT"
+    ] == [f"https://zenodo.org/api/files/bucket/{name}" for name in names]
+    assert {updated["files"][index]["name"] for index in range(2)} == set(names)
+    assert second_session.methods.count("DELETE") == 1
+
+
+def test_successor_upload_retries_partial_delete_from_fresh_remote_inventory(
+    tmp_path: Path,
+) -> None:
+    """A retry recomputes the remaining inherited extras after a partial DELETE."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    old_a = _remote_file("old-a.tar.gz", "old-a-id")
+    old_b = _remote_file("old-b.tar.gz", "old-b-id")
+    intended = _intended_remote_files([bundle.name])
+    with_both = _successor_payload([*intended, old_a, old_b])
+    with_b = _successor_payload([*intended, old_b])
+    first_session = _Session()
+    first_session.gets = [
+        _Response(_successor_payload([old_a, old_b])),
+        _Response(with_both),
+        _Response(with_both),
+        _Response(old_a),
+        _Response(with_b),
+        _Response(with_b),
+        _Response(old_b),
+        _Response(with_b),
+    ]
+    first_session.puts = [_Response({}, status_code=201)]
+    first_session.deletes = [_Response({}, status_code=204), RuntimeError("lost DELETE")]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="retry from fresh state"):
+        publisher.upload(first_session, _successor_state(), [bundle])
+    assert [
+        url
+        for method, url in zip(first_session.methods, first_session.urls, strict=True)
+        if method == "DELETE"
+    ] == [
+        "https://zenodo.org/api/deposit/depositions/8/files/old-a-id",
+        "https://zenodo.org/api/deposit/depositions/8/files/old-b-id",
+    ]
+
+    second_session = _Session()
+    second_session.gets = [
+        _Response(with_b),
+        _Response(with_b),
+        _Response(with_b),
+        _Response(old_b),
+        _Response(_successor_payload(intended)),
+        _Response(_successor_payload(intended)),
+    ]
+    second_session.puts = [_Response({}, status_code=201)]
+    second_session.deletes = [_Response({}, status_code=204)]
+
+    updated = publisher.upload(second_session, _successor_state(), [bundle])
+
+    assert updated["reconciliation_receipt"]["deleted_filenames"] == ["old-b.tar.gz"]
+    assert [
+        url
+        for method, url in zip(second_session.methods, second_session.urls, strict=True)
+        if method == "DELETE"
+    ] == [
+        "https://zenodo.org/api/deposit/depositions/8/files/old-b-id",
+    ]
+
+
 def test_new_version_replaces_metadata_and_seals_predecessor_identity() -> None:
     """A legacy new-version reservation returns only checked, credential-free state."""
     session = _new_version_fixture()
@@ -330,7 +970,18 @@ def test_new_version_accepts_legacy_prereserved_version_doi() -> None:
 
 def test_bound_new_version_rejects_returned_doi_before_metadata_put(tmp_path: Path) -> None:
     """A bound successor DOI mismatch is rejected before any metadata mutation."""
-    binding, metadata = _successor_binding(tmp_path)
+    metadata = _new_version_metadata()
+    metadata_path = tmp_path / "successor-metadata.json"
+    metadata_path.write_text(json.dumps({"metadata": metadata}), encoding="utf-8")
+    binding = publisher.build_release_binding(
+        {
+            "metadata_path": metadata_path,
+            "metadata_sha256": publisher._sha256_file(metadata_path),
+            "release_tag": SUCCESSOR_TAG,
+            "concept_doi": "10.5281/zenodo.6",
+            "version_doi": "10.5281/zenodo.8",
+        }
+    )
     mismatched_draft = _successor_draft(
         deposition_id=9,
         record_id=9,
@@ -372,25 +1023,6 @@ def test_recover_restores_successor_lineage_for_inherited_file_cleanup(tmp_path:
         "doi": "10.5281/zenodo.7",
     }
     assert state["source_tag"].endswith(SUCCESSOR_TAG)
-
-    bundle = tmp_path / "successor.tar.gz"
-    bundle.write_bytes(b"successor")
-    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
-    uploaded = _draft_file(bundle.name, file_id="successor-file")
-    remote = _successor_draft(metadata=metadata)
-    remote["files"] = [inherited]
-    session.gets = [
-        _Response(remote),
-        _Response([inherited, uploaded]),
-        _Response([uploaded]),
-    ]
-    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
-    session.deletes = [_Response({}, 204)]
-
-    updated = publisher.upload(session, state, [bundle], release_binding=binding)
-
-    assert updated["files"][0]["name"] == bundle.name
-    assert any(url.endswith("/deposit/depositions/8/files/inherited-file") for url in session.urls)
 
 
 @pytest.mark.parametrize(
@@ -1023,8 +1655,19 @@ def test_upload_does_not_persist_server_checksum_or_reflected_secret(tmp_path: P
         }
     )
     session = _Session()
-    uploaded = _draft_file(bundle.name, deposition_id=7, file_id="uploaded-file")
-    session.gets = [_Response(_draft()), _Response([uploaded])]
+    remote_after = _draft()
+    remote_after["files"] = [
+        {
+            "filename": bundle.name,
+            "size": bundle.stat().st_size,
+            "links": {"download": "https://zenodo.org/api/records/7/files/bundle/content"},
+        }
+    ]
+    session.gets = [
+        _Response(_draft()),
+        _Response(remote_after),
+        _Response(remote_after),
+    ]
     session.puts = [_Response({"checksum": "Bearer secret-reflection"})]
 
     updated = publisher.upload(session, state, [bundle])
@@ -1033,332 +1676,6 @@ def test_upload_does_not_persist_server_checksum_or_reflected_secret(tmp_path: P
     assert "secret-reflection" not in serialized
     assert "zenodo_checksum" not in updated["files"][0]
     assert updated["files"][0]["sha256"] == publisher._sha256_file(bundle)
-
-
-def test_upload_requires_exact_post_upload_inventory_without_extras(tmp_path: Path) -> None:
-    """Even an initially clean draft is reread and must expose every intended upload."""
-    bundle = tmp_path / "successor.tar.gz"
-    bundle.write_bytes(b"successor")
-    session = _Session()
-    session.gets = [_Response(_successor_draft()), _Response([])]
-    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
-
-    with pytest.raises(publisher.ZenodoPublisherError, match="changed unexpectedly"):
-        publisher.upload(session, _successor_state(), [bundle])
-
-    assert session.deletes == []
-    assert session.urls[-1] == "https://zenodo.org/api/deposit/depositions/8/files"
-
-
-def test_upload_reconciles_inherited_successor_files(tmp_path: Path) -> None:
-    """A bound successor uploads first, then removes only its inherited extra files."""
-    bundle = tmp_path / "successor.tar.gz"
-    bundle.write_bytes(b"successor")
-    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
-    uploaded = _draft_file(bundle.name, file_id="successor-file")
-    remote = _successor_draft()
-    remote["files"] = [inherited]
-    session = _Session()
-    session.gets = [
-        _Response(remote),
-        _Response([inherited, uploaded]),
-        _Response([uploaded]),
-    ]
-    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
-    session.deletes = [_Response({}, 204)]
-
-    updated = publisher.upload(session, _successor_state(), [bundle])
-
-    delete_urls = [url for url in session.urls if "/files/inherited-file" in url]
-    assert delete_urls == ["https://zenodo.org/api/deposit/depositions/8/files/inherited-file"]
-    assert all("/deposit/depositions/7/" not in url for url in delete_urls)
-    assert session.urls.index("https://zenodo.org/api/files/bucket/successor.tar.gz") < (
-        session.urls.index(delete_urls[0])
-    )
-    assert updated["files"] == [
-        {
-            "name": bundle.name,
-            "size": bundle.stat().st_size,
-            "sha256": publisher._sha256_file(bundle),
-        }
-    ]
-
-
-def test_upload_rejects_unbound_draft_with_unexpected_files_before_put(tmp_path: Path) -> None:
-    """A fresh reservation cannot silently prune an unrelated draft file."""
-    bundle = tmp_path / "successor.tar.gz"
-    bundle.write_bytes(b"successor")
-    remote = _draft()
-    remote["files"] = [_draft_file("unrelated.txt", deposition_id=7)]
-    state = publisher._seal_state(
-        {
-            "schema_version": publisher.ZENODO_STATE_SCHEMA,
-            "deposition_id": 7,
-            "record_id": 7,
-            "concept_record_id": "6",
-            "doi": "10.5281/zenodo.7",
-            "submitted": False,
-            "state": "unsubmitted",
-            "files": [],
-        }
-    )
-    session = _Session()
-    session.gets = [_Response(remote)]
-
-    with pytest.raises(publisher.ZenodoPublisherError, match="predecessor deposition ID"):
-        publisher.upload(session, state, [bundle])
-
-    assert session.puts == []
-    assert session.deletes == []
-
-
-@pytest.mark.parametrize(
-    "files",
-    [
-        "not-a-list",
-        ["not-an-object"],
-        [_draft_file("../unsafe", file_id="safe-id")],
-        [_draft_file("duplicate"), _draft_file("duplicate", file_id="file-2")],
-        [_draft_file("bad-id", file_id="unsafe/id")],
-        [_draft_file("one", file_id="same-id"), _draft_file("two", file_id="same-id")],
-        [
-            {
-                **_draft_file("wrong-link", file_id="file-1"),
-                "links": {"self": "https://zenodo.org/api/deposit/depositions/7/files/file-1"},
-            }
-        ],
-    ],
-)
-def test_upload_rejects_malformed_or_ambiguous_remote_inventory_before_put(
-    tmp_path: Path,
-    files: object,
-) -> None:
-    """Malformed remote file identities never reach upload or deletion."""
-    bundle = tmp_path / "successor.tar.gz"
-    bundle.write_bytes(b"successor")
-    remote = _successor_draft()
-    remote["files"] = files
-    session = _Session()
-    session.gets = [_Response(remote)]
-
-    with pytest.raises(publisher.ZenodoPublisherError):
-        publisher.upload(session, _successor_state(), [bundle])
-
-    assert session.puts == []
-    assert session.deletes == []
-
-
-def test_upload_blocks_inventory_race_without_deleting_new_file(tmp_path: Path) -> None:
-    """A new unknown file after PUT blocks cleanup instead of being deleted."""
-    bundle = tmp_path / "successor.tar.gz"
-    bundle.write_bytes(b"successor")
-    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
-    uploaded = _draft_file(bundle.name, file_id="successor-file")
-    raced = _draft_file("raced.txt", file_id="raced-file")
-    remote = _successor_draft()
-    remote["files"] = [inherited]
-    session = _Session()
-    session.gets = [_Response(remote), _Response([inherited, uploaded, raced])]
-    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
-
-    with pytest.raises(publisher.ZenodoPublisherError, match="changed unexpectedly"):
-        publisher.upload(session, _successor_state(), [bundle])
-
-    assert session.deletes == []
-
-
-def test_upload_requires_204_when_deleting_inherited_file(tmp_path: Path) -> None:
-    """A non-204 deletion response leaves caller state unchanged and blocks completion."""
-    bundle = tmp_path / "successor.tar.gz"
-    bundle.write_bytes(b"successor")
-    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
-    uploaded = _draft_file(bundle.name, file_id="successor-file")
-    remote = _successor_draft()
-    remote["files"] = [inherited]
-    state = _successor_state()
-    state_before = json.dumps(state, sort_keys=True)
-    session = _Session()
-    session.gets = [_Response(remote), _Response([inherited, uploaded])]
-    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
-    session.deletes = [_Response({}, 200)]
-
-    with pytest.raises(publisher.ZenodoPublisherError, match="delete extra draft file"):
-        publisher.upload(session, state, [bundle])
-
-    assert json.dumps(state, sort_keys=True) == state_before
-
-
-def test_upload_partial_delete_is_retryable(tmp_path: Path) -> None:
-    """A retry safely resumes after one of multiple inherited-file deletions fails."""
-    bundle = tmp_path / "successor.tar.gz"
-    bundle.write_bytes(b"successor")
-    inherited_a = _draft_file("a-predecessor.tar.gz", file_id="inherited-a")
-    inherited_b = _draft_file("b-predecessor.tar.gz", file_id="inherited-b")
-    uploaded = _draft_file(bundle.name, file_id="successor-file")
-    remote = _successor_draft()
-    remote["files"] = [inherited_a, inherited_b]
-    state = _successor_state()
-    state_before = json.dumps(state, sort_keys=True)
-    first = _Session()
-    first.gets = [
-        _Response(remote),
-        _Response([inherited_a, inherited_b, uploaded]),
-    ]
-    first.puts = [_Response({"checksum": "md5:fixture"}, 201)]
-    first.deletes = [_Response({}, 204), _Response({}, 500)]
-
-    with pytest.raises(publisher.ZenodoPublisherError, match="delete extra draft file"):
-        publisher.upload(first, state, [bundle])
-    assert json.dumps(state, sort_keys=True) == state_before
-
-    retry_remote = _successor_draft()
-    retry_remote["files"] = [inherited_b, uploaded]
-    retry = _Session()
-    retry.gets = [
-        _Response(retry_remote),
-        _Response([inherited_b, uploaded]),
-        _Response([uploaded]),
-    ]
-    retry.puts = [_Response({"checksum": "md5:fixture"}, 201)]
-    retry.deletes = [_Response({}, 204)]
-
-    updated = publisher.upload(retry, state, [bundle])
-    assert updated["files"][0]["name"] == bundle.name
-    assert any(url.endswith("/files/inherited-b") for url in retry.urls)
-
-
-def test_upload_rejects_inherited_identity_drift_before_delete(tmp_path: Path) -> None:
-    """A same-name inherited file with a changed ID is never deleted by stale identity."""
-    bundle = tmp_path / "successor.tar.gz"
-    bundle.write_bytes(b"successor")
-    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-old")
-    changed = _draft_file("predecessor.tar.gz", file_id="inherited-new")
-    uploaded = _draft_file(bundle.name, file_id="successor-file")
-    remote = _successor_draft()
-    remote["files"] = [inherited]
-    session = _Session()
-    session.gets = [_Response(remote), _Response([changed, uploaded])]
-    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
-
-    with pytest.raises(publisher.ZenodoPublisherError, match="identity changed"):
-        publisher.upload(session, _successor_state(), [bundle])
-
-    assert session.deletes == []
-
-
-def test_upload_requires_exact_inventory_after_cleanup(tmp_path: Path) -> None:
-    """A stale or newly added extra after deletion prevents state acceptance."""
-    bundle = tmp_path / "successor.tar.gz"
-    bundle.write_bytes(b"successor")
-    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
-    uploaded = _draft_file(bundle.name, file_id="successor-file")
-    remote = _successor_draft()
-    remote["files"] = [inherited]
-    session = _Session()
-    session.gets = [
-        _Response(remote),
-        _Response([inherited, uploaded]),
-        _Response([inherited, uploaded]),
-    ]
-    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
-    session.deletes = [_Response({}, 204)]
-
-    with pytest.raises(publisher.ZenodoPublisherError, match="after cleanup"):
-        publisher.upload(session, _successor_state(), [bundle])
-
-
-def test_upload_rejects_duplicate_local_basenames_before_network(tmp_path: Path) -> None:
-    """Two local paths cannot silently overwrite one remote filename."""
-    first = tmp_path / "one" / "bundle.tar.gz"
-    second = tmp_path / "two" / "bundle.tar.gz"
-    first.parent.mkdir()
-    second.parent.mkdir()
-    first.write_bytes(b"one")
-    second.write_bytes(b"two")
-    session = _Session()
-
-    with pytest.raises(publisher.ZenodoPublisherError, match="duplicate filename"):
-        publisher.upload(session, _successor_state(), [first, second])
-
-    assert session.urls == []
-
-
-@pytest.mark.parametrize("kind", ["missing", "empty"])
-def test_upload_rejects_missing_or_empty_local_inventory_before_network(
-    tmp_path: Path,
-    kind: str,
-) -> None:
-    """A missing inventory or empty file cannot begin an authenticated read."""
-    files: list[Path] = []
-    if kind == "empty":
-        empty = tmp_path / "empty.tar.gz"
-        empty.touch()
-        files = [empty]
-    session = _Session()
-
-    with pytest.raises(publisher.ZenodoPublisherError, match="at least one|empty"):
-        publisher.upload(session, _successor_state(), files)
-
-    assert session.urls == []
-
-
-@pytest.mark.parametrize(
-    ("updates", "match"),
-    [
-        (
-            {
-                "predecessor_deposition_id": 8,
-                "predecessor_doi": "10.5281/zenodo.8",
-                "predecessor": {"deposition_id": 8, "doi": "10.5281/zenodo.8"},
-            },
-            "reuses",
-        ),
-        (
-            {"predecessor": {"deposition_id": 7, "doi": "10.5281/zenodo.9"}},
-            "predecessor",
-        ),
-        ({"concept_doi": "10.5281/zenodo.9"}, "concept DOI"),
-    ],
-)
-def test_successor_cleanup_rejects_incoherent_lineage(
-    updates: dict[str, object],
-    match: str,
-) -> None:
-    """All successor/predecessor/concept identities must agree before cleanup."""
-    state = _successor_state()
-    state.update(updates)
-
-    with pytest.raises(publisher.ZenodoPublisherError, match=match):
-        publisher._validate_successor_cleanup_state(state)
-
-
-def test_post_upload_inventory_http_failure_blocks_cleanup() -> None:
-    """A failed inventory refresh is not interpreted as an empty draft."""
-    session = _Session()
-    session.gets = [_Response({}, 500)]
-
-    with pytest.raises(publisher.ZenodoPublisherError, match="inventory request failed"):
-        publisher._list_draft_files(
-            session,
-            deposition_id=8,
-            api_base="https://zenodo.org/api",
-            operation="post-upload draft file inventory",
-        )
-
-
-def test_upload_rejects_local_file_change_during_transfer(tmp_path: Path) -> None:
-    """The sealed local digest must still match after the streamed PUT completes."""
-    bundle = tmp_path / "successor.tar.gz"
-    bundle.write_bytes(b"successor")
-    session = _Session()
-    session.gets = [_Response(_successor_draft())]
-    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
-
-    with (
-        patch.object(publisher, "_sha256_file", side_effect=["a" * 64, "b" * 64]),
-        pytest.raises(publisher.ZenodoPublisherError, match="changed during transfer"),
-    ):
-        publisher.upload(session, _successor_state(), [bundle])
 
 
 @pytest.mark.parametrize("field", ["id", "record_id", "conceptrecid", "doi"])

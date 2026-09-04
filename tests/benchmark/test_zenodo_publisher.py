@@ -229,27 +229,6 @@ def test_reserve_upload_publish_and_verify_without_credentials_in_state(tmp_path
 
     bundle = tmp_path / "bundle.tar.gz"
     bundle.write_bytes(b"bundle")
-    session.gets = [
-        _Response(_draft_payload()),
-        _Response(
-            [
-                {
-                    "id": "uploaded-file",
-                    "filename": bundle.name,
-                    "links": {
-                        "self": (
-                            "https://zenodo.org/api/deposit/depositions/123/files/uploaded-file"
-                        )
-                    },
-                }
-            ]
-        ),
-    ]
-    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
-    state = upload(session, state, [bundle])
-    assert state["files"][0]["name"] == bundle.name
-    assert len(state["files"][0]["sha256"]) == 64
-
     remote_draft = _draft_payload()
     remote_draft["files"] = [
         {
@@ -258,6 +237,16 @@ def test_reserve_upload_publish_and_verify_without_credentials_in_state(tmp_path
             "links": {"download": "https://zenodo.org/api/records/123/files/bundle/content"},
         }
     ]
+    session.gets = [
+        _Response(_draft_payload()),
+        _Response(remote_draft),
+        _Response(remote_draft),
+    ]
+    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
+    state = upload(session, state, [bundle])
+    assert state["files"][0]["name"] == bundle.name
+    assert len(state["files"][0]["sha256"]) == 64
+
     downloaded = _Response({})
     downloaded.content = bundle.read_bytes()
     session.gets = [_Response(remote_draft), downloaded]

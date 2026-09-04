@@ -126,50 +126,49 @@ class RunSettings:
         return settings
 
     def effective_timesteps(self, *, test_mode: bool) -> int:
-        """TODO docstring. Document this function.
+        """Return the effective training steps for normal or test mode.
 
         Args:
-            test_mode: TODO docstring.
+            test_mode: Whether to apply the short-run cap and floor.
 
         Returns:
-            TODO docstring.
+            Configured steps normally; in test mode, steps capped at 128 and floored at 8.
         """
         if not test_mode:
             return self.total_timesteps
         return max(8, min(self.total_timesteps, 128))
 
     def effective_eval_freq(self, *, test_mode: bool) -> int:
-        """TODO docstring. Document this function.
+        """Return the effective evaluation frequency for normal or test mode.
 
         Args:
-            test_mode: TODO docstring.
+            test_mode: Whether to apply the short-run cap and floor.
 
         Returns:
-            TODO docstring.
+            Configured frequency normally; in test mode, frequency capped at 32 and floored at 1.
         """
         if not test_mode:
             return self.eval_freq
         return max(1, min(self.eval_freq, 32))
 
     def effective_save_freq(self, *, test_mode: bool) -> int:
-        """TODO docstring. Document this function.
+        """Return the effective checkpoint frequency for normal or test mode.
 
         Args:
-            test_mode: TODO docstring.
+            test_mode: Whether to apply the short-run cap and floor.
 
         Returns:
-            TODO docstring.
+            Configured frequency normally; in test mode, frequency capped at 64 and floored at 4.
         """
         if not test_mode:
             return self.save_freq
         return max(4, min(self.save_freq, 64))
 
     def worker_count(self) -> int:
-        """TODO docstring. Document this function.
-
+        """Return the worker count used for hardware metadata collection.
 
         Returns:
-            TODO docstring.
+            Configured environment count in vectorized mode; otherwise, one worker.
         """
         return self.num_envs if self.worker_mode == "vectorized" else 1
 
@@ -188,13 +187,13 @@ class RunContext:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """TODO docstring. Document this function.
+    """Parse command-line arguments for a multi-extractor training run.
 
     Args:
-        argv: TODO docstring.
+        argv: Optional argument sequence; defaults to the process arguments when None.
 
     Returns:
-        TODO docstring.
+        Parsed namespace containing configuration, run ID, output-root, and verbosity options.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -224,10 +223,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def _configure_logging(verbose: bool) -> None:
-    """TODO docstring. Document this function.
+    """Configure Loguru output and verbosity for the training script.
 
     Args:
-        verbose: TODO docstring.
+        verbose: Whether to enable DEBUG logging; otherwise, use INFO.
     """
     logger.remove()
     level = "DEBUG" if verbose else "INFO"
@@ -235,7 +234,10 @@ def _configure_logging(verbose: bool) -> None:
 
 
 def _ensure_spawn_start_method() -> None:
-    """TODO docstring. Document this function."""
+    """Ensure macOS uses the multiprocessing ``spawn`` start method.
+
+    On non-macOS platforms, the current multiprocessing start method is unchanged.
+    """
     if sys.platform != "darwin":
         return
     current = mp.get_start_method(allow_none=True)
@@ -264,13 +266,17 @@ def _get_vec_env_config(
 def load_configuration(
     config_path: Path,
 ) -> tuple[RunSettings, list[ExtractorConfigurationProfile]]:
-    """TODO docstring. Document this function.
+    """Load run settings and extractor profiles from a YAML configuration file.
 
     Args:
-        config_path: TODO docstring.
+        config_path: Path to the YAML configuration file.
 
     Returns:
-        TODO docstring.
+        Normalized run settings and extractor profiles sorted by priority.
+
+    Raises:
+        FileNotFoundError: If the configuration file does not exist.
+        ValueError: If the configuration root or extractor definitions are invalid.
     """
     if not config_path.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
@@ -305,13 +311,13 @@ def load_configuration(
 
 
 def should_use_test_mode(environment: dict[str, str]) -> bool:
-    """TODO docstring. Document this function.
+    """Return whether the environment enables the short test mode.
 
     Args:
-        environment: TODO docstring.
+        environment: Environment-variable mapping to inspect for ``TEST_MODE_ENV``.
 
     Returns:
-        TODO docstring.
+        True for ``1``, ``true``, ``yes``, or ``on`` (case-insensitive); otherwise False.
     """
     value = environment.get(TEST_MODE_ENV)
     if not value:
@@ -325,15 +331,15 @@ def resolve_run_context(
     args: argparse.Namespace,
     environment: dict[str, str],
 ) -> RunContext:
-    """TODO docstring. Document this function.
+    """Create the derived runtime context for a training run.
 
     Args:
-        settings: TODO docstring.
-        args: TODO docstring.
-        environment: TODO docstring.
+        settings: Parsed and validated run settings.
+        args: Parsed CLI arguments, including optional run ID and output-root overrides.
+        environment: Environment variables used for output-root resolution and test-mode detection.
 
     Returns:
-        TODO docstring.
+        Context containing timestamps, output directory, hardware profile, settings, and test mode.
     """
     run_id = args.run_id or settings.run_label
     now = datetime.now(UTC)
@@ -365,13 +371,16 @@ def resolve_run_context(
 
 
 def _resolve_feature_config(profile: ExtractorConfigurationProfile) -> FeatureExtractorConfig:
-    """TODO docstring. Document this function.
+    """Build the feature-extractor configuration for a profile.
 
     Args:
-        profile: TODO docstring.
+        profile: Extractor profile naming a preset and optional parameter overrides.
 
     Returns:
-        TODO docstring.
+        Configuration created from the selected preset and merged parameters.
+
+    Raises:
+        ValueError: If the selected preset is not defined on ``FeatureExtractorPresets``.
     """
     from robot_sf.feature_extractors.config import FeatureExtractorPresets
 
@@ -423,11 +432,10 @@ def _make_ppo_model(
 
 
 def _gpu_available() -> bool:
-    """TODO docstring. Document this function.
-
+    """Return whether PyTorch reports CUDA availability.
 
     Returns:
-        TODO docstring.
+        True when ``torch.cuda.is_available()`` succeeds and reports availability; otherwise False.
     """
     try:
         import torch
@@ -443,16 +451,16 @@ def _skip_record(
     artifacts: dict[str, str],
     reason: str,
 ) -> ExtractorRunRecord:
-    """TODO docstring. Document this function.
+    """Create a skipped extractor result with no training metrics.
 
     Args:
-        profile: TODO docstring.
-        context: TODO docstring.
-        artifacts: TODO docstring.
-        reason: TODO docstring.
+        profile: Extractor profile that was not run.
+        context: Resolved run context supplying hardware and worker settings.
+        artifacts: Artifact paths already allocated for the extractor.
+        reason: Explanation for skipping the extractor.
 
     Returns:
-        TODO docstring.
+        Run record marked ``"skipped"`` with zero duration and training steps.
     """
     now = datetime.now(UTC).isoformat()
     return ExtractorRunRecord(
@@ -477,16 +485,16 @@ def _simulate_extractor_run(
     extractor_dir: Path,
     artifacts: dict[str, str],
 ) -> ExtractorRunRecord:
-    """TODO docstring. Document this function.
+    """Record a simulated successful test-mode run without launching training.
 
     Args:
-        profile: TODO docstring.
-        context: TODO docstring.
-        extractor_dir: TODO docstring.
-        artifacts: TODO docstring.
+        profile: Extractor profile being simulated.
+        context: Resolved run context supplying output and run metadata.
+        extractor_dir: Per-extractor output directory for the metrics file.
+        artifacts: Mutable artifact map to augment with the relative metrics path.
 
     Returns:
-        TODO docstring.
+        Successful run record with zero-valued metrics and test-mode training steps.
     """
     logger.debug("Simulating extractor run", extractor=profile.name)
     start_time = datetime.now(UTC).isoformat()
@@ -553,11 +561,10 @@ def _run_sb3_training(
         save_freq = context.settings.effective_save_freq(test_mode=context.test_mode)
 
         def env_factory() -> Any:
-            """TODO docstring. Document this function.
-
+            """Create a robot environment using the configured seed.
 
             Returns:
-                TODO docstring.
+                Robot environment initialized through ``environment_factory``.
             """
             return environment_factory.make_robot_env(seed=context.settings.seed)
 
@@ -686,14 +693,14 @@ def _run_sb3_training(
 def _determine_skip_reason(
     profile: ExtractorConfigurationProfile, context: RunContext
 ) -> str | None:
-    """TODO docstring. Document this function.
+    """Determine whether an extractor lacks its required CUDA resources.
 
     Args:
-        profile: TODO docstring.
-        context: TODO docstring.
+        profile: Extractor profile with expected resource requirements.
+        context: Resolved run context containing device settings.
 
     Returns:
-        TODO docstring.
+        Skip explanation when CUDA is requested or required but unavailable; otherwise None.
     """
     settings = context.settings
     gpu_available = _gpu_available()
@@ -714,14 +721,14 @@ def train_extractor(
     profile: ExtractorConfigurationProfile,
     context: RunContext,
 ) -> ExtractorRunRecord:
-    """TODO docstring. Document this function.
+    """Run one configured extractor and return its result record.
 
     Args:
-        profile: TODO docstring.
-        context: TODO docstring.
+        profile: Extractor profile to train or simulate.
+        context: Resolved run context controlling mode, resources, paths, and settings.
 
     Returns:
-        TODO docstring.
+        Result record for a skipped, simulated, or Stable-Baselines3 training attempt.
     """
     settings = context.settings
     extractor_dir = make_extractor_directory(context.run_dir, profile.name)
@@ -761,14 +768,14 @@ def _load_histories(
     records: list[ExtractorRunRecord],
     context: RunContext,
 ) -> dict[str, tuple[object | None, Path]]:
-    """TODO docstring. Document this function.
+    """Load evaluation histories for extractor records.
 
     Args:
-        records: TODO docstring.
-        context: TODO docstring.
+        records: Extractor records whose artifact directories identify evaluation logs.
+        context: Run context providing the root output directory.
 
     Returns:
-        TODO docstring.
+        Mapping from extractor name to its history (or None) and extractor directory.
     """
     history_map: dict[str, tuple[object | None, Path]] = {}
     for record in records:
@@ -782,14 +789,14 @@ def _enrich_records_with_analysis(
     records: list[ExtractorRunRecord],
     context: RunContext,
 ) -> tuple[float, float]:
-    """TODO docstring. Document this function.
+    """Enrich extractor records with analysis metrics and generated figures.
 
     Args:
-        records: TODO docstring.
-        context: TODO docstring.
+        records: Extractor records to update in place.
+        context: Run context supplying baseline selection, thresholds, and output paths.
 
     Returns:
-        TODO docstring.
+        Baseline target reward and baseline convergence timestep used for comparison.
     """
     if not records:
         return 0.0, 0.0
@@ -851,15 +858,15 @@ def compute_aggregate_metrics(
     baseline_target: float,
     baseline_convergence: float,
 ) -> dict[str, float]:
-    """TODO docstring. Document this function.
+    """Compute aggregate metrics across extractor run records.
 
     Args:
-        records: TODO docstring.
-        baseline_target: TODO docstring.
-        baseline_convergence: TODO docstring.
+        records: Extractor run records to summarize.
+        baseline_target: Baseline best reward used as the sample-efficiency target.
+        baseline_convergence: Baseline convergence timestep included in the output.
 
     Returns:
-        TODO docstring.
+        Mapping of run counts, reward/time summaries, convergence statistics, and baseline values.
     """
     total_time = sum(record.duration_seconds or 0.0 for record in records)
     best_rewards = [
@@ -895,14 +902,14 @@ def compute_aggregate_metrics(
 
 
 def build_summary(context: RunContext, records: list[ExtractorRunRecord]) -> TrainingRunSummary:
-    """TODO docstring. Document this function.
+    """Build the summary for a multi-extractor training run.
 
     Args:
-        context: TODO docstring.
-        records: TODO docstring.
+        context: Resolved run context with metadata and output directory.
+        records: Per-extractor result records to analyze and include.
 
     Returns:
-        TODO docstring.
+        Training summary containing hardware, extractor results, aggregate metrics, and notes.
     """
     notes = [record.reason for record in records if record.reason]
     baseline_target, baseline_convergence = _enrich_records_with_analysis(records, context)
@@ -970,13 +977,13 @@ def write_legacy_results(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """TODO docstring. Document this function.
+    """Run the multi-extractor training CLI and write summary artifacts.
 
     Args:
-        argv: TODO docstring.
+        argv: Optional command-line arguments; defaults to process arguments when None.
 
     Returns:
-        TODO docstring.
+        Zero when configuration, training, analysis, and artifact writing complete.
     """
     args = parse_args(argv)
     _configure_logging(verbose=args.verbose)

@@ -732,8 +732,9 @@ before the queue auto-merges a PR:
 - **Audit record**: the job emits a `merge_queue_gate.v1` audit with the evaluated head SHA, the
   source-head SHA encoded in the queue ref and its binding verdict, queue merging strategy, base
   SHA, label set, metadata digest and metadata-verdict status, gate-verdict status, staleness
-  verdict, CI conclusion, and reviewer-thread resolution plus requested-reviewer status, so every
-  merge decision is inspectable and reproducible.
+  verdict, CI conclusion, reviewer-thread resolution plus requested-reviewer status, and the
+  current closing-discipline status/blockers from PR commit and issue metadata, so every merge
+  decision is inspectable and reproducible.
 - **Self-test**: `uv run python scripts/dev/merge_queue_gate.py --self-test` exercises the
   fail-closed contract deterministically (the issue #6274 validation scenarios).
 
@@ -2594,6 +2595,14 @@ workflow uses the existing `main_ci_incident_reconcile.py` signal and requires
 two newer consecutive decisive green runs before it posts an evidence comment
 and closes an incident as completed. Active, pending, malformed, or
 concurrent-change cases remain open.
+Cancelled or superseded runs are neutral: they count as neither green nor red
+and cannot satisfy either slot in the two-green streak.
+
+To preserve that evidence boundary, pull requests must use `Refs #N` for these
+incidents instead of GitHub's semantic closing keywords (`Closes`, `Fixes`, or
+`Resolves`). The blocking PR Contract Check rejects semantic closure for either
+the canonical body marker or its compatibility label, leaving the scheduled
+reconciler as the sole closer after the two-green criterion is met.
 
 The Actions run evidence window is paginated. The reconciler reads full
 workflow-run pages and stops only after two decisive completed green/red runs

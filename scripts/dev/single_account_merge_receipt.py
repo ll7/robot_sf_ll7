@@ -1738,6 +1738,7 @@ def build_live_evidence(
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Re-read canonical merge-gate evidence for a report/validate/apply run."""
     from scripts.dev.merge_queue_gate import (  # local import avoids a module cycle for pure helpers
+        _fetch_live_closing_discipline,
         evaluate_merge_gate,
         fetch_main_sha,
         fetch_pr_snapshot,
@@ -1747,6 +1748,15 @@ def build_live_evidence(
     snapshot, error = fetch_pr_snapshot(pr_number, repo=repository)
     if error or not snapshot:
         return None, error or "PR snapshot unavailable"
+    closing_discipline_status, closing_discipline_blockers = _fetch_live_closing_discipline(
+        pr_number,
+        repo=repository,
+        body=str(snapshot.get("body") or ""),
+    )
+    snapshot["closing_discipline"] = {
+        "status": closing_discipline_status,
+        "blockers": closing_discipline_blockers,
+    }
     current_base_sha = fetch_main_sha(repo=repository)
     if not current_base_sha:
         return None, "current main SHA unavailable"

@@ -19,6 +19,10 @@ from tests.support.environment_guards import configure_git_identity
 
 ROOT = Path(__file__).resolve().parents[2]
 
+# PR #8440 is the known pre-guard regression: its merge reference closed the
+# incident in #8414 before the two-green reconciler criterion was established.
+KNOWN_HISTORICAL_MAIN_CI_CLOSING_GUARD_HITS = {8440: {"8414"}}
+
 
 def _valid_review_sidecar(artifact: Path, artifact_path: str) -> dict[str, object]:
     """Build a valid immutable-evidence review sidecar payload for a fixture artifact."""
@@ -34,10 +38,17 @@ def _valid_review_sidecar(artifact: Path, artifact_path: str) -> dict[str, objec
 def test_find_closed_issues() -> None:
     """Test find_closed_issues matches closing keywords."""
     body = (
-        "This fixes #123 and closes #456. Resolves https://github.com/ll7/robot_sf_ll7/issues/789."
+        "This fixes #123, closes: #456, and resolves ll7/robot_sf_ll7#789. "
+        "Fixes https://github.com/ll7/robot_sf_ll7/issues/1011."
     )
     closed = pr_contract_check.find_closed_issues(body)
-    assert closed == ["123", "456", "789"]
+    assert closed == ["123", "456", "789", "1011"]
+
+
+def test_find_closed_issues_keeps_cross_repository_references_parseable() -> None:
+    """Qualified references are parsed so the discipline rule can ignore other repos."""
+    body = "Closes other-org/other-repo#123 and closes ll7/robot_sf_ll7#456"
+    assert pr_contract_check.find_closed_issues(body) == ["123", "456"]
 
 
 def test_find_title_issues() -> None:
@@ -48,24 +59,167 @@ def test_find_title_issues() -> None:
 
 def test_has_declaration_for_issue() -> None:
     """Test has_declaration_for_issue checks body matches."""
-    body = "We reference Refs #123 here."
+    body = (
+        "We reference Refs #123 here, close: #456, and fix ll7/robot_sf_ll7#789. "
+        "Resolves https://github.com/ll7/robot_sf_ll7/issues/1011."
+    )
     assert pr_contract_check.has_declaration_for_issue("123", body) is True
-    assert pr_contract_check.has_declaration_for_issue("456", body) is False
+    assert pr_contract_check.has_declaration_for_issue("456", body) is True
+    assert pr_contract_check.has_declaration_for_issue("789", body) is True
+    assert pr_contract_check.has_declaration_for_issue("1011", body) is True
+    assert pr_contract_check.has_declaration_for_issue("999", body) is False
 
 
 @patch("subprocess.run")
 def test_check_closes_discipline(mock_run: MagicMock) -> None:
-    """Test check_closes_discipline blocks closing epic issues."""
+    """Test check_closes_discipline protects special issue lifecycles."""
     # Test case 1: Issue has no epic label
-    mock_run.return_value = MagicMock(returncode=0, stdout='{"labels": [{"name": "bug"}]}')
+    mock_run.return_value = MagicMock(
+        returncode=0, stdout='{"labels": [{"name": "bug"}], "body": ""}'
+    )
     blockers = pr_contract_check.check_closes_discipline("Closes #123", "ll7/robot_sf_ll7")
     assert not blockers
 
     # Test case 2: Issue has epic label
-    mock_run.return_value = MagicMock(returncode=0, stdout='{"labels": [{"name": "epic"}]}')
+    mock_run.return_value = MagicMock(
+        returncode=0, stdout='{"labels": [{"name": "epic"}], "body": ""}'
+    )
     blockers = pr_contract_check.check_closes_discipline("Closes #123", "ll7/robot_sf_ll7")
     assert len(blockers) == 1
     assert "epic" in blockers[0]
+
+    # A canonical marker blocks all semantic closing keywords, including a repair PR.
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps(
+            {"labels": [], "body": "<!-- ll7-main-red-incident:v1 -->\nAutomated incident."}
+        ),
+    )
+    blockers = pr_contract_check.check_closes_discipline("Fixes #8414", "ll7/robot_sf_ll7")
+    assert len(blockers) == 1
+    assert "main continuous-integration (CI) incident" in blockers[0]
+    assert "Refs #8414" in blockers[0]
+    assert "two consecutive decisive green runs" in blockers[0]
+
+    # The compatibility label protects marker-less incidents as well.
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout=json.dumps({"labels": [{"name": "ll7-main-red-incident:v1"}], "body": ""}),
+    )
+    blockers = pr_contract_check.check_closes_discipline("Resolves #8441", "ll7/robot_sf_ll7")
+    assert len(blockers) == 1
+    assert "main continuous-integration (CI) incident" in blockers[0]
+
+    # A failed metadata read is unknown, not evidence that semantic closure is safe.
+    mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="API unavailable")
+    blockers = pr_contract_check.check_closes_discipline("Closes #999", "ll7/robot_sf_ll7")
+    assert len(blockers) == 1
+    assert "fails closed" in blockers[0]
+
+
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_closes_discipline_scans_commit_messages(mock_metadata: MagicMock) -> None:
+    """Commit-message closing keywords receive the same lifecycle protection as body keywords."""
+    mock_metadata.return_value = (
+        [],
+        "<!-- ll7-main-red-incident:v1 -->\nAutomated incident.",
+    )
+
+    blockers = pr_contract_check.check_closes_discipline(
+        "Adds a repair without a body closing keyword.",
+        "ll7/robot_sf_ll7",
+        commit_messages="Implement repair\n\nCloses: #8414\n",
+        commit_messages_checked=True,
+    )
+
+    assert len(blockers) == 1
+    assert "PR commit message" in blockers[0]
+    mock_metadata.assert_called_once_with("8414", "ll7/robot_sf_ll7")
+
+
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_closes_discipline_ignores_other_repository(mock_metadata: MagicMock) -> None:
+    """A qualified close for another repository is not a local lifecycle mutation."""
+    blockers = pr_contract_check.check_closes_discipline(
+        "Closes other-org/other-repo#8414",
+        "ll7/robot_sf_ll7",
+    )
+
+    assert not blockers
+    mock_metadata.assert_not_called()
+
+
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_issue_metadata_requires_complete_payload(mock_run: MagicMock) -> None:
+    """Partial issue responses cannot be treated as evidence that closure is safe."""
+    mock_run.return_value = MagicMock(returncode=0, stdout='{"labels": []}')
+    assert pr_contract_check.get_issue_metadata("8414", "ll7/robot_sf_ll7") is None
+
+    mock_run.return_value = MagicMock(returncode=0, stdout='{"body": ""}')
+    assert pr_contract_check.get_issue_metadata("8414", "ll7/robot_sf_ll7") is None
+
+
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_pr_commit_messages_uses_paginated_commit_api(mock_run: MagicMock) -> None:
+    """The commit source is fetched through the paginated PR commits endpoint."""
+    mock_run.return_value = MagicMock(returncode=0, stdout="first\nsecond\n")
+
+    assert pr_contract_check.get_pr_commit_messages("8451", "ll7/robot_sf_ll7") == "first\nsecond\n"
+    mock_run.assert_called_once_with(
+        [
+            "gh",
+            "api",
+            "--paginate",
+            "repos/ll7/robot_sf_ll7/pulls/8451/commits?per_page=100",
+            "--jq",
+            ".[] | .commit.message",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_pr_commit_messages_rejects_empty_success(mock_run: MagicMock) -> None:
+    """A successful empty response is unavailable evidence, not a verified commit list."""
+    mock_run.return_value = MagicMock(returncode=0, stdout=" \n")
+
+    assert pr_contract_check.get_pr_commit_messages("8451", "ll7/robot_sf_ll7") is None
+
+
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_closes_discipline_fails_closed_when_commit_source_unavailable(
+    mock_metadata: MagicMock,
+) -> None:
+    """A live PR check cannot silently skip commit-message closure references."""
+    for commit_messages in (None, "", " \n"):
+        blockers = pr_contract_check.check_closes_discipline(
+            "No semantic closing reference in the body.",
+            "ll7/robot_sf_ll7",
+            commit_messages=commit_messages,
+            commit_messages_checked=True,
+        )
+
+        assert len(blockers) == 1
+        assert "commit messages" in blockers[0]
+    mock_metadata.assert_not_called()
+
+
+def test_check_closes_discipline_allows_non_closing_reference() -> None:
+    """``Refs`` keeps GitHub from closing an incident before reconciliation."""
+    assert not pr_contract_check.check_closes_discipline("Refs #8414", "ll7/robot_sf_ll7")
+
+
+def test_build_comment_body_marks_main_ci_closing_guard_failure() -> None:
+    """The summary row reports incident-closure blockers as failed."""
+    blocker = (
+        f"BLOCKER: {pr_contract_check.CLOSES_DISCIPLINE_TAG} PR body attempts to close "
+        "a canonical main-CI incident."
+    )
+    comment = pr_contract_check.build_comment_body([blocker], [], [], "🔴 FAILED")
+    assert "| 1. Closes-discipline | ❌ FAILED |" in comment
 
 
 def test_check_closure_declaration() -> None:
@@ -567,7 +721,26 @@ def test_regression_last_20_merged_prs() -> None:
         blockers, _, _ = pr_contract_check.run_all_checks(
             title, body, changed_files, "ll7/robot_sf_ll7", "origin/main", None
         )
-        assert not blockers, f"PR #{number} ('{title}') triggered false blockers: {blockers}"
+        metadata_unavailable = next(
+            (blocker for blocker in blockers if "Could not verify issue" in blocker), None
+        )
+        if metadata_unavailable is not None:
+            # The production rule intentionally fails closed. A local regression sweep must not
+            # turn a temporary GitHub/API rate limit into a false code failure.
+            pytest.skip(f"Skipping live PR regression sweep: {metadata_unavailable}")
+        expected_incident_issues = KNOWN_HISTORICAL_MAIN_CI_CLOSING_GUARD_HITS.get(number, set())
+        for issue in expected_incident_issues:
+            assert any(f"incident issue #{issue}" in blocker for blocker in blockers), (
+                f"PR #{number} no longer exposes its known historical guard hit"
+            )
+        unexpected_blockers = [
+            blocker
+            for blocker in blockers
+            if not any(f"incident issue #{issue}" in blocker for issue in expected_incident_issues)
+        ]
+        assert not unexpected_blockers, (
+            f"PR #{number} ('{title}') triggered unexpected blockers: {unexpected_blockers}"
+        )
 
 
 class TestPlaceholderDocstringRatchet:

@@ -16,6 +16,7 @@ fail-closed preflight as ``gh-pr-merger``:
     a proven docs-only changed-file set covered by CI's ``paths-ignore`` rules,
   - no unresolved actionable review threads,
   - no outstanding explicitly requested reviewers,
+  - a current closing-discipline recheck over the PR body and commit messages,
   - the merge queue's ``ALLGREEN`` strategy, so every constituent entry must
     pass its own required gate check,
   - staleness-free base (fresh by construction inside the merge queue, where the
@@ -30,8 +31,8 @@ because a stacked PR must never be merged independently before its parent merges
 It emits a ``merge_queue_gate.v1`` audit record with the evaluated head SHA,
 queue merging strategy, base SHA, label set, metadata digest and trailer
 statuses, exact-head changed-coverage status, staleness verdict, CI conclusion,
-reviewer-thread resolution, and requested-reviewer status so the merge decision
-is inspectable and reproducible.
+reviewer-thread resolution, requested-reviewer status, and closing-discipline
+status so the merge decision is inspectable and reproducible.
 
 The pure function ``evaluate_merge_gate`` is deterministic and exercised by
 ``--self-test`` (the validation contract for issue #6274). The CLI resolves a
@@ -73,6 +74,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from scripts.ci.pr_contract_check import (  # noqa: E402
+    check_closes_discipline,
+    get_pr_commit_messages,
+)
 from scripts.dev.check_pr_ci_status import (  # noqa: E402
     _enrich_rest_check_runs,
     _latest_check_runs,
@@ -181,6 +186,8 @@ class MergeGateAudit:
     passed: bool
     body_narrative_status: str = "clean"
     body_not_ready_sentinels: list[str] = field(default_factory=list)
+    closing_discipline_status: str = "not_evaluated"
+    closing_discipline_blockers: list[str] = field(default_factory=list)
     reasons: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -271,6 +278,30 @@ def _reviewer_request_reason(status: str) -> str | None:
     )
 
 
+def _closing_discipline_state(pr: dict[str, Any]) -> tuple[str, list[str]]:
+    """Validate the live closing-discipline result carried by a PR snapshot.
+
+    Older pure-evaluator fixtures do not carry this optional field and retain the
+    ``not_evaluated`` status.  A live snapshot must carry one of the explicit
+    results so a missing or malformed merge-time recheck cannot be mistaken for a
+    successful check.
+    """
+    value = pr.get("closing_discipline")
+    if value is None:
+        return "not_evaluated", []
+    if not isinstance(value, dict):
+        return "unknown", []
+    status = value.get("status")
+    blockers = value.get("blockers", [])
+    if status not in {"passed", "blocked", "unavailable"}:
+        return "unknown", []
+    if not isinstance(blockers, list) or not all(isinstance(item, str) for item in blockers):
+        return "unknown", []
+    if status == "passed" and blockers:
+        return "unknown", blockers
+    return status, blockers
+
+
 def _core_preflight_reasons(
     *,
     draft: bool,
@@ -319,6 +350,7 @@ def _fail_closed_reasons(  # noqa: PLR0913
     merge_group_head_binding: str,
     body_not_ready_sentinels: list[str] | None = None,
     ancestry_state: str = "",
+    closing_discipline_status: str = "not_evaluated",
 ) -> list[str]:
     """Collect fail-closed reasons for one gate evaluation.
 
@@ -353,6 +385,14 @@ def _fail_closed_reasons(  # noqa: PLR0913
 
     if ancestry_state and ancestry_state != "clean":
         reasons.append("stacked_ancestry_not_independently_mergeable")
+
+    if closing_discipline_status not in {"passed", "not_evaluated"}:
+        reasons.append(
+            {
+                "blocked": "closing_discipline_blocked",
+                "unavailable": "closing_discipline_unavailable",
+            }.get(closing_discipline_status, "closing_discipline_not_verified")
+        )
     return reasons
 
 
@@ -456,7 +496,8 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission
         ``has_current_accepted_gate_verdict`` (``gate_verdict`` /
         ``gate_verdicts`` / ``comments`` / ``reviews`` body excerpts),
         ``metadata_digest`` and trusted ``metadata_verdicts``, and
-        ``reviewers_requested`` when supplied by the live snapshot.
+        ``reviewers_requested`` when supplied by the live snapshot, plus the
+        optional live ``closing_discipline`` result.
       main_sha: current ``main`` HEAD SHA. When both ``base_sha`` and
         ``main_sha`` are present and differ, the gate fails closed as stale. When
         either is absent, staleness is reported as ``not_applicable`` (the merge
@@ -494,6 +535,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission
     body_text = str(pr.get("body") or "")
     body_not_ready_sentinels = find_not_ready_body_sentinels(body_text)
     body_narrative_status = _resolve_narrative_status(body_text, body_not_ready_sentinels)
+    closing_discipline_status, closing_discipline_blockers = _closing_discipline_state(pr)
 
     if ci_overall is None:
         ci_overall = str((pr.get("checks") or {}).get("overall", "") or "")
@@ -559,6 +601,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission
             merge_group_head_binding=merge_group_head_binding,
             body_not_ready_sentinels=body_not_ready_sentinels,
             ancestry_state=ancestry_state,
+            closing_discipline_status=closing_discipline_status,
         )
     )
     if not head_sha:
@@ -593,6 +636,8 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission
         passed=passed,
         body_narrative_status=body_narrative_status,
         body_not_ready_sentinels=body_not_ready_sentinels,
+        closing_discipline_status=closing_discipline_status,
+        closing_discipline_blockers=closing_discipline_blockers,
         reasons=reasons,
     )
 
@@ -616,6 +661,28 @@ def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
         timeout=timeout,
         check=False,
     )
+
+
+def _fetch_live_closing_discipline(
+    pr_number: str | int, *, repo: str, body: str
+) -> tuple[str, list[str]]:
+    """Recheck semantic closing references against current PR and issue metadata.
+
+    The PR-contract status check runs on pull-request events, so a later incident
+    label or marker change could otherwise make its earlier green result stale.
+    Native merge admission repeats the check against the current commit list and
+    current issue metadata.  An unavailable commit list is an explicit
+    fail-closed result.
+    """
+    commit_messages = get_pr_commit_messages(str(pr_number), repo)
+    blockers = check_closes_discipline(
+        body,
+        repo,
+        commit_messages=commit_messages,
+        commit_messages_checked=True,
+    )
+    status = "unavailable" if commit_messages is None else ("blocked" if blockers else "passed")
+    return status, blockers
 
 
 def _parse_json(stdout: str) -> tuple[Any, str | None]:
@@ -2072,6 +2139,7 @@ def _format_summary(audit: MergeGateAudit) -> str:
         f"- gate-verdict status: `{audit.gate_verdict_status}`",
         f"- PR metadata digest: `{audit.metadata_digest or '?'}`",
         f"- PR metadata verdict status: `{audit.metadata_verdict_status}`",
+        f"- closing-discipline status: `{audit.closing_discipline_status}`",
         f"- body narrative status: `{audit.body_narrative_status}`",
         f"- staleness verdict: `{audit.staleness_verdict}`",
         f"- CI conclusion: `{audit.ci_overall}`",
@@ -2132,6 +2200,14 @@ def _evaluate_live(
             merge_group_head_sha=merge_group_head_sha,
         )
         return _failed_audit(audit, "pr_snapshot_unavailable"), err
+
+    closing_discipline_status, closing_discipline_blockers = _fetch_live_closing_discipline(
+        pr_number, repo=repo, body=str(snapshot.get("body") or "")
+    )
+    snapshot["closing_discipline"] = {
+        "status": closing_discipline_status,
+        "blockers": closing_discipline_blockers,
+    }
 
     if merge_group_base_sha:
         # Inside the merge queue the base SHA is the prospective current main, so

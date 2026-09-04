@@ -4,8 +4,12 @@ Describe what changed and the user or maintainer value in one or two sentences.
 
 ## Linked Issues
 
-<!-- Keep issue references plain so GitHub recognizes closing keywords after merge. -->
+<!-- Keep issue references plain so GitHub recognizes closing keywords after merge. Use a
+closing keyword only when this PR is authorized to complete the issue. Canonical main
+continuous-integration (CI) incidents marked `ll7-main-red-incident:v1` must use `Refs #<id>`;
+the scheduled reconciler closes them only after two newer, consecutive decisive green runs. -->
 - Closes #<id>
+- Refs #<id>
 - Relates to #<id>
 
 ## Stack / Dependency

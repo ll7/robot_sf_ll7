@@ -39,6 +39,8 @@ def _vector(value: Sequence[float], field_name: str) -> Vector2:
 
     if isinstance(value, (str, bytes)) or len(value) != 2:
         raise ValueError(f"{field_name} must contain exactly two values")
+    if any(isinstance(component, bool) for component in value):
+        raise ValueError(f"{field_name} must contain finite numeric values")
     result = (float(value[0]), float(value[1]))
     if not all(math.isfinite(component) for component in result):
         raise ValueError(f"{field_name} must contain finite values")

@@ -90,6 +90,7 @@ def test_projection_retains_visible_and_occluded_tracks_by_snapshot_entity_id() 
     assert projected.diagnostics["visible_track_count"] == 1
     assert projected.diagnostics["occluded_track_count"] == 1
     assert projected.diagnostics["stale_track_count"] == 1
+    assert projected.diagnostics["retained_track_count"] == 2
     assert projected.diagnostics["projected_track_count"] == 2
     assert projected.diagnostics["supported_projection_target"] is True
     assert projected.ordered_track_ids() == ("ped_000", "ped_001")
@@ -558,6 +559,7 @@ def test_track_field_and_time_validation_edges() -> None:
     with pytest.raises(ValueError, match="positive observation age"):
         adapter._age_steps(1.0, 0.0)
     assert adapter._age_steps(0.0, 0.0) == 0
+    assert adapter._age_steps(5e-10, 1.0) == 1
     assert adapter._age_steps(0.21, 0.1) == 3
 
 

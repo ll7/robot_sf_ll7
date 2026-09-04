@@ -570,7 +570,13 @@ def _age_steps(age_s: Any, timestep_s: Any) -> int:
         if age == 0.0:
             return 0
         raise ValueError("positive observation age requires a positive belief timestep")
-    return max(0, int(np.ceil(age / timestep - 1e-9)))
+    ratio = age / timestep
+    if ratio <= 0.0:
+        return 0
+    nearest_step = round(ratio)
+    if nearest_step > 0 and np.isclose(ratio, nearest_step, atol=1e-9, rtol=0.0):
+        return nearest_step
+    return max(1, int(np.ceil(ratio)))
 
 
 def _planner_track_from_entity(
@@ -683,6 +689,7 @@ def _belief_projection_diagnostics(
             for track in ordered_tracks
         ),
         "stale_track_count": sum(track.age_steps > 0 for track in ordered_tracks),
+        "retained_track_count": len(ordered_tracks),
         "projected_track_count": len(ordered_tracks),
         "retired_track_count": None,
         "dropped_track_count": 0,

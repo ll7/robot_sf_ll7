@@ -34,7 +34,8 @@ The additive issue #8050 diagnostic seam also provides
 `BeliefGuidedLocalPlanner`. It retains every `ScenarioBelief.agents` entry in an immutable,
 entity-ID-keyed `tracks` mapping, including entries absent from the visible legacy rows, and
 reports distinct `no_belief`, `empty_belief`, `projection_target_not_supported`, `invalid_belief`,
-and `projected` statuses. Serialization is versioned and deterministic; legacy observations and
+and `projected` statuses. Its diagnostics expose both retained and projected track counts.
+Serialization is versioned and deterministic; legacy observations and
 the existing stream-gap path are unchanged.
 
 `track_id` is the entity identifier supplied by one `ScenarioBelief` snapshot, not a

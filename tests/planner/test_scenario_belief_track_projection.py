@@ -7,7 +7,6 @@ evidence.
 
 from __future__ import annotations
 
-import builtins
 import json
 from dataclasses import replace
 from types import SimpleNamespace
@@ -331,14 +330,7 @@ def test_snapshot_identity_limitation_is_explicit() -> None:
 
 def test_lazy_representation_import_fails_closed(monkeypatch) -> None:
     """Optional representation imports should report unavailable instead of leaking ImportError."""
-    original_import = builtins.__import__
-
-    def blocked_import(name, *args, **kwargs):
-        if name.startswith("robot_sf.representation.scenario_belief"):
-            raise ModuleNotFoundError("scenario belief dependencies blocked")
-        return original_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", blocked_import)
+    monkeypatch.setattr(adapter, "try_import", lambda name: None)
     assert adapter._load_scenario_belief_types() is None
 
 

@@ -35,9 +35,13 @@ from scripts.ci.check_evidence_writer_usage import (  # noqa: E402
 )
 from scripts.dev.gh_pr_label_rest import add_label  # noqa: E402
 
-# Match keywords followed by #N or a GitHub issue URL
+# Match GitHub closing keywords followed by a local/cross-repository issue reference or URL.
 CLOSING_PATTERN = re.compile(
-    r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+`?(?:#(\d+)|https?://github\.com/[^/\s]+/[^/\s]+/issues/(\d+))\b",
+    r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s*`?"
+    r"(?:(?P<qualified_repo>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#(?P<qualified_issue>\d+)"
+    r"|#(?P<issue>\d+)"
+    r"|https?://github\.com/(?P<url_repo>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/issues/"
+    r"(?P<url_issue>\d+))\b",
     re.IGNORECASE,
 )
 CLOSES_DISCIPLINE_TAG = "[closes-discipline]"
@@ -86,15 +90,22 @@ def is_negated(text: str, match_start: int) -> bool:
     return False
 
 
+def _find_closed_references(text: str) -> list[tuple[str | None, str]]:
+    """Extract closing references as ``(target_repo, issue_number)`` pairs."""
+    references: list[tuple[str | None, str]] = []
+    for match in CLOSING_PATTERN.finditer(text):
+        if is_negated(text, match.start()):
+            continue
+        target_repo = match.group("qualified_repo") or match.group("url_repo")
+        issue = match.group("qualified_issue") or match.group("issue") or match.group("url_issue")
+        if issue:
+            references.append((target_repo, issue))
+    return references
+
+
 def find_closed_issues(body: str) -> list[str]:
     """Extract issue numbers that this PR claims to close."""
-    issues = []
-    for match in CLOSING_PATTERN.finditer(body):
-        if is_negated(body, match.start()):
-            continue
-        num1, num2 = match.groups()
-        issues.append(num1 or num2)
-    return sorted({i for i in issues if i}, key=int)
+    return sorted({issue for _, issue in _find_closed_references(body)}, key=int)
 
 
 def find_title_issues(title: str) -> list[str]:
@@ -131,7 +142,9 @@ def get_issue_metadata(issue: str, repo: str) -> tuple[list[str], str] | None:
         data = json.loads(res.stdout)
         if not isinstance(data, dict):
             return None
-        raw_labels = data.get("labels", [])
+        if "labels" not in data or "body" not in data:
+            return None
+        raw_labels = data["labels"]
         if not isinstance(raw_labels, list):
             return None
         labels: list[str] = []
@@ -139,8 +152,12 @@ def get_issue_metadata(issue: str, repo: str) -> tuple[list[str], str] | None:
             if not isinstance(label, dict) or not isinstance(label.get("name"), str):
                 return None
             labels.append(label["name"].lower())
-        body = data.get("body") or ""
-        if not isinstance(body, str):
+        raw_body = data["body"]
+        if raw_body is None:
+            body = ""
+        elif isinstance(raw_body, str):
+            body = raw_body
+        else:
             return None
         return labels, body
     except _BEST_EFFORT_ERRORS:
@@ -151,6 +168,30 @@ def get_issue_labels(issue: str, repo: str) -> list[str]:
     """Query GitHub API to get labels for a specific issue."""
     metadata = get_issue_metadata(issue, repo)
     return metadata[0] if metadata is not None else []
+
+
+def get_pr_commit_messages(pr_number: str, repo: str) -> str | None:
+    """Return all commit messages for a PR, or ``None`` when the API read fails."""
+    try:
+        result = subprocess.run(
+            [
+                "gh",
+                "api",
+                "--paginate",
+                f"repos/{repo}/pulls/{pr_number}/commits?per_page=100",
+                "--jq",
+                ".[] | .commit.message",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if result.returncode != 0:
+            return None
+        return result.stdout
+    except _BEST_EFFORT_ERRORS:
+        return None
 
 
 def is_main_ci_incident_issue(labels: list[str], body: str) -> bool:
@@ -239,33 +280,62 @@ def is_file_new(path: str, base_ref: str = "origin/main") -> bool:
     return res.returncode != 0
 
 
-def check_closes_discipline(body: str, repo: str) -> list[str]:
-    """Rule 1: protect epic and canonical main-CI incident issue lifecycles."""
-    blockers: list[str] = []
-    closed_issues = find_closed_issues(body)
-    for issue in closed_issues:
-        metadata = get_issue_metadata(issue, repo)
-        if metadata is None:
-            blockers.append(
-                f"BLOCKER: {CLOSES_DISCIPLINE_TAG} Could not verify issue #{issue} metadata "
-                f"before evaluating a semantic closing reference. The check fails closed; "
-                f"retry when GitHub issue metadata is available."
-            )
-            continue
+def check_closes_discipline(
+    body: str,
+    repo: str,
+    *,
+    commit_messages: str | None = None,
+    commit_messages_checked: bool = False,
+) -> list[str]:
+    """Rule 1: protect epic and canonical main-CI incident issue lifecycles.
 
-        labels, issue_body = metadata
-        if is_main_ci_incident_issue(labels, issue_body):
+    When ``commit_messages_checked`` is true, the commit-message source is authoritative for the
+    PR and an unavailable response fails closed. The default keeps direct/local callers body-only.
+    """
+    blockers: list[str] = []
+    sources = [("PR body", body)]
+    if commit_messages_checked:
+        if commit_messages is None:
             blockers.append(
-                f"BLOCKER: {CLOSES_DISCIPLINE_TAG} PR body attempts to semantically close "
-                f"canonical main continuous-integration (CI) incident issue #{issue}. Use "
-                f"'Refs #{issue}' instead; the scheduled reconciler owns closure after two "
-                f"consecutive decisive green runs."
+                f"BLOCKER: {CLOSES_DISCIPLINE_TAG} Could not verify PR commit messages before "
+                "evaluating semantic closing references. The check fails closed; retry when "
+                "GitHub commit metadata is available."
             )
-        elif "epic" in labels:
-            blockers.append(
-                f"BLOCKER: {CLOSES_DISCIPLINE_TAG} PR body attempts to close epic issue #{issue}. "
-                f"Epic issues cannot be closed by a single PR. Please use 'Refs #{issue}' instead."
-            )
+        else:
+            sources.append(("PR commit message", commit_messages))
+
+    local_repo = repo.strip().lower()
+    seen_issues: set[str] = set()
+    for source_name, source_text in sources:
+        for target_repo, issue in _find_closed_references(source_text):
+            if target_repo is not None and target_repo.lower() != local_repo:
+                continue
+            if issue in seen_issues:
+                continue
+            seen_issues.add(issue)
+            metadata = get_issue_metadata(issue, repo)
+            if metadata is None:
+                blockers.append(
+                    f"BLOCKER: {CLOSES_DISCIPLINE_TAG} {source_name} could not verify issue "
+                    f"#{issue} metadata before evaluating a semantic closing reference. The "
+                    f"check fails closed; retry when GitHub issue metadata is available."
+                )
+                continue
+
+            labels, issue_body = metadata
+            if is_main_ci_incident_issue(labels, issue_body):
+                blockers.append(
+                    f"BLOCKER: {CLOSES_DISCIPLINE_TAG} {source_name} attempts to semantically "
+                    f"close canonical main continuous-integration (CI) incident issue #{issue}. "
+                    f"Use 'Refs #{issue}' instead; the scheduled reconciler owns closure after "
+                    f"two consecutive decisive green runs."
+                )
+            elif "epic" in labels:
+                blockers.append(
+                    f"BLOCKER: {CLOSES_DISCIPLINE_TAG} {source_name} attempts to close epic issue "
+                    f"#{issue}. Epic issues cannot be closed by a single PR. Please use 'Refs "
+                    f"#{issue}' instead."
+                )
     return blockers
 
 
@@ -894,7 +964,17 @@ def run_all_checks(
     infos = []
 
     # 1. Closes-discipline
-    closes_blockers = check_closes_discipline(body, repo)
+    commit_messages = None
+    commit_messages_checked = False
+    if pr_number:
+        commit_messages = get_pr_commit_messages(pr_number, repo)
+        commit_messages_checked = True
+    closes_blockers = check_closes_discipline(
+        body,
+        repo,
+        commit_messages=commit_messages,
+        commit_messages_checked=commit_messages_checked,
+    )
     blockers.extend(closes_blockers)
 
     # 2. Closure declaration

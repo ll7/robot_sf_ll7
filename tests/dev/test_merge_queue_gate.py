@@ -1408,6 +1408,7 @@ def test_evaluate_live_query_failure_preserves_unknown_thread_audit() -> None:
             "fetch_pr_snapshot",
             return_value=(snapshot, None),
         ),
+        patch.object(merge_queue_gate_module, "get_pr_commit_messages", return_value=""),
         patch.object(merge_queue_gate_module, "fetch_main_sha", return_value=base_sha),
         patch.object(
             merge_queue_gate_module,
@@ -1495,6 +1496,87 @@ def test_headgreen_merge_queue_strategy_fails_closed() -> None:
     assert audit.passed is False
     assert audit.queue_merging_strategy == "HEADGREEN"
     assert "unsafe_merge_queue_strategy:HEADGREEN" in audit.reasons
+
+
+def test_evaluate_merge_gate_requires_verified_closing_discipline() -> None:
+    """A live snapshot without a passing semantic-close recheck cannot be admitted."""
+    body = "final body"
+    digest = metadata_digest("merge queue test PR", body)
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": FULL_SHA,
+            "labels": ["merge-ready"],
+            "draft": False,
+            "body": body,
+            "metadata_digest": digest,
+            "metadata_verdicts": [metadata_trailer(digest)],
+            "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+            "checks": {"overall": "success"},
+            "changed_coverage": {"status": "success", "head_sha": FULL_SHA},
+            "closing_discipline": {
+                "status": "unavailable",
+                "blockers": ["commit metadata unavailable"],
+            },
+        },
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+
+    assert audit.passed is False
+    assert audit.closing_discipline_status == "unavailable"
+    assert audit.closing_discipline_blockers == ["commit metadata unavailable"]
+    assert "closing_discipline_unavailable" in audit.reasons
+
+
+def test_evaluate_live_carries_current_closing_discipline_result() -> None:
+    """The live evaluator binds the merge decision to the fresh contract recheck."""
+    body = "final body"
+    digest = metadata_digest("live gate", body)
+    snapshot = {
+        "number": 42,
+        "title": "live gate",
+        "body": body,
+        "head_sha": FULL_SHA,
+        "base_sha": FULL_SHA,
+        "labels": ["merge-ready"],
+        "draft": False,
+        "checks": {"overall": "success"},
+        "changed_coverage": {"status": "success", "head_sha": FULL_SHA},
+        "gate_verdicts": [f"gate-verdict: accepted @ {FULL_SHA}"],
+        "metadata_digest": digest,
+        "metadata_verdicts": [metadata_trailer(digest)],
+        "reviewers_requested": False,
+    }
+    with (
+        patch.object(merge_queue_gate_module, "fetch_pr_snapshot", return_value=(snapshot, None)),
+        patch.object(merge_queue_gate_module, "fetch_main_sha", return_value=FULL_SHA),
+        patch.object(merge_queue_gate_module, "fetch_threads_resolved", return_value=(True, None)),
+        patch.object(
+            merge_queue_gate_module,
+            "get_pr_commit_messages",
+            return_value="Closes: #8414",
+        ) as mock_commits,
+        patch.object(
+            merge_queue_gate_module,
+            "check_closes_discipline",
+            return_value=["incident blocker"],
+        ) as mock_check,
+    ):
+        audit, error = merge_queue_gate_module._evaluate_live(42, repo="owner/repo")
+
+    assert error is None
+    assert audit.passed is False
+    assert audit.closing_discipline_status == "blocked"
+    assert audit.closing_discipline_blockers == ["incident blocker"]
+    assert "closing_discipline_blocked" in audit.reasons
+    mock_commits.assert_called_once_with("42", "owner/repo")
+    mock_check.assert_called_once_with(
+        body,
+        "owner/repo",
+        commit_messages="Closes: #8414",
+        commit_messages_checked=True,
+    )
 
 
 def test_outstanding_requested_reviewer_fails_closed() -> None:
@@ -1598,7 +1680,10 @@ def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> 
     gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
     threads = _review_threads_payload(nodes=[], total_count=0, has_next_page=False)
 
-    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+    with (
+        patch("scripts.dev.merge_queue_gate._gh") as mock_gh,
+        patch.object(merge_queue_gate_module, "get_pr_commit_messages", return_value=""),
+    ):
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
@@ -1631,7 +1716,10 @@ def test_from_event_accepts_branch_name_queue_ref(tmp_path) -> None:
     gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
     threads = _review_threads_payload(nodes=[], total_count=0, has_next_page=False)
 
-    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+    with (
+        patch("scripts.dev.merge_queue_gate._gh") as mock_gh,
+        patch.object(merge_queue_gate_module, "get_pr_commit_messages", return_value=""),
+    ):
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),

@@ -38,10 +38,17 @@ def _valid_review_sidecar(artifact: Path, artifact_path: str) -> dict[str, objec
 def test_find_closed_issues() -> None:
     """Test find_closed_issues matches closing keywords."""
     body = (
-        "This fixes #123 and closes #456. Resolves https://github.com/ll7/robot_sf_ll7/issues/789."
+        "This fixes #123, closes: #456, and resolves ll7/robot_sf_ll7#789. "
+        "Fixes https://github.com/ll7/robot_sf_ll7/issues/1011."
     )
     closed = pr_contract_check.find_closed_issues(body)
-    assert closed == ["123", "456", "789"]
+    assert closed == ["123", "456", "789", "1011"]
+
+
+def test_find_closed_issues_keeps_cross_repository_references_parseable() -> None:
+    """Qualified references are parsed so the discipline rule can ignore other repos."""
+    body = "Closes other-org/other-repo#123 and closes ll7/robot_sf_ll7#456"
+    assert pr_contract_check.find_closed_issues(body) == ["123", "456"]
 
 
 def test_find_title_issues() -> None:
@@ -61,12 +68,16 @@ def test_has_declaration_for_issue() -> None:
 def test_check_closes_discipline(mock_run: MagicMock) -> None:
     """Test check_closes_discipline protects special issue lifecycles."""
     # Test case 1: Issue has no epic label
-    mock_run.return_value = MagicMock(returncode=0, stdout='{"labels": [{"name": "bug"}]}')
+    mock_run.return_value = MagicMock(
+        returncode=0, stdout='{"labels": [{"name": "bug"}], "body": ""}'
+    )
     blockers = pr_contract_check.check_closes_discipline("Closes #123", "ll7/robot_sf_ll7")
     assert not blockers
 
     # Test case 2: Issue has epic label
-    mock_run.return_value = MagicMock(returncode=0, stdout='{"labels": [{"name": "epic"}]}')
+    mock_run.return_value = MagicMock(
+        returncode=0, stdout='{"labels": [{"name": "epic"}], "body": ""}'
+    )
     blockers = pr_contract_check.check_closes_discipline("Closes #123", "ll7/robot_sf_ll7")
     assert len(blockers) == 1
     assert "epic" in blockers[0]
@@ -86,7 +97,8 @@ def test_check_closes_discipline(mock_run: MagicMock) -> None:
 
     # The compatibility label protects marker-less incidents as well.
     mock_run.return_value = MagicMock(
-        returncode=0, stdout=json.dumps({"labels": [{"name": "ll7-main-red-incident:v1"}]})
+        returncode=0,
+        stdout=json.dumps({"labels": [{"name": "ll7-main-red-incident:v1"}], "body": ""}),
     )
     blockers = pr_contract_check.check_closes_discipline("Resolves #8441", "ll7/robot_sf_ll7")
     assert len(blockers) == 1
@@ -97,6 +109,87 @@ def test_check_closes_discipline(mock_run: MagicMock) -> None:
     blockers = pr_contract_check.check_closes_discipline("Closes #999", "ll7/robot_sf_ll7")
     assert len(blockers) == 1
     assert "fails closed" in blockers[0]
+
+
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_closes_discipline_scans_commit_messages(mock_metadata: MagicMock) -> None:
+    """Commit-message closing keywords receive the same lifecycle protection as body keywords."""
+    mock_metadata.return_value = (
+        [],
+        "<!-- ll7-main-red-incident:v1 -->\nAutomated incident.",
+    )
+
+    blockers = pr_contract_check.check_closes_discipline(
+        "Adds a repair without a body closing keyword.",
+        "ll7/robot_sf_ll7",
+        commit_messages="Implement repair\n\nCloses: #8414\n",
+        commit_messages_checked=True,
+    )
+
+    assert len(blockers) == 1
+    assert "PR commit message" in blockers[0]
+    mock_metadata.assert_called_once_with("8414", "ll7/robot_sf_ll7")
+
+
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_closes_discipline_ignores_other_repository(mock_metadata: MagicMock) -> None:
+    """A qualified close for another repository is not a local lifecycle mutation."""
+    blockers = pr_contract_check.check_closes_discipline(
+        "Closes other-org/other-repo#8414",
+        "ll7/robot_sf_ll7",
+    )
+
+    assert not blockers
+    mock_metadata.assert_not_called()
+
+
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_issue_metadata_requires_complete_payload(mock_run: MagicMock) -> None:
+    """Partial issue responses cannot be treated as evidence that closure is safe."""
+    mock_run.return_value = MagicMock(returncode=0, stdout='{"labels": []}')
+    assert pr_contract_check.get_issue_metadata("8414", "ll7/robot_sf_ll7") is None
+
+    mock_run.return_value = MagicMock(returncode=0, stdout='{"body": ""}')
+    assert pr_contract_check.get_issue_metadata("8414", "ll7/robot_sf_ll7") is None
+
+
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_pr_commit_messages_uses_paginated_commit_api(mock_run: MagicMock) -> None:
+    """The commit source is fetched through the paginated PR commits endpoint."""
+    mock_run.return_value = MagicMock(returncode=0, stdout="first\nsecond\n")
+
+    assert pr_contract_check.get_pr_commit_messages("8451", "ll7/robot_sf_ll7") == "first\nsecond\n"
+    mock_run.assert_called_once_with(
+        [
+            "gh",
+            "api",
+            "--paginate",
+            "repos/ll7/robot_sf_ll7/pulls/8451/commits?per_page=100",
+            "--jq",
+            ".[] | .commit.message",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+
+@patch("scripts.ci.pr_contract_check.get_issue_metadata")
+def test_check_closes_discipline_fails_closed_when_commit_source_unavailable(
+    mock_metadata: MagicMock,
+) -> None:
+    """A live PR check cannot silently skip commit-message closure references."""
+    blockers = pr_contract_check.check_closes_discipline(
+        "No semantic closing reference in the body.",
+        "ll7/robot_sf_ll7",
+        commit_messages=None,
+        commit_messages_checked=True,
+    )
+
+    assert len(blockers) == 1
+    assert "commit messages" in blockers[0]
+    mock_metadata.assert_not_called()
 
 
 def test_check_closes_discipline_allows_non_closing_reference() -> None:

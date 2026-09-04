@@ -744,7 +744,7 @@ def _parse_json(stdout: str) -> tuple[Any, str | None]:
         return None, f"Failed to parse JSON: {exc}"
 
 
-def _rollup_overall(rollup: list[dict[str, Any]]) -> str:
+def _rollup_overall(rollup: list[dict[str, Any]]) -> str:  # noqa: C901
     """Classify a PR ``statusCheckRollup`` into an overall CI conclusion.
 
     Returns ``failure`` if any check failed, ``pending`` if any check is
@@ -755,6 +755,13 @@ def _rollup_overall(rollup: list[dict[str, Any]]) -> str:
         return "pending"
     if any(not isinstance(check, dict) for check in rollup):
         return "pending"
+    if any(
+        check.get("name") == GATE_JOB_NAME and check.get("workflowName") != GATE_WORKFLOW_NAME
+        for check in rollup
+    ):
+        # A job name without its workflow identity cannot prove whether this is
+        # the required Merge Queue Gate context or an unrelated check.
+        return "unknown"
     effective_rollup, _superseded_count = _latest_check_runs(rollup)
     without_current_gate = [
         check

@@ -750,6 +750,18 @@ def test_fetch_pr_snapshot_ignores_current_gate_check() -> None:
             ],
             "pending",
         ),
+        (
+            [
+                {
+                    "__typename": "CheckRun",
+                    "name": "merge-queue-gate",
+                    "startedAt": "2026-07-25T12:05:00Z",
+                    "status": "COMPLETED",
+                    "conclusion": "SUCCESS",
+                }
+            ],
+            "unknown",
+        ),
         ([{"status": "COMPLETED", "conclusion": "STALE"}], "failure"),
         ([{"status": "COMPLETED", "conclusion": None}], "pending"),
         ([{"status": "BROKEN", "conclusion": "SUCCESS"}], "unknown"),

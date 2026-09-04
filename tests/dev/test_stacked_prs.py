@@ -18,7 +18,9 @@ from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 from scripts.dev.stacked_prs import (
     _closing_discipline_reasons,
     _get_paginated_list,
+    _merge_queue_gate_reasons,
     _parse_expected_heads,
+    _resolve_check_run_workflow_name,
     _retarget_plan,
     _review_digest,
     build_stack_status,
@@ -259,6 +261,23 @@ def test_merge_queue_gate_requires_newest_exact_head_success() -> None:
         summarize_merge_queue_gate([older, newer_pending], head_sha=head_sha)["status"] == "pending"
     )
     assert (
+        summarize_merge_queue_gate(
+            [
+                older,
+                {
+                    **older,
+                    "id": 3,
+                    "status": "queued",
+                    "conclusion": None,
+                    "completed_at": None,
+                    "started_at": None,
+                },
+            ],
+            head_sha=head_sha,
+        )["status"]
+        == "pending"
+    )
+    assert (
         summarize_merge_queue_gate([{**older, "head_sha": "b" * 40}], head_sha=head_sha)["status"]
         == "mismatch"
     )
@@ -291,6 +310,71 @@ def test_merge_queue_gate_rejects_missing_workflow_identity() -> None:
 
     assert summary["status"] == "mismatch"
     assert summary["workflow_name"] is None
+
+
+def test_merge_queue_gate_reasons_distinguish_workflow_identity_mismatch() -> None:
+    """Workflow identity failures should be actionable in stack diagnostics."""
+    assert _merge_queue_gate_reasons(
+        {"merge_queue_gate": {"status": "mismatch", "workflow_name": None}}
+    ) == ["merge_queue_gate_workflow_mismatch"]
+    assert _merge_queue_gate_reasons(
+        {"merge_queue_gate": {"status": "mismatch", "workflow_name": "Other Workflow"}}
+    ) == ["merge_queue_gate_workflow_mismatch"]
+    assert _merge_queue_gate_reasons(
+        {"merge_queue_gate": {"status": "mismatch", "workflow_name": "Merge Queue Gate"}}
+    ) == ["merge_queue_gate_head_mismatch"]
+
+
+@pytest.mark.parametrize(
+    "details_url",
+    [
+        "https://example.com/owner/repo/actions/runs/123/job/456",
+        "https://github.com/owner/repo/actions/runs/123/job/not-a-job",
+        "https://github.com/other/repo/actions/runs/123/job/456",
+        "https://github.com/owner/repo/actions/runs/123",
+    ],
+)
+def test_workflow_resolution_rejects_untrusted_details_urls(details_url: str) -> None:
+    """Only canonical GitHub URLs for this repository may identify a workflow run."""
+    calls: list[str] = []
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        calls.append(path)
+        return {"name": "Merge Queue Gate", "head_sha": "a" * 40}, None
+
+    assert (
+        _resolve_check_run_workflow_name(
+            {"details_url": details_url, "head_sha": "a" * 40},
+            repo="owner/repo",
+            api=fake_api,
+            cache={},
+        )
+        == ""
+    )
+    assert calls == []
+
+
+def test_workflow_resolution_requires_matching_run_head() -> None:
+    """A workflow run from another commit cannot establish the current gate identity."""
+    calls: list[str] = []
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        calls.append(path)
+        return {"name": "Merge Queue Gate", "head_sha": "b" * 40}, None
+
+    assert (
+        _resolve_check_run_workflow_name(
+            {
+                "details_url": "https://github.com/owner/repo/actions/runs/123/job/456",
+                "head_sha": "a" * 40,
+            },
+            repo="owner/repo",
+            api=fake_api,
+            cache={},
+        )
+        == ""
+    )
+    assert calls == ["repos/owner/repo/actions/runs/123"]
 
 
 def test_explicit_holds_and_withdrawn_review_carriers_fail_closed() -> None:
@@ -412,9 +496,10 @@ def test_status_resolves_gate_workflow_from_actions_run_and_fails_closed(
         assert method == "GET"
         assert payload is None
         if path == "repos/owner/repo/actions/runs/123":
+            resolved_run = None if actions_run is None else {**actions_run, "head_sha": head_sha}
             return (
-                actions_run,
-                None if actions_run is not None else "Actions run lookup unavailable",
+                resolved_run,
+                None if resolved_run is not None else "Actions run lookup unavailable",
             )
         return payloads[path], None
 

@@ -105,9 +105,111 @@ class FakeREST:
         raise AssertionError(f"unexpected REST path: {path}")
 
 
+def _actions_run(run: dict[str, Any]) -> dict[str, Any]:
+    """Convert a classifier-shaped run into an Actions REST row."""
+    return {
+        "id": run["databaseId"],
+        "status": run["status"],
+        "conclusion": run["conclusion"],
+        "head_sha": run["headSha"],
+        "created_at": run["createdAt"],
+    }
+
+
+class FakeActionsRunREST:
+    """REST fake for workflow resolution and paginated Actions runs."""
+
+    def __init__(self, pages: list[list[dict[str, Any]]]) -> None:
+        """Initialize paginated raw workflow-run rows."""
+        self.pages = pages
+        self.calls: list[str] = []
+
+    def __call__(
+        self,
+        path: str,
+        payload: object | None = None,
+        *,
+        method: str | None = None,
+        extra_args: list[str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        """Return the requested workflow inventory or run page."""
+        assert payload is None
+        assert method is None
+        assert extra_args is None
+        self.calls.append(path)
+        if path == "repos/owner/repo/actions/workflows?per_page=100&page=1":
+            return _proc(
+                {
+                    "total_count": 1,
+                    "workflows": [
+                        {
+                            "id": 77,
+                            "name": "CI",
+                            "path": ".github/workflows/ci.yml",
+                        }
+                    ],
+                }
+            )
+        prefix = "repos/owner/repo/actions/workflows/77/runs?branch=main&per_page=100&page="
+        if path.startswith(prefix):
+            page = int(path.removeprefix(prefix))
+            return _proc({"total_count": 0, "workflow_runs": self.pages[page - 1]})
+        raise AssertionError(f"unexpected Actions REST path: {path}")
+
+
 def _fetcher(runs: list[dict[str, Any]]):
     """Return an injectable run-window fetcher."""
     return lambda _repo, _workflow, limit: runs[:limit]
+
+
+def test_paginated_actions_fetch_reaches_decisive_runs_past_cancellations() -> None:
+    """A full cancelled page must not be mistaken for the complete evidence window."""
+    cancelled_page = [
+        _actions_run(_run(1000 + index, "cancelled", f"2026-09-04T00:{index:02d}:00Z"))
+        for index in range(100)
+    ]
+    decisive_page = [
+        _actions_run(_run(900, "success", "2026-09-03T23:00:00Z")),
+        _actions_run(_run(899, "success", "2026-09-03T22:00:00Z")),
+    ]
+    fake = FakeActionsRunREST([cancelled_page, decisive_page])
+
+    runs = reconciler._fetch_main_ci_runs(
+        REPO,
+        "CI",
+        max_pages=2,
+        runner=fake,
+    )
+
+    assert len(runs) == 102
+    assert [run["databaseId"] for run in runs[-2:]] == [900, 899]
+    assert any(path.endswith("page=2") for path in fake.calls)
+
+
+def test_paginated_actions_fetch_fails_closed_at_page_budget() -> None:
+    """A page ceiling without two decisive runs cannot produce a guessed verdict."""
+    cancelled_pages = [
+        [
+            _actions_run(
+                _run(
+                    2000 + page * 100 + index, "cancelled", f"2026-09-{page:02d}T00:{index:02d}:00Z"
+                )
+            )
+            for index in range(100)
+        ]
+        for page in range(1, 3)
+    ]
+    fake = FakeActionsRunREST(cancelled_pages)
+
+    with pytest.raises(reconciler.ReconciliationError, match="two decisive runs"):
+        reconciler._fetch_main_ci_runs(
+            REPO,
+            "CI",
+            max_pages=2,
+            runner=fake,
+        )
+
+    assert any(path.endswith("page=2") for path in fake.calls)
 
 
 def test_parse_deciding_run_requires_one_canonical_field() -> None:
@@ -328,6 +430,59 @@ def test_empty_inventory_does_not_require_a_run_fetch() -> None:
     assert report["status"] == "ok"
     assert report["results"] == []
     assert report["source"]["open_incident_count"] == 0
+
+
+def test_explicit_run_page_limit_overrides_legacy_run_limit() -> None:
+    """The new page budget remains independently controllable for the REST path."""
+    fake = FakeREST(_issue(run_id=300))
+    fake.issue["state"] = "closed"
+
+    report = reconciler.reconcile_batch(
+        repo=REPO,
+        runner=fake,
+        run_limit=3,
+        max_run_pages=2,
+    )
+
+    assert report["source"]["run_limit"] == 3
+    assert report["source"]["run_page_limit"] == 2
+
+
+def test_default_run_reader_receives_resolved_page_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The batch path routes the new page budget to the default REST reader."""
+    fake = FakeREST(_issue(run_id=300))
+    observed: dict[str, Any] = {}
+
+    def fake_run_reader(
+        repo: str,
+        workflow: str,
+        *,
+        max_pages: int,
+        runner: object,
+    ) -> list[dict[str, Any]]:
+        observed.update(repo=repo, workflow=workflow, max_pages=max_pages, runner=runner)
+        return [
+            _run(500, "success", "2026-09-01T02:00:00Z"),
+            _run(400, "success", "2026-09-01T01:00:00Z"),
+            _run(300, "failure", "2026-09-01T00:00:00Z"),
+        ]
+
+    monkeypatch.setattr(reconciler, "_fetch_main_ci_runs", fake_run_reader)
+    report = reconciler.reconcile_batch(
+        repo=REPO,
+        workflow="CI",
+        runner=fake,
+        run_limit=7,
+        max_run_pages=4,
+    )
+
+    assert observed["repo"] == REPO
+    assert observed["workflow"] == "CI"
+    assert observed["max_pages"] == 4
+    assert observed["runner"] is fake
+    assert report["source"]["run_page_limit"] == 4
 
 
 def test_malformed_run_window_fails_closed_before_any_issue_write() -> None:

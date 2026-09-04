@@ -9,8 +9,8 @@
       "occurrences": 0
     },
     "scripts": {
-      "files": 15,
-      "occurrences": 182
+      "files": 14,
+      "occurrences": 130
     },
     "tests": {
       "files": 180,
@@ -26,7 +26,6 @@
     "scripts/research/generate_extractor_report.py": 6,
     "scripts/run_social_navigation_benchmark.py": 8,
     "scripts/scale_svgs_to_50m.py": 2,
-    "scripts/snqi_sensitivity_analysis.py": 52,
     "scripts/tools/check_artifact_root.py": 16,
     "scripts/tools/compare_training_runs.py": 2,
     "scripts/training/train_ppo.py": 11,
@@ -222,7 +221,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 195,
-    "total_occurrences": 1425
+    "files": 194,
+    "total_occurrences": 1373
   }
 }

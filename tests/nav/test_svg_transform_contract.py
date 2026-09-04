@@ -11,6 +11,7 @@ from __future__ import annotations
 import pickle
 import re
 import xml.etree.ElementTree as ET
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -155,6 +156,16 @@ def test_unknown_contract_rejected(tmp_path: Path):
     svg = _write_svg(tmp_path, "unknown_contract.svg", "")
     with pytest.raises(ValueError, match="geometry_contract"):
         SvgMapConverter(svg, geometry_contract="translate-everything")
+
+
+def test_map_definition_rejects_unknown_contract(tmp_path: Path):
+    """Map definitions reject unsupported geometry provenance values directly."""
+
+    svg = _write_svg(tmp_path, "unknown_map_contract.svg", "")
+    map_definition = SvgMapConverter(svg).get_map_definition()
+
+    with pytest.raises(ValueError, match="Unknown svg_geometry_contract"):
+        replace(map_definition, svg_geometry_contract="translate-everything")
 
 
 @pytest.mark.parametrize(

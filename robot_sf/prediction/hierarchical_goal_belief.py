@@ -36,6 +36,7 @@ from robot_sf.prediction.goal_belief_contract import (
     GoalCandidateKind,
     GoalCandidateProbability,
 )
+from robot_sf.prediction.goal_intention import GoalCandidateRole, GoalCandidateSet
 
 HIERARCHICAL_GOAL_POSTERIOR_SCHEMA_VERSION = "hierarchical_goal_posterior.v1"
 HIERARCHICAL_PROJECTION_LEVELS = ("active_waypoint", "final_destination")
@@ -432,12 +433,84 @@ class HierarchicalGoalPosteriorV1:
         )
         return probabilities, min(1.0, unknown * scale)
 
-    def to_goal_belief_v1(self, level: str) -> GoalBeliefV1:
+    def _validate_candidate_binding(self, candidate_set: GoalCandidateSet) -> None:
+        """Require a concrete actor-safe candidate set for flat projection admission.
+
+        The hierarchical payload carries only a candidate-set digest, so projection must
+        rebind it to the canonical candidate bytes and verify every referenced candidate
+        before emitting the observation-only flat contract.  This is a static admission
+        check; temporal lifecycle reconciliation and upstream evidence integration remain
+        outside Slice A.
+        """
+        if type(candidate_set) is not GoalCandidateSet:
+            raise TypeError("candidate_set must be a GoalCandidateSet")
+        if is_forbidden_evidence_source(candidate_set.source):
+            raise ValueError(
+                "candidate_set.source must not identify a forbidden oracle or simulator source"
+            )
+        for candidate in candidate_set.candidates:
+            if is_forbidden_evidence_source(candidate.source):
+                raise ValueError(
+                    f"candidate {candidate.id} has a forbidden oracle or simulator source"
+                )
+
+        actual_digest = stable_digest(candidate_set.to_dict())
+        if actual_digest != self.candidate_set_digest:
+            raise ValueError("candidate_set_digest does not match the bound candidate set")
+
+        candidate_by_id = {candidate.id: candidate for candidate in candidate_set.candidates}
+        destination_ids = {item.candidate_id for item in self.destination_probabilities}
+        waypoint_ids = {
+            item.candidate_id
+            for conditional in self.waypoint_conditionals
+            for item in conditional.waypoint_probabilities
+        }
+        referenced_ids = destination_ids | waypoint_ids
+        missing = referenced_ids - set(candidate_by_id)
+        if missing:
+            raise ValueError(
+                "bound candidate set is missing referenced candidate IDs: "
+                + ", ".join(sorted(missing))
+            )
+
+        unknown_role_ids = sorted(
+            candidate_id
+            for candidate_id in referenced_ids
+            if candidate_by_id[candidate_id].role is GoalCandidateRole.UNKNOWN
+        )
+        if unknown_role_ids:
+            raise ValueError(
+                "hierarchical probability references candidate(s) with UNKNOWN role: "
+                + ", ".join(unknown_role_ids)
+            )
+
+        for waypoint_id, destination_id in self.waypoint_parent_destination:
+            candidate = candidate_by_id[waypoint_id]
+            if (
+                candidate.parent_destination_id is not None
+                and candidate.parent_destination_id != destination_id
+            ):
+                raise ValueError(
+                    f"candidate {waypoint_id} parent_destination_id disagrees with "
+                    f"hierarchy parent {destination_id}"
+                )
+
+    def to_goal_belief_v1(
+        self,
+        level: str,
+        *,
+        candidate_set: GoalCandidateSet,
+    ) -> GoalBeliefV1:
         """Project exactly one hierarchy level into the unchanged flat v1 type.
+
+        Args:
+            level: The one hierarchy level to project.
+            candidate_set: The concrete canonical candidate set bound to this posterior.
 
         Returns:
             A flat actor-only belief for the explicitly requested level.
         """
+        self._validate_candidate_binding(candidate_set)
         if level not in HIERARCHICAL_PROJECTION_LEVELS:
             raise ValueError("level must be one of: " + ", ".join(HIERARCHICAL_PROJECTION_LEVELS))
 

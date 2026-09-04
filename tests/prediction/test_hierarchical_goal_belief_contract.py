@@ -12,13 +12,58 @@ from robot_sf.prediction import (
     ACTOR_FORBIDDEN_KEYS,
     HIERARCHICAL_GOAL_POSTERIOR_SCHEMA_VERSION,
     GoalBeliefSource,
+    GoalCandidate,
     GoalCandidateKind,
+    GoalCandidateRole,
+    GoalCandidateSet,
     HierarchicalGoalPosteriorV1,
     HierarchicalProbability,
     HierarchicalWaypointConditionalV1,
 )
+from robot_sf.prediction._contract_utils import stable_digest
 
 HASH = "a" * 64
+
+
+POSTERIOR_CANDIDATE_SET = GoalCandidateSet(
+    candidates=(
+        GoalCandidate(
+            id="destination-a",
+            position=(10.0, 0.0),
+            source="public_fixture",
+            role=GoalCandidateRole.FINAL_DESTINATION,
+        ),
+        GoalCandidate(
+            id="destination-b",
+            position=(0.0, 10.0),
+            source="public_fixture",
+            role=GoalCandidateRole.FINAL_DESTINATION,
+        ),
+        GoalCandidate(
+            id="waypoint-a-near",
+            position=(2.0, 0.0),
+            source="public_fixture",
+            role=GoalCandidateRole.ACTIVE_WAYPOINT,
+            parent_destination_id="destination-a",
+        ),
+        GoalCandidate(
+            id="waypoint-a-far",
+            position=(6.0, 0.0),
+            source="public_fixture",
+            role=GoalCandidateRole.ACTIVE_WAYPOINT,
+            parent_destination_id="destination-a",
+        ),
+        GoalCandidate(
+            id="waypoint-b",
+            position=(0.0, 4.0),
+            source="public_fixture",
+            role=GoalCandidateRole.ACTIVE_WAYPOINT,
+            parent_destination_id="destination-b",
+        ),
+    ),
+    source="public_fixture",
+)
+POSTERIOR_CANDIDATE_SET_DIGEST = stable_digest(POSTERIOR_CANDIDATE_SET.to_dict())
 
 
 def _posterior(
@@ -66,7 +111,7 @@ def _posterior(
         innovation=0.2,
         blockers=("synthetic_fixture",),
         config_hash=HASH,
-        candidate_set_digest="b" * 64,
+        candidate_set_digest=POSTERIOR_CANDIDATE_SET_DIGEST,
     )
 
 
@@ -101,6 +146,17 @@ def test_hierarchy_has_independent_normalization_and_expected_marginal() -> None
 
 def test_tolerated_roundoff_is_canonicalized_before_flat_projection() -> None:
     """Tolerated normalization drift cannot make a derived probability invalid."""
+    candidate_set = GoalCandidateSet(
+        candidates=(
+            GoalCandidate(
+                id="destination",
+                position=(1.0, 0.0),
+                source="public_fixture",
+                role=GoalCandidateRole.FINAL_DESTINATION,
+            ),
+        ),
+        source="public_fixture",
+    )
     posterior = HierarchicalGoalPosteriorV1(
         track_id="track-roundoff",
         tracking_epoch_id="epoch-1",
@@ -111,10 +167,10 @@ def test_tolerated_roundoff_is_canonicalized_before_flat_projection() -> None:
         waypoint_conditionals=(HierarchicalWaypointConditionalV1("destination"),),
         waypoint_parent_destination={},
         config_hash=HASH,
-        candidate_set_digest="b" * 64,
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
     )
 
-    projected = posterior.to_goal_belief_v1("active_waypoint")
+    projected = posterior.to_goal_belief_v1("active_waypoint", candidate_set=candidate_set)
 
     assert projected.unknown_candidate_probability <= 1.0
     assert sum(
@@ -129,6 +185,18 @@ def test_tolerated_roundoff_is_canonicalized_before_flat_projection() -> None:
     all_unknown_conditionals = tuple(
         HierarchicalWaypointConditionalV1(destination.candidate_id) for destination in destinations
     )
+    cardinality_candidate_set = GoalCandidateSet(
+        candidates=tuple(
+            GoalCandidate(
+                id=destination.candidate_id,
+                position=(float(index), 0.0),
+                source="public_fixture",
+                role=GoalCandidateRole.FINAL_DESTINATION,
+            )
+            for index, destination in enumerate(destinations)
+        ),
+        source="public_fixture",
+    )
     cardinality_posterior = HierarchicalGoalPosteriorV1(
         track_id="track-cardinality-roundoff",
         tracking_epoch_id="epoch-1",
@@ -139,11 +207,14 @@ def test_tolerated_roundoff_is_canonicalized_before_flat_projection() -> None:
         waypoint_conditionals=all_unknown_conditionals,
         waypoint_parent_destination={},
         config_hash=HASH,
-        candidate_set_digest="b" * 64,
+        candidate_set_digest=stable_digest(cardinality_candidate_set.to_dict()),
     )
 
     marginal, unknown = cardinality_posterior.active_waypoint_marginal()
-    cardinality_projected = cardinality_posterior.to_goal_belief_v1("active_waypoint")
+    cardinality_projected = cardinality_posterior.to_goal_belief_v1(
+        "active_waypoint",
+        candidate_set=cardinality_candidate_set,
+    )
 
     assert marginal == ()
     assert unknown == 1.0
@@ -231,7 +302,7 @@ def test_flat_projection_requires_and_preserves_the_selected_level(
     expected_ids: set[str],
 ) -> None:
     """Compatibility output never silently mixes destination and waypoint IDs."""
-    belief = _posterior().to_goal_belief_v1(level)
+    belief = _posterior().to_goal_belief_v1(level, candidate_set=POSTERIOR_CANDIDATE_SET)
 
     assert {candidate.candidate_id for candidate in belief.candidate_probabilities} == expected_ids
     assert {candidate.kind for candidate in belief.candidate_probabilities} == {expected_kind}
@@ -246,7 +317,119 @@ def test_flat_projection_requires_and_preserves_the_selected_level(
 def test_flat_projection_rejects_implicit_or_unknown_level() -> None:
     """Callers must name one supported hierarchy level explicitly."""
     with pytest.raises(ValueError, match="level must be one of"):
-        _posterior().to_goal_belief_v1("all")
+        _posterior().to_goal_belief_v1("all", candidate_set=POSTERIOR_CANDIDATE_SET)
+
+
+def test_flat_projection_requires_a_concrete_candidate_set() -> None:
+    """Observation-only projection must fail closed when no candidate set is supplied."""
+    with pytest.raises(TypeError, match="candidate_set"):
+        _posterior().to_goal_belief_v1("final_destination")
+
+
+def test_flat_projection_rejects_noncanonical_candidate_set_types() -> None:
+    """Projection admission accepts only the canonical GoalCandidateSet implementation."""
+    with pytest.raises(TypeError, match="GoalCandidateSet"):
+        _posterior().to_goal_belief_v1(
+            "final_destination",
+            candidate_set=object(),  # type: ignore[arg-type]
+        )
+
+
+def test_flat_projection_recomputes_and_checks_candidate_set_digest() -> None:
+    """A shape-valid digest cannot admit projection without matching canonical candidate bytes."""
+    posterior = replace(_posterior(), candidate_set_digest="c" * 64)
+
+    with pytest.raises(ValueError, match="does not match"):
+        posterior.to_goal_belief_v1(
+            "final_destination",
+            candidate_set=POSTERIOR_CANDIDATE_SET,
+        )
+
+
+def test_flat_projection_rejects_unreferenced_candidate_ids() -> None:
+    """Every non-unknown posterior mass must name a candidate in the bound public set."""
+    candidate_set = GoalCandidateSet(
+        candidates=tuple(
+            candidate
+            for candidate in POSTERIOR_CANDIDATE_SET.candidates
+            if candidate.id != "waypoint-b"
+        ),
+        source="public_fixture",
+    )
+    posterior = replace(
+        _posterior(),
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
+    )
+
+    with pytest.raises(ValueError, match="waypoint-b"):
+        posterior.to_goal_belief_v1("active_waypoint", candidate_set=candidate_set)
+
+
+@pytest.mark.parametrize("binding", ["set", "candidate"])
+def test_flat_projection_rejects_privileged_candidate_sources(binding: str) -> None:
+    """Static source labels cannot smuggle privileged evidence into observation-only output."""
+    if binding == "set":
+        candidate_set = GoalCandidateSet(
+            candidates=POSTERIOR_CANDIDATE_SET.candidates,
+            source="simulator_truth",
+        )
+    else:
+        candidate_set = GoalCandidateSet(
+            candidates=tuple(
+                replace(candidate, source="true_goal")
+                if candidate.id == "destination-a"
+                else candidate
+                for candidate in POSTERIOR_CANDIDATE_SET.candidates
+            ),
+            source="public_fixture",
+        )
+    posterior = replace(
+        _posterior(),
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
+    )
+
+    with pytest.raises(ValueError, match="forbidden oracle or simulator source"):
+        posterior.to_goal_belief_v1("final_destination", candidate_set=candidate_set)
+
+
+def test_flat_projection_rejects_parent_metadata_disagreement() -> None:
+    """A bound waypoint cannot disagree with the hierarchy's static parent mapping."""
+    candidate_set = GoalCandidateSet(
+        candidates=tuple(
+            replace(candidate, parent_destination_id="destination-b")
+            if candidate.id == "waypoint-a-near"
+            else candidate
+            for candidate in POSTERIOR_CANDIDATE_SET.candidates
+        ),
+        source="public_fixture",
+    )
+    posterior = replace(
+        _posterior(),
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
+    )
+
+    with pytest.raises(ValueError, match="parent_destination_id disagrees"):
+        posterior.to_goal_belief_v1("active_waypoint", candidate_set=candidate_set)
+
+
+def test_flat_projection_rejects_unknown_role_used_as_known_mass() -> None:
+    """The explicit unknown probability bucket must not be duplicated as candidate mass."""
+    candidate_set = GoalCandidateSet(
+        candidates=tuple(
+            replace(candidate, role=GoalCandidateRole.UNKNOWN)
+            if candidate.id == "waypoint-a-near"
+            else candidate
+            for candidate in POSTERIOR_CANDIDATE_SET.candidates
+        ),
+        source="public_fixture",
+    )
+    posterior = replace(
+        _posterior(),
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
+    )
+
+    with pytest.raises(ValueError, match="UNKNOWN role"):
+        posterior.to_goal_belief_v1("active_waypoint", candidate_set=candidate_set)
 
 
 @pytest.mark.parametrize(
@@ -277,7 +460,10 @@ def test_innovation_is_an_unbounded_diagnostic_and_not_change_probability() -> N
     """Slice A keeps NIS-like innovation separate from calibrated change probability."""
     posterior = replace(_posterior(), innovation=4.2)
 
-    belief = posterior.to_goal_belief_v1("final_destination")
+    belief = posterior.to_goal_belief_v1(
+        "final_destination",
+        candidate_set=POSTERIOR_CANDIDATE_SET,
+    )
 
     assert posterior.innovation == pytest.approx(4.2)
     assert belief.change_probability == 0.0
@@ -434,11 +620,24 @@ def test_empty_hierarchy_can_represent_unknown_at_both_levels() -> None:
         waypoint_conditionals=(),
         waypoint_parent_destination={},
         config_hash=HASH,
-        candidate_set_digest="b" * 64,
+        candidate_set_digest=stable_digest(GoalCandidateSet().to_dict()),
     )
 
     marginal, unknown = posterior.active_waypoint_marginal()
     assert marginal == ()
     assert unknown == 1.0
-    assert posterior.to_goal_belief_v1("active_waypoint").unknown_candidate_probability == 1.0
-    assert posterior.to_goal_belief_v1("final_destination").unknown_candidate_probability == 1.0
+    empty_candidate_set = GoalCandidateSet()
+    assert (
+        posterior.to_goal_belief_v1(
+            "active_waypoint",
+            candidate_set=empty_candidate_set,
+        ).unknown_candidate_probability
+        == 1.0
+    )
+    assert (
+        posterior.to_goal_belief_v1(
+            "final_destination",
+            candidate_set=empty_candidate_set,
+        ).unknown_candidate_probability
+        == 1.0
+    )

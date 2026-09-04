@@ -421,6 +421,35 @@ def test_projection_invalid_belief_fallbacks_and_alias(monkeypatch) -> None:
     assert legacy_failure.diagnostics["fallback_reason"] == "legacy_observation_unavailable"
 
 
+def test_projection_rejects_nonfinite_time_ratios_as_invalid_belief() -> None:
+    """Overflowing finite time ratios fail closed before integer conversion."""
+    belief = _belief_fixture()
+
+    with pytest.raises(ValueError, match="ratio"):
+        adapter._belief_step(SimpleNamespace(sim_time_s=1e308, timestep_s=1e-308))
+    with pytest.raises(ValueError, match="ratio"):
+        adapter._age_steps(1e308, 1e-308)
+
+    overflowing_time = project_belief_aware_planner_input(
+        replace(belief, sim_time_s=1e308, timestep_s=1e-308),
+        planner_name="BeliefGuidedLocalPlanner",
+    )
+    overflowing_age = project_belief_aware_planner_input(
+        replace(
+            belief,
+            agents=(
+                replace(belief.agents[0], last_observed_age_s=1e308),
+                belief.agents[1],
+            ),
+        ),
+        planner_name="BeliefGuidedLocalPlanner",
+    )
+
+    for rejected in (overflowing_time, overflowing_age):
+        assert rejected.diagnostics["status"] == "invalid_belief"
+        assert "ratio" in rejected.diagnostics["fallback_reason"]
+
+
 def test_validation_helpers_reject_malformed_values() -> None:
     """Array, covariance, probability, integer, and ID validators fail closed."""
 
@@ -436,10 +465,14 @@ def test_validation_helpers_reject_malformed_values() -> None:
         adapter._readonly_float_array("state", ["x", "y"], shape=(2,))
     with pytest.raises(ValueError, match="finite"):
         adapter._readonly_float_array("state", [np.nan, 1.0], shape=(2,))
+    with pytest.raises(ValueError, match="real-valued"):
+        adapter._readonly_float_array("state", np.array([1.0 + 2.0j, 1.0]), shape=(2,))
 
     with pytest.raises(ValueError, match="numeric"):
         adapter._readonly_covariance([[1.0], [1.0, 2.0]])
     assert adapter._readonly_covariance(np.eye(4)).shape == (5, 5)
+    with pytest.raises(ValueError, match="real-valued"):
+        adapter._readonly_covariance(np.eye(4, dtype=np.complex128))
     with pytest.raises(ValueError, match="numeric"):
         adapter._readonly_covariance(np.full((5, 5), "x", dtype=object))
     with pytest.raises(ValueError, match="shape"):
@@ -529,6 +562,34 @@ def test_typed_input_validation_and_json_edges() -> None:
         non_json.to_dict()
 
 
+def test_diagnostics_are_deeply_immutable_for_stable_json() -> None:
+    """Nested diagnostics mutation cannot change a constructed input's JSON."""
+    diagnostics = {
+        "nested": {"status": "projected"},
+        "values": [1],
+        "array": np.asarray([1.0]),
+    }
+    wrapper = BeliefAwarePlannerInput(
+        legacy_observation={},
+        tracks={},
+        belief_step=0,
+        diagnostics=diagnostics,
+    )
+    initial_json = wrapper.to_json()
+
+    with pytest.raises(TypeError):
+        wrapper.diagnostics["nested"]["status"] = "changed"
+    with pytest.raises(AttributeError):
+        wrapper.diagnostics["values"].append(2)
+    with pytest.raises(ValueError, match="read-only"):
+        wrapper.diagnostics["array"][0] = 2.0
+
+    diagnostics["nested"]["status"] = "changed"
+    diagnostics["values"].append(2)
+    diagnostics["array"][0] = 2.0
+    assert wrapper.to_json() == initial_json
+
+
 def test_track_field_and_time_validation_edges() -> None:
     """Planner-track fields and canonical time metadata reject unsafe values."""
     for overrides, match in (
@@ -582,6 +643,20 @@ def test_entity_projection_rejects_malformed_public_fields() -> None:
         project(replace(agent, position=SimpleNamespace(mean_xy=(0.0, 0.0))))
     with pytest.raises(ValueError, match="two coordinates"):
         project(replace(agent, position=replace(agent.position, mean_xy=(0.0,))))
+    with pytest.raises(ValueError, match="shape"):
+        project(
+            replace(
+                agent,
+                position=replace(agent.position, mean_xy=np.asarray([[0.0, 0.0]])),
+            )
+        )
+    with pytest.raises(ValueError, match="shape"):
+        project(
+            replace(
+                agent,
+                velocity=replace(agent.velocity, mean_xy=np.asarray([[0.0, 0.0]])),
+            )
+        )
     with pytest.raises(ValueError, match="2x2"):
         project(
             replace(
@@ -589,6 +664,21 @@ def test_entity_projection_rejects_malformed_public_fields() -> None:
                 position=replace(agent.position, covariance_xy=((1.0, 0.0, 0.0),) * 3),
             )
         )
+    complex_entity_values = (
+        ("position", replace(agent.position, mean_xy=np.asarray([1.0 + 2.0j, 0.0]))),
+        ("velocity", replace(agent.velocity, mean_xy=np.asarray([1.0 + 2.0j, 0.0]))),
+        (
+            "position",
+            replace(agent.position, covariance_xy=np.eye(2, dtype=np.complex128)),
+        ),
+        (
+            "velocity",
+            replace(agent.velocity, covariance_xy=np.eye(2, dtype=np.complex128)),
+        ),
+    )
+    for field, value in complex_entity_values:
+        with pytest.raises(ValueError, match="real-valued"):
+            project(replace(agent, **{field: value}))
     with pytest.raises(ValueError, match="radius"):
         project(replace(agent, radius="bad"))
     with pytest.raises(ValueError, match="source adapter"):

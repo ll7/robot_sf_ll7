@@ -402,7 +402,10 @@ def _latest_merge_queue_gate_index(check_runs: list[dict[str, Any]]) -> int | No
 
 def _actions_run_id(details_url: str, *, repo: str) -> str:
     """Extract a numeric Actions run ID from this repository's canonical job URL."""
-    parsed_url = urlparse(details_url)
+    try:
+        parsed_url = urlparse(details_url)
+    except ValueError:
+        return ""
     expected_repo_path = f"/{repo.strip('/')}"
     if parsed_url.scheme != "https" or parsed_url.netloc.lower() != "github.com":
         return ""
@@ -429,6 +432,38 @@ def _workflow_run_payload(
     return payload
 
 
+def _resolve_check_run_workflow_identity(
+    check_run: dict[str, Any],
+    *,
+    repo: str,
+    api: GhApi,
+    cache: dict[str, dict[str, Any]],
+) -> tuple[str, str]:
+    """Resolve workflow identity and return a structured failure reason when unavailable."""
+    workflow_name = _check_workflow_name(check_run)
+    if workflow_name:
+        return workflow_name, ""
+    details_url = str(check_run.get("details_url") or check_run.get("detailsUrl") or "")
+    run_id = _actions_run_id(details_url, repo=repo)
+    if not run_id:
+        return "", "workflow_url_invalid"
+    check_head_sha = str(check_run.get("head_sha") or "").strip()
+    if not check_head_sha:
+        return "", "check_run_head_missing"
+    workflow_run = _workflow_run_payload(run_id, repo=repo, api=api, cache=cache)
+    if workflow_run is None:
+        return "", "workflow_run_unavailable"
+    run_head_sha = str(workflow_run.get("head_sha") or "").strip()
+    if not run_head_sha or run_head_sha.casefold() != check_head_sha.casefold():
+        return "", "workflow_run_head_mismatch"
+    resolved_name = str(workflow_run.get("name") or "").strip()
+    if not resolved_name:
+        return "", "workflow_name_missing"
+    if run_id not in cache:
+        cache[run_id] = workflow_run
+    return resolved_name, ""
+
+
 def _resolve_check_run_workflow_name(
     check_run: dict[str, Any],
     *,
@@ -437,28 +472,10 @@ def _resolve_check_run_workflow_name(
     cache: dict[str, dict[str, Any]],
 ) -> str:
     """Resolve a check run's workflow name without guessing from its job name."""
-    workflow_name = _check_workflow_name(check_run)
-    if workflow_name:
-        return workflow_name
-    details_url = str(check_run.get("details_url") or check_run.get("detailsUrl") or "")
-    run_id = _actions_run_id(details_url, repo=repo)
-    if not run_id:
-        return ""
-    check_head_sha = str(check_run.get("head_sha") or "").strip()
-    if not check_head_sha:
-        return ""
-    workflow_run = _workflow_run_payload(run_id, repo=repo, api=api, cache=cache)
-    if workflow_run is None:
-        return ""
-    run_head_sha = str(workflow_run.get("head_sha") or "").strip()
-    if not run_head_sha or run_head_sha.casefold() != check_head_sha.casefold():
-        return ""
-    resolved_name = str(workflow_run.get("name") or "").strip()
-    if not resolved_name:
-        return ""
-    if run_id not in cache:
-        cache[run_id] = workflow_run
-    return resolved_name
+    workflow_name, _reason = _resolve_check_run_workflow_identity(
+        check_run, repo=repo, api=api, cache=cache
+    )
+    return workflow_name
 
 
 def _enrich_merge_queue_gate_check_runs(
@@ -472,13 +489,16 @@ def _enrich_merge_queue_gate_check_runs(
     latest_index = _latest_merge_queue_gate_index(check_runs)
     if latest_index is None:
         return check_runs
-    workflow_name = _resolve_check_run_workflow_name(
+    workflow_name, identity_error = _resolve_check_run_workflow_identity(
         check_runs[latest_index], repo=repo, api=api, cache=cache
     )
-    if not workflow_name:
+    if not workflow_name and not identity_error:
         return check_runs
     enriched = [dict(item) for item in check_runs]
-    enriched[latest_index]["workflow_name"] = workflow_name
+    if workflow_name:
+        enriched[latest_index]["workflow_name"] = workflow_name
+    else:
+        enriched[latest_index]["workflow_identity_error"] = identity_error
     return enriched
 
 
@@ -487,6 +507,7 @@ def summarize_check_runs(check_runs: list[dict[str, Any]]) -> dict[str, Any]:
     current, superseded_count = _latest_check_runs(check_runs)
     normalized: list[dict[str, Any]] = []
     failures: list[str] = []
+    malformed: list[str] = []
     pending: list[str] = []
     for item in current:
         app = item.get("app") if isinstance(item.get("app"), dict) else {}
@@ -507,8 +528,12 @@ def summarize_check_runs(check_runs: list[dict[str, Any]]) -> dict[str, Any]:
             pending.append(name)
         elif conclusion not in SUCCESS_CONCLUSIONS:
             failures.append(name)
+        if _check_run_identifier(item) is None:
+            malformed.append(name)
     if not current:
         overall = "unknown"
+    elif malformed:
+        overall = "malformed"
     elif pending:
         overall = "pending"
     elif failures:
@@ -521,6 +546,7 @@ def summarize_check_runs(check_runs: list[dict[str, Any]]) -> dict[str, Any]:
         "superseded_count": superseded_count,
         "pending": pending,
         "failures": failures,
+        "malformed": malformed,
     }
 
 
@@ -561,6 +587,7 @@ def summarize_merge_queue_gate(
         "head_sha": reported_head or head_sha,
         "exact_head": exact_head,
         "workflow_name": workflow_name or None,
+        "workflow_identity_error": latest.get("workflow_identity_error"),
         "check_run_id": latest.get("id"),
         "started_at": latest.get("started_at"),
         "completed_at": latest.get("completed_at"),
@@ -696,6 +723,10 @@ def _merge_queue_gate_reasons(entry: dict[str, Any]) -> list[str]:
     if gate_status == "malformed":
         return ["malformed_merge_queue_gate"]
     if gate_status == "mismatch":
+        if entry.get("merge_queue_gate", {}).get("workflow_identity_error") == (
+            "workflow_run_head_mismatch"
+        ):
+            return ["merge_queue_gate_head_mismatch"]
         if entry.get("merge_queue_gate", {}).get("workflow_name") != GATE_WORKFLOW_NAME:
             return ["merge_queue_gate_workflow_mismatch"]
         return ["merge_queue_gate_head_mismatch"]

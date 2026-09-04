@@ -17,6 +17,7 @@ from scripts.dev import single_account_merge_receipt as receipt_module
 from scripts.dev.pr_metadata import metadata_digest, metadata_trailer
 from scripts.dev.stacked_prs import (
     _closing_discipline_reasons,
+    _enrich_merge_queue_gate_check_runs,
     _get_paginated_list,
     _merge_queue_gate_reasons,
     _parse_expected_heads,
@@ -236,6 +237,30 @@ def test_check_summary_fails_closed_for_pending_and_failed_current_runs() -> Non
     assert missing["overall"] == "unknown"
 
 
+def test_check_summary_rejects_malformed_newest_run_instead_of_using_old_result() -> None:
+    """Malformed newest ordinary check data must not report a green summary."""
+    summary = summarize_check_runs(
+        [
+            {
+                "id": 200,
+                "name": "CI",
+                "status": "completed",
+                "conclusion": "failure",
+                "completed_at": "2026-08-17T10:00:00Z",
+            },
+            {
+                "name": "CI",
+                "status": "completed",
+                "conclusion": "success",
+                "completed_at": "2026-08-17T11:00:00Z",
+            },
+        ]
+    )
+
+    assert summary["overall"] == "malformed"
+    assert summary["malformed"] == ["CI"]
+
+
 def test_merge_queue_gate_requires_newest_exact_head_success() -> None:
     head_sha = "a" * 40
     older = {
@@ -380,6 +405,19 @@ def test_workflow_resolution_rejects_untrusted_details_urls(details_url: str) ->
     assert calls == []
 
 
+def test_workflow_resolution_handles_malformed_url_without_raising() -> None:
+    """Malformed URL parsing must remain a structured fail-closed result."""
+    assert (
+        _resolve_check_run_workflow_name(
+            {"details_url": "https://[::1", "head_sha": "a" * 40},
+            repo="owner/repo",
+            api=lambda *_args: pytest.fail("malformed URL must not call the API"),
+            cache={},
+        )
+        == ""
+    )
+
+
 def test_workflow_resolution_requires_matching_run_head() -> None:
     """A workflow run from another commit cannot establish the current gate identity."""
     calls: list[str] = []
@@ -401,6 +439,37 @@ def test_workflow_resolution_requires_matching_run_head() -> None:
         == ""
     )
     assert calls == ["repos/owner/repo/actions/runs/123"]
+
+
+def test_workflow_resolution_reports_run_head_mismatch_diagnostic() -> None:
+    """A rejected fetched run head should remain distinct from URL identity failure."""
+    head_sha = "a" * 40
+
+    def fake_api(method: str, path: str, payload: dict[str, Any] | None) -> tuple[Any, None]:
+        return {"name": "Merge Queue Gate", "head_sha": "b" * 40}, None
+
+    enriched = _enrich_merge_queue_gate_check_runs(
+        [
+            {
+                "id": 701,
+                "name": "merge-queue-gate",
+                "details_url": "https://github.com/owner/repo/actions/runs/701/job/702",
+                "head_sha": head_sha,
+                "status": "completed",
+                "conclusion": "success",
+            }
+        ],
+        repo="owner/repo",
+        api=fake_api,
+        cache={},
+    )
+    summary = summarize_merge_queue_gate(enriched, head_sha=head_sha)
+
+    assert summary["status"] == "mismatch"
+    assert summary["workflow_identity_error"] == "workflow_run_head_mismatch"
+    assert _merge_queue_gate_reasons({"merge_queue_gate": summary}) == [
+        "merge_queue_gate_head_mismatch"
+    ]
 
 
 def test_workflow_resolution_does_not_cache_incomplete_payloads() -> None:

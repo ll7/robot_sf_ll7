@@ -143,9 +143,8 @@ def _stale_declarations(
         document = json.loads(evidence_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         return [], [f"{evidence_path}: unreadable ({exc}); skipped"]
-    stale: list[dict[str, str]] = []
+    candidates: dict[str, list[dict[str, str]]] = {}
     skipped: list[str] = []
-    seen: dict[str, str] = {}
     for mapping in _iter_mappings(document):
         if not isinstance(mapping, dict):
             continue
@@ -154,14 +153,7 @@ def _stale_declarations(
             if actual is None or actual.lower() == declared.lower():
                 continue
             dedupe = f"{artifact}\0{hash_key}"
-            if dedupe in seen and seen[dedupe] != declared.lower():
-                skipped.append(
-                    f"{evidence_path}: {artifact} pinned twice with "
-                    "different values; skipped as ambiguous"
-                )
-                continue
-            seen[dedupe] = declared.lower()
-            stale.append(
+            candidates.setdefault(dedupe, []).append(
                 {
                     "artifact": artifact,
                     "hash_key": hash_key,
@@ -169,26 +161,36 @@ def _stale_declarations(
                     "actual": actual,
                 }
             )
+    stale: list[dict[str, str]] = []
+    for entries in candidates.values():
+        if len({entry["declared"].lower() for entry in entries}) > 1:
+            skipped.append(
+                f"{evidence_path}: {entries[0]['artifact']} pinned twice with "
+                "different values; skipped as ambiguous"
+            )
+            continue
+        stale.extend(entries)
     return stale, skipped
 
 
 def _rewrite_file(evidence_path: Path, stale: list[dict[str, str]]) -> int:
     """Rewrite stale declared hashes by exact value replacement."""
     text = evidence_path.read_text(encoding="utf-8")
-    count = 0
+    replacements: list[tuple[str, str]] = []
     for entry in stale:
         occurrences = text.count(entry["declared"])
         if occurrences != 1:
             print(
                 f"  skip {entry['artifact']}: declared value occurs {occurrences}x (need exactly 1)"
             )
-            continue
-        text = text.replace(entry["declared"], entry["actual"])
-        count += 1
-    if count:
+            return 0
+        replacements.append((entry["declared"], entry["actual"]))
+    for declared, actual in replacements:
+        text = text.replace(declared, actual)
+    if replacements:
         evidence_path.write_text(text, encoding="utf-8")
         json.loads(evidence_path.read_text(encoding="utf-8"))
-    return count
+    return len(replacements)
 
 
 def _mismatch_files(repo_root: Path) -> list[Path]:
@@ -240,10 +242,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"refusing to touch baseline file: {rel}")
             return 2
     total_stale = 0
+    skipped_count = 0
+    rewrite_failures = 0
     for target in targets:
         stale, skipped = _stale_declarations(repo_root, target)
         for reason in skipped:
             print(reason)
+        skipped_count += len(skipped)
         rel = target.relative_to(repo_root).as_posix()
         if not stale:
             print(f"{rel}: no stale hashes")
@@ -257,8 +262,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.write:
             refreshed = _rewrite_file(target, stale)
             print(f"{rel}: refreshed {refreshed}/{len(stale)} declaration(s)")
+            rewrite_failures += len(stale) - refreshed
     if total_stale and not args.write:
         print("\nRefresh with: uv run python scripts/dev/refresh_evidence_hashes.py --write")
+        return 1
+    if skipped_count or rewrite_failures:
+        print(
+            "\nERROR: one or more stale declarations could not be refreshed "
+            "unambiguously; no successful write is reported.",
+            file=sys.stderr,
+        )
         return 1
     return 0
 

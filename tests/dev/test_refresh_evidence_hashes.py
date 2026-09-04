@@ -83,6 +83,68 @@ def test_ambiguous_double_pin_is_skipped(tmp_path: Path, monkeypatch: pytest.Mon
     assert "ambiguous" in skipped[0]
 
 
+def test_write_fails_closed_on_ambiguous_double_pin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An ambiguous artifact is not partially rewritten or reported clean."""
+    target = tmp_path / "evidence.json"
+    target.write_text(
+        json.dumps(
+            {
+                "evidence": [
+                    {"path": "docs/README.md", "sha256": STALE_HASH},
+                    {"path": "docs/README.md", "sha256": "ff" * 32},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    before = target.read_text(encoding="utf-8")
+    monkeypatch.setattr(helper, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(helper, "_actual_hash", lambda _root, _art: "ab" * 32)
+
+    assert helper.main(["--write", "--path", target.name]) == 1
+    assert target.read_text(encoding="utf-8") == before
+
+
+def test_rewrite_refuses_non_unique_declared_value(tmp_path: Path) -> None:
+    """A repeated declared value does not permit a partial file rewrite."""
+    target = tmp_path / "evidence.json"
+    target.write_text(
+        json.dumps(
+            {
+                "evidence": [
+                    {"path": "docs/README.md", "sha256": STALE_HASH},
+                    {"path": "docs/OTHER.md", "sha256": STALE_HASH},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    before = target.read_text(encoding="utf-8")
+
+    refreshed = helper._rewrite_file(
+        target,
+        [
+            {
+                "artifact": "docs/README.md",
+                "hash_key": "sha256",
+                "declared": STALE_HASH,
+                "actual": "ab" * 32,
+            },
+            {
+                "artifact": "docs/OTHER.md",
+                "hash_key": "sha256",
+                "declared": STALE_HASH,
+                "actual": "cd" * 32,
+            },
+        ],
+    )
+
+    assert refreshed == 0
+    assert target.read_text(encoding="utf-8") == before
+
+
 def test_rewrite_round_trip_is_byte_exact(tmp_path: Path) -> None:
     """Rewriting one stale value preserves every other byte."""
     target = _write_evidence(tmp_path, "evidence.json", "docs/README.md", STALE_HASH)

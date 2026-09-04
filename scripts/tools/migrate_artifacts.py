@@ -22,7 +22,7 @@ from robot_sf.common.artifact_paths import (
 
 @dataclass
 class RelocatedItem:
-    """TODO docstring. Document this class."""
+    """Record describing a relocated legacy artifact and its destination."""
 
     legacy_path: str
     destination: str
@@ -31,7 +31,7 @@ class RelocatedItem:
 
 @dataclass
 class SkippedItem:
-    """TODO docstring. Document this class."""
+    """Record describing a legacy artifact skipped during migration."""
 
     legacy_path: str
     reason: str
@@ -39,7 +39,7 @@ class SkippedItem:
 
 @dataclass
 class MigrationReport:
-    """TODO docstring. Document this class."""
+    """Summary report detailing relocated and skipped items from a migration pass."""
 
     relocated: list[RelocatedItem]
     skipped: list[SkippedItem]
@@ -47,11 +47,10 @@ class MigrationReport:
     artifact_root: str
 
     def to_dict(self) -> dict[str, object]:
-        """TODO docstring. Document this function.
-
+        """Convert the migration report into a JSON-serializable dictionary.
 
         Returns:
-            TODO docstring.
+            Dictionary containing relocated items, skipped items, warnings, and artifact root.
         """
         return {
             "relocated": [asdict(item) for item in self.relocated],
@@ -62,11 +61,11 @@ class MigrationReport:
 
 
 def _serialize_report(report: MigrationReport, report_path: Path) -> None:
-    """TODO docstring. Document this function.
+    """Serialize the migration report as formatted JSON to the given path.
 
     Args:
-        report: TODO docstring.
-        report_path: TODO docstring.
+        report: Migration report data to serialize.
+        report_path: Destination path for the JSON report file.
     """
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8")
@@ -74,13 +73,13 @@ def _serialize_report(report: MigrationReport, report_path: Path) -> None:
 
 
 def _iter_legacy_sources(source_root: Path) -> list[Path]:
-    """TODO docstring. Document this function.
+    """Find and return all legacy artifact paths located under the source root.
 
     Args:
-        source_root: TODO docstring.
+        source_root: Root directory to search for legacy artifacts.
 
     Returns:
-        TODO docstring.
+        Sorted list of discovered legacy artifact paths.
     """
     return sorted(find_legacy_artifact_paths(source_root))
 
@@ -172,11 +171,10 @@ def migrate_artifacts(
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """TODO docstring. Document this function.
-
+    """Construct the command-line argument parser for artifact migration.
 
     Returns:
-        TODO docstring.
+        Configured ArgumentParser instance.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -208,13 +206,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """TODO docstring. Document this function.
+    """Execute the artifact migration command-line interface.
 
     Args:
-        argv: TODO docstring.
+        argv: Optional list of command-line arguments (defaults to sys.argv[1:]).
 
     Returns:
-        TODO docstring.
+        Integer exit code (0 on success).
     """
     parser = _build_parser()
     args = parser.parse_args(argv)

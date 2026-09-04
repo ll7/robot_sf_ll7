@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -52,6 +53,18 @@ _IDENTITY_FIELDS = (
 )
 _SHA1_LENGTH = 40
 _CANONICAL_OUTCOME_FIELDS = frozenset({"route_complete", "collision_event", "timeout_event"})
+_CANONICAL_SUCCESS_METRIC_FIELDS = ("success", "success_rate")
+_CANONICAL_TOTAL_COLLISION_METRIC_FIELDS = (
+    "collisions",
+    "collision_rate",
+    "total_collision_count",
+)
+_CANONICAL_COMPONENT_COLLISION_METRIC_FIELDS = (
+    "ped_collision_count",
+    "obstacle_collision_count",
+    "agent_collision_count",
+    "wall_collisions",
+)
 
 
 def _is_sha256(value: Any) -> bool:
@@ -245,6 +258,40 @@ def _load_binding(  # noqa: C901, PLR0912
     }
 
 
+def _candidate_record_lineage(
+    contract_data: dict[str, Any], binding: dict[str, Any], manifest_id: str
+) -> dict[str, Any]:
+    """Reconstruct the outcome-independent lineage frozen by held-out preflight."""
+    arm, rank, pool_index = _selection_info(binding, manifest_id)
+    planner = contract_data["planner"]
+    return {
+        "candidate_manifest_id": manifest_id,
+        "candidate_manifest_sha256": binding["candidate_manifest_sha256_by_id"][manifest_id],
+        "selection_arm": arm,
+        "selection_rank": rank,
+        "candidate_pool_seed": binding["candidate_pool_seed"],
+        "candidate_pool_index": pool_index,
+        "target_planner_id": planner["id"],
+        "target_planner_config_sha256": planner["config_sha256"],
+        "scenario_family": contract_data["contract"]["evaluation"]["scenario_family"],
+        "scenario_seed": binding["scenario_seed_by_manifest_id"][manifest_id],
+        "execution_commit": planner["execution_commit"],
+    }
+
+
+def _validate_candidate_record_lineage(
+    contract_data: dict[str, Any], binding: dict[str, Any], manifest_id: str
+) -> None:
+    """Reject a binding whose frozen candidate record hash is not self-consistent."""
+    expected_hash = binding["record_sha256_by_manifest_id"][manifest_id]
+    observed_hash = payload_sha256(_candidate_record_lineage(contract_data, binding, manifest_id))
+    if observed_hash != expected_hash:
+        raise ValueError(
+            f"execution binding record SHA-256 does not match reconstructed candidate lineage "
+            f"for {manifest_id}"
+        )
+
+
 def _admission_spec(contract_data: dict[str, Any], binding: dict[str, Any]) -> AdmissionSpec:
     """Build the strict v2 admission spec for the canonical adapter contract."""
     contract = contract_data["contract"]
@@ -415,6 +462,112 @@ def _validate_episode_outcome(record: dict[str, Any], *, manifest_id: str) -> No
         )
 
 
+def _metric_number(value: Any, *, field: str, manifest_id: str) -> float:
+    """Parse a finite non-negative episode metric without accepting booleans."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"episode record {manifest_id} metric {field} must be numeric")
+    number = float(value)
+    if not math.isfinite(number) or number < 0.0:
+        raise ValueError(
+            f"episode record {manifest_id} metric {field} must be finite and non-negative"
+        )
+    return number
+
+
+def _success_metric_value(value: Any, *, field: str, manifest_id: str) -> bool:
+    """Parse a per-episode success metric as a strict binary value."""
+    if isinstance(value, bool):
+        return value
+    number = _metric_number(value, field=field, manifest_id=manifest_id)
+    if number not in (0.0, 1.0):
+        raise ValueError(
+            f"episode record {manifest_id} metric {field} must be a binary per-episode value"
+        )
+    return bool(number)
+
+
+def _validate_episode_metrics(record: dict[str, Any], *, manifest_id: str) -> None:
+    """Require canonical success/collision metrics to agree with raw outcome flags.
+
+    The benchmark runner writes ``success`` and ``collisions`` for every v1
+    episode. Requiring those canonical metrics here prevents a caller from
+    changing only the outcome/attribution projection or supplying an aggregate
+    metric surface that contradicts the terminal episode record.
+    """
+    metrics = record.get("metrics")
+    if not isinstance(metrics, dict) or not metrics:
+        raise ValueError(f"episode record {manifest_id} metrics must be a non-empty object")
+    missing = [field for field in ("success", "collisions") if field not in metrics]
+    if missing:
+        raise ValueError(
+            f"episode record {manifest_id} metrics missing canonical fields: {missing}"
+        )
+
+    outcome = record["outcome"]
+    route_complete = bool(outcome["route_complete"])
+    collision = bool(outcome["collision_event"])
+    success_values = {
+        field: _success_metric_value(metrics[field], field=field, manifest_id=manifest_id)
+        for field in _CANONICAL_SUCCESS_METRIC_FIELDS
+        if field in metrics
+    }
+    if any(value != route_complete for value in success_values.values()):
+        raise ValueError(
+            f"episode record {manifest_id} success metrics disagree with canonical outcome"
+        )
+
+    total_collision_values = {
+        field: _metric_number(metrics[field], field=field, manifest_id=manifest_id)
+        for field in _CANONICAL_TOTAL_COLLISION_METRIC_FIELDS
+        if field in metrics
+    }
+    if any((value > 0.0) != collision for value in total_collision_values.values()):
+        raise ValueError(
+            f"episode record {manifest_id} total collision metrics disagree with canonical outcome"
+        )
+
+    component_collision_values = {
+        field: _metric_number(metrics[field], field=field, manifest_id=manifest_id)
+        for field in _CANONICAL_COMPONENT_COLLISION_METRIC_FIELDS
+        if field in metrics
+    }
+    component_has_collision = any(value > 0.0 for value in component_collision_values.values())
+    if component_collision_values and component_has_collision != collision:
+        raise ValueError(
+            f"episode record {manifest_id} collision component metrics disagree with canonical outcome"
+        )
+
+    component_fields = ("ped_collision_count", "obstacle_collision_count", "agent_collision_count")
+    if all(field in metrics for field in component_fields):
+        component_total = sum(
+            _metric_number(metrics[field], field=field, manifest_id=manifest_id)
+            for field in component_fields
+        )
+        for field in ("collisions", "total_collision_count"):
+            if field in metrics and not math.isclose(
+                _metric_number(metrics[field], field=field, manifest_id=manifest_id),
+                component_total,
+                rel_tol=0.0,
+                abs_tol=1e-9,
+            ):
+                raise ValueError(
+                    f"episode record {manifest_id} collision metrics disagree internally"
+                )
+
+
+def _validate_episode_record_hash(
+    envelope: dict[str, Any], record: dict[str, Any], *, manifest_id: str
+) -> None:
+    """Require the runner-supplied record digest to bind the exact raw payload."""
+    episode_record_sha256 = envelope.get("episode_record_sha256")
+    if not _is_sha256(episode_record_sha256):
+        raise ValueError(
+            f"execution envelope {manifest_id} episode_record_sha256 is missing or malformed"
+        )
+    if episode_record_sha256 != payload_sha256(record):
+        raise ValueError(f"execution envelope {manifest_id} episode record SHA-256 mismatch")
+
+
 def _validate_replay_lineage(value: Any) -> dict[str, Any]:
     """Validate the deterministic replay signature block supplied by the runner."""
     if not isinstance(value, dict):
@@ -508,6 +661,7 @@ def _validate_envelope_common(  # noqa: C901, PLR0912
             f"episode record {manifest_id} scenario_seed does not match selected scenario"
         )
     _validate_episode_outcome(record, manifest_id=manifest_id)
+    _validate_episode_metrics(record, manifest_id=manifest_id)
     if envelope.get("scenario_family") != scenario_family:
         raise ValueError(f"execution envelope {manifest_id} scenario family mismatch")
     if envelope.get("scenario_certification_status") != "passed":
@@ -571,6 +725,11 @@ def _build_candidate_rows(  # noqa: C901
     expected_scenario_seed = binding["scenario_seed_by_manifest_id"][manifest_id]
     if replay_seed != expected_scenario_seed:
         raise ValueError(f"candidate {manifest_id} replay seed does not match scenario seed")
+    _validate_episode_record_hash(
+        replay_envelope,
+        replay_record,
+        manifest_id=manifest_id,
+    )
     replay_lineage = _validate_replay_lineage(replay_envelope.get("replay_lineage"))
     replay_attr = attribution_from_episode_record(replay_record)
     replay_pair = (str(replay_attr.primary_failure), str(replay_attr.details["termination_reason"]))
@@ -595,6 +754,7 @@ def _build_candidate_rows(  # noqa: C901
             != seed
         ):
             raise ValueError(f"candidate {manifest_id} record seed does not match execution seed")
+        _validate_episode_record_hash(envelope, record, manifest_id=manifest_id)
         by_seed[int(seed)] = (
             envelope,
             record,
@@ -638,7 +798,7 @@ def _build_candidate_rows(  # noqa: C901
         envelope, record, identity, config_lineage_json = by_seed[seed]
         config_lineage = json.loads(config_lineage_json)
         attribution = attributions[seed]
-        episode_hash = payload_sha256(record)
+        episode_hash = envelope["episode_record_sha256"]
         rows.append(
             {
                 "row_id": _row_id(arm, rank, seed_offset),
@@ -670,7 +830,7 @@ def _build_candidate_rows(  # noqa: C901
                 "candidate_certification_status": "passed",
                 "replay_lineage": {
                     **replay_lineage,
-                    "replay_record_sha256": payload_sha256(replay_record),
+                    "replay_record_sha256": replay_envelope["episode_record_sha256"],
                     "replay_seed": expected_scenario_seed,
                 },
                 "confirmation_lineage": confirmation_lineage,
@@ -737,6 +897,8 @@ def build_outcome_packet(
         for arm in _ARMS
         for manifest_id in binding["candidate_manifest_ids_by_arm"][arm]
     }
+    for manifest_id in sorted(expected_ids):
+        _validate_candidate_record_lineage(contract_data, binding, manifest_id)
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for envelope in execution_records:
         manifest_id = envelope.get("candidate_manifest_id") if isinstance(envelope, dict) else None

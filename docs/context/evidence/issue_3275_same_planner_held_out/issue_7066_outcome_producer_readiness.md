@@ -23,7 +23,10 @@ cannot become evidence by labeling alone.
 
 The historical planner/reference commit remains the `execution_commit` in each
 row. The merged code that produces the packet is recorded separately as
-`producer_commit`, and each episode record is content-hashed. Scenario
+`producer_commit`. Each execution envelope must supply
+`episode_record_sha256`; the producer recomputes the digest of the canonical
+raw record and rejects a missing or mismatched hash before emitting a row.
+Scenario
 provenance binds to the selected candidate: `scenario_id` must equal the frozen
 scenario family, while `scenario_params.candidate_manifest_id` and
 `scenario_params.scenario_seed` must equal the envelope's selected manifest and
@@ -31,6 +34,18 @@ the external binding's frozen scenario seed. A record from another candidate
 or scenario is rejected even if its execution seed otherwise looks valid.
 Scenario and episode execution seeds must also be JSON integers, not numeric
 lookalikes such as floating-point values or booleans.
+
+Before constructing rows, the producer also reconstructs the outcome-independent
+candidate lineage used by held-out preflight and compares its canonical digest
+with the binding's `record_sha256_by_manifest_id` value. A syntactically valid
+but internally inconsistent binding is therefore blocked rather than copied
+into every emitted row.
+
+The canonical episode metrics are part of the same fail-closed boundary:
+`metrics.success` and `metrics.collisions` must be present and agree with the
+canonical outcome and termination reason. Supplied success aliases, collision
+totals, and component counts are checked for finite, non-negative, internally
+consistent values; contradictory metrics block packet production.
 
 ## Producer command
 

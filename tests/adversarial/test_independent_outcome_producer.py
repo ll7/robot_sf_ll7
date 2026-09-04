@@ -17,6 +17,7 @@ from robot_sf.adversarial.independent_outcome_producer import (
     build_outcome_packet,
     load_execution_records,
 )
+from robot_sf.adversarial.independent_outcomes import payload_sha256
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = REPO_ROOT / "configs/adversarial/issue_3275_same_planner_contract.json"
@@ -50,15 +51,34 @@ def _contract_and_binding(tmp_path: Path) -> tuple[Path, Path]:
         },
         "candidate_pool_index_by_manifest_id": {selected[0]: 0, selected[1]: 1},
         "scenario_seed_by_manifest_id": {selected[0]: 11, selected[1]: 12},
-        "record_sha256_by_manifest_id": {
-            candidate_id: _sha256(f"record:{candidate_id}") for candidate_id in selected
-        },
+        "record_sha256_by_manifest_id": {},
         "execution_seeds_by_manifest_id": {
             selected[0]: [100, 101, 102, 103, 104],
             selected[1]: [200, 201, 202, 203, 204],
         },
         "candidate_pool_seed": 42,
     }
+    for arm in ("proposal", "random"):
+        for rank, candidate_id in enumerate(ids[arm], start=1):
+            binding["record_sha256_by_manifest_id"][candidate_id] = payload_sha256(
+                {
+                    "candidate_manifest_id": candidate_id,
+                    "candidate_manifest_sha256": binding["candidate_manifest_sha256_by_id"][
+                        candidate_id
+                    ],
+                    "selection_arm": arm,
+                    "selection_rank": rank,
+                    "candidate_pool_seed": binding["candidate_pool_seed"],
+                    "candidate_pool_index": binding["candidate_pool_index_by_manifest_id"][
+                        candidate_id
+                    ],
+                    "target_planner_id": "social_force",
+                    "target_planner_config_sha256": CONFIG_SHA,
+                    "scenario_family": "classic_cross_trap_medium",
+                    "scenario_seed": binding["scenario_seed_by_manifest_id"][candidate_id],
+                    "execution_commit": REFERENCE_COMMIT,
+                }
+            )
     binding_path = tmp_path / "binding.json"
     binding_path.write_text(json.dumps(binding, sort_keys=True), encoding="utf-8")
     return contract_path, binding_path
@@ -106,6 +126,7 @@ def _episode_record(
             "collision_event": failure,
             "timeout_event": False,
         },
+        "metrics": {"success": not failure, "collisions": 1 if failure else 0},
         "termination_reason": "collision" if failure else "success",
     }
 
@@ -131,6 +152,12 @@ def _envelope(
         "planner_reference_commit": REFERENCE_COMMIT,
         "producer_commit": PRODUCER_COMMIT,
     }
+    episode_record = _episode_record(
+        candidate_id=candidate_id,
+        scenario_seed=scenario_seed,
+        seed=record_seed,
+        failure=failure,
+    )
     envelope: dict[str, Any] = {
         "schema_version": EXECUTION_RECORD_SCHEMA_VERSION,
         "candidate_manifest_id": candidate_id,
@@ -140,12 +167,8 @@ def _envelope(
         "execution_seed": execution_seed,
         "execution_command": ["uv", "run", "robot_sf_bench", "run"],
         "execution_config_lineage": lineage,
-        "episode_record": _episode_record(
-            candidate_id=candidate_id,
-            scenario_seed=scenario_seed,
-            seed=record_seed,
-            failure=failure,
-        ),
+        "episode_record": episode_record,
+        "episode_record_sha256": payload_sha256(episode_record),
     }
     if stage == "replay":
         signature = _sha256(f"replay:{candidate_id}")
@@ -258,6 +281,22 @@ def test_producer_cli_reads_jsonl_and_writes_packet(
     )
 
 
+def test_producer_rejects_inconsistent_frozen_candidate_record_hash(tmp_path: Path) -> None:
+    """The producer reconstructs the preflight lineage before building rows."""
+    contract_path, binding_path = _contract_and_binding(tmp_path)
+    binding = json.loads(binding_path.read_text(encoding="utf-8"))
+    binding["record_sha256_by_manifest_id"]["proposal_0"] = _sha256("tampered-lineage")
+    binding_path.write_text(json.dumps(binding, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="reconstructed candidate lineage"):
+        build_outcome_packet(
+            _execution_records(contract_path, binding_path),
+            contract_path=contract_path,
+            binding_path=binding_path,
+            producer_commit=PRODUCER_COMMIT,
+        )
+
+
 @pytest.mark.parametrize(
     ("contents", "expected_fragment"),
     [
@@ -290,6 +329,7 @@ def test_producer_rejects_common_envelope_provenance_drift(tmp_path: Path) -> No
         ("target_planner_config_sha256", "target config hash mismatch"),
         ("planner_reference_commit", "planner reference commit mismatch"),
         ("producer_commit", "producer commit mismatch"),
+        ("episode_record_sha256", "episode record SHA-256 mismatch"),
         ("scenario_family", "scenario family mismatch"),
         ("scenario_certification_status", "scenario certification is not passed"),
     )
@@ -302,6 +342,8 @@ def test_producer_rejects_common_envelope_provenance_drift(tmp_path: Path) -> No
             records[0]["execution_config_lineage"][field] = "b" * 64
         elif field in {"planner_reference_commit", "producer_commit"}:
             records[0]["execution_config_lineage"][field] = "b" * 40
+        elif field == "episode_record_sha256":
+            records[0][field] = "b" * 64
         elif field == "scenario_family":
             records[0][field] = "other_family"
         elif field == "scenario_certification_status":
@@ -353,6 +395,40 @@ def test_producer_rejects_episode_record_provenance_drift(tmp_path: Path) -> Non
                 binding_path=binding_path,
                 producer_commit=PRODUCER_COMMIT,
             )
+
+
+@pytest.mark.parametrize(
+    ("metric_mutation", "expected_fragment"),
+    [
+        ("success", "success metrics disagree with canonical outcome"),
+        ("collisions", "total collision metrics disagree with canonical outcome"),
+        ("missing_success", "metrics missing canonical fields"),
+        ("invalid_metrics", "metrics must be a non-empty object"),
+    ],
+)
+def test_producer_rejects_episode_metric_outcome_drift(
+    tmp_path: Path, metric_mutation: str, expected_fragment: str
+) -> None:
+    """Canonical outcome flags cannot override contradictory benchmark metrics."""
+    contract_path, binding_path = _contract_and_binding(tmp_path)
+    records = _execution_records(contract_path, binding_path)
+    metrics = records[0]["episode_record"]["metrics"]
+    if metric_mutation == "success":
+        metrics["success"] = True
+    elif metric_mutation == "collisions":
+        metrics["collisions"] = 0
+    elif metric_mutation == "missing_success":
+        del metrics["success"]
+    else:
+        records[0]["episode_record"]["metrics"] = []
+
+    with pytest.raises(ValueError, match=expected_fragment):
+        build_outcome_packet(
+            records,
+            contract_path=contract_path,
+            binding_path=binding_path,
+            producer_commit=PRODUCER_COMMIT,
+        )
 
 
 @pytest.mark.parametrize(

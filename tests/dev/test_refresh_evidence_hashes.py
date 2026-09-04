@@ -6,6 +6,10 @@ fail-closed contract: baseline files are refused, ambiguous pins are skipped,
 rewrites round-trip byte-exact, and check mode exits nonzero on stale input.
 """
 
+# evidence-writer-exempt: these tests intentionally write synthetic evidence
+# JSON fixtures only under pytest tmp_path (plus read-only checks against the
+# repo tree); no evidence-tree or baseline files are modified.
+
 from __future__ import annotations
 
 import hashlib

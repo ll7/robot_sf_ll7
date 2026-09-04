@@ -1,5 +1,4 @@
 """Refresh stale artifact hashes declared in evidence-registry JSON files.
-
 Every PR that edits a file pinned by an evidence-registry ``sha256`` declaration
 (e.g. ``docs/RELEASE.md`` pinned by the issue_4683 assurance-case example) trips
 ``evidence-registry-ratchet`` with ``artifact_hash_mismatch``. The fix is a
@@ -16,6 +15,9 @@ are never touched; files that do not parse as JSON are skipped; ambiguous
 declarations (same artifact pinned twice with different values in one file)
 are skipped; every rewrite is re-parsed before reporting success.
 """
+
+# evidence-writer-exempt: hash-refresh tooling; declared-hash writes target
+# tracked evidence JSON only, never baseline files (refused by path guard).
 
 from __future__ import annotations
 

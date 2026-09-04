@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -118,6 +119,7 @@ def test_ci_uv_sync_diag_reports_runner_and_uv_state() -> None:
     assert "uv_sync_diag cache_size" in output
     assert "uv_sync_diag venv_info" in output
     assert "::endgroup::" in output
+    assert "uv_cache_size=" not in output
     if shutil.which("uv"):
         assert "uv_version=uv " in output
 
@@ -186,15 +188,20 @@ def test_ci_uv_sync_diag_cache_sizing_is_single_pass(tmp_path: Path) -> None:
 
 
 def test_ci_uv_sync_diag_du_timeout_reports_unavailable(tmp_path: Path) -> None:
-    """Slow `du` walks under host contention must not hang the probe (issue #8249).
+    """Slow `du` walks must not hang the probe (issue #8249).
 
-    A 60GB cache measured 28s for one `du` pass against the 30s test budget, so
-    loaded hosts exceed it. With a slow-`du` shim and a 1s probe budget, the
-    script must still exit 0 quickly with timed-out markers. Completion inside
-    the outer 30s budget is itself the boundedness proof.
+    With a TERM-resistant slow-`du` shim and a 1s probe budget, both probes must
+    be killed promptly after the configured deadline and the script must still
+    exit 0 with timed-out markers. The fake uv also proves that the diagnostic
+    no longer performs the unbounded ``uv cache size`` traversal.
     """
     timeout_bin = shutil.which("timeout")
     if timeout_bin is None:
+        pytest.skip("GNU timeout(1) is required for the du-budget probe")
+    timeout_version = subprocess.run(
+        [timeout_bin, "--version"], capture_output=True, text=True, check=False, timeout=5
+    )
+    if "GNU coreutils" not in timeout_version.stdout:
         pytest.skip("GNU timeout(1) is required for the du-budget probe")
     script = _script_path()
     bash_path = shutil.which("bash")
@@ -202,9 +209,28 @@ def test_ci_uv_sync_diag_du_timeout_reports_unavailable(tmp_path: Path) -> None:
 
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
+    du_calls = tmp_path / "du_calls.log"
     slow_du = fake_bin / "du"
-    slow_du.write_text("#!/usr/bin/env bash\nsleep 30\n", encoding="utf-8")
+    slow_du.write_text(
+        f'#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "{du_calls}"\ntrap \'\' TERM\nsleep 30\n',
+        encoding="utf-8",
+    )
     slow_du.chmod(0o755)
+
+    uv_calls = tmp_path / "uv_calls.log"
+    uv_shim = fake_bin / "uv"
+    uv_shim.write_text(
+        "#!/usr/bin/env bash\n"
+        f'printf "%s\\n" "$*" >> "{uv_calls}"\n'
+        'case "$*" in\n'
+        '  "--version") printf "uv 0.11.21\\n" ;;\n'
+        '  "cache dir") printf "%s\\n" "$UV_CACHE_DIR" ;;\n'
+        '  "cache size") sleep 30 ;;\n'
+        "  *) exit 99 ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    uv_shim.chmod(0o755)
 
     cache_dir = tmp_path / "uv-cache"
     cache_dir.mkdir()
@@ -215,6 +241,7 @@ def test_ci_uv_sync_diag_du_timeout_reports_unavailable(tmp_path: Path) -> None:
     env["UV_CACHE_DIR"] = str(cache_dir)
     env["ROBOT_SF_DIAG_DU_TIMEOUT_SECONDS"] = "1"
 
+    started = time.monotonic()
     result = subprocess.run(
         [bash_path, str(script), "du-timeout-test"],
         capture_output=True,
@@ -222,12 +249,161 @@ def test_ci_uv_sync_diag_du_timeout_reports_unavailable(tmp_path: Path) -> None:
         check=False,
         env=env,
         cwd=tmp_path,  # .venv dir present here, so both du probes fire
-        timeout=30,
+        timeout=10,
+    )
+    elapsed = time.monotonic() - started
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert elapsed < 8, f"diagnostic took {elapsed:.2f}s instead of stopping near the 1s probes"
+    assert "cache_total_size=unavailable-timed-out" in result.stdout
+    assert "cache_sizing_status=timed-out" in result.stdout
+    assert "cache_sizing_timeout_seconds=1" in result.stdout
+    assert "venv_size=unavailable-timed-out" in result.stdout
+    assert "venv_sizing_status=timed-out" in result.stdout
+    assert "venv_sizing_timeout_seconds=1" in result.stdout
+    assert "under host contention" not in result.stdout
+    uv_invocations = uv_calls.read_text(encoding="utf-8").splitlines()
+    assert "cache size" not in uv_invocations
+    assert len(du_calls.read_text(encoding="utf-8").splitlines()) == 2
+    assert "::endgroup::" in result.stdout
+
+
+def test_ci_uv_sync_diag_zero_timeout_uses_default(tmp_path: Path) -> None:
+    """A zero timeout must not disable the GNU timeout boundary."""
+    script = _script_path()
+    bash_path = shutil.which("bash")
+    assert bash_path, "bash is required for this test"
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    timeout_calls = tmp_path / "timeout_calls.log"
+    fake_timeout = fake_bin / "timeout"
+    fake_timeout.write_text(
+        "#!/bin/bash\n"
+        'if [[ "${1:-}" == "--version" ]]; then\n'
+        '  printf "timeout (GNU coreutils) 9.1\\n"\n'
+        "  exit 0\n"
+        "fi\n"
+        f'printf "%s\\n" "$*" >> "{timeout_calls}"\n'
+        "exit 124\n",
+        encoding="utf-8",
+    )
+    fake_timeout.chmod(0o755)
+
+    cache_dir = tmp_path / "uv-cache"
+    cache_dir.mkdir()
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    env["UV_CACHE_DIR"] = str(cache_dir)
+    env["ROBOT_SF_DIAG_DU_TIMEOUT_SECONDS"] = "0"
+
+    result = subprocess.run(
+        [bash_path, str(script), "zero-timeout-test"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+        cwd=tmp_path,
+        timeout=5,
     )
     assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert "cache_sizing_status=timed-out" in result.stdout
+    assert "cache_sizing_timeout_seconds=10" in result.stdout
     assert "cache_total_size=unavailable-timed-out" in result.stdout
-    assert "venv_size=unavailable-timed-out" in result.stdout
-    assert "::endgroup::" in result.stdout
+    calls = timeout_calls.read_text(encoding="utf-8").splitlines()
+    assert len(calls) == 1
+    assert "--kill-after=2s 10 du -h -d 1" in calls[0]
+    assert "--kill-after=2s 0 " not in calls[0]
+
+
+def test_ci_uv_sync_diag_reports_du_errors(tmp_path: Path) -> None:
+    """Non-timeout `du` failures must remain visible in advisory output."""
+    script = _script_path()
+    bash_path = shutil.which("bash")
+    assert bash_path, "bash is required for this test"
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    failing_du = fake_bin / "du"
+    failing_du.write_text("#!/bin/bash\nexit 125\n", encoding="utf-8")
+    failing_du.chmod(0o755)
+
+    cache_dir = tmp_path / "uv-cache"
+    cache_dir.mkdir()
+    (tmp_path / ".venv" / "bin").mkdir(parents=True)
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    env["UV_CACHE_DIR"] = str(cache_dir)
+
+    result = subprocess.run(
+        [bash_path, str(script), "du-error-test"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+        cwd=tmp_path,
+        timeout=10,
+    )
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert "cache_sizing_status=error" in result.stdout
+    assert "cache_sizing_exit_code=125" in result.stdout
+    assert "cache_total_size=unavailable-error" in result.stdout
+    assert "venv_sizing_status=error" in result.stdout
+    assert "venv_sizing_exit_code=125" in result.stdout
+    assert "venv_size=unavailable-error" in result.stdout
+
+
+def test_ci_uv_sync_diag_without_gnu_timeout_preserves_du_output(tmp_path: Path) -> None:
+    """The direct-`du` fallback must preserve ordinary size markers."""
+    script = _script_path()
+    bash_path = shutil.which("bash")
+    assert bash_path, "bash is required for this test"
+
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    for command_name in ("awk", "date", "df", "nproc", "uptime"):
+        command_path = shutil.which(command_name)
+        if command_path:
+            (fake_bin / command_name).symlink_to(command_path)
+    assert (fake_bin / "awk").exists(), "awk is required for this fallback test"
+
+    du_calls = tmp_path / "du_calls.log"
+    du_shim = fake_bin / "du"
+    du_shim.write_text(
+        "#!/bin/bash\n"
+        f'printf "%s\\n" "$*" >> "{du_calls}"\n'
+        'target="${@: -1}"\n'
+        'if [[ "$target" == ".venv" ]]; then\n'
+        '  printf "4K\\t%s\\n" "$target"\n'
+        "else\n"
+        '  printf "8K\\t%s\\n" "$target"\n'
+        "fi\n",
+        encoding="utf-8",
+    )
+    du_shim.chmod(0o755)
+
+    cache_dir = tmp_path / "uv-cache"
+    cache_dir.mkdir()
+    (tmp_path / ".venv" / "bin").mkdir(parents=True)
+    env = _clean_diag_env(tmp_path)
+    env["PATH"] = str(fake_bin)
+
+    assert shutil.which("timeout", path=env["PATH"]) is None
+    result = subprocess.run(
+        [bash_path, str(script), "no-timeout-test"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=env,
+        cwd=tmp_path,
+        timeout=10,
+    )
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert "cache_sizing_status=ok" in result.stdout
+    assert "cache_total_size=8K" in result.stdout
+    assert "venv_sizing_status=ok" in result.stdout
+    assert "venv_size=4K" in result.stdout
+    assert "unavailable-timed-out" not in result.stdout
+    assert len(du_calls.read_text(encoding="utf-8").splitlines()) == 2
 
 
 def test_workflow_uv_cache_is_pruned_by_setup_uv() -> None:

@@ -529,11 +529,10 @@ def load_weights(file_path: Path) -> dict[str, float]:
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
-    """TODO docstring. Document this function.
-
+    """Build the command-line parser for SNQI sensitivity analysis.
 
     Returns:
-        TODO docstring.
+        An argument parser configured for input files, analysis settings, validation, and logging.
     """
     parser = argparse.ArgumentParser(description="SNQI Sensitivity Analysis")
     parser.add_argument(
@@ -597,13 +596,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 def _load_inputs(
     args: argparse.Namespace,
 ) -> tuple[list[dict], dict[str, dict[str, float]], dict[str, float]]:
-    """TODO docstring. Document this function.
+    """Load episode data, baseline statistics, and weights from parsed arguments.
 
     Args:
-        args: TODO docstring.
+        args: Parsed arguments containing paths to the episode, baseline, and weight files.
 
     Returns:
-        TODO docstring.
+        A tuple containing the loaded episodes, baseline statistics, and weights.
     """
     try:
         episodes = load_episodes_data(args.episodes)
@@ -619,10 +618,10 @@ def _load_inputs(
 
 
 def _apply_seed_if_any(seed: int | None) -> None:
-    """TODO docstring. Document this function.
+    """Seed NumPy's random number generator when a seed is provided.
 
     Args:
-        seed: TODO docstring.
+        seed: Random seed to apply, or ``None`` to leave the generator unchanged.
     """
     if seed is not None:
         np.random.seed(seed)
@@ -634,16 +633,16 @@ def _run_analyses(
     sweep_points: int,
     pairwise_points: int,
 ) -> dict[str, Any]:
-    """TODO docstring. Document this function.
+    """Run all configured sensitivity analyses.
 
     Args:
-        analyzer: TODO docstring.
-        weights: TODO docstring.
-        sweep_points: TODO docstring.
-        pairwise_points: TODO docstring.
+        analyzer: Analyzer initialized with episode data and baseline statistics.
+        weights: Base SNQI weights used by each analysis.
+        sweep_points: Number of points in each individual weight sweep.
+        pairwise_points: Number of points along each dimension of pairwise analysis grids.
 
     Returns:
-        TODO docstring.
+        Results keyed by ``weight_sweep``, ``pairwise``, ``ablation``, and ``normalization``.
     """
     results: dict[str, Any] = {}
     logger.info("Running weight sweep analysis")
@@ -661,11 +660,10 @@ def _run_analyses(
 
 
 def _git_commit() -> str:
-    """TODO docstring. Document this function.
-
+    """Return the current Git commit's abbreviated hash when available.
 
     Returns:
-        TODO docstring.
+        The short commit hash, or ``"UNKNOWN"`` if Git cannot provide it.
     """
     try:
         return (
@@ -686,16 +684,16 @@ def _build_metadata(
     end_iso: str,
     runtime_seconds: float,
 ) -> dict[str, Any]:
-    """TODO docstring. Document this function.
+    """Build metadata describing the analysis inputs, timing, and configuration.
 
     Args:
-        args: TODO docstring.
-        start_iso: TODO docstring.
-        end_iso: TODO docstring.
-        runtime_seconds: TODO docstring.
+        args: Parsed arguments that identify inputs and analysis options.
+        start_iso: ISO-formatted analysis start timestamp.
+        end_iso: ISO-formatted analysis end timestamp.
+        runtime_seconds: Elapsed analysis time in seconds.
 
     Returns:
-        TODO docstring.
+        Metadata containing schema, timing, provenance, seed, and Git commit information.
     """
     return {
         "schema_version": 1,
@@ -718,14 +716,14 @@ def _build_metadata(
 
 
 def _validate_results(results: dict[str, Any], validate: bool) -> int | None:
-    """TODO docstring. Document this function.
+    """Validate analysis results and return an error code when validation fails.
 
     Args:
-        results: TODO docstring.
-        validate: TODO docstring.
+        results: Sensitivity analysis results to validate.
+        validate: Whether to apply the SNQI sensitivity schema; otherwise check finiteness only.
 
     Returns:
-        TODO docstring.
+        ``None`` on success, or ``EXIT_VALIDATION_ERROR`` when validation raises ``ValueError``.
     """
     try:
         if validate:
@@ -739,11 +737,11 @@ def _validate_results(results: dict[str, Any], validate: bool) -> int | None:
 
 
 def _write_results(results: dict[str, Any], output_dir: Path) -> None:
-    """TODO docstring. Document this function.
+    """Write sensitivity analysis results to JSON in the output directory.
 
     Args:
-        results: TODO docstring.
-        output_dir: TODO docstring.
+        results: Sensitivity analysis results to serialize.
+        output_dir: Directory in which to create the results file.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     with open(output_dir / "sensitivity_analysis_results.json", "w", encoding="utf-8") as f:
@@ -760,20 +758,20 @@ def _build_summary(
     end_iso: str,
     metadata: dict[str, Any],
 ) -> dict[str, Any]:
-    """TODO docstring. Document this function.
+    """Build a standalone summary from analysis results and run metadata.
 
     Args:
-        results: TODO docstring.
-        total_episodes: TODO docstring.
-        weights: TODO docstring.
-        args: TODO docstring.
-        runtime_seconds: TODO docstring.
-        start_iso: TODO docstring.
-        end_iso: TODO docstring.
-        metadata: TODO docstring.
+        results: Sensitivity analysis results from the four analysis stages.
+        total_episodes: Number of episodes included in the analysis.
+        weights: Base SNQI weights used for the analysis.
+        args: Parsed arguments containing run configuration.
+        runtime_seconds: Elapsed analysis time in seconds.
+        start_iso: ISO-formatted analysis start timestamp.
+        end_iso: ISO-formatted analysis end timestamp.
+        metadata: Metadata to attach to the summary.
 
     Returns:
-        TODO docstring.
+        Summary containing key sensitivity findings, normalization impact, and run details.
     """
     summary: dict[str, Any] = {
         "analysis_summary": {
@@ -823,11 +821,11 @@ def _build_summary(
 
 
 def _write_summary(summary: dict[str, Any], output_dir: Path) -> None:
-    """TODO docstring. Document this function.
+    """Write the sensitivity summary to JSON in the output directory.
 
     Args:
-        summary: TODO docstring.
-        output_dir: TODO docstring.
+        summary: Summary data to serialize.
+        output_dir: Directory containing the summary output file.
     """
     with open(output_dir / "sensitivity_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
@@ -839,16 +837,17 @@ def _handle_visualizations(
     output_dir: Path,
     skip_visualizations: bool,
 ) -> int | None:
-    """TODO docstring. Document this function.
+    """Generate requested visualizations and report missing optional dependencies.
 
     Args:
-        analyzer: TODO docstring.
-        results: TODO docstring.
-        output_dir: TODO docstring.
-        skip_visualizations: TODO docstring.
+        analyzer: Analyzer responsible for creating the plots.
+        results: Sensitivity analysis results to visualize.
+        output_dir: Directory in which to save visualization files.
+        skip_visualizations: Whether to skip visualization generation.
 
     Returns:
-        TODO docstring.
+        ``None`` unless visualization dependencies are unavailable, in which case
+        ``EXIT_OPTIONAL_DEPS_MISSING`` is returned.
     """
     if skip_visualizations:
         return None
@@ -868,11 +867,11 @@ def _handle_visualizations(
 
 
 def _print_summary(results: dict[str, Any], total_episodes: int) -> None:
-    """TODO docstring. Document this function.
+    """Print the completed sensitivity analysis summary.
 
     Args:
-        results: TODO docstring.
-        total_episodes: TODO docstring.
+        results: Sensitivity analysis results containing optional ablation and normalization data.
+        total_episodes: Number of episodes included in the analysis.
     """
     logger.info("Sensitivity analysis completed.")
     print("\nSensitivity Analysis Summary:")
@@ -895,11 +894,10 @@ def _print_summary(results: dict[str, Any], total_episodes: int) -> None:
 
 
 def main() -> int:
-    """TODO docstring. Document this function.
-
+    """Run the SNQI sensitivity analysis command-line workflow.
 
     Returns:
-        TODO docstring.
+        The process exit code for success, runtime failure, validation failure, or missing extras.
     """
     start_perf = perf_counter()
     start_iso = datetime.now(UTC).isoformat()

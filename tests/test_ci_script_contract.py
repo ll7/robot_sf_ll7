@@ -58,6 +58,7 @@ CHECK_RUNTIME_REQUIREMENTS = ROOT / "scripts" / "dev" / "check_runtime_requireme
 CHECK_CARLA_RUNTIME = ROOT / "scripts" / "dev" / "check_carla_runtime.sh"
 CI_INSTALL_HEADLESS_PACKAGES = ROOT / "scripts" / "dev" / "ci_install_headless_packages.sh"
 EVIDENCE_REGISTRY_RATCHET = ROOT / "scripts" / "dev" / "evidence_registry_ratchet.py"
+CI_UV_SYNC_DIAG = ROOT / "scripts" / "dev" / "ci_uv_sync_diag.sh"
 COVERAGE_GUIDE = ROOT / "docs" / "coverage_guide.md"
 DEV_GUIDE = ROOT / "docs" / "dev_guide.md"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
@@ -74,6 +75,28 @@ def test_ci_driver_smoke_uses_runtime_schema_and_output_matrix_path() -> None:
     assert 'cat > "$matrix_path"' in script_text
     assert '--matrix "$matrix_path"' in script_text
     assert "cat > matrix.yaml" not in script_text
+
+
+def test_ci_uv_sync_diag_preserves_bounded_sizing_contract() -> None:
+    """Keep diagnostic sizing bounded and make advisory failures observable."""
+
+    script_text = CI_UV_SYNC_DIAG.read_text(encoding="utf-8")
+
+    assert 'diag_du_timeout" =~ ^[1-9][0-9]*$' in script_text
+    assert 'timeout --version 2>/dev/null | grep -q "GNU coreutils"' in script_text
+    assert "du_timeout_kill_after_secs=2" in script_text
+    assert '"$du_timeout_bin" --kill-after="${du_timeout_kill_after_secs}s"' in script_text
+    assert 'cache_du="$(bounded_du du -h -d 1 "$cache_dir" 2>/dev/null)"' in script_text
+    assert 'venv_du="$(bounded_du du -sh .venv 2>/dev/null)"' in script_text
+    assert "${prefix}_sizing_status=timed-out" in script_text
+    assert "${prefix}_sizing_status=error" in script_text
+    assert "${prefix}_sizing_exit_code=" in script_text
+    assert "cache_total_size=unavailable-timed-out" in script_text
+    assert "cache_total_size=unavailable-error" in script_text
+    assert "venv_size=unavailable-timed-out" in script_text
+    assert "venv_size=unavailable-error" in script_text
+    assert "uv_cache_size=" not in script_text
+    assert "uv cache size 2>/dev/null" not in script_text
 
 
 def test_ci_driver_test_phase_uses_shared_parallel_test_wrapper() -> None:

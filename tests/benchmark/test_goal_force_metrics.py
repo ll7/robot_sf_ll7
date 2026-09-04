@@ -125,3 +125,10 @@ def test_rows_and_vectors_fail_closed() -> None:
         evaluate_goal_force_rows([{"predicted_force_xy": (1.0, 0.0)}])  # type: ignore[list-item]
     with pytest.raises(ValueError, match="finite"):
         GoalForceMetricRow((math.nan, 0.0), (0.0, 0.0))
+
+
+@pytest.mark.parametrize("component", [False, True])
+def test_boolean_vector_components_are_not_numeric(component: bool) -> None:
+    """Boolean values must not silently become force components."""
+    with pytest.raises(ValueError, match="finite numeric"):
+        GoalForceMetricRow((component, 0.0), (0.0, 0.0))  # type: ignore[arg-type]

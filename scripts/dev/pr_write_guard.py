@@ -125,6 +125,27 @@ def _validate_expected_shas(
     return None
 
 
+def _read_author_login(
+    payload: dict[str, Any], *, required: bool
+) -> tuple[str | None, dict[str, Any] | None]:
+    """Return the live PR author's login when required, or a fail-closed error."""
+    if not required:
+        return None, None
+    raw_author = payload.get("user")
+    if not isinstance(raw_author, dict) or not isinstance(raw_author.get("login"), str):
+        return None, {"status": "error", "error": "PR write-state payload has no author login"}
+    login = raw_author["login"].strip()
+    if not login:
+        return None, {"status": "error", "error": "PR write-state payload has empty author login"}
+    return login, None
+
+
+def _attach_author_login(base: dict[str, Any], login: str | None) -> None:
+    """Add author data only to author-aware guard results."""
+    if login is not None:
+        base["observed_author_login"] = login
+
+
 def guard_pr_write(
     number: int,
     *,
@@ -132,6 +153,7 @@ def guard_pr_write(
     expected_head_sha: str | None,
     expected_base_sha: str | None = None,
     operation: str,
+    include_author: bool = False,
 ) -> dict[str, Any]:
     """Read PR state/head/base immediately before a review or merge-ready write.
 
@@ -139,7 +161,9 @@ def guard_pr_write(
     ``expected_base_sha`` is supplied returns ``review_skipped_stale_state`` and
     must never be followed by a write. Transport or malformed-payload failures
     return ``error`` so callers fail closed rather than treating uncertainty as
-    a safe skip.
+    a safe skip. When ``include_author`` is true, the live PR author's login is
+    required and returned as ``observed_author_login`` for caller-side policy
+    checks.
     """
     validation_error = _validate_expected_shas(
         number=number,
@@ -174,6 +198,10 @@ def guard_pr_write(
     ):
         return {"status": "error", "error": "PR write-state payload has no base SHA"}
 
+    observed_author_login, author_error = _read_author_login(payload, required=include_author)
+    if author_error is not None:
+        return author_error
+
     observed_state = raw_state.upper()
     observed_head_sha = raw_head["sha"]
     observed_base_sha: str | None = None
@@ -189,6 +217,7 @@ def guard_pr_write(
         observed_base_sha=observed_base_sha,
         merged_at=merged_at,
     )
+    _attach_author_login(base, observed_author_login)
     return _write_verdict(
         observed_state=observed_state,
         merged_at=merged_at,

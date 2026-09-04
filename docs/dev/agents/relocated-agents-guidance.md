@@ -482,6 +482,13 @@ When working issue batches or Project #5 updates:
 - check `gh api rate_limit` before large batches and degrade to REST/local state when GraphQL
   remaining is low.
 
+For exact-head REST review publication, `scripts/dev/gh_pr_review_rest.py` reads the authenticated
+GitHub login before a `REQUEST_CHANGES` write and compares it with the live PR author inside the
+freshness guard. A self-authored request returns `review_skipped_self_authored` with exit code 2 and
+explicit `COMMENT` guidance; it never auto-downgrades the event. If the caller chooses that
+fallback, rerun with `--event COMMENT` and preserve the blocking marker (for example, the
+`gate-verdict` evidence); a comment is not an approval or a merge-gate acceptance by itself.
+
 Canonical note:
 
 - `docs/context/issue_713_batch_first_issue_workflow.md`

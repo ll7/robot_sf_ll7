@@ -26,11 +26,14 @@ def _pr_payload(
     head_sha: str = HEAD_SHA,
     base_sha: str | None = BASE_SHA,
     merged_at: object = None,
+    author_login: str | None = None,
 ) -> str:
     """Build a compact pull-request REST payload."""
     payload: dict[str, object] = {"state": state, "head": {"sha": head_sha}, "merged_at": merged_at}
     if base_sha is not None:
         payload["base"] = {"sha": base_sha}
+    if author_login is not None:
+        payload["user"] = {"login": author_login}
     return json.dumps(payload)
 
 
@@ -77,6 +80,39 @@ def test_matching_open_head_and_base_are_admitted() -> None:
 
     assert result["status"] == "ok"
     assert result["observed_base_sha"] == BASE_SHA
+
+
+def test_include_author_returns_observed_pr_author() -> None:
+    """An author-aware guard exposes the live PR author for policy checks."""
+    with patch(
+        "scripts.dev.pr_write_guard._gh_api_get",
+        return_value=_proc(stdout=_pr_payload(author_login="Maintainer")),
+    ):
+        result = guard_pr_write(
+            7571,
+            expected_head_sha=HEAD_SHA,
+            operation="review",
+            include_author=True,
+        )
+
+    assert result["status"] == "ok"
+    assert result["observed_author_login"] == "Maintainer"
+
+
+def test_include_author_requires_live_pr_author() -> None:
+    """An author-aware guard fails closed when the PR author is unavailable."""
+    with patch(
+        "scripts.dev.pr_write_guard._gh_api_get",
+        return_value=_proc(stdout=_pr_payload()),
+    ):
+        result = guard_pr_write(
+            7571,
+            expected_head_sha=HEAD_SHA,
+            operation="review",
+            include_author=True,
+        )
+
+    assert result == {"status": "error", "error": "PR write-state payload has no author login"}
 
 
 def test_base_movement_skips_write() -> None:

@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from scripts.dev._gh_rest import gh_api_get as _gh_api_get
 from scripts.dev._gh_rest import gh_api_review_post as _gh_api_post
 from scripts.dev._gh_rest import parse_json as _parse_json
 from scripts.dev.github_transport_policy import get_transport_contract
@@ -16,6 +17,7 @@ from scripts.dev.pr_carrier_gate import _declared_base_sha, extract_full_shas
 from scripts.dev.pr_write_guard import DEFAULT_REPO, guard_pr_write, pr_write_lock
 
 REVIEW_EVENTS = ("COMMENT", "APPROVE", "REQUEST_CHANGES")
+SELF_AUTHORED_REVIEW_STATUS = "review_skipped_self_authored"
 TRANSPORT_CONTRACT = get_transport_contract("gh_pr_review_rest.py")
 
 
@@ -66,6 +68,106 @@ def _validate_review_body_shas(
     return None
 
 
+def _read_authenticated_actor() -> tuple[str | None, dict[str, Any] | None]:
+    """Read the authenticated GitHub login, failing closed on uncertainty."""
+    result = _gh_api_get("user")
+    payload, error = _parse_json(result, what="authenticated GitHub actor read")
+    if error:
+        return None, {"status": "error", "error": error}
+    if not isinstance(payload, dict):
+        return None, {"status": "error", "error": "authenticated actor payload was not an object"}
+    login = payload.get("login")
+    if not isinstance(login, str) or not login.strip():
+        return None, {"status": "error", "error": "authenticated actor payload has no login"}
+    return login.strip(), None
+
+
+def _guard_review(
+    number: int,
+    *,
+    repo: str,
+    expected_head_sha: str,
+    event: str,
+) -> dict[str, Any]:
+    """Run the event-specific exact-head guard."""
+    guard_kwargs: dict[str, Any] = {
+        "repo": repo,
+        "expected_head_sha": expected_head_sha,
+        "operation": "commented_review" if event == "COMMENT" else "review",
+    }
+    if event == "REQUEST_CHANGES":
+        guard_kwargs["include_author"] = True
+    return guard_pr_write(number, **guard_kwargs)
+
+
+def _self_authored_guidance(
+    guard: dict[str, Any],
+    *,
+    authenticated_actor_login: str,
+) -> dict[str, Any] | None:
+    """Return explicit comment guidance for a self-authored request, if needed."""
+    observed_author_login = guard.get("observed_author_login")
+    if not isinstance(observed_author_login, str) or not observed_author_login:
+        return {
+            "status": "error",
+            "error": "PR write-state guard did not return an author login",
+        }
+    if authenticated_actor_login.casefold() != observed_author_login.casefold():
+        return None
+    return {
+        **guard,
+        "status": SELF_AUTHORED_REVIEW_STATUS,
+        "reason": "self_authored_request_changes_forbidden",
+        "fallback_event": "COMMENT",
+        "automatic_fallback": False,
+        "body_preserved": True,
+        "authenticated_actor_login": authenticated_actor_login,
+    }
+
+
+def _review_preflight(
+    number: int,
+    body: str,
+    *,
+    repo: str,
+    expected_head_sha: str,
+    event: str,
+) -> dict[str, Any]:
+    """Run actor, exact-head, body-carrier, and self-authored checks before a write."""
+    authenticated_actor_login: str | None = None
+    if event == "REQUEST_CHANGES":
+        authenticated_actor_login, actor_error = _read_authenticated_actor()
+        if actor_error is not None:
+            return actor_error
+        assert authenticated_actor_login is not None
+
+    guard = _guard_review(
+        number,
+        repo=repo,
+        expected_head_sha=expected_head_sha,
+        event=event,
+    )
+    if guard["status"] != "ok":
+        return guard
+
+    body_sha_error = _validate_review_body_shas(
+        body,
+        expected_head_sha=expected_head_sha,
+        observed_base_sha=guard.get("observed_base_sha"),
+    )
+    if body_sha_error is not None:
+        return body_sha_error
+
+    if authenticated_actor_login is not None:
+        guidance = _self_authored_guidance(
+            guard,
+            authenticated_actor_login=authenticated_actor_login,
+        )
+        if guidance is not None:
+            return guidance
+    return guard
+
+
 def post_review(
     number: int,
     body_file: Path,
@@ -88,22 +190,15 @@ def post_review(
 
     try:
         with pr_write_lock(repo, number):
-            guard = guard_pr_write(
+            preflight = _review_preflight(
                 number,
+                body,
                 repo=repo,
                 expected_head_sha=expected_head_sha,
-                operation="commented_review" if event == "COMMENT" else "review",
+                event=event,
             )
-            if guard["status"] != "ok":
-                return guard
-
-            body_sha_error = _validate_review_body_shas(
-                body,
-                expected_head_sha=expected_head_sha,
-                observed_base_sha=guard.get("observed_base_sha"),
-            )
-            if body_sha_error is not None:
-                return body_sha_error
+            if preflight["status"] != "ok":
+                return preflight
 
             result = _gh_api_post(
                 f"repos/{repo}/pulls/{number}/reviews",
@@ -166,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(result, sort_keys=True), file=sys.stdout if status == "ok" else sys.stderr)
     if status == "ok":
         return 0
-    if status == "review_skipped_stale_state":
+    if status in {"review_skipped_stale_state", SELF_AUTHORED_REVIEW_STATUS}:
         return 2
     return 1
 

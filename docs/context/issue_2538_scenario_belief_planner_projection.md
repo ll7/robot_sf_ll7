@@ -29,6 +29,19 @@ Issue #2538 adds a planner-facing ScenarioBelief projection helper:
 - The stream-gap planner remains opt-in for uncertainty consumption. Missing or malformed
   uncertainty metadata still keeps deterministic pedestrian rows.
 
+The additive issue #8050 diagnostic seam also provides
+`project_belief_aware_planner_input(...)` for the explicitly named
+`BeliefGuidedLocalPlanner`. It retains every canonical `ScenarioBelief.agents` entry in an
+immutable, ID-keyed `tracks` mapping, including entries absent from the visible legacy rows, and
+reports distinct `no_belief`, `empty_belief`, `unsupported_planner`, `invalid_belief`, and
+`projected` statuses. Serialization is versioned and deterministic; legacy observations and the
+existing stream-gap path are unchanged.
+
+The current `ScenarioBelief` owner does not expose retirement generations. The new diagnostic
+therefore reports `identity_generation_available: false`, marks its entity-ID token as not
+reuse-safe, and requires stateful consumers to reset at an externally supplied lifecycle boundary.
+It does not infer retirement, reuse, or benchmark/safety benefit.
+
 ## Claim Boundary
 
 This proves only that ScenarioBelief uncertainty metadata can reach one planner-compatible local
@@ -47,5 +60,6 @@ uv run ruff format --check robot_sf/planner/scenario_belief_adapter.py tests/pla
 ## Follow-Up
 
 The next useful step is a runtime observation-builder path that produces a ScenarioBelief during an
-environment step and routes this projection into a planner selection or smoke command. Until that
-exists, this remains a unit-level planner interface smoke.
+environment step and routes this projection into a planner selection or smoke command. A canonical
+track-generation/retirement owner is also required before a stateful planner can claim reuse-safe
+identity semantics. Until those gates exist, this remains a unit-level planner interface smoke.

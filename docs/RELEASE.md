@@ -528,6 +528,49 @@ does not change or replace the scientific source commit. A row, component
 metric, source, matrix, or claim-boundary change is not a derived-metadata
 erratum and requires a new scientific campaign decision.
 
+### Predecessor trust root (pinned tuple + cold verification, never the label)
+
+The trust root for the September 2026 erratum is the pinned tuple below plus
+repeated credential-free cold-download verification — never the GitHub release
+label alone. The predecessor GitHub release object currently reports
+`immutable:false` (verified live 2026-09-03; `target_commitish` matches the
+scientific source SHA), so its label cannot anchor trust:
+
+- predecessor version DOI `10.5281/zenodo.22227035`, tag
+  `paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880`
+- successor version DOI `10.5281/zenodo.22265925`, concept DOI
+  `10.5281/zenodo.22227034`, tag `...-erratum.1`
+- scientific source SHA `59577bad289dd692ba3580e1600c4a649ae27880`
+- predecessor archive: 54,219,004 bytes, SHA-256
+  `e8f301c6f4eae16fdaf83f59b31bef060d84bf5a0e23dfdbf375f834b25d7b4b`
+- orchestration SHA `09f6b1beeff71b4ee30deae7cc2504c0c7310729`
+  (frozen in `configs/benchmarks/releases/benchmark_data_release_s30_h600_2026_09_erratum_1.json`;
+  the contract itself is frozen and is not edited by this note)
+
+Re-verify the full tuple (concrete reviewed pins, no placeholders) with:
+
+```bash
+uv run robot-sf release audit-published \
+  --tag paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880-erratum.1 \
+  --doi 10.5281/zenodo.22265925 \
+  --expected-source-sha 59577bad289dd692ba3580e1600c4a649ae27880 \
+  --expected-concept-doi 10.5281/zenodo.22227034 \
+  --expected-predecessor-doi 10.5281/zenodo.22227035 \
+  --expected-predecessor-tag paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880 \
+  --expected-predecessor-archive-sha256 e8f301c6f4eae16fdaf83f59b31bef060d84bf5a0e23dfdbf375f834b25d7b4b \
+  --expected-predecessor-size-bytes 54219004 \
+  --expected-builder-sha a4aaf1f06860cf632d0173c5a13e11ad855b6df2 \
+  --expected-validator-sha a4aaf1f06860cf632d0173c5a13e11ad855b6df2 \
+  --expected-orchestration-sha 09f6b1beeff71b4ee30deae7cc2504c0c7310729
+```
+
+and confirm the predecessor release object state with:
+
+```bash
+gh api repos/ll7/robot_sf_ll7/releases/tags/paper-matrix-v2-h600-s30-2026-09-59577bad289dd692ba3580e1600c4a649ae27880 \
+  --jq '{immutable, draft, tag_name, target_commitish}'
+```
+
 Upload and verify the generated bundle using:
 
 - `docs/benchmark_camera_ready_release.md`

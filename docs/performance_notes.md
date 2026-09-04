@@ -214,10 +214,11 @@ The throughput guard supports environment-specific calibration:
 
 - `ROBOT_SF_SIM_STEPS_SOFT` (default `2.0`)
 - `ROBOT_SF_SIM_STEPS_HARD` (default `0.5`)
-- `ROBOT_SF_PERF_ENFORCE=1` to turn soft/hard threshold breaches into test failures
 
-On shared or heterogeneous cluster nodes, keep enforcement off for exploratory runs and
-set tuned thresholds per hardware profile.
+A measured breach fails on every lane; skips are reserved for missing prerequisites, so a
+regression can never pass silently (issue #8377).
+
+On shared or heterogeneous cluster nodes, set tuned thresholds per hardware profile.
 
 ### Benchmark Runner Performance
 Location: `robot_sf/benchmark/runner.py`

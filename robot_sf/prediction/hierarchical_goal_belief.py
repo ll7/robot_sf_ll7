@@ -40,6 +40,7 @@ from robot_sf.prediction.goal_belief_contract import (
 HIERARCHICAL_GOAL_POSTERIOR_SCHEMA_VERSION = "hierarchical_goal_posterior.v1"
 HIERARCHICAL_PROJECTION_LEVELS = ("active_waypoint", "final_destination")
 _ACTOR_EVIDENCE_SOURCES = frozenset({"upstream_selected"})
+_UNKNOWN_CANDIDATE_ID = "unknown"
 
 
 def _as_sequence(value: Any, field_name: str) -> tuple[Any, ...]:
@@ -129,6 +130,10 @@ class HierarchicalProbability:
     def __post_init__(self) -> None:
         """Validate identity and finite probability mass."""
         object.__setattr__(self, "candidate_id", require_text(self.candidate_id, "candidate_id"))
+        if self.candidate_id.strip().lower() == _UNKNOWN_CANDIDATE_ID:
+            raise ValueError(
+                "candidate_id 'unknown' is reserved for the explicit unknown probability mass"
+            )
         object.__setattr__(
             self,
             "probability",

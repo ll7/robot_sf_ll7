@@ -324,19 +324,32 @@ def _review_digest(
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _check_run_sort_key(item: dict[str, Any]) -> tuple[int, str]:
+def _check_run_identifier(item: dict[str, Any]) -> int | None:
+    """Return a positive REST check-run ID, or ``None`` for malformed data."""
+    raw_identifier = item.get("id")
+    if isinstance(raw_identifier, bool):
+        return None
+    if isinstance(raw_identifier, int):
+        identifier = raw_identifier
+    elif isinstance(raw_identifier, str) and raw_identifier.strip().isdigit():
+        identifier = int(raw_identifier.strip())
+    else:
+        return None
+    return identifier if identifier > 0 else None
+
+
+def _check_run_sort_key(item: dict[str, Any]) -> tuple[int, int, str]:
     """Return a newest-first-compatible identity key for a REST check run.
 
     Check-run IDs are monotonic, while queued runs may not have timestamps yet.
     Prefer the ID so a newer queued run cannot be hidden by an older completed
-    run; use the timestamp as a deterministic fallback when an ID is absent.
+    run. Treat malformed or missing IDs as newer than valid IDs so they cannot
+    silently hide behind historical evidence; use the timestamp only to order
+    multiple malformed records deterministically.
     """
     timestamp = str(item.get("completed_at") or item.get("started_at") or "")
-    try:
-        identifier = int(item.get("id", 0) or 0)
-    except (TypeError, ValueError):
-        identifier = 0
-    return identifier, timestamp
+    identifier = _check_run_identifier(item)
+    return (0, identifier, timestamp) if identifier is not None else (1, 0, timestamp)
 
 
 def _latest_check_runs(check_runs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
@@ -387,6 +400,35 @@ def _latest_merge_queue_gate_index(check_runs: list[dict[str, Any]]) -> int | No
     return max(candidates, key=lambda candidate: _check_run_sort_key(candidate[1]))[0]
 
 
+def _actions_run_id(details_url: str, *, repo: str) -> str:
+    """Extract a numeric Actions run ID from this repository's canonical job URL."""
+    parsed_url = urlparse(details_url)
+    expected_repo_path = f"/{repo.strip('/')}"
+    if parsed_url.scheme != "https" or parsed_url.netloc.lower() != "github.com":
+        return ""
+    path = parsed_url.path
+    if not path.casefold().startswith(f"{expected_repo_path}/".casefold()):
+        return ""
+    match = _ACTIONS_RUN_JOB_PATH_RE.fullmatch(path[len(expected_repo_path) :])
+    return match.group("run_id") if match is not None else ""
+
+
+def _workflow_run_payload(
+    run_id: str,
+    *,
+    repo: str,
+    api: GhApi,
+    cache: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Fetch a workflow run, caching only a complete dictionary response."""
+    if run_id in cache:
+        return cache[run_id]
+    payload, error = _get_object(f"repos/{repo}/actions/runs/{run_id}", api=api)
+    if error or not isinstance(payload, dict):
+        return None
+    return payload
+
+
 def _resolve_check_run_workflow_name(
     check_run: dict[str, Any],
     *,
@@ -399,34 +441,24 @@ def _resolve_check_run_workflow_name(
     if workflow_name:
         return workflow_name
     details_url = str(check_run.get("details_url") or check_run.get("detailsUrl") or "")
-    parsed_url = urlparse(details_url)
-    expected_repo_path = f"/{repo.strip('/')}"
-    if parsed_url.scheme != "https" or parsed_url.netloc.lower() != "github.com":
-        return ""
-    if parsed_url.path.casefold()[: len(expected_repo_path)] != expected_repo_path.casefold():
-        return ""
-    if (
-        len(parsed_url.path) <= len(expected_repo_path)
-        or parsed_url.path[len(expected_repo_path)] != "/"
-    ):
-        return ""
-    match = _ACTIONS_RUN_JOB_PATH_RE.fullmatch(parsed_url.path[len(expected_repo_path) :])
-    if match is None:
+    run_id = _actions_run_id(details_url, repo=repo)
+    if not run_id:
         return ""
     check_head_sha = str(check_run.get("head_sha") or "").strip()
     if not check_head_sha:
         return ""
-    run_id = match.group("run_id")
-    if run_id not in cache:
-        payload, error = _get_object(f"repos/{repo}/actions/runs/{run_id}", api=api)
-        if error or payload is None:
-            return ""
-        cache[run_id] = payload
-    workflow_run = cache[run_id]
+    workflow_run = _workflow_run_payload(run_id, repo=repo, api=api, cache=cache)
+    if workflow_run is None:
+        return ""
     run_head_sha = str(workflow_run.get("head_sha") or "").strip()
     if not run_head_sha or run_head_sha.casefold() != check_head_sha.casefold():
         return ""
-    return str(workflow_run.get("name") or "")
+    resolved_name = str(workflow_run.get("name") or "").strip()
+    if not resolved_name:
+        return ""
+    if run_id not in cache:
+        cache[run_id] = workflow_run
+    return resolved_name
 
 
 def _enrich_merge_queue_gate_check_runs(
@@ -509,7 +541,9 @@ def summarize_merge_queue_gate(
     workflow_name = _check_workflow_name(latest)
     reported_head = str(latest.get("head_sha") or "")
     exact_head = bool(reported_head) and reported_head.lower() == head_sha.lower()
-    if workflow_name != GATE_WORKFLOW_NAME:
+    if _check_run_identifier(latest) is None:
+        status = "malformed"
+    elif workflow_name != GATE_WORKFLOW_NAME:
         status = "mismatch"
     elif not reported_head:
         status = "malformed"

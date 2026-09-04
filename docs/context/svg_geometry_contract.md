@@ -44,6 +44,14 @@ Selection: `SvgMapConverter(svg_file, geometry_contract=...)`,
 - Every `MapDefinition` records `svg_geometry_contract`. The label distinguishes
   legacy and corrected executions; downstream consumers must partition them or
   establish explicit compatibility before pooling rows as comparable evidence.
+- The regression suite compares both default and explicit legacy parsing against
+  canonical SHA-256 digests of every pre-contract `MapDefinition` state field
+  for the five transformed maps. The new `svg_geometry_contract` value is
+  additive provenance and is intentionally excluded from that compatibility
+  projection; this proves exact pre-existing-field equivalence rather than
+  generic whole-object serialization.
+- The bottleneck regression asserts the authored `ped_route_0_0` coordinates
+  under both contracts, in addition to the zone coordinates and overlap guards.
 - Existing frozen results and figures that ran on the legacy loader remain
   labeled legacy/as-run and are not retroactively corrected.
 - The low-tier bottleneck cell authored no pedestrian markers (`diss#2144`);

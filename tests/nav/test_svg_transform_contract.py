@@ -8,13 +8,19 @@ legacy contract preserves the historical transform-ignoring geometry.
 
 from __future__ import annotations
 
+import dataclasses
+import hashlib
+import json
 import pickle
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 
+import numpy as np
 import pytest
+from shapely.geometry.base import BaseGeometry
 
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.nav.svg_map_parser import SvgMapConverter, convert_map
@@ -38,6 +44,18 @@ BASE_ELEMENTS = """
 """
 
 
+_LEGACY_PROJECTION_SHA256 = {
+    # Canonical MapDefinition state digests from the pre-contract parser at
+    # 23d07d6cf32a6b88027c767d3861e1f00aa1eecc. The additive provenance field
+    # is intentionally excluded from the projection.
+    "classic_bottleneck.svg": "41332d22981070f8074641bb260936d87aa2d9cb96c2f14e66c23ceee0a0a237",
+    "classic_bottleneck_medium.svg": "a948fbcd1a244cb187d451dda77642c9d95d861102e2abebdbdd93a4752cf707",
+    "classic_bottleneck_high.svg": "3d4ae1674acd73a8c527aae28a13837497e6cee04a6479a8b96d8e3546726969",
+    "classic_t_intersection.svg": "60ed90684655086a9282ac8f944ef333546db15eb039c6ce1d75d9b85ba6d9c6",
+    "planner_test_simple.svg": "1062a6f1d19911a684cdb575c8062e4e7fe269d7b1e058b50ed0a49fdc508825",
+}
+
+
 def _write_svg(tmp_path: Path, name: str, inner: str) -> str:
     """Write a synthetic SVG map and return its path."""
     path = tmp_path / name
@@ -55,6 +73,52 @@ def _zone_bounds(zone) -> tuple[float, float, float, float]:
     xs = [p[0] for p in zone]
     ys = [p[1] for p in zone]
     return min(xs), min(ys), max(xs), max(ys)
+
+
+def _canonicalize(value: object) -> object:
+    """Encode map state with exact float and container-type semantics."""
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, (float, np.floating)):
+        return ["float", float(value).hex()]
+    if isinstance(value, np.ndarray):
+        return ["ndarray", str(value.dtype), list(value.shape), _canonicalize(value.tolist())]
+    if isinstance(value, BaseGeometry):
+        return ["geometry", value.geom_type, value.wkb_hex]
+    if isinstance(value, bytes):
+        return ["bytes", value.hex()]
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return [
+            "dataclass",
+            f"{type(value).__module__}.{type(value).__qualname__}",
+            {
+                field.name: _canonicalize(getattr(value, field.name))
+                for field in dataclasses.fields(value)
+            },
+        ]
+    if isinstance(value, list):
+        return ["list", [_canonicalize(item) for item in value]]
+    if isinstance(value, tuple):
+        return ["tuple", [_canonicalize(item) for item in value]]
+    if isinstance(value, Mapping):
+        return [
+            "mapping",
+            [
+                [str(key), _canonicalize(item)]
+                for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            ],
+        ]
+    raise TypeError(f"Unsupported value in map compatibility projection: {type(value)!r}")
+
+
+def _legacy_projection_digest(map_definition: MapDefinition) -> str:
+    """Hash every pre-contract map field while omitting additive provenance metadata."""
+    state = map_definition.__getstate__()
+    state.pop("svg_geometry_contract", None)
+    encoded = json.dumps(_canonicalize(state), separators=(",", ":"), sort_keys=True).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def test_nested_translate_rect(tmp_path: Path):
@@ -192,6 +256,8 @@ def test_map_definition_rejects_unknown_contract(tmp_path: Path):
         ("translate(1)", (1.0, 0.0)),
         ("translate(1 2)", (1.0, 2.0)),
         ("translate(1, 2)", (1.0, 2.0)),
+        ("translate(-1.5 .25)", (-1.5, 0.25)),
+        ("translate(1e-3, -2E+2)", (0.001, -200.0)),
         ("translate(1.e2)", (100.0, 0.0)),
         ("translate(1,2) translate(3,4)", (4.0, 6.0)),
     ],
@@ -216,7 +282,11 @@ def test_valid_translate_syntax_is_consumed_as_a_complete_list(
         "translate(foo)",
         "translate(1,foo)",
         "translate(foo,2)",
+        "translate(1foo2)",
         "translate(1px,2)",
+        "translate(1 2 garbage)",
+        "translate(1e,2)",
+        "translate(1..2)",
         "translate(1;2)",
         "translate(1.2.3)",
         "translate(1,2,3)",
@@ -322,6 +392,21 @@ def test_corrected_matches_authored_geometry(map_name: str):
 
 
 @pytest.mark.parametrize("map_name", TRANSFORMED_MAPS)
+def test_default_and_explicit_legacy_match_pre_contract_map_state(map_name: str):
+    """Default and explicit legacy parsing match the pre-contract state projection."""
+    default = SvgMapConverter(str(SVG_DIR / map_name)).get_map_definition()
+    explicit = SvgMapConverter(
+        str(SVG_DIR / map_name), geometry_contract="legacy"
+    ).get_map_definition()
+
+    assert default.svg_geometry_contract == "legacy"
+    assert explicit.svg_geometry_contract == "legacy"
+    assert _legacy_projection_digest(default) == _LEGACY_PROJECTION_SHA256[map_name]
+    assert _legacy_projection_digest(explicit) == _LEGACY_PROJECTION_SHA256[map_name]
+    assert _legacy_projection_digest(default) == _legacy_projection_digest(explicit)
+
+
+@pytest.mark.parametrize("map_name", TRANSFORMED_MAPS)
 def test_legacy_reproduces_historical_coordinates(map_name: str):
     """Legacy coordinates match raw attributes within numeric tolerance."""
     root = ET.parse(str(SVG_DIR / map_name)).getroot()
@@ -379,6 +464,8 @@ def test_legacy_bottleneck_keeps_historical_overlaps():
     assert _zone_bounds(md.ped_goal_zones[0]) == pytest.approx(
         (17.801584, 38.135078, 21.801584, 42.135078)
     )
+    route = next(route for route in md.ped_routes if route.source_label == "ped_route_0_0")
+    assert route.waypoints == [(20.0, 13.293715), (20.0, 28.0)]
 
 
 @pytest.mark.parametrize("geometry_contract", ["legacy", "corrected"])

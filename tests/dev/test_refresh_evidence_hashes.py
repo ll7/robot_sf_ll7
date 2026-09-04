@@ -174,9 +174,18 @@ def test_main_refuses_baseline_files() -> None:
 def test_check_clean_pinned_file_passes() -> None:
     """Check mode exits zero for the currently pinned assurance-case example."""
     code = helper.main(
-        ["--path", "docs/context/evidence/issue_4683_release_assurance_case_example.json"]
+        [
+            "--check",
+            "--path",
+            "docs/context/evidence/issue_4683_release_assurance_case_example.json",
+        ]
     )
     assert code == 0
+
+
+def test_default_check_targets_release_assurance_example() -> None:
+    """The no-argument check remains scoped to the issue's tracked example."""
+    assert helper.main(["--check"]) == 0
 
 
 def test_real_artifact_hash_matches_helper_logic() -> None:

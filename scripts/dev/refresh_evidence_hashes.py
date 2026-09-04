@@ -5,8 +5,8 @@ Every PR that edits a file pinned by an evidence-registry ``sha256`` declaration
 one-line declared-hash refresh, not a baseline regeneration. This helper makes
 that refresh deterministic:
 
-- ``--check`` (default): report ``artifact_hash_mismatch`` findings derived
-  from the canonical linter (``scripts/tools/lint_evidence_registry.py``).
+- ``--check`` (default): report stale hashes in the tracked release-assurance
+  example. Use ``--path`` to check another linter-reported evidence file.
 - ``--write``: rewrite stale declared hashes in the declaring evidence files.
   Use ``--path`` to restrict the rewrite to named evidence files.
 
@@ -41,6 +41,7 @@ ARTIFACT_PATH_KEYS = (
     "source_path",
 )
 BASELINE_PREFIXES = ("scripts/validation/evidence_registry_baseline",)
+DEFAULT_EXAMPLE = Path("docs/context/evidence/issue_4683_release_assurance_case_example.json")
 DEFAULT_LINTER = Path("scripts/tools/lint_evidence_registry.py")
 DEFAULT_REGISTRY_ROOT = Path("docs/context/evidence")
 DEFAULT_DISPOSITION = Path("docs/context/evidence/evidence_registry_dispositions.yaml")
@@ -218,7 +219,13 @@ def _mismatch_files(repo_root: Path) -> list[Path]:
 def main(argv: list[str] | None = None) -> int:
     """Run the hash-refresh check or write pass."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--check",
+        action="store_true",
+        help="Check stale declared hashes without writing (default).",
+    )
+    mode.add_argument(
         "--write",
         action="store_true",
         help="Rewrite stale declared hashes (default is check-only).",
@@ -231,7 +238,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     repo_root = _repo_root()
-    targets = [repo_root / p for p in args.path] if args.path else _mismatch_files(repo_root)
+    targets = [repo_root / p for p in args.path] if args.path else [repo_root / DEFAULT_EXAMPLE]
     for target in targets:
         rel = (
             target.relative_to(repo_root).as_posix()

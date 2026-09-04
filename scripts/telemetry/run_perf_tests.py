@@ -116,11 +116,11 @@ def _write_summary(
     scenario: str | None,
     result: performance_smoke_test.SmokeTestResult,
 ) -> Path:
-    """Write a JSON summary of a performance smoke-test result.
+    """Write performance-test results as a JSON summary file in the run directory.
 
     Args:
-        run_directory: Directory in which to write the summary file.
-        run_id: Run identifier added to the serialized result.
+        run_directory: Directory where the summary file will be stored.
+        run_id: Identifier for the current performance-test run.
         scenario: Optional scenario label added to the summary.
         result: Structured smoke-test result to serialize.
 
@@ -152,6 +152,7 @@ def _build_manifest_summary(
         summary_path: Path to the JSON summary recorded in the mapping.
         scenario: Optional scenario label; ``"default"`` is used when absent.
         num_resets: Number of environment resets measured by the smoke test.
+        step_samples: Number of simulator steps sampled for profiling.
         recommendation_count: Number of recommendations generated for the run.
 
     Returns:

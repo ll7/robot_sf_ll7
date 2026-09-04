@@ -73,6 +73,14 @@ def _registry_checkpoint_sha256(registry_path: Path, model_id: str) -> str:
     raise ValueError(f"Model ID is absent from the model registry: {model_id}")
 
 
+def _normalize_sha256(value: Any) -> str | None:
+    """Return a normalized SHA-256 value, or ``None`` when the value is malformed."""
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().lower()
+    return normalized if re.fullmatch(r"[0-9a-f]{64}", normalized) else None
+
+
 def _input_refs(config_path: Path, config: dict[str, Any]) -> dict[str, str]:
     """Return resolved input lineage and digests, or raise on missing provenance inputs."""
     scenario_matrix = _repo_path(str(config["scenario_matrix"]))
@@ -112,6 +120,86 @@ def _input_refs(config_path: Path, config: dict[str, Any]) -> dict[str, str]:
         ("model_registry", model_registry),
     ):
         refs[f"{name}_sha256"] = _sha256(path)
+    if resolved_config.get("predictive_foresight_enabled") is True:
+        predictive_model_id = resolved_config.get("predictive_foresight_model_id")
+        if not isinstance(predictive_model_id, str) or not predictive_model_id.strip():
+            raise ValueError(
+                "Resolved candidate enables predictive foresight without a model_id: "
+                f"{config['candidate']}"
+            )
+        refs.update(
+            {
+                "predictive_checkpoint_model_id": predictive_model_id,
+                "predictive_checkpoint_sha256_declared": _registry_checkpoint_sha256(
+                    model_registry, predictive_model_id
+                ),
+            }
+        )
+    return refs
+
+
+def _runtime_predictive_checkpoint_refs(
+    traces: dict[str, dict[str, Any]],
+    *,
+    expected_sha256: str | None,
+) -> dict[str, str]:
+    """Return paired predictive-foresight checkpoint provenance and its registry verdict."""
+    conditions = ("perfect_perception", "sensor_limited")
+    expected = _normalize_sha256(expected_sha256)
+    requested_hashes: dict[str, str] = {}
+    observed_hashes: dict[str, str] = {}
+    runtime_hashes: dict[str, str] = {}
+    eligible: dict[str, bool] = {}
+    for condition in conditions:
+        summary = traces.get(condition, {}).get("planner_summary")
+        foresight = summary.get("foresight_prediction") if isinstance(summary, dict) else None
+        requested = _normalize_sha256(
+            foresight.get("requested_checkpoint_sha256") if isinstance(foresight, dict) else None
+        )
+        observed = _normalize_sha256(
+            foresight.get("observed_checkpoint_sha256") if isinstance(foresight, dict) else None
+        )
+        is_eligible = (
+            isinstance(foresight, dict)
+            and foresight.get("load_status") == "loaded"
+            and foresight.get("fallback_used") is False
+            and requested is not None
+            and observed is not None
+        )
+        requested_hashes[condition] = requested or "unavailable"
+        observed_hashes[condition] = observed or "unavailable"
+        runtime_hashes[condition] = observed if is_eligible else "unavailable"
+        eligible[condition] = is_eligible
+
+    refs = {
+        "predictive_checkpoint_sha256_requested_perfect_perception": requested_hashes[
+            "perfect_perception"
+        ],
+        "predictive_checkpoint_sha256_requested_sensor_limited": requested_hashes["sensor_limited"],
+        "predictive_checkpoint_sha256_observed_perfect_perception": observed_hashes[
+            "perfect_perception"
+        ],
+        "predictive_checkpoint_sha256_observed_sensor_limited": observed_hashes["sensor_limited"],
+        "predictive_checkpoint_sha256_runtime_perfect_perception": runtime_hashes[
+            "perfect_perception"
+        ],
+        "predictive_checkpoint_sha256_runtime_sensor_limited": runtime_hashes["sensor_limited"],
+    }
+    paired_hash = runtime_hashes["perfect_perception"]
+    if paired_hash != "unavailable" and paired_hash == runtime_hashes["sensor_limited"]:
+        refs["predictive_checkpoint_sha256_runtime"] = paired_hash
+    else:
+        refs["predictive_checkpoint_sha256_runtime"] = "unavailable"
+    refs["predictive_checkpoint_sha256_matches_declared"] = str(
+        expected is not None
+        and refs["predictive_checkpoint_sha256_runtime"] != "unavailable"
+        and all(
+            eligible[condition]
+            and requested_hashes[condition] == expected
+            and observed_hashes[condition] == expected
+            for condition in conditions
+        )
+    ).lower()
     return refs
 
 
@@ -119,6 +207,7 @@ def _runtime_checkpoint_refs(
     traces: dict[str, dict[str, Any]],
     *,
     expected_sha256: str | None = None,
+    expected_predictive_sha256: str | None = None,
 ) -> dict[str, str]:
     """Return paired runtime checkpoint hashes and their registry-match verdict."""
     runtime_hashes: dict[str, str] = {}
@@ -155,6 +244,13 @@ def _runtime_checkpoint_refs(
     refs["checkpoint_sha256_matches_declared"] = str(
         expected_sha256 is not None and refs["checkpoint_sha256_runtime"] == expected_sha256.lower()
     ).lower()
+    if expected_predictive_sha256 is not None:
+        refs.update(
+            _runtime_predictive_checkpoint_refs(
+                traces,
+                expected_sha256=expected_predictive_sha256,
+            )
+        )
     return refs
 
 
@@ -177,6 +273,27 @@ def _runtime_provenance_error(input_refs: dict[str, str]) -> dict[str, Any] | No
             "reason": "runtime checkpoint digest does not match the model registry digest",
             "command": ["_runtime_checkpoint_refs"],
         }
+    if "predictive_checkpoint_sha256_declared" in input_refs:
+        if input_refs.get("predictive_checkpoint_sha256_runtime") == "unavailable":
+            return {
+                "condition": "inputs",
+                "status": "blocked",
+                "reason": (
+                    "paired predictive foresight checkpoint provenance is unavailable, "
+                    "degraded, or did not expose the same valid digest for both conditions"
+                ),
+                "command": ["_runtime_checkpoint_refs"],
+            }
+        if input_refs.get("predictive_checkpoint_sha256_matches_declared") != "true":
+            return {
+                "condition": "inputs",
+                "status": "blocked",
+                "reason": (
+                    "runtime predictive foresight checkpoint digest does not match "
+                    "the model registry digest"
+                ),
+                "command": ["_runtime_checkpoint_refs"],
+            }
     return None
 
 
@@ -445,6 +562,7 @@ def main(argv: list[str] | None = None) -> int:
             _runtime_checkpoint_refs(
                 traces,
                 expected_sha256=input_refs.get("checkpoint_sha256_declared"),
+                expected_predictive_sha256=input_refs.get("predictive_checkpoint_sha256_declared"),
             )
         )
         runtime_provenance_error = _runtime_provenance_error(input_refs)

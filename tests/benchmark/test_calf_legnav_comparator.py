@@ -365,6 +365,122 @@ def test_runtime_checkpoint_refs_require_a_paired_registry_match() -> None:
     assert refs["checkpoint_sha256_matches_declared"] == "false"
 
 
+def test_input_refs_bind_enabled_predictive_checkpoint_to_registry() -> None:
+    """Enabled predictive foresight contributes its own declared registry identity."""
+    config_path = REPO_ROOT / "configs/benchmarks/issue_7318_calf_legnav_comparator_smoke.yaml"
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+    refs = comparator_runner._input_refs(config_path, config)
+
+    assert refs["predictive_checkpoint_model_id"] == "predictive_proxy_selected_v2_full"
+    assert refs["predictive_checkpoint_sha256_declared"] == (
+        "a28aed6d6ad7e1ebf597277ade1cf908efa6da038d0a9fcfdf80c7c31d8d1be1"
+    )
+
+
+def _checkpoint_traces(
+    requested: str | None,
+    observed: str | None,
+    *,
+    load_status: str = "loaded",
+    fallback_used: bool = False,
+) -> dict[str, dict[str, Any]]:
+    """Build paired trace summaries with outer and nested checkpoint provenance."""
+    return {
+        condition: {
+            "planner_summary": {
+                "checkpoint_provenance": {
+                    "checkpoint_sha256": "a" * 64,
+                    "hash_source": "computed_resolved_file",
+                    "load_succeeded": True,
+                },
+                "foresight_prediction": {
+                    "load_status": load_status,
+                    "fallback_used": fallback_used,
+                    "requested_checkpoint_sha256": requested,
+                    "observed_checkpoint_sha256": observed,
+                },
+            }
+        }
+        for condition in ("perfect_perception", "sensor_limited")
+    }
+
+
+def test_runtime_predictive_checkpoint_refs_require_paired_registry_match() -> None:
+    """Loaded nested foresight digests must match the declared registry digest in both arms."""
+    nested_digest = "b" * 64
+    traces = _checkpoint_traces(nested_digest.upper(), nested_digest)
+
+    refs = comparator_runner._runtime_checkpoint_refs(
+        traces,
+        expected_sha256="a" * 64,
+        expected_predictive_sha256=nested_digest,
+    )
+
+    assert refs["predictive_checkpoint_sha256_requested_perfect_perception"] == nested_digest
+    assert refs["predictive_checkpoint_sha256_observed_sensor_limited"] == nested_digest
+    assert refs["predictive_checkpoint_sha256_runtime"] == nested_digest
+    assert refs["predictive_checkpoint_sha256_matches_declared"] == "true"
+    assert comparator_runner._runtime_provenance_error(refs) is None
+
+
+def test_runtime_predictive_checkpoint_digest_mismatch_blocks() -> None:
+    """A nested requested/observed digest mismatch blocks the comparator report."""
+    requested = "b" * 64
+    observed = "c" * 64
+    refs = comparator_runner._runtime_checkpoint_refs(
+        _checkpoint_traces(requested, observed),
+        expected_sha256="a" * 64,
+        expected_predictive_sha256=requested,
+    )
+
+    error = comparator_runner._runtime_provenance_error(
+        {
+            **refs,
+            "predictive_checkpoint_sha256_declared": requested,
+        }
+    )
+
+    assert refs["predictive_checkpoint_sha256_runtime"] == observed
+    assert refs["predictive_checkpoint_sha256_matches_declared"] == "false"
+    assert error is not None
+    assert error["status"] == "blocked"
+    assert "predictive foresight checkpoint digest" in error["reason"]
+
+
+@pytest.mark.parametrize(
+    ("load_status", "fallback_used"),
+    [("not_attempted", False), ("loaded", True)],
+)
+def test_runtime_predictive_checkpoint_unavailable_blocks(
+    load_status: str, fallback_used: bool
+) -> None:
+    """Predictive foresight must be loaded without fallback before it can admit a report."""
+    digest = "b" * 64
+    refs = comparator_runner._runtime_checkpoint_refs(
+        _checkpoint_traces(
+            digest,
+            digest,
+            load_status=load_status,
+            fallback_used=fallback_used,
+        ),
+        expected_sha256="a" * 64,
+        expected_predictive_sha256=digest,
+    )
+
+    error = comparator_runner._runtime_provenance_error(
+        {
+            **refs,
+            "predictive_checkpoint_sha256_declared": digest,
+        }
+    )
+
+    assert refs["predictive_checkpoint_sha256_runtime"] == "unavailable"
+    assert error is not None
+    assert error["status"] == "blocked"
+    assert "predictive foresight checkpoint provenance" in error["reason"]
+
+
 def test_non_finite_config_is_rejected_before_execution(tmp_path: Path) -> None:
     """YAML NaN values cannot enter config provenance or generated commands."""
     config_path = REPO_ROOT / "configs/benchmarks/issue_7318_calf_legnav_comparator_smoke.yaml"

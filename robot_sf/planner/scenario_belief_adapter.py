@@ -175,6 +175,8 @@ def _readonly_float_array(
         raise ValueError(f"{name} must have shape {shape}, got {array.shape}")
     if not np.issubdtype(array.dtype, np.number):
         raise ValueError(f"{name} must use a numeric dtype")
+    if np.iscomplexobj(array):
+        raise ValueError(f"{name} must contain real-valued data")
     try:
         owned = np.array(array, dtype=np.float64, copy=True)
     except (TypeError, ValueError) as exc:
@@ -203,6 +205,8 @@ def _readonly_covariance(value: Any) -> np.ndarray:
         array = np.asarray(value)
     except (TypeError, ValueError) as exc:
         raise ValueError("covariance must be a numeric array") from exc
+    if np.iscomplexobj(array):
+        raise ValueError("covariance must contain real-valued data")
     if array.shape == (4, 4):
         try:
             normalized = np.zeros((5, 5), dtype=np.float64)
@@ -388,6 +392,41 @@ def _copy_runtime_value(value: Any) -> Any:
     return value
 
 
+def _freeze_runtime_value(value: Any) -> Any:
+    """Copy nested diagnostics into immutable containers with owned arrays.
+
+    Returns:
+        A recursively copied value whose mappings and sequences cannot be mutated.
+    """
+    if isinstance(value, np.ndarray):
+        copied = np.array(value, copy=True)
+        copied.setflags(write=False)
+        return copied
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {key: _freeze_runtime_value(nested) for key, nested in value.items()}
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_runtime_value(nested) for nested in value)
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
+
+
+def _entity_float_array(value: np.ndarray) -> np.ndarray:
+    """Convert one already-shaped entity array after rejecting complex values.
+
+    Returns:
+        A float64 entity array.
+    """
+    if np.iscomplexobj(value):
+        raise ValueError("entity state or covariance must contain real-valued data")
+    try:
+        return np.asarray(value, dtype=np.float64)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("entity state or covariance is malformed") from exc
+
+
 def _runtime_value_is_finite(value: Any) -> bool:
     """Return whether nested numeric runtime values are finite."""
     if isinstance(value, np.ndarray):
@@ -474,9 +513,7 @@ class BeliefAwarePlannerInput:
             raise ValueError("schema_version must be a non-empty string")
         if not isinstance(self.diagnostics, Mapping):
             raise TypeError("diagnostics must be a mapping")
-        object.__setattr__(
-            self, "diagnostics", MappingProxyType(_copy_runtime_value(self.diagnostics))
-        )
+        object.__setattr__(self, "diagnostics", _freeze_runtime_value(self.diagnostics))
 
     @property
     def projection(self) -> Mapping[str, Any]:
@@ -547,6 +584,8 @@ def _belief_step(belief: Any) -> int:
             return 0
         raise ValueError("belief timestep_s must be positive when sim_time_s is non-zero")
     ratio = sim_time_s / timestep_s
+    if not np.isfinite(ratio):
+        raise ValueError("belief sim_time_s/timestep_s ratio must be finite")
     rounded = round(ratio)
     if not np.isclose(ratio, rounded, atol=1e-6, rtol=0.0):
         raise ValueError("belief sim_time_s is not aligned to timestep_s")
@@ -566,11 +605,15 @@ def _age_steps(age_s: Any, timestep_s: Any) -> int:
         raise ValueError("last_observed_age_s must be numeric") from exc
     if not np.isfinite(age) or age < 0.0:
         raise ValueError("last_observed_age_s must be finite and non-negative")
+    if not np.isfinite(timestep):
+        raise ValueError("belief timestep_s must be finite")
     if timestep <= 0.0:
         if age == 0.0:
             return 0
         raise ValueError("positive observation age requires a positive belief timestep")
     ratio = age / timestep
+    if not np.isfinite(ratio):
+        raise ValueError("last_observed_age_s/timestep_s ratio must be finite")
     if ratio <= 0.0:
         return 0
     nearest_step = round(ratio)
@@ -597,16 +640,20 @@ def _planner_track_from_entity(
     if not isinstance(visibility_state, visibility_type):
         raise ValueError("visibility_state is malformed")
     try:
-        position = np.asarray(agent.position.mean_xy, dtype=np.float64).reshape(-1)
-        velocity = np.asarray(agent.velocity.mean_xy, dtype=np.float64).reshape(-1)
-        position_covariance = np.asarray(agent.position.covariance_xy, dtype=np.float64)
-        velocity_covariance = np.asarray(agent.velocity.covariance_xy, dtype=np.float64)
+        position = np.asarray(agent.position.mean_xy)
+        velocity = np.asarray(agent.velocity.mean_xy)
+        position_covariance = np.asarray(agent.position.covariance_xy)
+        velocity_covariance = np.asarray(agent.velocity.covariance_xy)
     except (AttributeError, TypeError, ValueError) as exc:
         raise ValueError("entity state or covariance is malformed") from exc
     if position.shape != (2,) or velocity.shape != (2,):
-        raise ValueError("entity position and velocity must have two coordinates")
+        raise ValueError("entity position and velocity must each have shape (2,) (two coordinates)")
     if position_covariance.shape != (2, 2) or velocity_covariance.shape != (2, 2):
         raise ValueError("entity position and velocity covariance must be 2x2")
+    position = _entity_float_array(position)
+    velocity = _entity_float_array(velocity)
+    position_covariance = _entity_float_array(position_covariance)
+    velocity_covariance = _entity_float_array(velocity_covariance)
     try:
         radius = float(agent.radius)
     except (AttributeError, TypeError, ValueError) as exc:

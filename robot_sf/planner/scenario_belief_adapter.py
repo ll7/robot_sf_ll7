@@ -11,11 +11,12 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from robot_sf.representation.scenario_belief import ScenarioBelief, VisibilityState
+if TYPE_CHECKING:
+    from robot_sf.representation.scenario_belief import ScenarioBelief
 
 SCENARIO_BELIEF_PLANNER_PROJECTION_SCHEMA_VERSION = "scenario-belief-planner-projection.v1"
 SUPPORTED_UNCERTAINTY_PLANNER_KEYS = frozenset({"stream_gap"})
@@ -23,6 +24,27 @@ BELIEF_AWARE_PLANNER_INPUT_SCHEMA_VERSION = "belief-aware-planner-input.v1"
 SUPPORTED_BELIEF_AWARE_PLANNER_NAMES = frozenset({"BeliefGuidedLocalPlanner"})
 # Keep the key-shaped alias discoverable for callers that use the existing adapter vocabulary.
 SUPPORTED_BELIEF_AWARE_PLANNER_KEYS = SUPPORTED_BELIEF_AWARE_PLANNER_NAMES
+
+
+def _load_scenario_belief_types() -> tuple[type[Any], type[Any]] | None:
+    """Load canonical belief and visibility types only when the new seam is used.
+
+    The existing adapter is imported by dependency-light legacy planner paths.  Keep the
+    optional SciPy-backed ScenarioBelief representation out of that import path; callers that
+    invoke the typed projection get an explicit unavailable/invalid fallback instead.
+
+    Returns:
+        The canonical ``ScenarioBelief`` and ``VisibilityState`` classes, or ``None`` when the
+        optional representation dependencies are unavailable.
+    """
+    try:
+        from robot_sf.representation.scenario_belief import (  # noqa: PLC0415
+            ScenarioBelief,
+            VisibilityState,
+        )
+    except (ImportError, ModuleNotFoundError):
+        return None
+    return ScenarioBelief, VisibilityState
 
 
 @dataclass(frozen=True)
@@ -285,11 +307,10 @@ class PlannerTrackBelief:
         """Validate and defensively normalize all planner-track fields."""
         track_id = _validate_track_id(self.track_id)
         object.__setattr__(self, "track_id", track_id)
-        object.__setattr__(
-            self,
-            "mean_state",
-            _readonly_float_array("mean_state", self.mean_state, shape=(5,)),
-        )
+        mean_state = _readonly_float_array("mean_state", self.mean_state, shape=(5,))
+        if mean_state[4] < 0.0:
+            raise ValueError("mean_state radius must be finite and non-negative")
+        object.__setattr__(self, "mean_state", mean_state)
         object.__setattr__(self, "covariance", _readonly_covariance(self.covariance))
         object.__setattr__(self, "confidence", _validate_probability("confidence", self.confidence))
         object.__setattr__(
@@ -556,7 +577,12 @@ def _age_steps(age_s: Any, timestep_s: Any) -> int:
     return max(0, int(np.ceil(age / timestep - 1e-9)))
 
 
-def _planner_track_from_entity(agent: Any, *, timestep_s: float) -> PlannerTrackBelief:
+def _planner_track_from_entity(
+    agent: Any,
+    *,
+    timestep_s: float,
+    visibility_type: type[Any],
+) -> PlannerTrackBelief:
     """Build one planner track from public EntityBelief fields only.
 
     Returns:
@@ -565,7 +591,8 @@ def _planner_track_from_entity(agent: Any, *, timestep_s: float) -> PlannerTrack
 
     if not isinstance(agent.entity_id, (str, int)) or isinstance(agent.entity_id, bool):
         raise ValueError("entity_id must be a stable string or integer")
-    if not isinstance(agent.visibility_state, VisibilityState):
+    visibility_state = agent.visibility_state
+    if not isinstance(visibility_state, visibility_type):
         raise ValueError("visibility_state is malformed")
     try:
         position = np.asarray(agent.position.mean_xy, dtype=np.float64).reshape(-1)
@@ -605,12 +632,12 @@ def _planner_track_from_entity(agent: Any, *, timestep_s: float) -> PlannerTrack
         covariance=covariance,
         confidence=confidence,
         existence_probability=existence_probability,
-        visibility=agent.visibility_state is VisibilityState.VISIBLE,
+        visibility=visibility_state.value == "visible",
         age_steps=age_steps,
         source=source,
         position_confidence=position_confidence,
         velocity_confidence=velocity_confidence,
-        visibility_state=agent.visibility_state.value,
+        visibility_state=visibility_state.value,
         identity_lifecycle_token=f"entity-id:{track_id}",
     )
 
@@ -650,7 +677,14 @@ def _belief_projection_diagnostics(
         "planner_name": planner_name,
         "belief_step": belief_step,
         "visible_track_count": sum(track.visibility for track in ordered_tracks),
-        "occluded_track_count": sum(not track.visibility for track in ordered_tracks),
+        "occluded_track_count": sum(
+            (
+                track.visibility_state == "occluded"
+                if track.visibility_state is not None
+                else not track.visibility
+            )
+            for track in ordered_tracks
+        ),
         "stale_track_count": sum(track.age_steps > 0 for track in ordered_tracks),
         "retained_track_count": len(ordered_tracks),
         "retired_track_count": 0,
@@ -741,7 +775,22 @@ def project_belief_aware_planner_input(
             diagnostics=diagnostics,
         )
 
-    if not isinstance(belief, ScenarioBelief):
+    scenario_belief_types = _load_scenario_belief_types()
+    if scenario_belief_types is None:
+        diagnostics = _belief_projection_diagnostics(
+            planner_name=resolved_name,
+            status="invalid_belief",
+            belief_step=0,
+            fallback_reason="scenario_belief_representation_unavailable",
+        )
+        return BeliefAwarePlannerInput(
+            legacy_observation={},
+            tracks={},
+            belief_step=0,
+            diagnostics=diagnostics,
+        )
+    scenario_belief_type, visibility_type = scenario_belief_types
+    if not isinstance(belief, scenario_belief_type):
         diagnostics = _belief_projection_diagnostics(
             planner_name=resolved_name,
             status="invalid_belief",
@@ -805,7 +854,11 @@ def project_belief_aware_planner_input(
         tracks = {}
         timestep_s = float(belief.timestep_s)
         for agent in belief.agents:
-            track = _planner_track_from_entity(agent, timestep_s=timestep_s)
+            track = _planner_track_from_entity(
+                agent,
+                timestep_s=timestep_s,
+                visibility_type=visibility_type,
+            )
             if track.track_id in seen_ids:
                 raise ValueError(f"duplicate track_id {track.track_id!r}")
             seen_ids.add(track.track_id)

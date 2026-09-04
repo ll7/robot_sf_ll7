@@ -125,6 +125,24 @@ def test_projection_distinguishes_missing_empty_and_unsupported() -> None:
     assert SUPPORTED_BELIEF_AWARE_PLANNER_NAMES == frozenset({"BeliefGuidedLocalPlanner"})
 
 
+def test_projection_counts_out_of_range_as_non_visible_not_occluded() -> None:
+    """Visibility diagnostics distinguish explicit occlusion from other hidden states."""
+    belief = _belief_fixture()
+    out_of_range = replace(
+        belief.agents[1],
+        visibility_state=VisibilityState.OUT_OF_RANGE,
+    )
+
+    projected = project_belief_aware_planner_input(
+        replace(belief, agents=(belief.agents[0], out_of_range)),
+        planner_name="BeliefGuidedLocalPlanner",
+    )
+
+    assert projected.diagnostics["visible_track_count"] == 1
+    assert projected.diagnostics["occluded_track_count"] == 0
+    assert projected.diagnostics["retained_track_count"] == 2
+
+
 def test_projection_rejects_malformed_track_and_keeps_safe_legacy_fallback() -> None:
     """A malformed maintained track rejects the complete typed projection."""
     belief = _belief_fixture()
@@ -185,6 +203,17 @@ def test_typed_record_rejects_non_psd_covariance_and_key_mismatch() -> None:
             existence_probability=1.0,
             visibility=False,
             age_steps=1,
+            source="unit_test",
+        )
+    with pytest.raises(ValueError, match="radius"):
+        PlannerTrackBelief(
+            track_id="ped_negative_radius",
+            mean_state=np.array([0.0, 0.0, 0.0, 0.0, -0.1]),
+            covariance=np.eye(5),
+            confidence=1.0,
+            existence_probability=1.0,
+            visibility=True,
+            age_steps=0,
             source="unit_test",
         )
 

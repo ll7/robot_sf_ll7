@@ -117,7 +117,9 @@ class BaseSimulationEnv(SimulationUICloseMixin, Env, ABC):
         base_env = BaseEnv.__new__(BaseEnv)
         base_env.recorded_states = self.recorded_states
         base_env.map_def = self.map_def
+        base_env._legacy_recording_saves = getattr(self, "_legacy_recording_saves", 0)
         base_env.save_recording(filename)
+        self._legacy_recording_saves = base_env._legacy_recording_saves
 
 
 class SingleAgentEnv(BaseSimulationEnv, ABC):

@@ -193,6 +193,9 @@ class PedestrianEnv(SingleAgentEnv):
 
         # Recording directory mirrors legacy behavior (canonical artifact category).
         self._recording_dir = get_artifact_category_path("recordings")
+        # Successful legacy pickle saves; mirrors BaseEnv so the first-reset flush
+        # stays debug-level while post-save empty saves still warn.
+        self._legacy_recording_saves = 0
 
         # Track last actions/observations
         self.last_obs_robot = None
@@ -579,7 +582,11 @@ class PedestrianEnv(SingleAgentEnv):
             target_path = resolve_artifact_path(filename)
 
         if len(self.recorded_states) == 0:
-            logger.warning("No states recorded, skipping save")
+            if self._legacy_recording_saves == 0:
+                # First reset flushes before any episode was recorded; expected.
+                logger.debug("No recorded states yet, skipping save")
+            else:
+                logger.warning("No states recorded since last save, skipping save")
             return
 
         target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -589,6 +596,7 @@ class PedestrianEnv(SingleAgentEnv):
             logger.info("Recording saved to {target_path}", target_path=f"{target_path}")
             logger.info("Reset state list")
             self.recorded_states = []
+            self._legacy_recording_saves += 1
 
 
 # Backward-compatible class names for external imports that used the transition labels.

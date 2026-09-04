@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from robot_sf.common.optional_import import try_import
+
 if TYPE_CHECKING:
     from robot_sf.representation.scenario_belief import ScenarioBelief
 
@@ -39,14 +41,10 @@ def _load_scenario_belief_types() -> tuple[type[Any], type[Any]] | None:
         The canonical ``ScenarioBelief`` and ``VisibilityState`` classes, or ``None`` when the
         optional representation dependencies are unavailable.
     """
-    try:
-        from robot_sf.representation.scenario_belief import (  # noqa: PLC0415
-            ScenarioBelief,
-            VisibilityState,
-        )
-    except ImportError:
+    scenario_belief_module = try_import("robot_sf.representation.scenario_belief")
+    if scenario_belief_module is None:
         return None
-    return ScenarioBelief, VisibilityState
+    return scenario_belief_module.ScenarioBelief, scenario_belief_module.VisibilityState
 
 
 @dataclass(frozen=True)

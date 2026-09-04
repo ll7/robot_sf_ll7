@@ -185,7 +185,9 @@ def _runtime_predictive_checkpoint_refs(
         observed_hashes[condition] = observed or "unavailable"
         runtime_hashes[condition] = observed if is_eligible else "unavailable"
         requested_model_ids[condition] = requested_model_id or "unavailable"
-        runtime_model_ids[condition] = requested_model_id if is_eligible else "unavailable"
+        runtime_model_ids[condition] = (
+            requested_model_id if is_eligible and requested_model_id is not None else "unavailable"
+        )
         eligible[condition] = is_eligible
 
     refs = {

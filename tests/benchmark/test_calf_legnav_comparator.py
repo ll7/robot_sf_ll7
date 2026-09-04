@@ -482,6 +482,36 @@ def test_runtime_predictive_checkpoint_model_id_mismatch_blocks() -> None:
     assert "model identity" in error["reason"]
 
 
+@pytest.mark.parametrize("requested_model_id", [None, 42])
+def test_runtime_predictive_checkpoint_malformed_model_id_blocks_without_schema_error(
+    requested_model_id: Any,
+) -> None:
+    """Missing or non-string model IDs become an explicit blocked provenance result."""
+    digest = "b" * 64
+    expected_model_id = "predictive_proxy_selected_v2_full"
+    refs = comparator_runner._runtime_checkpoint_refs(
+        _checkpoint_traces(digest, digest, requested_model_id=requested_model_id),
+        expected_sha256="a" * 64,
+        expected_predictive_sha256=digest,
+        expected_predictive_model_id=expected_model_id,
+    )
+
+    error = comparator_runner._runtime_provenance_error(
+        {
+            **refs,
+            "predictive_checkpoint_sha256_declared": digest,
+            "predictive_checkpoint_model_id": expected_model_id,
+        }
+    )
+
+    assert all(isinstance(value, str) for value in refs.values())
+    assert refs["predictive_checkpoint_model_id_runtime"] == "unavailable"
+    assert refs["predictive_checkpoint_model_id_matches_declared"] == "false"
+    assert error is not None
+    assert error["status"] == "blocked"
+    assert "model identity" in error["reason"]
+
+
 @pytest.mark.parametrize(
     ("load_status", "fallback_used"),
     [("not_attempted", False), ("loaded", True)],

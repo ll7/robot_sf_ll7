@@ -1132,6 +1132,37 @@ scenarios:
     assert cfg is not None
 
 
+@pytest.mark.parametrize(
+    ("geometry_contract", "message"),
+    [
+        ("corrected", "only supported for SVG maps"),
+        ("unknown", "Unknown geometry_contract"),
+    ],
+)
+def test_resolve_map_definition_rejects_non_svg_contract(
+    tmp_path: Path, geometry_contract: str, message: str
+) -> None:
+    """Non-SVG maps cannot claim an SVG geometry contract in scenario identity."""
+    map_file = Path(__file__).resolve().parents[2] / "maps/imported/ovgu_campus_walk.yaml"
+    with pytest.raises(ValueError, match=message):
+        resolve_map_definition(
+            str(map_file),
+            scenario_path=tmp_path / "scenario.yaml",
+            geometry_contract=geometry_contract,
+        )
+
+
+def test_build_robot_config_rejects_corrected_without_explicit_svg_map(
+    tmp_path: Path,
+) -> None:
+    """A corrected contract cannot silently apply to the default legacy map pool."""
+    with pytest.raises(ValueError, match="requires an explicit SVG map_file"):
+        build_robot_config_from_scenario(
+            {"name": "implicit_default_map", "map_geometry_contract": "corrected"},
+            scenario_path=tmp_path / "scenario.yaml",
+        )
+
+
 def test_classic_interactions_francis2023_manifest_resolves_all_maps() -> None:
     """All scenarios in the combined issue-791 manifest must resolve to real map files.
 

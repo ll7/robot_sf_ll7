@@ -28,7 +28,7 @@ from robot_sf.nav.map_config import (
     parse_social_group_definitions,
     serialize_map,
 )
-from robot_sf.nav.nav_types import SUPPORTED_GEOMETRY_CONTRACTS
+from robot_sf.nav.nav_types import GEOMETRY_CONTRACT_LEGACY, SUPPORTED_GEOMETRY_CONTRACTS
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
 from robot_sf.ped_npc.residual_adversary import ResidualAdversaryConfig
@@ -1197,6 +1197,12 @@ def _load_map_definition(map_path: str, geometry_contract: str = "legacy") -> Ma
         MapDefinition | None: Parsed map definition for SVG maps, else ``None``.
     """
 
+    if geometry_contract not in SUPPORTED_GEOMETRY_CONTRACTS:
+        raise ValueError(
+            f"Unknown geometry_contract {geometry_contract!r} for map {map_path!r}. "
+            f"Supported contracts: {sorted(SUPPORTED_GEOMETRY_CONTRACTS)}."
+        )
+
     path = Path(map_path)
     if not path.exists():
         logger.warning("Scenario map file not found: {}", path)
@@ -1204,6 +1210,11 @@ def _load_map_definition(map_path: str, geometry_contract: str = "legacy") -> Ma
     if path.suffix.lower() == ".svg":
         return convert_map(str(path), geometry_contract=geometry_contract)
     if path.suffix.lower() in {".json", ".yaml", ".yml"}:
+        if geometry_contract != GEOMETRY_CONTRACT_LEGACY:
+            raise ValueError(
+                f"geometry_contract {geometry_contract!r} is only supported for SVG maps; "
+                f"map {map_path!r} is {path.suffix.lower()} and uses the legacy map format."
+            )
         data = _load_yaml_documents(path)
         if not isinstance(data, dict):
             logger.warning("Map definition '{}' must contain a mapping.", path)
@@ -2392,6 +2403,12 @@ def _apply_map_pool(
             f"Scenario '{scenario_name}': unknown map_geometry_contract "
             f"{geometry_contract!r}. Supported contracts: "
             f"{sorted(SUPPORTED_GEOMETRY_CONTRACTS)}."
+        )
+    if not map_file and geometry_contract != GEOMETRY_CONTRACT_LEGACY:
+        scenario_name = scenario.get("name") or scenario.get("scenario_id") or "unknown"
+        raise ValueError(
+            f"Scenario '{scenario_name}': map_geometry_contract {geometry_contract!r} "
+            "requires an explicit SVG map_file."
         )
     map_def = resolve_map_definition(
         map_file, scenario_path=scenario_path, geometry_contract=geometry_contract

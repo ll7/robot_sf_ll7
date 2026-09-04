@@ -103,8 +103,13 @@ def _row(  # noqa: PLR0913
         "execution_command": ["python", "-m", "robot_sf.run_eval"],
         "execution_config_lineage": execution_config_lineage,
         "execution_mode": execution_mode,
-        "primary_failure": "collision" if failure else "none",
-        "termination_reason": "collision" if failure else "goal_reached",
+        "outcome": {
+            "route_complete": not failure,
+            "collision_event": failure,
+            "timeout_event": False,
+        },
+        "primary_failure": "collision" if failure else "success",
+        "termination_reason": "collision" if failure else "success",
         "independent_failure_outcome": failure,
         "scenario_certification_status": scenario_cert,
         "candidate_certification_status": candidate_cert,
@@ -417,9 +422,13 @@ def test_fallback_execution_mode_row_fails_closed() -> None:
             },
             "keys and values",
         ),
-        ({"expected_execution_mode": "adapter"}, "producer commit"),
+        ({"expected_execution_mode": "adapter"}, "execution identity"),
         (
-            {"expected_execution_mode": "adapter", "require_producer_commit": True},
+            {
+                "expected_execution_mode": "adapter",
+                "expected_execution_identity": dict(_ADAPTER_IDENTITY),
+                "require_producer_commit": True,
+            },
             "episode record SHA-256",
         ),
     ],
@@ -499,6 +508,39 @@ def test_missing_required_field_fails_closed() -> None:
     result = _evaluate(packet, budget_per_arm=4)
     assert result["status"] == "blocked"
     assert "record_sha256" in result["reason"]
+
+
+def test_canonical_raw_outcome_is_required() -> None:
+    """An admitted row cannot omit the raw-record outcome projection."""
+    packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=1)
+    del packet["rows"][0]["outcome"]
+
+    result = _evaluate(packet, budget_per_arm=1)
+
+    assert result["status"] == "blocked"
+    assert "outcome" in result["reason"]
+
+
+def test_mutable_failure_flag_cannot_override_canonical_outcome() -> None:
+    """Candidate yields are derived from canonical outcome fields, not a mutable flag."""
+    packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=1)
+    packet["rows"][0]["independent_failure_outcome"] = False
+
+    result = _evaluate(packet, budget_per_arm=1)
+
+    assert result["status"] == "blocked"
+    assert "independent_failure_outcome" in result["reason"]
+
+
+def test_mutable_attribution_cannot_override_canonical_outcome() -> None:
+    """Derived attribution must remain consistent with the raw-record projection."""
+    packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=1)
+    packet["rows"][0]["primary_failure"] = "success"
+
+    result = _evaluate(packet, budget_per_arm=1)
+
+    assert result["status"] == "blocked"
+    assert "primary_failure" in result["reason"]
 
 
 def test_missing_admission_status_fails_closed() -> None:
@@ -908,14 +950,7 @@ def test_three_of_five_confirmation_counts_as_one_candidate_failure() -> None:
     assert result["random"]["outcomes"] == [False]
 
 
-@pytest.mark.parametrize(
-    ("field", "drifted_value"),
-    [("primary_failure", "deadlock"), ("termination_reason", "timeout")],
-)
-def test_different_confirming_attributions_fail_closed(
-    field: str,
-    drifted_value: str,
-) -> None:
+def test_different_confirming_attributions_fail_closed() -> None:
     """Confirming seeds must retain the same failure mechanism and termination."""
     rows = [
         *[
@@ -945,7 +980,13 @@ def test_different_confirming_attributions_fail_closed(
             for seed in range(1, 6)
         ],
     ]
-    rows[1][field] = drifted_value
+    rows[1]["outcome"] = {
+        "route_complete": False,
+        "collision_event": False,
+        "timeout_event": True,
+    }
+    rows[1]["primary_failure"] = "timeout"
+    rows[1]["termination_reason"] = "terminated"
 
     result = _evaluate(_packet(rows), budget_per_arm=1)
 

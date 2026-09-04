@@ -3,7 +3,8 @@
 This module owns the frozen ``adversarial_independent_outcomes.v2`` contract: one
 row per candidate x execution seed, binding every outcome to its candidate
 manifest, selection arm, target planner/config, scenario family/seed, execution
-commit/command/config lineage, configured execution identity, termination reason
+commit/command/config lineage, configured execution identity, canonical raw-record
+outcome, termination reason
 and independent failure outcome, scenario and candidate certification status,
 replay/confirmation lineage and record hash, and an exclusion reason when
 inadmissible.
@@ -42,6 +43,7 @@ from robot_sf.adversarial.disjoint_evaluation import (
     ranking_permutation_test,
     shuffled_outcome_null_test,
 )
+from robot_sf.benchmark.termination_reason import TERMINATION_REASONS, TIMEOUT_TERMINATION_REASONS
 
 #: Frozen row-level outcome schema for the #3275 contract.
 OUTCOME_SCHEMA_VERSION = "adversarial_independent_outcomes.v2"
@@ -51,6 +53,7 @@ OUTCOME_OBJECTIVE = "certified_failure_outcome"
 
 #: Selection arms admitted by the contract.
 _ARMS = ("proposal", "random")
+_CANONICAL_OUTCOME_FIELDS = frozenset({"route_complete", "collision_event", "timeout_event"})
 
 
 def _is_sha256_hex(value: Any) -> bool:
@@ -83,6 +86,7 @@ REQUIRED_ADMITTED_ROW_FIELDS = (
     "execution_command",
     "execution_config_lineage",
     "execution_mode",
+    "outcome",
     "primary_failure",
     "termination_reason",
     "independent_failure_outcome",
@@ -200,6 +204,18 @@ def _validate_packet_metadata(payload: dict[str, Any], spec: AdmissionSpec) -> s
         != spec.expected_target_planner_config_sha256
     ):
         return "target_planner_config_sha256 mismatch in packet metadata"
+    if spec.expected_execution_mode == "adapter":
+        if payload.get("execution_mode") != "adapter":
+            return "execution_mode adapter is missing from packet metadata"
+        if payload.get("execution_identity") != spec.expected_execution_identity:
+            return "execution_identity mismatch in packet metadata"
+        producer_commit = payload.get("producer_commit")
+        if (
+            not isinstance(producer_commit, str)
+            or len(producer_commit) != 40
+            or any(character not in "0123456789abcdefABCDEF" for character in producer_commit)
+        ):
+            return "producer_commit must be a 40-character Git commit SHA-1 in packet metadata"
     return None
 
 
@@ -343,6 +359,8 @@ def _validate_frozen_admission_spec(  # noqa: C901, PLR0912
             for key, value in spec.expected_execution_identity.items()
         ):
             return "expected execution identity keys and values must be non-empty strings"
+    if spec.expected_execution_mode == "adapter" and spec.expected_execution_identity is None:
+        return "adapter execution admission must require an expected execution identity"
     if spec.expected_execution_mode == "adapter" and not spec.require_producer_commit:
         return "adapter execution admission must require a producer commit"
     if spec.expected_execution_mode == "adapter" and not spec.require_episode_record_sha256:
@@ -449,6 +467,75 @@ def _row_missing_fields(  # noqa: C901, PLR0912
         return "primary_failure must be a non-empty string"
     if not isinstance(row.get("record_sha256"), str) or not row.get("record_sha256"):
         return "record_sha256 missing"
+    return None
+
+
+def _canonical_outcome_error(row: dict[str, Any]) -> str | None:
+    """Validate the canonical raw-record outcome projection in one row."""
+    outcome = row.get("outcome")
+    if not isinstance(outcome, dict) or set(outcome) != _CANONICAL_OUTCOME_FIELDS:
+        return "outcome must contain exactly the canonical raw-record fields"
+    if any(not isinstance(outcome[field], bool) for field in _CANONICAL_OUTCOME_FIELDS):
+        return "outcome canonical fields must be boolean"
+
+    termination_reason = row.get("termination_reason")
+    if termination_reason not in TERMINATION_REASONS:
+        return f"termination_reason {termination_reason!r} is not canonical"
+    if termination_reason == "error":
+        return "runtime error is not an admissible outcome"
+
+    route_complete = outcome["route_complete"]
+    collision = outcome["collision_event"]
+    timeout = outcome["timeout_event"]
+    if sum((route_complete, collision, timeout)) > 1:
+        return "outcome contains contradictory terminal flags"
+    if route_complete != (termination_reason == "success"):
+        return "outcome.route_complete disagrees with termination_reason"
+    if collision != (termination_reason == "collision"):
+        return "outcome.collision_event disagrees with termination_reason"
+    if timeout != (termination_reason in TIMEOUT_TERMINATION_REASONS):
+        return "outcome.timeout_event disagrees with termination_reason"
+    return None
+
+
+def _canonical_row_attribution(row: dict[str, Any]) -> tuple[str, str, bool] | None:
+    """Return attribution derived from canonical outcome fields, not row flags."""
+    if _canonical_outcome_error(row) is not None:
+        return None
+    outcome = row["outcome"]
+    termination_reason = str(row["termination_reason"])
+    if outcome["collision_event"]:
+        primary_failure = "collision"
+    elif outcome["timeout_event"]:
+        primary_failure = "timeout"
+    elif outcome["route_complete"]:
+        primary_failure = "success"
+    else:
+        primary_failure = "incomplete"
+    return primary_failure, termination_reason, primary_failure != "success"
+
+
+def _row_outcome_drift(row: dict[str, Any], _row_id: Any, _spec: AdmissionSpec) -> str | None:
+    """Require derived attribution fields to agree with the canonical raw outcome."""
+    outcome_error = _canonical_outcome_error(row)
+    if outcome_error is not None:
+        return outcome_error
+    attribution = _canonical_row_attribution(row)
+    if attribution is None:
+        return "canonical outcome attribution could not be derived"
+    primary_failure, termination_reason, failure = attribution
+    if row.get("primary_failure") != primary_failure:
+        return (
+            "primary_failure disagrees with canonical outcome: "
+            f"observed={row.get('primary_failure')!r} expected={primary_failure!r}"
+        )
+    if row.get("termination_reason") != termination_reason:
+        return "termination_reason disagrees with canonical outcome"
+    if row.get("independent_failure_outcome") is not failure:
+        return (
+            "independent_failure_outcome disagrees with canonical raw-record outcome: "
+            f"observed={row.get('independent_failure_outcome')!r} expected={failure!r}"
+        )
     return None
 
 
@@ -655,6 +742,7 @@ def _row_exclusion_state_drift(
 
 _ROW_CHECKERS = (
     _row_missing_fields,
+    _row_outcome_drift,
     _row_exclusion_state_drift,
     _row_planner_family_drift,
     _row_execution_drift,
@@ -726,8 +814,14 @@ def _candidate_outcome_from_seed_rows(
             f"execution-seed lineage mismatch for candidate {manifest_id} in arm {arm}: "
             f"observed={sorted(observed_seeds)} expected={sorted(expected_seeds)}"
         )
-    confirming_rows = [row for row in seed_rows.values() if row["independent_failure_outcome"]]
-    confirmed_count = len(confirming_rows)
+    canonical_attributions: dict[int, tuple[str, str, bool]] = {}
+    for seed, row in seed_rows.items():
+        attribution = _canonical_row_attribution(row)
+        if attribution is None:
+            return None, f"canonical outcome validation failed for candidate {manifest_id}"
+        canonical_attributions[seed] = attribution
+    confirming_seeds = {seed for seed in seed_rows if canonical_attributions[seed][2]}
+    confirmed_count = len(confirming_seeds)
     for row in seed_rows.values():
         confirmation_lineage = row["confirmation_lineage"]
         if confirmation_lineage["confirmed_count"] != confirmed_count:
@@ -745,7 +839,8 @@ def _candidate_outcome_from_seed_rows(
     if confirmed_count < min_confirmed:
         return False, None
     attributions = {
-        (str(row["primary_failure"]), str(row["termination_reason"])) for row in confirming_rows
+        (canonical_attributions[seed][0], canonical_attributions[seed][1])
+        for seed in confirming_seeds
     }
     if len(attributions) != 1:
         return None, (

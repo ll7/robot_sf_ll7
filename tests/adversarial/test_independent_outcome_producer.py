@@ -204,12 +204,17 @@ def test_producer_emits_complete_adapter_packet_with_separate_commits(tmp_path: 
     assert len(packet["rows"]) == 10
     assert packet["execution_commit"] == REFERENCE_COMMIT
     assert packet["producer_commit"] == PRODUCER_COMMIT
+    assert packet["execution_mode"] == "adapter"
     assert all(row["execution_mode"] == "adapter" for row in packet["rows"])
     assert all(
         row["execution_identity"]["adapter_name"] == "SocialForcePlannerAdapter"
         for row in packet["rows"]
     )
     assert all(row["execution_commit"] != row["producer_commit"] for row in packet["rows"])
+    assert all(
+        set(row["outcome"]) == {"route_complete", "collision_event", "timeout_event"}
+        for row in packet["rows"]
+    )
 
 
 def test_producer_cli_reads_jsonl_and_writes_packet(

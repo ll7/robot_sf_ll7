@@ -183,11 +183,11 @@ class SmokeTestResult:
     exit_code: int = 0
 
     def to_dict(self) -> dict[str, Any]:
-        """TODO docstring. Document this function.
-
+        """Serialize the smoke-test result to a JSON-compatible dictionary.
 
         Returns:
-            TODO docstring.
+            Dictionary containing performance metrics, thresholds, statuses,
+            optional profile data, recommendations, and the exit code.
         """
         payload = {
             "timestamp": self.timestamp.isoformat(timespec="seconds"),
@@ -778,11 +778,10 @@ def run_performance_smoke_test(  # noqa: PLR0913
 
 
 def parse_args() -> argparse.Namespace:
-    """TODO docstring. Document this function.
-
+    """Parse command-line options for the performance smoke test.
 
     Returns:
-        TODO docstring.
+        Parsed command-line arguments.
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -894,11 +893,11 @@ def _resolve_step_profile_warmup_steps(
 
 
 def main() -> int:  # noqa: C901
-    """TODO docstring. Document this function.
-
+    """Run the performance smoke-test command-line entry point.
 
     Returns:
-        TODO docstring.
+        Exit code from the smoke test: zero for no enforced failure, otherwise
+        one for a hard-threshold or enforced soft-threshold failure.
     """
     print("Social Navigation Benchmark - Performance Smoke Test")
     print("=" * 60)
@@ -1006,11 +1005,10 @@ def main() -> int:  # noqa: C901
 
 
 def _default_summary_path() -> Path:
-    """TODO docstring. Document this function.
-
+    """Ensure the benchmark artifact directory and return its default summary path.
 
     Returns:
-        TODO docstring.
+        Path for the performance smoke-test JSON summary.
     """
     ensure_canonical_tree(categories=("benchmarks",))
     return get_artifact_category_path("benchmarks") / "performance_smoke_test.json"
@@ -1028,15 +1026,15 @@ def _apply_large_crowd_profile_preset(args: argparse.Namespace) -> None:
 
 
 def _status_label(soft_ok: bool, hard_ok: bool, enforce: bool) -> str:
-    """TODO docstring. Document this function.
+    """Determine a PASS, WARN, or FAIL label from threshold results.
 
     Args:
-        soft_ok: TODO docstring.
-        hard_ok: TODO docstring.
-        enforce: TODO docstring.
+        soft_ok: Whether the measured value meets the soft threshold.
+        hard_ok: Whether the measured value meets the hard threshold.
+        enforce: Whether a soft-threshold breach should be reported as a failure.
 
     Returns:
-        TODO docstring.
+        One of ``"PASS"``, ``"WARN"``, or ``"FAIL"``.
     """
     if hard_ok and soft_ok:
         return "PASS"
@@ -1053,16 +1051,16 @@ def _build_recommendations(
     resets_per_sec: float,
     thresholds: dict[str, float | bool],
 ) -> tuple[PerformanceRecommendation, ...]:
-    """TODO docstring. Document this function.
+    """Build recommendations for non-passing creation or reset checks.
 
     Args:
-        statuses: TODO docstring.
-        creation_time: TODO docstring.
-        resets_per_sec: TODO docstring.
-        thresholds: TODO docstring.
+        statuses: Status labels for the environment creation and reset checks.
+        creation_time: Measured environment creation time in seconds.
+        resets_per_sec: Measured environment reset throughput.
+        thresholds: Soft and hard thresholds used for the checks.
 
     Returns:
-        TODO docstring.
+        Recommendations for creation or reset checks whose status is not ``"PASS"``.
     """
     recommendations: list[PerformanceRecommendation] = []
     timestamp_ms = int(time.time() * 1000)
@@ -1116,11 +1114,11 @@ def _build_recommendations(
 
 
 def _write_telemetry_snapshot(path: Path, result: SmokeTestResult) -> None:
-    """TODO docstring. Document this function.
+    """Append a JSONL telemetry snapshot for a smoke-test result.
 
     Args:
-        path: TODO docstring.
-        result: TODO docstring.
+        path: Destination JSONL file; parent directories are created if needed.
+        result: Smoke-test result providing timing and optional profile metrics.
     """
     payload = {
         "timestamp_ms": int(result.timestamp.timestamp() * 1000),
@@ -1156,14 +1154,14 @@ def _write_telemetry_snapshot(path: Path, result: SmokeTestResult) -> None:
 
 
 def _env_float(name: str, default: float) -> float:
-    """TODO docstring. Document this function.
+    """Read a floating-point setting from the environment with a fallback.
 
     Args:
-        name: TODO docstring.
-        default: TODO docstring.
+        name: Environment variable to read.
+        default: Value to use when the variable is missing, empty, or invalid.
 
     Returns:
-        TODO docstring.
+        Parsed environment value, or ``default`` when parsing fails.
     """
     try:
         return float(os.environ.get(name, "").strip() or default)

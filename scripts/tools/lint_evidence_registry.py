@@ -565,10 +565,18 @@ def _artifact_hash_finding(
         return None
     actual_hash = hashlib.sha256(resolved[1].read_bytes()).hexdigest()
     if actual_hash != declared_hash.lower():
+        message = f"{artifact_path} SHA-256 does not match the tracked file"
+        if display_path == Path(
+            "docs/context/evidence/issue_4683_release_assurance_case_example.json"
+        ):
+            message += (
+                "; if this is the tracked release-assurance example, run "
+                "`uv run python scripts/dev/refresh_assurance_case_hashes.py --write`"
+            )
         return _issue(
             display_path,
             "artifact_hash_mismatch",
-            f"{artifact_path} SHA-256 does not match the tracked file",
+            message,
         )
     return None
 

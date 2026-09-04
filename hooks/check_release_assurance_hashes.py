@@ -6,14 +6,20 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-EVIDENCE_PATH = Path("docs/context/evidence/issue_4683_release_assurance_case_example.json")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.dev.refresh_assurance_case_hashes import (  # noqa: E402
+    EVIDENCE_PATH,
+    update_evidence_hashes,
+)
 
 
 def _repo_root() -> Path:
@@ -60,18 +66,12 @@ def _load_staged_evidence(repo_root: Path) -> dict[str, Any]:
 
 def _update_evidence_hashes(repo_root: Path, payload: dict[str, Any]) -> bool:
     """Update every evidence digest from its staged source content."""
-    updated = False
-    for entry in payload["evidence"]:
-        if not isinstance(entry, dict):
-            raise ValueError("Each release-assurance evidence entry must be an object.")
-        raw_path = entry.get("path")
-        if not isinstance(raw_path, str) or not raw_path:
-            raise ValueError("Each release-assurance evidence entry requires a path.")
-        digest = hashlib.sha256(_staged_bytes(repo_root, Path(raw_path))).hexdigest()
-        if entry.get("sha256") != digest:
-            entry["sha256"] = digest
-            updated = True
-    return updated
+    return bool(
+        update_evidence_hashes(
+            payload,
+            lambda relative_path: _staged_bytes(repo_root, relative_path),
+        )
+    )
 
 
 def _stage_evidence(repo_root: Path) -> None:

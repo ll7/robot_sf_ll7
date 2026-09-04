@@ -2600,6 +2600,23 @@ API with read-before-write and readback checks. It writes a report under
 `output/main-ci-incidents/`; the directory is workflow-local evidence and is
 not a durable benchmark artifact.
 
+### Release-assurance example hash refresh
+
+When a change updates `docs/RELEASE.md`, check the tracked release-assurance example before running
+the evidence-registry ratchet:
+
+```bash
+uv run python scripts/dev/refresh_assurance_case_hashes.py --check
+uv run python scripts/dev/refresh_assurance_case_hashes.py --write
+```
+
+`--check` is read-only and fails closed on a stale or untracked source hash. `--write` updates only
+the mismatched `sha256` fields in
+`docs/context/evidence/issue_4683_release_assurance_case_example.json`; it does not stage the
+file, so the one-line change can be reviewed before both files are committed. This helper targets
+the tracked worked example and does not regenerate the evidence-registry baseline or change gate
+policy.
+
 ## CI Performance Monitoring
 The CI pipeline separates fast feedback from the heavier smoke/artifact tail:
 

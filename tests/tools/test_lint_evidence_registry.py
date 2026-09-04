@@ -386,6 +386,25 @@ def test_hash_mismatch_is_classified(tmp_path: Path) -> None:
     assert {issue["code"] for issue in report["issues"]} >= {"artifact_hash_mismatch"}
 
 
+def test_release_assurance_hash_mismatch_points_to_targeted_helper(tmp_path: Path) -> None:
+    """The release example mismatch names the narrow hash refresher, not baseline regeneration."""
+    linter = _load_linter()
+    repo, evidence, commit, config_sha256 = _make_repo(tmp_path)
+    _write_entry(
+        evidence,
+        campaign_id="campaign-release-assurance-hash-mismatch",
+        commit=commit,
+        config_sha256=config_sha256,
+        artifact_sha256="0" * 64,
+        name="issue_4683_release_assurance_case_example.json",
+    )
+
+    report = linter.lint_evidence_registry(repo, evidence)
+
+    finding = next(issue for issue in report["issues"] if issue["code"] == "artifact_hash_mismatch")
+    assert "refresh_assurance_case_hashes.py --write" in finding["message"]
+
+
 def test_artifact_manifest_paths_are_repository_root_relative(tmp_path: Path) -> None:
     """Ensure canonical paths prevent a bare filename from resolving ambiguously."""
     linter = _load_linter()

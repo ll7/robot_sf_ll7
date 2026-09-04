@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
@@ -440,7 +440,7 @@ class BeliefAwarePlannerInput:
     tracks: Mapping[str | int, PlannerTrackBelief]
     belief_step: int
     schema_version: str = BELIEF_AWARE_PLANNER_INPUT_SCHEMA_VERSION
-    diagnostics: Mapping[str, Any] = MappingProxyType({})
+    diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Validate mappings and make caller-owned observation data independent."""

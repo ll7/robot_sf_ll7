@@ -560,6 +560,11 @@ def test_live_evidence_requires_full_exact_selector_policy_and_current_main_cas(
         merge_queue_gate, "fetch_threads_resolved", lambda *args, **kwargs: (True, None)
     )
     monkeypatch.setattr(
+        merge_queue_gate,
+        "_fetch_live_closing_discipline",
+        lambda *args, **kwargs: ("passed", []),
+    )
+    monkeypatch.setattr(
         merge_queue_gate, "evaluate_merge_gate", lambda *args, **kwargs: StaleOnlyGate()
     )
     monkeypatch.setattr(
@@ -791,6 +796,10 @@ def test_build_live_evidence_reports_rest_facts_when_thread_graphql_is_unavailab
         "scripts.dev.merge_queue_gate.fetch_threads_resolved",
         lambda *args, **kwargs: (None, "GitHub GraphQL quota exhausted"),
     )
+    monkeypatch.setattr(
+        "scripts.dev.merge_queue_gate._fetch_live_closing_discipline",
+        lambda *args, **kwargs: ("blocked", ["incident blocker"]),
+    )
 
     evidence, error = build_live_evidence(42, repository="owner/repo")
 
@@ -803,6 +812,8 @@ def test_build_live_evidence_reports_rest_facts_when_thread_graphql_is_unavailab
         "diagnostic": "GitHub GraphQL quota exhausted",
     }
     assert evidence["thread_resolution"]["status"] == "unavailable"
+    assert evidence["gate_audit"]["closing_discipline_status"] == "blocked"
+    assert "closing_discipline_blocked" in evidence["gate_audit"]["reasons"]
     assert evidence["gate_audit"]["thread_resolution"] == "not_evaluated"
     assert "review_threads_not_evaluated" in evidence["gate_audit"]["reasons"]
 

@@ -28,6 +28,7 @@ from robot_sf.nav.map_config import (
     parse_social_group_definitions,
     serialize_map,
 )
+from robot_sf.nav.nav_types import GEOMETRY_CONTRACT_LEGACY, SUPPORTED_GEOMETRY_CONTRACTS
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.ped_npc.ped_robot_force import PedRobotForceConfig
 from robot_sf.ped_npc.residual_adversary import ResidualAdversaryConfig
@@ -1183,8 +1184,8 @@ def select_scenario(
 
 
 @lru_cache(maxsize=256)
-def _load_map_definition(map_path: str) -> MapDefinition | None:
-    """Load and convert a map definition, caching by absolute path.
+def _load_map_definition(map_path: str, geometry_contract: str = "legacy") -> MapDefinition | None:
+    """Load and convert a map definition, caching by absolute path and geometry contract.
 
     The cache size is set to 256 to accommodate all unique maps across typical
     multi-scenario SAC training runs. ``classic_interactions.yaml`` alone
@@ -1196,13 +1197,24 @@ def _load_map_definition(map_path: str) -> MapDefinition | None:
         MapDefinition | None: Parsed map definition for SVG maps, else ``None``.
     """
 
+    if geometry_contract not in SUPPORTED_GEOMETRY_CONTRACTS:
+        raise ValueError(
+            f"Unknown geometry_contract {geometry_contract!r} for map {map_path!r}. "
+            f"Supported contracts: {sorted(SUPPORTED_GEOMETRY_CONTRACTS)}."
+        )
+
     path = Path(map_path)
     if not path.exists():
         logger.warning("Scenario map file not found: {}", path)
         return None
     if path.suffix.lower() == ".svg":
-        return convert_map(str(path))
+        return convert_map(str(path), geometry_contract=geometry_contract)
     if path.suffix.lower() in {".json", ".yaml", ".yml"}:
+        if geometry_contract != GEOMETRY_CONTRACT_LEGACY:
+            raise ValueError(
+                f"geometry_contract {geometry_contract!r} is only supported for SVG maps; "
+                f"map {map_path!r} is {path.suffix.lower()} and uses the legacy map format."
+            )
         data = _load_yaml_documents(path)
         if not isinstance(data, dict):
             logger.warning("Map definition '{}' must contain a mapping.", path)
@@ -1557,7 +1569,9 @@ def _apply_robot_overrides(
     )
 
 
-def resolve_map_definition(map_file: str | None, *, scenario_path: Path) -> MapDefinition | None:
+def resolve_map_definition(
+    map_file: str | None, *, scenario_path: Path, geometry_contract: str = "legacy"
+) -> MapDefinition | None:
     """Resolve and load a map definition from a scenario map file reference.
 
     Returns:
@@ -1575,7 +1589,7 @@ def resolve_map_definition(map_file: str | None, *, scenario_path: Path) -> MapD
             map_file,
             scenario_path,
         )
-    return _load_map_definition(str(candidate))
+    return _load_map_definition(str(candidate), geometry_contract)
 
 
 def apply_single_pedestrian_overrides(
@@ -2382,7 +2396,23 @@ def _apply_map_pool(
             reset (the original issue #830 failure mode on long SLURM runs).
     """
     map_file = scenario.get("map_file")
-    map_def = resolve_map_definition(map_file, scenario_path=scenario_path)
+    geometry_contract = scenario.get("map_geometry_contract", "legacy")
+    if geometry_contract not in SUPPORTED_GEOMETRY_CONTRACTS:
+        scenario_name = scenario.get("name") or scenario.get("scenario_id") or "unknown"
+        raise ValueError(
+            f"Scenario '{scenario_name}': unknown map_geometry_contract "
+            f"{geometry_contract!r}. Supported contracts: "
+            f"{sorted(SUPPORTED_GEOMETRY_CONTRACTS)}."
+        )
+    if not map_file and geometry_contract != GEOMETRY_CONTRACT_LEGACY:
+        scenario_name = scenario.get("name") or scenario.get("scenario_id") or "unknown"
+        raise ValueError(
+            f"Scenario '{scenario_name}': map_geometry_contract {geometry_contract!r} "
+            "requires an explicit SVG map_file."
+        )
+    map_def = resolve_map_definition(
+        map_file, scenario_path=scenario_path, geometry_contract=geometry_contract
+    )
     if map_def is None:
         if map_file:
             scenario_name = scenario.get("name") or scenario.get("scenario_id") or "unknown"

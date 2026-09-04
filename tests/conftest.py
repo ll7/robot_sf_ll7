@@ -401,6 +401,9 @@ _FAST_FILES = {
     # Goal-marker pixels require the optional pygame extra, but the focused
     # regression is deterministic and covers the renderer in PR fast shards.
     "test_sim_view_goal_marker.py",
+    # SVG geometry contract tests provide changed-line coverage for the
+    # parser's explicit legacy/corrected transform paths (issue #8314).
+    "test_svg_transform_contract.py",
     # The real-manifest contract tests use mocked candidate evaluation only;
     # keep their coverage available to pull-request shards without promoting
     # the broader adversarial-search suite into the fast lane.

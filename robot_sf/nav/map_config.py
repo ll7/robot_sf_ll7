@@ -16,7 +16,11 @@ from shapely.geometry import Point, Polygon
 
 from robot_sf.common.types import Line2D, Rect, Vec2D
 from robot_sf.nav.global_route import GlobalRoute
-from robot_sf.nav.nav_types import SemanticBoundary
+from robot_sf.nav.nav_types import (
+    GEOMETRY_CONTRACT_LEGACY,
+    SUPPORTED_GEOMETRY_CONTRACTS,
+    SemanticBoundary,
+)
 from robot_sf.nav.obstacle import Obstacle
 
 
@@ -665,6 +669,14 @@ class MapDefinition:
     planner wrappers.
     """
 
+    svg_geometry_contract: str = GEOMETRY_CONTRACT_LEGACY
+    """SVG geometry contract that produced this map (issue #8314).
+
+    ``"legacy"`` reproduces the historical transform-ignoring coordinates;
+    ``"corrected"`` applies nested ancestor ``translate(...)`` transforms.
+    Rows from different contracts must never be pooled as comparable evidence.
+    """
+
     _poi_positions_by_label: dict[str, Vec2D] = field(init=False, default_factory=dict, repr=False)
     """Internal lookup table from POI label to position for faster access."""
     obstacles_pysf: list[Line2D] = field(init=False)
@@ -696,6 +708,12 @@ class MapDefinition:
             logger.critical(
                 "Map width and height mustn't be zero or negative! "
                 + f"Width: {self.width}, Height: {self.height}",
+            )
+
+        if self.svg_geometry_contract not in SUPPORTED_GEOMETRY_CONTRACTS:
+            raise ValueError(
+                f"Unknown svg_geometry_contract {self.svg_geometry_contract!r}. "
+                f"Supported contracts: {sorted(SUPPORTED_GEOMETRY_CONTRACTS)}."
             )
 
         if not self.robot_spawn_zones:
@@ -1012,6 +1030,8 @@ class MapDefinition:
             self.infrastructure_zones = []
         if not hasattr(self, "social_groups"):
             self.social_groups = []
+        if "svg_geometry_contract" not in self.__dict__:
+            self.svg_geometry_contract = GEOMETRY_CONTRACT_LEGACY
         self._build_poi_lookup()
 
 

@@ -29,13 +29,13 @@ DEFAULT_PERF_SCENARIO = "configs/validation/minimal.yaml"
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    """TODO docstring. Document this function.
+    """Parse command-line arguments for the examples smoke test.
 
     Args:
-        argv: TODO docstring.
+        argv: Command-line arguments to parse, or ``None`` to use ``sys.argv``.
 
     Returns:
-        TODO docstring.
+        Parsed command-line options.
     """
     parser = argparse.ArgumentParser(
         description="Run the manifest-driven examples smoke test (pytest harness).",
@@ -94,13 +94,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """TODO docstring. Document this function.
+    """Run the optional checks and manifest-driven examples smoke test.
 
     Args:
-        argv: TODO docstring.
+        argv: Command-line arguments to parse, or ``None`` to use ``sys.argv``.
 
     Returns:
-        TODO docstring.
+        Process exit code, with nonzero indicating a failed check or pytest run.
     """
     args = parse_args(argv)
     manifest = load_manifest(validate_paths=True)
@@ -137,13 +137,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _maybe_run_tracker_progress_check(args: argparse.Namespace) -> bool:
-    """TODO docstring. Document this function.
+    """Run the tracker progress smoke check unless it is skipped.
 
     Args:
-        args: TODO docstring.
+        args: Parsed options controlling whether the tracker check runs.
 
     Returns:
-        TODO docstring.
+        ``True`` when the check is skipped or passes, otherwise ``False``.
     """
     if args.dry_run or args.skip_tracker_check:
         return True
@@ -186,11 +186,11 @@ def _maybe_run_tracker_progress_check(args: argparse.Namespace) -> bool:
 
 
 def _resolve_pipeline_example() -> Path | None:
-    """TODO docstring. Document this function.
+    """Return the pipeline example path when the file exists.
 
 
     Returns:
-        TODO docstring.
+        The absolute pipeline example path, or ``None`` when the file is absent.
     """
     candidate = REPO_ROOT / PIPELINE_EXAMPLE
     if candidate.is_file():
@@ -199,11 +199,11 @@ def _resolve_pipeline_example() -> Path | None:
 
 
 def _build_example_env() -> dict[str, str]:
-    """TODO docstring. Document this function.
+    """Build the environment used to run the pipeline example.
 
 
     Returns:
-        TODO docstring.
+        A copy of the current environment with headless example settings and repository import paths.
     """
     env = os.environ.copy()
     env.setdefault("PYTHONUNBUFFERED", "1")
@@ -218,13 +218,13 @@ def _build_example_env() -> dict[str, str]:
 
 
 def _maybe_run_perf_tests(args: argparse.Namespace) -> bool:
-    """TODO docstring. Document this function.
+    """Run the telemetry performance wrapper unless it is skipped.
 
     Args:
-        args: TODO docstring.
+        args: Parsed options controlling whether the performance wrapper runs.
 
     Returns:
-        TODO docstring.
+        ``True`` when skipped or successful, otherwise ``False``.
     """
     if args.dry_run or args.skip_perf_tests:
         return True
@@ -258,14 +258,14 @@ def _maybe_run_perf_tests(args: argparse.Namespace) -> bool:
 
 
 def _merge_pythonpath(root: Path, existing: str | None) -> str:
-    """TODO docstring. Document this function.
+    """Merge a repository path into an existing ``PYTHONPATH`` value.
 
     Args:
-        root: TODO docstring.
-        existing: TODO docstring.
+        root: Path to place first in the merged path.
+        existing: Existing path-separated import path, or ``None``.
 
     Returns:
-        TODO docstring.
+        A path-separated value with empty entries removed and duplicates omitted.
     """
     parts: list[str] = [str(root)]
     if existing:
@@ -280,11 +280,14 @@ def _merge_pythonpath(root: Path, existing: str | None) -> str:
 
 
 def _assert_progress_output(stdout: str | None, stderr: str | None) -> None:
-    """TODO docstring. Document this function.
+    """Validate that tracker output contains progress and ETA markers.
 
     Args:
-        stdout: TODO docstring.
-        stderr: TODO docstring.
+        stdout: Captured standard output, if any.
+        stderr: Captured standard error, if any.
+
+    Raises:
+        AssertionError: If the combined output does not contain both expected markers.
     """
     combined = "\n".join(part for part in (stdout, stderr) if part)
     lowered = combined.lower()
@@ -295,15 +298,15 @@ def _assert_progress_output(stdout: str | None, stderr: str | None) -> None:
 
 
 def _tail_output(stdout: str | None, stderr: str | None, limit: int = 20) -> str:
-    """TODO docstring. Document this function.
+    """Return the final lines from captured subprocess output.
 
     Args:
-        stdout: TODO docstring.
-        stderr: TODO docstring.
-        limit: TODO docstring.
+        stdout: Captured standard output, if any.
+        stderr: Captured standard error, if any.
+        limit: Maximum number of lines to retain when output is truncated.
 
     Returns:
-        TODO docstring.
+        Combined output with trailing whitespace stripped from each line and limited to ``limit`` lines.
     """
     combined = "\n".join(part for part in (stdout, stderr) if part)
     lines = [line.rstrip() for line in combined.splitlines()]

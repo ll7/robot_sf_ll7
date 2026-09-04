@@ -1030,6 +1030,8 @@ class MapDefinition:
             self.infrastructure_zones = []
         if not hasattr(self, "social_groups"):
             self.social_groups = []
+        if not hasattr(self, "svg_geometry_contract"):
+            self.svg_geometry_contract = GEOMETRY_CONTRACT_LEGACY
         self._build_poi_lookup()
 
 

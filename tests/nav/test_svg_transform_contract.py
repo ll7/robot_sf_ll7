@@ -8,6 +8,7 @@ legacy contract reproduces the historical transform-ignoring coordinates exactly
 
 from __future__ import annotations
 
+import pickle
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -135,6 +136,18 @@ def test_default_contract_is_legacy(tmp_path: Path):
     md = SvgMapConverter(svg).get_map_definition()
     assert md.svg_geometry_contract == "legacy"
     assert _zone_bounds(md.ped_spawn_zones[0]) == pytest.approx((10.0, 10.0, 14.0, 14.0))
+
+
+def test_legacy_pickle_without_geometry_contract_defaults_to_legacy(tmp_path: Path):
+    """Maps pickled before the geometry contract field remain legacy maps."""
+
+    svg = _write_svg(tmp_path, "old_pickle.svg", "")
+    map_definition = SvgMapConverter(svg).get_map_definition()
+    del map_definition.svg_geometry_contract
+
+    restored = pickle.loads(pickle.dumps(map_definition))
+
+    assert restored.svg_geometry_contract == "legacy"
 
 
 def test_unknown_contract_rejected(tmp_path: Path):

@@ -6,6 +6,7 @@ import json
 import runpy
 import sys
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ import yaml
 
 from robot_sf.benchmark.map_runner.map_runner import run_map_batch
 from robot_sf.benchmark.scenario_generation import (
+    apply_generated_replay_runtime,
     dump_generated_scenario_yaml,
     extract_critical_segment,
     generated_replay_status_entry,
@@ -141,6 +143,31 @@ def test_loader_fails_closed_for_nonfinite_generated_replay_coordinates(tmp_path
 
     with pytest.raises(ValueError, match="must contain finite coordinates"):
         build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
+
+
+def test_generated_replay_preserves_source_geometry_contract(test_map) -> None:
+    """Replay-derived maps retain the source map's geometry provenance."""
+
+    source_map = replace(test_map, svg_geometry_contract="corrected")
+    runtime = {
+        "schema_version": "robot_sf.generated_replay_runtime.v1",
+        "robot": {
+            "start": [1.0, 1.0],
+            "goal": [8.0, 8.0],
+            "trajectory": [[1.0, 1.0], [8.0, 8.0]],
+        },
+        "pedestrians": [
+            {
+                "id": "pedestrian-0",
+                "start": [1.0, 8.0],
+                "trajectory": [[1.0, 8.0], [8.0, 1.0]],
+            }
+        ],
+    }
+
+    replay_map = apply_generated_replay_runtime(source_map, runtime)
+
+    assert replay_map.svg_geometry_contract == "corrected"
 
 
 def test_materialized_yaml_executes_one_bounded_cpu_map_runner_job(tmp_path: Path) -> None:

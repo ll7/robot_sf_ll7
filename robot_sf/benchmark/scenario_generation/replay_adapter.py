@@ -230,6 +230,7 @@ def apply_generated_replay_runtime(  # noqa: C901
         ped_routes=[],
         single_pedestrians=single_pedestrians,
         infrastructure_zones=deepcopy(map_def.infrastructure_zones),
+        svg_geometry_contract=map_def.svg_geometry_contract,
     )
 
 

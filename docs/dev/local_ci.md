@@ -140,8 +140,12 @@ For bounded polling of hosted PR checks, use:
 
 ```bash
 uv run python scripts/dev/check_pr_ci_status.py <pr-number> \
-  --poll-attempts 20 --poll-interval 30
+  --poll-attempts 20 --poll-interval 30 --max-wall-seconds 600
 ```
+
+The local wall cap also bounds nested `gh` reads. If a read reaches the cap, the monitor emits a
+machine-readable fail-closed error and stops; it never cancels a remote GitHub check. On POSIX
+hosts, timed-out `gh` process groups are terminated together with their local descendants.
 
 Record command, base/head SHA, profile, and whether the result was native, adapter, fallback, or
 degraded. Read [`docs/maintainer_values.md`](../maintainer_values.md) and

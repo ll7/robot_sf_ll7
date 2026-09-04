@@ -996,8 +996,11 @@ The wrapper sets `UV_PROJECT_ENVIRONMENT` to the owning checkout's `.venv` and `
 so the command works from a worktree that has not run `uv sync`. The `--help` output of
 `scripts/dev/check_pr_ci_status.py` also prints this invocation for quick agent copy/paste.
 Use `--max-wall-seconds` to give long-running monitors a clean local stop path before patching or
-pushing a branch; exit code 2 means checks were still pending when the local cap expired, not that
-remote GitHub checks were cancelled or failed.
+pushing a branch. The cap applies to nested `gh` reads as well as inter-poll sleeps; a read that
+reaches the cap emits one machine-readable fail-closed error and stops. On POSIX hosts, a timed-out
+`gh` process group and its local descendants are terminated together. Exit code 2 means checks were
+still pending when the local cap expired between reads, not that remote GitHub checks were cancelled
+or failed; a nested-read timeout is an error (exit code 1) and is never merge authorization.
 If the parent workflow is already `completed/success` and every recorded job step ends with a
 successful `Complete job` step while GitHub still reports a pending check/job lifecycle (either a
 job that remains `in_progress` or a stale check-run over a `completed/success` job), the JSON payload

@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import time
@@ -48,13 +50,105 @@ STABILITY_SNAPSHOT_SCHEMA = "pr_stability_snapshot.v1"
 _RETRY_AFTER_RE = re.compile(r"retry-after\s*[:=]\s*(\d+)", re.IGNORECASE)
 _RESUME_MONITOR_ARGS = "--poll-attempts 40 --poll-interval 30 --max-wall-seconds 1200"
 DEFAULT_ACTIONS_STALE_AFTER_SECONDS = 900
+_ACTIVE_WALL_DEADLINE: float | None = None
+_GH_TERMINATION_GRACE_SECONDS = 0.25
 
 
-def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
+class _WallClockBudgetExpired(subprocess.TimeoutExpired):
+    """Signal that a local monitor deadline stopped a nested read."""
+
+
+def _remaining_wall_seconds() -> float | None:
+    """Return the active monitor budget, or ``None`` outside bounded polling."""
+    if _ACTIVE_WALL_DEADLINE is None:
+        return None
+    return _ACTIVE_WALL_DEADLINE - time.monotonic()
+
+
+def _bounded_command_timeout(timeout: float) -> float:
+    """Cap one local command timeout by the active monitor deadline."""
+    remaining = _remaining_wall_seconds()
+    if remaining is None:
+        return max(0.001, float(timeout))
+    if remaining <= 0:
+        raise _WallClockBudgetExpired(["gh"], 0)
+    return max(0.001, min(float(timeout), remaining))
+
+
+def _terminate_process_group(process: subprocess.Popen[str]) -> None:
+    """Terminate a bounded local command and its POSIX descendants."""
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    else:
+        process.terminate()
+
+    try:
+        process.communicate(timeout=_GH_TERMINATION_GRACE_SECONDS)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    else:
+        process.kill()
+    try:
+        process.communicate(timeout=_GH_TERMINATION_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        # The process-group kill is best effort.  Do not turn a local timeout
+        # into an unbounded wait when a child escaped the group.
+        for stream in (process.stdout, process.stderr):
+            if stream is not None:
+                stream.close()
+
+
+def _gh_with_process_group(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
+    """Run one bounded ``gh`` read with a killable local process group."""
+    command = ["gh", *args]
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=os.name == "posix",
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        _terminate_process_group(process)
+        raise _WallClockBudgetExpired(
+            command,
+            timeout,
+            output=exc.output,
+            stderr=exc.stderr,
+        ) from exc
+    return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+def _sleep_with_wall_budget(seconds: float) -> None:
+    """Sleep without crossing the active monitor deadline."""
+    remaining = _remaining_wall_seconds()
+    if remaining is None:
+        time.sleep(seconds)
+        return
+    if remaining <= 0:
+        return
+    time.sleep(min(max(0.0, seconds), remaining))
+
+
+def _gh(args: list[str], timeout: float = 30) -> subprocess.CompletedProcess:
     """Run a gh command and return the completed process.
 
     Raises FileNotFoundError when gh is not installed.
     """
+    if _ACTIVE_WALL_DEADLINE is not None:
+        return _gh_with_process_group(args, _bounded_command_timeout(timeout))
     return subprocess.run(
         ["gh", *args],
         capture_output=True,
@@ -1144,7 +1238,9 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
         A dict with 'state', 'conclusion', 'statuses', and metadata.
     """
     if backoff > 0:
-        time.sleep(backoff)
+        _sleep_with_wall_budget(backoff)
+
+    retry_sleep = _sleep_with_wall_budget if _ACTIVE_WALL_DEADLINE is not None else None
 
     retry = run_with_retry(
         _gh,
@@ -1156,6 +1252,7 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
             "number,title,state,mergeable,headRefName,headRefOid,statusCheckRollup,reviews",
         ],
         **_ci_retry_kwargs(max_attempts),
+        **({"sleep": retry_sleep} if retry_sleep is not None else {}),
     )
     result = retry.result
     if retry.quota_exhausted:
@@ -1958,6 +2055,22 @@ def _bounded_sleep_seconds(
     return min(sleep_seconds, remaining_seconds), False
 
 
+def _wall_timeout_payload(pr: str, expected_head_sha: str) -> dict[str, Any]:
+    """Return a machine-readable fail-closed result for a local wall timeout."""
+    return {
+        "status": "error",
+        "error_kind": "max_wall_seconds",
+        "error": "local wall-clock budget expired during a nested GitHub read",
+        "pr": pr,
+        "head_sha": expected_head_sha,
+        "checks": {
+            "overall": "pending",
+            "pending_reason": "max_wall_seconds",
+            "route_evidence_only": True,
+        },
+    }
+
+
 def _non_negative_float(value: str) -> float:
     """Parse a non-negative float for local duration limits."""
     parsed = float(value)
@@ -1985,7 +2098,7 @@ class _CIPollOptions:
     starvation_seconds: float = DEFAULT_QUEUE_STARVATION_SECONDS
 
 
-def _poll_ci_status(
+def _poll_ci_status(  # noqa: C901 - explicit bounded deadline/error branches.
     pr: str,
     *,
     attempts: int,
@@ -2007,50 +2120,72 @@ def _poll_ci_status(
     wall_deadline = (
         time.monotonic() + max(0.0, max_wall_seconds) if max_wall_seconds is not None else None
     )
-    for attempt in range(1, attempts + 1):
-        data = _fetch_ci_status(
-            pr,
-            backoff=backoff if attempt == 1 else 0.0,
-            actions_stale_after_seconds=options.actions_stale_after_seconds,
-            starvation_seconds=options.starvation_seconds,
-        )
-        _add_monitor_metadata(
-            data,
-            expected_head_sha=expected_head_sha,
-            attempt=attempt,
-            attempts=attempts,
-            poll_interval=poll_interval,
-            wait_budget_seconds=wait_budget_seconds,
-            max_wall_seconds=max_wall_seconds,
-            deadline_epoch_seconds=deadline_epoch_seconds,
-        )
-        if data.get("status") == "error":
-            data["monitor"]["terminal_reason"] = "error"
-            break
-        if _guard_head_sha(data, expected_head_sha):
-            break
-        overall = data.get("checks", {}).get("overall")
-        sleep_seconds, local_stop = _bounded_sleep_seconds(poll_interval, wall_deadline)
-        terminal_reason = _monitor_terminal_reason(
-            data,
-            overall=overall,
-            attempt=attempt,
-            attempts=attempts,
-            local_stop=local_stop,
-        )
-        if overall == "pending" and attempt < attempts and local_stop:
-            data["monitor"]["local_stop_reason"] = "max_wall_seconds"
-        if terminal_reason:
-            data["monitor"]["terminal_reason"] = terminal_reason
-        if attempts > 1:
-            if json_output:
-                print(json.dumps(data), flush=True)
-            else:
-                print(f"poll attempt {attempt}/{attempts}", flush=True)
-                print(_format_human(data), flush=True)
-        if terminal_reason:
-            break
-        time.sleep(sleep_seconds)
+    global _ACTIVE_WALL_DEADLINE
+    previous_deadline = _ACTIVE_WALL_DEADLINE
+    _ACTIVE_WALL_DEADLINE = wall_deadline
+    try:
+        for attempt in range(1, attempts + 1):
+            try:
+                data = _fetch_ci_status(
+                    pr,
+                    backoff=backoff if attempt == 1 else 0.0,
+                    actions_stale_after_seconds=options.actions_stale_after_seconds,
+                    starvation_seconds=options.starvation_seconds,
+                )
+            except subprocess.TimeoutExpired:
+                data = _wall_timeout_payload(pr, expected_head_sha)
+                _add_monitor_metadata(
+                    data,
+                    expected_head_sha=expected_head_sha,
+                    attempt=attempt,
+                    attempts=attempts,
+                    poll_interval=poll_interval,
+                    wait_budget_seconds=wait_budget_seconds,
+                    max_wall_seconds=max_wall_seconds,
+                    deadline_epoch_seconds=deadline_epoch_seconds,
+                )
+                data["monitor"]["local_stop_reason"] = "max_wall_seconds"
+                data["monitor"]["terminal_reason"] = "max_wall_seconds"
+                break
+            _add_monitor_metadata(
+                data,
+                expected_head_sha=expected_head_sha,
+                attempt=attempt,
+                attempts=attempts,
+                poll_interval=poll_interval,
+                wait_budget_seconds=wait_budget_seconds,
+                max_wall_seconds=max_wall_seconds,
+                deadline_epoch_seconds=deadline_epoch_seconds,
+            )
+            if data.get("status") == "error":
+                data["monitor"]["terminal_reason"] = "error"
+                break
+            if _guard_head_sha(data, expected_head_sha):
+                break
+            overall = data.get("checks", {}).get("overall")
+            sleep_seconds, local_stop = _bounded_sleep_seconds(poll_interval, wall_deadline)
+            terminal_reason = _monitor_terminal_reason(
+                data,
+                overall=overall,
+                attempt=attempt,
+                attempts=attempts,
+                local_stop=local_stop,
+            )
+            if overall == "pending" and attempt < attempts and local_stop:
+                data["monitor"]["local_stop_reason"] = "max_wall_seconds"
+            if terminal_reason:
+                data["monitor"]["terminal_reason"] = terminal_reason
+            if attempts > 1:
+                if json_output:
+                    print(json.dumps(data), flush=True)
+                else:
+                    print(f"poll attempt {attempt}/{attempts}", flush=True)
+                    print(_format_human(data), flush=True)
+            if terminal_reason:
+                break
+            _sleep_with_wall_budget(sleep_seconds)
+    finally:
+        _ACTIVE_WALL_DEADLINE = previous_deadline
     return data
 
 
@@ -2245,7 +2380,8 @@ codes: 0 stable, 1 changed/failure/error, 2 inconclusive
         type=_non_negative_float,
         default=None,
         help=(
-            "optional local wall-clock cap for bounded polling; pending checks return exit code 2 "
+            "optional local wall-clock cap for bounded polling; nested gh reads are capped and "
+            "timed-out local process groups are terminated; pending checks return exit code 2 "
             "without affecting remote GitHub checks"
         ),
     )

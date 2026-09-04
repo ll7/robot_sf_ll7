@@ -909,12 +909,12 @@ def test_main_bounded_polling_json_respects_max_wall_seconds(
     )
 
     with (
-        patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run,
+        patch("scripts.dev.check_pr_ci_status._gh") as mock_gh,
         patch("scripts.dev.check_pr_ci_status.time.sleep") as mock_sleep,
         patch("scripts.dev.check_pr_ci_status.time.time", return_value=1000.0),
-        patch("scripts.dev.check_pr_ci_status.time.monotonic", side_effect=[0.0, 0.0, 1.0]),
+        patch("scripts.dev.check_pr_ci_status.time.monotonic", side_effect=[0.0, 0.0, 0.0, 1.0]),
     ):
-        mock_run.side_effect = [
+        mock_gh.side_effect = [
             MagicMock(returncode=0, stdout=pending_data, stderr=""),
             MagicMock(returncode=0, stdout=pending_data, stderr=""),
         ]
@@ -934,7 +934,7 @@ def test_main_bounded_polling_json_respects_max_wall_seconds(
         )
 
     assert rc == 2
-    assert mock_run.call_count == 2
+    assert mock_gh.call_count == 2
     mock_sleep.assert_called_once_with(1.0)
     payloads = [json.loads(line) for line in capsys.readouterr().out.strip().splitlines()]
     assert len(payloads) == 2
@@ -942,6 +942,72 @@ def test_main_bounded_polling_json_respects_max_wall_seconds(
     assert payloads[-1]["monitor"]["max_wall_seconds"] == 1.0
     assert payloads[-1]["monitor"]["deadline_epoch_seconds"] == 1001
     assert payloads[-1]["monitor"]["local_stop_reason"] == "max_wall_seconds"
+
+
+def test_main_bounded_polling_emits_json_when_nested_read_expires(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """A nested local timeout should become one machine-readable fail-closed result."""
+    with patch(
+        "scripts.dev.check_pr_ci_status._gh",
+        side_effect=subprocess.TimeoutExpired(["gh"], timeout=0.1),
+    ):
+        rc = main(
+            [
+                "12",
+                "--json",
+                "--expected-head-sha",
+                FULL_SHA,
+                "--poll-attempts",
+                "40",
+                "--poll-interval",
+                "30",
+                "--max-wall-seconds",
+                "1",
+            ]
+        )
+
+    assert rc == 1
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert payload["status"] == "error"
+    assert payload["error_kind"] == "max_wall_seconds"
+    assert payload["checks"]["overall"] == "pending"
+    assert payload["monitor"]["local_stop_reason"] == "max_wall_seconds"
+    assert payload["monitor"]["terminal_reason"] == "max_wall_seconds"
+    assert payload["monitor"]["route_evidence_only"] is True
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process groups provide descendant cleanup")
+def test_bounded_gh_terminates_local_process_group_on_timeout() -> None:
+    """A timed-out bounded gh read must terminate the local process group."""
+    process = MagicMock()
+    process.pid = 4321
+    process.communicate.side_effect = [
+        subprocess.TimeoutExpired(["gh", "api"], timeout=0.1),
+        subprocess.TimeoutExpired(["gh", "api"], timeout=0.25),
+        ("", ""),
+    ]
+
+    with (
+        patch(
+            "scripts.dev.check_pr_ci_status.subprocess.Popen", return_value=process
+        ) as mock_popen,
+        patch("scripts.dev.check_pr_ci_status.os.killpg") as mock_killpg,
+    ):
+        with pytest.raises(subprocess.TimeoutExpired):
+            ci_status._gh_with_process_group(["api"], 0.1)
+
+    mock_popen.assert_called_once_with(
+        ["gh", "api"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    assert mock_killpg.call_args_list == [
+        ((4321, ci_status.signal.SIGTERM),),
+        ((4321, ci_status.signal.SIGKILL),),
+    ]
 
 
 def test_main_gh_not_installed() -> None:

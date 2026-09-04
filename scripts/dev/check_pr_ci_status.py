@@ -781,11 +781,12 @@ def _actions_lifecycle_age_source(
     job = job or {}
     if phase == "queued":
         candidates = (
-            (run.get("created_at"), "workflow_created_at"),
             (job.get("created_at"), "job_created_at"),
+            (run.get("created_at"), "workflow_created_at"),
         )
     elif phase == "setup":
         candidates = (
+            (job.get("created_at"), "job_created_at"),
             (run.get("run_started_at"), "workflow_started_at"),
             (run.get("created_at"), "workflow_created_at"),
         )
@@ -910,6 +911,7 @@ def _annotate_actions_lifecycle(  # noqa: C901 - explicit fail-closed diagnostic
                 "job_status": str((job or {}).get("status", "") or "") or None,
                 "run_created_at": str((run or {}).get("created_at", "") or "") or None,
                 "run_started_at": str((run or {}).get("run_started_at", "") or "") or None,
+                "job_created_at": str((job or {}).get("created_at", "") or "") or None,
                 "job_started_at": str((job or {}).get("started_at", "") or "") or None,
                 "run_head_sha": run_head_sha or None,
                 "exact_head_sha_matches": exact_head_matches,
@@ -1326,14 +1328,45 @@ def _append_pending_reason(
             lines.append(f"    - {queued.get('name', 'unknown')}{suffix}")
         return
 
-    lag_details = checks.get("status_propagation_lag", [])
-    lines.append(f"  pending_reason: {pending_reason}  |  affected checks: {len(lag_details)}")
-    for lag in lag_details:
-        lines.append(
-            f"    - {lag.get('name', 'unknown')}: "
-            f"run {lag.get('run_id')} job {lag.get('job_id')}  |  "
-            f"{lag.get('final_step', 'unknown')}/{lag.get('final_step_conclusion', 'unknown')}"
-        )
+    if pending_reason == "actions_gate_age":
+        age_warnings = checks.get("age_warnings", [])
+        if not age_warnings and isinstance(checks.get("actions_lifecycle"), dict):
+            age_warnings = [
+                item for item in checks["actions_lifecycle"].get("items", []) if item.get("stale")
+            ]
+        lines.append(f"  pending_reason: {pending_reason}  |  affected checks: {len(age_warnings)}")
+        for warning in age_warnings:
+            run_id = warning.get("run_id")
+            job_id = warning.get("job_id")
+            id_parts: list[str] = []
+            if run_id is not None:
+                id_parts.append(f"run {run_id}")
+            if job_id is not None:
+                id_parts.append(f"job {job_id}")
+            id_str = " ".join(id_parts)
+            age = warning.get("age_seconds")
+            age_str = f"age={age}s" if age is not None else "age=unknown"
+            phase = warning.get("phase", "unknown")
+            source = warning.get("age_source")
+            source_str = f"  |  source: {source}" if source else ""
+            suffix = f"  |  {id_str}" if id_str else ""
+            lines.append(
+                f"    - {warning.get('name', 'unknown')}: {phase} {age_str}{suffix}{source_str}"
+            )
+        return
+
+    if pending_reason == "status_propagation_lag":
+        lag_details = checks.get("status_propagation_lag", [])
+        lines.append(f"  pending_reason: {pending_reason}  |  affected checks: {len(lag_details)}")
+        for lag in lag_details:
+            lines.append(
+                f"    - {lag.get('name', 'unknown')}: "
+                f"run {lag.get('run_id')} job {lag.get('job_id')}  |  "
+                f"{lag.get('final_step', 'unknown')}/{lag.get('final_step_conclusion', 'unknown')}"
+            )
+        return
+
+    lines.append(f"  pending_reason: {pending_reason}")
 
 
 def _format_human(data: dict[str, Any]) -> str:  # noqa: C901 - compact diagnostic rendering.
@@ -1457,6 +1490,7 @@ def _monitor_terminal_reason(
     if terminal_reason == "attempt_exhausted" and pending_reason in {
         "status_propagation_lag",
         "runner_queue_starvation",
+        "actions_gate_age",
     }:
         return str(pending_reason)
     return terminal_reason

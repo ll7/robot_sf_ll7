@@ -2079,3 +2079,201 @@ def test_main_bounded_polling_stops_early_when_pr_merged(
     assert payload["monitor"]["poll_attempt"] == 1
     assert payload["monitor"]["terminal_reason"] == "pr_merged"
     assert payload["state"] == "MERGED"
+
+
+# Issue #8399: queued job age precedence and actions_gate_age affected checks reporting.
+
+
+def test_actions_lifecycle_age_source_prefers_job_created_at_over_workflow() -> None:
+    """Queued phase must prefer job.created_at over older parent run.created_at."""
+    check = {"startedAt": None}
+    run = {"created_at": "2026-09-03T22:00:00Z"}
+    job = {"created_at": "2026-09-03T22:15:00Z"}
+
+    ts, source = ci_status._actions_lifecycle_age_source("queued", check, run, job)
+    assert ts == "2026-09-03T22:15:00Z"
+    assert source == "job_created_at"
+
+
+def test_actions_lifecycle_age_source_queued_phase_falls_back_when_job_created_at_missing() -> None:
+    """Queued phase falls back to workflow_created_at when job.created_at is absent."""
+    check = {"startedAt": None}
+    run = {"created_at": "2026-09-03T22:00:00Z"}
+    job = {"created_at": None}
+
+    ts, source = ci_status._actions_lifecycle_age_source("queued", check, run, job)
+    assert ts == "2026-09-03T22:00:00Z"
+    assert source == "workflow_created_at"
+
+
+def test_actions_lifecycle_age_source_setup_phase_prefers_job_created_at() -> None:
+    """Setup phase prefers job.created_at before workflow started/created timestamps."""
+    check = {"startedAt": None}
+    run = {
+        "created_at": "2026-09-03T22:00:00Z",
+        "run_started_at": "2026-09-03T22:00:10Z",
+    }
+    job = {"created_at": "2026-09-03T22:18:00Z"}
+
+    ts, source = ci_status._actions_lifecycle_age_source("setup", check, run, job)
+    assert ts == "2026-09-03T22:18:00Z"
+    assert source == "job_created_at"
+
+
+def test_actions_lifecycle_age_source_unavailable_when_no_valid_timestamps() -> None:
+    """When all candidate timestamps are missing/malformed, return unavailable."""
+    check = {"startedAt": None}
+    run = {"created_at": "not-a-timestamp"}
+    job = {"created_at": None}
+
+    ts, source = ci_status._actions_lifecycle_age_source("queued", check, run, job)
+    assert ts is None
+    assert source == "unavailable"
+
+
+def test_fetch_ci_status_queued_job_newer_than_workflow_is_not_stale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A newly queued job inside an older workflow run must not be marked stale (Issue #8399)."""
+    payload = {
+        "number": 8393,
+        "title": "reconcile Zenodo successor files",
+        "state": "OPEN",
+        "mergeable": "MERGEABLE",
+        "headRefName": "fix/zenodo",
+        "headRefOid": FULL_SHA,
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "CI",
+                "status": "queued",
+                "conclusion": "",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/33811181121/job/100837191719",
+            }
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    api_payloads = {
+        "actions/runs/33811181121": {
+            "status": "queued",
+            "conclusion": None,
+            "created_at": "2026-09-03T22:00:00Z",  # 1500s ago relative to 22:25:00
+            "head_sha": FULL_SHA,
+        },
+        "actions/jobs/100837191719": {
+            "status": "queued",
+            "conclusion": None,
+            "created_at": "2026-09-03T22:23:00Z",  # only 120s ago relative to 22:25:00
+        },
+    }
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status._rest_api_get", api_payloads.get)
+    now_epoch = datetime.fromisoformat("2026-09-03T22:25:00+00:00").timestamp()
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status.time.time", lambda: now_epoch)
+
+    data = _fetch_ci_status("8393", actions_stale_after_seconds=900)
+
+    lifecycle = data["checks"]["actions_lifecycle"]
+    assert lifecycle["by_phase"] == {"queued": 1}
+    assert lifecycle["stale_count"] == 0
+    item = lifecycle["items"][0]
+    assert item["age_seconds"] == 120
+    assert item["age_source"] == "job_created_at"
+    assert item["job_created_at"] == "2026-09-03T22:23:00Z"
+    assert item["stale"] is False
+    assert "pending_reason" not in data["checks"]
+    assert "age_warnings" not in data["checks"]
+
+
+def test_format_human_actions_gate_age_reports_affected_checks_and_details() -> None:
+    """actions_gate_age in human output must report affected check count and check lines (Issue #8399)."""
+    data = {
+        "status": "ok",
+        "pr": 8393,
+        "title": "reconcile Zenodo successor files",
+        "state": "OPEN",
+        "mergeable": "MERGEABLE",
+        "branch": "fix/zenodo",
+        "head_sha": FULL_SHA,
+        "checks": {
+            "overall": "pending",
+            "total": 34,
+            "by_conclusion": {"success": 33},
+            "by_status": {"queued": 1, "completed": 33},
+            "pending_reason": "actions_gate_age",
+            "diagnostic": "actions_gate_queue_age",
+            "age_warnings": [
+                {
+                    "name": "ci",
+                    "phase": "queued",
+                    "age_seconds": 1140,
+                    "age_source": "job_created_at",
+                    "run_id": 33811181121,
+                    "job_id": 100837191719,
+                }
+            ],
+            "actions_lifecycle": {
+                "by_phase": {"queued": 1},
+                "stale_count": 1,
+                "warning_threshold_seconds": 900,
+            },
+            "details": [],
+        },
+    }
+
+    output = _format_human(data)
+
+    assert "pending_reason: actions_gate_age  |  affected checks: 1" in output
+    assert (
+        "ci: queued age=1140s  |  run 33811181121 job 100837191719  |  source: job_created_at"
+        in output
+    )
+    assert "affected checks: 0" not in output
+
+
+def test_format_human_unknown_pending_reason_renders_without_zero_lag() -> None:
+    """An unknown pending reason must render safely without claiming affected checks: 0."""
+    data = {
+        "status": "ok",
+        "pr": 1234,
+        "title": "test unknown reason",
+        "state": "OPEN",
+        "mergeable": "MERGEABLE",
+        "branch": "test",
+        "head_sha": FULL_SHA,
+        "checks": {
+            "overall": "pending",
+            "total": 1,
+            "by_conclusion": {},
+            "by_status": {"pending": 1},
+            "pending_reason": "custom_blocker",
+            "details": [],
+        },
+    }
+
+    output = _format_human(data)
+
+    assert "pending_reason: custom_blocker" in output
+    assert "affected checks: 0" not in output
+
+
+def test_monitor_terminal_reason_preserves_actions_gate_age() -> None:
+    """Exhausted attempts with actions_gate_age pending reason should return actions_gate_age."""
+    data = {
+        "checks": {
+            "pending_reason": "actions_gate_age",
+        },
+        "state": "OPEN",
+    }
+    result = ci_status._monitor_terminal_reason(
+        data,
+        overall="pending",
+        attempt=3,
+        attempts=3,
+        local_stop=False,
+    )
+    assert result == "actions_gate_age"

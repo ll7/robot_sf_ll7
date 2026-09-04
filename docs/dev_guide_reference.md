@@ -2595,6 +2595,14 @@ two newer consecutive decisive green runs before it posts an evidence comment
 and closes an incident as completed. Active, pending, malformed, or
 concurrent-change cases remain open.
 
+The Actions run evidence window is paginated. The reconciler reads full
+workflow-run pages and stops only after two decisive completed green/red runs
+are visible, so a cancellation-saturated newest page cannot hide the decisive
+history. The default page budget is ten; `--max-run-pages N` changes it, and
+the legacy `--run-limit N` option is retained as an alias for that page budget.
+If the budget is exhausted before two decisive runs are found, the helper
+fails closed instead of classifying an incomplete window.
+
 The helper is report-only unless `--apply` is supplied, so an offline or local
 inspection can use:
 

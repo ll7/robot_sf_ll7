@@ -13,6 +13,11 @@ Every mutation is preceded by a fresh issue read and followed by readback.  A
 changed body, label set, or state causes the item to be skipped or reported as
 failed.  Malformed incidents, active incidents, incomplete green evidence, and
 API failures never close an issue.
+
+The Actions run reader paginates past cancellation-heavy raw pages and stops
+only after two decisive completed runs are visible, subject to a bounded page
+budget.  It fails closed when that budget is exhausted before the evidence
+window is complete.
 """
 
 from __future__ import annotations
@@ -31,13 +36,16 @@ from urllib.parse import quote, urlencode
 from scripts.dev._gh_rest import parse_json, run_gh_api
 from scripts.dev.main_ci_incident_reconcile import (
     build_incident_signal,
-    fetch_runs,
     incident_reconcile_status,
 )
 from scripts.dev.main_ci_is_green import classify
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_WORKFLOW = "CI"
+# ``run_limit`` is retained in the public Python/CLI contract for callers that
+# inject the legacy ``gh run list`` fetcher.  The default REST path interprets
+# it as a page budget, not as a raw-run cutoff, so cancellation-heavy windows
+# cannot hide the decisive records behind the first page.
 DEFAULT_RUN_LIMIT = 10
 DEFAULT_MAX_PAGES = 10
 DEFAULT_MAX_COMMENT_PAGES = 10
@@ -134,6 +142,144 @@ def _paginate_collection(
             return rows
     raise ReconciliationError(
         f"{operation} exceeded the {max_pages}-page budget; refusing a partial inventory"
+    )
+
+
+def _resolve_workflow_selector(
+    *,
+    repo: str,
+    workflow: str,
+    max_pages: int,
+    runner: Runner,
+) -> str:
+    """Resolve a workflow display name to a stable REST workflow selector."""
+    selector = workflow.strip()
+    if not selector:
+        raise ReconciliationError("workflow must not be empty")
+    if selector.isdecimal() or selector.lower().endswith((".yml", ".yaml")):
+        return selector
+
+    rows: list[Mapping[str, Any]] = []
+    for page in range(1, max_pages + 1):
+        endpoint = (
+            f"repos/{quote(repo, safe='/')}/actions/workflows?per_page={PER_PAGE}&page={page}"
+        )
+        payload = _api_json(
+            endpoint,
+            runner=runner,
+            operation="Actions workflow inventory",
+        )
+        if not isinstance(payload, Mapping):
+            raise ReconciliationError("Actions workflow inventory returned a non-object payload")
+        page_rows = payload.get("workflows")
+        if not isinstance(page_rows, list) or any(
+            not isinstance(row, Mapping) for row in page_rows
+        ):
+            raise ReconciliationError("Actions workflow inventory returned malformed rows")
+        rows.extend(row for row in page_rows if isinstance(row, Mapping))
+        if len(page_rows) < PER_PAGE:
+            break
+    else:
+        raise ReconciliationError(
+            f"Actions workflow inventory exceeded the {max_pages}-page budget; "
+            "refusing an ambiguous workflow selector"
+        )
+
+    matches = [
+        row
+        for row in rows
+        if row.get("name") == selector
+        or row.get("path") == selector
+        or str(row.get("path") or "").rsplit("/", 1)[-1] == selector
+    ]
+    if not matches:
+        raise ReconciliationError(f"workflow {workflow!r} was not found")
+    if len(matches) > 1:
+        raise ReconciliationError(f"workflow {workflow!r} resolved to multiple workflows")
+    workflow_id = _positive_int(matches[0].get("id"), field="workflow id")
+    return str(workflow_id)
+
+
+def _normalize_actions_run(row: Mapping[str, Any], *, index: int) -> dict[str, Any]:
+    """Normalize one Actions REST run to the existing classifier schema."""
+    run_id = _positive_int(row.get("id"), field=f"Actions run row {index} id")
+    status = row.get("status")
+    if not isinstance(status, str) or not status:
+        raise ReconciliationError(f"Actions run row {index} has no usable status")
+    conclusion = row.get("conclusion")
+    if conclusion is not None and not isinstance(conclusion, str):
+        raise ReconciliationError(f"Actions run row {index} has a malformed conclusion")
+    created_at = row.get("created_at")
+    if not isinstance(created_at, str) or not created_at:
+        raise ReconciliationError(f"Actions run row {index} has no usable created_at")
+    head_sha = row.get("head_sha")
+    if head_sha is not None and not isinstance(head_sha, str):
+        raise ReconciliationError(f"Actions run row {index} has a malformed head_sha")
+    return {
+        "databaseId": run_id,
+        "status": status,
+        "conclusion": conclusion,
+        "headSha": head_sha,
+        "createdAt": created_at,
+    }
+
+
+def _fetch_main_ci_runs(
+    repo: str,
+    workflow: str,
+    *,
+    max_pages: int,
+    runner: Runner,
+) -> list[dict[str, Any]]:
+    """Fetch a bounded Actions window until two decisive runs are visible.
+
+    GitHub's latest-main-wins concurrency can make the newest raw pages almost
+    entirely cancelled.  A raw ``--limit`` therefore does not identify a
+    sufficient evidence window.  Read full REST pages and stop only after the
+    window contains two completed green/red runs; a complete short final page
+    is also a valid stopping point.  Hitting the page budget before finding
+    two decisive runs fails closed instead of silently classifying a partial
+    history.
+    """
+    if max_pages <= 0:
+        raise ValueError("max_run_pages must be positive")
+    selector = _resolve_workflow_selector(
+        repo=repo,
+        workflow=workflow,
+        max_pages=max_pages,
+        runner=runner,
+    )
+    endpoint_base = (
+        f"repos/{quote(repo, safe='/')}/actions/workflows/{quote(selector, safe='')}/runs"
+        f"?{urlencode({'branch': 'main'})}"
+    )
+    runs: list[dict[str, Any]] = []
+    for page in range(1, max_pages + 1):
+        endpoint = f"{endpoint_base}&per_page={PER_PAGE}&page={page}"
+        payload = _api_json(
+            endpoint,
+            runner=runner,
+            operation=f"main-CI runs page {page}",
+        )
+        if not isinstance(payload, Mapping):
+            raise ReconciliationError(f"main-CI runs page {page} returned a non-object payload")
+        page_rows = payload.get("workflow_runs")
+        if not isinstance(page_rows, list) or any(
+            not isinstance(row, Mapping) for row in page_rows
+        ):
+            raise ReconciliationError(f"main-CI runs page {page} returned malformed rows")
+        runs.extend(
+            _normalize_actions_run(row, index=index)
+            for index, row in enumerate(page_rows, start=len(runs))
+            if isinstance(row, Mapping)
+        )
+        if len(_ordered_decisive_runs(runs)) >= 2:
+            return runs
+        if len(page_rows) < PER_PAGE:
+            return runs
+    raise ReconciliationError(
+        f"main-CI run search exceeded the {max_pages}-page budget before "
+        "finding two decisive runs; refusing a partial evidence window"
     )
 
 
@@ -591,6 +737,7 @@ def reconcile_batch(
     workflow: str = DEFAULT_WORKFLOW,
     apply: bool = False,
     run_limit: int = DEFAULT_RUN_LIMIT,
+    max_run_pages: int | None = None,
     max_pages: int = DEFAULT_MAX_PAGES,
     max_comment_pages: int = DEFAULT_MAX_COMMENT_PAGES,
     max_issues: int = DEFAULT_MAX_ISSUES,
@@ -601,6 +748,9 @@ def reconcile_batch(
     """Inventory, classify, and optionally reconcile all open incidents."""
     if run_limit <= 0 or max_issues <= 0 or max_mutations <= 0:
         raise ValueError("run_limit, max_issues, and max_mutations must be positive")
+    resolved_run_pages = run_limit if max_run_pages is None else max_run_pages
+    if resolved_run_pages <= 0:
+        raise ValueError("max_run_pages must be positive")
     rest_runner = runner or _default_runner
     incidents = list_open_incidents(repo=repo, max_pages=max_pages, runner=rest_runner)
     if len(incidents) > max_issues:
@@ -619,6 +769,7 @@ def reconcile_batch(
                 "open_incident_count": 0,
                 "pagination_complete": True,
                 "run_limit": run_limit,
+                "run_page_limit": resolved_run_pages,
                 "run_count": 0,
             },
             "run_window": [],
@@ -628,7 +779,16 @@ def reconcile_batch(
             "status": "ok",
         }
     try:
-        runs = (run_fetcher or fetch_runs)(repo, workflow, run_limit)
+        if run_fetcher is not None:
+            # Preserve the injectable legacy contract used by offline callers.
+            runs = run_fetcher(repo, workflow, run_limit)
+        else:
+            runs = _fetch_main_ci_runs(
+                repo,
+                workflow,
+                max_pages=resolved_run_pages,
+                runner=rest_runner,
+            )
     except (RuntimeError, json.JSONDecodeError) as exc:
         raise ReconciliationError(f"main-CI run fetch failed: {exc}") from exc
     if not isinstance(runs, list):
@@ -684,6 +844,7 @@ def reconcile_batch(
             "open_incident_count": len(incidents),
             "pagination_complete": True,
             "run_limit": run_limit,
+            "run_page_limit": resolved_run_pages,
             "run_count": len(runs),
         },
         "run_window": [
@@ -726,7 +887,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", DEFAULT_REPO))
     parser.add_argument("--workflow", default=DEFAULT_WORKFLOW)
-    parser.add_argument("--run-limit", type=int, default=DEFAULT_RUN_LIMIT)
+    parser.add_argument(
+        "--run-limit",
+        type=int,
+        default=DEFAULT_RUN_LIMIT,
+        help=("maximum Actions run-search pages (legacy option name; raw runs are not the bound)"),
+    )
+    parser.add_argument(
+        "--max-run-pages",
+        type=int,
+        default=None,
+        help="maximum paginated Actions run pages; overrides --run-limit when supplied",
+    )
     parser.add_argument("--max-pages", type=int, default=DEFAULT_MAX_PAGES)
     parser.add_argument("--max-comment-pages", type=int, default=DEFAULT_MAX_COMMENT_PAGES)
     parser.add_argument("--max-issues", type=int, default=DEFAULT_MAX_ISSUES)
@@ -751,6 +923,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             workflow=args.workflow,
             apply=args.apply,
             run_limit=args.run_limit,
+            max_run_pages=args.max_run_pages,
             max_pages=args.max_pages,
             max_comment_pages=args.max_comment_pages,
             max_issues=args.max_issues,

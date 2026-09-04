@@ -1,4 +1,4 @@
-"""Diagnostic contract tests for the identity-keyed ScenarioBelief projection.
+"""Diagnostic contract tests for the entity-ID-keyed ScenarioBelief snapshot projection.
 
 These tests cover the additive interface only.  They do not claim planner
 performance, identity-generation support, safety improvement, or benchmark
@@ -20,6 +20,7 @@ from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.planner.scenario_belief_adapter import (
     BELIEF_AWARE_PLANNER_INPUT_SCHEMA_VERSION,
     SUPPORTED_BELIEF_AWARE_PLANNER_NAMES,
+    SUPPORTED_PROJECTION_TARGETS,
     BeliefAwarePlannerInput,
     PlannerTrackBelief,
     project_belief_aware_planner_input,
@@ -75,8 +76,8 @@ def _standalone_track(**overrides):
     return PlannerTrackBelief(**values)
 
 
-def test_projection_retains_visible_and_occluded_tracks_by_canonical_id() -> None:
-    """Visible legacy rows and complete ID-keyed maintained tracks stay distinct."""
+def test_projection_retains_visible_and_occluded_tracks_by_snapshot_entity_id() -> None:
+    """Visible legacy rows and complete snapshot-keyed tracks stay distinct."""
     belief = _belief_fixture()
 
     projected = project_belief_aware_planner_input(
@@ -90,7 +91,8 @@ def test_projection_retains_visible_and_occluded_tracks_by_canonical_id() -> Non
     assert projected.diagnostics["visible_track_count"] == 1
     assert projected.diagnostics["occluded_track_count"] == 1
     assert projected.diagnostics["stale_track_count"] == 1
-    assert projected.diagnostics["retained_track_count"] == 2
+    assert projected.diagnostics["projected_track_count"] == 2
+    assert projected.diagnostics["supported_projection_target"] is True
     assert projected.ordered_track_ids() == ("ped_000", "ped_001")
     assert projected.tracks["ped_000"].visibility is True
     assert projected.tracks["ped_001"].visibility is False
@@ -99,7 +101,7 @@ def test_projection_retains_visible_and_occluded_tracks_by_canonical_id() -> Non
 
 
 def test_projection_is_independent_of_scenario_agent_order() -> None:
-    """Reordering source agents cannot exchange ID-keyed uncertainty metadata."""
+    """Reordering source agents cannot exchange entity-ID-keyed snapshot metadata."""
     belief = _belief_fixture()
     reordered = replace(belief, agents=tuple(reversed(belief.agents)))
 
@@ -117,6 +119,50 @@ def test_projection_is_independent_of_scenario_agent_order() -> None:
     assert (
         first.tracks["ped_001"].covariance.tolist() == second.tracks["ped_001"].covariance.tolist()
     )
+
+
+def test_reused_entity_id_exposes_no_cross_snapshot_continuity_token() -> None:
+    """A reused snapshot ID has no fabricated generation or continuity token."""
+    first_belief = _belief_fixture()
+    first_agent = first_belief.agents[0]
+    replacement_agent = replace(
+        first_agent,
+        position=replace(first_agent.position, mean_xy=(7.0, 7.0)),
+        velocity=replace(first_agent.velocity, mean_xy=(-0.4, 0.2)),
+    )
+    second_belief = replace(
+        first_belief,
+        sim_time_s=0.6,
+        agents=(replacement_agent, first_belief.agents[1]),
+    )
+
+    first = project_belief_aware_planner_input(
+        first_belief,
+        planner_name="BeliefGuidedLocalPlanner",
+    )
+    second = project_belief_aware_planner_input(
+        second_belief,
+        planner_name="BeliefGuidedLocalPlanner",
+    )
+    first_track = first.tracks["ped_000"]
+    second_track = second.tracks["ped_000"]
+
+    assert first_track.track_id == second_track.track_id == "ped_000"
+    assert not np.array_equal(first_track.mean_state, second_track.mean_state)
+    first_track_payload = first_track.to_dict()
+    second_track_payload = second_track.to_dict()
+    assert not hasattr(first_track, "identity_lifecycle_token")
+    assert not hasattr(second_track, "identity_lifecycle_token")
+    for payload in (first_track_payload, second_track_payload):
+        assert not any(
+            marker in key.lower()
+            for key in payload
+            for marker in ("token", "generation", "continuity")
+        )
+    assert "identity_lifecycle_tokens" not in first.diagnostics
+    assert "identity_lifecycle_tokens" not in second.diagnostics
+    assert first.diagnostics["identity_generation_available"] is False
+    assert second.diagnostics["identity_generation_available"] is False
 
 
 def test_projection_distinguishes_missing_empty_and_unsupported() -> None:
@@ -139,10 +185,13 @@ def test_projection_distinguishes_missing_empty_and_unsupported() -> None:
     assert missing.legacy_observation == {}
     assert empty.diagnostics["status"] == "empty_belief"
     assert empty.tracks == {}
-    assert unsupported.diagnostics["status"] == "unsupported_planner"
+    assert unsupported.diagnostics["status"] == "projection_target_not_supported"
+    assert unsupported.diagnostics["fallback_reason"] == "projection_target_not_supported"
+    assert unsupported.diagnostics["supported_projection_target"] is False
     assert unsupported.tracks == {}
     assert unsupported.legacy_observation["pedestrians"]["count"][0] == pytest.approx(1.0)
     assert SUPPORTED_BELIEF_AWARE_PLANNER_NAMES == frozenset({"BeliefGuidedLocalPlanner"})
+    assert SUPPORTED_PROJECTION_TARGETS == SUPPORTED_BELIEF_AWARE_PLANNER_NAMES
 
 
 def test_projection_counts_out_of_range_as_non_visible_not_occluded() -> None:
@@ -160,7 +209,7 @@ def test_projection_counts_out_of_range_as_non_visible_not_occluded() -> None:
 
     assert projected.diagnostics["visible_track_count"] == 1
     assert projected.diagnostics["occluded_track_count"] == 0
-    assert projected.diagnostics["retained_track_count"] == 2
+    assert projected.diagnostics["projected_track_count"] == 2
 
 
 def test_projection_rejects_malformed_track_and_keeps_safe_legacy_fallback() -> None:
@@ -176,6 +225,7 @@ def test_projection_rejects_malformed_track_and_keeps_safe_legacy_fallback() -> 
     assert "radius" in rejected.diagnostics["fallback_reason"]
     assert rejected.tracks == {}
     assert rejected.diagnostics["dropped_track_count"] == 0
+    assert rejected.diagnostics["retired_track_count"] is None
     assert "pedestrians" in rejected.legacy_observation
 
 
@@ -210,6 +260,7 @@ def test_typed_records_own_arrays_and_export_deterministically() -> None:
     assert list(payload["tracks"]) == ["2"]
     assert json.loads(wrapper.to_json()) == payload
     assert payload["diagnostics"]["status"] == "projected"
+    assert "identity_lifecycle_token" not in payload["tracks"]["2"]
 
 
 def test_typed_record_rejects_non_psd_covariance_and_key_mismatch() -> None:
@@ -255,8 +306,8 @@ def test_typed_record_rejects_non_psd_covariance_and_key_mismatch() -> None:
         )
 
 
-def test_identity_lifecycle_limitation_is_explicit() -> None:
-    """The adapter does not fabricate a generation for numeric-ID reuse."""
+def test_snapshot_identity_limitation_is_explicit() -> None:
+    """The adapter exposes snapshot IDs without claiming lifecycle continuity."""
     projected = project_belief_aware_planner_input(
         _belief_fixture(),
         planner_name="BeliefGuidedLocalPlanner",
@@ -265,6 +316,14 @@ def test_identity_lifecycle_limitation_is_explicit() -> None:
     assert projected.diagnostics["identity_generation_available"] is False
     assert projected.diagnostics["identity_reuse_safe"] is False
     assert projected.diagnostics["lifecycle_reset_required"] is True
+    assert projected.diagnostics["stateful_identity_admitted"] is False
+    assert projected.diagnostics["retired_track_count"] is None
+    assert projected.diagnostics["uncertainty_semantics"] == {
+        "source": "adapter_derived",
+        "aggregate_confidence": "min(position_confidence, velocity_confidence)",
+        "state_covariance": "position_velocity_blocks_plus_zero_radius_block",
+        "radius_uncertainty": "unavailable_as_modelled",
+    }
     assert projected.diagnostics["retirement_tracking"] == (
         "unavailable_at_scenario_belief_boundary"
     )
@@ -483,7 +542,6 @@ def test_track_field_and_time_validation_edges() -> None:
         ({"visibility": "yes"}, "visibility"),
         ({"source": ""}, "source"),
         ({"visibility_state": ""}, "visibility_state"),
-        ({"identity_lifecycle_token": ""}, "identity_lifecycle_token"),
     ):
         with pytest.raises(ValueError, match=match):
             _standalone_track(**overrides)

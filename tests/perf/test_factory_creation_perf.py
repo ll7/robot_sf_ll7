@@ -10,7 +10,6 @@ NOTE: Ensures fast demo mode is disabled to reflect real creation cost.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -74,27 +73,19 @@ def test_factory_creation_mean_within_budget(monkeypatch):
     current_robot_mean = sum(robot_times) / len(robot_times)
     current_image_mean = sum(image_times) / len(image_times)
 
-    # Hard assertions (tightened). To avoid flaky failures on slower/dev
-    # machines, only enforce the hard budget when ROBOT_SF_PERF_ENFORCE=1 is
-    # set in the environment. Otherwise skip the test on breach.
-    enforce = bool(int(os.environ.get("ROBOT_SF_PERF_ENFORCE", "0")))
-    if enforce:
-        assert current_robot_mean <= base_robot * THRESHOLD, (
+    # Hard budget (tightened). A measured breach fails on every lane: skips are
+    # reserved for missing prerequisites (baseline/hardware), so a regression
+    # can never pass silently (issue #8377). Hosts that cannot meet the
+    # reference budget must regenerate the baseline for their hardware profile
+    # instead of relying on silent skips.
+    if current_robot_mean > base_robot * THRESHOLD:
+        pytest.fail(
             f"Robot env creation mean {current_robot_mean:.2f}ms exceeds hard budget (+{(THRESHOLD - 1) * 100:.0f}% {base_robot * THRESHOLD:.2f}ms ceiling from baseline {base_robot:.2f}ms)"
         )
-        assert current_image_mean <= base_image * THRESHOLD, (
+    if current_image_mean > base_image * THRESHOLD:
+        pytest.fail(
             f"Image env creation mean {current_image_mean:.2f}ms exceeds hard budget (+{(THRESHOLD - 1) * 100:.0f}% {base_image * THRESHOLD:.2f}ms ceiling from baseline {base_image:.2f}ms)"
         )
-    else:
-        if current_robot_mean > base_robot * THRESHOLD:
-            pytest.skip(
-                f"Robot env creation mean {current_robot_mean:.2f}ms exceeds hard budget; set ROBOT_SF_PERF_ENFORCE=1 to enforce"
-            )
-        if current_image_mean > base_image * THRESHOLD:
-            pytest.skip(
-                f"Image env creation mean {current_image_mean:.2f}ms exceeds hard budget; set ROBOT_SF_PERF_ENFORCE=1 to enforce"
-            )
-    # Soft warnings (informational only within new narrow band)
     if (
         base_robot * THRESHOLD < current_robot_mean <= base_robot * SOFT_THRESHOLD
     ):  # pragma: no cover

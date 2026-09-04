@@ -25,7 +25,6 @@ if TYPE_CHECKING:
 
 _SOFT_STEPS_PER_SEC = float(os.environ.get("ROBOT_SF_SIM_STEPS_SOFT", "2.0"))
 _HARD_STEPS_PER_SEC = float(os.environ.get("ROBOT_SF_SIM_STEPS_HARD", "0.5"))
-_ENFORCE_PERF = os.environ.get("ROBOT_SF_PERF_ENFORCE", "0") == "1"
 _WARMUP_STEPS = int(os.environ.get("ROBOT_SF_SIM_WARMUP_STEPS", "20"))
 _MEASURED_STEPS = 10
 
@@ -117,32 +116,23 @@ def test_simulation_step_throughput():
             "ms_per_step": ms_per_step,
             "soft_steps_per_sec": _SOFT_STEPS_PER_SEC,
             "hard_steps_per_sec": _HARD_STEPS_PER_SEC,
-            "enforce_perf": _ENFORCE_PERF,
             "peds_have_obstacle_forces": True,
             "ped_count": ped_count,
         },
     )
 
     if steps_per_sec < _HARD_STEPS_PER_SEC:
-        msg = (
+        # A measured breach fails on every lane: skips are reserved for missing
+        # prerequisites, so a throughput regression can never pass silently
+        # (issue #8377). Hosts that cannot meet the reference budget must tune
+        # ROBOT_SF_SIM_STEPS_SOFT/ROBOT_SF_SIM_STEPS_HARD for their profile.
+        pytest.fail(
             "Simulation throughput below hard threshold: "
             f"{steps_per_sec:.2f} steps/sec < {_HARD_STEPS_PER_SEC:.2f}"
         )
-        if _ENFORCE_PERF:
-            pytest.fail(msg)
-        pytest.skip(
-            f"{msg}; set ROBOT_SF_PERF_ENFORCE=1 to enforce or tune "
-            "ROBOT_SF_SIM_STEPS_SOFT/ROBOT_SF_SIM_STEPS_HARD for your hardware profile"
-        )
 
     if steps_per_sec < _SOFT_STEPS_PER_SEC:
-        msg = (
+        pytest.fail(
             "Simulation throughput below soft threshold: "
             f"{steps_per_sec:.2f} steps/sec < {_SOFT_STEPS_PER_SEC:.2f}"
-        )
-        if _ENFORCE_PERF:
-            pytest.fail(msg)
-        pytest.skip(
-            f"{msg}; set ROBOT_SF_PERF_ENFORCE=1 to enforce or tune "
-            "ROBOT_SF_SIM_STEPS_SOFT/ROBOT_SF_SIM_STEPS_HARD for your hardware profile"
         )

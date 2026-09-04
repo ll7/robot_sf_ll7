@@ -44,7 +44,7 @@ def _load_scenario_belief_types() -> tuple[type[Any], type[Any]] | None:
             ScenarioBelief,
             VisibilityState,
         )
-    except (ImportError, ModuleNotFoundError):
+    except ImportError:
         return None
     return ScenarioBelief, VisibilityState
 

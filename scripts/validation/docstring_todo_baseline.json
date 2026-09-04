@@ -9,8 +9,8 @@
       "occurrences": 0
     },
     "scripts": {
-      "files": 16,
-      "occurrences": 257
+      "files": 15,
+      "occurrences": 182
     },
     "tests": {
       "files": 180,
@@ -20,7 +20,6 @@
   "files": {
     "scripts/PPO_training/train_ppo_punish_action.py": 2,
     "scripts/debug_trained_policy.py": 1,
-    "scripts/multi_extractor_training.py": 75,
     "scripts/perf/baseline_factory_creation.py": 11,
     "scripts/ranking_table.py": 8,
     "scripts/research/compare_ablations.py": 3,
@@ -223,7 +222,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 196,
-    "total_occurrences": 1500
+    "files": 195,
+    "total_occurrences": 1425
   }
 }

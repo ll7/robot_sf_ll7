@@ -1,8 +1,9 @@
 """Planner-facing ScenarioBelief uncertainty projection helpers.
 
 These helpers are diagnostic interface smoke, not benchmark evidence. They bridge
-the uncertainty-preserving ScenarioBelief report into one planner-compatible observation shape
-without changing legacy policy projections.
+the uncertainty-preserving ScenarioBelief report into planner-compatible observation shapes
+without changing legacy policy projections. The typed seam is an entity-ID-keyed projection of
+one ScenarioBelief snapshot; it does not establish cross-lifecycle identity continuity.
 """
 
 from __future__ import annotations
@@ -21,9 +22,10 @@ if TYPE_CHECKING:
 SCENARIO_BELIEF_PLANNER_PROJECTION_SCHEMA_VERSION = "scenario-belief-planner-projection.v1"
 SUPPORTED_UNCERTAINTY_PLANNER_KEYS = frozenset({"stream_gap"})
 BELIEF_AWARE_PLANNER_INPUT_SCHEMA_VERSION = "belief-aware-planner-input.v1"
-SUPPORTED_BELIEF_AWARE_PLANNER_NAMES = frozenset({"BeliefGuidedLocalPlanner"})
-# Keep the key-shaped alias discoverable for callers that use the existing adapter vocabulary.
-SUPPORTED_BELIEF_AWARE_PLANNER_KEYS = SUPPORTED_BELIEF_AWARE_PLANNER_NAMES
+SUPPORTED_PROJECTION_TARGETS = frozenset({"BeliefGuidedLocalPlanner"})
+# Keep the existing names discoverable for callers that use the initial adapter vocabulary.
+SUPPORTED_BELIEF_AWARE_PLANNER_NAMES = SUPPORTED_PROJECTION_TARGETS
+SUPPORTED_BELIEF_AWARE_PLANNER_KEYS = SUPPORTED_PROJECTION_TARGETS
 
 
 def _load_scenario_belief_types() -> tuple[type[Any], type[Any]] | None:
@@ -186,14 +188,15 @@ def _readonly_float_array(
 
 
 def _readonly_covariance(value: Any) -> np.ndarray:
-    """Validate the canonical 5D state covariance and return an owned copy.
+    """Validate the adapter's 5D state covariance and return an owned copy.
 
     ``ScenarioBelief`` owns independent 2D position and velocity covariance
     matrices.  The planner state is ``[x, y, vx, vy, radius]``; the adapter
     embeds those two blocks and uses a deterministic zero-variance radius block
-    because the current canonical owner has no radius uncertainty or cross terms.
-    A 4x4 block matrix is accepted for standalone typed-record construction and
-    is normalized to the same 5x5 representation.
+    because radius uncertainty and cross terms are unavailable as modelled at
+    the ScenarioBelief boundary. The zero block is not evidence of measured
+    zero radius uncertainty. A 4x4 block matrix is accepted for standalone
+    typed-record construction and is normalized to the same 5x5 representation.
 
     Returns:
         An owned, read-only 5x5 positive-semidefinite covariance matrix.
@@ -249,7 +252,7 @@ def _validate_nonnegative_int(name: str, value: Any) -> int:
 
 
 def _validate_track_id(value: Any) -> str | int:
-    """Validate a stable string or integer track identifier.
+    """Validate a snapshot-supplied string or integer track identifier.
 
     Current ``ScenarioBelief`` uses string entity IDs.  Integer IDs remain
     accepted for interoperability with the canonical prediction types, but are
@@ -276,18 +279,21 @@ def _track_sort_key(track_id: str | int) -> tuple[int, str | int]:
 
 @dataclass(frozen=True)
 class PlannerTrackBelief:
-    """Immutable, track-keyed planner state from one maintained belief.
+    """Immutable, entity-ID-keyed planner state from one belief snapshot.
 
-    ``track_id`` is the canonical entity identity, not a row number.  The
-    current ScenarioBelief owner supplies string IDs; integer IDs are retained
-    only for standalone typed interoperability.  ``covariance`` uses state
-    order ``[x, y, vx, vy, radius]`` and is a 5x5 owned, read-only array.
+    ``track_id`` is the entity identifier supplied by this ``ScenarioBelief``
+    snapshot, not a visible-observation row number. No cross-lifecycle
+    continuity is implied. The current representation supplies string IDs;
+    integer IDs are retained only for standalone typed interoperability.
+    ``covariance`` uses state order ``[x, y, vx, vy, radius]`` and is a 5x5
+    owned, read-only array. The position/velocity blocks are adapter-projected;
+    the radius block is zero because radius uncertainty is unavailable as
+    modelled, not because it is known to be zero.
 
-    The current ScenarioBelief contract does not expose a track generation or
-    retirement epoch.  ``identity_lifecycle_token`` therefore identifies the
-    canonical entity ID only and is explicitly *not* a reuse-safe generation.
-    Stateful consumers must reset on a canonical lifecycle event until the
-    representation owner supplies that missing generation.
+    The aggregate ``confidence`` is adapter-derived as the minimum of position
+    and velocity confidence. Stateful consumers must reset at an externally
+    supplied lifecycle boundary until the representation owner supplies a
+    generation or retirement epoch.
     """
 
     track_id: str | int
@@ -301,7 +307,6 @@ class PlannerTrackBelief:
     position_confidence: float | None = None
     velocity_confidence: float | None = None
     visibility_state: str | None = None
-    identity_lifecycle_token: str | None = None
 
     def __post_init__(self) -> None:
         """Validate and defensively normalize all planner-track fields."""
@@ -342,12 +347,6 @@ class PlannerTrackBelief:
             not isinstance(self.visibility_state, str) or not self.visibility_state
         ):
             raise ValueError("visibility_state must be a non-empty string when provided")
-        lifecycle_token = self.identity_lifecycle_token
-        if lifecycle_token is None:
-            lifecycle_token = f"entity-id:{track_id}"
-        if not isinstance(lifecycle_token, str) or not lifecycle_token:
-            raise ValueError("identity_lifecycle_token must be a non-empty string")
-        object.__setattr__(self, "identity_lifecycle_token", lifecycle_token)
 
     def to_dict(self) -> dict[str, Any]:
         """Return a deterministic JSON-safe track mapping."""
@@ -360,7 +359,6 @@ class PlannerTrackBelief:
             "visibility": self.visibility,
             "age_steps": self.age_steps,
             "source": self.source,
-            "identity_lifecycle_token": self.identity_lifecycle_token,
         }
         if self.position_confidence is not None:
             payload["position_confidence"] = float(self.position_confidence)
@@ -455,7 +453,7 @@ def _validate_planner_mapping(
 
 @dataclass(frozen=True)
 class BeliefAwarePlannerInput:
-    """Versioned planner input preserving legacy observations and ID-keyed tracks."""
+    """Versioned planner input preserving legacy observations and snapshot-keyed tracks."""
 
     legacy_observation: Mapping[str, Any]
     tracks: Mapping[str | int, PlannerTrackBelief]
@@ -484,11 +482,11 @@ class BeliefAwarePlannerInput:
 
     @property
     def projection(self) -> Mapping[str, Any]:
-        """Return the compact projection diagnostics under the issue vocabulary."""
+        """Return the compact entity-ID-keyed snapshot projection diagnostics."""
         return self.diagnostics
 
     def ordered_track_ids(self) -> tuple[str | int, ...]:
-        """Return track IDs in canonical deterministic order."""
+        """Return track IDs in deterministic order."""
         return tuple(sorted(self.tracks, key=_track_sort_key))
 
     def to_dict(self) -> dict[str, Any]:
@@ -583,14 +581,14 @@ def _planner_track_from_entity(
     timestep_s: float,
     visibility_type: type[Any],
 ) -> PlannerTrackBelief:
-    """Build one planner track from public EntityBelief fields only.
+    """Build one planner track from public fields of one belief snapshot.
 
     Returns:
-        An immutable planner track containing only canonical public belief data.
+        An immutable planner track containing only public snapshot data.
     """
 
     if not isinstance(agent.entity_id, (str, int)) or isinstance(agent.entity_id, bool):
-        raise ValueError("entity_id must be a stable string or integer")
+        raise ValueError("entity_id must be a non-empty string or integer")
     visibility_state = agent.visibility_state
     if not isinstance(visibility_state, visibility_type):
         raise ValueError("visibility_state is malformed")
@@ -638,7 +636,6 @@ def _planner_track_from_entity(
         position_confidence=position_confidence,
         velocity_confidence=velocity_confidence,
         visibility_state=visibility_state.value,
-        identity_lifecycle_token=f"entity-id:{track_id}",
     )
 
 
@@ -675,6 +672,8 @@ def _belief_projection_diagnostics(
         "schema_version": BELIEF_AWARE_PLANNER_INPUT_SCHEMA_VERSION,
         "status": status,
         "planner_name": planner_name,
+        "projection_target": planner_name,
+        "supported_projection_target": planner_name in SUPPORTED_PROJECTION_TARGETS,
         "belief_step": belief_step,
         "visible_track_count": sum(track.visibility for track in ordered_tracks),
         "occluded_track_count": sum(
@@ -686,20 +685,24 @@ def _belief_projection_diagnostics(
             for track in ordered_tracks
         ),
         "stale_track_count": sum(track.age_steps > 0 for track in ordered_tracks),
-        "retained_track_count": len(ordered_tracks),
-        "retired_track_count": 0,
+        "projected_track_count": len(ordered_tracks),
+        "retired_track_count": None,
         "dropped_track_count": 0,
         "per_reason_drop_count": {},
         "fallback_reason": fallback_reason,
         "ordered_track_ids": [track.track_id for track in ordered_tracks],
-        "identity_lifecycle_tokens": {
-            str(track.track_id): track.identity_lifecycle_token for track in ordered_tracks
+        "uncertainty_semantics": {
+            "source": "adapter_derived",
+            "aggregate_confidence": "min(position_confidence, velocity_confidence)",
+            "state_covariance": "position_velocity_blocks_plus_zero_radius_block",
+            "radius_uncertainty": "unavailable_as_modelled",
         },
         "identity_lifecycle_status": "entity_id_only",
         "identity_generation_available": False,
         "identity_reuse_safe": False,
         "retirement_tracking": "unavailable_at_scenario_belief_boundary",
         "lifecycle_reset_required": True,
+        "stateful_identity_admitted": False,
         "claim_boundary": "diagnostic_interface_smoke",
     }
     return diagnostics
@@ -745,13 +748,16 @@ def project_belief_aware_planner_input(
     planner_name: str | None = None,
     planner_key: str | None = None,
 ) -> BeliefAwarePlannerInput:
-    """Project a ScenarioBelief into an explicit identity-safe planner input.
+    """Project one ScenarioBelief snapshot into an entity-ID-keyed planner input.
 
-    The only admitted name is ``BeliefGuidedLocalPlanner``.  Missing belief,
-    empty belief, unsupported planner, and invalid belief are represented by
-    distinct statuses.  A valid projection retains every entity in
-    ``ScenarioBelief.agents`` regardless of visibility, age, confidence, or
-    existence; canonical retirement policy is not reimplemented here.
+    ``BeliefGuidedLocalPlanner`` is the only currently supported projection
+    target; this allow-list does not admit a planner implementation or stateful
+    identity semantics. Missing belief, empty belief, unsupported target, and
+    invalid belief are represented by distinct statuses. A valid projection
+    retains every entity in ``ScenarioBelief.agents`` regardless of visibility,
+    age, confidence, or existence. ``track_id`` is the identifier supplied by
+    this snapshot, not a visible-row position, and no cross-lifecycle
+    continuity or retirement policy is inferred here.
 
     This is an additive diagnostic seam.  It does not register a planner,
     alter a default roster, or change ``to_socnav_struct()``/the existing
@@ -835,12 +841,12 @@ def project_belief_aware_planner_input(
             diagnostics=diagnostics,
         )
 
-    if resolved_name not in SUPPORTED_BELIEF_AWARE_PLANNER_NAMES:
+    if resolved_name not in SUPPORTED_PROJECTION_TARGETS:
         diagnostics = _belief_projection_diagnostics(
             planner_name=resolved_name,
-            status="unsupported_planner",
+            status="projection_target_not_supported",
             belief_step=belief_step,
-            fallback_reason="planner_not_explicitly_admitted",
+            fallback_reason="projection_target_not_supported",
         )
         return BeliefAwarePlannerInput(
             legacy_observation=legacy_observation,
@@ -911,6 +917,7 @@ __all__ = [
     "SCENARIO_BELIEF_PLANNER_PROJECTION_SCHEMA_VERSION",
     "SUPPORTED_BELIEF_AWARE_PLANNER_KEYS",
     "SUPPORTED_BELIEF_AWARE_PLANNER_NAMES",
+    "SUPPORTED_PROJECTION_TARGETS",
     "SUPPORTED_UNCERTAINTY_PLANNER_KEYS",
     "BeliefAwarePlannerInput",
     "PlannerTrackBelief",

@@ -221,6 +221,25 @@ def _metadata_sha256(metadata: Mapping[str, Any]) -> str:
     return hashlib.sha256(_canonical_bytes(_metadata_contract(metadata))).hexdigest()
 
 
+def _remote_metadata_contract_sha256(payload: Mapping[str, Any]) -> str:
+    """Hash the credential-free metadata contract in a remote deposition payload.
+
+    Returns:
+        Lowercase hexadecimal SHA-256 digest.
+
+    Raises:
+        ZenodoPublisherError: If the remote metadata cannot be represented as
+            a deterministic JSON contract.
+    """
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, Mapping):
+        raise ZenodoPublisherError("Zenodo remote metadata is malformed")
+    try:
+        return _metadata_sha256(metadata)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ZenodoPublisherError("Zenodo remote metadata is malformed") from exc
+
+
 def _validated_api_base(api_base: str) -> str:
     """Require the production Zenodo HTTPS API base without URL credentials/queries.
 
@@ -2140,6 +2159,7 @@ def _remote_revision_binding(
         "doi": payload.get("doi"),
         "state": payload.get("state"),
         "submitted": payload.get("submitted"),
+        "metadata_contract_sha256": _remote_metadata_contract_sha256(payload),
         "files": [
             {"name": name, "id": file_id}
             for name, file_id in sorted(

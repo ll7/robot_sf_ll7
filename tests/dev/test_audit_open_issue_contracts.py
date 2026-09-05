@@ -480,3 +480,37 @@ def test_fixture_cli_process_boundary(tmp_path: Path) -> None:
     assert report["schema"] == "open_issue_contract_audit.v1"
     assert report["mutation_authorized"] is False
     assert report["summary"]["executable_leaf_numbers"] == [1]
+
+
+def test_fixture_cli_partial_check_returns_two_after_writing_report(tmp_path: Path) -> None:
+    """A bounded partial audit remains diagnostic and fails closed at the CLI boundary."""
+    fixture_path = tmp_path / "fixture.json"
+    fixture_path.write_text(
+        json.dumps(_fixture([_raw_issue(1)], trailing_empty_page=False)), encoding="utf-8"
+    )
+    root = Path(__file__).resolve().parents[2]
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scripts.dev.audit_open_issue_contracts",
+            "--fixture",
+            str(fixture_path),
+            "--page-size",
+            "1",
+            "--max-pages",
+            "1",
+            "--check",
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    assert report["complete"] is False
+    assert report["applicable"] is False
+    assert report["pagination"]["resume_hint"]

@@ -162,6 +162,7 @@ def _linked_recovery_fixture(
     for source in (
         RUN_SHARED_VENV,
         RECOVER_FAST_PYSF,
+        REPO_ROOT / "scripts" / "dev" / "worktree_creation_lock.py",
         REPO_ROOT / "scripts" / "dev" / "check_fast_pysf_runtime.py",
         REPO_ROOT / "scripts" / "dev" / "check_worktree_capacity.py",
         REPO_ROOT / "scripts" / "dev" / "check_worktree_optional_deps.py",
@@ -676,6 +677,95 @@ def test_shared_venv_recovery_serializes_same_repository(tmp_path: Path) -> None
         if first.poll() is None:
             first.kill()
             first.wait(timeout=30)
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def _flockless_path(stub_bin: Path, fake_bin: Path) -> str:
+    """Build a PATH without the flock CLI (e.g. macOS) keeping all other tools."""
+    stub_bin.mkdir(exist_ok=True)
+    for directory in ("/usr/bin", "/bin", "/usr/local/bin"):
+        try:
+            entries = os.listdir(directory)
+        except OSError:
+            continue
+        for entry in entries:
+            if entry == "flock" or (stub_bin / entry).exists():
+                continue
+            try:
+                (stub_bin / entry).symlink_to(os.path.join(directory, entry))
+            except OSError:
+                continue
+    assert shutil.which("flock", path=str(stub_bin)) is None, "stub PATH must hide flock"
+    return f"{fake_bin}{os.pathsep}{stub_bin}"
+
+
+def test_shared_venv_recovery_portable_lock_preserves_contention_contract(
+    tmp_path: Path,
+) -> None:
+    """A flock-less contender still exits 75 against a flock-CLI lock holder."""
+    repo, worktree, fake_bin, _capture, sync_started, env = _linked_recovery_fixture(tmp_path)
+    first_env = {**env, "UV_SYNC_STARTED": str(sync_started), "UV_SYNC_SLEEP": "1.5"}
+    first = subprocess.Popen(
+        [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+        cwd=worktree,
+        env=first_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not sync_started.exists() and first.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert sync_started.exists(), "first recovery did not reach the bounded sync window"
+
+        stub_bin = tmp_path / "stub-bin"
+        contender_env = {**env, "PATH": _flockless_path(stub_bin, fake_bin)}
+        second = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=contender_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert second.returncode == 75, second.stderr
+        assert "another fast-pysf recovery is active" in second.stderr
+        assert "flock is required" not in second.stderr
+
+        first_stdout, first_stderr = first.communicate(timeout=30)
+        assert first.returncode == 0, first_stdout + first_stderr
+    finally:
+        if first.poll() is None:
+            first.kill()
+            first.wait(timeout=30)
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_portable_lock_succeeds_without_flock_cli(
+    tmp_path: Path,
+) -> None:
+    """Uncontended recovery proceeds on the portable path without the flock CLI."""
+    repo, worktree, fake_bin, capture, _, env = _linked_recovery_fixture(tmp_path)
+    stub_bin = tmp_path / "stub-bin"
+    fallback_env = {**env, "PATH": _flockless_path(stub_bin, fake_bin)}
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=fallback_env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "portable lock" in result.stderr
+        assert "flock is required" not in result.stderr
+        calls = capture.read_text(encoding="utf-8").splitlines()
+        assert calls.count("sync --all-extras --reinstall-package robot-sf --frozen") == 1
+    finally:
         _remove_linked_recovery_fixture(repo, worktree)
 
 

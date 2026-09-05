@@ -772,6 +772,72 @@ def test_worktree_creation_lock_helper_contract(tmp_path: Path) -> None:
     assert lock_path.exists()
 
 
+def test_worktree_creation_lock_helper_non_blocking_reports_contention(
+    tmp_path: Path,
+) -> None:
+    """--non-blocking exits 75 on a held lock and runs the child when free."""
+    lock_path = tmp_path / "test-nonblocking.lock"
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            "import time; time.sleep(30)",
+        ],
+        cwd=REPO_ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not lock_path.exists() and holder.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert lock_path.exists(), "holder did not create the lock file"
+        time.sleep(0.3)
+        contended = subprocess.run(
+            [
+                sys.executable,
+                str(WORKTREE_CREATION_LOCK),
+                "--non-blocking",
+                str(lock_path),
+                "--",
+                sys.executable,
+                "-c",
+                "pass",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        assert contended.returncode == 75, contended.stderr
+    finally:
+        holder.terminate()
+        holder.wait(timeout=15)
+    free = subprocess.run(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            "--non-blocking",
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            "pass",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert free.returncode == 0, free.stderr
+
+
 def test_create_worktree_hints_when_orphan_branch_diverged(tmp_path: Path) -> None:
     """An orphan branch that is not an ancestor of the base gets a recovery hint."""
     branch = _unique_branch(tmp_path, "orphan-diverged")

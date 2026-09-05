@@ -329,7 +329,7 @@ def _validate_adapter_status(metadata: dict[str, Any]) -> None:
         ("evidence_eligible", "evidence_eligible"),
     ):
         if key not in metadata:
-            continue
+            raise ValueError(f"episode record {label} must be explicit")
         value = metadata[key]
         if not isinstance(value, bool):
             raise ValueError(f"episode record {label} must be boolean when present")

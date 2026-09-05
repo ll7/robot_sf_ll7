@@ -691,6 +691,24 @@ def test_producer_rejects_unavailable_or_ineligible_adapter_metadata(
         )
 
 
+@pytest.mark.parametrize("metadata_field", ["fallback_or_degraded", "evidence_eligible"])
+def test_producer_rejects_missing_adapter_eligibility_metadata(
+    tmp_path: Path, metadata_field: str
+) -> None:
+    """Missing eligibility diagnostics cannot be treated as successful execution."""
+    contract_path, binding_path = _contract_and_binding(tmp_path)
+    records = _execution_records(contract_path, binding_path)
+    records[1]["episode_record"]["algorithm_metadata"].pop(metadata_field)
+
+    with pytest.raises(ValueError, match=f"{metadata_field} must be explicit"):
+        build_outcome_packet(
+            records,
+            contract_path=contract_path,
+            binding_path=binding_path,
+            producer_commit=PRODUCER_COMMIT,
+        )
+
+
 def test_producer_rejects_partial_or_duplicate_confirmation_lineage(tmp_path: Path) -> None:
     """A missing or duplicate execution seed blocks the complete packet."""
     contract_path, binding_path = _contract_and_binding(tmp_path)

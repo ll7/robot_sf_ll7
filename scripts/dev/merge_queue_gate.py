@@ -83,6 +83,7 @@ from scripts.ci.pr_contract_check import (  # noqa: E402
     get_pr_commit_messages,
 )
 from scripts.dev.check_pr_ci_status import (  # noqa: E402
+    _check_run_order_key,
     _enrich_rest_check_runs,
     _latest_check_runs,
     _rest_check_runs_to_rollup,
@@ -755,14 +756,32 @@ def _rollup_overall(rollup: list[dict[str, Any]]) -> str:  # noqa: C901
         return "pending"
     if any(not isinstance(check, dict) for check in rollup):
         return "pending"
-    if any(
-        check.get("name") == GATE_JOB_NAME and check.get("workflowName") != GATE_WORKFLOW_NAME
-        for check in rollup
-    ):
-        # A job name without its workflow identity cannot prove whether this is
-        # the required Merge Queue Gate context or an unrelated check.
-        return "unknown"
     effective_rollup, _superseded_count = _latest_check_runs(rollup)
+    gate_checks = [check for check in rollup if check.get("name") == GATE_JOB_NAME]
+    if any(
+        check.get("workflowName") != GATE_WORKFLOW_NAME
+        and not (check.get("startedAt") or check.get("started_at"))
+        for check in gate_checks
+    ):
+        # Without a timestamp there is no safe way to prove that an identity-
+        # malformed gate record is historical, so retain the fail-closed result.
+        return "unknown"
+    current_gate = max(gate_checks, key=_check_run_order_key) if gate_checks else None
+    if current_gate is not None:
+        # ``_latest_check_runs`` intentionally keeps malformed identity records
+        # fail-closed, so select the newest gate by timestamp before validating
+        # its workflow identity. This still drops an older malformed predecessor
+        # when a newer identity-bound rerun exists.
+        effective_rollup = [
+            check for check in effective_rollup if check.get("name") != GATE_JOB_NAME
+        ]
+        effective_rollup.append(current_gate)
+    if current_gate is not None and current_gate.get("workflowName") != GATE_WORKFLOW_NAME:
+        # A current job name without its workflow identity cannot prove whether
+        # this is the required Merge Queue Gate context or an unrelated check.
+        # Superseded historical records are ignored before this validation so a
+        # malformed predecessor cannot mask a newer, identity-bound rerun.
+        return "unknown"
     without_current_gate = [
         check
         for check in effective_rollup

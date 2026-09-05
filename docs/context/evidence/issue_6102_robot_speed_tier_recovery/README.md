@@ -69,6 +69,9 @@ Each metric carries one versioned source-binding payload containing the complete
 canonical synthesis row: pooled effect and standard error, 180-pair denominator,
 both directional raw and Holm-adjusted tests and bounds, preregistered harm threshold,
 activation diagnostics, classification, and the immutable `synthesis.json` SHA-256.
+It also records the exact preregistration-file SHA, seed values, and scenario
+identities; the builder rejects mutations even when the derived denominator stays
+at 180.
 
 The successor still uses `smoke_diagnostic` / `diagnostic_only`. Its 18 activated
 contrasts remain `inconclusive` pending a separate domain-aware admission decision;

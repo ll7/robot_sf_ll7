@@ -20,6 +20,28 @@ scripts/dev/run_worktree_shared_venv.sh -- \
   uv run pytest tests/test_ci_script_contract.py -q
 ```
 
+## Recover stale fast-pysf explicitly
+
+If the shared wrapper reports a stale installed `fast-pysf` package, recover from the linked
+worktree by rerunning the same command with the explicit recovery option:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh --recover-stale-fast-pysf -- \
+  uv run pytest tests/test_ci_script_contract.py -q
+```
+
+This route creates or refreshes only the current linked worktree's ignored `.venv`. It refuses the
+main checkout and dirty dependency inputs, checks `ROBOT_SF_WORKTREE_MIN_FREE_BYTES` (2 GiB by
+default) with `check_worktree_capacity.py`, serializes recovery per repository with a kernel-backed
+lock, and verifies `fast-pysf` before starting the command. It runs the frozen, auditable operation
+`uv sync --all-extras --reinstall-package robot-sf --frozen`; an existing coherent local environment
+skips the sync. Capacity or lock contention fails closed without starting the wrapped command.
+
+Do not combine recovery with `--venv`, `--standalone`, or a freshness bypass. Repair an explicitly
+owned environment manually with `uv sync --all-extras --reinstall-package robot-sf` in that
+checkout only when that ownership is intentional. The standalone helper and its ownership boundary
+are documented in `scripts/dev/recover_fast_pysf_worktree.sh`.
+
 ## Readiness count selectors
 
 When reporting readiness counts, name the exact selector so another contributor can reproduce the

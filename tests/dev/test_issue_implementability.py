@@ -35,6 +35,20 @@ uv run pytest -q tests/dev/test_example.py
 ```
 """
 
+ISSUE_8453_PRE_REPAIR_BODY = """## Goal
+Make agents choose a bounded task route.
+
+## Scope and ownership
+Keep the implementation packet scoped to one route and preserve existing gates.
+
+## Required changes
+- Update the canonical workflow entrypoint.
+
+## Acceptance and validation
+- [ ] The route is explicit and the focused checks pass.
+- `uv run python scripts/tools/sync_ai_config.py --check`
+"""
+
 
 def _issue(*, labels: list[str] | None = None, body: str = COMPLETE_BODY) -> dict[str, object]:
     return {
@@ -565,6 +579,18 @@ def test_preflight_body_text_accepts_complete_body() -> None:
     assert payload["ready"] is True
     assert payload["missing_fields"] == []
     assert payload["body_sha256"] == issue_implementability.preflight_body_text(body)["body_sha256"]
+
+
+def test_preflight_body_text_accepts_issue_8453_pre_repair_shape() -> None:
+    """Issue #8453's compound headings satisfy their combined contract fields."""
+    inspection = inspect_contract(ISSUE_8453_PRE_REPAIR_BODY)
+    payload = issue_implementability.preflight_body_text(ISSUE_8453_PRE_REPAIR_BODY)
+
+    assert inspection["fields"]["scope"]["matched_headings"] == ["scope and ownership"]
+    assert inspection["fields"]["acceptance"]["matched_headings"] == ["acceptance and validation"]
+    assert inspection["fields"]["verification"]["matched_headings"] == ["acceptance and validation"]
+    assert payload["ready"] is True
+    assert payload["missing_fields"] == []
 
 
 @pytest.mark.parametrize(

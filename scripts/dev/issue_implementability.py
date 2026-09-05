@@ -98,6 +98,7 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "non goals",
         "out of scope",
         "scope",
+        "scope and ownership",
         "scope boundary",
     ),
     "inputs": (
@@ -114,6 +115,7 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "required contract fields",
     ),
     "acceptance": (
+        "acceptance and validation",
         "acceptance criteria",
         "completion",
         "definition of done",
@@ -121,6 +123,7 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "success metrics",
     ),
     "verification": (
+        "acceptance and validation",
         "proof",
         "testing",
         "validation",

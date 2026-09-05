@@ -30,6 +30,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from robot_sf.benchmark.result_interpretation_packet import (  # noqa: E402
+    _git_file_sha256,
     compute_packet_digest,
     load_result_interpretation_packet,
     render_caption,
@@ -543,6 +544,34 @@ def _validate_producer_commit(commit: str) -> str:
     return resolved
 
 
+def _refresh_tracked_source_ref(source: Mapping[str, Any]) -> dict[str, Any]:
+    """Refresh one inherited source ref from the current tracked bytes.
+
+    The reviewed predecessor packet can contain a historical or abbreviated
+    ``tracked_commit``.  Reuse its path and declared digest, but resolve the
+    current commit that owns those exact bytes instead of copying stale
+    provenance into the successor packet.
+    """
+
+    source_path = _repo_path(Path(_require_nonempty_string(source.get("path"), "source path")))
+    relative_path = source_path.relative_to(_REPO_ROOT.resolve()).as_posix()
+    declared_sha256 = _require_sha256(source.get("sha256"), "source sha256")
+    current_sha256 = _sha256(source_path)
+    if current_sha256 != declared_sha256:
+        raise ValueError(f"source bytes do not match declared sha256 for {relative_path}")
+
+    tracked_commit = _git("log", "-1", "--format=%H", "--", relative_path)
+    if not tracked_commit:
+        raise ValueError(f"source path is not tracked: {relative_path}")
+    tracked_sha256 = _git_file_sha256(tracked_commit, relative_path)
+    if tracked_sha256 != declared_sha256:
+        raise ValueError(f"tracked source bytes do not match declared sha256 for {relative_path}")
+
+    refreshed = dict(source)
+    refreshed["tracked_commit"] = tracked_commit
+    return refreshed
+
+
 def _producer_command(commit: str) -> str:
     """Return a checkout-pinned, non-self-referential reproduction command."""
 
@@ -969,10 +998,12 @@ def build_packet(
         == "authenticated_immutable_source_hydrated"
     )
 
-    recovery_source = next(
-        source
-        for source in previous_packet["sources"]
-        if source["source_id"] == "recovery_manifest"
+    recovery_source = _refresh_tracked_source_ref(
+        next(
+            source
+            for source in previous_packet["sources"]
+            if source["source_id"] == "recovery_manifest"
+        )
     )
     metrics: list[dict[str, Any]] = []
     decisions: list[dict[str, Any]] = []

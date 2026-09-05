@@ -25,6 +25,7 @@ from robot_sf.benchmark.result_interpretation_packet import (
 from scripts.analysis import build_issue_7980_speed_tier_packet as builder
 from scripts.analysis.build_issue_7980_speed_tier_packet import (
     _canonical_manifest_digest,
+    _refresh_tracked_source_ref,
     _review_sidecar_path,
     _review_sidecar_payload,
     _validate_source_receipt,
@@ -398,6 +399,40 @@ def test_source_receipt_rejects_tracked_blob_drift(
         )
 
 
+def test_inherited_recovery_source_ref_refreshes_stale_tracked_commit() -> None:
+    """Resolve an inherited short commit from the current tracked source bytes."""
+
+    source = next(
+        source
+        for source in _load_json(EVIDENCE_DIR / "result_interpretation_packet.v1.json")["sources"]
+        if source["source_id"] == "recovery_manifest"
+    )
+    assert source["tracked_commit"] == "75c7eb725"
+
+    refreshed = _refresh_tracked_source_ref(source)
+
+    expected_commit = builder._git("log", "-1", "--format=%H", "--", source["path"])
+    assert refreshed["path"] == source["path"]
+    assert refreshed["sha256"] == source["sha256"]
+    assert refreshed["tracked_commit"] == expected_commit
+    assert len(refreshed["tracked_commit"]) == 40
+    assert refreshed["tracked_commit"] != source["tracked_commit"]
+
+
+def test_inherited_recovery_source_ref_fails_closed_on_digest_drift() -> None:
+    """Reject an inherited source ref when its declared bytes no longer match."""
+
+    source = next(
+        source
+        for source in _load_json(EVIDENCE_DIR / "result_interpretation_packet.v1.json")["sources"]
+        if source["source_id"] == "recovery_manifest"
+    )
+    source["sha256"] = "0" * 64
+
+    with pytest.raises(ValueError, match="source bytes do not match declared sha256"):
+        _refresh_tracked_source_ref(source)
+
+
 def test_generated_artifacts_have_exact_review_sidecars() -> None:
     """Bind every marker-sensitive artifact to the shared review-sidecar contract."""
 
@@ -608,6 +643,10 @@ def test_fixture_receipt_build_declares_durable_source_and_validates_packet(
 
     sources = {source["source_id"]: source for source in packet["sources"]}
     assert set(sources) == {"recovery_manifest", "issue_7980_source_receipt"}
+    recovery_source = sources["recovery_manifest"]
+    assert recovery_source["tracked_commit"] == builder._git(
+        "log", "-1", "--format=%H", "--", recovery_source["path"]
+    )
     receipt_source = sources["issue_7980_source_receipt"]
     assert receipt_source["path"] == (
         "docs/context/evidence/issue_6102_robot_speed_tier_recovery/"

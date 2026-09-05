@@ -1551,6 +1551,75 @@ def test_git_remote_owner_name_parses_ssh_and_https(monkeypatch: pytest.MonkeyPa
     assert _git_remote_owner_name() == ("", "")
 
 
+def test_rest_api_get_prefers_explicit_repository(monkeypatch: pytest.MonkeyPatch) -> None:
+    """REST fallback reads must not derive a different repository from the local remote."""
+    gh = MagicMock(return_value=MagicMock(returncode=0, stdout="{}", stderr=""))
+    monkeypatch.setattr(ci_status, "_gh", gh)
+    monkeypatch.setattr(ci_status, "_git_remote_owner_name", lambda: ("local", "remote"))
+
+    assert ci_status._rest_api_get("pulls/42", repo="target/repository") == {}
+
+    gh.assert_called_once_with(["api", "repos/target/repository/pulls/42"], timeout=45)
+
+
+def test_fetch_ci_status_rest_fallback_honors_explicit_repository(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_workflow_id_cache: None,
+) -> None:
+    """Every normal REST fallback read uses the explicit repository target."""
+    pull = {
+        "number": 42,
+        "title": "explicit fallback repository",
+        "state": "OPEN",
+        "head": {"ref": "fix", "sha": "abc"},
+        "mergeable_state": "clean",
+    }
+    check_runs = {
+        "check_runs": [
+            {
+                "name": "ci",
+                "status": "in_progress",
+                "conclusion": None,
+                "details_url": "https://github.com/target/repository/actions/runs/123/job/456",
+            }
+        ]
+    }
+    rest_calls: list[tuple[str, str | None]] = []
+
+    def _fake_rest(path: str, *, repo: str = "") -> object:
+        rest_calls.append((path, repo or None))
+        if path == "pulls/42":
+            return pull
+        if path == "commits/abc/check-runs":
+            return check_runs
+        if path == "actions/runs/123":
+            return {
+                "id": 123,
+                "workflow_id": 987654,
+                "status": "completed",
+                "conclusion": "success",
+            }
+        if path == "actions/jobs/456":
+            return {"status": "in_progress", "conclusion": None}
+        if path == "pulls/42/reviews":
+            return []
+        return None
+
+    monkeypatch.setattr(
+        ci_status,
+        "_gh",
+        MagicMock(return_value=MagicMock(returncode=1, stderr=QUOTA_STDERR, stdout="")),
+    )
+    monkeypatch.setattr(ci_status, "_rest_api_get", _fake_rest)
+
+    data = ci_status._fetch_ci_status("42", repo="target/repository")
+
+    assert data["status"] == "ok"
+    assert data["data_source"] == "rest_fallback_graphql_quota"
+    assert rest_calls
+    assert all(repo == "target/repository" for _, repo in rest_calls)
+
+
 @pytest.mark.parametrize("returncode", [0, 1])
 def test_fetch_ci_status_falls_back_to_rest_on_graphql_quota(
     monkeypatch: pytest.MonkeyPatch,

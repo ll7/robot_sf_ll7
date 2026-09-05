@@ -29,7 +29,7 @@ Run from a current Robot SF checkout with authenticated `gh` read access and the
 remote available:
 
 ```bash
-uv run python scripts/dev/audit_open_issue_contracts.py \
+uv run python -m scripts.dev.audit_open_issue_contracts \
   --repo ll7/robot_sf_ll7 \
   --remote origin \
   --json-report output/open_issue_contract_audit.json \
@@ -60,7 +60,7 @@ Exit codes are:
 Use an offline fixture for deterministic tests and review:
 
 ```bash
-uv run python scripts/dev/audit_open_issue_contracts.py \
+uv run python -m scripts.dev.audit_open_issue_contracts \
   --fixture tests/fixtures/open_issue_contract_audit/example.json \
   --page-size 100 \
   --check

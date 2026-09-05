@@ -32,7 +32,7 @@ The helper is a bounded-github-mutation tool:
 ### 1. Audit (report-only)
 
 ```bash
-uv run python scripts/dev/audit_open_issue_contracts.py \
+uv run python -m scripts.dev.audit_open_issue_contracts \
   --repo ll7/robot_sf_ll7 \
   --format json \
   --output /tmp/open_issue_audit.json
@@ -43,7 +43,7 @@ The audit must be `complete: true` with `errors: []` before planning.
 ### 2. Plan (report-only)
 
 ```bash
-uv run python scripts/dev/prepare_open_issue_contracts.py \
+uv run python -m scripts.dev.prepare_open_issue_contracts \
   --audit-json /tmp/open_issue_audit.json \
   --plan-json /tmp/open_issue_preparation_plan.json \
   --plan-markdown /tmp/open_issue_preparation_plan.md \
@@ -75,7 +75,7 @@ authority and are never promoted by preparation.
 ### 3. Render (report-only)
 
 ```bash
-uv run python scripts/dev/prepare_open_issue_contracts.py \
+uv run python -m scripts.dev.prepare_open_issue_contracts \
   --audit-json /tmp/open_issue_audit.json \
   --mode render --issue <number> --batch-id <stable-batch-id>
 ```
@@ -93,7 +93,7 @@ change invalidates that item and may invalidate its batch.
 ### 5. Verify (report-only)
 
 ```bash
-uv run python scripts/dev/prepare_open_issue_contracts.py \
+uv run python -m scripts.dev.prepare_open_issue_contracts \
   --audit-json /tmp/open_issue_audit.json \
   --mode verify \
   --bodies-json /tmp/prepared_bodies.json
@@ -105,7 +105,7 @@ marker region (with the documented boundary-newline normalization).
 ### 6. Apply (bounded, after review)
 
 ```bash
-uv run python scripts/dev/prepare_open_issue_contracts.py \
+uv run python -m scripts.dev.prepare_open_issue_contracts \
   --audit-json /tmp/open_issue_audit.json \
   --mode apply --apply \
   --batch-id <stable-batch-id> \

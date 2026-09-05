@@ -306,6 +306,12 @@ Full details live in
   and zero when the canonical event is false.
 * `near_misses`: count based on distance thresholds.
 * `min_distance`,  `path_efficiency`: closest approach and shortest/actual path ratio.
+* `aggregated_time`: implementation-only cooperative completion-time diagnostic. When
+  `cooperative_agents` is provided, it returns the maximum first goal-reaching step times
+  `EpisodeData.dt` from the explicit `EpisodeData.cooperative_goal_steps` mapping. The legacy
+  `cooperative_agents=None` path remains `time_to_goal`; missing or malformed cooperative data
+  returns `NaN`, and there is no implicit all-agent sentinel. Current episode producers do not
+  populate this optional field, so no benchmark result is implied.
 
 **Force/comfort**
 * `force_quantiles` (q50/q90/q95),  `per_ped_force_quantiles`

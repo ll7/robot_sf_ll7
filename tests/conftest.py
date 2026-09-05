@@ -543,6 +543,10 @@ _FAST_FILES = {
     "test_socnav_prediction_module.py",
     # Termination reason tests are deterministic unit contracts for canonical outcome flags.
     "test_termination_reason.py",
+    # Benchmark metric characterization tests are deterministic pure-metric
+    # contracts; keep them in fast shards for changed metrics coverage.
+    "test_metrics.py",
+    "test_aggregated_time_cooperative.py",
     # Classic planner adapter tests are deterministic planner-contract tests for
     # the changed classic_planner_adapter.py producer; keep in fast shards for
     # the exact-head changed-coverage gate.

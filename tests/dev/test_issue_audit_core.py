@@ -648,18 +648,67 @@ def test_blocker_without_reason_routes_to_needs_triage() -> None:
     assert any("declined state:blocked" in finding for finding in classification.findings)
 
 
-def test_non_blocking_blocked_by_none_does_not_route_to_triage() -> None:
+@pytest.mark.parametrize(
+    "phrase",
+    ["none", "no blockers", "n/a", "not applicable", "clear", "resolved"],
+)
+def test_non_blocking_blocked_by_phrase_does_not_route_to_triage(phrase: str) -> None:
     """A documented absence of blockers is not current gate evidence."""
     classification = classify_issue(
         _issue(
             123,
-            body="Blocked by: none.\n## Acceptance Criteria\n- [ ] implement the change",
+            body=f"Blocked by: {phrase}.\n## Acceptance Criteria\n- [ ] implement the change",
         ),
         available_labels={"state:ready", "state:blocked", "needs-triage"},
     )
 
     assert classification.blocker_evidence == ()
     assert not any(mutation["value"] == "needs-triage" for mutation in classification.mutations)
+
+
+def test_non_blocking_declaration_does_not_hide_a_later_gate() -> None:
+    """A later genuine gate on the same line remains current evidence."""
+    classification = classify_issue(
+        _issue(
+            124,
+            body="Blocked by: none. This issue remains blocked until the dataset is staged.",
+        ),
+        available_labels={"state:blocked", "needs-triage"},
+    )
+
+    assert {item["kind"] for item in classification.blocker_evidence} == {
+        "external-input",
+        "blocked",
+    }
+
+
+def test_audit_plan_does_not_route_explicit_no_blocker_text_to_triage() -> None:
+    """The complete audit plan ignores an explicit no-blocker declaration."""
+    plan = build_audit_plan(
+        {
+            "repo": "ll7/robot_sf_ll7",
+            "issues": [
+                _issue(
+                    123,
+                    labels=["state:ready"],
+                    body="Blocked by: none.\n## Acceptance Criteria\n- [ ] implement the change",
+                )
+            ],
+            "open_prs": [],
+            "merged_prs": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "labels": ["state:ready", "state:blocked", "needs-triage"],
+            "inventory": {},
+        }
+    )
+
+    assert plan["issues"][0]["blocker_evidence"] == []
+    assert not any(
+        mutation["operation"] == "add_label" and mutation["value"] == "needs-triage"
+        for mutation in plan["mutations"]
+    )
 
 
 def test_blocked_triage_block_binds_reason_to_blocked_label() -> None:

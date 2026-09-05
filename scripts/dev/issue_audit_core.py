@@ -1314,11 +1314,8 @@ def _gate_evidence(text: str) -> list[dict[str, str]]:
                 )
                 break
     for line in lines:
-        if (
-            generic_gate_pattern.search(line)
-            and not report_pattern.search(line)
-            and not non_blocking_gate_pattern.search(line)
-        ):
+        generic_gate_line = non_blocking_gate_pattern.sub("", line)
+        if generic_gate_pattern.search(generic_gate_line) and not report_pattern.search(line):
             evidence.append({"kind": "blocked", "text": "explicit current blocker"})
             break
     return evidence

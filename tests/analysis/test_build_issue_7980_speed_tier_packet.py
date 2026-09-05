@@ -372,6 +372,32 @@ def test_source_references_match_tracked_bytes_and_nested_synthesis_digest() -> 
     )
 
 
+def test_source_receipt_rejects_tracked_blob_drift(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A source digest must be bound to the bytes in its declared tracked commit."""
+    source_path = tmp_path / "source-row-crosswalk.json"
+    source_path.write_text("{}", encoding="utf-8")
+    commit = "a" * 40
+
+    def fake_git(*args: str) -> str:
+        """Return deterministic mismatched commit and blob identities."""
+        if args[:3] == ("log", "-1", "--format=%H"):
+            return commit
+        if args[0] == "rev-parse":
+            return "b" * 40
+        if args[0] == "hash-object":
+            return "c" * 40
+        raise AssertionError(f"unexpected git query: {args}")
+
+    monkeypatch.setattr(builder, "_git", fake_git)
+
+    with pytest.raises(ValueError, match="do not match the latest tracked commit blob"):
+        builder._tracked_source_commit(
+            "docs/context/evidence/source-row-crosswalk.json", source_path
+        )
+
+
 def test_generated_artifacts_have_exact_review_sidecars() -> None:
     """Bind every marker-sensitive artifact to the shared review-sidecar contract."""
 

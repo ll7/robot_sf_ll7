@@ -446,11 +446,7 @@ def _source_receipt_source_ref(
         raise ValueError(
             "source receipt crosswalk must be a durable repository file for packet declaration"
         ) from exc
-    tracked_commit = _git("log", "-1", "--format=%H", "--", relative_path)
-    if not tracked_commit:
-        raise ValueError(
-            "source receipt crosswalk must be tracked before it can be declared in the packet"
-        )
+    tracked_commit = _tracked_source_commit(relative_path, source_path)
     source_sha256 = _require_sha256(receipt.get("source_sha256"), "source_sha256")
     return {
         "source_id": "issue_7980_source_receipt",
@@ -471,6 +467,27 @@ def _source_receipt_source_ref(
         ),
         "direction": "not_applicable",
     }
+
+
+def _tracked_source_commit(relative_path: str, source_path: Path) -> str:
+    """Require the current source bytes to equal the latest tracked blob."""
+    tracked_commit = _git("log", "-1", "--format=%H", "--", relative_path)
+    if not tracked_commit:
+        raise ValueError(
+            "source receipt crosswalk must be tracked before it can be declared in the packet"
+        )
+    try:
+        committed_blob = _git("rev-parse", f"{tracked_commit}:{relative_path}")
+    except subprocess.CalledProcessError as exc:
+        raise ValueError(
+            "source receipt crosswalk tracked commit does not contain the declared path"
+        ) from exc
+    current_blob = _git("hash-object", str(source_path))
+    if committed_blob != current_blob:
+        raise ValueError(
+            "source receipt crosswalk bytes do not match the latest tracked commit blob"
+        )
+    return tracked_commit
 
 
 def _sha256(path: Path) -> str:

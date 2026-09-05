@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from numbers import Real
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -39,9 +40,12 @@ def _vector(value: Sequence[float], field_name: str) -> Vector2:
 
     if isinstance(value, (str, bytes)) or len(value) != 2:
         raise ValueError(f"{field_name} must contain exactly two values")
-    if any(isinstance(component, bool) for component in value):
+    if any(isinstance(component, bool) or not isinstance(component, Real) for component in value):
         raise ValueError(f"{field_name} must contain finite numeric values")
-    result = (float(value[0]), float(value[1]))
+    try:
+        result = (float(value[0]), float(value[1]))
+    except (OverflowError, TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must contain finite numeric values") from exc
     if not all(math.isfinite(component) for component in result):
         raise ValueError(f"{field_name} must contain finite values")
     return result

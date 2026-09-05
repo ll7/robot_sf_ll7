@@ -2,7 +2,9 @@
 
 import json
 import math
+from decimal import Decimal
 
+import numpy as np
 import pytest
 
 from robot_sf.benchmark.goal_force_metrics import (
@@ -127,8 +129,47 @@ def test_rows_and_vectors_fail_closed() -> None:
         GoalForceMetricRow((math.nan, 0.0), (0.0, 0.0))
 
 
-@pytest.mark.parametrize("component", [False, True])
-def test_boolean_vector_components_are_not_numeric(component: bool) -> None:
-    """Boolean values must not silently become force components."""
+@pytest.mark.parametrize(
+    "component",
+    [
+        pytest.param(False, id="builtin-false"),
+        pytest.param(True, id="builtin-true"),
+        pytest.param(np.bool_(False), id="numpy-false"),
+        pytest.param(np.bool_(True), id="numpy-true"),
+    ],
+)
+def test_boolean_vector_components_are_not_numeric(component: object) -> None:
+    """Builtin and NumPy booleans must not silently become force components."""
     with pytest.raises(ValueError, match="finite numeric"):
         GoalForceMetricRow((component, 0.0), (0.0, 0.0))  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "component",
+    [
+        pytest.param("1.0", id="numeric-string"),
+        pytest.param(1 + 2j, id="builtin-complex"),
+        pytest.param(np.complex64(1 + 2j), id="numpy-complex"),
+        pytest.param(Decimal("1.0"), id="decimal"),
+        pytest.param(np.array(1.0), id="zero-dimensional-array"),
+    ],
+)
+def test_non_real_vector_components_are_not_coerced(component: object) -> None:
+    """Vector components must be real scalar values, not merely float-coercible."""
+    with pytest.raises(ValueError, match="finite numeric"):
+        GoalForceMetricRow((component, 0.0), (0.0, 0.0))  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    "component",
+    [
+        pytest.param(1, id="builtin-int"),
+        pytest.param(1.25, id="builtin-float"),
+        pytest.param(np.int64(2), id="numpy-int"),
+        pytest.param(np.float32(2.5), id="numpy-float"),
+    ],
+)
+def test_real_scalar_vector_components_are_accepted(component: object) -> None:
+    """Builtin and NumPy real scalar components remain accepted."""
+    row = GoalForceMetricRow((component, 0.0), (0.0, 0.0))  # type: ignore[arg-type]
+    assert row.predicted_force_xy == pytest.approx((float(component), 0.0))

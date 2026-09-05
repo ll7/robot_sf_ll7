@@ -1,0 +1,42 @@
+schema_version: ch7-evidence-package.v2
+issue: 7087
+package_revision: v2.1
+collision_exclusion_ruling:
+  issue: 7042
+  status: frozen
+  decision: exclude_collision_and_snqi
+custody:
+  package_key: issue-7322/ch7-evidence-package-v2.1
+  source_registry_key: issue-6792/source-registry-v1
+  source_registry_path: docs/context/issue_6792_ch7_admission_receipt.v1.json
+  source_registry_sha256: 9f19cae4ccdea9a2336eb1432f418e7df7af97f65eb6d95378023d802e4e64ac
+source:
+  package: docs/context/evidence/issue_6792_ch7_evidence_package_v1
+  sha256sums_sha256: 6807fdc9275133365812c8f51f51e057da6054f8dcaf77cb5fa8a32b08c4a87f
+  audit_member: audit/campaign_atlas.csv
+  audit_member_sha256: 18768f5cf1d9f360487e9203fa1c538de136aaff240070ae3684b5243c44bc10
+  reduced_atlas_member: publication/reduced_atlas.json
+  reduced_atlas_member_sha256: e5bed5855b7048291530615c86c88257f02622a1abbbecef4a7a6d7fb37c29b6
+portfolio_config:
+  path: configs/analysis/ch7_worked_example_portfolio.v2.yaml
+  sha256: ebf2e943b6cea7e647f71171c08e904edf19b818cd2e1853ee5409a80d74f010
+safe_metrics:
+  - success_fraction
+  - near_misses_mean
+  - time_to_goal_norm_mean
+  - path_efficiency_mean
+excluded_metrics:
+  - collision_fraction
+  - ped_collision_fraction
+  - obstacle_collision_fraction
+  - total_collision_fraction
+  - collision_count_mean
+  - ped_collision_count_mean
+  - obstacle_collision_count_mean
+  - total_collision_count_mean
+  - snqi_mean
+  - collision_derived_composites
+admission:
+  status: not_admitted
+  receipt_required: true
+  receipt_schema: ch7-evidence-admission.v2

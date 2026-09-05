@@ -153,6 +153,11 @@ Python, numerical thread variables, and NumPy/Numba versions while keeping raw
 host identity separate from public comparison labels:
 [issue_7128_exact_repeat_execution_context.md](issue_7128_exact_repeat_execution_context.md).
 
+Issue #7412 Chapter 7 v2.1 refresh: additive post-ruling package preserving the original v2 bytes as
+an immutable historical baseline and binding the frozen #7042 collision/SNQI exclusion. The refresh
+remains `not_admitted` and does not create a benchmark or paper-facing claim:
+[evidence/issue_7322_ch7_evidence_package_v2_1/](evidence/issue_7322_ch7_evidence_package_v2_1/).
+
 Issue #7047 Chapter 7 portfolio companion binding: fail-closed linter binding from the frozen
 Issue #6792 package portfolio references to the tracked source config, preserving package bytes and the
 release-cell-only claim boundary:

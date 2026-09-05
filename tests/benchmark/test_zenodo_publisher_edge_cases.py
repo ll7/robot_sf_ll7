@@ -1555,6 +1555,15 @@ def test_upload_rejects_metadata_drift_during_fallback_readback(tmp_path: Path) 
     ]
 
 
+def test_fallback_revision_rejects_malformed_metadata() -> None:
+    """A fallback digest cannot be sealed from a malformed deposition metadata object."""
+    payload = _successor_draft()
+    payload["metadata"] = None
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="metadata is malformed"):
+        publisher._remote_revision_binding(payload, {})
+
+
 def test_upload_rejects_lifecycle_drift_during_pre_delete_readback(tmp_path: Path) -> None:
     """A lifecycle change in the exact pre-delete response blocks DELETE."""
     bundle = tmp_path / "successor.tar.gz"

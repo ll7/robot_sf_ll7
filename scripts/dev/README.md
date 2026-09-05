@@ -111,7 +111,7 @@ batch. Real apply additionally requires the exact selected issue list and its
 `content_sha256` passed as `--reviewed-plan-digest`.
 
 ```bash
-uv run python scripts/dev/prepare_open_issue_contracts.py \
+uv run python -m scripts.dev.prepare_open_issue_contracts \
   --audit-json /tmp/open_issue_audit.json \
   --plan-json /tmp/open_issue_preparation_plan.json \
   --batch-id <stable-batch-id>

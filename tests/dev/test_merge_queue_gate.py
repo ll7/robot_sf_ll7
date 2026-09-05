@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import shlex
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -229,6 +230,39 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
     assert "baseRefOid" not in fields
     assert "reviewRequests" in fields
     assert mock_gh.call_args_list[1].args[0] == ["api", "repos/owner/repo/pulls/42"]
+
+
+def test_fetch_pr_snapshot_records_active_exact_head_review_claim() -> None:
+    """The live queue snapshot exposes an in-flight claim for gate admission."""
+    raw_pr = _raw_pr()
+    raw_pr["comments"] = [
+        *raw_pr["comments"],
+        {
+            "body": f"review-claim: lane-a @ {FULL_SHA} until 2099-01-01T00:00:00Z",
+            "authorAssociation": "COLLABORATOR",
+        },
+    ]
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(raw_pr)),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+            _exact_changed_coverage_response(),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["review_claim"]["status"] == "active"
+    assert snapshot["review_claim"]["head_sha"] == FULL_SHA
+
+    audit = evaluate_merge_gate(
+        snapshot,
+        main_sha="base_sha",
+        threads_resolved=True,
+        reviewers_requested=False,
+    )
+    assert audit.passed is False
+    assert audit.review_claim_status == "active"
+    assert "active_review_claim" in audit.reasons
 
 
 def test_fetch_pr_snapshot_preserves_terminal_merged_state() -> None:
@@ -2006,6 +2040,52 @@ def test_evaluate_merge_gate_passes_with_clean_body_narrative() -> None:
     assert audit.reasons == []
     assert audit.body_narrative_status == "clean"
     assert audit.body_not_ready_sentinels == []
+
+
+def test_evaluate_merge_gate_fails_closed_on_active_exact_head_review_claim() -> None:
+    """Native queue admission must wait for an in-flight exact-head review worker."""
+    claim = f"review-claim: lane-a @ {FULL_SHA} until 2026-08-18T13:30:00Z"
+    snapshot = _gate_ready_pr(
+        comments=[{"authorAssociation": "COLLABORATOR", "body": claim}],
+        reviews=[],
+    )
+
+    audit = evaluate_merge_gate(
+        snapshot,
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+        now=datetime(2026, 8, 18, 12, 0, tzinfo=UTC),
+    )
+
+    assert audit.passed is False
+    assert audit.review_claim_status == "active"
+    assert "active_review_claim" in audit.reasons
+
+
+def test_evaluate_merge_gate_allows_released_exact_head_review_claim() -> None:
+    """The existing exact-head gate remains authoritative after claim release."""
+    claim = f"review-claim: lane-a @ {FULL_SHA} until 2026-08-18T13:30:00Z"
+    release = f"review-claim: released @ {FULL_SHA}"
+    snapshot = _gate_ready_pr(
+        comments=[
+            {"authorAssociation": "COLLABORATOR", "body": claim},
+            {"authorAssociation": "COLLABORATOR", "body": release},
+        ],
+        reviews=[],
+    )
+
+    audit = evaluate_merge_gate(
+        snapshot,
+        main_sha=FULL_SHA,
+        threads_resolved=True,
+        reviewers_requested=False,
+        now=datetime(2026, 8, 18, 12, 0, tzinfo=UTC),
+    )
+
+    assert audit.passed is True
+    assert audit.review_claim_status == "clear"
+    assert "active_review_claim" not in audit.reasons
 
 
 # ---------------------------------------------------------------------------

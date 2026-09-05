@@ -16,6 +16,8 @@ This module closes that class of drift:
   and, when it declares a base, the exact live base;
 - a human ``COMMENTED`` review from the PR reviews endpoint is valid only when
   its body names that live head/base and its ``commit_id`` is the live head;
+- an unexpired trusted ``review-claim`` covering the live head means an exact-
+  head review worker is still active, so the merge-ready write is withheld;
 - a body or comment carrying stale-narrative sentinels (including
   "not current-base merge evidence" and pending domain-review dispositions)
   invalidates the merge-ready disposition;
@@ -26,7 +28,8 @@ This module closes that class of drift:
 
 All reads go through the shared REST helpers and fail closed on transport or
 payload uncertainty. A valid top-level carrier remains a compatibility path
-when the review endpoint is unavailable.
+when the review endpoint has no carrier; the endpoint itself must still be
+readable so a review-only claim cannot bypass the hold.
 """
 
 from __future__ import annotations
@@ -36,7 +39,11 @@ from typing import TYPE_CHECKING, Any
 
 from scripts.dev._gh_rest import gh_api_get as _gh_api_get
 from scripts.dev._gh_rest import parse_json as _parse_json
-from scripts.dev.pr_loop_policy import extract_sha_carriers, invalid_sha_carriers
+from scripts.dev.pr_loop_policy import (
+    active_review_claim,
+    extract_sha_carriers,
+    invalid_sha_carriers,
+)
 from scripts.dev.pr_metadata import find_not_ready_body_sentinels
 
 if TYPE_CHECKING:
@@ -199,26 +206,55 @@ def _review_carrier_error(
     )
 
 
+def _active_review_claim_error(entries: Sequence[dict[str, Any]], *, live_head: str) -> str | None:
+    """Return an error when a trusted review worker still claims the live head."""
+    claim = active_review_claim({"comments": list(entries)}, live_head, None)
+    if claim is None:
+        return None
+    return (
+        f"active exact-head review claim {claim.lane!r} covers the live head {live_head}; "
+        "review worker is still running and merge-ready must be withheld"
+    )
+
+
+def _read_reviews(
+    number: int,
+    *,
+    repo: str,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Read and structurally validate the review endpoint payload."""
+    reviews_result = _gh_api_get(f"repos/{repo}/pulls/{number}/reviews?per_page=100")
+    reviews, reviews_error = _parse_json(reviews_result, what=f"PR {number} review carriers read")
+    if reviews_error:
+        return [], reviews_error
+    if not isinstance(reviews, list):
+        return [], "PR review carriers payload was not a list"
+    return reviews, None
+
+
 def _reviews_verdict(
     number: int,
     *,
     repo: str,
     live_head: str,
     live_base: str,
+    reviews: Sequence[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Read PR reviews and validate a canonical review-endpoint carrier.
 
     A review must be a live-head ``COMMENTED`` review with its commit id bound to
-    the live head. The caller checks the top-level issue-comment compatibility
-    carrier first, so older GitHub CLI/API setups do not need this endpoint when
-    that legacy carrier is already present.
+    the live head. The caller may use a top-level issue-comment carrier when
+    this endpoint has no carrier, but it still reads the endpoint to check for
+    review-only active claims.
     """
-    reviews_result = _gh_api_get(f"repos/{repo}/pulls/{number}/reviews?per_page=100")
-    reviews, reviews_error = _parse_json(reviews_result, what=f"PR {number} review carriers read")
-    if reviews_error:
-        return {"status": "error", "error": reviews_error}
-    if not isinstance(reviews, list):
-        return {"status": "error", "error": "PR review carriers payload was not a list"}
+    if reviews is None:
+        reviews, reviews_error = _read_reviews(number, repo=repo)
+        if reviews_error:
+            return {"status": "error", "error": reviews_error}
+
+    claim_error = _active_review_claim_error(reviews, live_head=live_head)
+    if claim_error:
+        return {"status": "error", "error": claim_error}
 
     narrative_error = _stale_narrative_error(reviews, body="")
     if narrative_error:
@@ -276,12 +312,28 @@ def _comments_verdict(
     if not isinstance(comments, list):
         return {"status": "error", "error": "PR carrier comments payload was not a list"}
 
+    claim_error = _active_review_claim_error(comments, live_head=live_head)
+    if claim_error:
+        return {"status": "error", "error": claim_error}
+
     narrative_error = _stale_narrative_error(comments, body=body)
     if narrative_error:
         return {"status": "error", "error": narrative_error}
 
     review_error = _review_carrier_error(comments, live_head=live_head, live_base=live_base)
     if review_error is None:
+        # Inspect both carrier sources before accepting the compatibility
+        # comment; otherwise a review-only active claim can be hidden by a
+        # valid issue comment.
+        reviews, reviews_error = _read_reviews(number, repo=repo)
+        if reviews_error:
+            return {"status": "error", "error": reviews_error}
+        claim_error = _active_review_claim_error(reviews, live_head=live_head)
+        if claim_error:
+            return {"status": "error", "error": claim_error}
+        narrative_error = _stale_narrative_error(reviews, body="")
+        if narrative_error:
+            return {"status": "error", "error": narrative_error}
         return {"status": "ok", "carrier_source": "issue_comment"}
     reviews_verdict = _reviews_verdict(
         number,
@@ -307,7 +359,8 @@ def check_merge_ready_carriers(
     Reads the live PR object and its issue comments immediately, then checks
     body-digest freshness, body not-ready sentinels, stale-carrier narratives,
     and the existence of a human exact-head review comment bound to
-    ``live_head``/``live_base``. Any failure returns ``status: error`` and the
+    ``live_head``/``live_base``. An active trusted review claim for the live
+    head is also a hard blocker. Any failure returns ``status: error`` and the
     merge-ready write must be withheld.
     """
     if number < 1:

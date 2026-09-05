@@ -549,7 +549,12 @@ def handle(args: argparse.Namespace) -> int:  # noqa: C901
                 {"release_binding": release_binding} if release_binding is not None else {}
             )
             state = zenodo_publisher.upload(
-                session, state, args.files, api_base=args.api_base, **operation_kwargs
+                session,
+                state,
+                args.files,
+                api_base=args.api_base,
+                state_path=args.state,
+                **operation_kwargs,
             )
             zenodo_publisher.write_state(args.state, state)
             _print(state)

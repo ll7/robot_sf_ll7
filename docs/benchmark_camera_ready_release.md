@@ -314,8 +314,13 @@ record, and collection paths are not accepted as PUT targets. Credential-shaped
 remote filenames, including parameterized `Authorization: <scheme> <value>` forms,
 are rejected before they can enter state or a receipt. It deletes only stable
 inherited filenames from the unpublished successor and requires an exact final
-filename inventory. It never addresses the
-published predecessor.
+filename inventory. It never addresses the published predecessor. Before the first
+PUT, `upload` persists a pending attempt with the exact local inventory digest and
+the exact initial successor file-ID inventory. A retry must use the same inventory
+and API base; a changed or incomplete file list, an unknown remote extra, or missing
+prior-attempt proof blocks reconciliation without issuing a delete. The CLI writes
+this pending state before mutation so an interrupted process can safely be rerun
+with the original file list.
 DELETE 204, 404, 403, 5xx, network, and other unexpected results are classified;
 non-204 results are treated as conditionally idempotent only when a bounded pair
 of consecutive exact readbacks proves the target absent with unchanged

@@ -1175,6 +1175,124 @@ def test_reconciliation_receipt_rejects_tampered_inventory_binding(tmp_path: Pat
         publisher._validate_state_for_operation(tampered_state)
 
 
+def test_upload_retry_rejects_changed_inventory_after_partial_put(tmp_path: Path) -> None:
+    """A persisted [a, b] attempt cannot be retried with only [a]."""
+    first_file = tmp_path / "a.tar.gz"
+    second_file = tmp_path / "b.tar.gz"
+    first_file.write_bytes(b"a")
+    second_file.write_bytes(b"b")
+    state = _successor_state()
+    state_path = tmp_path / "state.json"
+    publisher.write_state(state_path, state)
+
+    first = _Session()
+    first.gets = [_Response(_successor_draft())]
+    first.puts = [
+        _Response({"checksum": "md5:a"}, 201),
+        _Response({"error": "interrupted"}, 500),
+    ]
+    with pytest.raises(publisher.ZenodoPublisherError, match="upload b.tar.gz"):
+        publisher.upload(
+            first,
+            state,
+            [first_file, second_file],
+            state_path=state_path,
+        )
+
+    pending = publisher.load_state(state_path)
+    assert pending["upload_attempt"]["files"] == [
+        {"name": first_file.name, "size": 1, "sha256": publisher._sha256_file(first_file)},
+        {"name": second_file.name, "size": 1, "sha256": publisher._sha256_file(second_file)},
+    ]
+    assert pending["upload_attempt"]["initial_remote_inventory"] == []
+
+    retry = _Session()
+    with pytest.raises(publisher.ZenodoPublisherError, match="retry inventory"):
+        publisher.upload(retry, pending, [first_file], state_path=state_path)
+    assert retry.urls == []
+    assert retry.puts == []
+    assert retry.deletes == []
+
+
+def test_upload_retry_rejects_changed_inventory_after_prior_receipt(tmp_path: Path) -> None:
+    """A completed [a, b] reconciliation receipt also binds later retries."""
+    first_file = tmp_path / "a.tar.gz"
+    second_file = tmp_path / "b.tar.gz"
+    first_file.write_bytes(b"a")
+    second_file.write_bytes(b"b")
+    files = [
+        {"name": first_file.name, "size": 1, "sha256": publisher._sha256_file(first_file)},
+        {"name": second_file.name, "size": 1, "sha256": publisher._sha256_file(second_file)},
+    ]
+    deposition = _successor_draft()
+    deposition["files"] = [
+        _draft_file(first_file.name, file_id="a-file"),
+        _draft_file(second_file.name, file_id="b-file"),
+    ]
+    receipt = publisher._reconciliation_receipt(
+        deposition,
+        {first_file.name: "a-file", second_file.name: "b-file"},
+        files,
+        [],
+    )
+    state = publisher._seal_state(
+        {
+            **{key: value for key, value in _successor_state().items() if key != "integrity"},
+            "files": files,
+            "reconciliation_receipt": receipt,
+        }
+    )
+    session = _Session()
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="reconciliation receipt"):
+        publisher.upload(session, state, [first_file])
+
+    assert session.urls == []
+    assert session.puts == []
+    assert session.deletes == []
+
+
+def test_upload_retry_rejects_remote_extra_without_prior_attempt_proof(tmp_path: Path) -> None:
+    """A receipt cannot authorize deletion of a later unproven remote extra."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    files = [
+        {
+            "name": bundle.name,
+            "size": bundle.stat().st_size,
+            "sha256": publisher._sha256_file(bundle),
+        }
+    ]
+    deposition = _successor_draft()
+    deposition["files"] = [_draft_file(bundle.name, file_id="bundle-file")]
+    receipt = publisher._reconciliation_receipt(
+        deposition,
+        {bundle.name: "bundle-file"},
+        files,
+        [],
+    )
+    state = publisher._seal_state(
+        {
+            **{key: value for key, value in _successor_state().items() if key != "integrity"},
+            "files": files,
+            "reconciliation_receipt": receipt,
+        }
+    )
+    remote = _successor_draft()
+    remote["files"] = [
+        _draft_file(bundle.name, file_id="bundle-file"),
+        _draft_file("unproven-extra.tar.gz", file_id="unproven-file"),
+    ]
+    session = _Session()
+    session.gets = [_Response(remote)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="prior-attempt proof"):
+        publisher.upload(session, state, [bundle])
+
+    assert session.puts == []
+    assert session.deletes == []
+
+
 @pytest.mark.parametrize(
     "credential_shaped_name",
     [
@@ -1561,7 +1679,7 @@ def test_upload_blocks_inventory_race_without_deleting_new_file(tmp_path: Path) 
 
 
 def test_upload_requires_204_when_deleting_inherited_file(tmp_path: Path) -> None:
-    """A non-204 deletion response leaves caller state unchanged and blocks completion."""
+    """A non-204 deletion response leaves a pending retry identity and blocks completion."""
     bundle = tmp_path / "successor.tar.gz"
     bundle.write_bytes(b"successor")
     inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
@@ -1590,7 +1708,9 @@ def test_upload_requires_204_when_deleting_inherited_file(tmp_path: Path) -> Non
     with pytest.raises(publisher.ZenodoPublisherError, match="DELETE unexpected"):
         publisher.upload(session, state, [bundle])
 
-    assert json.dumps(state, sort_keys=True) == state_before
+    assert json.dumps(state, sort_keys=True) != state_before
+    assert state["upload_attempt"]["status"] == "pending"
+    assert state["upload_attempt"]["files"][0]["name"] == bundle.name
 
 
 def test_upload_partial_delete_is_retryable(tmp_path: Path) -> None:
@@ -1629,7 +1749,8 @@ def test_upload_partial_delete_is_retryable(tmp_path: Path) -> None:
 
     with pytest.raises(publisher.ZenodoPublisherError, match="DELETE server_error"):
         publisher.upload(first, state, [bundle])
-    assert json.dumps(state, sort_keys=True) == state_before
+    assert json.dumps(state, sort_keys=True) != state_before
+    assert state["upload_attempt"]["status"] == "pending"
 
     retry_remote = _successor_draft()
     retry_remote["files"] = [inherited_b, uploaded]

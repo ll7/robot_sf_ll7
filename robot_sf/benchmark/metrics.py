@@ -109,6 +109,12 @@ class EpisodeData:
         Pedestrian footprint radius in meters for clearance-based robot-pedestrian metrics. Runners
         should populate this from the episode/simulation configuration; the default is a
         compatibility fallback for synthetic tests and legacy callers.
+    cooperative_goal_steps : dict[int, int] | None
+        Optional per-agent goal-reach steps for multi-agent episodes, mapping a
+        caller-defined agent index to its first goal-reaching step. This mapping is
+        the canonical per-agent identity/index source for aggregated_time.
+        Default None (single-robot episodes). Appended after the legacy optional
+        fields so positional ``EpisodeData`` callers retain their existing layout.
     """
 
     robot_pos: np.ndarray
@@ -127,6 +133,7 @@ class EpisodeData:
     robot_radius: float = 1.0
     ped_radius: float = 0.4
     episode_metadata: dict[str, Any] | None = None
+    cooperative_goal_steps: dict[int, int] | None = None
 
 
 def has_force_data(data: EpisodeData) -> bool:
@@ -2847,31 +2854,62 @@ def time_to_collision_min(data: EpisodeData) -> float:
     return float(min_ttc) if np.isfinite(min_ttc) else float("nan")
 
 
+def _is_valid_nonnegative_finite(value: Any) -> bool:
+    """Return whether a runtime numeric value is finite and non-negative."""
+    if isinstance(value, (bool, np.bool_)):
+        return False
+    try:
+        return bool(math.isfinite(value) and value >= 0.0)
+    except (TypeError, ValueError):
+        return False
+
+
+def _cooperative_duration(step: int, dt: Any) -> float:
+    """Return a finite cooperative duration, or NaN when multiplication overflows."""
+    try:
+        duration = step * dt
+        if not math.isfinite(duration) or duration < 0.0:
+            return float("nan")
+        return float(duration)
+    except (OverflowError, TypeError, ValueError):
+        return float("nan")
+
+
 def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None = None) -> float:
     """Time taken for subset of cooperative agents to meet their goals.
 
     From paper 2306.16740v4 Table 1: Aggregated Time (AT).
 
-    Formula: AT = time for cooperative_agents to all reach goals
+    Formula: AT = max(reached_goal_step[agent] * dt) over the requested agents.
 
     Parameters
     ----------
     data : EpisodeData
         Episode trajectory container
     cooperative_agents : list[int] | None, optional
-        Indices of cooperative agents to track (default: None = single robot)
+        Indices of cooperative agents to track (default: None = single robot).
+        Each index is looked up in ``data.cooperative_goal_steps``, which is the
+        canonical per-agent identity/index source. Indices carry no positional
+        meaning against ``other_agents_pos`` or pedestrian rows.
 
     Returns
     -------
     float
         Aggregated time for cooperative agents
-        Range: [0, ∞)
+        Range: [0, ∞) or NaN when the result is unavailable
         Units: seconds
 
     Edge Cases
     -----------
     - If cooperative_agents is None → use single robot time_to_goal
-    - Multi-agent coordination not implemented yet → returns time_to_goal
+    - If cooperative_agents is empty → NaN (no agent to aggregate)
+    - Duplicate indices are deduplicated deterministically
+    - A negative or absent index (out of range for the explicit mapping), a
+      missing mapping, a non-finite/negative ``dt``, or a non-integral/negative
+      step → NaN (unavailable); the metric never falls back to a fabricated or
+      single-agent value
+    - All-agent aggregation has no implicit sentinel: pass every known agent
+      index explicitly to aggregate over all agents
 
     Paper Reference
     ---------------
@@ -2879,13 +2917,33 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
 
     Notes
     -----
-    Full multi-agent support requires additional coordination data.
-    Current implementation returns single-robot time for backward compatibility.
+    ``cooperative_agents=None`` preserves the single-robot result for backward
+    compatibility. Goal completion is never inferred from positions or
+    pedestrian trajectories.
     """
-    # For single-robot scenarios, return time to goal
-    # Multi-agent extension would require reached_goal_step per agent
-    _ = cooperative_agents  # Acknowledge parameter for linter
-    return time_to_goal(data)
+    if cooperative_agents is None:
+        return time_to_goal(data)
+    steps = data.cooperative_goal_steps
+    if not _is_valid_nonnegative_finite(data.dt) or not isinstance(steps, dict) or not steps:
+        return float("nan")
+    seen: set[int] = set()
+    max_step: int | None = None
+    for agent in cooperative_agents:
+        if isinstance(agent, bool) or not isinstance(agent, int) or agent < 0:
+            return float("nan")
+        if agent in seen:
+            continue
+        seen.add(agent)
+        if agent not in steps:
+            return float("nan")
+        step = steps[agent]
+        if isinstance(step, bool) or not isinstance(step, int) or step < 0:
+            return float("nan")
+        if max_step is None or step > max_step:
+            max_step = step
+    if not seen or max_step is None:
+        return float("nan")
+    return _cooperative_duration(max_step, data.dt)
 
 
 # --- Orchestrator ---

@@ -6,6 +6,30 @@ This guide helps agents start from the right command and read only the code regi
 Use it when a task needs repository commands, model lookup, validation, or navigation through
 large files.
 
+## Task Routes And Preflight Discipline
+
+Agents must choose the bounded task route matching their assigned goal and consume existing deterministic
+preflight and status outputs rather than repeatedly scanning instructions, reconstructing validation requirements,
+or mutating branches during read-only review.
+
+| Route | Purpose | Required context / evidence | First deterministic command | Permitted mutations | Authoritative acceptance command |
+| --- | --- | --- | --- | --- | --- |
+| **Read-only observation** | PR / issue audit, queue review, CI status, non-mutating review | Target/base/head SHAs, PR/issue metadata, triage state | `git rev-parse HEAD` or `python3 scripts/dev/watch_pr_ci_status.py <pr> --json --once` | None (fail-closed via #8321 guard; no branch pushes or merges) | Structured snapshot report or non-mutating review assessment |
+| **Documentation-only edit** | Documentation, markdown, instructions, glossaries | Changed paths, referenced file/link targets | `git diff --name-only` or targeted link check | Markdown/text files under `docs/`, `.agents/`, or root instructions | `uv run python scripts/tools/sync_ai_config.py --check` and diff/link verification |
+| **Implementation / runtime change** | Bugfix, feature, or refactor in runtime code/tests | Issue contract, reproduction test, plan | Focused test: `uv run pytest <path> -q` | Scoped code and tests within declared `owned_paths` | `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` |
+| **Scientific / benchmark interpretation** | Benchmark analysis, policy eval, metric review | Scenario/config/seed provenance, campaign runs | Canonical benchmark runner / analyzer or row inspection | None (or diagnostic scripts / artifact manifests only) | `uv run python -m robot_sf.benchmark.camera_ready_campaign --verify-only` (no fallback/degraded as success) |
+| **Environment / worktree repair** | Capacity reclamation, venv repair, git worktree hygiene | Capacity inventory, worktree status, venv health | `python scripts/dev/check_worktree_capacity.py --inventory --json` | Worktree prune, `.venv` recreation, scratch cleanup | `python scripts/dev/check_worktree_optional_deps.py --profile all-extras` |
+
+### Route Boundaries and Negative Rules
+
+- **Read-only review never mutates branches**: A reviewer records target/base/head SHAs and inspects or fetches according to existing policy; it must never merge `origin/main` into the implementation branch or push to it. Review worktrees enforce this via the machine guard (`scripts/dev/review_worktree_guard.py`, issue #8321).
+- **Validation proportional to change risk**: A pure documentation edit does not trigger an expensive simulation campaign; conversely, a runtime or benchmark change cannot pass on documentation or lint checks alone (see maintainer value hierarchy in `AGENTS.md`).
+- **Environment blockers are not relaxation licenses**: Missing optional or native dependencies remain visible. An environment blocker is an explicit blocker that routes to environment repair or closes as `blocked`; it never authorizes lowering scientific gates or claiming fallback/degraded execution as benchmark success.
+- **Freshness before expensive proof**: A moved PR head/base or changed material metadata invalidates prior readiness proof; re-validate against the exact current head before handoff (issue #7649).
+- **Separation of observer/audit collection from mutations**: Observers and audit scripts emit bounded snapshots with producer revision, freshness timestamp, and data completeness marker. Quota exhaustion, truncated pagination, or a stale producer must never be treated as an empty-success result or authorize state mutations, issue updates, or label writes (issues #8304 and #8307).
+- **Integrity of scientific indicators**: Refactoring or readability improvements must never strip units, uncertainty qualifiers, source pins, seed/config identifiers, or forbidden-inference boundaries.
+- **Privacy and provenance boundaries**: Private infrastructure, account details, unpublished project context, and raw runtime logs must never leak into public PR bodies, comments, or committed artifacts.
+
 ## Command Entrypoints
 
 Run Python through the project environment so imports such as `robot_sf` resolve consistently:
@@ -144,6 +168,18 @@ python3 "$ROUTING_REPO/scripts/resolve-route.py" \
 Read back the private plan's `selected_route`, `forbidden_actions`, and `acceptance_gate` before
 dispatch. The resolver owns native-tier selection, evidence-gated escalation, and external-provider
 budget alternatives; do not copy a volatile model inventory or add local legacy routes.
+
+## Compact Final Handoff Contract
+
+Every completed task must provide a concise, reproducible handoff record adhering to repository acceptance terminology. A model's prose assertion is not execution evidence:
+
+1. **Result**: Final status (`success`, `blocked`, `diagnostic`, `not benchmark evidence`).
+2. **Revisions**: Exact base SHA, head SHA, and relevant input/config digests.
+3. **Changed paths**: Modified files (must stay strictly within declared `owned_paths`).
+4. **Validation evidence**: Exact commands run with their exit codes and output summaries.
+5. **Unrun or unavailable checks**: Explicit list of any skipped, unrun, or blocked checks, accompanied by technical rationale (e.g. GPU unavailable, optional dependency missing).
+6. **Scientific scope & limitations**: Any caveats, assumptions, or boundary conditions.
+7. **Next disposition**: Actionable next step (e.g. ready for PR review, follow-up issue required).
 
 ## Large-File Navigation
 

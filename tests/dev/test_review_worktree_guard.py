@@ -107,15 +107,15 @@ def _remote_refs(worktree: Path) -> str:
     ).stdout
 
 
-def _common_git(worktree: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    """Run a remote-read command with the common config, not review barriers."""
+def _common_config_path(worktree: Path) -> Path:
+    """Return the shared config file used by linked worktrees."""
     common_git_dir = _git(
         worktree,
         "rev-parse",
         "--path-format=absolute",
         "--git-common-dir",
     ).stdout.strip()
-    return _git(worktree, "--git-dir", common_git_dir, *args)
+    return Path(common_git_dir) / "config"
 
 
 def test_create_review_worktree_blocks_refspecs_and_no_verify(tmp_path: Path) -> None:
@@ -204,76 +204,119 @@ def test_create_review_worktree_blocks_refspecs_and_no_verify(tmp_path: Path) ->
         _remove_worktree(repo, worktree, branch)
 
 
-def test_review_mode_blocks_a_remote_added_after_configuration(tmp_path: Path) -> None:
-    """The review barrier masks a common pushInsteadOf alias for new remotes."""
+def test_review_mode_refuses_a_common_push_alias_without_shared_mutation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A repository push alias refuses setup without changing shared config."""
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "global.gitconfig"))
     repo, _remote = _fixture_repo(tmp_path)
     second_remote = tmp_path / "second-remote.git"
     _git(tmp_path, "init", "--bare", str(second_remote))
-    _git(repo, "push", str(second_remote), "main:refs/heads/main")
     _git(repo, "config", f"url.{second_remote}.pushInsteadOf", "review-target")
-    _git(repo, "config", f"url.{second_remote}.insteadOf", "read-target")
+    common_config = _common_config_path(repo)
+    before_config = common_config.read_bytes()
     worktree = tmp_path / "review-new-remote"
     branch = "review/new-remote"
     try:
         _git(repo, "worktree", "add", "--no-track", "-b", branch, str(worktree), "HEAD")
         configured = _configure(worktree, "review")
-        assert configured.returncode == 0, configured.stderr
+        output = configured.stdout + configured.stderr
+        assert configured.returncode != 0, output
+        assert "cannot safely activate" in output
+        assert "shared Git config was not changed" in output
+        assert common_config.read_bytes() == before_config
         alias_key = f"url.{second_remote}.pushInsteadOf"
-        masked_alias = _git(repo, "config", "--get", alias_key, check=False)
-        assert masked_alias.returncode != 0, masked_alias.stdout + masked_alias.stderr
-        configured_again = _configure(worktree, "review")
-        assert configured_again.returncode == 0, configured_again.stderr
-        _git(worktree, "remote", "add", "mirror", "review-target")
+        alias = _git(repo, "config", "--get", alias_key)
+        assert alias.stdout.strip() == "review-target"
+        mode = _git(worktree, "config", "--get", "robot-sf.worktree-mode", check=False)
+        assert mode.returncode != 0
         allowed_fetch = _git(worktree, "fetch", "origin", "main", check=False)
         assert allowed_fetch.returncode == 0, allowed_fetch.stdout + allowed_fetch.stderr
         allowed_ls_remote = _git(worktree, "ls-remote", "origin", check=False)
         assert allowed_ls_remote.returncode == 0, (
             allowed_ls_remote.stdout + allowed_ls_remote.stderr
         )
-        _git(worktree, "remote", "add", "read-mirror", "read-target")
-        read_alias = _git(worktree, "ls-remote", "--refs", "read-mirror")
-        assert "refs/heads/main" in read_alias.stdout
-        read_fetch = _git(worktree, "fetch", "read-mirror", "main", check=False)
-        assert read_fetch.returncode == 0, read_fetch.stdout + read_fetch.stderr
-        result = _git(
-            worktree,
-            "push",
-            "--no-verify",
-            "mirror",
-            "HEAD:refs/heads/new-remote-bypass",
-            check=False,
-        )
-        assert result.returncode != 0, result.stdout + result.stderr
-        refs = _git(worktree, "ls-remote", "--refs", str(second_remote)).stdout
-        assert "refs/heads/new-remote-bypass" not in refs
-        restored = _configure(worktree, "implementation")
-        assert restored.returncode == 0, restored.stderr
-        restored_alias = _git(repo, "config", "--get", alias_key)
-        assert restored_alias.stdout.strip() == "review-target"
     finally:
         _remove_worktree(repo, worktree, branch)
 
 
-def test_review_mode_fails_closed_for_an_unmaskable_global_push_alias(
+def test_concurrent_review_refusal_does_not_mutate_shared_config(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """A global push alias cannot remain active behind the review catch-all."""
+    """Concurrent refusals leave shared aliases and review markers untouched."""
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "global.gitconfig"))
     repo, _remote = _fixture_repo(tmp_path)
     second_remote = tmp_path / "second-remote.git"
     _git(tmp_path, "init", "--bare", str(second_remote))
+    _git(repo, "config", f"url.{second_remote}.pushInsteadOf", "review-target")
+    common_config = _common_config_path(repo)
+    before_config = common_config.read_bytes()
+    worktrees = (tmp_path / "review-a", tmp_path / "review-b")
+    branches = ("review/concurrent-a", "review/concurrent-b")
+    try:
+        for worktree, branch in zip(worktrees, branches, strict=True):
+            _git(repo, "worktree", "add", "--no-track", "-b", branch, str(worktree), "HEAD")
+        command = [
+            sys.executable,
+            str(GUARD),
+            "configure",
+            "--worktree",
+            "PLACEHOLDER",
+            "--mode",
+            "review",
+        ]
+        processes = [
+            subprocess.Popen(
+                [*command[:4], str(worktree), *command[5:]],
+                cwd=worktree,
+                env=os.environ.copy(),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for worktree in worktrees
+        ]
+        results = [process.communicate(timeout=30) for process in processes]
+        for returncode, (stdout, stderr) in zip(
+            (process.returncode for process in processes), results, strict=True
+        ):
+            output = stdout + stderr
+            assert returncode != 0, output
+            assert "cannot safely activate" in output
+        assert common_config.read_bytes() == before_config
+        for worktree in worktrees:
+            mode = _git(worktree, "config", "--get", "robot-sf.worktree-mode", check=False)
+            assert mode.returncode != 0
+    finally:
+        for worktree, branch in zip(worktrees, branches, strict=True):
+            _remove_worktree(repo, worktree, branch)
+
+
+def test_review_mode_fails_closed_for_an_inherited_global_push_alias(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A global push alias refuses setup without changing repository or global config."""
     global_config = tmp_path / "global.gitconfig"
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+    repo, _remote = _fixture_repo(tmp_path)
+    second_remote = tmp_path / "second-remote.git"
+    _git(tmp_path, "init", "--bare", str(second_remote))
     alias_key = f"url.{second_remote}.pushInsteadOf"
     _git(repo, "config", "--global", alias_key, "review-target")
+    common_config = _common_config_path(repo)
+    before_common = common_config.read_bytes()
+    before_global = global_config.read_bytes()
     worktree = tmp_path / "review-global-alias"
     branch = "review/global-alias"
     try:
         _git(repo, "worktree", "add", "--no-track", "-b", branch, str(worktree), "HEAD")
         configured = _configure(worktree, "review")
-        assert configured.returncode != 0
-        assert "cannot mask all inherited URL pushInsteadOf aliases" in (
-            configured.stdout + configured.stderr
-        )
+        output = configured.stdout + configured.stderr
+        assert configured.returncode != 0, output
+        assert "cannot safely activate" in output
+        assert "shared Git config was not changed" in output
+        assert common_config.read_bytes() == before_common
+        assert global_config.read_bytes() == before_global
         remaining = _git(repo, "config", "--global", "--get", alias_key)
         assert remaining.stdout.strip() == "review-target"
     finally:
@@ -310,9 +353,16 @@ def test_review_mode_blocks_a_new_explicit_pushurl_on_the_hook_path(tmp_path: Pa
         _remove_worktree(repo, worktree, branch)
 
 
-def test_review_worktree_allows_ls_remote_and_fetch_while_blocking_pushes(tmp_path: Path) -> None:
+def test_review_worktree_allows_ls_remote_and_fetch_while_blocking_pushes(
+    tmp_path: Path, monkeypatch
+) -> None:
     """Review mode separates push rejection from read-only ls-remote and fetch (issue #8321)."""
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "global.gitconfig"))
     repo, _remote = _fixture_repo(tmp_path)
+    read_remote = tmp_path / "read-remote.git"
+    _git(tmp_path, "init", "--bare", str(read_remote))
+    _git(repo, "push", str(read_remote), "main:refs/heads/main")
+    _git(repo, "config", f"url.{read_remote}.insteadOf", "read-target")
     worktree = tmp_path / "review-read-urls"
     branch = "review/read-urls"
     try:
@@ -344,6 +394,13 @@ def test_review_worktree_allows_ls_remote_and_fetch_while_blocking_pushes(tmp_pa
         # Read-only fetch: git fetch origin main
         allowed_fetch = _git(worktree, "fetch", "origin", "main", check=False)
         assert allowed_fetch.returncode == 0, allowed_fetch.stdout + allowed_fetch.stderr
+
+        # Generic read-side URL rewrites remain available in review mode.
+        _git(worktree, "remote", "add", "read-mirror", "read-target")
+        read_ls_remote = _git(worktree, "ls-remote", "--refs", "read-mirror")
+        assert "refs/heads/main" in read_ls_remote.stdout
+        read_fetch = _git(worktree, "fetch", "read-mirror", "main", check=False)
+        assert read_fetch.returncode == 0, read_fetch.stdout + read_fetch.stderr
 
         # Push rejection: ordinary push is blocked
         push_normal = _git(worktree, "push", "origin", "HEAD:refs/heads/normal-push", check=False)

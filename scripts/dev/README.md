@@ -172,10 +172,11 @@ Git configuration override can bypass them. In particular, a remote added after 
 explicit `remote.<name>.pushurl` remains protected by the ordinary hook path, while a deliberate
 `--no-verify` bypass is owned by stronger process isolation in #8343.
 
-Review setup temporarily removes direct repository-local `url.*.pushInsteadOf` entries from the
-shared config so a longer inherited alias cannot outrank the worktree push barrier; implementation
-mode restores those entries. Read-side `url.*.insteadOf` rewrites remain enabled, and setup fails
-closed if an effective push alias cannot be masked.
+Review setup never edits the shared config to mask `url.*.pushInsteadOf` entries. If an effective
+repository, global, system, or pre-existing worktree alias could outrank the worktree push barrier,
+setup fails closed before enabling review mode; remove or relocate the alias and retry. A
+guard-specific lock would not serialize arbitrary Git processes in other linked worktrees. Read-side
+`url.*.insteadOf` rewrites remain enabled for safe configurations.
 Implementation worktrees keep the default pushable behavior. See
 [`worktree_lifecycle.md`](../../docs/dev/worktree_lifecycle.md) for the complete invocation and
 restoration procedure.

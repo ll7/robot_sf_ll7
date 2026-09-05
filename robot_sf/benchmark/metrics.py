@@ -2891,9 +2891,9 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
     - If cooperative_agents is None → use single robot time_to_goal
     - If cooperative_agents is empty → NaN (no agent to aggregate)
     - Duplicate indices are deduplicated deterministically
-    - A negative/out-of-range index, a missing mapping entry, a missing mapping,
-      a non-finite/negative ``dt``, or a non-integral/negative step → NaN
-      (unavailable); the metric never falls back to a fabricated or
+    - A negative or absent index (out of range for the explicit mapping), a
+      missing mapping, a non-finite/negative ``dt``, or a non-integral/negative
+      step → NaN (unavailable); the metric never falls back to a fabricated or
       single-agent value
     - All-agent aggregation has no implicit sentinel: pass every known agent
       index explicitly to aggregate over all agents

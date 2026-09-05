@@ -127,6 +127,10 @@ def test_malformed_inputs_fail_closed() -> None:
     malformed.cooperative_goal_steps = {0: -1, 1: 30}
     assert np.isnan(aggregated_time(malformed, cooperative_agents=[0, 1]))
 
+    nonfinite_step = _make_episode()
+    nonfinite_step.cooperative_goal_steps = {0: float("nan"), 1: 30}  # type: ignore[dict-item]
+    assert np.isnan(aggregated_time(nonfinite_step, cooperative_agents=[0, 1]))
+
     bool_step = _make_episode()
     bool_step.cooperative_goal_steps = {0: True, 1: 30}
     assert np.isnan(aggregated_time(bool_step, cooperative_agents=[0, 1]))
@@ -141,6 +145,10 @@ def test_invalid_timestep_and_agent_index_fail_closed() -> None:
     nonfinite_dt = _make_episode(dt=float("inf"))
     nonfinite_dt.cooperative_goal_steps = {0: 10}
     assert np.isnan(aggregated_time(nonfinite_dt, cooperative_agents=[0]))
+
+    nan_dt = _make_episode(dt=float("nan"))
+    nan_dt.cooperative_goal_steps = {0: 10}
+    assert np.isnan(aggregated_time(nan_dt, cooperative_agents=[0]))
 
     nonnumeric_dt = _make_episode()
     nonnumeric_dt.dt = "0.1"  # type: ignore[assignment]

@@ -13,6 +13,7 @@ from robot_sf.prediction import (
     HIERARCHICAL_GOAL_POSTERIOR_SCHEMA_VERSION,
     GoalBeliefSource,
     GoalCandidate,
+    GoalCandidateAvailability,
     GoalCandidateKind,
     GoalCandidateRole,
     GoalCandidateSet,
@@ -410,6 +411,158 @@ def test_flat_projection_rejects_parent_metadata_disagreement() -> None:
 
     with pytest.raises(ValueError, match="parent_destination_id disagrees"):
         posterior.to_goal_belief_v1("active_waypoint", candidate_set=candidate_set)
+
+
+def test_flat_projection_rejects_missing_parent_metadata() -> None:
+    """A waypoint must carry the same explicit parent as the hierarchy mapping."""
+    candidate_set = GoalCandidateSet(
+        candidates=tuple(
+            replace(candidate, parent_destination_id=None)
+            if candidate.id == "waypoint-a-near"
+            else candidate
+            for candidate in POSTERIOR_CANDIDATE_SET.candidates
+        ),
+        source="public_fixture",
+    )
+    posterior = replace(
+        _posterior(),
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
+    )
+
+    with pytest.raises(ValueError, match="parent_destination_id is missing"):
+        posterior.to_goal_belief_v1("active_waypoint", candidate_set=candidate_set)
+
+
+@pytest.mark.parametrize(
+    ("candidate_id", "role", "message"),
+    [
+        (
+            "destination-a",
+            GoalCandidateRole.ACTIVE_WAYPOINT,
+            "destination probability",
+        ),
+        (
+            "waypoint-a-near",
+            GoalCandidateRole.FINAL_DESTINATION,
+            "waypoint probability",
+        ),
+        (
+            "destination-a",
+            GoalCandidateRole.OPEN_RAY,
+            "destination probability",
+        ),
+    ],
+)
+def test_flat_projection_rejects_incompatible_candidate_roles(
+    candidate_id: str,
+    role: GoalCandidateRole,
+    message: str,
+) -> None:
+    """Known mass cannot bind to an open-ray or opposite-level candidate."""
+    if role is GoalCandidateRole.OPEN_RAY:
+        replacement = GoalCandidate(
+            id=candidate_id,
+            position=None,
+            source="public_fixture",
+            role=role,
+            direction=(1.0, 0.0),
+        )
+    else:
+        replacement = replace(
+            next(
+                candidate
+                for candidate in POSTERIOR_CANDIDATE_SET.candidates
+                if candidate.id == candidate_id
+            ),
+            role=role,
+        )
+    candidate_set = GoalCandidateSet(
+        candidates=tuple(
+            replacement if candidate.id == candidate_id else candidate
+            for candidate in POSTERIOR_CANDIDATE_SET.candidates
+        ),
+        source="public_fixture",
+    )
+    posterior = replace(
+        _posterior(),
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
+    )
+
+    with pytest.raises(ValueError, match=message):
+        posterior.to_goal_belief_v1("final_destination", candidate_set=candidate_set)
+
+
+def test_flat_projection_rejects_unavailable_candidate_mass() -> None:
+    """Unavailable candidates cannot be emitted as known posterior mass."""
+    candidate_set = GoalCandidateSet(
+        candidates=tuple(
+            replace(candidate, availability=GoalCandidateAvailability.UNAVAILABLE)
+            if candidate.id == "destination-a"
+            else candidate
+            for candidate in POSTERIOR_CANDIDATE_SET.candidates
+        ),
+        source="public_fixture",
+    )
+    posterior = replace(
+        _posterior(),
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
+    )
+
+    with pytest.raises(ValueError, match="unavailable candidate"):
+        posterior.to_goal_belief_v1("final_destination", candidate_set=candidate_set)
+
+
+def test_flat_projection_rejects_unavailable_candidate_set() -> None:
+    """An unavailable candidate provider cannot authorize a flat projection."""
+    candidate_set = GoalCandidateSet(
+        candidates=POSTERIOR_CANDIDATE_SET.candidates,
+        source="public_fixture",
+        availability=GoalCandidateAvailability.UNAVAILABLE,
+    )
+    posterior = replace(
+        _posterior(),
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
+    )
+
+    with pytest.raises(ValueError, match="candidate_set.availability"):
+        posterior.to_goal_belief_v1("final_destination", candidate_set=candidate_set)
+
+
+@pytest.mark.parametrize("binding", ["set", "candidate", "provenance"])
+def test_flat_projection_rejects_extended_privileged_candidate_provenance(binding: str) -> None:
+    """Route/truth labels and provenance references cannot enter actor-side projection."""
+    if binding == "set":
+        candidate_set = GoalCandidateSet(
+            candidates=POSTERIOR_CANDIDATE_SET.candidates,
+            source="assigned_route_v2",
+        )
+    elif binding == "candidate":
+        candidate_set = GoalCandidateSet(
+            candidates=tuple(
+                replace(candidate, source="ground_truth")
+                if candidate.id == "destination-a"
+                else candidate
+                for candidate in POSTERIOR_CANDIDATE_SET.candidates
+            ),
+            source="public_fixture",
+        )
+    else:
+        candidate_set = GoalCandidateSet(
+            candidates=tuple(
+                replace(candidate, provenance_refs=("oracle:goal",))
+                if candidate.id == "destination-a"
+                else candidate
+                for candidate in POSTERIOR_CANDIDATE_SET.candidates
+            ),
+            source="public_fixture",
+        )
+    posterior = replace(
+        _posterior(),
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
+    )
+
+    with pytest.raises(ValueError, match="privileged"):
+        posterior.to_goal_belief_v1("final_destination", candidate_set=candidate_set)
 
 
 def test_flat_projection_rejects_unknown_role_used_as_known_mass() -> None:

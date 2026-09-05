@@ -94,6 +94,22 @@ CLAIM_BOUNDARY = (
     "the closed #7042 ruling; no such field is quoted. No trace-level, causal, universal-ranking, "
     "or admission claim is produced by this builder."
 )
+FROZEN_RULING_CLAIM_BOUNDARY = (
+    "Release-cell descriptive projections only. Collision-related metrics and SNQI remain explicitly "
+    "excluded by the frozen #7042 ruling. No trace-level, causal, universal-ranking, or admission "
+    "claim is produced by this builder."
+)
+LEGACY_EXCLUSION_REASON = "collision-related metrics and SNQI are excluded by the closed #7042 ruling; v2 does not quote this field"
+FROZEN_EXCLUSION_REASON = (
+    "collision-related metrics and SNQI are excluded by the frozen #7042 ruling; v2.1 does not "
+    "quote these fields"
+)
+LEGACY_PANEL_LIMITATION = "collision-related metrics and SNQI excluded by the closed #7042 ruling"
+FROZEN_PANEL_LIMITATION = "collision-related metrics and SNQI excluded by the frozen #7042 ruling"
+V21_PACKAGE_KEY = "issue-7322/ch7-evidence-package-v2.1"
+V21_SOURCE_REGISTRY_KEY = "issue-6792/source-registry-v1"
+V21_SOURCE_REGISTRY_PATH = "docs/context/issue_6792_ch7_admission_receipt.v1.json"
+V21_SOURCE_REGISTRY_SHA256 = "9f19cae4ccdea9a2336eb1432f418e7df7af97f65eb6d95378023d802e4e64ac"
 
 
 class Ch7EvidencePackageV2Error(ValueError):
@@ -141,7 +157,7 @@ def _load_config(path: Path | None) -> dict[str, Any]:
     return dict(payload)
 
 
-def _validate_config(config: Mapping[str, Any]) -> None:  # noqa: C901
+def _validate_config(config: Mapping[str, Any]) -> None:  # noqa: C901, PLR0912
     if not config:
         return
     if config.get("schema_version") != PACKAGE_SCHEMA:
@@ -172,6 +188,36 @@ def _validate_config(config: Mapping[str, Any]) -> None:  # noqa: C901
         or admission_config.get("receipt_schema") != "ch7-evidence-admission.v2"
     ):
         raise Ch7EvidencePackageV2Error("v2 config must retain the not-admitted boundary")
+    revision = config.get("package_revision")
+    ruling = config.get("collision_exclusion_ruling")
+    if revision is None and ruling is None:
+        return
+    if revision != "v2.1":
+        raise Ch7EvidencePackageV2Error("unsupported v2 package revision")
+    if ruling != {"issue": 7042, "status": "frozen", "decision": "exclude_collision_and_snqi"}:
+        raise Ch7EvidencePackageV2Error("v2.1 config must bind the frozen #7042 ruling")
+    custody = config.get("custody")
+    expected_custody = {
+        "package_key": V21_PACKAGE_KEY,
+        "source_registry_key": V21_SOURCE_REGISTRY_KEY,
+        "source_registry_path": V21_SOURCE_REGISTRY_PATH,
+        "source_registry_sha256": V21_SOURCE_REGISTRY_SHA256,
+    }
+    if custody != expected_custody:
+        raise Ch7EvidencePackageV2Error("v2.1 config must bind the approved custody identity")
+    registry_path = Path(__file__).parents[2] / V21_SOURCE_REGISTRY_PATH
+    if not registry_path.is_file() or _sha256_file(registry_path) != V21_SOURCE_REGISTRY_SHA256:
+        raise Ch7EvidencePackageV2Error("v2.1 source registry digest mismatch")
+
+
+def _is_frozen_ruling_config(config: Mapping[str, Any]) -> bool:
+    """Return whether config selects the additive post-ruling v2.1 wording."""
+
+    return config.get("package_revision") == "v2.1"
+
+
+def _claim_boundary(config: Mapping[str, Any]) -> str:
+    return FROZEN_RULING_CLAIM_BOUNDARY if _is_frozen_ruling_config(config) else CLAIM_BOUNDARY
 
 
 def _load_portfolio_contract(config: Mapping[str, Any]) -> dict[str, Any]:  # noqa: C901
@@ -469,13 +515,17 @@ def _projection_metadata() -> dict[str, Any]:
     }
 
 
-def _excluded_metric_records() -> list[dict[str, Any]]:
+def _excluded_metric_records(config: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
+    config = config or {}
+    reason = (
+        FROZEN_EXCLUSION_REASON if _is_frozen_ruling_config(config) else LEGACY_EXCLUSION_REASON
+    )
     return [
         {
             "metric": metric,
             "issue": 7042,
             "status": "excluded",
-            "reason": "collision-related metrics and SNQI are excluded by the closed #7042 ruling; v2 does not quote this field",
+            "reason": reason,
         }
         for metric in EXCLUDED_METRICS
     ]
@@ -586,6 +636,8 @@ def _build_once(*, source_package: Path, output: Path, config: Mapping[str, Any]
     terminal_counts = _read_terminal_counts(source_package)
     selected = select_v2_cells(rows, source=source, terminal_counts=terminal_counts)
     metadata = _projection_metadata()
+    claim_boundary = _claim_boundary(config)
+    excluded_metrics = _excluded_metric_records(config)
     output.parent.mkdir(parents=True, exist_ok=True)
     staging = output.parent / f".{output.name}.staging"
     if staging.exists():
@@ -605,9 +657,17 @@ def _build_once(*, source_package: Path, output: Path, config: Mapping[str, Any]
             },
             "selection": metadata,
             "safe_metrics": list(SAFE_METRICS),
-            "excluded_metrics": _excluded_metric_records(),
-            "claim_boundary": CLAIM_BOUNDARY,
+            "excluded_metrics": excluded_metrics,
+            "claim_boundary": claim_boundary,
         }
+        if _is_frozen_ruling_config(config):
+            binding["package_revision"] = "v2.1"
+            binding["custody"] = {
+                "package_key": V21_PACKAGE_KEY,
+                "source_registry_key": V21_SOURCE_REGISTRY_KEY,
+                "source_registry_path": V21_SOURCE_REGISTRY_PATH,
+                "source_registry_sha256": V21_SOURCE_REGISTRY_SHA256,
+            }
         _write_json(staging / "source/projection_binding.json", binding)
         _write_csv(staging / "publication/reduced_atlas.csv", selected)
         atlas = {
@@ -616,13 +676,13 @@ def _build_once(*, source_package: Path, output: Path, config: Mapping[str, Any]
             "terminal_label_normalization": v1.terminal_label_normalization(),
             "cells": selected,
             "projections": metadata,
-            "excluded_metrics": _excluded_metric_records(),
+            "excluded_metrics": excluded_metrics,
             "roles": [
                 "cross_topology_inversion",
                 "cross_mechanism_inversion",
                 "feasibility_criticism",
             ],
-            "claim_boundary": CLAIM_BOUNDARY,
+            "claim_boundary": claim_boundary,
         }
         _write_json(staging / "publication/reduced_atlas.json", atlas)
         for panel, label in (
@@ -649,7 +709,11 @@ def _build_once(*, source_package: Path, output: Path, config: Mapping[str, Any]
                     ),
                     "limitations": [
                         "release-cell grain only",
-                        "collision-related metrics and SNQI excluded by the closed #7042 ruling",
+                        (
+                            FROZEN_PANEL_LIMITATION
+                            if _is_frozen_ruling_config(config)
+                            else LEGACY_PANEL_LIMITATION
+                        ),
                         "no trace or mechanism-level causal evidence",
                         "no universal ranking claim",
                         "external admission receipt remains required",
@@ -668,6 +732,19 @@ def _build_once(*, source_package: Path, output: Path, config: Mapping[str, Any]
             {
                 "schema_version": "ch7-v2-source-verification.v1",
                 "status": "verified_but_domain_approval_pending",
+                **(
+                    {
+                        "package_revision": "v2.1",
+                        "custody": {
+                            "package_key": V21_PACKAGE_KEY,
+                            "source_registry_key": V21_SOURCE_REGISTRY_KEY,
+                            "source_registry_path": V21_SOURCE_REGISTRY_PATH,
+                            "source_registry_sha256": V21_SOURCE_REGISTRY_SHA256,
+                        },
+                    }
+                    if _is_frozen_ruling_config(config)
+                    else {}
+                ),
                 "source_package": source,
                 "raw_traces_included": False,
                 "release_archive_included": False,
@@ -707,7 +784,7 @@ def _build_once(*, source_package: Path, output: Path, config: Mapping[str, Any]
             "projection": metadata,
             "metrics": {
                 "included": list(SAFE_METRICS),
-                "excluded": _excluded_metric_records(),
+                "excluded": excluded_metrics,
             },
             "terminal_label_normalization": v1.terminal_label_normalization(),
             "roles": {
@@ -724,11 +801,19 @@ def _build_once(*, source_package: Path, output: Path, config: Mapping[str, Any]
                 "receipt_schema": "ch7-evidence-admission.v2",
                 "reason": "v2 domain approval and the external admission receipt remain pending",
             },
-            "claim_boundary": CLAIM_BOUNDARY,
+            "claim_boundary": claim_boundary,
             "raw_traces_included": False,
             "release_archive_included": False,
             "deterministic_serialization": "strict-json-sort-keys-utf8-newline.v1",
         }
+        if _is_frozen_ruling_config(config):
+            manifest["package_revision"] = "v2.1"
+            manifest["custody"] = {
+                "package_key": V21_PACKAGE_KEY,
+                "source_registry_key": V21_SOURCE_REGISTRY_KEY,
+                "source_registry_path": V21_SOURCE_REGISTRY_PATH,
+                "source_registry_sha256": V21_SOURCE_REGISTRY_SHA256,
+            }
         _write_json(staging / "manifest.json", manifest)
         _write_checksums(staging)
         _validate_output(staging)

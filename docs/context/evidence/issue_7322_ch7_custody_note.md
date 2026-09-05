@@ -8,6 +8,36 @@ The generated manifest retains its internal status `blocked_pending_domain_appro
 status `not_admitted`; the package is durable and ready for the maintainer-owned admission review
 once the recorded blockers are resolved.
 
+## Frozen-ruling refresh (#7412)
+
+The additive v2.1 package preserves the original v2 directory and records the frozen #7042 ruling
+as the exclusion boundary. The old package remains an immutable historical baseline; its bytes and
+hashes are not rewritten.
+
+- Current refresh: [`issue_7322_ch7_evidence_package_v2_1/`](issue_7322_ch7_evidence_package_v2_1/)
+- v2.1 package key: `issue-7322/ch7-evidence-package-v2.1`
+- v2.1 manifest SHA-256: `3472b0065661e5ad2fd058de0a55b55d9b1ba73c967a8acd0376f7ffa037df70`
+- v2.1 `SHA256SUMS` SHA-256: `cdbc85234c4b802cbd5a102da0599a3e5bf36550404916571a7439875020edfe`
+- Source-registry key: `issue-6792/source-registry-v1`; SHA-256: `9f19cae4ccdea9a2336eb1432f418e7df7af97f65eb6d95378023d802e4e64ac`
+- Status: `blocked_pending_domain_approval` / `not_admitted`; the external admission receipt
+  remains required.
+- Exclusion boundary: collision-related metrics and SNQI remain explicitly excluded by the frozen
+  ruling in Issue #7042; no collision or SNQI field is added to the 28-cell projection.
+
+Canonical refresh command:
+
+```bash
+uv run python scripts/analysis/build_ch7_evidence_package_v2.py \
+  --source-package docs/context/evidence/issue_6792_ch7_evidence_package_v1 \
+  --config configs/analysis/ch7_evidence_package.v2.1.yaml \
+  --output docs/context/evidence/issue_7322_ch7_evidence_package_v2_1 \
+  --check-determinism
+```
+
+The v2.1 check-only diagnostic has `receipt_created=false`, `admission_status=not_admitted`, and
+retains only the domain-approval and external-receipt blockers. It is a provenance refresh, not an
+admission receipt, benchmark result, or paper-facing claim.
+
 ## Durable retrieval
 
 - Package: [`issue_7322_ch7_evidence_package_v2/`](issue_7322_ch7_evidence_package_v2/)

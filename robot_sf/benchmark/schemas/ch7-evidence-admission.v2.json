@@ -76,21 +76,18 @@
       "additionalProperties": false,
       "required": ["claim_boundary", "forbidden_claims"],
       "properties": {
-        "claim_boundary": {"$ref": "#/$defs/nonempty"},
+        "claim_boundary": {
+          "const": "Release-cell descriptive projections only. Collision-related metrics and SNQI are excluded by the closed #7042 ruling; no such field is quoted. No trace-level, causal, universal-ranking, or admission claim is produced by this builder."
+        },
         "forbidden_claims": {
-          "type": "array",
-          "uniqueItems": true,
-          "minItems": 5,
-          "items": {
-            "enum": [
-              "matched_comparison",
-              "causal_divergence",
-              "counterfactual_branching",
-              "trajectory_divergence",
-              "universal_planner_ranking",
-              "collision_metric_semantics"
-            ]
-          }
+          "const": [
+            "matched_comparison",
+            "causal_divergence",
+            "counterfactual_branching",
+            "trajectory_divergence",
+            "universal_planner_ranking",
+            "collision_metric_semantics"
+          ]
         }
       }
     },

@@ -1,7 +1,7 @@
 {
-  "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_7322_ch7_evidence_package_v2/SHA256SUMS",
-  "artifact_sha256": "97316d20ca3f41db9b9aaae820784ab8a2090cfd2109003225d95f3691ef6a4c",
+  "artifact_sha256": "f5b1e658c6bf20b593c0e9a34d38cf5b94b164f8fad93eea9268a720f9680abb",
+  "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "preserved_exact_bytes": true
+  "schema_version": "evidence-review-marker.v1"
 }

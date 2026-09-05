@@ -11,6 +11,7 @@
     "admission_status",
     "source_integrity_gate",
     "source",
+    "source_registry",
     "inputs",
     "atlas",
     "projection",
@@ -47,6 +48,35 @@
         "v1_audit_member_sha256": {"$ref": "#/$defs/sha256"},
         "v1_reduced_atlas_member": {"const": "publication/reduced_atlas.json"},
         "v1_reduced_atlas_member_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "source_registry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registry_id",
+        "record_id",
+        "record_sha256",
+        "registry_path",
+        "registry_sha256",
+        "source_commit",
+        "retrieval",
+        "durable_sources"
+      ],
+      "properties": {
+        "registry_id": {"const": "source_gate_registry.v1"},
+        "record_id": {"const": "issue-7411-ch7-v1-v2-source.v1"},
+        "record_sha256": {"$ref": "#/$defs/sha256"},
+        "registry_path": {"const": "configs/analysis/source_gate_registry.v1.json"},
+        "registry_sha256": {"$ref": "#/$defs/sha256"},
+        "source_commit": {"$ref": "#/$defs/git_object"},
+        "retrieval": {"$ref": "#/$defs/source_registry_retrieval"},
+        "durable_sources": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"$ref": "#/$defs/durable_source"}
+        }
       }
     },
     "inputs": {
@@ -114,7 +144,9 @@
         "reason": {"type": "string", "minLength": 1}
       }
     },
-    "claim_boundary": {"type": "string", "minLength": 1},
+    "claim_boundary": {
+      "const": "Release-cell descriptive projections only. Collision-related metrics and SNQI are excluded by the closed #7042 ruling; no such field is quoted. No trace-level, causal, universal-ranking, or admission claim is produced by this builder."
+    },
     "raw_traces_included": {"const": false},
     "release_archive_included": {"const": false},
     "deterministic_serialization": {"const": "strict-json-sort-keys-utf8-newline.v1"}
@@ -143,6 +175,51 @@
   ],
   "$defs": {
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "git_object": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "source_registry_retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "repository_url", "public_access", "retention", "rights"],
+      "properties": {
+        "protocol": {"const": "git-commit-tree-v1"},
+        "repository_url": {"const": "https://github.com/ll7/robot_sf_ll7"},
+        "public_access": {"const": true},
+        "retention": {"type": "string", "minLength": 1},
+        "rights": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "basis"],
+          "properties": {
+            "status": {"const": "not_evaluated_by_this_record"},
+            "basis": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    },
+    "durable_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package_id",
+        "path",
+        "tree_sha",
+        "sha256sums_sha256",
+        "member_sha256sums",
+        "durable_uri"
+      ],
+      "properties": {
+        "package_id": {"enum": ["ch7-evidence-package-v1", "ch7-evidence-package-v2"]},
+        "path": {"type": "string", "minLength": 1},
+        "tree_sha": {"$ref": "#/$defs/git_object"},
+        "sha256sums_sha256": {"$ref": "#/$defs/sha256"},
+        "member_sha256sums": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"$ref": "#/$defs/sha256"}
+        },
+        "durable_uri": {"type": "string", "format": "uri"}
+      }
+    },
     "available_role": {
       "type": "object",
       "additionalProperties": false,

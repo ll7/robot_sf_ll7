@@ -361,14 +361,17 @@
     },
     "docs/context/evidence/issue_7322_ch7_evidence_package_v2/review/source_verification.json": {
       "hash_without_artifact_path": 1
+    },
+    "docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json": {
+      "artifact_hash_mismatch": 4
     }
   },
-  "generated_at": "2026-09-01T21:32:44Z",
+  "generated_at": "2026-09-03T20:22:01Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
     "by_code": {
-      "artifact_hash_mismatch": 15,
+      "artifact_hash_mismatch": 19,
       "config_missing_at_commit": 6,
       "dangling_commit": 20,
       "duplicate_campaign_id": 7,
@@ -379,7 +382,7 @@
       "missing_config_sha256": 53,
       "uncommitted_artifact_missing_location": 150
     },
-    "files_with_findings": 95,
-    "total_findings": 429
+    "files_with_findings": 96,
+    "total_findings": 433
   }
 }

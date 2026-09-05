@@ -95,11 +95,6 @@ class EpisodeData:
     goal : (2,) array robot target position
     dt : float timestep
     reached_goal_step : int | None (first step index reaching goal)  # optional helper
-    cooperative_goal_steps : dict[int, int] | None
-        Optional per-agent goal-reach steps for multi-agent episodes, mapping a
-        caller-defined agent index to its first goal-reaching step. This mapping is
-        the canonical per-agent identity/index source for aggregated_time.
-        Default None (single-robot episodes).
     obstacles : (M,2) array | None
         Obstacle/wall positions for collision detection (default: None).
         Used by wall_collisions (WC) and clearing_distance (CD) metrics.
@@ -114,6 +109,12 @@ class EpisodeData:
         Pedestrian footprint radius in meters for clearance-based robot-pedestrian metrics. Runners
         should populate this from the episode/simulation configuration; the default is a
         compatibility fallback for synthetic tests and legacy callers.
+    cooperative_goal_steps : dict[int, int] | None
+        Optional per-agent goal-reach steps for multi-agent episodes, mapping a
+        caller-defined agent index to its first goal-reaching step. This mapping is
+        the canonical per-agent identity/index source for aggregated_time.
+        Default None (single-robot episodes). Appended after the legacy optional
+        fields so positional ``EpisodeData`` callers retain their existing layout.
     """
 
     robot_pos: np.ndarray
@@ -124,7 +125,6 @@ class EpisodeData:
     goal: np.ndarray
     dt: float
     reached_goal_step: int | None = None
-    cooperative_goal_steps: dict[int, int] | None = None
     # Optional pre-sampled force field grid: dict with keys X,Y,Fx,Fy (2D arrays)
     force_field_grid: dict[str, np.ndarray] | None = None
     # Optional fields for paper metrics (2306.16740v4)
@@ -133,6 +133,7 @@ class EpisodeData:
     robot_radius: float = 1.0
     ped_radius: float = 0.4
     episode_metadata: dict[str, Any] | None = None
+    cooperative_goal_steps: dict[int, int] | None = None
 
 
 def has_force_data(data: EpisodeData) -> bool:

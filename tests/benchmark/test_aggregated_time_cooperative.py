@@ -33,6 +33,39 @@ def test_none_preserves_single_robot_time_to_goal() -> None:
     assert np.isnan(aggregated_time(episode))
 
 
+def test_new_field_preserves_legacy_positional_optional_fields() -> None:
+    """Appending the cooperative field must not shift the public dataclass layout."""
+    force_grid = {"X": np.zeros((1, 1))}
+    obstacles = np.zeros((1, 2))
+    other_agents = np.zeros((1, 1, 2))
+    metadata = {"source": "legacy"}
+    episode = EpisodeData(
+        np.zeros((1, 2)),
+        np.zeros((1, 2)),
+        np.zeros((1, 2)),
+        np.zeros((1, 0, 2)),
+        np.zeros((1, 0, 2)),
+        np.zeros(2),
+        0.1,
+        3,
+        force_grid,
+        obstacles,
+        other_agents,
+        0.3,
+        0.4,
+        metadata,
+    )
+
+    assert episode.reached_goal_step == 3
+    assert episode.force_field_grid is force_grid
+    assert episode.obstacles is obstacles
+    assert episode.other_agents_pos is other_agents
+    assert episode.robot_radius == 0.3
+    assert episode.ped_radius == 0.4
+    assert episode.episode_metadata is metadata
+    assert episode.cooperative_goal_steps is None
+
+
 def test_subset_returns_maximum_completion_time() -> None:
     """A requested subset returns the maximum per-agent completion time in seconds."""
     episode = _make_episode()

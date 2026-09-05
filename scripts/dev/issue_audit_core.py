@@ -1022,6 +1022,7 @@ def discover_issue_timeline_merged_prs(
 
     for issue_number in numbers:
         if max_requests is not None and requests_attempted >= max_requests:
+            request_limit_exhausted = True
             truncated = True
             if request_budget is not None and request_budget.remaining <= 0:
                 request_budget.mark_budget_exhausted()

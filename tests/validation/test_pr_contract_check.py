@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
@@ -162,9 +163,19 @@ def test_get_issue_metadata_requires_complete_payload(mock_run: MagicMock) -> No
 @patch("scripts.ci.pr_contract_check.subprocess.run")
 def test_get_pr_commit_messages_uses_paginated_commit_api(mock_run: MagicMock) -> None:
     """The commit source is fetched through the paginated PR commits endpoint."""
-    mock_run.return_value = MagicMock(returncode=0, stdout="first\nsecond\n")
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout="\n".join(
+            base64.b64encode(message.encode("utf-8")).decode("ascii")
+            for message in ("first line\nsecond line — café", "second")
+        )
+        + "\n",
+    )
 
-    assert pr_contract_check.get_pr_commit_messages("8451", "ll7/robot_sf_ll7") == "first\nsecond\n"
+    assert (
+        pr_contract_check.get_pr_commit_messages("8451", "ll7/robot_sf_ll7")
+        == "first line\nsecond line — café\nsecond\n"
+    )
     mock_run.assert_called_once_with(
         [
             "gh",
@@ -172,7 +183,9 @@ def test_get_pr_commit_messages_uses_paginated_commit_api(mock_run: MagicMock) -
             "--paginate",
             "repos/ll7/robot_sf_ll7/pulls/8451/commits?per_page=100",
             "--jq",
-            ".[] | .commit.message",
+            '.[] | if (.commit? | type) == "object" and (.commit.message? | type) == "string" '
+            "then .commit.message | @base64 "
+            'else error("invalid commit metadata") end',
         ],
         capture_output=True,
         text=True,
@@ -185,6 +198,55 @@ def test_get_pr_commit_messages_uses_paginated_commit_api(mock_run: MagicMock) -
 def test_get_pr_commit_messages_rejects_empty_success(mock_run: MagicMock) -> None:
     """A successful empty response is unavailable evidence, not a verified commit list."""
     mock_run.return_value = MagicMock(returncode=0, stdout=" \n")
+
+    assert pr_contract_check.get_pr_commit_messages("8451", "ll7/robot_sf_ll7") is None
+
+
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_pr_commit_messages_rejects_nonempty_malformed_output(mock_run: MagicMock) -> None:
+    """A malformed jq value cannot masquerade as available commit evidence."""
+    mock_run.return_value = MagicMock(returncode=0, stdout="null\n")
+
+    assert pr_contract_check.get_pr_commit_messages("8451", "ll7/robot_sf_ll7") is None
+
+
+@pytest.mark.parametrize("separator", ("\n", " \t\n"))
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_pr_commit_messages_rejects_mixed_blank_or_whitespace_lines(
+    mock_run: MagicMock, separator: str
+) -> None:
+    """Blank or whitespace-only records cannot be dropped from commit evidence."""
+    encoded = base64.b64encode(b"first").decode("ascii")
+    mock_run.return_value = MagicMock(returncode=0, stdout=f"{encoded}\n{separator}{encoded}\n")
+
+    assert pr_contract_check.get_pr_commit_messages("8451", "ll7/robot_sf_ll7") is None
+
+
+@pytest.mark.parametrize("output", (" {encoded}\n", "{encoded} \n", "\t{encoded}\n"))
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_pr_commit_messages_rejects_surrounding_whitespace(
+    mock_run: MagicMock, output: str
+) -> None:
+    """Base64 records must contain no surrounding whitespace before strict decoding."""
+    encoded = base64.b64encode(b"first").decode("ascii")
+    mock_run.return_value = MagicMock(returncode=0, stdout=output.format(encoded=encoded))
+
+    assert pr_contract_check.get_pr_commit_messages("8451", "ll7/robot_sf_ll7") is None
+
+
+@pytest.mark.parametrize(
+    "encoded",
+    (
+        "not-base64",
+        base64.b64encode(b"\xff\xfe").decode("ascii"),
+    ),
+)
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_pr_commit_messages_rejects_invalid_base64_or_utf8(
+    mock_run: MagicMock, encoded: str
+) -> None:
+    """Malformed base64 and non-UTF-8 decoded bytes are unavailable evidence."""
+    mock_run.return_value = MagicMock(returncode=0, stdout=f"{encoded}\n")
 
     assert pr_contract_check.get_pr_commit_messages("8451", "ll7/robot_sf_ll7") is None
 

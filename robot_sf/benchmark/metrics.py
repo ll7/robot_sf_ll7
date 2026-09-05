@@ -95,6 +95,11 @@ class EpisodeData:
     goal : (2,) array robot target position
     dt : float timestep
     reached_goal_step : int | None (first step index reaching goal)  # optional helper
+    cooperative_goal_steps : dict[int, int] | None
+        Optional per-agent goal-reach steps for multi-agent episodes, mapping a
+        caller-defined agent index to its first goal-reaching step. This mapping is
+        the canonical per-agent identity/index source for aggregated_time.
+        Default None (single-robot episodes).
     obstacles : (M,2) array | None
         Obstacle/wall positions for collision detection (default: None).
         Used by wall_collisions (WC) and clearing_distance (CD) metrics.
@@ -119,6 +124,7 @@ class EpisodeData:
     goal: np.ndarray
     dt: float
     reached_goal_step: int | None = None
+    cooperative_goal_steps: dict[int, int] | None = None
     # Optional pre-sampled force field grid: dict with keys X,Y,Fx,Fy (2D arrays)
     force_field_grid: dict[str, np.ndarray] | None = None
     # Optional fields for paper metrics (2306.16740v4)
@@ -2852,26 +2858,35 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
 
     From paper 2306.16740v4 Table 1: Aggregated Time (AT).
 
-    Formula: AT = time for cooperative_agents to all reach goals
+    Formula: AT = max(reached_goal_step[agent] * dt) over the requested agents.
 
     Parameters
     ----------
     data : EpisodeData
         Episode trajectory container
     cooperative_agents : list[int] | None, optional
-        Indices of cooperative agents to track (default: None = single robot)
+        Indices of cooperative agents to track (default: None = single robot).
+        Each index is looked up in ``data.cooperative_goal_steps``, which is the
+        canonical per-agent identity/index source. Indices carry no positional
+        meaning against ``other_agents_pos`` or pedestrian rows.
 
     Returns
     -------
     float
         Aggregated time for cooperative agents
-        Range: [0, ∞)
+        Range: [0, ∞) or NaN when the result is unavailable
         Units: seconds
 
     Edge Cases
     -----------
     - If cooperative_agents is None → use single robot time_to_goal
-    - Multi-agent coordination not implemented yet → returns time_to_goal
+    - If cooperative_agents is empty → NaN (no agent to aggregate)
+    - Duplicate indices are deduplicated deterministically
+    - An out-of-range index, a missing mapping entry, a missing mapping, or a
+      non-integral/negative step → NaN (unavailable); the metric never falls
+      back to a fabricated or single-agent value
+    - All-agent aggregation has no implicit sentinel: pass every known agent
+      index explicitly to aggregate over all agents
 
     Paper Reference
     ---------------
@@ -2879,13 +2894,33 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
 
     Notes
     -----
-    Full multi-agent support requires additional coordination data.
-    Current implementation returns single-robot time for backward compatibility.
+    ``cooperative_agents=None`` preserves the single-robot result for backward
+    compatibility. Goal completion is never inferred from positions or
+    pedestrian trajectories.
     """
-    # For single-robot scenarios, return time to goal
-    # Multi-agent extension would require reached_goal_step per agent
-    _ = cooperative_agents  # Acknowledge parameter for linter
-    return time_to_goal(data)
+    if cooperative_agents is None:
+        return time_to_goal(data)
+    steps = data.cooperative_goal_steps
+    if not isinstance(steps, dict) or not steps:
+        return float("nan")
+    seen: set[int] = set()
+    max_step: int | None = None
+    for agent in cooperative_agents:
+        if isinstance(agent, bool) or not isinstance(agent, int):
+            return float("nan")
+        if agent in seen:
+            continue
+        seen.add(agent)
+        if agent not in steps:
+            return float("nan")
+        step = steps[agent]
+        if isinstance(step, bool) or not isinstance(step, int) or step < 0:
+            return float("nan")
+        if max_step is None or step > max_step:
+            max_step = step
+    if not seen or max_step is None:
+        return float("nan")
+    return float(max_step * data.dt)
 
 
 # --- Orchestrator ---

@@ -235,7 +235,9 @@ def test_all_zenodo_modes_preserve_manifest_binding(tmp_path: Path) -> None:
             "filename": bundle.name,
             "size": bundle.stat().st_size,
             "links": {
-                "download": f"https://zenodo.org/api/records/{version_record_id}/files/bundle"
+                "download": (
+                    f"https://zenodo.org/api/records/{version_record_id}/files/bundle.tar.gz/content"
+                )
             },
         }
     ]
@@ -299,7 +301,9 @@ def test_recover_restores_manifest_bound_state_for_upload_and_verify(tmp_path: P
             "filename": bundle.name,
             "size": bundle.stat().st_size,
             "links": {
-                "download": f"https://zenodo.org/api/records/{version_record_id}/files/bundle"
+                "download": (
+                    f"https://zenodo.org/api/records/{version_record_id}/files/bundle.tar.gz/content"
+                )
             },
         }
     ]

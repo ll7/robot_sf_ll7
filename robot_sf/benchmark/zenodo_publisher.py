@@ -7,8 +7,9 @@ import json
 import os
 import posixpath
 import re
+import tempfile
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Protocol
@@ -21,6 +22,7 @@ ZENODO_API_BASE = "https://zenodo.org/api"
 ZENODO_STATE_SCHEMA = "robot-sf-zenodo-deposition.v1"
 ZENODO_VERIFICATION_SCHEMA = "robot-sf-zenodo-verification.v2"
 ZENODO_RECONCILIATION_SCHEMA = "robot-sf-zenodo-reconciliation.v1"
+ZENODO_UPLOAD_ATTEMPT_SCHEMA = "robot-sf-zenodo-upload-attempt.v1"
 _REMOTE_DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _SOURCE_TAG_RE = re.compile(r"^https://github\.com/ll7/robot_sf_ll7/releases/tag/[^/?#]+$")
@@ -275,8 +277,8 @@ def _validated_remote_url(value: Any, api_base: str, label: str) -> str:
         candidate = urlsplit(value.strip())
         base_hostname = base.hostname
         candidate_hostname = candidate.hostname
-        base_port = base.port or 443
-        candidate_port = candidate.port or 443
+        base_port = base.port if base.port is not None else 443
+        candidate_port = candidate.port if candidate.port is not None else 443
     except ValueError as exc:
         raise ZenodoPublisherError(f"Zenodo {label} is not a valid same-origin HTTPS URL") from exc
     if (
@@ -331,6 +333,41 @@ def _validated_upload_bucket(value: Any, api_base: str) -> str:
         or candidate_path != f"{api_path}/files/{parts[1]}"
     ):
         raise ZenodoPublisherError("Zenodo draft upload bucket is not a canonical files bucket")
+    return candidate
+
+
+def _validated_file_download_url(
+    value: Any,
+    api_base: str,
+    *,
+    record_id: int,
+    filename: str,
+) -> str:
+    """Require a download URL bound to the expected record and filename.
+
+    Same-origin validation alone is insufficient: a server-controlled link for
+    another record or file could return matching bytes and incorrectly satisfy
+    verification. Accept only the record-scoped content paths emitted by the
+    Zenodo API, including the legacy draft path variant.
+
+    Returns:
+        The validated, resource-bound URL.
+    """
+    candidate = _validated_remote_url(value, api_base, f"remote file {filename} download")
+    try:
+        api_path = urlsplit(_validated_api_base(api_base)).path.rstrip("/")
+        candidate_path = posixpath.normpath(unquote(urlsplit(candidate).path))
+    except ValueError as exc:
+        raise ZenodoPublisherError("Zenodo remote file download URL is invalid") from exc
+    expected_prefix = f"{api_path}/records/{record_id}/"
+    expected_paths = {
+        f"{expected_prefix}files/{filename}/content",
+        f"{expected_prefix}draft/files/{filename}/content",
+    }
+    if candidate_path not in expected_paths:
+        raise ZenodoPublisherError(
+            f"Zenodo remote file {filename} download URL is not bound to the expected record"
+        )
     return candidate
 
 
@@ -959,6 +996,180 @@ def _validate_reconciliation_receipt(state: Mapping[str, Any]) -> None:  # noqa:
         raise ZenodoPublisherError("Zenodo state reconciliation receipt revision is invalid")
 
 
+def _validated_upload_attempt_files(
+    raw_attempt: Mapping[str, Any],
+) -> tuple[list[dict[str, Any]], str]:
+    """Validate and canonicalize the local inventory inside an upload attempt.
+
+    Returns:
+        Canonical local files and their intended-inventory digest.
+    """
+    raw_files = raw_attempt.get("files")
+    expected_files, file_problems = _file_inventory({"files": raw_files})
+    if file_problems:
+        raise ZenodoPublisherError("Zenodo state upload attempt inventory is invalid")
+    canonical_files = [
+        {
+            "name": name,
+            "size": int(item["size"]),
+            "sha256": str(item["sha256"]),
+        }
+        for name, item in sorted(
+            expected_files.items(), key=lambda item: _filename_sort_key(item[0])
+        )
+    ]
+    if raw_files != canonical_files:
+        raise ZenodoPublisherError("Zenodo state upload attempt inventory is not canonical")
+    intended_digest = raw_attempt.get("intended_inventory_sha256")
+    if intended_digest != _inventory_sha256(canonical_files):
+        raise ZenodoPublisherError("Zenodo state upload attempt inventory digest is invalid")
+    return canonical_files, intended_digest
+
+
+def _validated_upload_attempt_initial_inventory(
+    raw_attempt: Mapping[str, Any],
+) -> dict[str, str]:
+    """Validate and index the exact remote inventory seen before an attempt.
+
+    Returns:
+        Validated remote file IDs keyed by exact filename.
+    """
+    raw_initial = raw_attempt.get("initial_remote_inventory")
+    if not isinstance(raw_initial, list):
+        raise ZenodoPublisherError(
+            "Zenodo state upload attempt lacks initial remote inventory proof"
+        )
+    initial_inventory: dict[str, str] = {}
+    initial_records: list[dict[str, str]] = []
+    collision_keys: set[str] = set()
+    seen_ids: set[str] = set()
+    for index, item in enumerate(raw_initial):
+        if not isinstance(item, Mapping):
+            raise ZenodoPublisherError(
+                f"Zenodo state upload attempt initial inventory entry {index} is invalid"
+            )
+        try:
+            name = _validated_file_name(
+                item.get("name"),
+                f"upload attempt initial inventory entry {index}",
+            )
+            file_id = _validated_file_id(
+                item.get("file_id"),
+                f"upload attempt initial inventory entry {index}",
+            )
+        except ZenodoPublisherError as exc:
+            raise ZenodoPublisherError(
+                "Zenodo state upload attempt initial inventory is invalid"
+            ) from exc
+        collision_key = _filename_collision_key(name)
+        if name in initial_inventory or collision_key in collision_keys or file_id in seen_ids:
+            raise ZenodoPublisherError("Zenodo state upload attempt initial inventory is ambiguous")
+        initial_inventory[name] = file_id
+        collision_keys.add(collision_key)
+        seen_ids.add(file_id)
+        initial_records.append({"name": name, "file_id": file_id})
+    canonical_initial = sorted(initial_records, key=lambda item: _filename_sort_key(item["name"]))
+    if raw_initial != canonical_initial:
+        raise ZenodoPublisherError("Zenodo state upload attempt initial inventory is not canonical")
+    if raw_attempt.get("initial_remote_inventory_sha256") != _remote_inventory_sha256(
+        initial_inventory
+    ):
+        raise ZenodoPublisherError(
+            "Zenodo state upload attempt initial inventory digest is invalid"
+        )
+    return initial_inventory
+
+
+def _validated_upload_attempt_deleted_files(
+    raw_attempt: Mapping[str, Any],
+    *,
+    initial_inventory: Mapping[str, str],
+    expected_names: set[str],
+) -> list[str]:
+    """Validate names proven deleted by an earlier part of the attempt.
+
+    Missing names from the initial remote inventory are not enough to authorize
+    a receipt: the name must also be recorded after a stable deletion readback.
+    This lets retries distinguish an interrupted, recorded cleanup from an
+    unexplained concurrent disappearance.
+
+    Returns:
+        Canonical deleted filenames.
+    """
+    raw_deleted = raw_attempt.get("deleted_files", [])
+    if not isinstance(raw_deleted, list):
+        raise ZenodoPublisherError("Zenodo state upload attempt deleted files are invalid")
+    validated: list[str] = []
+    collision_keys: set[str] = set()
+    initial_names = set(initial_inventory)
+    for index, value in enumerate(raw_deleted):
+        try:
+            name = _validated_file_name(
+                value,
+                f"upload attempt deleted file {index}",
+            )
+        except ZenodoPublisherError as exc:
+            raise ZenodoPublisherError(
+                "Zenodo state upload attempt deleted files are invalid"
+            ) from exc
+        collision_key = _filename_collision_key(name)
+        if name not in initial_names or name in expected_names or collision_key in collision_keys:
+            raise ZenodoPublisherError("Zenodo state upload attempt deleted files are invalid")
+        collision_keys.add(collision_key)
+        validated.append(name)
+    canonical = sorted(validated, key=_filename_sort_key)
+    if raw_deleted != canonical:
+        raise ZenodoPublisherError("Zenodo state upload attempt deleted files are not canonical")
+    return canonical
+
+
+def _validated_upload_attempt(state: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Validate the persisted inventory identity for an unfinished upload.
+
+    The upload attempt is deliberately part of the sealed deposition state.  It
+    records both the intended local inventory and the exact remote inventory
+    observed before the first PUT, so a later retry cannot reinterpret a file
+    left by an interrupted attempt as an inherited file that may be deleted.
+
+    Returns:
+        A normalized attempt with its initial remote inventory indexed by name,
+        or ``None`` when no unfinished attempt is present.
+    """
+    raw_attempt = state.get("upload_attempt")
+    if raw_attempt is None:
+        return None
+    if not isinstance(raw_attempt, Mapping):
+        raise ZenodoPublisherError("Zenodo state upload attempt is malformed")
+    if raw_attempt.get("schema_version") != ZENODO_UPLOAD_ATTEMPT_SCHEMA:
+        raise ZenodoPublisherError("Zenodo state upload attempt schema is invalid")
+    if raw_attempt.get("status") != "pending":
+        raise ZenodoPublisherError("Zenodo state upload attempt is not pending")
+    for key in ("deposition_id", "record_id", "concept_record_id", "doi"):
+        if raw_attempt.get(key) != state.get(key):
+            raise ZenodoPublisherError("Zenodo state upload attempt identity does not match state")
+    try:
+        attempt_api_base = _validated_api_base(raw_attempt.get("api_base"))
+    except ZenodoPublisherError as exc:
+        raise ZenodoPublisherError("Zenodo state upload attempt API base is invalid") from exc
+    if raw_attempt.get("api_base") != attempt_api_base:
+        raise ZenodoPublisherError("Zenodo state upload attempt API base is not canonical")
+
+    canonical_files, intended_digest = _validated_upload_attempt_files(raw_attempt)
+    initial_inventory = _validated_upload_attempt_initial_inventory(raw_attempt)
+    deleted_files = _validated_upload_attempt_deleted_files(
+        raw_attempt,
+        initial_inventory=initial_inventory,
+        expected_names={file["name"] for file in canonical_files},
+    )
+    return {
+        "files": canonical_files,
+        "intended_inventory_sha256": intended_digest,
+        "initial_inventory": initial_inventory,
+        "deleted_files": deleted_files,
+        "api_base": attempt_api_base,
+    }
+
+
 def _validate_state_for_operation(state: Mapping[str, Any]) -> None:
     """Validate sealed state identity and lifecycle before any API URL use."""
     if not isinstance(state, Mapping):
@@ -988,6 +1199,7 @@ def _validate_state_for_operation(state: Mapping[str, Any]) -> None:
     if lifecycle not in _STABLE_ZENODO_STATES:
         raise ZenodoPublisherError("Zenodo state lifecycle is not an admissible operation state")
     _validate_reconciliation_receipt(state)
+    _validated_upload_attempt(state)
 
 
 def _contains_control_character(value: str) -> bool:
@@ -1168,6 +1380,63 @@ def _inventory_sha256(files: list[Mapping[str, Any]]) -> str:
     ]
     canonical.sort(key=lambda item: _filename_sort_key(item["name"]))
     return hashlib.sha256(_canonical_bytes({"files": canonical})).hexdigest()
+
+
+def _remote_inventory_records(inventory: Mapping[str, str]) -> list[dict[str, str]]:
+    """Return a canonical, credential-free representation of remote file IDs."""
+    return [
+        {"name": name, "file_id": file_id}
+        for name, file_id in sorted(inventory.items(), key=lambda item: _filename_sort_key(item[0]))
+    ]
+
+
+def _remote_inventory_sha256(inventory: Mapping[str, str]) -> str:
+    """Hash the exact successor file-name/file-ID inventory snapshot.
+
+    Returns:
+        Lowercase hexadecimal SHA-256 digest.
+    """
+    return hashlib.sha256(
+        _canonical_bytes({"files": _remote_inventory_records(inventory)})
+    ).hexdigest()
+
+
+def _upload_inventory_records(
+    local_files: list[tuple[Path, int, str]],
+) -> list[dict[str, Any]]:
+    """Return the canonical intended inventory for one upload attempt."""
+    return [
+        {"name": resolved.name, "size": size, "sha256": sha256}
+        for resolved, size, sha256 in local_files
+    ]
+
+
+def _upload_attempt(
+    state: Mapping[str, Any],
+    *,
+    api_base: str,
+    files: list[dict[str, Any]],
+    initial_inventory: Mapping[str, str],
+) -> dict[str, Any]:
+    """Build the sealed-state payload that authorizes one exact retry identity.
+
+    Returns:
+        Credential-free pending-attempt payload.
+    """
+    return {
+        "schema_version": ZENODO_UPLOAD_ATTEMPT_SCHEMA,
+        "status": "pending",
+        "deposition_id": state["deposition_id"],
+        "record_id": state["record_id"],
+        "concept_record_id": state["concept_record_id"],
+        "doi": state["doi"],
+        "api_base": api_base,
+        "files": [dict(file) for file in files],
+        "intended_inventory_sha256": _inventory_sha256(files),
+        "initial_remote_inventory": _remote_inventory_records(initial_inventory),
+        "initial_remote_inventory_sha256": _remote_inventory_sha256(initial_inventory),
+        "deleted_files": [],
+    }
 
 
 def _sha256_file(path: Path) -> str:
@@ -1541,7 +1810,7 @@ def _admit_successor_cleanup(
     return extra_names
 
 
-def _reconcile_inherited_draft_files(
+def _reconcile_inherited_draft_files(  # noqa: PLR0913
     session: _Session,
     *,
     state: Mapping[str, Any],
@@ -1550,6 +1819,8 @@ def _reconcile_inherited_draft_files(
     extra_names: set[str],
     deposition_id: int,
     api_base: str,
+    previously_deleted: list[str],
+    on_deleted: Callable[[str], None] | None = None,
 ) -> tuple[list[str], dict[str, Any], dict[str, str]]:
     """Reconcile inherited files using exact deposition responses only.
 
@@ -1576,10 +1847,10 @@ def _reconcile_inherited_draft_files(
             "Zenodo inherited draft file identity changed after upload; refusing deletion"
         )
     if not extra_names:
-        return [], post_upload_payload, post_upload_inventory
+        return list(previously_deleted), post_upload_payload, post_upload_inventory
 
     expected_inventory = dict(post_upload_inventory)
-    deleted_names: list[str] = []
+    deleted_names = list(previously_deleted)
     for name in sorted(extra_names, key=_filename_sort_key):
         _, _, pre_delete_inventory = _read_successor_deposition(
             session,
@@ -1613,6 +1884,8 @@ def _reconcile_inherited_draft_files(
         )
         expected_inventory = final_inventory
         deleted_names.append(name)
+        if on_deleted is not None:
+            on_deleted(name)
     return deleted_names, final_payload, expected_inventory
 
 
@@ -1922,6 +2195,97 @@ def _reconciliation_receipt(
         "integrity",
         ZENODO_RECONCILIATION_SCHEMA,
     )
+
+
+def _commit_upload_state(
+    state: dict[str, Any],
+    candidate: Mapping[str, Any],
+    *,
+    state_path: str | Path | None,
+) -> dict[str, Any]:
+    """Seal and persist an upload state before exposing it to remote mutation.
+
+    Returns:
+        The sealed candidate state.
+    """
+    sealed = _seal_state(candidate)
+    if state_path is not None:
+        write_state(state_path, sealed)
+    state.clear()
+    state.update(sealed)
+    return sealed
+
+
+def _validate_upload_retry_identity(
+    state: Mapping[str, Any],
+    expected_files: list[dict[str, Any]],
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Require a changed retry to match its persisted attempt or final receipt.
+
+    Returns:
+        The prior reconciliation receipt and pending upload attempt, if present.
+    """
+    expected_digest = _inventory_sha256(expected_files)
+    reconciliation = state.get("reconciliation_receipt")
+    if reconciliation is not None:
+        if not isinstance(reconciliation, Mapping):  # pragma: no cover - state validation covers it
+            raise ZenodoPublisherError("Zenodo state reconciliation receipt is malformed")
+        if (
+            reconciliation.get("intended_inventory_sha256") != expected_digest
+            or reconciliation.get("files") != expected_files
+        ):
+            raise ZenodoPublisherError(
+                "Zenodo upload retry inventory differs from persisted reconciliation receipt"
+            )
+    attempt = _validated_upload_attempt(state)
+    if attempt is not None and (
+        attempt["intended_inventory_sha256"] != expected_digest
+        or attempt["files"] != expected_files
+    ):
+        raise ZenodoPublisherError(
+            "Zenodo upload retry inventory differs from persisted upload attempt"
+        )
+    return (
+        dict(reconciliation) if isinstance(reconciliation, Mapping) else None,
+        attempt,
+    )
+
+
+def _validate_retry_remote_inventory(
+    current_inventory: Mapping[str, str],
+    persisted_initial_inventory: Mapping[str, str],
+    expected_names: set[str],
+    persisted_deleted_files: list[str],
+) -> None:
+    """Reject remote files or absences not covered by persisted attempt proof."""
+    allowed_names = set(persisted_initial_inventory) | expected_names
+    unproven_names = set(current_inventory) - allowed_names
+    if unproven_names:
+        raise ZenodoPublisherError(
+            "Zenodo upload retry has remote files without persisted prior-attempt proof; "
+            "refusing deletion"
+        )
+    persisted_deleted = set(persisted_deleted_files)
+    missing_inherited = (set(persisted_initial_inventory) - expected_names) - set(current_inventory)
+    if missing_inherited - persisted_deleted:
+        raise ZenodoPublisherError(
+            "Zenodo upload retry has remote deletions without persisted prior-attempt proof; "
+            "refusing reconciliation"
+        )
+    if persisted_deleted & set(current_inventory):
+        raise ZenodoPublisherError(
+            "Zenodo upload retry has a previously deleted file present again; refusing deletion"
+        )
+    for name in sorted(
+        set(current_inventory) & set(persisted_initial_inventory), key=_filename_sort_key
+    ):
+        if (
+            current_inventory[name] != persisted_initial_inventory[name]
+            and name not in expected_names
+        ):
+            raise ZenodoPublisherError(
+                "Zenodo upload retry inherited file identity changed; refusing deletion"
+            )
 
 
 def _receipt_contract(receipt: Mapping[str, Any]) -> dict[str, Any]:
@@ -2371,15 +2735,21 @@ def recover(
     return _seal_state(state)
 
 
-def upload(
+def upload(  # noqa: C901, PLR0915
     session: _Session,
     state: dict[str, Any],
     files: list[Path],
     *,
     api_base: str = ZENODO_API_BASE,
     release_binding: Any | None = None,
+    state_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    """Upload files to an unpublished deposition and record local SHA-256 values.
+    """Upload files and persist an exact retry identity before the first PUT.
+
+    ``state_path`` is used by the CLI to persist the pending attempt before
+    remote mutation.  The input mapping is updated with the same sealed
+    attempt, so direct callers can persist it with :func:`write_state` when
+    they manage state files themselves.
 
     Returns:
         Updated credential-free deposition state.
@@ -2397,6 +2767,11 @@ def upload(
         ),
     )
     local_files = _validated_upload_files(files)
+    expected_files = _upload_inventory_records(local_files)
+    prior_receipt, prior_attempt = _validate_upload_retry_identity(
+        working_state,
+        expected_files,
+    )
     deposition_id = _positive_deposition_id(
         working_state.get("deposition_id"),
         "state deposition ID",
@@ -2429,6 +2804,33 @@ def upload(
         deposition_id=deposition_id,
         api_base=validated_base,
     )
+    if prior_attempt is not None:
+        if prior_attempt["api_base"] != validated_base:
+            raise ZenodoPublisherError(
+                "Zenodo upload retry API base differs from persisted upload attempt"
+            )
+        _validate_retry_remote_inventory(
+            initial_inventory,
+            prior_attempt["initial_inventory"],
+            expected_names,
+            prior_attempt["deleted_files"],
+        )
+    elif prior_receipt is not None and set(initial_inventory) - expected_names:
+        raise ZenodoPublisherError(
+            "Zenodo upload retry has remote files without persisted prior-attempt proof; "
+            "refusing deletion"
+        )
+    else:
+        pending = dict(working_state)
+        pending["upload_attempt"] = _upload_attempt(
+            working_state,
+            api_base=validated_base,
+            files=expected_files,
+            initial_inventory=initial_inventory,
+        )
+        pending.pop("verification_receipt", None)
+        _commit_upload_state(state, pending, state_path=state_path)
+        working_state = deepcopy(state)
     extra_names = _admit_successor_cleanup(
         working_state,
         deposition=deposition,
@@ -2464,6 +2866,27 @@ def upload(
                 "sha256": sha256,
             }
         )
+
+    previously_deleted = list(prior_attempt["deleted_files"]) if prior_attempt else []
+
+    def record_deleted(name: str) -> None:
+        """Persist each proven deletion before attempting the next one."""
+        nonlocal working_state
+        attempt = working_state.get("upload_attempt")
+        if not isinstance(attempt, Mapping):
+            raise ZenodoPublisherError(
+                "Zenodo upload deletion proof cannot be persisted without a pending attempt"
+            )
+        deleted_files = list(attempt.get("deleted_files", []))
+        if name in deleted_files:
+            return
+        candidate = deepcopy(working_state)
+        candidate_attempt = dict(attempt)
+        candidate_attempt["deleted_files"] = sorted([*deleted_files, name], key=_filename_sort_key)
+        candidate["upload_attempt"] = candidate_attempt
+        sealed = _commit_upload_state(state, candidate, state_path=state_path)
+        working_state = deepcopy(sealed)
+
     deleted_files, final_deposition, final_inventory = _reconcile_inherited_draft_files(
         session,
         state=working_state,
@@ -2472,6 +2895,8 @@ def upload(
         extra_names=extra_names,
         deposition_id=deposition_id,
         api_base=validated_base,
+        previously_deleted=previously_deleted,
+        on_deleted=record_deleted,
     )
     reconciliation_receipt = _reconciliation_receipt(
         final_deposition,
@@ -2481,9 +2906,10 @@ def upload(
     )
     updated = dict(working_state)
     updated["files"] = uploaded
+    updated.pop("upload_attempt", None)
     updated.pop("verification_receipt", None)
     updated["reconciliation_receipt"] = reconciliation_receipt
-    return _seal_state(updated)
+    return _commit_upload_state(state, updated, state_path=state_path)
 
 
 def publish(  # noqa: C901, PLR0912
@@ -2755,10 +3181,13 @@ def verify(  # noqa: C901, PLR0912, PLR0915
             else None
         )
         try:
-            download_url = _validated_remote_url(
+            download_url = _validated_file_download_url(
                 download_url,
                 validated_base,
-                f"remote file {name} download",
+                record_id=_positive_deposition_id(
+                    working_state.get("record_id"), "state record ID"
+                ),
+                filename=name,
             )
         except ZenodoPublisherError:
             problems.append(f"remote file {name} has no secure download URL (download failed)")
@@ -2872,14 +3301,38 @@ def write_state(path: str | Path, state: dict[str, Any]) -> None:
             raise ZenodoPublisherError("refusing to overwrite a different Zenodo deposition state")
     output.parent.mkdir(parents=True, exist_ok=True)
     sealed = _seal_state(state)
-    output.write_text(json.dumps(sealed, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    os.chmod(output, 0o600)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=output.parent,
+            prefix=f".{output.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(json.dumps(sealed, indent=2, sort_keys=True) + "\n")
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.chmod(temporary_path, 0o600)
+        os.replace(temporary_path, output)
+        temporary_path = None
+    except OSError as exc:
+        raise ZenodoPublisherError("could not atomically write Zenodo deposition state") from exc
+    finally:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink()
+            except OSError:
+                pass
 
 
 __all__ = [
     "ZENODO_API_BASE",
     "ZENODO_RECONCILIATION_SCHEMA",
     "ZENODO_STATE_SCHEMA",
+    "ZENODO_UPLOAD_ATTEMPT_SCHEMA",
     "ZENODO_VERIFICATION_SCHEMA",
     "ZenodoPublisherError",
     "build_release_binding",

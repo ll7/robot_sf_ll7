@@ -753,6 +753,7 @@ def test_api_base_normalizes_one_trailing_slash() -> None:
         "https://zenodo.org/api/files/bucket?access_token=secret",
         "https://zenodo.org/api/files/bucket?",
         "https://zenodo.org/api/files/bucket#",
+        "https://zenodo.org:0/api/files/bucket",
         "https://zenodo.org/records/7/files/bundle",
         "https://zenodo.org/apiary/files/bucket",
         "https://zenodo.org/api/deposit/depositions/7/files",
@@ -837,6 +838,46 @@ def test_verify_rejects_cross_origin_download_without_authenticated_fetch(tmp_pa
     assert "secret" not in json.dumps(report).casefold()
 
 
+def test_verify_rejects_same_origin_download_for_wrong_record_or_file(tmp_path: Path) -> None:
+    """Same-origin bytes cannot satisfy verification for another Zenodo resource."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    state = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "concept_record_id": "6",
+            "doi": "10.5281/zenodo.7",
+            "submitted": False,
+            "state": "unsubmitted",
+            "files": [
+                {
+                    "name": bundle.name,
+                    "size": bundle.stat().st_size,
+                    "sha256": publisher._sha256_file(bundle),
+                }
+            ],
+        }
+    )
+    remote = _draft()
+    remote["files"] = [
+        {
+            "filename": bundle.name,
+            "size": bundle.stat().st_size,
+            "links": {"download": "https://zenodo.org/api/records/999/files/other.tar.gz/content"},
+        }
+    ]
+    session = _Session()
+    session.gets = [_Response(remote)]
+
+    report = publisher.verify(session, state, _metadata(), api_base="https://zenodo.org/api")
+
+    assert report["status"] == "fail"
+    assert any("secure download URL" in problem for problem in report["problems"])
+    assert session.urls == ["https://zenodo.org/api/deposit/depositions/7"]
+
+
 def test_verification_receipt_hashes_remote_version_without_echoing_server_value(
     tmp_path: Path,
 ) -> None:
@@ -867,7 +908,7 @@ def test_verification_receipt_hashes_remote_version_without_echoing_server_value
         {
             "filename": bundle.name,
             "size": bundle.stat().st_size,
-            "links": {"download": "https://zenodo.org/api/files/bundle/content"},
+            "links": {"download": "https://zenodo.org/api/records/7/files/bundle.tar.gz/content"},
         }
     ]
     session = _Session()
@@ -1173,6 +1214,124 @@ def test_reconciliation_receipt_rejects_tampered_inventory_binding(tmp_path: Pat
 
     with pytest.raises(publisher.ZenodoPublisherError, match="inventory digest"):
         publisher._validate_state_for_operation(tampered_state)
+
+
+def test_upload_retry_rejects_changed_inventory_after_partial_put(tmp_path: Path) -> None:
+    """A persisted [a, b] attempt cannot be retried with only [a]."""
+    first_file = tmp_path / "a.tar.gz"
+    second_file = tmp_path / "b.tar.gz"
+    first_file.write_bytes(b"a")
+    second_file.write_bytes(b"b")
+    state = _successor_state()
+    state_path = tmp_path / "state.json"
+    publisher.write_state(state_path, state)
+
+    first = _Session()
+    first.gets = [_Response(_successor_draft())]
+    first.puts = [
+        _Response({"checksum": "md5:a"}, 201),
+        _Response({"error": "interrupted"}, 500),
+    ]
+    with pytest.raises(publisher.ZenodoPublisherError, match="upload b.tar.gz"):
+        publisher.upload(
+            first,
+            state,
+            [first_file, second_file],
+            state_path=state_path,
+        )
+
+    pending = publisher.load_state(state_path)
+    assert pending["upload_attempt"]["files"] == [
+        {"name": first_file.name, "size": 1, "sha256": publisher._sha256_file(first_file)},
+        {"name": second_file.name, "size": 1, "sha256": publisher._sha256_file(second_file)},
+    ]
+    assert pending["upload_attempt"]["initial_remote_inventory"] == []
+
+    retry = _Session()
+    with pytest.raises(publisher.ZenodoPublisherError, match="retry inventory"):
+        publisher.upload(retry, pending, [first_file], state_path=state_path)
+    assert retry.urls == []
+    assert retry.puts == []
+    assert retry.deletes == []
+
+
+def test_upload_retry_rejects_changed_inventory_after_prior_receipt(tmp_path: Path) -> None:
+    """A completed [a, b] reconciliation receipt also binds later retries."""
+    first_file = tmp_path / "a.tar.gz"
+    second_file = tmp_path / "b.tar.gz"
+    first_file.write_bytes(b"a")
+    second_file.write_bytes(b"b")
+    files = [
+        {"name": first_file.name, "size": 1, "sha256": publisher._sha256_file(first_file)},
+        {"name": second_file.name, "size": 1, "sha256": publisher._sha256_file(second_file)},
+    ]
+    deposition = _successor_draft()
+    deposition["files"] = [
+        _draft_file(first_file.name, file_id="a-file"),
+        _draft_file(second_file.name, file_id="b-file"),
+    ]
+    receipt = publisher._reconciliation_receipt(
+        deposition,
+        {first_file.name: "a-file", second_file.name: "b-file"},
+        files,
+        [],
+    )
+    state = publisher._seal_state(
+        {
+            **{key: value for key, value in _successor_state().items() if key != "integrity"},
+            "files": files,
+            "reconciliation_receipt": receipt,
+        }
+    )
+    session = _Session()
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="reconciliation receipt"):
+        publisher.upload(session, state, [first_file])
+
+    assert session.urls == []
+    assert session.puts == []
+    assert session.deletes == []
+
+
+def test_upload_retry_rejects_remote_extra_without_prior_attempt_proof(tmp_path: Path) -> None:
+    """A receipt cannot authorize deletion of a later unproven remote extra."""
+    bundle = tmp_path / "bundle.tar.gz"
+    bundle.write_bytes(b"bundle")
+    files = [
+        {
+            "name": bundle.name,
+            "size": bundle.stat().st_size,
+            "sha256": publisher._sha256_file(bundle),
+        }
+    ]
+    deposition = _successor_draft()
+    deposition["files"] = [_draft_file(bundle.name, file_id="bundle-file")]
+    receipt = publisher._reconciliation_receipt(
+        deposition,
+        {bundle.name: "bundle-file"},
+        files,
+        [],
+    )
+    state = publisher._seal_state(
+        {
+            **{key: value for key, value in _successor_state().items() if key != "integrity"},
+            "files": files,
+            "reconciliation_receipt": receipt,
+        }
+    )
+    remote = _successor_draft()
+    remote["files"] = [
+        _draft_file(bundle.name, file_id="bundle-file"),
+        _draft_file("unproven-extra.tar.gz", file_id="unproven-file"),
+    ]
+    session = _Session()
+    session.gets = [_Response(remote)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="prior-attempt proof"):
+        publisher.upload(session, state, [bundle])
+
+    assert session.puts == []
+    assert session.deletes == []
 
 
 @pytest.mark.parametrize(
@@ -1561,7 +1720,7 @@ def test_upload_blocks_inventory_race_without_deleting_new_file(tmp_path: Path) 
 
 
 def test_upload_requires_204_when_deleting_inherited_file(tmp_path: Path) -> None:
-    """A non-204 deletion response leaves caller state unchanged and blocks completion."""
+    """A non-204 deletion response leaves a pending retry identity and blocks completion."""
     bundle = tmp_path / "successor.tar.gz"
     bundle.write_bytes(b"successor")
     inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
@@ -1590,7 +1749,9 @@ def test_upload_requires_204_when_deleting_inherited_file(tmp_path: Path) -> Non
     with pytest.raises(publisher.ZenodoPublisherError, match="DELETE unexpected"):
         publisher.upload(session, state, [bundle])
 
-    assert json.dumps(state, sort_keys=True) == state_before
+    assert json.dumps(state, sort_keys=True) != state_before
+    assert state["upload_attempt"]["status"] == "pending"
+    assert state["upload_attempt"]["files"][0]["name"] == bundle.name
 
 
 def test_upload_partial_delete_is_retryable(tmp_path: Path) -> None:
@@ -1629,7 +1790,9 @@ def test_upload_partial_delete_is_retryable(tmp_path: Path) -> None:
 
     with pytest.raises(publisher.ZenodoPublisherError, match="DELETE server_error"):
         publisher.upload(first, state, [bundle])
-    assert json.dumps(state, sort_keys=True) == state_before
+    assert json.dumps(state, sort_keys=True) != state_before
+    assert state["upload_attempt"]["status"] == "pending"
+    assert state["upload_attempt"]["deleted_files"] == [inherited_a["filename"]]
 
     retry_remote = _successor_draft()
     retry_remote["files"] = [inherited_b, uploaded]
@@ -1651,6 +1814,10 @@ def test_upload_partial_delete_is_retryable(tmp_path: Path) -> None:
 
     updated = publisher.upload(retry, state, [bundle])
     assert updated["files"][0]["name"] == bundle.name
+    assert updated["reconciliation_receipt"]["deleted_files"] == [
+        inherited_a["filename"],
+        inherited_b["filename"],
+    ]
     assert any(url.endswith("/files/inherited-b") for url in retry.urls)
 
 
@@ -2011,7 +2178,7 @@ def test_verify_rejects_reflected_doi_before_sealing_a_receipt(tmp_path: Path) -
         {
             "filename": bundle.name,
             "size": bundle.stat().st_size,
-            "links": {"download": "https://zenodo.org/api/records/7/files/bundle/content"},
+            "links": {"download": "https://zenodo.org/api/records/7/files/bundle.tar.gz/content"},
         }
     ]
     session = _Session()
@@ -2141,7 +2308,7 @@ def test_verify_reports_inventory_transport_and_checksum_mismatches(tmp_path: Pa
         {
             "key": bundle.name,
             "size": bundle.stat().st_size,
-            "links": {"self": "https://zenodo.org/api/files/bundle/content"},
+            "links": {"self": "https://zenodo.org/api/records/7/files/bundle.tar.gz/content"},
         }
     ]
     session.gets = [
@@ -2243,7 +2410,7 @@ def test_verify_rejects_conflicting_remote_aliases_without_download(
         {
             "filename": bundle.name,
             "size": bundle.stat().st_size,
-            "links": {"download": "https://zenodo.org/api/files/bundle/content"},
+            "links": {"download": "https://zenodo.org/api/records/7/files/bundle.tar.gz/content"},
             **updates,
         }
     ]
@@ -2331,7 +2498,7 @@ def test_verify_rejects_invalid_published_file_size(
     )
     public_file: dict[str, Any] = {
         "key": bundle.name,
-        "links": {"self": "https://zenodo.org/api/records/7/files/bundle/content"},
+        "links": {"self": "https://zenodo.org/api/records/7/files/bundle.tar.gz/content"},
     }
     if remote_size is not None:
         public_file["size"] = remote_size
@@ -2389,6 +2556,40 @@ def test_state_load_and_write_are_schema_checked_and_non_destructive(tmp_path: P
                 }
             ),
         )
+
+
+def test_state_write_keeps_previous_file_when_atomic_replace_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed state replacement leaves the last complete state readable."""
+    state_path = tmp_path / "state.json"
+    original = publisher._seal_state(
+        {
+            "schema_version": publisher.ZENODO_STATE_SCHEMA,
+            "deposition_id": 7,
+            "record_id": 7,
+            "concept_record_id": "6",
+            "doi": "10.5281/zenodo.7",
+            "submitted": False,
+            "state": "unsubmitted",
+            "files": [],
+        }
+    )
+    publisher.write_state(state_path, original)
+    before = state_path.read_bytes()
+    replacement = publisher._seal_state({**original, "files": [{"name": "bundle.tar.gz"}]})
+
+    def fail_replace(source: Path, destination: Path) -> None:
+        """Simulate a crash/failure at the atomic replacement boundary."""
+        del source, destination
+        raise OSError("replacement interrupted")
+
+    monkeypatch.setattr(publisher.os, "replace", fail_replace)
+    with pytest.raises(publisher.ZenodoPublisherError, match="atomically"):
+        publisher.write_state(state_path, replacement)
+
+    assert state_path.read_bytes() == before
+    assert list(tmp_path.glob(".state.json.*.tmp")) == []
 
 
 def test_state_integrity_rejects_manual_edit(tmp_path: Path) -> None:

@@ -103,10 +103,11 @@ and the owner. One writer per branch is the rule; the following make that rule o
   the window and the activity is not yours, park the PR (`awaiting_reviewer` or `blocked_external`,
   reason `active_writer`) and move on. Do not race; do not retry on the same head.
 - **Announce a claim before mutable work.** Post one bounded PR comment
-  `review-claim: <lane-id> @ <head-sha> until <UTC>` (default 90 minutes) before pushing, editing
-  the body, or changing labels; release it with `review-claim: released @ <head-sha>` on exit. An
-  unexpired claim from another lane is an active writer. Until repository tooling enforces this
-  marker it is advisory between reviewer lanes; the factory's own writes remain authoritative.
+  `review-claim: <lane-id> @ <head-sha> until <UTC>` (default 90 minutes) before pushing or editing
+  the body. After publishing the exact-head review evidence, release it with
+  `review-claim: released @ <head-sha>` and re-read the live state before applying `merge-ready`.
+  An unexpired trusted claim covering the live head is an admission hold: the carrier and native
+  queue gates withhold authorization until the review worker releases it.
 - **Content-identical head moves do not require a full re-review.** When the head advanced only by
   a `main` refresh (verify: `git diff origin/main...<old-head> -- <changed-files>` equals
   `git diff origin/main...<new-head> -- <changed-files>`), the prior findings transfer, but every
@@ -376,7 +377,9 @@ stops after advancing the child until fresh CI and exact-head evidence are curre
    `merge-ready` through `gh_pr_label_rest.py` with the same expected head SHA. Both writes
    return `review_skipped_stale_state` without mutating a PR if it is no longer open or its
    head moved. The
-   review event refreshes the source-head queue gate after the verdict. If review submission is
+   The review event refreshes the source-head queue gate after the verdict. Release the bounded
+   `review-claim` for this head with `gh_comment.sh` and re-read the PR before the label write; an
+   active claim must never coexist with a new `merge-ready` authorization. If review submission is
    unavailable, a matching top-level compatibility carrier may be used only when the guarded label
    gate can read it; otherwise record the gate-refresh blocker.
 

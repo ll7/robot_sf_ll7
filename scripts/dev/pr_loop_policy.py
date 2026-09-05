@@ -137,10 +137,11 @@ _EXACT_HEAD_RE = re.compile(
 )
 EXACT_HEAD_RE = _EXACT_HEAD_RE
 
-# Issue #7508 markers from the goal-pr-review skill (PR #7500). An advisory
-# ``review-claim`` comment announces a lane's mutable-write window; the same
-# comment thread is released with ``review-claim: released @ <head-sha>``. The
-# ``until`` timestamp is the ISO-8601 UTC expiry (default claim window 90 min).
+# Issue #7508 markers from the goal-pr-review skill (PR #7500). A
+# ``review-claim`` comment announces a lane's mutable-write window; admission
+# gates treat an unexpired trusted claim as a hold. The same comment thread is
+# released with ``review-claim: released @ <head-sha>``. The ``until`` timestamp
+# is the ISO-8601 UTC expiry (default claim window 90 min).
 _REVIEW_CLAIM_RE = re.compile(
     r"review-claim\s*:\s*(?P<lane>[^\s@]+)\s*@\s*(?P<sha>[0-9a-fA-F]{7,40})\b"
     r"\s+until\s+(?P<until>\S+)",

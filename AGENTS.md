@@ -58,20 +58,22 @@ Use validation proportional to the file/change type, with claim strength as an e
 Claim strength overrides the nominal row: a docs or workflow edit that asserts a benchmark, metric,
 schema, model-provenance, or paper-facing result must use the stronger proof tier for that claim.
 
-## Always-Load Context
+## Task-Scoped Context Entrypoints
 
 Read only the surfaces relevant to the task. Prefer repo-local files over ad-hoc summaries in issue comments.
+Do not load every skill, historical report, implementation detail, or runtime guide indiscriminately.
 
+Always-required core context:
 - `docs/maintainer_values.md`: compact current values and hard contracts.
 - `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
-- `memory/MEMORY.md`: concise repo-local memory index for stable facts and links to topic files.
-- `docs/code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
-- `docs/context/INDEX.md`: retrieval-first catalog for current context-note entry points.
-- `.agents/PLANS.md`: plan-writing convention for non-trivial work.
-- `.agents/skills/`: canonical skill tree for execution workflows and context packs.
-- `.agents/prompts/`, `.agents/commands/`, `.agents/agents/`: canonical agent workflow sources.
-- `docs/ai/`: AI-facing overview documents for structure, planner-zoo state, and context packing.
-- `.understand-anything/knowledge-graph.json`: shared codebase graph; see `docs/ai/understand_anything.md` before reading or updating it.
+- `docs/ai/agent_workflow_entrypoints.md`: task route table, canonical command entrypoints, handoff format, and large-file navigation.
+
+Route-specific context references (consult `docs/ai/agent_workflow_entrypoints.md` and load only what matches the active task):
+- **Read-only observation / review**: `docs/code_review.md`, `.agents/skills/implementation-verification/SKILL.md`, `scripts/dev/review_worktree_guard.py` (see issue #8321). Use `goal-pr-review` only when mutation-authorized PR fixes or state changes are in scope.
+- **Documentation-only edit**: `docs/glossary.md`, `docs/maintainer_values.md` (clarity and proof tier).
+- **Implementation / runtime change**: `.agents/PLANS.md`, `docs/code_review.md`, targeted modules and tests under `robot_sf/`, `scripts/`, or `tests/`.
+- **Scientific result / benchmark interpretation**: `memory/MEMORY.md`, `docs/context/INDEX.md`, `docs/ai/`, benchmark skills (`benchmark-overview`, `benchmark-row-status`, `evidence-synthesis`).
+- **Environment / worktree repair**: `docs/dev/worktree_lifecycle.md`, `scripts/dev/check_worktree_capacity.py`, `scripts/dev/bootstrap_worktree.sh` (see issue #8443).
 
 For the token-efficient active thread profile, phase audits, meta-workflow PR gate, SLURM lane rules,
 shared knowledge graph, cross-agent compatibility, and detailed context-note policy, read
@@ -102,7 +104,7 @@ worker. Use `scripts/dev/bootstrap_worktree.sh` only when a worktree-local envir
 required; it still performs `uv venv .venv && uv sync --all-extras`, verifies `.venv/bin/python`,
 and adds `UV_NO_SYNC=1` to the activation script. For a dependency-only check that separates
 missing optional packages from changed-code failures, run
-`python scripts/dev/check_worktree_optional_deps.py --profile all-extras` through the shared wrapper.
+`scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras`.
 Use a matching named profile such as `--profile training` when a local environment was bootstrapped
 with `--extra training`. Before manual reclaim, run
 `scripts/dev/check_worktree_capacity.py --inventory --json`; it never deletes files. Preserve
@@ -111,9 +113,10 @@ task-owned no-longer-running `/dev/shm` scratch. Do not include CARLA in routine
 opt into `--group carla` only for CARLA-capable worktrees and prove runtime with
 `scripts/dev/check_carla_runtime.sh` when needed.
 
-If the current branch is not `main`, fetch latest `origin/main` and merge it early:
-`git fetch origin main && git merge origin/main`. Do not create divergent per-worktree machine
-contexts unless the worktree truly needs machine-specific behavior.
+If the current branch is not `main`, branch synchronization is mode-specific:
+- For implementation worktrees, fetch latest `origin/main` and merge it early: `git fetch origin main && git merge origin/main`.
+- For read-only review worktrees/passes, record target/base/head SHAs and inspect or fetch as needed; never merge `origin/main` into the implementation branch or push to it during review. Review worktrees rely on the machine-enforced read-only guard (issue #8321, `scripts/dev/review_worktree_guard.py`) to fail closed on write attempts.
+Do not create divergent per-worktree machine contexts unless the worktree truly needs machine-specific behavior.
 
 ## Worktree Teardown And Artifacts
 

@@ -70,6 +70,20 @@ issues; it does not make the repository-wide closed-PR history complete, and
 mutation application remains fail-closed while any global or targeted source is
 partial or unavailable.
 
+The core performs the REST core-quota preflight before reading issues, comments,
+pull requests, timelines, or labels. It converts the remaining capacity above
+the safety margin into one shared request budget, and every subsequent REST
+page reserves one request from that budget. Optional comment enrichment stops
+after an actual rate-limit response. Only explicit primary or secondary
+rate-limit responses (including HTTP 429 and GitHub abuse/rate-limit markers)
+are classified as quota exhaustion; an ordinary permission HTTP 403 remains an
+incomplete source error. A low or spent request budget, partial/truncated
+collection, failed source read, or uncertain quota result sets
+`classification_status.mutations_suppressed` to `true` and clears both
+top-level and per-issue mutations. A mid-run rate limit also records the core
+reset time, retry-after timestamp, retry command, and a human-readable handoff
+so the next run can resume only after a fresh inventory.
+
 Issue bodies and comments are evidence sources for decisions and gates. They
 are not permission to infer missing provenance, rights, compute authorization,
 or maintainer intent.

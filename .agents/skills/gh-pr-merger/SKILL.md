@@ -38,7 +38,9 @@ cannot self-approve a new head under a retained label. The queue gate also fails
 unless the live queue uses GitHub's `ALLGREEN` ("Only merge non-failing pull
 requests") strategy, which prevents a
 passing tail entry from carrying an earlier ungated entry through a grouped
-merge. That workflow is the merge-queue entry point for this contract; this
+merge. It also fails closed when a trusted unexpired exact-head `review-claim` marks the review
+worker as active; the claim must be released after exact-head evidence is published and before
+`merge-ready` admission. That workflow is the merge-queue entry point for this contract; this
 skill remains the binding authority for guarded merges it executes directly.
 See `docs/dev_guide.md` ("Merge queue gate") for the required-check toggle and
 the audit record shape (`merge_queue_gate.v1`).

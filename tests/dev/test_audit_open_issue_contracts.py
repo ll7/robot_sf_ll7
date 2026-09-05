@@ -9,6 +9,9 @@ from pathlib import Path
 from typing import Any
 
 from scripts.dev.audit_open_issue_contracts import (
+    DEFAULT_ITEM_LIMIT,
+    DEFAULT_MAX_PAGES,
+    DEFAULT_PAGE_SIZE,
     NEXT_ACTIONS,
     _build_report,
     _fixture_evaluator,
@@ -227,6 +230,34 @@ def test_full_final_page_at_limit_is_truncated() -> None:
     assert report["complete"] is False
     assert report["applicable"] is False
     assert report["content_sha256"]
+    assert report["pagination"]["resume_hint"]
+
+
+def test_default_live_audit_bounds_are_explicit_and_conservative() -> None:
+    """Default developer scans stay bounded and expose fresh-run guidance when partial."""
+    assert DEFAULT_PAGE_SIZE == 20
+    assert DEFAULT_MAX_PAGES == 1
+    assert DEFAULT_ITEM_LIMIT == 20
+
+
+def test_complete_report_has_no_resume_hint() -> None:
+    """A complete fixture does not advertise a continuation path."""
+    report = _report(_fixture([_raw_issue(1)]))
+    assert report["complete"] is True
+    assert report["pagination"]["resume_hint"] is None
+
+
+def test_partial_markdown_report_exposes_resume_hint() -> None:
+    """Markdown output carries the same fresh-run guidance as the JSON report."""
+    report = _report(
+        _fixture([_raw_issue(1)], trailing_empty_page=False),
+        page_size=1,
+        max_pages=1,
+    )
+
+    rendered = _render_markdown(report, item_limit=1, json_report=None)
+    assert "Pagination guidance:" in rendered
+    assert "fresh audit" in rendered
 
 
 def test_hidden_extra_fixture_page_is_truncated() -> None:
@@ -447,6 +478,8 @@ def test_fixture_cli_process_boundary(tmp_path: Path) -> None:
             str(fixture_path),
             "--page-size",
             "100",
+            "--max-pages",
+            "2",
             "--check",
         ],
         cwd=root,
@@ -460,3 +493,37 @@ def test_fixture_cli_process_boundary(tmp_path: Path) -> None:
     assert report["schema"] == "open_issue_contract_audit.v1"
     assert report["mutation_authorized"] is False
     assert report["summary"]["executable_leaf_numbers"] == [1]
+
+
+def test_fixture_cli_partial_check_returns_two_after_writing_report(tmp_path: Path) -> None:
+    """A bounded partial audit remains diagnostic and fails closed at the CLI boundary."""
+    fixture_path = tmp_path / "fixture.json"
+    fixture_path.write_text(
+        json.dumps(_fixture([_raw_issue(1)], trailing_empty_page=False)), encoding="utf-8"
+    )
+    root = Path(__file__).resolve().parents[2]
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scripts.dev.audit_open_issue_contracts",
+            "--fixture",
+            str(fixture_path),
+            "--page-size",
+            "1",
+            "--max-pages",
+            "1",
+            "--check",
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    assert report["complete"] is False
+    assert report["applicable"] is False
+    assert report["pagination"]["resume_hint"]

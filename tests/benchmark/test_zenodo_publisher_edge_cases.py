@@ -321,6 +321,22 @@ def test_new_version_replaces_metadata_and_seals_predecessor_identity() -> None:
     publisher._verify_integrity(state, key="integrity", schema=publisher.ZENODO_STATE_SCHEMA)
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_new_version_rejects_non_finite_metadata_before_remote_mutation(value: float) -> None:
+    """Non-finite metadata cannot reach the successor reservation endpoint."""
+    session = _new_version_fixture()
+    metadata = _new_version_metadata()
+    metadata["related_identifiers"][0]["extra"] = value
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="finite JSON values"):
+        _new_version_with_metadata(session, metadata)
+
+    assert session.urls == []
+    assert len(session.gets) == 2
+    assert len(session.posts) == 1
+    assert len(session.puts) == 1
+
+
 def test_new_version_accepts_legacy_prereserved_version_doi() -> None:
     """Legacy drafts may expose the new DOI only under metadata.prereserve_doi."""
     session = _new_version_fixture(draft=_successor_draft(doi=None))
@@ -1517,6 +1533,212 @@ def test_upload_requires_bounded_stable_remote_readback(tmp_path: Path) -> None:
 
     assert len(session.gets) == 0
     assert len(session.urls) == 9
+
+
+def test_upload_rejects_metadata_only_race_during_stable_readback(tmp_path: Path) -> None:
+    """A metadata-only remote mutation must reset fallback stability proof."""
+    bundle = tmp_path / "successor.tar.gz"
+    bundle.write_bytes(b"successor")
+    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
+    uploaded = _draft_file(bundle.name, file_id="successor-file")
+    initial = _successor_draft()
+    initial["files"] = [inherited]
+    post_upload = _successor_draft()
+    post_upload["files"] = [inherited, uploaded]
+    readbacks: list[dict[str, Any]] = []
+    for title in ("Robot SF benchmark dataset", "second title", "third title"):
+        readback = _successor_draft()
+        readback["files"] = [uploaded]
+        readback["metadata"]["title"] = title
+        readbacks.append(readback)
+    session = _Session()
+    session.gets = [
+        _Response(initial),
+        _Response(post_upload),
+        _Response(post_upload),
+        _Response(inherited),
+        *[_Response(readback) for readback in readbacks],
+    ]
+    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
+    session.deletes = [_Response({}, 204)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="stable readback|metadata drift"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+
+@pytest.mark.parametrize("field", ["modified", "version", "revision"])
+def test_upload_rejects_optimistic_metadata_drift_before_stable_readback(
+    tmp_path: Path,
+    field: str,
+) -> None:
+    """A metadata change before the first post-delete readback stays blocked."""
+    bundle = tmp_path / "successor.tar.gz"
+    bundle.write_bytes(b"successor")
+    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
+    uploaded = _draft_file(bundle.name, file_id="successor-file")
+    initial = _successor_draft()
+    initial["files"] = [inherited]
+    post_upload = _successor_draft()
+    post_upload["files"] = [inherited, uploaded]
+    post_upload[field] = "stable-revision"
+    pre_delete = _successor_draft()
+    pre_delete["files"] = [inherited, uploaded]
+    pre_delete[field] = "stable-revision"
+    changed = _successor_draft()
+    changed["files"] = [uploaded]
+    changed[field] = "stable-revision"
+    changed["metadata"]["title"] = "changed after pre-delete read"
+    session = _Session()
+    session.gets = [
+        _Response(initial),
+        _Response(post_upload),
+        _Response(pre_delete),
+        _Response(inherited),
+        _Response(changed),
+        _Response(changed),
+    ]
+    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
+    session.deletes = [_Response({}, 204)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="metadata drift"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+
+@pytest.mark.parametrize("mutation", ["metadata", "modified", "version", "revision"])
+def test_upload_rejects_binding_drift_between_post_upload_and_pre_delete(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    """A binding change before DELETE cannot become the new cleanup baseline."""
+    bundle = tmp_path / "successor.tar.gz"
+    bundle.write_bytes(b"successor")
+    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
+    uploaded = _draft_file(bundle.name, file_id="successor-file")
+    initial = _successor_draft()
+    initial["files"] = [inherited]
+    post_upload = _successor_draft()
+    post_upload["files"] = [inherited, uploaded]
+    pre_delete = _successor_draft()
+    pre_delete["files"] = [inherited, uploaded]
+    if mutation == "metadata":
+        pre_delete["metadata"]["title"] = "changed before pre-delete read"
+    else:
+        post_upload[mutation] = "post-upload-revision"
+        pre_delete[mutation] = "pre-delete-revision"
+    session = _Session()
+    session.gets = [
+        _Response(initial),
+        _Response(post_upload),
+        _Response(pre_delete),
+    ]
+    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="post-upload and pre-delete"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.delete_urls == []
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_upload_rejects_non_finite_remote_metadata_before_delete(
+    tmp_path: Path,
+    value: float,
+) -> None:
+    """Non-finite metadata cannot authorize inherited-file cleanup."""
+    bundle = tmp_path / "successor.tar.gz"
+    bundle.write_bytes(b"successor")
+    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
+    uploaded = _draft_file(bundle.name, file_id="successor-file")
+    initial = _successor_draft()
+    initial["files"] = [inherited]
+    post_upload = _successor_draft()
+    post_upload["files"] = [inherited, uploaded]
+    pre_delete = _successor_draft()
+    pre_delete["files"] = [inherited, uploaded]
+    pre_delete["metadata"]["title"] = value
+    session = _Session()
+    session.gets = [
+        _Response(initial),
+        _Response(post_upload),
+        _Response(pre_delete),
+    ]
+    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="metadata is malformed"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.delete_urls == []
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_upload_rejects_non_finite_prereserve_metadata_before_delete(
+    tmp_path: Path,
+    value: float,
+) -> None:
+    """A direct DOI must not bypass reservation-hint validation before cleanup."""
+    bundle = tmp_path / "successor.tar.gz"
+    bundle.write_bytes(b"successor")
+    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
+    uploaded = _draft_file(bundle.name, file_id="successor-file")
+    initial = _successor_draft()
+    initial["files"] = [inherited]
+    post_upload = _successor_draft()
+    post_upload["files"] = [inherited, uploaded]
+    pre_delete = _successor_draft()
+    pre_delete["files"] = [inherited, uploaded]
+    pre_delete["metadata"]["prereserve_doi"] = {
+        "doi": "10.5281/zenodo.8",
+        "unexpected": value,
+    }
+    session = _Session()
+    session.gets = [
+        _Response(initial),
+        _Response(post_upload),
+        _Response(pre_delete),
+    ]
+    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="metadata is malformed"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.delete_urls == []
+
+
+@pytest.mark.parametrize("field", ["modified", "version", "revision"])
+def test_remote_revision_binding_retains_optimistic_metadata_digest(field: str) -> None:
+    """Optimistic revision receipts retain the credential-free metadata binding."""
+    payload = _successor_draft()
+    payload[field] = "remote-version"
+
+    revision = publisher._remote_revision_binding(payload, {})
+
+    assert revision["field"] == field
+    assert revision["metadata_contract_sha256"] == publisher._metadata_sha256(payload["metadata"])
+
+
+@pytest.mark.parametrize("metadata", [None, [], {"title": object()}])
+def test_remote_revision_binding_rejects_malformed_fallback_metadata(
+    metadata: Any,
+) -> None:
+    """Malformed remote metadata cannot enter a fallback reconciliation digest."""
+    payload = _successor_draft()
+    payload["metadata"] = metadata
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="metadata is malformed"):
+        publisher._remote_revision_binding(payload, {})
+
+
+@pytest.mark.parametrize("field", ["modified", "version", "revision"])
+def test_remote_revision_binding_rejects_malformed_metadata_before_optimistic_binding(
+    field: str,
+) -> None:
+    """Malformed metadata cannot bypass validation through an optimistic revision."""
+    payload = _successor_draft()
+    payload["metadata"] = {"title": object()}
+    payload[field] = "remote-version"
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="metadata is malformed"):
+        publisher._remote_revision_binding(payload, {})
 
 
 def test_upload_rejects_lifecycle_drift_during_pre_delete_readback(tmp_path: Path) -> None:

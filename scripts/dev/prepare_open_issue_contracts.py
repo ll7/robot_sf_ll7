@@ -492,6 +492,9 @@ def _body_patch_proposal(item: Mapping[str, Any]) -> dict[str, Any]:
 
 def build_plan(audit: Mapping[str, Any], *, batch_id: str) -> dict[str, Any]:
     """Build an ``open_issue_preparation_plan.v1`` from a complete audit report."""
+    if not isinstance(audit, Mapping):
+        raise ValueError("audit report must be an object")
+    _validate_audit_for_planning(audit)
     items = audit.get("items")
     if not isinstance(items, list):
         raise ValueError("audit report has no items list")
@@ -605,6 +608,19 @@ def _load_audit(path: str) -> dict[str, Any]:
     if payload.get("mutation_authorized") not in (False, None):
         raise ValueError("audit must be report-only (mutation_authorized false)")
     return payload
+
+
+def _validate_audit_for_planning(audit: Mapping[str, Any]) -> None:
+    """Require the complete, applicable, error-free audit planning contract."""
+    if audit.get("complete") is not True:
+        raise ValueError("audit must be complete before planning")
+    if audit.get("applicable") is not True:
+        raise ValueError("audit must be applicable before planning")
+    errors = audit.get("errors")
+    if not isinstance(errors, list):
+        raise ValueError("audit errors must be a list")
+    if errors:
+        raise ValueError("audit must have no errors before planning")
 
 
 def _render_plan_markdown(plan: Mapping[str, Any]) -> str:

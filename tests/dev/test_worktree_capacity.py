@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
+import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -15,11 +18,16 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.dev import check_worktree_capacity as capacity
+from scripts.dev import worktree_creation_lock
 from tests.support.environment_guards import git_identity_environment
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CHECK_CAPACITY = REPO_ROOT / "scripts" / "dev" / "check_worktree_capacity.py"
 CREATE_WORKTREE = REPO_ROOT / "scripts" / "dev" / "create_worktree.sh"
+WORKTREE_CREATION_LOCK = REPO_ROOT / "scripts" / "dev" / "worktree_creation_lock.py"
+# Test hook honored by create_worktree.sh: force the portable Python fcntl
+# fallback even when the flock CLI is installed (issue #8488).
+FORCE_PYTHON_LOCK_ENV = {"ROBOT_SF_WORKTREE_FORCE_PYTHON_LOCK": "1"}
 
 
 def _unique_branch(tmp_path: Path, name: str) -> str:
@@ -303,6 +311,32 @@ def test_create_worktree_dry_run_does_not_invoke_git(tmp_path: Path) -> None:
     assert not target.exists()
 
 
+def test_create_worktree_dry_run_works_outside_git_checkout(tmp_path: Path) -> None:
+    """Dry-run admission remains filesystem-only outside a Git checkout."""
+    target = tmp_path / "new-worktree"
+    result = subprocess.run(
+        [
+            str(CREATE_WORKTREE),
+            "--path",
+            str(target),
+            "--branch",
+            "test/capacity-dry-run-outside-git",
+            "--minimum-free-bytes",
+            "0",
+            "--dry-run",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "git worktree add was not invoked" in result.stdout
+    assert "not a git repository" not in result.stderr
+    assert not target.exists()
+
+
 def test_create_worktree_executes_command_inside_new_worktree(tmp_path: Path) -> None:
     branch = _unique_branch(tmp_path, "exec-in-worktree")
     target = _worktree_target(tmp_path, branch)
@@ -450,6 +484,68 @@ def test_create_worktree_recovers_orphan_branch_before_add(tmp_path: Path) -> No
         _cleanup_owned_worktree(_worktree_target(tmp_path, branch), branch)
 
 
+def test_create_worktree_python_fallback_serializes_against_lock_holder(
+    tmp_path: Path,
+) -> None:
+    """The portable fallback must wait for the same shared lock file identity."""
+    fcntl = pytest.importorskip("fcntl")
+    branch = _unique_branch(tmp_path, "py-fallback-locked")
+    target = _worktree_target(tmp_path, branch)
+    common_dir = Path(
+        subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+    lock_path = common_dir / "robot-sf-create-worktree.lock"
+    process: subprocess.Popen[str] | None = None
+    try:
+        _create_orphan_branch(branch)
+        with lock_path.open("a+", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            process = subprocess.Popen(
+                [
+                    str(CREATE_WORKTREE),
+                    "--path",
+                    str(target),
+                    "--branch",
+                    branch,
+                    "--minimum-free-bytes",
+                    "0",
+                ],
+                cwd=REPO_ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env={**os.environ, **FORCE_PYTHON_LOCK_ENV},
+            )
+            time.sleep(0.5)
+            assert process.poll() is None, "fallback creator did not wait for the lock"
+            assert not target.exists()
+            assert (
+                subprocess.run(
+                    ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
+                    cwd=REPO_ROOT,
+                    check=False,
+                ).returncode
+                == 0
+            )
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+        stdout, stderr = process.communicate(timeout=120)
+        assert process.returncode == 0, f"stdout={stdout!r} stderr={stderr!r}"
+        assert "portable lock" in stderr
+        assert target.is_dir()
+    finally:
+        if process is not None and process.poll() is None:
+            process.kill()
+            process.communicate()
+        _cleanup_owned_worktree(target, branch)
+
+
 def test_create_worktree_lock_covers_orphan_recovery_and_add(tmp_path: Path) -> None:
     """The repository lock must cover branch cleanup through worktree registration."""
     fcntl = pytest.importorskip("fcntl")
@@ -506,6 +602,858 @@ def test_create_worktree_lock_covers_orphan_recovery_and_add(tmp_path: Path) -> 
             process.kill()
             process.communicate()
         _cleanup_owned_worktree(target, branch)
+
+
+def test_create_worktree_python_fallback_concurrent_creations_serialize(
+    tmp_path: Path,
+) -> None:
+    """Two competing fallback creations must both complete and register cleanly."""
+    first_root = tmp_path / "first"
+    second_root = tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    first_branch = _unique_branch(first_root, "py-fallback-race")
+    second_branch = _unique_branch(second_root, "py-fallback-race")
+    first_target = _worktree_target(first_root, first_branch)
+    second_target = _worktree_target(second_root, second_branch)
+    assert first_branch != second_branch
+    processes: list[subprocess.Popen[str]] = []
+    try:
+        for branch, target in (
+            (first_branch, first_target),
+            (second_branch, second_target),
+        ):
+            processes.append(
+                subprocess.Popen(
+                    [
+                        str(CREATE_WORKTREE),
+                        "--path",
+                        str(target),
+                        "--branch",
+                        branch,
+                        "--minimum-free-bytes",
+                        "0",
+                    ],
+                    cwd=REPO_ROOT,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env={**os.environ, **FORCE_PYTHON_LOCK_ENV},
+                )
+            )
+        for process in processes:
+            stdout, stderr = process.communicate(timeout=180)
+            assert process.returncode == 0, f"stdout={stdout!r} stderr={stderr!r}"
+            assert "portable lock" in stderr
+        assert first_target.is_dir()
+        assert second_target.is_dir()
+        registered = subprocess.run(
+            ["git", "worktree", "list"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        assert f"[{first_branch}]" in registered
+        assert f"[{second_branch}]" in registered
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+                process.communicate()
+        _cleanup_owned_worktree(first_target, first_branch)
+        _cleanup_owned_worktree(second_target, second_branch)
+
+
+def test_create_worktree_python_fallback_refuses_low_space(tmp_path: Path) -> None:
+    """Failed capacity admission still refuses on the portable fallback path."""
+    target = tmp_path / "new-worktree"
+    result = subprocess.run(
+        [
+            str(CREATE_WORKTREE),
+            "--path",
+            str(target),
+            "--branch",
+            _unique_branch(tmp_path, "py-fallback-blocked"),
+            "--minimum-free-bytes",
+            str(2**63),
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, **FORCE_PYTHON_LOCK_ENV},
+    )
+
+    assert result.returncode == 2
+    assert "available space is below" in result.stdout
+    assert not target.exists()
+
+
+def test_create_worktree_rejects_direct_locked_transaction(tmp_path: Path) -> None:
+    """The internal re-entry flag cannot bypass the repository lock."""
+    branch = _unique_branch(tmp_path, "direct-locked-transaction")
+    target = _worktree_target(tmp_path, branch)
+    try:
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--minimum-free-bytes",
+                "0",
+                "--__locked-transaction",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "internal" in result.stderr
+        assert "repository lock" in result.stderr
+        assert not target.exists()
+    finally:
+        _cleanup_owned_worktree(target, branch)
+
+
+def test_create_worktree_locked_transaction_keeps_capacity_gate(tmp_path: Path) -> None:
+    """A lock-owned internal transaction still enforces the capacity safety gate."""
+    branch = _unique_branch(tmp_path, "direct-locked-capacity")
+    target = _worktree_target(tmp_path, branch)
+    common_dir = Path(
+        subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+    lock_path = common_dir / "robot-sf-create-worktree.lock"
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(WORKTREE_CREATION_LOCK),
+                str(lock_path),
+                "--",
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--minimum-free-bytes",
+                str(2**63),
+                "--__locked-transaction",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "available space is below" in result.stdout
+        assert not target.exists()
+    finally:
+        _cleanup_owned_worktree(target, branch)
+
+
+@pytest.mark.parametrize("force_python", (False, True), ids=("flock-cli", "portable-python"))
+def test_create_worktree_capacity_waits_for_lock(
+    force_python: bool,
+    tmp_path: Path,
+) -> None:
+    """Both lock backends acquire the repository lock before capacity admission."""
+    fcntl = pytest.importorskip("fcntl")
+    if not force_python and shutil.which("flock") is None:
+        pytest.skip("flock CLI is unavailable")
+
+    branch = _unique_branch(tmp_path, f"capacity-under-lock-{force_python}")
+    target = _worktree_target(tmp_path, branch)
+    common_dir = Path(
+        subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+    lock_path = common_dir / "robot-sf-create-worktree.lock"
+    environment = os.environ.copy()
+    if force_python:
+        environment.update(FORCE_PYTHON_LOCK_ENV)
+    else:
+        environment.pop("ROBOT_SF_WORKTREE_FORCE_PYTHON_LOCK", None)
+    process: subprocess.Popen[str] | None = None
+    try:
+        with lock_path.open("a+", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            process = subprocess.Popen(
+                [
+                    str(CREATE_WORKTREE),
+                    "--path",
+                    str(target),
+                    "--branch",
+                    branch,
+                    "--minimum-free-bytes",
+                    str(2**63),
+                ],
+                cwd=REPO_ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=environment,
+            )
+            deadline = time.monotonic() + 5
+            while process.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.02)
+            assert process.poll() is None, "capacity admission ran before lock acquisition"
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+        stdout, stderr = process.communicate(timeout=30)
+        assert process.returncode == 2, f"stdout={stdout!r} stderr={stderr!r}"
+        assert "available space is below" in stdout
+        assert not target.exists()
+    finally:
+        if process is not None and process.poll() is None:
+            process.kill()
+            process.communicate()
+        _cleanup_owned_worktree(target, branch)
+
+
+def test_create_worktree_without_flock_cli_uses_python_fallback(tmp_path: Path) -> None:
+    """A PATH without flock (e.g. macOS) must fall back instead of exiting 2."""
+    stub_bin = tmp_path / "stub-bin"
+    stub_bin.mkdir()
+    for tool in ("bash", "sh", "git", "git-lfs", "python3", "dirname", "cat", "grep", "du"):
+        resolved = shutil.which(tool)
+        assert resolved is not None, f"test host is missing required tool: {tool}"
+        (stub_bin / tool).symlink_to(resolved)
+    assert shutil.which("flock", path=str(stub_bin)) is None, "stub PATH must hide flock"
+    branch = _unique_branch(tmp_path, "no-flock-fallback")
+    target = _worktree_target(tmp_path, branch)
+    try:
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--minimum-free-bytes",
+                "0",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, "PATH": str(stub_bin)},
+        )
+        assert result.returncode == 0, result.stderr
+        assert "portable lock" in result.stderr
+        assert "flock is required" not in result.stderr
+        assert target.is_dir()
+    finally:
+        _cleanup_owned_worktree(target, branch)
+
+
+def test_create_worktree_python_fallback_runs_exec_exactly_once(tmp_path: Path) -> None:
+    """--exec must survive the fallback re-entry and run exactly once."""
+    branch = _unique_branch(tmp_path, "py-fallback-exec")
+    target = _worktree_target(tmp_path, branch)
+    marker = tmp_path / "exec-marker.txt"
+    try:
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--minimum-free-bytes",
+                "0",
+                "--exec",
+                "bash",
+                "-c",
+                f"echo ran >> {marker}",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, **FORCE_PYTHON_LOCK_ENV},
+        )
+        assert result.returncode == 0, result.stderr
+        assert marker.is_file(), "fallback must run the --exec command"
+        assert marker.read_text().splitlines() == ["ran"]
+    finally:
+        _cleanup_owned_worktree(target, branch)
+
+
+def test_create_worktree_python_fallback_exec_runs_after_lock_release(tmp_path: Path) -> None:
+    """Portable creation releases the lock before --exec while keeping receipt checks."""
+    pytest.importorskip("fcntl")
+    branch = _unique_branch(tmp_path, "py-fallback-exec-unlocked")
+    target = _worktree_target(tmp_path, branch)
+    marker = tmp_path / "exec-lock-marker.txt"
+    receipt_path = tmp_path / "exec.receipt.json"
+    common_dir = Path(
+        subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+    lock_path = common_dir / "robot-sf-create-worktree.lock"
+    probe_code = (
+        "import fcntl\n"
+        "import sys\n"
+        "from pathlib import Path\n"
+        "with open(sys.argv[1], 'a+') as lock_file:\n"
+        "    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)\n"
+        "Path(sys.argv[2]).write_text('unlocked\\n', encoding='utf-8')\n"
+        "assert Path(sys.argv[3]).is_file()\n"
+    )
+    try:
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--minimum-free-bytes",
+                "0",
+                "--receipt",
+                str(receipt_path),
+                "--task-id",
+                "issue-8498",
+                "--exec",
+                sys.executable,
+                "-c",
+                probe_code,
+                str(lock_path),
+                str(marker),
+                str(receipt_path),
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+            env={**os.environ, **FORCE_PYTHON_LOCK_ENV},
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert marker.read_text(encoding="utf-8") == "unlocked\n"
+        assert receipt_path.is_file()
+    finally:
+        _cleanup_owned_worktree(target, branch)
+
+
+@pytest.mark.parametrize("force_python", (False, True), ids=("flock-cli", "portable-python"))
+def test_create_worktree_exec_can_create_nested_worktree(
+    force_python: bool,
+    tmp_path: Path,
+) -> None:
+    """A supplied command can create another worktree after the outer lock releases."""
+    outer_branch = _unique_branch(tmp_path, f"nested-outer-{force_python}")
+    inner_branch = _unique_branch(tmp_path, f"nested-inner-{force_python}")
+    outer_target = _worktree_target(tmp_path, outer_branch)
+    inner_target = _worktree_target(tmp_path, inner_branch)
+    nested_code = (
+        "import subprocess, sys\n"
+        "result = subprocess.run(\n"
+        "    [sys.argv[1], '--path', sys.argv[2], '--branch', sys.argv[3],\n"
+        "     '--minimum-free-bytes', '0'],\n"
+        "    cwd=sys.argv[4], capture_output=True, text=True, timeout=10, check=False\n"
+        ")\n"
+        "if result.returncode != 0:\n"
+        "    print(result.stdout)\n"
+        "    print(result.stderr, file=sys.stderr)\n"
+        "    raise SystemExit(result.returncode)\n"
+    )
+    environment = os.environ.copy()
+    if force_python:
+        environment.update(FORCE_PYTHON_LOCK_ENV)
+    else:
+        environment.pop("ROBOT_SF_WORKTREE_FORCE_PYTHON_LOCK", None)
+    try:
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(outer_target),
+                "--branch",
+                outer_branch,
+                "--minimum-free-bytes",
+                "0",
+                "--exec",
+                sys.executable,
+                "-c",
+                nested_code,
+                str(CREATE_WORKTREE),
+                str(inner_target),
+                inner_branch,
+                str(outer_target),
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+            env=environment,
+        )
+
+        assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
+        assert outer_target.is_dir()
+        assert inner_target.is_dir()
+    finally:
+        _cleanup_owned_worktree(inner_target, inner_branch)
+        _cleanup_owned_worktree(outer_target, outer_branch)
+
+
+def test_worktree_creation_lock_helper_contract(tmp_path: Path) -> None:
+    """The portable lock helper validates usage and propagates child status."""
+    assert os.access(WORKTREE_CREATION_LOCK, os.X_OK)
+    compile_result = subprocess.run(
+        [sys.executable, "-m", "py_compile", str(WORKTREE_CREATION_LOCK)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert compile_result.returncode == 0, compile_result.stderr
+
+    lock_path = tmp_path / "test-creation.lock"
+    usage = subprocess.run(
+        [sys.executable, str(WORKTREE_CREATION_LOCK), str(lock_path)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert usage.returncode == 2
+    assert "usage" in usage.stderr
+
+    propagated = subprocess.run(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            "import sys; sys.exit(7)",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert propagated.returncode == 7
+    assert lock_path.exists()
+
+    signaled = subprocess.run(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            "import os, signal; os.kill(os.getpid(), signal.SIGTERM)",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert signaled.returncode == 128 + signal.SIGTERM
+
+
+def test_worktree_creation_lock_forwards_signal_and_keeps_lock_until_child_exit(
+    tmp_path: Path,
+) -> None:
+    """A terminating helper must not release the lock while its mutation child lives."""
+    lock_path = tmp_path / "test-signal.lock"
+    started = tmp_path / "child.started"
+    signal_marker = tmp_path / "child.signal"
+    release = tmp_path / "child.release"
+    contender_marker = tmp_path / "contender.acquired"
+    child_code = (
+        "import os, signal, sys, time\n"
+        "from pathlib import Path\n"
+        "started, signal_marker, release = map(Path, sys.argv[1:])\n"
+        "def record_signal(signum, _frame):\n"
+        "    signal_marker.write_text(str(signum), encoding='utf-8')\n"
+        "signal.signal(signal.SIGTERM, record_signal)\n"
+        "started.write_text(str(os.getpid()), encoding='utf-8')\n"
+        "while not release.exists():\n"
+        "    time.sleep(0.02)\n"
+    )
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            child_code,
+            str(started),
+            str(signal_marker),
+            str(release),
+        ],
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    contender: subprocess.Popen[str] | None = None
+    child_pid: int | None = None
+    try:
+        deadline = time.monotonic() + 10
+        while not started.exists() and time.monotonic() < deadline:
+            assert holder.poll() is None, "lock helper exited before its child started"
+            time.sleep(0.02)
+        assert started.is_file(), "lock helper child did not start"
+        child_pid = int(started.read_text(encoding="utf-8"))
+
+        holder.send_signal(signal.SIGTERM)
+        time.sleep(0.2)
+        assert holder.poll() is None, "helper released the lock before its child exited"
+        deadline = time.monotonic() + 5
+        while not signal_marker.exists() and time.monotonic() < deadline:
+            assert holder.poll() is None, "helper exited before forwarding SIGTERM"
+            time.sleep(0.02)
+        assert signal_marker.read_text(encoding="utf-8") == str(signal.SIGTERM)
+
+        contender = subprocess.Popen(
+            [
+                sys.executable,
+                str(WORKTREE_CREATION_LOCK),
+                str(lock_path),
+                "--",
+                sys.executable,
+                "-c",
+                "from pathlib import Path; import sys; Path(sys.argv[1]).write_text('ok')",
+                str(contender_marker),
+            ],
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        time.sleep(0.2)
+        assert contender.poll() is None, "child mutation was still alive but the lock was released"
+
+        release.touch()
+        assert holder.wait(timeout=10) == 128 + signal.SIGTERM
+        assert contender.wait(timeout=10) == 0
+        assert contender_marker.read_text(encoding="utf-8") == "ok"
+    finally:
+        release.touch()
+        if holder.poll() is None:
+            holder.terminate()
+            try:
+                holder.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                holder.kill()
+                holder.wait(timeout=5)
+        if contender is not None and contender.poll() is None:
+            contender.kill()
+            contender.wait(timeout=5)
+        if child_pid is not None:
+            try:
+                os.kill(child_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
+def test_worktree_creation_lock_child_descriptor_survives_helper_sigkill(
+    tmp_path: Path,
+) -> None:
+    """An uncatchable helper exit must not release a live child's inherited lock."""
+    lock_path = tmp_path / "test-sigkill.lock"
+    started = tmp_path / "child.started"
+    release = tmp_path / "child.release"
+    finished = tmp_path / "child.finished"
+    contender_marker = tmp_path / "contender.acquired"
+    child_code = (
+        "import os, sys, time\n"
+        "from pathlib import Path\n"
+        "started, release, finished = map(Path, sys.argv[1:])\n"
+        "started.write_text(str(os.getpid()), encoding='utf-8')\n"
+        "while not release.exists():\n"
+        "    time.sleep(0.02)\n"
+        "finished.touch()\n"
+    )
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            child_code,
+            str(started),
+            str(release),
+            str(finished),
+        ],
+        cwd=REPO_ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    contender: subprocess.Popen[bytes] | None = None
+    child_pid: int | None = None
+    try:
+        deadline = time.monotonic() + 10
+        while not started.exists() and time.monotonic() < deadline:
+            assert holder.poll() is None, "lock helper exited before its child started"
+            time.sleep(0.02)
+        assert started.is_file(), "lock helper child did not start"
+        child_pid = int(started.read_text(encoding="utf-8"))
+
+        holder.kill()
+        assert holder.wait(timeout=5) == -signal.SIGKILL
+        contender = subprocess.Popen(
+            [
+                sys.executable,
+                str(WORKTREE_CREATION_LOCK),
+                str(lock_path),
+                "--",
+                sys.executable,
+                "-c",
+                "from pathlib import Path; import sys; Path(sys.argv[1]).write_text('ok')",
+                str(contender_marker),
+            ],
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        time.sleep(0.2)
+        assert contender.poll() is None, "helper SIGKILL released a live child's lock"
+
+        release.touch()
+        deadline = time.monotonic() + 5
+        while not finished.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert finished.is_file(), "child did not finish after the release marker"
+        assert contender.wait(timeout=10) == 0
+        assert contender_marker.read_text(encoding="utf-8") == "ok"
+    finally:
+        release.touch()
+        if holder.poll() is None:
+            holder.kill()
+            holder.wait(timeout=5)
+        if contender is not None and contender.poll() is None:
+            contender.kill()
+            contender.wait(timeout=5)
+        if child_pid is not None:
+            try:
+                os.kill(child_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
+@pytest.mark.parametrize(
+    ("lock_errno", "expected_returncode"),
+    ((errno.EAGAIN, 75), (errno.EACCES, 75), (errno.EIO, 2)),
+)
+def test_worktree_creation_lock_helper_non_blocking_errno_contract(
+    monkeypatch,
+    tmp_path: Path,
+    lock_errno: int,
+    expected_returncode: int,
+) -> None:
+    """Only documented non-blocking contention errno values map to exit 75."""
+    fcntl = pytest.importorskip("fcntl")
+
+    def fake_flock(_file_descriptor: int, operation: int) -> None:
+        assert operation & fcntl.LOCK_NB
+        raise OSError(lock_errno, "simulated lock contention")
+
+    monkeypatch.setattr(fcntl, "flock", fake_flock)
+    result = worktree_creation_lock.run(
+        ["--non-blocking", str(tmp_path / "test-errno.lock"), "--", sys.executable, "-c", "pass"]
+    )
+
+    assert result == expected_returncode
+
+
+def test_worktree_creation_lock_helper_non_blocking_reports_contention(
+    tmp_path: Path,
+) -> None:
+    """--non-blocking exits 75 on a held lock and runs the child when free."""
+    lock_path = tmp_path / "test-nonblocking.lock"
+    held_marker = tmp_path / "test-nonblocking-held"
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            "from pathlib import Path; import sys, time; Path(sys.argv[1]).touch(); time.sleep(30)",
+            str(held_marker),
+        ],
+        cwd=REPO_ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not held_marker.exists() and holder.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert held_marker.exists(), "holder did not acquire the lock before running the child"
+        contended = subprocess.run(
+            [
+                sys.executable,
+                str(WORKTREE_CREATION_LOCK),
+                "--non-blocking",
+                str(lock_path),
+                "--",
+                sys.executable,
+                "-c",
+                "pass",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        assert contended.returncode == 75, contended.stderr
+    finally:
+        holder.terminate()
+        holder.wait(timeout=15)
+    free = subprocess.run(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            "--non-blocking",
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            "pass",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert free.returncode == 0, free.stderr
+
+
+def test_worktree_creation_lock_survives_detached_descendant_with_descriptor(
+    tmp_path: Path,
+) -> None:
+    """A detached descendant retains the lock when it keeps the inherited fd."""
+    pytest.importorskip("fcntl")
+    if not hasattr(os, "fork") or not hasattr(os, "setsid"):
+        pytest.skip("detached descendant probe requires fork and setsid")
+
+    lock_path = tmp_path / "test-detached.lock"
+    started = tmp_path / "detached.started"
+    release = tmp_path / "detached.release"
+    finished = tmp_path / "detached.finished"
+    contender_marker = tmp_path / "contender.acquired"
+    child_code = (
+        "import os, sys, time\n"
+        "from pathlib import Path\n"
+        "started, release, finished = map(Path, sys.argv[1:])\n"
+        "pid = os.fork()\n"
+        "if pid == 0:\n"
+        "    os.setsid()\n"
+        "    started.write_text(str(os.getpid()), encoding='utf-8')\n"
+        "    while not release.exists():\n"
+        "        time.sleep(0.02)\n"
+        "    finished.touch()\n"
+        "    os.close(int(os.environ['ROBOT_SF_WORKTREE_LOCK_FD']))\n"
+        "    os._exit(0)\n"
+        "os._exit(0)\n"
+    )
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            child_code,
+            str(started),
+            str(release),
+            str(finished),
+        ],
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    contender: subprocess.Popen[bytes] | None = None
+    detached_pid: int | None = None
+    try:
+        deadline = time.monotonic() + 10
+        while not started.exists() and time.monotonic() < deadline:
+            assert holder.poll() is None, "lock helper exited before detached child started"
+            time.sleep(0.02)
+        assert started.is_file(), "detached child did not start"
+        detached_pid = int(started.read_text(encoding="utf-8"))
+        assert holder.wait(timeout=10) == 0
+
+        contender = subprocess.Popen(
+            [
+                sys.executable,
+                str(WORKTREE_CREATION_LOCK),
+                str(lock_path),
+                "--",
+                sys.executable,
+                "-c",
+                "from pathlib import Path; import sys; Path(sys.argv[1]).write_text('ok')",
+                str(contender_marker),
+            ],
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        time.sleep(0.2)
+        assert contender.poll() is None, "detached descendant released its inherited lock"
+
+        release.touch()
+        deadline = time.monotonic() + 5
+        while not finished.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert finished.is_file(), "detached child did not finish after the release marker"
+        assert contender.wait(timeout=10) == 0
+        assert contender_marker.read_text(encoding="utf-8") == "ok"
+    finally:
+        release.touch()
+        if holder.poll() is None:
+            holder.kill()
+            holder.wait(timeout=5)
+        if contender is not None and contender.poll() is None:
+            contender.kill()
+            contender.wait(timeout=5)
+        if detached_pid is not None:
+            try:
+                os.kill(detached_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 def test_create_worktree_hints_when_orphan_branch_diverged(tmp_path: Path) -> None:

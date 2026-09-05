@@ -296,6 +296,22 @@ def test_non_passing_gate_audit_blocks_ready_receipts() -> None:
     assert "merge_queue_gate_stale_merge_base" in blocked["reason_codes"]
 
 
+def test_active_review_claim_gate_audit_blocks_ready_receipts() -> None:
+    """The receipt cannot authorize while the native queue gate sees an active claim."""
+    blocked = _receipt(
+        gate_audit={
+            "schema": "merge_queue_gate.v1",
+            "passed": False,
+            "review_claim_status": "active",
+            "reasons": ["active_review_claim"],
+        }
+    )
+
+    assert blocked["status"] == "blocked"
+    assert "merge_queue_gate_not_passed" in blocked["reason_codes"]
+    assert "merge_queue_gate_active_review_claim" in blocked["reason_codes"]
+
+
 def test_exact_head_ordinary_cas_proof_qualifies_only_stale_base_gate_reason() -> None:
     receipt = _receipt(
         gate_audit={

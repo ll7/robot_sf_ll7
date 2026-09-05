@@ -20,6 +20,32 @@ scripts/dev/run_worktree_shared_venv.sh -- \
   uv run pytest tests/test_ci_script_contract.py -q
 ```
 
+## Recover stale fast-pysf explicitly
+
+If the shared wrapper reports a stale installed `fast-pysf` package, recover from the linked
+worktree by rerunning the same command with the explicit recovery option:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh --recover-stale-fast-pysf -- \
+  uv run pytest tests/test_ci_script_contract.py -q
+```
+
+This route creates or refreshes only the current linked worktree's ignored `.venv`. It refuses the
+main checkout and dirty dependency inputs, checks `ROBOT_SF_WORKTREE_MIN_FREE_BYTES` (2 GiB by
+default) with `check_worktree_capacity.py`, serializes recovery per repository with a kernel-backed
+lock, and verifies `fast-pysf` before starting the command. It runs the frozen, auditable operation
+`uv sync --all-extras --reinstall-package robot-sf --frozen`; an existing coherent local environment
+skips the sync. Environment ownership checks reject nested links that would redirect package writes
+outside the worktree, while allowing valid standard `bin/python*` links to the host interpreter and
+rejecting broken aliases or links into the owning checkout. The recursive scan also fails closed if
+any environment subtree cannot be inspected. Capacity or lock contention fails closed without
+starting the wrapped command.
+
+Do not combine recovery with `--venv`, `--standalone`, or a freshness bypass. Repair an explicitly
+owned environment manually with `uv sync --all-extras --reinstall-package robot-sf` in that
+checkout only when that ownership is intentional. The standalone helper and its ownership boundary
+are documented in `scripts/dev/recover_fast_pysf_worktree.sh`.
+
 ## Readiness count selectors
 
 When reporting readiness counts, name the exact selector so another contributor can reproduce the
@@ -128,6 +154,23 @@ the CUDA serial policy (subject to the existing platform and low-CPU caps). The 
 records the CUDA status, selected lane, worker count, and override or default reason. An uncertain
 CUDA probe uses the serial safe default; an unavailable or unusable runtime keeps the CPU parallel
 path and CUDA-gated tests use their explicit unavailable receipt.
+
+## Parallel timeout diagnostics
+
+The parallel pytest wrapper captures every non-zero run and invokes
+`scripts/dev/diagnose_xdist_crash.py` with the selected worker count, distribution mode, execution
+mode, and pytest exit code. The reporter classifies pytest-timeout, subprocess, and silent
+process-timeout signatures and includes a bounded runtime fingerprint. A timeout remains an
+incomplete, fail-closed readiness result; an opt-in serial rerun can classify load-sensitive
+behavior but cannot promote the parallel lane to success evidence. Record the exact timed-out
+tests, worker count, runtime/dependency versions, cache location, and process-cleanup result when
+triaging parallel-load friction (issue #8469).
+
+The high-concurrency `run_xdist_race_validation.sh` route also preserves the compact-validation
+summary and, when its outer process boundary returns exit code 124, feeds the recorded log through
+the same reporter with the requested worker and distribution settings. If the outer summary cannot
+provide a log path, the route reports that diagnostic as unavailable and remains failed; it never
+turns an outer timeout into a pass.
 
 ## Local CI-equivalent path
 

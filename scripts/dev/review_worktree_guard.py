@@ -7,6 +7,10 @@ Git config, installs the tracked pre-push hook, and routes push destinations to
 a non-repository URL.  Worktree-local URL and protocol barriers catch direct
 URLs and explicit push URLs as well; the integration probe reads remote state
 through the common Git config so it can retain a read-only remote comparison.
+Review activation fails closed when an effective inherited
+``url.*.pushInsteadOf`` entry could outrank the worktree barrier. Git has no
+worktree-local negative rewrite, and masking that entry would mutate shared
+configuration visible to other linked worktrees and Git processes.
 This is a Git-level workflow guard, not an operating-system sandbox; a caller
 who deliberately overrides the worktree's Git configuration can bypass these
 local barriers.
@@ -246,6 +250,10 @@ def _blocked_receivepack(identity: dict[str, Path]) -> str:
     return str(identity["git_dir"] / ".robot-sf-review-push-blocked-receive-pack")
 
 
+STANDARD_PROTOCOL_NAMES = ("allow", "ext", "file", "git", "http", "https", "ssh")
+URL_PUSH_INSTEAD_OF_PATTERN = r"^url\..*\.pushinsteadof$"
+
+
 def _url_rule_key(blocked_url: str) -> str:
     return f"url.{blocked_url}.pushInsteadOf"
 
@@ -254,9 +262,88 @@ def _url_catchall_key(blocked_url: str) -> str:
     return f"url.{blocked_url}.insteadOf"
 
 
+def _parse_config_regexp(
+    result: subprocess.CompletedProcess[str], label: str
+) -> dict[str, list[str]]:
+    """Parse ``git config --get-regexp`` output into ordered key values."""
+    if result.returncode == 1:
+        return {}
+    if result.returncode != 0:
+        raise GuardError(f"git config {label} read failed: {_command_detail(result)}")
+    values: dict[str, list[str]] = {}
+    for line in result.stdout.splitlines():
+        parts = line.split(maxsplit=1)
+        if not parts:
+            continue
+        key, value = parts if len(parts) == 2 else (parts[0], "")
+        values.setdefault(key, []).append(value)
+    return values
+
+
+def _worktree_url_push_insteadof_values(identity: dict[str, Path]) -> dict[str, list[str]]:
+    config_path = _worktree_config_file(identity)
+    if not config_path.exists():
+        return {}
+    result = _run_git(
+        identity["path"],
+        "config",
+        "--no-includes",
+        "--file",
+        str(config_path),
+        "--get-regexp",
+        URL_PUSH_INSTEAD_OF_PATTERN,
+    )
+    return _parse_config_regexp(result, "worktree URL pushInsteadOf")
+
+
+def _effective_url_push_insteadof_values(identity: dict[str, Path]) -> dict[str, list[str]]:
+    result = _run_git(
+        identity["path"],
+        "config",
+        "--get-regexp",
+        URL_PUSH_INSTEAD_OF_PATTERN,
+    )
+    return _parse_config_regexp(result, "effective URL pushInsteadOf")
+
+
+def _unexpected_url_push_insteadof_values(
+    identity: dict[str, Path], allowed_guard_url: str | None = None
+) -> dict[str, list[str]]:
+    """Return effective push aliases that are not owned by this guard."""
+    values = _effective_url_push_insteadof_values(identity)
+    # A pre-existing config.worktree may not be effective until the common
+    # extensions.worktreeConfig setting is enabled. Inspect it physically too,
+    # so enabling that setting cannot turn a hidden alias into a bypass.
+    for key, key_values in _worktree_url_push_insteadof_values(identity).items():
+        values.setdefault(key, key_values)
+
+    if allowed_guard_url is not None:
+        guard_key = _url_rule_key(allowed_guard_url)
+        guard_values = _worktree_values(identity, guard_key)
+        for key, key_values in list(values.items()):
+            if key.casefold() == guard_key.casefold() and key_values == guard_values:
+                values.pop(key)
+                break
+    return values
+
+
+def _reject_inherited_url_push_insteadof_values(
+    identity: dict[str, Path], allowed_guard_url: str | None = None
+) -> None:
+    """Refuse review activation instead of mutating shared config to mask aliases."""
+    values = _unexpected_url_push_insteadof_values(identity, allowed_guard_url)
+    if not values:
+        return
+    names = ", ".join(sorted(values))
+    raise GuardError(
+        "review mode cannot safely activate while effective URL pushInsteadOf aliases are "
+        f"configured; remove them before retrying (shared Git config was not changed): {names}"
+    )
+
+
 def _protocol_policy_keys(identity: dict[str, Path]) -> set[str]:
-    """Return built-in and configured protocol allow-policy keys."""
-    keys = set(PROTOCOL_POLICY_KEYS)
+    """Return configured custom protocol allow-policy keys (excluding standard ones)."""
+    keys: set[str] = set()
     result = _run_git(
         identity["path"],
         "config",
@@ -268,12 +355,15 @@ def _protocol_policy_keys(identity: dict[str, Path]) -> set[str]:
     for line in result.stdout.splitlines():
         key = line.split(maxsplit=1)[0].lower()
         if key.startswith("protocol.") and key.endswith(".allow"):
-            keys.add(key)
+            proto_name = key[len("protocol.") : -len(".allow")]
+            if proto_name not in STANDARD_PROTOCOL_NAMES:
+                keys.add(key)
     return keys
 
 
 def _capture_backup(identity: dict[str, Path], original_mode: str | None) -> dict[str, Any]:
     remotes = _remote_names(identity)
+    all_protocol_keys = set(PROTOCOL_POLICY_KEYS) | _protocol_policy_keys(identity)
     return {
         "schema": BACKUP_SCHEMA_VERSION,
         "mode": original_mode,
@@ -285,9 +375,7 @@ def _capture_backup(identity: dict[str, Path], original_mode: str | None) -> dic
             remote: _worktree_values(identity, f"remote.{remote}.receivepack") for remote in remotes
         },
         "remote_urls": {remote: _remote_urls(identity, remote) for remote in remotes},
-        "protocol_allows": {
-            key: _worktree_values(identity, key) for key in _protocol_policy_keys(identity)
-        },
+        "protocol_allows": {key: _worktree_values(identity, key) for key in all_protocol_keys},
     }
 
 
@@ -368,6 +456,10 @@ def _configure_review_mode(
         raise GuardError("review mode is set but its restoration backup is missing")
     if original_mode != REVIEW_MODE and backup is not None:
         raise GuardError("stale review guard backup exists outside review mode")
+    _reject_inherited_url_push_insteadof_values(
+        identity,
+        _blocked_url(identity) if original_mode == REVIEW_MODE else None,
+    )
     hook = _check_hook_files(identity, hook_source_root)
     if backup is None:
         backup = _capture_backup(identity, original_mode)
@@ -376,6 +468,14 @@ def _configure_review_mode(
     _worktree_set(identity, "core.hooksPath", str(hook.parent))
     # Set the mode last so a partial setup remains fail-closed only after its
     # hook and configured-remote barriers are in place.
+    try:
+        _reject_inherited_url_push_insteadof_values(identity, _blocked_url(identity))
+    except GuardError as exc:
+        try:
+            _restore_implementation_mode(identity, backup)
+        except GuardError as cleanup_exc:
+            raise GuardError(f"{exc}; local review setup cleanup failed: {cleanup_exc}") from exc
+        raise
     _worktree_set(identity, WORKTREE_MODE_KEY, REVIEW_MODE)
     return _configure_result(identity, REVIEW_MODE, hook, len(_remote_names(identity)))
 
@@ -422,17 +522,15 @@ def _prepare_review_barriers(
         _worktree_set(identity, f"remote.{remote}.receivepack", blocked_receivepack)
         for url in configured_urls[remote]:
             _worktree_add(identity, rule_key, url)
-    # Keep the URL barrier effective for remotes added after review mode is
-    # configured, including explicit pushurl values. This all-URL rewrite is
-    # intentionally broader than pushInsteadOf: Git ignores pushInsteadOf when
-    # a remote has an explicit pushurl. Remote reads needed by ``integrate``
-    # use the common Git config below, outside this worktree-local rule.
-    _worktree_add(identity, catchall_key, "")
-    # URL rewrite precedence is longest-prefix based, so a pre-existing common
-    # config alias can otherwise beat the empty-prefix catch-all. Deny every
-    # built-in transport and every configured custom transport in this worktree
-    # as the final barrier, including remotes and aliases added after review
-    # mode is configured.
+    # Catch-all for push URLs to keep the push barrier effective for remotes
+    # added after review mode is configured, including raw URLs.
+    # Note: pushInsteadOf applies only to pushes, preserving read-only commands
+    # like git ls-remote and git fetch (issue #8321). Git deliberately does not
+    # apply pushInsteadOf to an explicit remote.<name>.pushurl added later; the
+    # ordinary pre-push hook still protects that path, while --no-verify and
+    # command-line config overrides belong to the stronger #8343 boundary.
+    _worktree_add(identity, rule_key, "")
+    # Disable preconfigured custom transports without blocking standard read protocols.
     for key in _protocol_policy_keys(identity):
         _worktree_set(identity, key, "never")
     return expected_url
@@ -500,6 +598,12 @@ def configure_worktree(
     if mode not in (REVIEW_MODE, IMPLEMENTATION_MODE):
         raise GuardError(f"unsupported worktree mode: {mode}")
     identity = _identity(worktree)
+    if mode == REVIEW_MODE:
+        initial_mode = _configured_mode(identity)
+        _reject_inherited_url_push_insteadof_values(
+            identity,
+            _blocked_url(identity) if initial_mode == REVIEW_MODE else None,
+        )
     _ensure_worktree_config(identity)
     original_mode = _configured_mode(identity)
     if original_mode not in (None, REVIEW_MODE, IMPLEMENTATION_MODE):

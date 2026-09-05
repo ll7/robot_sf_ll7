@@ -6,20 +6,75 @@ This guide helps agents start from the right command and read only the code regi
 Use it when a task needs repository commands, model lookup, validation, or navigation through
 large files.
 
-## Command Entrypoints
+## Task Routes And Preflight Discipline
 
-Run Python through the project environment so imports such as `robot_sf` resolve consistently:
+Agents must choose the bounded task route matching their assigned goal and consume existing deterministic
+preflight and status outputs rather than repeatedly scanning instructions, reconstructing validation requirements,
+or mutating branches during read-only review.
+
+| Route | Purpose | Required context / evidence | First deterministic command | Permitted mutations | Authoritative acceptance command |
+| --- | --- | --- | --- | --- | --- |
+| **Read-only observation** | PR / issue audit, queue review, CI status, non-mutating review | Target/base/head SHAs, PR/issue metadata, triage state | `git rev-parse HEAD` or `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/watch_pr_ci_status.py <pr> --json --once` | None (fail-closed via #8321 guard; no branch pushes or merges) | Structured snapshot report or non-mutating review assessment |
+| **Documentation-only edit** | Documentation, markdown, instructions, glossaries | Changed paths, referenced file/link targets | `git diff --name-only` or targeted link check | Markdown/text files under `docs/`, `.agents/`, or root instructions | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/sync_ai_config.py --check` and diff/link verification |
+| **Implementation / runtime change** | Bugfix, feature, or refactor in runtime code/tests | Issue contract, reproduction test, plan | Focused test: `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest <path> -q` | Scoped code and tests within declared `owned_paths` | `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` |
+| **Scientific / benchmark interpretation** | Benchmark analysis, policy eval, metric review | Scenario/config/seed provenance, campaign runs | Canonical benchmark runner / analyzer or row inspection | None (or diagnostic scripts / artifact manifests only) | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/camera_ready_baseline_safe.yaml --mode preflight` (preflight only; no fallback/degraded as success) |
+| **Environment / worktree repair** | Capacity reclamation, venv repair, git worktree hygiene | Capacity inventory, worktree status, venv health | `scripts/dev/run_worktree_shared_venv.sh --standalone -- uv run python scripts/dev/check_worktree_capacity.py --inventory --json` | Worktree prune, `.venv` recreation, scratch cleanup | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras` |
+
+### Protected read-only worktrees
+
+Any read-only observation that needs a linked worktree must opt into the protected review mode at
+creation time. The creator defaults to implementation mode, so omitting `--mode review` is a
+blocked route rather than a read-only setup:
 
 ```bash
-uv run python scripts/<path>.py
+MAIN_REPO_ROOT="$(git rev-parse --show-toplevel)" || {
+  echo "Run this command from a Git checkout." >&2
+  exit 2
+}
+WORKTREE_PARENT="${WORKTREE_PARENT:-"$(dirname "$MAIN_REPO_ROOT")/$(basename "$MAIN_REPO_ROOT").worktrees"}"
+if ! mkdir -p "$WORKTREE_PARENT" ||
+   [[ ! -d "$WORKTREE_PARENT" || ! -w "$WORKTREE_PARENT" ]]; then
+  echo "WORKTREE_PARENT must be an existing writable directory: $WORKTREE_PARENT" >&2
+  exit 2
+fi
+
+scripts/dev/create_worktree.sh \
+  --path "$WORKTREE_PARENT/review-<id>" \
+  --branch "review/<id>" \
+  --base origin/main \
+  --mode review
 ```
 
-Use the same `uv run` prefix for focused validation:
+The creator records `robot-sf.worktree-mode=review` and installs the
+`scripts/dev/review_worktree_guard.py`/pre-push barriers. Treat a failed or missing guard setup as
+blocked; do not continue review work in the default implementation mode.
+
+### Route Boundaries and Negative Rules
+
+- **Read-only review never mutates branches**: A reviewer records target/base/head SHAs and inspects or fetches according to existing policy; it must never merge `origin/main` into the implementation branch or push to it. Review worktrees enforce this via the machine guard (`scripts/dev/review_worktree_guard.py`, issue #8321).
+- **Validation proportional to change risk**: A pure documentation edit does not trigger an expensive simulation campaign; conversely, a runtime or benchmark change cannot pass on documentation or lint checks alone (see maintainer value hierarchy in `AGENTS.md`).
+- **Environment blockers are not relaxation licenses**: Missing optional or native dependencies remain visible. An environment blocker is an explicit blocker that routes to environment repair or closes as `blocked`; it never authorizes lowering scientific gates or claiming fallback/degraded execution as benchmark success.
+- **Freshness before expensive proof**: A moved PR head/base or changed material metadata invalidates prior readiness proof; re-validate against the exact current head before handoff (issue #7649).
+- **Separation of observer/audit collection from mutations**: Observers and audit scripts emit bounded snapshots with producer revision, freshness timestamp, and data completeness marker. Quota exhaustion, truncated pagination, or a stale producer must never be treated as an empty-success result or authorize state mutations, issue updates, or label writes (issues #8304 and #8307).
+- **Integrity of scientific indicators**: Refactoring or readability improvements must never strip units, uncertainty qualifiers, source pins, seed/config identifiers, or forbidden-inference boundaries.
+- **Privacy and provenance boundaries**: Private infrastructure, account details, unpublished project context, and raw runtime logs must never leak into public PR bodies, comments, or committed artifacts.
+
+## Command Entrypoints
+
+Run Python through the project environment so imports such as `robot_sf` resolve consistently. In a
+fresh linked worktree, use the complete shared-environment invocation described in the worktree
+bootstrap guidance:
 
 ```bash
-uv run pytest tests/<path> -q
-uv run ruff check <changed-file>
-uv run ruff format --check <changed-file>
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/<path>.py
+```
+
+Use the same complete wrapper for focused validation:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/<path> -q
+scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check <changed-file>
+scripts/dev/run_worktree_shared_venv.sh -- uv run ruff format --check <changed-file>
 ```
 
 For broad pull request readiness, use the repository wrapper from the repository root:
@@ -45,10 +100,10 @@ token-saving workflow callable from a fresh checkout and return an explicit mach
 `unavailable` state when `CODEX_ROUTING_REPO` is not configured:
 
 ```bash
-python3 scripts/save-codex-token-checkpoint.py --task-class issue_implementation --format text
-python3 scripts/advise-provider-routing.py --json
-python3 scripts/read-active-ledger.py --json --limit 1
-python3 scripts/resolve-route.py --help
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/save-codex-token-checkpoint.py --task-class issue_implementation --format text
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/advise-provider-routing.py --json
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/read-active-ledger.py --json --limit 1
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/resolve-route.py --help
 ```
 
 Set `CODEX_ROUTING_REPO` to a checkout of the canonical shared routing repository to delegate route
@@ -62,7 +117,7 @@ The routed-worker manifest records startup failures separately from failures aft
 started. Build or update it from the bounded attempt records with:
 
 ```bash
-uv run python -m scripts.dev.routed_worker_manifest \
+scripts/dev/run_worktree_shared_venv.sh -- uv run python -m scripts.dev.routed_worker_manifest \
   --attempts-json <attempts.json> --chosen-index <index> \
   --target-repo <linked-worktree> --max-recovery-attempts 2
 ```
@@ -104,7 +159,7 @@ acceptance_gate:
   - all declared validation commands pass
   - changed files stay within owned_paths
 validation_commands:
-  - uv run pytest -q tests/dev/test_check_skills.py
+  - scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q tests/dev/test_check_skills.py
 execution_mode: external_runtime
 dependencies: []
 budget:
@@ -134,7 +189,7 @@ TARGET_REPO="$(pwd)"
 TARGET_HEAD="$(git -C "$TARGET_REPO" rev-parse HEAD)"
 ROUTING_REPO="${CODEX_ROUTING_REPO:?set CODEX_ROUTING_REPO to a codex-personal-skills checkout}"
 HANDOFF_FILE="${HANDOFF_FILE:?set HANDOFF_FILE to the flat handoff.v2 YAML above}"
-python3 "$ROUTING_REPO/scripts/resolve-route.py" \
+uv run --project "$ROUTING_REPO" python "$ROUTING_REPO/scripts/resolve-route.py" \
   --task-id ROBOTSF-EXAMPLE --task-class issue_implementation --risk R1 \
   --handoff-file "$HANDOFF_FILE" \
   --frozen-head "$TARGET_HEAD" --target-repo "$TARGET_REPO" \
@@ -144,6 +199,18 @@ python3 "$ROUTING_REPO/scripts/resolve-route.py" \
 Read back the private plan's `selected_route`, `forbidden_actions`, and `acceptance_gate` before
 dispatch. The resolver owns native-tier selection, evidence-gated escalation, and external-provider
 budget alternatives; do not copy a volatile model inventory or add local legacy routes.
+
+## Compact Final Handoff Contract
+
+Every completed task must provide a concise, reproducible handoff record adhering to repository acceptance terminology. A model's prose assertion is not execution evidence:
+
+1. **Result**: Final status (`success`, `blocked`, `diagnostic`, `not benchmark evidence`).
+2. **Revisions**: Exact base SHA, head SHA, and relevant input/config digests.
+3. **Changed paths**: Modified files (must stay strictly within declared `owned_paths`).
+4. **Validation evidence**: Exact commands run with their exit codes and output summaries.
+5. **Unrun or unavailable checks**: Explicit list of any skipped, unrun, or blocked checks, accompanied by technical rationale (e.g. GPU unavailable, optional dependency missing).
+6. **Scientific scope & limitations**: Any caveats, assumptions, or boundary conditions.
+7. **Next disposition**: Actionable next step (e.g. ready for PR review, follow-up issue required).
 
 ## Large-File Navigation
 

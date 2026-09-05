@@ -50,16 +50,23 @@ scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/review_work
 
 The creator writes the worktree-local `robot-sf.worktree-mode=review` marker and installs the
 tracked pre-push guard. Configured remote names also receive inert worktree-local push destinations
-and a nonexistent worktree-local receive-pack command. An all-URL worktree-local rewrite (plus
-exact push-URL rules) routes remote URLs to an inert path, covering inherited `pushurl` values,
-equivalent local-path spellings, explicit destination refspecs, and `--no-verify`. Review mode also
-denies Git's known and unknown transport protocols in the worktree-local config, so a longer
-common-config URL alias cannot win URL-rewrite precedence and a remote added after activation stays
-blocked. It therefore intentionally blocks direct fetch and `ls-remote` commands too; refresh refs
-before entering the mode or use the integration helper, which reads its comparison through the
-common Git config. No configured remote can be mutated from the protected worktree through ordinary
-Git invocation paths. This is a Git-level workflow guard, not an operating-system sandbox; a
-deliberate per-command Git configuration override can bypass it.
+and a nonexistent worktree-local receive-pack command. Push-specific URL rewrites (plus exact
+configured-URL rules) route push URLs to an inert path, covering direct pushes, equivalent local-path
+spellings, explicit destination refspecs, and `--no-verify` for configured remotes. Push rejection is
+separated from read-only URL resolution: direct `git fetch` and `git ls-remote` commands remain
+operational for inspection and ref verification. A remote added after activation with an explicit
+`remote.<name>.pushurl` is still protected on the ordinary hook path, but Git does not apply
+`pushInsteadOf` to that explicit value when `--no-verify` bypasses the hook. That deliberate
+configuration/command-line override belongs to the stronger process boundary tracked in #8343. This
+is a Git-level workflow guard, not an operating-system sandbox; a deliberate per-command Git
+configuration override can bypass it.
+
+Review setup never masks `url.*.pushInsteadOf` entries by editing the shared Git config. If an
+effective repository, global, system, or pre-existing worktree `url.*.pushInsteadOf` alias could
+outrank the worktree barrier, setup fails closed before enabling review mode; remove or relocate
+the alias and retry. This refusal is required because a guard-specific lock would not serialize
+arbitrary Git processes in other linked worktrees. Generic `url.*.insteadOf` entries remain intact
+for read URL resolution.
 
 If the selected base predates the guard files, `create_worktree.sh --mode review` keeps the target
 clean and temporarily points its worktree-local hooks path at the invoking checkout's tracked
@@ -117,7 +124,15 @@ If a worktree-local environment is intentional, create and sync it with
 accidental partial `.venv`, stop using that environment and follow the bootstrap/wrapper path after
 confirming it contains no worktree-local state that needs preserving.
 
-Never edit `.venv`; manage dependencies through `pyproject.toml` and `uv sync`. Never use a bare
+If the shared wrapper reports stale `fast-pysf`, use its explicit linked-worktree recovery option:
+`scripts/dev/run_worktree_shared_venv.sh --recover-stale-fast-pysf -- <command>`. It creates or
+refreshes only the current worktree's `.venv`, applies the capacity and repository recovery-lock
+gates, rejects nested environment links that could redirect package writes outside the worktree, and
+rejects broken or owning-checkout `bin/python*` aliases, and fails closed if a nested environment
+subtree cannot be inspected. It never repairs the main checkout implicitly. See the [local CI
+recovery contract](local_ci.md#recover-stale-fast-pysf-explicitly).
+
+Never edit `.venv` by hand; manage dependencies through `pyproject.toml` and `uv sync`. Never use a bare
 `git stash pop` in a linked worktree because all worktrees share one stash namespace. Prefer a
 temporary commit or `scripts/dev/safe_stash_pop.sh`.
 

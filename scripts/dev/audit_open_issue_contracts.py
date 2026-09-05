@@ -30,9 +30,13 @@ if TYPE_CHECKING:
 SCHEMA = "open_issue_contract_audit.v1"
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_REMOTE = "origin"
-DEFAULT_PAGE_SIZE = 100
-DEFAULT_MAX_PAGES = 20
-DEFAULT_ITEM_LIMIT = 25
+# Keep the default developer invocation bounded. A full exact-read evaluation of every open issue
+# can exceed the local command timeout as the repository grows; callers that need complete coverage
+# must opt into a fresh run with larger explicit limits and preserve the applicable=false result when
+# pagination is truncated.
+DEFAULT_PAGE_SIZE = 20
+DEFAULT_MAX_PAGES = 1
+DEFAULT_ITEM_LIMIT = 20
 
 NEXT_ACTIONS: dict[str, str] = {
     "ready": "dispatch_via_goal_issue_admission",
@@ -503,6 +507,13 @@ def _build_report(
             "page_size": page_size,
             "max_pages": max_pages,
             "pages_read": len(pages),
+            "resume_hint": (
+                "Pagination is intentionally bounded. Rerun a fresh audit with explicit "
+                "--page-size/--max-pages values for broader coverage; suffix-only continuation "
+                "is unsupported."
+                if not pagination_complete
+                else None
+            ),
             **counts,
         },
         "errors": errors,
@@ -537,6 +548,9 @@ def _render_markdown(report: Mapping[str, Any], *, item_limit: int, json_report:
     ]
     if json_report:
         lines.append(f"- Full JSON report: `{json_report}`")
+    resume_hint = pagination.get("resume_hint")
+    if isinstance(resume_hint, str) and resume_hint:
+        lines.append(f"- Pagination guidance: {_markdown_cell(resume_hint)}")
     lines.extend(
         ["", "## Classification counts", "", "| Classification | Count |", "| --- | ---: |"]
     )
@@ -607,8 +621,21 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo", default=DEFAULT_REPO, help="Repository as OWNER/REPO.")
     parser.add_argument("--remote", default=DEFAULT_REMOTE, help="Git remote for claim reads.")
     parser.add_argument("--fixture", type=Path, help="Offline fixture JSON path.")
-    parser.add_argument("--page-size", type=int, default=DEFAULT_PAGE_SIZE)
-    parser.add_argument("--max-pages", type=int, default=DEFAULT_MAX_PAGES)
+    parser.add_argument(
+        "--page-size",
+        type=int,
+        default=DEFAULT_PAGE_SIZE,
+        help=f"REST issues page size (default: {DEFAULT_PAGE_SIZE}).",
+    )
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=DEFAULT_MAX_PAGES,
+        help=(
+            "Maximum REST pages (default: "
+            f"{DEFAULT_MAX_PAGES}; rerun with explicit larger limits for full coverage)."
+        ),
+    )
     parser.add_argument("--format", choices=("json", "markdown"), default="json")
     parser.add_argument("--output", type=Path, help="Write selected output format to this path.")
     parser.add_argument("--json-report", type=Path, help="Also write the full JSON report here.")
@@ -617,7 +644,12 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Optional fresh route-plan JSON for explicitly multi-repository issue contracts.",
     )
-    parser.add_argument("--item-limit", type=int, default=DEFAULT_ITEM_LIMIT)
+    parser.add_argument(
+        "--item-limit",
+        type=int,
+        default=DEFAULT_ITEM_LIMIT,
+        help=f"Maximum rows in Markdown output (default: {DEFAULT_ITEM_LIMIT}).",
+    )
     parser.add_argument(
         "--check",
         action="store_true",

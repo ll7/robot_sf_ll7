@@ -31,19 +31,36 @@ The helper is a bounded-github-mutation tool:
 
 ### 1. Audit (report-only)
 
+The audit script's bounded default (`20` rows across `1` page) is useful for a
+quick report-only inventory, but it is not sufficient input for preparation.
+Preparation requires one fresh, complete, error-free audit. The command below
+uses a justified `100` rows per page and `20` pages (capacity for `2,000` raw
+REST rows) and uses `--check` so a truncated or otherwise non-applicable report
+is written for diagnosis but cannot silently continue into planning.
+
 ```bash
-uv run python scripts/dev/audit_open_issue_contracts.py \
+uv run python -m scripts.dev.audit_open_issue_contracts \
   --repo ll7/robot_sf_ll7 \
+  --page-size 100 \
+  --max-pages 20 \
   --format json \
-  --output /tmp/open_issue_audit.json
+  --output /tmp/open_issue_audit.json \
+  --check
 ```
 
-The audit must be `complete: true` with `errors: []` before planning.
+`--check` returns `0` only when the report is complete and applicable. It
+returns `2` after writing the report when pagination or an exact-item read is
+non-applicable; increase `--max-pages` as needed and rerun a fresh audit before
+planning. Do not feed the bounded partial inventory to planning or apply.
+
+The audit must be `complete: true` with `errors: []` before planning. The
+bounded inventory guidance remains documented in
+[`open-issue-contract-audit.md`](open-issue-contract-audit.md).
 
 ### 2. Plan (report-only)
 
 ```bash
-uv run python scripts/dev/prepare_open_issue_contracts.py \
+uv run python -m scripts.dev.prepare_open_issue_contracts \
   --audit-json /tmp/open_issue_audit.json \
   --plan-json /tmp/open_issue_preparation_plan.json \
   --plan-markdown /tmp/open_issue_preparation_plan.md \
@@ -75,7 +92,7 @@ authority and are never promoted by preparation.
 ### 3. Render (report-only)
 
 ```bash
-uv run python scripts/dev/prepare_open_issue_contracts.py \
+uv run python -m scripts.dev.prepare_open_issue_contracts \
   --audit-json /tmp/open_issue_audit.json \
   --mode render --issue <number> --batch-id <stable-batch-id>
 ```
@@ -93,7 +110,7 @@ change invalidates that item and may invalidate its batch.
 ### 5. Verify (report-only)
 
 ```bash
-uv run python scripts/dev/prepare_open_issue_contracts.py \
+uv run python -m scripts.dev.prepare_open_issue_contracts \
   --audit-json /tmp/open_issue_audit.json \
   --mode verify \
   --bodies-json /tmp/prepared_bodies.json
@@ -105,7 +122,7 @@ marker region (with the documented boundary-newline normalization).
 ### 6. Apply (bounded, after review)
 
 ```bash
-uv run python scripts/dev/prepare_open_issue_contracts.py \
+uv run python -m scripts.dev.prepare_open_issue_contracts \
   --audit-json /tmp/open_issue_audit.json \
   --mode apply --apply \
   --batch-id <stable-batch-id> \

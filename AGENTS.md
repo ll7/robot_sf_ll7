@@ -69,7 +69,7 @@ Always-required core context:
 - `docs/ai/agent_workflow_entrypoints.md`: task route table, canonical command entrypoints, handoff format, and large-file navigation.
 
 Route-specific context references (consult `docs/ai/agent_workflow_entrypoints.md` and load only what matches the active task):
-- **Read-only observation / review**: `docs/code_review.md`, `.agents/skills/goal-pr-review/SKILL.md`, `scripts/dev/review_worktree_guard.py` (see issue #8321).
+- **Read-only observation / review**: `docs/code_review.md`, `.agents/skills/implementation-verification/SKILL.md`, `scripts/dev/review_worktree_guard.py` (see issue #8321). Use `goal-pr-review` only when mutation-authorized PR fixes or state changes are in scope.
 - **Documentation-only edit**: `docs/glossary.md`, `docs/maintainer_values.md` (clarity and proof tier).
 - **Implementation / runtime change**: `.agents/PLANS.md`, `docs/code_review.md`, targeted modules and tests under `robot_sf/`, `scripts/`, or `tests/`.
 - **Scientific result / benchmark interpretation**: `memory/MEMORY.md`, `docs/context/INDEX.md`, `docs/ai/`, benchmark skills (`benchmark-overview`, `benchmark-row-status`, `evidence-synthesis`).
@@ -104,7 +104,7 @@ worker. Use `scripts/dev/bootstrap_worktree.sh` only when a worktree-local envir
 required; it still performs `uv venv .venv && uv sync --all-extras`, verifies `.venv/bin/python`,
 and adds `UV_NO_SYNC=1` to the activation script. For a dependency-only check that separates
 missing optional packages from changed-code failures, run
-`python scripts/dev/check_worktree_optional_deps.py --profile all-extras` through the shared wrapper.
+`scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras`.
 Use a matching named profile such as `--profile training` when a local environment was bootstrapped
 with `--extra training`. Before manual reclaim, run
 `scripts/dev/check_worktree_capacity.py --inventory --json`; it never deletes files. Preserve

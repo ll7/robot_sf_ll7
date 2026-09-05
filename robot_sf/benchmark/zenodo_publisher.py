@@ -36,7 +36,7 @@ _REMOTE_FILENAME_ALIASES = ("filename", "key")
 _REMOTE_FILE_ID_ALIASES = ("id", "file_id", "fileid")
 _CREDENTIAL_SHAPED_FILENAME_RE = re.compile(
     r"(?i)^(?:bearer|basic)\s+\S+$|"
-    r"^authorization\s*[:=]\s*(?:bearer|basic)\s+\S+$|"
+    r"^authorization\s*[:=]\s*[A-Za-z][A-Za-z0-9_-]*\s+\S+$|"
     r"^(?:authorization|access[_ -]?token|api[_ -]?key|password|secret|token)\s*[:=]\s*\S+$"
 )
 _DELETE_READBACK_ATTEMPTS = 3
@@ -317,9 +317,17 @@ def _validated_upload_bucket(value: Any, api_base: str) -> str:
         raise ZenodoPublisherError("Zenodo draft upload bucket has an invalid path") from exc
     if candidate_path.endswith("/"):
         candidate_path = candidate_path[:-1]
-    relative_path = candidate_path[len(api_path) :].lstrip("/")
+    api_prefix = f"{api_path}/"
+    relative_path = (
+        candidate_path[len(api_prefix) :] if candidate_path.startswith(api_prefix) else ""
+    )
     parts = relative_path.split("/")
-    if len(parts) != 2 or parts[0] != "files" or _ZENODO_FILE_ID_RE.fullmatch(parts[1]) is None:
+    if (
+        len(parts) != 2
+        or parts[0] != "files"
+        or _ZENODO_FILE_ID_RE.fullmatch(parts[1]) is None
+        or candidate_path != f"{api_path}/files/{parts[1]}"
+    ):
         raise ZenodoPublisherError("Zenodo draft upload bucket is not a canonical files bucket")
     return candidate
 

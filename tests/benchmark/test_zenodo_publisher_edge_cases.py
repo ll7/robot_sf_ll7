@@ -754,6 +754,7 @@ def test_api_base_normalizes_one_trailing_slash() -> None:
         "https://zenodo.org/records/7/files/bundle",
         "https://zenodo.org/apiary/files/bucket",
         "https://zenodo.org/api/deposit/depositions/7/files",
+        "https://zenodo.org/api//files/bucket",
         "https://zenodo.org/api/files/bucket/extra",
         "https://zenodo.org/api/files/bucket%2Fextra",
         "https://zenodo.org/api/../records/7/files/bundle",
@@ -1174,7 +1175,12 @@ def test_reconciliation_receipt_rejects_tampered_inventory_binding(tmp_path: Pat
 
 @pytest.mark.parametrize(
     "credential_shaped_name",
-    ["Bearer secret-reflection", "Authorization: Bearer secret-reflection"],
+    [
+        "Bearer secret-reflection",
+        "Authorization: Bearer secret-reflection",
+        "Authorization: Token secret-reflection",
+        "Authorization=Digest secret-reflection",
+    ],
 )
 def test_reconciliation_receipt_rejects_credential_shaped_deleted_filename(
     credential_shaped_name: str,

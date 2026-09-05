@@ -8,8 +8,9 @@ the campaign synthesizer and recorded file checksums. The same 76 source files a
 now preserved in the immutable W&B artifact
 `ll7/robot_sf/campaign-issue5578-native-speed-tier-job-13828:v0`. The artifact
 manifest and every stored and decompressed source object were checked against
-SHA-256 and byte-size records. This closes the custody gap, but does not by itself
-admit a benchmark, planner-ranking, causal, dissertation, or paper claim.
+SHA-256 and byte-size records. This records the recovered copy and its artifact
+reference, but does not close the authenticated immutable-member custody gate or
+by itself admit a benchmark, planner-ranking, causal, dissertation, or paper claim.
 
 ## What was verified
 

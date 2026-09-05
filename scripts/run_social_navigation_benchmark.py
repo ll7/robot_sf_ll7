@@ -173,6 +173,8 @@ def _compute_aggregates_payload(
     except TypeError as exc:
         if "expected_algorithms" not in aggregate_kwargs:
             raise
+        if "unexpected keyword argument 'expected_algorithms'" not in str(exc):
+            raise
         logger.debug(
             "compute_aggregates_with_ci missing expected_algorithms support, falling back: {}",
             exc,

@@ -104,6 +104,7 @@ _VALID_COMPARABILITY_STATUSES = {
     "mismatched",
 }
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_GIT_SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
 ProofStatus = Literal["passed", "unavailable", "failed", "not_run"]
 
 
@@ -242,7 +243,7 @@ def _git_path_is_tracked(path: Path, repo_root: Path) -> bool:
     return result.returncode == 0 and relative.as_posix() in result.stdout.splitlines()
 
 
-def strict_proof_input_provenance_error(
+def strict_proof_input_provenance_error(  # noqa: C901
     path: Path,
     *,
     repo_root: Path,
@@ -263,6 +264,19 @@ def strict_proof_input_provenance_error(
         return f"{field} cannot be resolved safely for provenance"
     if any(relative.parts[:2] == ("tests", "fixtures") for _, relative in candidates):
         return f"{field} cannot use tests/fixtures provenance for strict proof"
+    if not (repo_root.resolve() / ".git").exists():
+        return None
+    try:
+        git_root = subprocess.check_output(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=repo_root.resolve(),
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    if Path(git_root).resolve() != repo_root.resolve():
+        return None
     output_candidates = [
         candidate for candidate, relative in candidates if relative.parts[:1] == ("output",)
     ]
@@ -279,6 +293,27 @@ def strict_proof_input_provenance_error(
             f"{field} must use a tracked repository file; matching untracked files under "
             "output/ are not valid strict proof inputs"
         )
+    for candidate, relative_path in candidates:
+        if not _git_path_is_tracked(candidate, repo_root):
+            return f"{field} must use a tracked repository file: {relative_path.as_posix()}"
+        relative = relative_path.as_posix()
+        try:
+            committed_blob = subprocess.check_output(
+                ["git", "rev-parse", f"HEAD:{relative}"],
+                cwd=repo_root.resolve(),
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+            committed_bytes = subprocess.check_output(
+                ["git", "show", f"HEAD:{relative}"],
+                cwd=repo_root.resolve(),
+                stderr=subprocess.DEVNULL,
+            )
+            current_bytes = candidate.read_bytes()
+        except (OSError, subprocess.CalledProcessError):
+            return f"{field} cannot be bound to the committed HEAD blob: {relative}"
+        if not committed_blob or current_bytes != committed_bytes:
+            return f"{field} does not match the committed HEAD blob: {relative}"
     return None
 
 
@@ -350,6 +385,9 @@ def _proof_binding_error(  # noqa: C901, PLR0912
         "campaign_config",
         "manifest_sha256",
         "config_sha256",
+        "head_commit",
+        "manifest_blob",
+        "config_blob",
         "proof_digest",
     ):
         try:
@@ -359,6 +397,17 @@ def _proof_binding_error(  # noqa: C901, PLR0912
         if field.endswith("_sha256") or field == "proof_digest":
             if not _SHA256_RE.fullmatch(value.lower()):
                 return f"answerability.proof_binding.{field} must be a 64-hex SHA-256"
+        if field.endswith("_commit") or field.endswith("_blob"):
+            if not _GIT_SHA1_RE.fullmatch(value.lower()):
+                return f"answerability.proof_binding.{field} must be a 40-hex Git identity"
+    try:
+        current_head = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=repo_root.resolve(), text=True
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "answerability.proof_binding cannot resolve the committed HEAD"
+    if binding["head_commit"] != current_head:
+        return "answerability.proof_binding.head_commit does not match HEAD"
     if campaign_id is not None and binding["campaign_id"] != campaign_id:
         return "answerability.proof_binding.campaign_id does not match the manifest"
     if binding["question"] != contract["question"]["research_question"]:
@@ -402,6 +451,21 @@ def _proof_binding_error(  # noqa: C901, PLR0912
         )
         if file_error:
             return file_error
+    for field, blob_field in (
+        ("source_manifest", "manifest_blob"),
+        ("campaign_config", "config_blob"),
+    ):
+        try:
+            actual_blob = subprocess.check_output(
+                ["git", "rev-parse", f"HEAD:{binding[field]}"],
+                cwd=repo_root.resolve(),
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+        except (OSError, subprocess.CalledProcessError):
+            return f"answerability.proof_binding.{field} is not present at HEAD"
+        if actual_blob != binding[blob_field]:
+            return f"answerability.proof_binding.{blob_field} does not match HEAD"
     return None
 
 

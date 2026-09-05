@@ -925,3 +925,67 @@ class TestLauncherToFinalizerHandoff:
         assert report["classification"] == "failed"
         assert report["exit_code_lanes"]["campaign"]["exit_code"] == launcher_exit
         assert report["exit_code_lanes"]["job_exit_code"] == launcher_exit
+
+
+def test_main_persists_admission_sidecar_and_summary_reference(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A successful admission is reloadable from the canonical campaign summary."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("name: test\n", encoding="utf-8")
+    manifest_path = tmp_path / "research.yaml"
+    manifest_path.write_text("campaign: test\n", encoding="utf-8")
+    campaign_root = tmp_path / "campaign"
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary_path.parent.mkdir(parents=True)
+    summary_path.write_text(json.dumps({"artifacts": {}}), encoding="utf-8")
+    admission = {
+        "status": "research_answerability_admitted",
+        "answerability": {"state": "answerable", "decision_capable": True},
+        "answerability_proof": {"binding": {"proof_digest": "a" * 64}},
+    }
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "evaluate_research_manifest_answerability",
+        lambda **_: {
+            "source_manifest": str(manifest_path),
+            "answerability": {"state": "answerable", "decision_capable": True},
+            "answerability_proof": {"binding": {"proof_digest": "a" * 64}},
+        },
+    )
+    monkeypatch.setattr(run_camera_ready_benchmark, "load_campaign_config", lambda _: object())
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "run_campaign",
+        lambda *args, **kwargs: {
+            "campaign_root": str(campaign_root),
+            "summary_json": str(summary_path),
+            "campaign_id": "campaign",
+        },
+    )
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "_research_answerability_block",
+        lambda **_: admission,
+    )
+
+    assert (
+        run_camera_ready_benchmark.main(
+            [
+                "--config",
+                str(config_path),
+                "--research-manifest",
+                str(manifest_path),
+                "--require-answerable",
+            ]
+        )
+        == 2
+    )
+    persisted = json.loads(summary_path.read_text(encoding="utf-8"))
+    sidecar_path = campaign_root / persisted["research_answerability_admission"]["sidecar"]
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    assert sidecar["admission"] == admission
+    assert (
+        persisted["research_answerability_admission"]["admission_sha256"]
+        == sidecar["admission_sha256"]
+    )

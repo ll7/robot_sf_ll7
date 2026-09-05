@@ -313,7 +313,7 @@ def _validate_manifest(
         )
 
 
-def _evaluate_manifest_answerability(
+def _evaluate_manifest_answerability(  # noqa: PLR0913
     manifest: dict[str, Any],
     *,
     manifest_path: Path,
@@ -322,6 +322,8 @@ def _evaluate_manifest_answerability(
     require_proof_surfaces: bool = False,
     expected_campaign_config: Path | None = None,
     expected_config_sha256: str | None = None,
+    expected_campaign_id: str | None = None,
+    expected_execution_inventory: dict[str, Any] | None = None,
     approved_durable_roots: Iterable[Path] = (),
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """Evaluate one manifest through the shared proof collector and gate.
@@ -354,6 +356,8 @@ def _evaluate_manifest_answerability(
             expected_manifest_sha256=manifest_sha256,
             expected_campaign_config=expected_campaign_config,
             expected_config_sha256=expected_config_sha256,
+            expected_campaign_id=expected_campaign_id,
+            expected_execution_inventory=expected_execution_inventory,
         )
         if enforce_admission_proof
         else None
@@ -406,6 +410,8 @@ def evaluate_research_manifest_answerability(
     execute_validation: bool = True,
     expected_campaign_config: Path | None = None,
     expected_config_sha256: str | None = None,
+    expected_campaign_id: str | None = None,
+    expected_execution_inventory: dict[str, Any] | None = None,
     approved_durable_roots: Iterable[Path] = (),
 ) -> dict[str, Any]:
     """Evaluate a manifest for a production admission caller without writing output.
@@ -427,6 +433,8 @@ def evaluate_research_manifest_answerability(
         require_proof_surfaces=True,
         expected_campaign_config=expected_campaign_config,
         expected_config_sha256=expected_config_sha256,
+        expected_campaign_id=expected_campaign_id,
+        expected_execution_inventory=expected_execution_inventory,
         approved_durable_roots=approved_durable_roots,
     )
     return {
@@ -483,18 +491,35 @@ def _git_commit() -> str:
         return "unknown"
 
 
+def _git_head_blob(relative_path: str) -> tuple[str, str]:
+    """Return the exact HEAD and blob identity for one tracked path."""
+    root = _repo_root()
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=root, text=True, stderr=subprocess.DEVNULL
+    ).strip()
+    blob = subprocess.check_output(
+        ["git", "rev-parse", f"HEAD:{relative_path}"],
+        cwd=root,
+        text=True,
+        stderr=subprocess.DEVNULL,
+    ).strip()
+    return commit, blob
+
+
 def _sha256_file(path: Path) -> str:
     """Return a file digest used to bind admission to immutable inputs."""
     return hashlib.sha256(_stable_file_bytes(path)).hexdigest()
 
 
-def _build_proof_binding(  # noqa: C901
+def _build_proof_binding(  # noqa: C901, PLR0912
     manifest_path: Path,
     manifest: dict[str, Any],
     *,
     expected_manifest_sha256: str | None = None,
     expected_campaign_config: Path | None,
     expected_config_sha256: str | None = None,
+    expected_campaign_id: str | None = None,
+    expected_execution_inventory: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the exact manifest/config identity used by decision admission."""
     root = _repo_root()
@@ -550,6 +575,33 @@ def _build_proof_binding(  # noqa: C901
         raise ManifestError(
             "campaign configuration changed after loading; refusing to bind different bytes"
         )
+    try:
+        head_commit, manifest_blob = _git_head_blob(manifest_relative)
+        _, config_blob = _git_head_blob(config_relative)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ManifestError("could not bind proof inputs to committed HEAD blobs") from exc
+    campaign_id = str(manifest["campaign"]["id"])
+    if expected_campaign_id is not None and campaign_id != expected_campaign_id:
+        raise ManifestError(
+            "research manifest campaign.id does not match the effective execution campaign id: "
+            f"{campaign_id} != {expected_campaign_id}"
+        )
+    manifest_inventory = {
+        "scenario_ids": sorted(_scenario_ids(manifest)),
+        "planner_ids": sorted(str(row.get("planner_id")) for row in _planner_rows(manifest)),
+        "seeds": sorted({int(seed) for seed in _seeds(manifest)}),
+        "kinematics": sorted(
+            str(value) for value in manifest.get("kinematics_matrix", ["differential_drive"])
+        ),
+    }
+    if (
+        expected_execution_inventory is not None
+        and manifest_inventory != expected_execution_inventory
+    ):
+        raise ManifestError(
+            "research manifest matrix does not match the effective camera execution matrix: "
+            f"{manifest_inventory} != {expected_execution_inventory}"
+        )
     answerability = manifest.get("answerability")
     question = answerability.get("question") if isinstance(answerability, dict) else None
     estimand = answerability.get("estimand") if isinstance(answerability, dict) else None
@@ -565,13 +617,17 @@ def _build_proof_binding(  # noqa: C901
         raise ManifestError("decision-capable proof binding requires answerability.estimand")
     return {
         "schema_version": "research_answerability_proof_binding.v1",
-        "campaign_id": str(manifest["campaign"]["id"]),
+        "campaign_id": campaign_id,
+        "execution_inventory": manifest_inventory,
         "question": research_question.strip(),
         "estimand": primary_estimand.strip(),
         "source_manifest": manifest_relative,
         "campaign_config": config_relative,
         "manifest_sha256": manifest_sha256,
         "config_sha256": config_sha256,
+        "head_commit": head_commit,
+        "manifest_blob": manifest_blob,
+        "config_blob": config_blob,
     }
 
 

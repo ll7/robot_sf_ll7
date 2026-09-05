@@ -32,6 +32,7 @@ from loguru import logger  # noqa: E402
 
 from robot_sf.benchmark.camera_ready._config import (  # noqa: E402
     RadiusSweepBindingPreflightError,
+    _load_campaign_scenarios,
 )
 from robot_sf.benchmark.camera_ready_campaign import (  # noqa: E402
     load_campaign_config,
@@ -157,13 +158,15 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _research_answerability_block(
+def _research_answerability_block(  # noqa: C901
     *,
     manifest_path: Path | None,
     require_answerable: bool,
     mode: str,
     expected_campaign_config: Path,
     expected_config_sha256: str | None = None,
+    expected_campaign_id: str | None = None,
+    expected_execution_inventory: dict[str, Any] | None = None,
     config_input_drift: bool = False,
 ) -> dict[str, Any] | None:
     """Return an admission receipt or a fail-closed result for a research gate."""
@@ -194,6 +197,16 @@ def _research_answerability_block(
                 in inspect.signature(evaluate_research_manifest_answerability).parameters
             ):
                 evaluation_kwargs["expected_config_sha256"] = expected_config_sha256
+            if (
+                "expected_campaign_id"
+                in inspect.signature(evaluate_research_manifest_answerability).parameters
+            ):
+                evaluation_kwargs["expected_campaign_id"] = expected_campaign_id
+            if (
+                "expected_execution_inventory"
+                in inspect.signature(evaluate_research_manifest_answerability).parameters
+            ):
+                evaluation_kwargs["expected_execution_inventory"] = expected_execution_inventory
             report = evaluate_research_manifest_answerability(manifest_path, **evaluation_kwargs)
         except (OSError, TypeError, ValueError, yaml.YAMLError) as exc:
             reason = f"research answerability admission could not be evaluated: {exc}"
@@ -263,6 +276,60 @@ def _config_sha256_if_readable(path: Path) -> str | None:
         return None
 
 
+def _execution_inventory(cfg: Any) -> dict[str, Any]:
+    """Return the normalized scenario/planner/seed matrix used by the runner."""
+    scenarios = _load_campaign_scenarios(cfg)
+    return {
+        "scenario_ids": sorted(str(scenario["name"]) for scenario in scenarios),
+        "planner_ids": sorted(str(planner.key) for planner in cfg.planners),
+        "seeds": sorted({int(seed) for scenario in scenarios for seed in scenario["seeds"]}),
+        "kinematics": sorted(
+            str(value) for value in (cfg.kinematics_matrix or ("differential_drive",))
+        ),
+    }
+
+
+def _persist_answerability_admission(result: dict[str, Any]) -> None:
+    """Persist the successful admission beside, and by digest in, the campaign summary."""
+    admission = result.get("research_answerability_admission")
+    summary_value = result.get("summary_json")
+    campaign_root_value = result.get("campaign_root")
+    if not isinstance(admission, dict) or not summary_value or not campaign_root_value:
+        return
+    summary_path = Path(str(summary_value))
+    campaign_root = Path(str(campaign_root_value))
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        if not isinstance(summary, dict):
+            raise ValueError("campaign summary must be a JSON object")
+        encoded = json.dumps(admission, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        admission_sha256 = hashlib.sha256(encoded).hexdigest()
+        sidecar_path = summary_path.parent / "research_answerability_admission.json"
+        sidecar = {
+            "schema_version": "research_answerability_admission.v1",
+            "admission": admission,
+            "admission_sha256": admission_sha256,
+        }
+        sidecar_path.write_text(
+            json.dumps(sidecar, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        summary["research_answerability_admission"] = {
+            "sidecar": str(sidecar_path.relative_to(campaign_root)),
+            "sidecar_sha256": hashlib.sha256(sidecar_path.read_bytes()).hexdigest(),
+            "admission_sha256": admission_sha256,
+        }
+        artifacts = summary.setdefault("artifacts", {})
+        if isinstance(artifacts, dict):
+            artifacts["research_answerability_admission"] = str(
+                sidecar_path.relative_to(campaign_root)
+            )
+        summary_path.write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"could not persist research answerability admission: {exc}") from exc
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Execute camera-ready benchmark campaign from CLI arguments."""
     raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
@@ -282,6 +349,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         mode=args.mode,
         expected_campaign_config=args.config,
         expected_config_sha256=config_sha256_after,
+        expected_campaign_id=args.campaign_id,
+        expected_execution_inventory=(
+            _execution_inventory(cfg)
+            if args.require_answerable and hasattr(cfg, "scenario_matrix_path")
+            else None
+        ),
         config_input_drift=(
             config_sha256_before is not None
             and config_sha256_after is not None
@@ -372,6 +445,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = {}
     if research_admission is not None:
         result["research_answerability_admission"] = research_admission
+        if research_admission.get("status") == "research_answerability_admitted":
+            try:
+                _persist_answerability_admission(result)
+            except RuntimeError as exc:
+                logger.error("{}", exc)
+                result["status"] = "research_answerability_receipt_failed"
+                result["status_reason"] = str(exc)
+                result["benchmark_success"] = False
+                result["exit_code"] = 2
     print(json.dumps(result, indent=2))
     if args.mode == "preflight" and result.get("status") not in {
         "orca_preflight_failed",

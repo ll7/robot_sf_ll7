@@ -161,14 +161,22 @@ the ordinary path.
 ## Protected review-worktree guard
 
 Use `create_worktree.sh --mode review` for review-only or synthetic-integration work. It installs
-the worktree-local push guard, URL barriers, and deny-by-default transport policies;
+the worktree-local push guard, inert push destinations, and push-only URL rewrites;
 `review_worktree_guard.py integrate` then performs an aborting no-commit merge, restores
-`ORIG_HEAD`, and compares all remote refs before returning success. Review mode blocks direct
-remote reads as well, so refresh refs before entering it or use the helper. If the selected base
-predates the guard files, the creator temporarily uses the invoking checkout's tracked hook and
-guard; keep that checkout available for the review worktree's lifetime. The barriers cover ordinary
-Git invocation paths, but are not an operating-system sandbox: a deliberate per-command Git
-configuration override can bypass them.
+`ORIG_HEAD`, and compares all remote refs before returning success. Review mode separates push
+rejection from read operations, keeping direct `git fetch` and `git ls-remote` commands operational.
+If the selected base predates the guard files, the creator temporarily uses the invoking checkout's
+tracked hook and guard; keep that checkout available for the review worktree's lifetime. The barriers
+cover ordinary Git invocation paths, but are not an operating-system sandbox: a deliberate per-command
+Git configuration override can bypass them. In particular, a remote added after activation with an
+explicit `remote.<name>.pushurl` remains protected by the ordinary hook path, while a deliberate
+`--no-verify` bypass is owned by stronger process isolation in #8343.
+
+Review setup never edits the shared config to mask `url.*.pushInsteadOf` entries. If an effective
+repository, global, system, or pre-existing worktree alias could outrank the worktree push barrier,
+setup fails closed before enabling review mode; remove or relocate the alias and retry. A
+guard-specific lock would not serialize arbitrary Git processes in other linked worktrees. Read-side
+`url.*.insteadOf` rewrites remain enabled for safe configurations.
 Implementation worktrees keep the default pushable behavior. See
 [`worktree_lifecycle.md`](../../docs/dev/worktree_lifecycle.md) for the complete invocation and
 restoration procedure.

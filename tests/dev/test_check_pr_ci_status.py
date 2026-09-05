@@ -329,6 +329,62 @@ def test_main_accepts_pr_flag_alias(capsys: pytest.CaptureFixture) -> None:
     assert "PR #42" in capsys.readouterr().out
 
 
+def test_main_passes_explicit_repo_to_normal_monitor(capsys: pytest.CaptureFixture) -> None:
+    """An explicit repository must route the normal PR read away from the local remote."""
+    mock_data = json.dumps(
+        {
+            "number": 42,
+            "title": "explicit repository",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "explicit-repository",
+            "headRefOid": "abc123",
+            "statusCheckRollup": [],
+            "reviews": [],
+        }
+    )
+
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
+        rc = main(["42", "--repo", "ll7/robot_sf_ll7"])
+
+    assert rc == 0
+    gh_args = mock_run.call_args.args[0]
+    assert gh_args[-2:] == ["--repo", "ll7/robot_sf_ll7"]
+    assert "PR #42" in capsys.readouterr().out
+
+
+def test_main_passes_explicit_repo_when_resolving_pr_from_branch(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Branch-based PR resolution and the subsequent CI read share the explicit repository."""
+    pr_data = json.dumps(
+        {
+            "number": 42,
+            "title": "resolved repository",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "resolved-repository",
+            "headRefOid": "abc123",
+            "statusCheckRollup": [],
+            "reviews": [],
+        }
+    )
+
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="42\n", stderr=""),
+            MagicMock(returncode=0, stdout=pr_data, stderr=""),
+        ]
+        rc = main(["--repo", "ll7/robot_sf_ll7"])
+
+    assert rc == 0
+    assert mock_run.call_count == 2
+    for call in mock_run.call_args_list:
+        assert call.args[0][-2:] == ["--repo", "ll7/robot_sf_ll7"]
+    assert "PR #42" in capsys.readouterr().out
+
+
 def test_main_rejects_conflicting_positional_and_pr_flag(
     capsys: pytest.CaptureFixture,
 ) -> None:
@@ -1493,6 +1549,75 @@ def test_git_remote_owner_name_parses_ssh_and_https(monkeypatch: pytest.MonkeyPa
         lambda *a, **k: MagicMock(returncode=1, stdout="", stderr="no remote"),
     )
     assert _git_remote_owner_name() == ("", "")
+
+
+def test_rest_api_get_prefers_explicit_repository(monkeypatch: pytest.MonkeyPatch) -> None:
+    """REST fallback reads must not derive a different repository from the local remote."""
+    gh = MagicMock(return_value=MagicMock(returncode=0, stdout="{}", stderr=""))
+    monkeypatch.setattr(ci_status, "_gh", gh)
+    monkeypatch.setattr(ci_status, "_git_remote_owner_name", lambda: ("local", "remote"))
+
+    assert ci_status._rest_api_get("pulls/42", repo="target/repository") == {}
+
+    gh.assert_called_once_with(["api", "repos/target/repository/pulls/42"], timeout=45)
+
+
+def test_fetch_ci_status_rest_fallback_honors_explicit_repository(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_workflow_id_cache: None,
+) -> None:
+    """Every normal REST fallback read uses the explicit repository target."""
+    pull = {
+        "number": 42,
+        "title": "explicit fallback repository",
+        "state": "OPEN",
+        "head": {"ref": "fix", "sha": "abc"},
+        "mergeable_state": "clean",
+    }
+    check_runs = {
+        "check_runs": [
+            {
+                "name": "ci",
+                "status": "in_progress",
+                "conclusion": None,
+                "details_url": "https://github.com/target/repository/actions/runs/123/job/456",
+            }
+        ]
+    }
+    rest_calls: list[tuple[str, str | None]] = []
+
+    def _fake_rest(path: str, *, repo: str = "") -> object:
+        rest_calls.append((path, repo or None))
+        if path == "pulls/42":
+            return pull
+        if path == "commits/abc/check-runs":
+            return check_runs
+        if path == "actions/runs/123":
+            return {
+                "id": 123,
+                "workflow_id": 987654,
+                "status": "completed",
+                "conclusion": "success",
+            }
+        if path == "actions/jobs/456":
+            return {"status": "in_progress", "conclusion": None}
+        if path == "pulls/42/reviews":
+            return []
+        return None
+
+    monkeypatch.setattr(
+        ci_status,
+        "_gh",
+        MagicMock(return_value=MagicMock(returncode=1, stderr=QUOTA_STDERR, stdout="")),
+    )
+    monkeypatch.setattr(ci_status, "_rest_api_get", _fake_rest)
+
+    data = ci_status._fetch_ci_status("42", repo="target/repository")
+
+    assert data["status"] == "ok"
+    assert data["data_source"] == "rest_fallback_graphql_quota"
+    assert rest_calls
+    assert all(repo == "target/repository" for _, repo in rest_calls)
 
 
 @pytest.mark.parametrize("returncode", [0, 1])

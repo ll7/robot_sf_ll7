@@ -158,11 +158,14 @@ def _gh(args: list[str], timeout: float = 30) -> subprocess.CompletedProcess:
     )
 
 
-def _resolve_pr_number(pr_number: str | None) -> str:
+def _resolve_pr_number(pr_number: str | None, *, repo: str = "") -> str:
     """Resolve PR number from argument or current branch."""
     if pr_number:
         return pr_number
-    result = _gh(["pr", "view", "--json", "number", "--jq", ".number"])
+    args = ["pr", "view", "--json", "number", "--jq", ".number"]
+    if repo:
+        args.extend(["--repo", repo])
+    result = _gh(args)
     if result.returncode != 0:
         print(
             "Could not determine PR number from current branch. "
@@ -501,9 +504,15 @@ def _git_remote_owner_name() -> tuple[str, str]:
     return (owner, name) if owner and name else ("", "")
 
 
-def _rest_api_get(path: str, *, timeout: int = 45) -> Any:
+def _rest_api_get(path: str, *, repo: str = "", timeout: int = 45) -> Any:
     """Fetch ``repos/{owner}/{name}/{path}`` via REST and parse JSON, or ``None`` on failure."""
-    owner, name = _git_remote_owner_name()
+    if repo:
+        repo_parts = repo.strip("/").split("/")
+        if len(repo_parts) != 2 or not all(repo_parts):
+            return None
+        owner, name = repo_parts
+    else:
+        owner, name = _git_remote_owner_name()
     if not owner or not name:
         return None
     result = _gh(["api", f"repos/{owner}/{name}/{path}"], timeout=timeout)
@@ -513,6 +522,13 @@ def _rest_api_get(path: str, *, timeout: int = 45) -> Any:
         return json.loads(result.stdout)
     except json.JSONDecodeError:
         return None
+
+
+def _rest_api_get_for_repo(path: str, repo: str) -> Any:
+    """Use an explicit repository when supplied, preserving default test seams otherwise."""
+    if repo:
+        return _rest_api_get(path, repo=repo)
+    return _rest_api_get(path)
 
 
 def _rest_api_get_detailed(path: str, *, timeout: int = 45) -> tuple[Any, str]:
@@ -588,7 +604,7 @@ def _rate_limit_resume_hint(info: dict[str, Any], now: int) -> tuple[int | None,
     return min_delay, resume_epoch
 
 
-def _enrich_rest_check_runs(check_runs: list[Any]) -> list[dict[str, Any]]:
+def _enrich_rest_check_runs(check_runs: list[Any], *, repo: str = "") -> list[dict[str, Any]]:
     """Bind GitHub Actions check runs to their authoritative workflow IDs.
 
     REST check-run payloads omit the GraphQL ``workflowName`` field used to collapse reruns on the
@@ -611,7 +627,7 @@ def _enrich_rest_check_runs(check_runs: list[Any]) -> list[dict[str, Any]]:
         run_id = match.group("run_id")
         workflow_id = _WORKFLOW_ID_BY_RUN_ID.get(run_id)
         if workflow_id is None:
-            run = _rest_api_get(f"actions/runs/{run_id}")
+            run = _rest_api_get_for_repo(f"actions/runs/{run_id}", repo)
             raw_workflow_id = run.get("workflow_id") if isinstance(run, dict) else None
             workflow_id = str(raw_workflow_id) if raw_workflow_id is not None else None
             if workflow_id is not None:
@@ -659,6 +675,8 @@ def _rest_check_runs_to_rollup(check_runs: list[dict[str, Any]]) -> list[dict[st
 
 def _actions_lifecycle_payloads(
     rollup: list[dict[str, Any]],
+    *,
+    repo: str = "",
 ) -> dict[str, tuple[dict[str, Any] | None, dict[str, Any] | None]]:
     """Fetch bounded run/job metadata for pending Actions checks only.
 
@@ -676,8 +694,8 @@ def _actions_lifecycle_payloads(
         run_job_ids = _actions_run_job_ids(details_url)
         assert run_job_ids is not None
         run_id, job_id = run_job_ids
-        run = _rest_api_get(f"actions/runs/{run_id}")
-        job = _rest_api_get(f"actions/jobs/{job_id}")
+        run = _rest_api_get_for_repo(f"actions/runs/{run_id}", repo)
+        job = _rest_api_get_for_repo(f"actions/jobs/{job_id}", repo)
         payloads[details_url] = (
             run if isinstance(run, dict) else None,
             job if isinstance(job, dict) else None,
@@ -742,7 +760,11 @@ def _stale_job_status(job: dict[str, Any]) -> str | None:
     return None
 
 
-def _status_propagation_lag_evidence(details_url: str) -> dict[str, Any] | None:
+def _status_propagation_lag_evidence(
+    details_url: str,
+    *,
+    repo: str = "",
+) -> dict[str, Any] | None:
     """Return evidence for a completed-success workflow whose job record is still pending.
 
     GitHub can leave a check-run/job lifecycle status in ``in_progress`` after the parent
@@ -755,8 +777,8 @@ def _status_propagation_lag_evidence(details_url: str) -> dict[str, Any] | None:
         return None
 
     run_id, job_id = run_job_ids
-    run = _rest_api_get(f"actions/runs/{run_id}")
-    job = _rest_api_get(f"actions/jobs/{job_id}")
+    run = _rest_api_get_for_repo(f"actions/runs/{run_id}", repo)
+    job = _rest_api_get_for_repo(f"actions/jobs/{job_id}", repo)
     return _status_propagation_lag_evidence_from_payload(details_url, run, job)
 
 
@@ -764,6 +786,7 @@ def _status_propagation_lag_details(
     rollup: list[dict[str, Any]],
     *,
     actions_payloads: dict[str, tuple[dict[str, Any] | None, dict[str, Any] | None]] | None = None,
+    repo: str = "",
 ) -> list[dict[str, Any]]:
     """Inspect pending GitHub Actions checks for completed-success propagation lag."""
     details: list[dict[str, Any]] = []
@@ -773,7 +796,10 @@ def _status_propagation_lag_details(
         details_url = _check_details_url(check)
         payload = (actions_payloads or {}).get(details_url)
         if payload is None:
-            evidence = _status_propagation_lag_evidence(details_url)
+            if repo:
+                evidence = _status_propagation_lag_evidence(details_url, repo=repo)
+            else:
+                evidence = _status_propagation_lag_evidence(details_url)
         else:
             evidence = _status_propagation_lag_evidence_from_payload(
                 details_url,
@@ -790,9 +816,14 @@ def _annotate_status_propagation_lag(
     rollup: list[dict[str, Any]],
     *,
     actions_payloads: dict[str, tuple[dict[str, Any] | None, dict[str, Any] | None]] | None = None,
+    repo: str = "",
 ) -> dict[str, Any]:
     """Attach a distinct, fail-closed status for stale successful workflow job records."""
-    lag_details = _status_propagation_lag_details(rollup, actions_payloads=actions_payloads)
+    lag_details = _status_propagation_lag_details(
+        rollup,
+        actions_payloads=actions_payloads,
+        repo=repo,
+    )
     if not lag_details:
         return checks
     pending_count = sum(_rollup_status(check) in PENDING_STATUSES for check in rollup)
@@ -957,12 +988,15 @@ def _annotate_actions_lifecycle(  # noqa: C901 - explicit fail-closed diagnostic
     expected_head_sha: str,
     actions_stale_after_seconds: int = DEFAULT_ACTIONS_STALE_AFTER_SECONDS,
     actions_payloads: dict[str, tuple[dict[str, Any] | None, dict[str, Any] | None]] | None = None,
+    repo: str = "",
 ) -> dict[str, Any]:
     """Attach queue/setup age and manual recovery evidence to a CI summary."""
     if actions_stale_after_seconds < 0:
         raise ValueError("actions_stale_after_seconds must be non-negative")
     payloads = (
-        actions_payloads if actions_payloads is not None else _actions_lifecycle_payloads(rollup)
+        actions_payloads
+        if actions_payloads is not None
+        else _actions_lifecycle_payloads(rollup, repo=repo)
     )
     now_epoch_seconds = time.time()
     items: list[dict[str, Any]] = []
@@ -1048,6 +1082,7 @@ def _summarize_check_runs(
     now: datetime | None = None,
     actions_payloads: dict[str, tuple[dict[str, Any] | None, dict[str, Any] | None]] | None = None,
     starvation_seconds: float = DEFAULT_QUEUE_STARVATION_SECONDS,
+    repo: str = "",
 ) -> tuple[dict[str, Any], int]:
     """Build the ``checks`` summary (and superseded count) from raw REST check-run dicts."""
     rollup = _rest_check_runs_to_rollup(check_runs)
@@ -1093,13 +1128,19 @@ def _summarize_check_runs(
         now=now,
         starvation_seconds=starvation_seconds,
     )
-    _annotate_status_propagation_lag(checks, effective, actions_payloads=actions_payloads)
+    _annotate_status_propagation_lag(
+        checks,
+        effective,
+        actions_payloads=actions_payloads,
+        repo=repo,
+    )
     return checks, superseded_count
 
 
 def _fetch_ci_status_rest(
     pr_number: str,
     *,
+    repo: str = "",
     fallback_kind: str = "quota",
     fallback_diagnostic: str = "",
     actions_stale_after_seconds: int = DEFAULT_ACTIONS_STALE_AFTER_SECONDS,
@@ -1119,7 +1160,7 @@ def _fetch_ci_status_rest(
         error_kind = "graphql_quota_exhausted"
         source = "rest_fallback_graphql_quota"
         failure = "GraphQL quota exhausted and REST pull fallback failed"
-    pull = _rest_api_get(f"pulls/{pr_number}")
+    pull = _rest_api_get_for_repo(f"pulls/{pr_number}", repo)
     if not isinstance(pull, dict):
         return {
             "status": "error",
@@ -1128,17 +1169,18 @@ def _fetch_ci_status_rest(
         }
     head = pull.get("head") or {}
     head_sha = str(head.get("sha", "") or "")
-    checks_payload = _rest_api_get(f"commits/{head_sha}/check-runs")
+    checks_payload = _rest_api_get_for_repo(f"commits/{head_sha}/check-runs", repo)
     check_runs = checks_payload.get("check_runs", []) if isinstance(checks_payload, dict) else []
     raw_check_runs = check_runs if isinstance(check_runs, list) else []
-    enriched_check_runs = _enrich_rest_check_runs(raw_check_runs)
+    enriched_check_runs = _enrich_rest_check_runs(raw_check_runs, repo=repo)
     rest_rollup = _rest_check_runs_to_rollup(enriched_check_runs)
     effective_rest_rollup, _, _ = _latest_check_runs_with_evidence(rest_rollup)
-    actions_payloads = _actions_lifecycle_payloads(effective_rest_rollup)
+    actions_payloads = _actions_lifecycle_payloads(effective_rest_rollup, repo=repo)
     checks, _ = _summarize_check_runs(
         enriched_check_runs,
         actions_payloads=actions_payloads,
         starvation_seconds=starvation_seconds,
+        repo=repo,
     )
     _annotate_actions_lifecycle(
         checks,
@@ -1147,8 +1189,9 @@ def _fetch_ci_status_rest(
         expected_head_sha=head_sha,
         actions_stale_after_seconds=actions_stale_after_seconds,
         actions_payloads=actions_payloads,
+        repo=repo,
     )
-    reviews_raw = _rest_api_get(f"pulls/{pr_number}/reviews")
+    reviews_raw = _rest_api_get_for_repo(f"pulls/{pr_number}/reviews", repo)
     review_states: dict[str, int] = {}
     for review in reviews_raw if isinstance(reviews_raw, list) else []:
         if isinstance(review, dict):
@@ -1175,6 +1218,7 @@ def _gh_view_error_payload(
     stderr: str,
     returncode: int,
     *,
+    repo: str = "",
     retry: GraphQLRetryOutcome | None = None,
     allow_rest_fallback: bool = True,
     actions_stale_after_seconds: int = DEFAULT_ACTIONS_STALE_AFTER_SECONDS,
@@ -1199,6 +1243,7 @@ def _gh_view_error_payload(
     if quota_exhausted:
         return _fetch_ci_status_rest(
             pr_number,
+            repo=repo,
             fallback_diagnostic=stderr,
             actions_stale_after_seconds=actions_stale_after_seconds,
             starvation_seconds=starvation_seconds,
@@ -1206,6 +1251,7 @@ def _gh_view_error_payload(
     if retry is not None and retry.exhausted:
         return _fetch_ci_status_rest(
             pr_number,
+            repo=repo,
             fallback_kind="transient_exhausted",
             fallback_diagnostic=retry.terminal_diagnostic,
             actions_stale_after_seconds=actions_stale_after_seconds,
@@ -1225,6 +1271,7 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
     pr_number: str,
     backoff: float = 0.0,
     *,
+    repo: str = "",
     max_attempts: int | None = None,
     allow_rest_fallback: bool = True,
     actions_stale_after_seconds: int = DEFAULT_ACTIONS_STALE_AFTER_SECONDS,
@@ -1244,15 +1291,19 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
 
     retry_sleep = _sleep_with_wall_budget if _ACTIVE_WALL_DEADLINE is not None else None
 
+    gh_args = [
+        "pr",
+        "view",
+        pr_number,
+        "--json",
+        "number,title,state,mergeable,headRefName,headRefOid,statusCheckRollup,reviews",
+    ]
+    if repo:
+        gh_args.extend(["--repo", repo])
+
     retry = run_with_retry(
         _gh,
-        [
-            "pr",
-            "view",
-            pr_number,
-            "--json",
-            "number,title,state,mergeable,headRefName,headRefOid,statusCheckRollup,reviews",
-        ],
+        gh_args,
         **_ci_retry_kwargs(max_attempts),
         **({"sleep": retry_sleep} if retry_sleep is not None else {}),
     )
@@ -1262,6 +1313,7 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
             pr_number,
             retry.terminal_diagnostic,
             result.returncode,
+            repo=repo,
             retry=retry,
             allow_rest_fallback=allow_rest_fallback,
             actions_stale_after_seconds=actions_stale_after_seconds,
@@ -1273,6 +1325,7 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
             pr_number,
             stderr,
             result.returncode,
+            repo=repo,
             retry=retry,
             allow_rest_fallback=allow_rest_fallback,
             actions_stale_after_seconds=actions_stale_after_seconds,
@@ -1344,8 +1397,13 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
         rollup,
         starvation_seconds=starvation_seconds,
     )
-    actions_payloads = _actions_lifecycle_payloads(rollup)
-    _annotate_status_propagation_lag(checks, rollup, actions_payloads=actions_payloads)
+    actions_payloads = _actions_lifecycle_payloads(rollup, repo=repo)
+    _annotate_status_propagation_lag(
+        checks,
+        rollup,
+        actions_payloads=actions_payloads,
+        repo=repo,
+    )
     _annotate_actions_lifecycle(
         checks,
         rollup,
@@ -1353,6 +1411,7 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
         expected_head_sha=str(data.get("headRefOid", "") or ""),
         actions_stale_after_seconds=actions_stale_after_seconds,
         actions_payloads=actions_payloads,
+        repo=repo,
     )
 
     return {
@@ -1869,7 +1928,7 @@ def _fetch_stability_snapshot(
     # its bounded transient retry and REST fallback behavior, but using either
     # here would mix evidence from different time windows and violate the
     # route-evidence contract.
-    ci = _fetch_ci_status(pr, max_attempts=1, allow_rest_fallback=False)
+    ci = _fetch_ci_status(pr, repo=repo, max_attempts=1, allow_rest_fallback=False)
     if ci.get("status") == "error":
         error_text = str(ci.get("error", "") or "")
         quota_kinds = {"graphql_quota_exhausted"}
@@ -2109,6 +2168,7 @@ def _non_negative_int(value: str) -> int:
 class _CIPollOptions:
     """Bounded CI fetch options shared by each poll attempt."""
 
+    repo: str = ""
     actions_stale_after_seconds: int = DEFAULT_ACTIONS_STALE_AFTER_SECONDS
     starvation_seconds: float = DEFAULT_QUEUE_STARVATION_SECONDS
 
@@ -2144,6 +2204,7 @@ def _poll_ci_status(  # noqa: C901 - explicit bounded deadline/error branches.
                 data = _fetch_ci_status(
                     pr,
                     backoff=backoff if attempt == 1 else 0.0,
+                    repo=options.repo,
                     actions_stale_after_seconds=options.actions_stale_after_seconds,
                     starvation_seconds=options.starvation_seconds,
                 )
@@ -2245,6 +2306,7 @@ def _fetch_data(args: argparse.Namespace, pr: str) -> tuple[dict[str, Any], int]
             expected_head_sha=args.expected_head_sha,
             max_wall_seconds=args.max_wall_seconds,
             poll_options=_CIPollOptions(
+                repo=args.repo,
                 actions_stale_after_seconds=args.actions_stale_after_seconds,
                 starvation_seconds=args.queue_starvation_seconds,
             ),
@@ -2367,7 +2429,7 @@ codes: 0 stable, 1 changed/failure/error, 2 inconclusive
     parser.add_argument(
         "--repo",
         default="",
-        help="owner/name REST target (default: derive from the origin git remote)",
+        help="owner/name GitHub target for reads (default: derive from the origin git remote)",
     )
     parser.add_argument(
         "--expected-main-sha",
@@ -2426,7 +2488,7 @@ codes: 0 stable, 1 changed/failure/error, 2 inconclusive
     pr_number = args.pr_number_option or args.pr_number
 
     try:
-        pr = _resolve_pr_number(pr_number)
+        pr = _resolve_pr_number(pr_number, repo=args.repo)
         data, attempts = _fetch_data(args, pr)
     except FileNotFoundError:
         print("gh CLI not found. Install GitHub CLI: https://cli.github.com/", file=sys.stderr)

@@ -3467,6 +3467,101 @@ def test_timeline_max_requests_counts_failed_requests_against_budget() -> None:
     assert meta["pages_read"] == 0
 
 
+def test_timeline_max_requests_caps_full_page_pagination() -> None:
+    """A full page must not allow timeline pagination past the direct request limit."""
+    queried_endpoints: list[str] = []
+
+    def runner(args: list[str], input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+        endpoint = next(part for part in args if "issues/" in part and "/timeline" in part)
+        queried_endpoints.append(endpoint)
+        if "page=1" in endpoint:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                "[" + ",".join('{"event":"other"}' for _ in range(100)) + "]",
+            )
+        return subprocess.CompletedProcess(args, 0, "[]")
+
+    _prs, meta = discover_issue_timeline_merged_prs(
+        "ll7/robot_sf_ll7",
+        [1, 2],
+        max_pages=3,
+        max_requests=1,
+        runner=runner,
+    )
+
+    assert queried_endpoints == ["repos/ll7/robot_sf_ll7/issues/1/timeline?per_page=100&page=1"]
+    assert meta["requests_attempted"] == 1
+    assert meta["pages_read"] == 1
+    assert meta["truncated"] is True
+    assert meta["errors"]
+
+
+def test_timeline_max_requests_is_global_across_issue_pages() -> None:
+    """A short first issue must not reset the request limit for later issues."""
+    queried_endpoints: list[str] = []
+
+    def runner(args: list[str], input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+        endpoint = next(part for part in args if "issues/" in part and "/timeline" in part)
+        queried_endpoints.append(endpoint)
+        if "issues/1/" in endpoint:
+            return subprocess.CompletedProcess(args, 0, "[]")
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            "[" + ",".join('{"event":"other"}' for _ in range(100)) + "]",
+        )
+
+    _prs, meta = discover_issue_timeline_merged_prs(
+        "ll7/robot_sf_ll7",
+        [1, 2],
+        max_pages=3,
+        max_requests=2,
+        runner=runner,
+    )
+
+    assert queried_endpoints == [
+        "repos/ll7/robot_sf_ll7/issues/1/timeline?per_page=100&page=1",
+        "repos/ll7/robot_sf_ll7/issues/2/timeline?per_page=100&page=1",
+    ]
+    assert meta["requests_attempted"] == 2
+    assert meta["pages_read"] == 2
+    assert meta["truncated"] is True
+    assert meta["errors"]
+
+
+def test_timeline_direct_limit_marks_exhausted_shared_budget() -> None:
+    """A full final page must publish shared-budget exhaustion at the direct limit."""
+    request_budget = issue_audit_core._RestRequestBudget.from_available(2)
+
+    def runner(args: list[str], input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+        endpoint = next(part for part in args if "issues/" in part and "/timeline" in part)
+        if "issues/1/" in endpoint:
+            return subprocess.CompletedProcess(args, 0, "[]")
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            "[" + ",".join('{"event":"other"}' for _ in range(100)) + "]",
+        )
+
+    _prs, meta = discover_issue_timeline_merged_prs(
+        "ll7/robot_sf_ll7",
+        [1, 2],
+        max_pages=3,
+        max_requests=request_budget.remaining,
+        runner=runner,
+        request_budget=request_budget,
+    )
+
+    assert meta["requests_attempted"] == 2
+    assert meta["pages_read"] == 2
+    assert meta["truncated"] is True
+    assert meta["request_limit_exhausted"] is True
+    assert meta["budget_exhausted"] is True
+    assert request_budget.remaining == 0
+    assert request_budget.budget_exhausted is True
+
+
 def test_timeline_success_path_counts_attempts_consistently() -> None:
     """Successful timeline requests also count against the budget consistently."""
     queried_issues: list[int] = []

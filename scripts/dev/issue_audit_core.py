@@ -795,6 +795,7 @@ def paginate_rest(
     *,
     max_pages: int = DEFAULT_MAX_PAGES,
     per_page: int = PER_PAGE,
+    max_requests: int | None = None,
     runner: Runner | None = None,
     request_budget: _RestRequestBudget | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -809,9 +810,18 @@ def paginate_rest(
     truncated = False
     rate_limited = False
     budget_exhausted = False
+    request_limit_exhausted = False
     for page in range(1, max_pages + 1):
         separator = "&" if "?" in path else "?"
         endpoint = f"{path}{separator}per_page={per_page}&page={page}"
+        if max_requests is not None and requests_attempted >= max_requests:
+            request_limit_exhausted = True
+            truncated = True
+            if request_budget is not None and request_budget.remaining <= 0:
+                request_budget.mark_budget_exhausted()
+                budget_exhausted = True
+            errors.append(f"{endpoint} skipped: direct request limit exhausted")
+            break
         if request_budget is not None and not request_budget.reserve():
             budget_exhausted = True
             truncated = True
@@ -853,6 +863,8 @@ def paginate_rest(
         meta["quota_exhausted"] = True
     if budget_exhausted:
         meta["budget_exhausted"] = True
+    if request_limit_exhausted:
+        meta["request_limit_exhausted"] = True
     return rows, meta
 
 
@@ -1006,6 +1018,7 @@ def discover_issue_timeline_merged_prs(
     event_count = 0
     truncated = False
     rate_limited = False
+    request_limit_exhausted = False
 
     for issue_number in numbers:
         if max_requests is not None and requests_attempted >= max_requests:
@@ -1016,6 +1029,7 @@ def discover_issue_timeline_merged_prs(
         events, meta = paginate_rest(
             f"repos/{repo}/issues/{issue_number}/timeline",
             max_pages=max_pages,
+            max_requests=(None if max_requests is None else max_requests - requests_attempted),
             runner=run,
             request_budget=request_budget,
         )
@@ -1023,6 +1037,9 @@ def discover_issue_timeline_merged_prs(
         requests_attempted += int(meta.get("requests_attempted", 0))
         event_count += len(events)
         truncated = bool(truncated or meta.get("truncated"))
+        request_limit_exhausted = bool(
+            request_limit_exhausted or meta.get("request_limit_exhausted")
+        )
         errors.extend(f"issue {issue_number}: {error}" for error in meta.get("errors", []))
         if meta.get("rate_limited") or any(
             _is_rate_limit_error(error) for error in meta.get("errors", [])
@@ -1083,6 +1100,8 @@ def discover_issue_timeline_merged_prs(
         metadata["quota_exhausted"] = True
     if request_budget is not None and request_budget.budget_exhausted:
         metadata["budget_exhausted"] = True
+    if request_limit_exhausted:
+        metadata["request_limit_exhausted"] = True
     return sorted(by_number.values(), key=lambda item: item["number"]), metadata
 
 

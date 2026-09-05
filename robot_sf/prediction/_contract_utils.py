@@ -37,8 +37,14 @@ FORBIDDEN_EVIDENCE_SOURCE_TOKENS = frozenset(
 def is_forbidden_evidence_source(value: str) -> bool:
     """Return whether one source label is reserved for privileged evidence."""
     normalized = value.strip().lower()
-    return normalized in FORBIDDEN_EVIDENCE_SOURCE_NAMES or any(
-        token in normalized for token in FORBIDDEN_EVIDENCE_SOURCE_TOKENS
+    separator_normalized = normalized.replace("-", "_").replace(" ", "_")
+    return (
+        normalized in FORBIDDEN_EVIDENCE_SOURCE_NAMES
+        or separator_normalized in FORBIDDEN_EVIDENCE_SOURCE_NAMES
+        or any(
+            token in normalized or token in separator_normalized
+            for token in FORBIDDEN_EVIDENCE_SOURCE_TOKENS
+        )
     )
 
 

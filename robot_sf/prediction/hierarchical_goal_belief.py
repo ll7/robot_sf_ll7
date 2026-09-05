@@ -87,8 +87,10 @@ def _is_forbidden_actor_provenance(value: str) -> bool:
         ``True`` when the value identifies forbidden oracle, simulator, route, or truth evidence.
     """
     normalized = _normalize_label(value)
+    separator_normalized = normalized.replace("-", "_").replace(" ", "_")
     return is_forbidden_evidence_source(normalized) or any(
-        marker in normalized for marker in _PRIVILEGED_PROVENANCE_MARKERS
+        marker in normalized or marker in separator_normalized
+        for marker in _PRIVILEGED_PROVENANCE_MARKERS
     )
 
 

@@ -48,19 +48,30 @@ def test_shipped_contract_freezes_held_out_realism_validation_plan() -> None:
 
 
 def test_preregistration_note_freezes_author_packet_and_external_boundary() -> None:
-    """The canonical note names the revival packet without making a real-data claim."""
+    """The canonical note freezes the exact revival packet without a real-data claim."""
 
-    note = CONTEXT_NOTE_PATH.read_text(encoding="utf-8")
+    note = " ".join(CONTEXT_NOTE_PATH.read_text(encoding="utf-8").split())
 
     for required_text in (
         "BLOCKED_EXTERNAL",
+        "revival condition is exactly `#6530 staged`",
         "#6530",
-        "SDD scene IDs",
-        "checksums",
-        "Metres-per-pixel",
+        "Source/access provenance",
+        "non-canonical-mirror designation",
+        "rights basis",
+        "license acknowledgement",
+        "file hashes",
+        "scene identifiers",
+        "coordinate units",
+        "time units",
+        "required columns",
+        "privacy/publication",
+        "exact staging destination",
+        "provenance-manifest path",
+        "metres-per-pixel",
         "source frame rate",
         "y-axis direction",
-        "license acknowledgement",
+        "fail-closed validation receipt",
         "no real-data or paper-facing claim",
     ):
         assert required_text in note

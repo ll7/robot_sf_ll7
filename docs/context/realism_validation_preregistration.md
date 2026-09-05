@@ -8,9 +8,10 @@ Date: 2026-09-01
 Related issue: <https://github.com/ll7/robot_sf_ll7/issues/8246>
 
 Status: implementation and synthetic-fixture proof complete; terminal state is
-`BLOCKED_EXTERNAL` (serialized as `blocked-external-input`) until external-data gate #6530 is
-staged. This note does not report a Stanford Drone Dataset (SDD) result or a paper-facing realism
-claim.
+`BLOCKED_EXTERNAL` (serialized as `blocked-external-input`). The revival condition is exactly
+`#6530 staged`: the maintainer-provided SDD author packet below must be recorded and pass the
+staging preflight before any real-data execution is considered. This note does not report a
+Stanford Drone Dataset (SDD) result or a paper-facing realism claim.
 
 ## Purpose
 
@@ -57,21 +58,31 @@ The shipped YAML declares:
 ORCA is deliberately excluded from this hierarchy. The contract is metadata-only until the
 external data gate is satisfied.
 
-## Required SDD author packet before revival
+## Exact maintainer-provided SDD author packet before revival
 
-When #6530 makes SDD staging available, the author should attach one immutable packet containing:
+The revival condition is exactly `#6530 staged`. When it is met, the author must attach one
+immutable packet with every field below; placeholders, inferred values, or a substitute dataset do
+not satisfy the condition:
 
-1. SDD scene IDs and the calibration/held-out split.
-2. Raw annotation checksums and the staged-manifest checksum.
-3. Metres-per-pixel conversion and source frame rate.
-4. Coordinate convention, including the y-axis direction.
-5. Accepted annotation labels and the policy for lost, occluded, or interpolated tracks.
-6. Dataset license acknowledgement, citation, and provenance receipt.
-7. Calibration and held-out scene IDs repeated in the executable contract.
-8. Baseline artifact/config hashes for every evaluated model arm.
-9. Metric and analysis-version identifiers plus the output receipt.
-10. A statement that no real-data or paper-facing claim is made until all event floors, provenance,
-    and held-out promotion predicates pass.
+1. Source/access provenance: accepted archive identity, source path or URI, access provenance, and
+   the non-canonical-mirror designation.
+2. Rights and license: rights basis, license acknowledgement, citation, and the privacy/publication
+   boundary.
+3. Checksums: per-file hashes, the aggregate raw-annotation checksum, and the staged-manifest
+   checksum.
+4. Scene identity: scene identifiers and the calibration/held-out split identity, repeated in the
+   executable contract.
+5. Coordinate and time units: metres-per-pixel conversion, source frame rate, coordinate units,
+   time units, and y-axis direction.
+6. Annotation schema: required columns, accepted annotation labels, and the policy for lost,
+   occluded, or interpolated tracks.
+7. Staging receipt: exact staging destination, provenance-manifest path, and the successful
+   fail-closed validation receipt.
+
+The revived run must additionally bind each evaluated arm to its baseline artifact/config hash,
+metric and analysis-version identifiers, and output receipt. It must state that no real-data or
+paper-facing claim is made until all event floors, provenance, and held-out promotion predicates
+pass.
 
 The revived execution must preserve the calibration/held-out separation, record unavailable classes
 without silently pooling them, and distinguish native, adapter, fallback, or degraded model modes.
@@ -84,10 +95,10 @@ that the contract validates, the segmenter labels known fixtures, the scorecard 
 counts, and sparse event floors remain visible. It does not demonstrate SDD coverage, calibration,
 realism, planner performance, or a model ranking.
 
-The next smallest proof step is to revive the contract only after #6530 supplies the author packet,
-stage the licensed data through the external-data workflow, and run the held-out validation with
-the declared provenance and output receipt. Until then, keep this issue open and labeled
-`state:blocked-external-input`.
+The next smallest proof step is to revive the contract only after the exact condition `#6530
+staged` is recorded with the author packet above, stage the licensed data through the external-data
+workflow, and run the held-out validation with the declared provenance and output receipt. Until
+then, the terminal state remains `BLOCKED_EXTERNAL` / `state:blocked-external-input`.
 
 ## Reproducibility commands
 

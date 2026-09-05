@@ -332,6 +332,25 @@ def test_verify_rejects_non_finite_extra_remote_metadata(tmp_path: Path, value: 
     assert "verification_receipt" not in state
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_verify_rejects_non_finite_prereserve_metadata_with_direct_doi(
+    tmp_path: Path, value: float
+) -> None:
+    """A direct DOI must not bypass validation of malformed reservation metadata."""
+    session, state, remote = _metadata_verification_fixture(tmp_path)
+    remote["doi"] = "10.5281/zenodo.123"
+    remote["metadata"]["prereserve_doi"] = {
+        "doi": "10.5281/zenodo.123",
+        "unexpected": value,
+    }
+
+    report = verify(session, state, _metadata())
+
+    assert report["status"] == "fail"
+    assert "Zenodo remote metadata is malformed" in report["problems"]
+    assert "verification_receipt" not in state
+
+
 def test_verify_accepts_draft_without_advertised_size_when_download_matches(
     tmp_path: Path,
 ) -> None:

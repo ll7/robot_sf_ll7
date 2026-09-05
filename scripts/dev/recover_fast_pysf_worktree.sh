@@ -158,13 +158,13 @@ PY
   done
 
   local external_symlink symlink_check_status
-  if external_symlink="$(python3 - "$local_venv" "$main_repo_root/.venv" <<'PY'
+  if external_symlink="$(python3 - "$local_venv" "$main_repo_root" <<'PY'
 import os
 from pathlib import Path
 import sys
 
 local_venv = Path(sys.argv[1])
-main_venv = Path(sys.argv[2]).resolve(strict=False)
+main_checkout = Path(sys.argv[2]).resolve(strict=False)
 
 
 def is_standard_python_link(path: Path) -> bool:
@@ -174,8 +174,16 @@ def is_standard_python_link(path: Path) -> bool:
     return path.name == "python" or path.name == "python3" or path.name.startswith("python3.")
 
 
+def fail_on_walk_error(error: OSError) -> None:
+    raise error
+
+
 try:
-    for root, directories, files in os.walk(local_venv, followlinks=False):
+    for root, directories, files in os.walk(
+        local_venv,
+        followlinks=False,
+        onerror=fail_on_walk_error,
+    ):
         for name in (*directories, *files):
             candidate = Path(root) / name
             if not candidate.is_symlink():
@@ -187,8 +195,11 @@ try:
                 raise SystemExit(3)
 
             if is_standard_python_link(candidate):
+                if not resolved.is_file():
+                    print(f"{candidate} -> {resolved}")
+                    raise SystemExit(4)
                 try:
-                    resolved.relative_to(main_venv)
+                    resolved.relative_to(main_checkout)
                 except ValueError:
                     continue
                 print(f"{candidate} -> {resolved}")
@@ -213,7 +224,11 @@ PY
         printf '%s\n' "$external_symlink" >&2
         ;;
       2)
-        echo "recover_fast_pysf_worktree: refusing a Python interpreter linked to the owning checkout:" >&2
+        echo "recover_fast_pysf_worktree: refusing a host-interpreter link into the owning checkout:" >&2
+        printf '%s\n' "$external_symlink" >&2
+        ;;
+      4)
+        echo "recover_fast_pysf_worktree: refusing a broken host-interpreter link:" >&2
         printf '%s\n' "$external_symlink" >&2
         ;;
       *)
@@ -237,8 +252,8 @@ PY
       return 1
     fi
     case "$resolved_python" in
-      "$main_repo_root/.venv"/*)
-        echo "recover_fast_pysf_worktree: refusing a Python interpreter linked to the owning checkout: $local_venv/bin/python" >&2
+      "$main_repo_root"|"$main_repo_root"/*)
+        echo "recover_fast_pysf_worktree: refusing a host-interpreter link into the owning checkout: $local_venv/bin/python" >&2
         return 1
         ;;
     esac

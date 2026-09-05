@@ -4,7 +4,8 @@
 #
 # This helper never refreshes the owning checkout.  It only mutates the
 # current linked worktree's ignored .venv, after a repository-scoped lock and
-# capacity check, then verifies the installed package before returning.
+# capacity check, then verifies the installed package before returning. Every
+# non-interpreter symlink below .venv must remain inside that environment.
 
 set -euo pipefail
 
@@ -155,6 +156,73 @@ PY
         ;;
     esac
   done
+
+  local external_symlink symlink_check_status
+  if external_symlink="$(python3 - "$local_venv" "$main_repo_root/.venv" <<'PY'
+import os
+from pathlib import Path
+import sys
+
+local_venv = Path(sys.argv[1])
+main_venv = Path(sys.argv[2]).resolve(strict=False)
+
+
+def is_standard_python_link(path: Path) -> bool:
+    relative = path.relative_to(local_venv)
+    if not relative.parts or relative.parts[0] != "bin":
+        return False
+    return path.name == "python" or path.name == "python3" or path.name.startswith("python3.")
+
+
+try:
+    for root, directories, files in os.walk(local_venv, followlinks=False):
+        for name in (*directories, *files):
+            candidate = Path(root) / name
+            if not candidate.is_symlink():
+                continue
+            try:
+                resolved = candidate.resolve(strict=False)
+            except (OSError, RuntimeError) as error:
+                print(f"could not resolve environment symlink {candidate}: {error}")
+                raise SystemExit(3)
+
+            if is_standard_python_link(candidate):
+                try:
+                    resolved.relative_to(main_venv)
+                except ValueError:
+                    continue
+                print(f"{candidate} -> {resolved}")
+                raise SystemExit(2)
+
+            try:
+                resolved.relative_to(local_venv)
+            except ValueError:
+                print(f"{candidate} -> {resolved}")
+                raise SystemExit(1)
+except OSError as error:
+    print(f"could not inspect worktree environment symlinks: {error}")
+    raise SystemExit(3)
+PY
+)"; then
+    :
+  else
+    symlink_check_status=$?
+    case "$symlink_check_status" in
+      1)
+        echo "recover_fast_pysf_worktree: refusing an environment symlink outside the worktree:" >&2
+        printf '%s\n' "$external_symlink" >&2
+        ;;
+      2)
+        echo "recover_fast_pysf_worktree: refusing a Python interpreter linked to the owning checkout:" >&2
+        printf '%s\n' "$external_symlink" >&2
+        ;;
+      *)
+        echo "recover_fast_pysf_worktree: could not verify environment symlink ownership:" >&2
+        printf '%s\n' "$external_symlink" >&2
+        ;;
+    esac
+    return 1
+  fi
 
   if [[ -e "$local_venv/bin/python" || -L "$local_venv/bin/python" ]]; then
     local resolved_python

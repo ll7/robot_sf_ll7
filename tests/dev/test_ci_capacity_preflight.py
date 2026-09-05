@@ -370,6 +370,59 @@ def test_shared_venv_recovery_rejects_nested_main_venv_symlink(tmp_path: Path) -
         _remove_linked_recovery_fixture(repo, worktree)
 
 
+def test_shared_venv_recovery_rejects_nested_external_site_packages_symlink(
+    tmp_path: Path,
+) -> None:
+    """Package directories must not redirect recovery writes outside the worktree."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    outside = tmp_path / "outside-site-packages"
+    outside.mkdir()
+    local_site_packages = worktree / ".venv" / "lib" / "python3.13" / "site-packages"
+    local_site_packages.parent.mkdir(parents=True)
+    local_site_packages.symlink_to(outside, target_is_directory=True)
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "environment symlink outside the worktree" in result.stderr
+        assert not capture.exists()
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_allows_external_standard_python_symlink(tmp_path: Path) -> None:
+    """A standard interpreter link may target the host Python, but not main .venv."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    local_python3 = worktree / ".venv" / "bin" / "python3"
+    local_python3.parent.mkdir(parents=True)
+    local_python3.symlink_to(Path("/usr/bin/python3"))
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "sync --all-extras --reinstall-package robot-sf --frozen" in capture.read_text(
+            encoding="utf-8"
+        )
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
 def test_shared_venv_recovery_refuses_symlinked_repository_lock(tmp_path: Path) -> None:
     """The lock guard must not truncate or follow an arbitrary symlink target."""
     repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)

@@ -35,7 +35,9 @@ main checkout and dirty dependency inputs, checks `ROBOT_SF_WORKTREE_MIN_FREE_BY
 default) with `check_worktree_capacity.py`, serializes recovery per repository with a kernel-backed
 lock, and verifies `fast-pysf` before starting the command. It runs the frozen, auditable operation
 `uv sync --all-extras --reinstall-package robot-sf --frozen`; an existing coherent local environment
-skips the sync. Capacity or lock contention fails closed without starting the wrapped command.
+skips the sync. Environment ownership checks reject nested links that would redirect package writes
+outside the worktree, while allowing standard `bin/python*` links to the host interpreter. Capacity
+or lock contention fails closed without starting the wrapped command.
 
 Do not combine recovery with `--venv`, `--standalone`, or a freshness bypass. Repair an explicitly
 owned environment manually with `uv sync --all-extras --reinstall-package robot-sf` in that

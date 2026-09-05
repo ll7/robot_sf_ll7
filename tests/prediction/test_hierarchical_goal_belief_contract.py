@@ -565,6 +565,72 @@ def test_flat_projection_rejects_extended_privileged_candidate_provenance(bindin
         posterior.to_goal_belief_v1("final_destination", candidate_set=candidate_set)
 
 
+@pytest.mark.parametrize("source", ["sim_truth", "truth_label", "route_assignment"])
+def test_flat_projection_rejects_privileged_source_aliases(source: str) -> None:
+    """Near-miss simulator/truth aliases cannot bypass canonical source admission."""
+    candidate_set = GoalCandidateSet(
+        candidates=tuple(
+            replace(candidate, source=source) if candidate.id == "destination-a" else candidate
+            for candidate in POSTERIOR_CANDIDATE_SET.candidates
+        ),
+        source="public_fixture",
+    )
+    posterior = replace(
+        _posterior(),
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
+    )
+
+    with pytest.raises(ValueError, match="forbidden oracle or simulator source"):
+        posterior.to_goal_belief_v1("final_destination", candidate_set=candidate_set)
+
+
+@pytest.mark.parametrize("status", ["infeasible", "unknown", "unavailable"])
+def test_flat_projection_rejects_non_feasible_referenced_candidates(status: str) -> None:
+    """Available metadata cannot reclassify an infeasible candidate as known posterior mass."""
+    candidate_set = GoalCandidateSet(
+        candidates=tuple(
+            replace(candidate, feasibility_status=status)
+            if candidate.id == "destination-a"
+            else candidate
+            for candidate in POSTERIOR_CANDIDATE_SET.candidates
+        ),
+        source="public_fixture",
+    )
+    posterior = replace(
+        _posterior(),
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
+    )
+
+    with pytest.raises(ValueError, match="non-feasible status"):
+        posterior.to_goal_belief_v1("final_destination", candidate_set=candidate_set)
+
+
+def test_flat_projection_allows_unreferenced_provider_unknown_candidate() -> None:
+    """The provider's explicit unknown candidate remains separate from known posterior mass."""
+    unknown = GoalCandidate(
+        id="unknown",
+        position=None,
+        source="unknown",
+        role=GoalCandidateRole.UNKNOWN,
+        feasibility_status="unknown",
+    )
+    candidate_set = GoalCandidateSet(
+        candidates=POSTERIOR_CANDIDATE_SET.candidates + (unknown,),
+        source="goal_candidate_provider",
+    )
+    posterior = replace(
+        _posterior(),
+        candidate_set_digest=stable_digest(candidate_set.to_dict()),
+    )
+
+    belief = posterior.to_goal_belief_v1("final_destination", candidate_set=candidate_set)
+
+    assert {item.candidate_id for item in belief.candidate_probabilities} == {
+        "destination-a",
+        "destination-b",
+    }
+
+
 def test_flat_projection_rejects_unknown_role_used_as_known_mass() -> None:
     """The explicit unknown probability bucket must not be duplicated as candidate mass."""
     candidate_set = GoalCandidateSet(

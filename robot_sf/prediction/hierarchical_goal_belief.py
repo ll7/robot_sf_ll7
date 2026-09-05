@@ -696,7 +696,10 @@ class HierarchicalGoalPosteriorV1:
             change_probability=0.0,
             mode=GoalBeliefMode.CENSORED,
             track_confidence=None,
-            censoring_state=CensoringState.CENSORED,
+            # Slice A does not observe speed-cap or sensing-censoring status.
+            # The flat view is incomplete (hence ``mode=CENSORED``), but it
+            # must not claim that censoring itself was observed.
+            censoring_state=CensoringState.UNKNOWN,
             speed_cap_status=ActorSpeedCapStatus.UNKNOWN,
             blockers=blockers,
             reset_provenance=None,

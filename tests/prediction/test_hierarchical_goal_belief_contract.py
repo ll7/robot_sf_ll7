@@ -11,6 +11,7 @@ import pytest
 from robot_sf.prediction import (
     ACTOR_FORBIDDEN_KEYS,
     HIERARCHICAL_GOAL_POSTERIOR_SCHEMA_VERSION,
+    CensoringState,
     GoalBeliefSource,
     GoalCandidate,
     GoalCandidateAvailability,
@@ -312,6 +313,7 @@ def test_flat_projection_requires_and_preserves_the_selected_level(
     assert "change_probability_unestimated" in belief.blockers
     assert belief.change_probability == 0.0
     assert belief.source is GoalBeliefSource.OBSERVATION_ONLY
+    assert belief.censoring_state is CensoringState.UNKNOWN
     assert ACTOR_FORBIDDEN_KEYS.isdisjoint(belief.to_dict())
 
 

@@ -83,6 +83,39 @@ SOURCE_ARTIFACT_MANIFEST_SCHEMA = "campaign-preservation-manifest.v1"
 PRODUCER_SCRIPT_PATH = "scripts/analysis/build_issue_7980_speed_tier_packet.py"
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+EXPECTED_SEED_VALUES = tuple(range(111, 141))
+EXPECTED_SCENARIO_CONTRACT = (
+    (
+        "classic_head_on_corridor_medium",
+        "configs/scenarios/archetypes/classic_head_on_corridor.yaml",
+        "head_on_corridor",
+    ),
+    (
+        "classic_doorway_medium",
+        "configs/scenarios/archetypes/classic_doorway.yaml",
+        "doorway",
+    ),
+    (
+        "classic_group_crossing_medium",
+        "configs/scenarios/archetypes/classic_group_crossing.yaml",
+        "group_crossing",
+    ),
+    (
+        "classic_merging_medium",
+        "configs/scenarios/archetypes/classic_merging.yaml",
+        "merging",
+    ),
+    (
+        "classic_overtaking_medium",
+        "configs/scenarios/archetypes/classic_overtaking.yaml",
+        "overtaking",
+    ),
+    (
+        "classic_station_platform_medium",
+        "configs/scenarios/archetypes/classic_station_platform.yaml",
+        "station_platform",
+    ),
+)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -593,7 +626,56 @@ def _read_preregistration(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _expected_design(preregistration: Mapping[str, Any]) -> tuple[set[str], int, dict[str, float]]:
+def _validated_preregistration_pairing(
+    preregistration: Mapping[str, Any],
+) -> tuple[tuple[int, ...], tuple[tuple[str, str, str], ...]]:
+    """Require the exact frozen seed values and scenario identities."""
+
+    seed_values = preregistration["seed_policy"].get("seeds")
+    if not isinstance(seed_values, list) or any(
+        isinstance(seed, bool) or not isinstance(seed, int) for seed in seed_values
+    ):
+        raise ValueError("preregistration seed values must be a list of integers")
+    if len(seed_values) != len(set(seed_values)) or seed_values != list(EXPECTED_SEED_VALUES):
+        raise ValueError(
+            "preregistration seed values must exactly match the unique frozen 111..140 set"
+        )
+
+    selected_scenarios = preregistration["scenario_contract"].get("selected_scenarios")
+    if not isinstance(selected_scenarios, list):
+        raise ValueError("preregistration selected_scenarios must be a list")
+    observed_scenarios: list[tuple[str, str, str]] = []
+    for scenario in selected_scenarios:
+        if not isinstance(scenario, Mapping):
+            raise ValueError("preregistration selected_scenarios entries must be objects")
+        fields = tuple(scenario.get(field) for field in ("scenario_id", "source_path", "mechanism"))
+        if not all(isinstance(value, str) and value for value in fields):
+            raise ValueError(
+                "preregistration scenarios need non-empty scenario_id, source_path, and mechanism"
+            )
+        observed_scenarios.append(fields)
+    if len({scenario[0] for scenario in observed_scenarios}) != len(observed_scenarios):
+        raise ValueError("preregistration scenario identities must be unique")
+    if (
+        preregistration["scenario_contract"].get("scenario_count")
+        != len(EXPECTED_SCENARIO_CONTRACT)
+        or tuple(observed_scenarios) != EXPECTED_SCENARIO_CONTRACT
+    ):
+        raise ValueError(
+            "preregistration scenario identities must exactly match the frozen six-scenario contract"
+        )
+    return EXPECTED_SEED_VALUES, EXPECTED_SCENARIO_CONTRACT
+
+
+def _expected_design(
+    preregistration: Mapping[str, Any],
+) -> tuple[
+    set[str],
+    int,
+    dict[str, float],
+    tuple[int, ...],
+    tuple[tuple[str, str, str], ...],
+]:
     """Resolve exact contrast IDs, paired support, and harm margins from preregistration."""
 
     planners = [item.get("planner_id") for item in preregistration["planner_roster"]["arms"]]
@@ -603,8 +685,7 @@ def _expected_design(preregistration: Mapping[str, Any]) -> tuple[set[str], int,
         if item.get("role") != "nominal_reference"
     ]
     metrics = list(preregistration["inference_contract"]["primary_metrics"])
-    seeds = list(preregistration["seed_policy"]["seeds"])
-    scenarios = list(preregistration["scenario_contract"]["selected_scenarios"])
+    seed_values, scenario_contract = _validated_preregistration_pairing(preregistration)
     if not all(isinstance(item, str) and item for item in [*planners, *tiers, *metrics]):
         raise ValueError("preregistration planner, tier, and metric IDs must be non-empty strings")
     expected_ids = {
@@ -613,7 +694,7 @@ def _expected_design(preregistration: Mapping[str, Any]) -> tuple[set[str], int,
         for tier in tiers
         for metric in metrics
     }
-    paired_denominator = len(seeds) * len(scenarios)
+    paired_denominator = len(seed_values) * len(scenario_contract)
     rules = preregistration["inference_contract"]["decision_rule"]
     thresholds = {
         "success_rate": float(rules["success_rate_harm_threshold"]),
@@ -624,7 +705,13 @@ def _expected_design(preregistration: Mapping[str, Any]) -> tuple[set[str], int,
         raise ValueError(
             "issue #7980 requires the frozen 24-contrast, 180-pair preregistration design"
         )
-    return expected_ids, paired_denominator, thresholds
+    return (
+        expected_ids,
+        paired_denominator,
+        thresholds,
+        seed_values,
+        scenario_contract,
+    )
 
 
 def _require_finite(row: Mapping[str, Any], fields: Sequence[str], test_id: str) -> None:
@@ -749,7 +836,13 @@ def _validate_synthesis(
                 f"expected {expected!r}"
             )
 
-    expected_ids, paired_denominator, thresholds = _expected_design(preregistration)
+    (
+        expected_ids,
+        paired_denominator,
+        thresholds,
+        seed_values,
+        scenario_contract,
+    ) = _expected_design(preregistration)
     rows = synthesis.get("decision_table")
     if not isinstance(rows, list):
         raise ValueError("synthesis decision_table must be a list")
@@ -793,6 +886,8 @@ def _validate_synthesis(
         sorted(validated_rows, key=lambda item: str(item["test_id"])),
         paired_denominator,
         thresholds,
+        seed_values,
+        scenario_contract,
     )
 
 
@@ -819,6 +914,9 @@ def _source_binding(
     row: Mapping[str, Any],
     *,
     synthesis_sha256: str,
+    preregistration_sha256: str,
+    seed_values: Sequence[int],
+    scenario_contract: Sequence[tuple[str, str, str]],
     paired_denominator: int,
     harm_threshold: float,
     source_receipt: Mapping[str, Any] | None,
@@ -832,6 +930,16 @@ def _source_binding(
         "preregistration": {
             "path": "configs/benchmarks/issue_5578_robot_speed_tier_preregistration.yaml",
             "schema_version": "robot_sf.issue_5578_robot_speed_tier_preregistration.v1",
+            "sha256": preregistration_sha256,
+            "seed_values": list(seed_values),
+            "scenario_contract": [
+                {
+                    "scenario_id": scenario_id,
+                    "source_path": source_path,
+                    "mechanism": mechanism,
+                }
+                for scenario_id, source_path, mechanism in scenario_contract
+            ],
         },
         "source_artifact": dict(source_receipt["source_artifact"])
         if source_receipt is not None
@@ -861,6 +969,9 @@ def _metric_and_decision(
     row: Mapping[str, Any],
     *,
     synthesis_sha256: str,
+    preregistration_sha256: str,
+    seed_values: Sequence[int],
+    scenario_contract: Sequence[tuple[str, str, str]],
     paired_denominator: int,
     harm_threshold: float,
     source_receipt: Mapping[str, Any] | None,
@@ -874,6 +985,9 @@ def _metric_and_decision(
         _source_binding(
             row,
             synthesis_sha256=synthesis_sha256,
+            preregistration_sha256=preregistration_sha256,
+            seed_values=seed_values,
+            scenario_contract=scenario_contract,
             paired_denominator=paired_denominator,
             harm_threshold=harm_threshold,
             source_receipt=source_receipt,
@@ -978,12 +1092,19 @@ def build_packet(
     if source_receipt_path is not None:
         source_receipt = _load_json(_repo_path(source_receipt_path))
     synthesis_sha256 = _sha256(synthesis_path)
-    rows, paired_denominator, thresholds = _validate_synthesis(
+    (
+        rows,
+        paired_denominator,
+        thresholds,
+        seed_values,
+        scenario_contract,
+    ) = _validate_synthesis(
         synthesis,
         synthesis_sha256=synthesis_sha256,
         recovery_manifest=recovery_manifest,
         preregistration=preregistration,
     )
+    preregistration_sha256 = _sha256(preregistration_path)
     if source_receipt is not None:
         source_receipt = _validate_source_receipt(
             source_receipt,
@@ -1011,6 +1132,9 @@ def build_packet(
         metric, decision = _metric_and_decision(
             row,
             synthesis_sha256=synthesis_sha256,
+            preregistration_sha256=preregistration_sha256,
+            seed_values=seed_values,
+            scenario_contract=scenario_contract,
             paired_denominator=paired_denominator,
             harm_threshold=thresholds[str(row["metric"])],
             source_receipt=source_receipt,

@@ -280,6 +280,16 @@ def test_all_24_packet_rows_match_the_immutable_source_binding() -> None:
         assert binding["preregistration"] == {
             "path": "configs/benchmarks/issue_5578_robot_speed_tier_preregistration.yaml",
             "schema_version": "robot_sf.issue_5578_robot_speed_tier_preregistration.v1",
+            "sha256": hashlib.sha256(PREREGISTRATION_PATH.read_bytes()).hexdigest(),
+            "seed_values": list(builder.EXPECTED_SEED_VALUES),
+            "scenario_contract": [
+                {
+                    "scenario_id": scenario_id,
+                    "source_path": source_path,
+                    "mechanism": mechanism,
+                }
+                for scenario_id, source_path, mechanism in builder.EXPECTED_SCENARIO_CONTRACT
+            ],
         }
         assert binding["paired_denominator"] == metric["denominator"] == 180
         assert metric["support"] == metric["support_threshold"] == 180
@@ -526,6 +536,44 @@ def test_validation_rejects_non_integral_scenario_count() -> None:
     synthesis["decision_table"][0]["n_scenarios"] = 6.5
 
     with pytest.raises(ValueError, match="n_scenarios must equal"):
+        _validate_synthesis(
+            synthesis,
+            synthesis_sha256=synthesis_sha,
+            recovery_manifest=recovery,
+            preregistration=preregistration,
+        )
+
+
+@pytest.mark.parametrize("mutation", ["value", "duplicate"])
+def test_validation_rejects_seed_value_or_uniqueness_mutation(mutation: str) -> None:
+    """Do not derive paired support from lengths when the frozen seeds are changed."""
+
+    synthesis, synthesis_sha, recovery, preregistration = _validation_inputs()
+    seeds = list(builder.EXPECTED_SEED_VALUES)
+    if mutation == "value":
+        seeds[0] = 999
+    else:
+        seeds[-1] = seeds[0]
+    preregistration["seed_policy"]["seeds"] = seeds
+
+    with pytest.raises(ValueError, match="seed values must exactly match"):
+        _validate_synthesis(
+            synthesis,
+            synthesis_sha256=synthesis_sha,
+            recovery_manifest=recovery,
+            preregistration=preregistration,
+        )
+
+
+def test_validation_rejects_scenario_identity_mutation() -> None:
+    """Bind scenario IDs and source paths instead of accepting any six-row list."""
+
+    synthesis, synthesis_sha, recovery, preregistration = _validation_inputs()
+    preregistration["scenario_contract"]["selected_scenarios"][0]["scenario_id"] = (
+        "classic_other_medium"
+    )
+
+    with pytest.raises(ValueError, match="scenario identities must exactly match"):
         _validate_synthesis(
             synthesis,
             synthesis_sha256=synthesis_sha,

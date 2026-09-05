@@ -862,6 +862,10 @@ def _validate_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
     """
     if not isinstance(metadata, Mapping):
         raise ZenodoPublisherError("Zenodo metadata must be a JSON object")
+    try:
+        _canonical_bytes(metadata)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ZenodoPublisherError("Zenodo metadata must contain only finite JSON values") from exc
     if metadata.get("upload_type") != "dataset":
         raise ZenodoPublisherError("Zenodo benchmark publication must use upload_type=dataset")
     if metadata.get("license") != "GPL-3.0-only":

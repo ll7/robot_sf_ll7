@@ -321,6 +321,22 @@ def test_new_version_replaces_metadata_and_seals_predecessor_identity() -> None:
     publisher._verify_integrity(state, key="integrity", schema=publisher.ZENODO_STATE_SCHEMA)
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_new_version_rejects_non_finite_metadata_before_remote_mutation(value: float) -> None:
+    """Non-finite metadata cannot reach the successor reservation endpoint."""
+    session = _new_version_fixture()
+    metadata = _new_version_metadata()
+    metadata["related_identifiers"][0]["extra"] = value
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="finite JSON values"):
+        _new_version_with_metadata(session, metadata)
+
+    assert session.urls == []
+    assert len(session.gets) == 2
+    assert len(session.posts) == 1
+    assert len(session.puts) == 1
+
+
 def test_new_version_accepts_legacy_prereserved_version_doi() -> None:
     """Legacy drafts may expose the new DOI only under metadata.prereserve_doi."""
     session = _new_version_fixture(draft=_successor_draft(doi=None))

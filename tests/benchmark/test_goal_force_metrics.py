@@ -161,15 +161,15 @@ def test_non_real_vector_components_are_not_coerced(component: object) -> None:
 
 
 @pytest.mark.parametrize(
-    "component",
+    ("component", "expected"),
     [
-        pytest.param(1, id="builtin-int"),
-        pytest.param(1.25, id="builtin-float"),
-        pytest.param(np.int64(2), id="numpy-int"),
-        pytest.param(np.float32(2.5), id="numpy-float"),
+        pytest.param(1, 1.0, id="builtin-int"),
+        pytest.param(1.25, 1.25, id="builtin-float"),
+        pytest.param(np.int64(2), 2.0, id="numpy-int"),
+        pytest.param(np.float32(2.5), 2.5, id="numpy-float"),
     ],
 )
-def test_real_scalar_vector_components_are_accepted(component: object) -> None:
+def test_real_scalar_vector_components_are_accepted(component: object, expected: float) -> None:
     """Builtin and NumPy real scalar components remain accepted."""
     row = GoalForceMetricRow((component, 0.0), (0.0, 0.0))  # type: ignore[arg-type]
-    assert row.predicted_force_xy == pytest.approx((float(component), 0.0))
+    assert row.predicted_force_xy == pytest.approx((expected, 0.0))

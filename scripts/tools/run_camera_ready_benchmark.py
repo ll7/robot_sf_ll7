@@ -78,8 +78,9 @@ def _build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help=(
-            "Optional exact campaign directory id. Use with resume-enabled configs to continue "
-            "an interrupted campaign root."
+            "Optional exact campaign directory id. Required with --require-answerable so the "
+            "research admission binds to the campaign that will execute. Use with "
+            "resume-enabled configs to continue an interrupted campaign root."
         ),
     )
     parser.add_argument(
@@ -176,6 +177,18 @@ def _research_answerability_block(  # noqa: C901
         reason = "--require-answerable requires --research-manifest"
         proof: dict[str, Any] = {}
         answerability: dict[str, Any] = {
+            "state": "not_declared",
+            "decision_capable": False,
+            "reasons": [reason],
+            "warnings": [],
+        }
+    elif expected_campaign_id is None:
+        reason = (
+            "--require-answerable requires --campaign-id so the research admission can bind "
+            "to the exact campaign execution identity"
+        )
+        proof = {}
+        answerability = {
             "state": "not_declared",
             "decision_capable": False,
             "reasons": [reason],
@@ -294,17 +307,17 @@ def _persist_answerability_admission(result: dict[str, Any]) -> None:
     admission = result.get("research_answerability_admission")
     summary_value = result.get("summary_json")
     campaign_root_value = result.get("campaign_root")
-    if not isinstance(admission, dict) or not summary_value or not campaign_root_value:
+    if not isinstance(admission, dict) or not campaign_root_value:
         return
-    summary_path = Path(str(summary_value))
-    campaign_root = Path(str(campaign_root_value))
+    summary_path = Path(str(summary_value)).resolve() if summary_value else None
+    campaign_root = Path(str(campaign_root_value)).resolve()
     try:
-        summary = json.loads(summary_path.read_text(encoding="utf-8"))
-        if not isinstance(summary, dict):
-            raise ValueError("campaign summary must be a JSON object")
         encoded = json.dumps(admission, sort_keys=True, separators=(",", ":")).encode("utf-8")
         admission_sha256 = hashlib.sha256(encoded).hexdigest()
-        sidecar_path = summary_path.parent / "research_answerability_admission.json"
+        sidecar_path = (
+            summary_path.parent if summary_path is not None else campaign_root / "reports"
+        ) / "research_answerability_admission.json"
+        sidecar_path.parent.mkdir(parents=True, exist_ok=True)
         sidecar = {
             "schema_version": "research_answerability_admission.v1",
             "admission": admission,
@@ -313,19 +326,23 @@ def _persist_answerability_admission(result: dict[str, Any]) -> None:
         sidecar_path.write_text(
             json.dumps(sidecar, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
-        summary["research_answerability_admission"] = {
+        receipt = {
             "sidecar": str(sidecar_path.relative_to(campaign_root)),
             "sidecar_sha256": hashlib.sha256(sidecar_path.read_bytes()).hexdigest(),
             "admission_sha256": admission_sha256,
         }
-        artifacts = summary.setdefault("artifacts", {})
-        if isinstance(artifacts, dict):
-            artifacts["research_answerability_admission"] = str(
-                sidecar_path.relative_to(campaign_root)
+        result["research_answerability_admission_receipt"] = receipt
+        if summary_path is not None:
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            if not isinstance(summary, dict):
+                raise ValueError("campaign summary must be a JSON object")
+            summary["research_answerability_admission"] = receipt
+            artifacts = summary.setdefault("artifacts", {})
+            if isinstance(artifacts, dict):
+                artifacts["research_answerability_admission"] = receipt["sidecar"]
+            summary_path.write_text(
+                json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
             )
-        summary_path.write_text(
-            json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"could not persist research answerability admission: {exc}") from exc
 

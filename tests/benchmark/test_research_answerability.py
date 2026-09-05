@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -73,6 +74,15 @@ def _strict_bound_contract() -> dict[str, object]:
             "campaign_config": campaign_config,
             "manifest_sha256": hashlib.sha256(ISSUE_6474_FIXTURE.read_bytes()).hexdigest(),
             "config_sha256": hashlib.sha256((REPO_ROOT / campaign_config).read_bytes()).hexdigest(),
+            "head_commit": subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=REPO_ROOT, text=True
+            ).strip(),
+            "manifest_blob": subprocess.check_output(
+                ["git", "rev-parse", f"HEAD:{source_manifest}"], cwd=REPO_ROOT, text=True
+            ).strip(),
+            "config_blob": subprocess.check_output(
+                ["git", "rev-parse", f"HEAD:{campaign_config}"], cwd=REPO_ROOT, text=True
+            ).strip(),
         }
     )
     proof_results = {name: {"status": "passed", "required": True} for name in PROOF_SURFACES}

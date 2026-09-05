@@ -198,6 +198,8 @@ def test_main_research_answerability_gate_blocks_before_preflight(
             "--research-manifest",
             str(research_manifest),
             "--require-answerable",
+            "--campaign-id",
+            "fixed-campaign",
         ]
     )
 
@@ -206,6 +208,59 @@ def test_main_research_answerability_gate_blocks_before_preflight(
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "research_answerability_blocked"
     assert payload["answerability"]["state"] == "diagnostic_only"
+
+
+def test_main_research_answerability_requires_explicit_campaign_id(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """Strict research admission must not guess the runner's timestamped campaign id."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("name: test\n", encoding="utf-8")
+    research_manifest = tmp_path / "research.yaml"
+    research_manifest.write_text("campaign: test\n", encoding="utf-8")
+    called = {"evaluate": False, "preflight": False}
+
+    monkeypatch.setattr(run_camera_ready_benchmark, "load_campaign_config", lambda _: object())
+
+    def _unexpected_evaluate(*args, **kwargs):
+        del args, kwargs
+        called["evaluate"] = True
+        raise AssertionError("strict admission must fail before evaluating an unbound campaign")
+
+    def _unexpected_preflight(*args, **kwargs):
+        del args, kwargs
+        called["preflight"] = True
+        raise AssertionError("camera-ready preflight must not run after admission failure")
+
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "evaluate_research_manifest_answerability",
+        _unexpected_evaluate,
+    )
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "prepare_campaign_preflight",
+        _unexpected_preflight,
+    )
+
+    exit_code = run_camera_ready_benchmark.main(
+        [
+            "--config",
+            str(config_path),
+            "--mode",
+            "preflight",
+            "--research-manifest",
+            str(research_manifest),
+            "--require-answerable",
+        ]
+    )
+
+    assert exit_code == 2
+    assert called == {"evaluate": False, "preflight": False}
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "research_answerability_blocked"
+    assert payload["answerability"]["state"] == "not_declared"
+    assert "--campaign-id" in payload["status_reason"]
 
 
 def test_main_persists_exact_answerability_admission_receipt(
@@ -262,6 +317,8 @@ def test_main_persists_exact_answerability_admission_receipt(
             "--research-manifest",
             str(research_manifest),
             "--require-answerable",
+            "--campaign-id",
+            "fixed-campaign",
         ]
     )
 
@@ -276,6 +333,12 @@ def test_main_persists_exact_answerability_admission_receipt(
         ]
         == "a" * 64
     )
+    receipt = payload["research_answerability_admission_receipt"]
+    sidecar_path = tmp_path / "out" / "cid" / receipt["sidecar"]
+    assert sidecar_path.is_file()
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    assert sidecar["admission"] == payload["research_answerability_admission"]
+    assert receipt["admission_sha256"] == sidecar["admission_sha256"]
 
 
 def test_main_run_mode_uses_run_campaign(tmp_path: Path, monkeypatch, capsys) -> None:

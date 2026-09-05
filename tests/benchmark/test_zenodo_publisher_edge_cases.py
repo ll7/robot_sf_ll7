@@ -1519,8 +1519,8 @@ def test_upload_requires_bounded_stable_remote_readback(tmp_path: Path) -> None:
     assert len(session.urls) == 9
 
 
-def test_upload_rejects_metadata_drift_during_fallback_readback(tmp_path: Path) -> None:
-    """A metadata-only race cannot pass the fallback stability proof."""
+def test_upload_rejects_metadata_only_race_during_stable_readback(tmp_path: Path) -> None:
+    """A metadata-only remote mutation must reset fallback stability proof."""
     bundle = tmp_path / "successor.tar.gz"
     bundle.write_bytes(b"successor")
     inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
@@ -1529,20 +1529,19 @@ def test_upload_rejects_metadata_drift_during_fallback_readback(tmp_path: Path) 
     initial["files"] = [inherited]
     post_upload = _successor_draft()
     post_upload["files"] = [inherited, uploaded]
-    stable = _successor_draft()
-    stable["files"] = [uploaded]
-    drifted = _successor_draft()
-    drifted["files"] = [uploaded]
-    drifted["metadata"]["title"] = "concurrent metadata mutation"
+    readbacks: list[dict[str, Any]] = []
+    for title in ("first title", "second title", "third title"):
+        readback = _successor_draft()
+        readback["files"] = [uploaded]
+        readback["metadata"]["title"] = title
+        readbacks.append(readback)
     session = _Session()
     session.gets = [
         _Response(initial),
         _Response(post_upload),
         _Response(post_upload),
         _Response(inherited),
-        _Response(stable),
-        _Response(drifted),
-        _Response(stable),
+        *[_Response(readback) for readback in readbacks],
     ]
     session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
     session.deletes = [_Response({}, 204)]
@@ -1550,15 +1549,16 @@ def test_upload_rejects_metadata_drift_during_fallback_readback(tmp_path: Path) 
     with pytest.raises(publisher.ZenodoPublisherError, match="stable readback"):
         publisher.upload(session, _successor_state(), [bundle])
 
-    assert session.delete_urls == [
-        "https://zenodo.org/api/deposit/depositions/8/files/inherited-file"
-    ]
+    assert len(session.gets) == 0
 
 
-def test_fallback_revision_rejects_malformed_metadata() -> None:
-    """A fallback digest cannot be sealed from a malformed deposition metadata object."""
+@pytest.mark.parametrize("metadata", [None, [], {"title": object()}])
+def test_remote_revision_binding_rejects_malformed_fallback_metadata(
+    metadata: Any,
+) -> None:
+    """Malformed remote metadata cannot enter a fallback reconciliation digest."""
     payload = _successor_draft()
-    payload["metadata"] = None
+    payload["metadata"] = metadata
 
     with pytest.raises(publisher.ZenodoPublisherError, match="metadata is malformed"):
         publisher._remote_revision_binding(payload, {})

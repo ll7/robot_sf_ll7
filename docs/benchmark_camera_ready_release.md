@@ -327,12 +327,12 @@ same-origin bytes alone.
 DELETE 204, 404, 403, 5xx, network, and other unexpected results are classified;
 non-204 results are treated as conditionally idempotent only when a bounded pair
 of consecutive exact readbacks proves the target absent with unchanged
-identity, unpublished lifecycle, metadata contract, inventory, and the server
-revision when one is available. When Zenodo exposes no revision field, the
-receipt records an exact final-response snapshot digest, including the
-credential-free metadata contract, instead; that fallback is not a server-side
-concurrency token. Any failed or unstable readback remains
-blocking, so rerun the same upload after a partial network interruption. A
+identity, unpublished lifecycle, inventory, and the server revision when one
+is available. When Zenodo exposes no revision field, the receipt records an
+exact final-response snapshot digest including the credential-free metadata
+contract; malformed metadata fails closed before a receipt can be accepted.
+That fallback is not a server-side concurrency token. Any failed or unstable
+readback remains blocking, so rerun the same upload after a partial network interruption. A
 successful upload stores a credential-free `robot-sf-zenodo-reconciliation.v1`
 receipt binding the intended-inventory SHA-256, deleted filename list, and
 final remote revision or exact snapshot digest/state. `verify` is read-only

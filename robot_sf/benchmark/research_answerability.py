@@ -400,6 +400,8 @@ def _proof_binding_error(  # noqa: C901, PLR0912
         if field.endswith("_commit") or field.endswith("_blob"):
             if not _GIT_SHA1_RE.fullmatch(value.lower()):
                 return f"answerability.proof_binding.{field} must be a 40-hex Git identity"
+    if repo_root is None:
+        return "strict admission proof verification requires the repository root"
     try:
         current_head = subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=repo_root.resolve(), text=True
@@ -437,8 +439,6 @@ def _proof_binding_error(  # noqa: C901, PLR0912
         return f"answerability.proof_binding proof_results are not canonical JSON: {exc}"
     if binding["proof_digest"].lower() != expected_digest:
         return "answerability.proof_binding.proof_digest does not match proof results"
-    if repo_root is None:
-        return "strict admission proof verification requires the repository root"
     for field, digest_field in (
         ("source_manifest", "manifest_sha256"),
         ("campaign_config", "config_sha256"),

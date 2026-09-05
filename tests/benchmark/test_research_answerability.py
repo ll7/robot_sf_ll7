@@ -250,6 +250,18 @@ def test_strict_admission_requires_verified_proof_binding() -> None:
     assert "proof_binding" in result.reasons[0]
 
 
+def test_strict_admission_requires_repository_root_for_bound_proof() -> None:
+    """A bound strict proof cannot crash when repository provenance is unavailable."""
+    result = evaluate_answerability(
+        _strict_bound_contract(),
+        enforce_admission_proof=True,
+        campaign_id="issue_6474_fixture",
+    )
+
+    assert result.state == "blocked_missing_proof"
+    assert "repository root" in result.reasons[0]
+
+
 def test_strict_admission_rejects_proof_surface_mutation_after_binding() -> None:
     """A status mutation cannot be evaluated as the proof that was bound."""
     contract = _strict_bound_contract()

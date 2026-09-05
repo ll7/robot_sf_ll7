@@ -1,6 +1,6 @@
 {
-  "artifact_path": "ch7-receipt-repair-final-20260905.json",
-  "artifact_sha256": "a1d005a93b777ffe8a19318c4a72b29c0d13d4786322ec3fae4b79a13fa73226",
+  "artifact_path": "docs/context/evidence/issue_7410_ch7_evidence_build_receipt.v1.json",
+  "artifact_sha256": "2df93068dc1e76f9b9bd082c63cbb64f394ae5ece489b54b98d0b14045e91e24",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

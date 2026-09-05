@@ -6,6 +6,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -366,6 +367,57 @@ def test_shared_venv_recovery_rejects_nested_main_venv_symlink(tmp_path: Path) -
         assert result.returncode == 2
         assert "environment component outside the worktree" in result.stderr
         assert not capture.exists()
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_rejects_nested_external_package_symlink(tmp_path: Path) -> None:
+    """A nested package directory must not redirect recovery outside the local environment."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    external_packages = tmp_path / "external-site-packages"
+    external_packages.mkdir()
+    site_packages = worktree / ".venv" / "lib" / "python3.13" / "site-packages"
+    site_packages.parent.mkdir(parents=True)
+    site_packages.symlink_to(external_packages, target_is_directory=True)
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "environment symlink outside the worktree-local .venv" in result.stderr
+        assert not capture.exists()
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_allows_host_python_interpreter_symlink(tmp_path: Path) -> None:
+    """Standard bin/python* links to the host interpreter remain supported."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    host_python = worktree / ".venv" / "bin" / "python3"
+    host_python.parent.mkdir(parents=True)
+    host_python.symlink_to(Path(sys.executable))
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "sync --all-extras --reinstall-package robot-sf --frozen" in capture.read_text(
+            encoding="utf-8"
+        )
     finally:
         _remove_linked_recovery_fixture(repo, worktree)
 

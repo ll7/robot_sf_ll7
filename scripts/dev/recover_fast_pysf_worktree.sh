@@ -169,11 +169,72 @@ PY
       return 1
     fi
     case "$resolved_python" in
-      "$main_repo_root/.venv"/*)
+      "$main_repo_root"/*)
         echo "recover_fast_pysf_worktree: refusing a Python interpreter linked to the owning checkout: $local_venv/bin/python" >&2
         return 1
         ;;
     esac
+  fi
+
+  if ! python3 - "$local_venv" "$main_repo_root" <<'PY'
+from __future__ import annotations
+
+import os
+import re
+import sys
+from pathlib import Path
+
+
+venv_root = Path(sys.argv[1]).resolve(strict=False)
+main_root = Path(sys.argv[2]).resolve(strict=False)
+host_interpreter_name = re.compile(r"python(?:3(?:\.\d+)?)?\Z")
+
+
+def is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def fail(message: str) -> None:
+    print(f"recover_fast_pysf_worktree: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def on_walk_error(error: OSError) -> None:
+    fail(f"could not inspect worktree environment links: {error}")
+
+
+for raw_root, directories, files in os.walk(venv_root, followlinks=False, onerror=on_walk_error):
+    for name in (*directories, *files):
+        link = Path(raw_root) / name
+        if not link.is_symlink():
+            continue
+        try:
+            resolved = link.resolve(strict=False)
+        except (OSError, RuntimeError) as error:
+            fail(f"could not resolve worktree environment link {link}: {error}")
+
+        if is_within(resolved, venv_root):
+            continue
+        if link.parent == venv_root / "bin" and host_interpreter_name.fullmatch(link.name):
+            if not resolved.is_file():
+                fail(f"refusing a broken host-interpreter link: {link} -> {resolved}")
+            if is_within(resolved, main_root):
+                fail(
+                    "refusing a host-interpreter link into the owning checkout: "
+                    f"{link} -> {resolved}"
+                )
+            continue
+        fail(
+            "refusing an environment symlink outside the worktree-local .venv: "
+            f"{link} -> {resolved}"
+        )
+PY
+  then
+    return 1
   fi
 }
 

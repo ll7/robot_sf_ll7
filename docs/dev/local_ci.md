@@ -33,7 +33,10 @@ scripts/dev/run_worktree_shared_venv.sh --recover-stale-fast-pysf -- \
 This route creates or refreshes only the current linked worktree's ignored `.venv`. It refuses the
 main checkout and dirty dependency inputs, checks `ROBOT_SF_WORKTREE_MIN_FREE_BYTES` (2 GiB by
 default) with `check_worktree_capacity.py`, serializes recovery per repository with a kernel-backed
-lock, and verifies `fast-pysf` before starting the command. It runs the frozen, auditable operation
+lock, and verifies `fast-pysf` before starting the command. The preflight recursively rejects
+`.venv` symlinks that resolve outside that worktree-local environment; standard `bin/python*`
+links to a host interpreter remain supported, but links into the owning checkout are refused. It
+runs the frozen, auditable operation
 `uv sync --all-extras --reinstall-package robot-sf --frozen`; an existing coherent local environment
 skips the sync. Capacity or lock contention fails closed without starting the wrapped command.
 

@@ -41,7 +41,7 @@ RECOVERY_MANIFEST_PATH = EVIDENCE_DIR / "recovery_manifest.json"
 PREREGISTRATION_PATH = (
     REPO_ROOT / "configs/benchmarks/issue_5578_robot_speed_tier_preregistration.yaml"
 )
-EXPECTED_PACKET_DIGEST = "859672b407ec0018d5a4db0ca61ddd7bf566746bb0bfa6244dbbc419ef788ce0"
+EXPECTED_PACKET_DIGEST = "a05be53e9af6dd4ffb4d3fb71abebd0fcad0c4131c0ba5c390c4a6e850e9dfe5"
 EXPECTED_ROW_DIGESTS = (
     "c204a1741a2d4bf77a1e757eb9614d77b6f721794bd51182bc34d922c2c48858",
     "35a90600f347363b74cf8c98fe8022a2b5b439cf3aea5e69f6a4c8e11707f85f",

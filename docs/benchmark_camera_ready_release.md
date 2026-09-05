@@ -319,8 +319,11 @@ PUT, `upload` persists a pending attempt with the exact local inventory digest a
 the exact initial successor file-ID inventory. A retry must use the same inventory
 and API base; a changed or incomplete file list, an unknown remote extra, or missing
 prior-attempt proof blocks reconciliation without issuing a delete. The CLI writes
-this pending state before mutation so an interrupted process can safely be rerun
-with the original file list.
+this pending state before mutation, atomically replaces the state file, and records
+each stable deletion so an interrupted process can safely be rerun with the
+original file list without losing earlier cleanup proof. Verification also binds
+each download URL to the expected record and filename, rather than trusting
+same-origin bytes alone.
 DELETE 204, 404, 403, 5xx, network, and other unexpected results are classified;
 non-204 results are treated as conditionally idempotent only when a bounded pair
 of consecutive exact readbacks proves the target absent with unchanged

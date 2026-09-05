@@ -181,7 +181,7 @@ def _metadata_verification_fixture(
         {
             "filename": bundle.name,
             "size": bundle.stat().st_size,
-            "links": {"download": "https://zenodo.org/api/records/123/files/bundle/content"},
+            "links": {"download": "https://zenodo.org/api/records/123/files/bundle.tar.gz/content"},
         }
     ]
     downloaded = _Response({})
@@ -250,7 +250,7 @@ def test_reserve_upload_publish_and_verify_without_credentials_in_state(tmp_path
         {
             "filename": bundle.name,
             "size": bundle.stat().st_size,
-            "links": {"download": "https://zenodo.org/api/records/123/files/bundle/content"},
+            "links": {"download": "https://zenodo.org/api/records/123/files/bundle.tar.gz/content"},
         }
     ]
     downloaded = _Response({})
@@ -275,7 +275,9 @@ def test_reserve_upload_publish_and_verify_without_credentials_in_state(tmp_path
         {
             "filename": bundle.name,
             "size": bundle.stat().st_size,
-            "links": {"download": "https://zenodo.org/api/records/123/draft/files/bundle/content"},
+            "links": {
+                "download": "https://zenodo.org/api/records/123/draft/files/bundle.tar.gz/content"
+            },
         }
     ]
     published_record = {
@@ -287,7 +289,7 @@ def test_reserve_upload_publish_and_verify_without_credentials_in_state(tmp_path
             {
                 "key": bundle.name,
                 "size": bundle.stat().st_size,
-                "links": {"self": "https://zenodo.org/api/records/123/files/bundle/content"},
+                "links": {"self": "https://zenodo.org/api/records/123/files/bundle.tar.gz/content"},
             }
         ],
     }
@@ -299,7 +301,7 @@ def test_reserve_upload_publish_and_verify_without_credentials_in_state(tmp_path
     assert report["publication_state"] == "published"
     assert report["file_count"] == 1
     assert session.urls[-2] == "https://zenodo.org/api/records/123"
-    assert session.urls[-1] == "https://zenodo.org/api/records/123/files/bundle/content"
+    assert session.urls[-1] == "https://zenodo.org/api/records/123/files/bundle.tar.gz/content"
 
 
 def test_verify_accepts_zenodo_license_and_creator_normalization(tmp_path: Path) -> None:
@@ -447,7 +449,7 @@ def test_verify_streams_remote_bundle_in_bounded_chunks_without_content_access(
         {
             "filename": bundle.name,
             "size": bundle.stat().st_size,
-            "links": {"download": "https://zenodo.org/api/records/123/files/bundle/content"},
+            "links": {"download": "https://zenodo.org/api/records/123/files/bundle.tar.gz/content"},
         }
     ]
     streamed = _StreamingResponse(chunks)

@@ -777,6 +777,7 @@ def test_worktree_creation_lock_helper_non_blocking_reports_contention(
 ) -> None:
     """--non-blocking exits 75 on a held lock and runs the child when free."""
     lock_path = tmp_path / "test-nonblocking.lock"
+    held_marker = tmp_path / "test-nonblocking-held"
     holder = subprocess.Popen(
         [
             sys.executable,
@@ -785,7 +786,8 @@ def test_worktree_creation_lock_helper_non_blocking_reports_contention(
             "--",
             sys.executable,
             "-c",
-            "import time; time.sleep(30)",
+            "from pathlib import Path; import sys, time; Path(sys.argv[1]).touch(); time.sleep(30)",
+            str(held_marker),
         ],
         cwd=REPO_ROOT,
         stdout=subprocess.DEVNULL,
@@ -793,10 +795,9 @@ def test_worktree_creation_lock_helper_non_blocking_reports_contention(
     )
     try:
         deadline = time.monotonic() + 10
-        while not lock_path.exists() and holder.poll() is None and time.monotonic() < deadline:
+        while not held_marker.exists() and holder.poll() is None and time.monotonic() < deadline:
             time.sleep(0.02)
-        assert lock_path.exists(), "holder did not create the lock file"
-        time.sleep(0.3)
+        assert held_marker.exists(), "holder did not acquire the lock before running the child"
         contended = subprocess.run(
             [
                 sys.executable,

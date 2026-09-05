@@ -399,7 +399,7 @@ def test_shared_venv_recovery_rejects_nested_external_site_packages_symlink(
 
 
 def test_shared_venv_recovery_allows_external_standard_python_symlink(tmp_path: Path) -> None:
-    """A standard interpreter link may target the host Python, but not main .venv."""
+    """A standard interpreter link may target an existing host Python."""
     repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
     local_python3 = worktree / ".venv" / "bin" / "python3"
     local_python3.parent.mkdir(parents=True)
@@ -419,6 +419,58 @@ def test_shared_venv_recovery_allows_external_standard_python_symlink(tmp_path: 
         assert "sync --all-extras --reinstall-package robot-sf --frozen" in capture.read_text(
             encoding="utf-8"
         )
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_rejects_host_python_link_into_owning_checkout(
+    tmp_path: Path,
+) -> None:
+    """A standard interpreter alias must not redirect into the owning checkout."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    owner_script = repo / "scripts" / "dev" / "owner-python-target"
+    _write_executable(owner_script, "#!/usr/bin/env bash\nexit 0\n")
+    worktree_python = worktree / ".venv" / "bin" / "python3"
+    worktree_python.parent.mkdir(parents=True)
+    worktree_python.symlink_to(owner_script)
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "host-interpreter link into the owning checkout" in result.stderr
+        assert not capture.exists()
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
+def test_shared_venv_recovery_rejects_broken_host_python_link(tmp_path: Path) -> None:
+    """A broken standard interpreter alias must fail before recovery starts."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    worktree_python = worktree / ".venv" / "bin" / "python3"
+    worktree_python.parent.mkdir(parents=True)
+    worktree_python.symlink_to(tmp_path / "missing-python")
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "broken host-interpreter link" in result.stderr
+        assert not capture.exists()
     finally:
         _remove_linked_recovery_fixture(repo, worktree)
 

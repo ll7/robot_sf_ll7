@@ -372,6 +372,7 @@ def test_projection_invalid_belief_fallbacks_and_alias(monkeypatch) -> None:
     assert unavailable.diagnostics["fallback_reason"] == (
         "scenario_belief_representation_unavailable"
     )
+    assert unavailable.legacy_observation["pedestrians"]["count"][0] == pytest.approx(1.0)
     monkeypatch.setattr(adapter, "_load_scenario_belief_types", original_loader)
 
     unsupported = project_belief_aware_planner_input(

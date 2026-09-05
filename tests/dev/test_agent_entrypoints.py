@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -16,6 +17,7 @@ RELOCATED_GUIDANCE = REPO_ROOT / "docs" / "dev" / "agents" / "relocated-agents-g
 CAMERA_READY_RUNNER = REPO_ROOT / "scripts" / "tools" / "run_camera_ready_benchmark.py"
 CREATE_WORKTREE = REPO_ROOT / "scripts" / "dev" / "create_worktree.sh"
 REVIEW_GUARD = REPO_ROOT / "scripts" / "dev" / "review_worktree_guard.py"
+SHARED_VENV_WRAPPER = "scripts/dev/run_worktree_shared_venv.sh --"
 
 CANONICAL_ROUTES = (
     "Read-only observation",
@@ -74,7 +76,7 @@ def test_scientific_acceptance_route_uses_parser_backed_preflight() -> None:
     text = ENTRYPOINTS_DOC.read_text(encoding="utf-8")
 
     assert (
-        "uv run python scripts/tools/run_camera_ready_benchmark.py "
+        f"{SHARED_VENV_WRAPPER} uv run python scripts/tools/run_camera_ready_benchmark.py "
         "--config configs/benchmarks/camera_ready_baseline_safe.yaml --mode preflight"
     ) in text
     assert "robot_sf.benchmark.camera_ready_campaign --verify-only" not in text
@@ -160,12 +162,47 @@ def test_documented_python_commands_use_project_environment() -> None:
         assert re.search(r"(?m)^\s*python(?:3)?(?:\s|$)", text) is None
 
 
+def test_fresh_worktree_commands_use_shared_environment_wrapper() -> None:
+    """Fresh linked-worktree commands must show the complete shared-venv wrapper."""
+    agents_text = AGENTS_MD.read_text(encoding="utf-8")
+    agents_fresh_section = agents_text.split("## Fresh Worktree Bootstrap", maxsplit=1)[1].split(
+        "If the current branch is not `main`", maxsplit=1
+    )[0]
+    for line in agents_fresh_section.splitlines():
+        if "uv run" in line:
+            assert SHARED_VENV_WRAPPER in line
+
+    entrypoints_text = ENTRYPOINTS_DOC.read_text(encoding="utf-8")
+    route_table = entrypoints_text.split("## Task Routes And Preflight Discipline", maxsplit=1)[
+        1
+    ].split("### Protected read-only worktrees", maxsplit=1)[0]
+    for line in route_table.splitlines():
+        if "uv run" in line:
+            assert SHARED_VENV_WRAPPER in line
+
+    # All bash command examples on this page use the wrapper, except the explicit
+    # external-project resolver, whose separate environment is intentional.
+    for block in re.findall(r"```bash\n(.*?)\n```", entrypoints_text, flags=re.DOTALL):
+        for line in block.splitlines():
+            if "uv run" in line and "--project" not in line:
+                assert SHARED_VENV_WRAPPER in line
+
+    assert (
+        f"{SHARED_VENV_WRAPPER} uv run pytest -q tests/dev/test_check_skills.py" in entrypoints_text
+    )
+
+
 def test_read_only_route_requires_explicit_protected_worktree_mode(tmp_path: Path) -> None:
     """A read-only linked checkout must be created with review mode and its guard enabled."""
     text = ENTRYPOINTS_DOC.read_text(encoding="utf-8")
     protected_section = text.split("### Protected read-only worktrees", maxsplit=1)[1].split(
         "### Route Boundaries and Negative Rules", maxsplit=1
     )[0]
+    assert 'MAIN_REPO_ROOT="$(git rev-parse --show-toplevel)"' in protected_section
+    assert 'WORKTREE_PARENT="${WORKTREE_PARENT:-' in protected_section
+    assert 'mkdir -p "$WORKTREE_PARENT"' in protected_section
+    assert '! -d "$WORKTREE_PARENT"' in protected_section
+    assert '! -w "$WORKTREE_PARENT"' in protected_section
     assert "create_worktree.sh" in protected_section
     assert "--mode review" in protected_section
     assert "robot-sf.worktree-mode=review" in protected_section
@@ -195,6 +232,53 @@ def test_read_only_route_requires_explicit_protected_worktree_mode(tmp_path: Pat
         text=True,
         check=True,
     )
+
+    code_block_match = re.search(r"```bash\n(?P<commands>.*?)\n```", protected_section, re.DOTALL)
+    assert code_block_match is not None
+    setup_commands = code_block_match.group("commands").split(
+        "scripts/dev/create_worktree.sh", maxsplit=1
+    )[0]
+    fresh_env = os.environ.copy()
+    fresh_env.pop("WORKTREE_PARENT", None)
+    setup = subprocess.run(
+        [
+            "bash",
+            "-c",
+            "set -euo pipefail\n"
+            + setup_commands
+            + '\nprintf "%s\\n" "$MAIN_REPO_ROOT" "$WORKTREE_PARENT"\n',
+        ],
+        cwd=repo,
+        env=fresh_env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert setup.returncode == 0, setup.stdout + setup.stderr
+    expected_parent = repo.parent / f"{repo.name}.worktrees"
+    assert setup.stdout.splitlines() == [str(repo), str(expected_parent)]
+    assert expected_parent.is_dir()
+    assert os.access(expected_parent, os.W_OK)
+
+    invalid_parent = tmp_path / "not-a-directory"
+    invalid_parent.write_text("fixture", encoding="utf-8")
+    rejected_env = fresh_env | {"WORKTREE_PARENT": str(invalid_parent)}
+    rejected = subprocess.run(
+        [
+            "bash",
+            "-c",
+            "set -euo pipefail\n" + setup_commands,
+        ],
+        cwd=repo,
+        env=rejected_env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert rejected.returncode == 2
+    assert "WORKTREE_PARENT must be an existing writable directory" in rejected.stderr
 
     try:
         created = subprocess.run(

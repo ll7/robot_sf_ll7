@@ -104,7 +104,7 @@ worker. Use `scripts/dev/bootstrap_worktree.sh` only when a worktree-local envir
 required; it still performs `uv venv .venv && uv sync --all-extras`, verifies `.venv/bin/python`,
 and adds `UV_NO_SYNC=1` to the activation script. For a dependency-only check that separates
 missing optional packages from changed-code failures, run
-`uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras` through the shared wrapper.
+`scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras`.
 Use a matching named profile such as `--profile training` when a local environment was bootstrapped
 with `--extra training`. Before manual reclaim, run
 `scripts/dev/check_worktree_capacity.py --inventory --json`; it never deletes files. Preserve

@@ -416,14 +416,20 @@ def test_rest_check_rollup_keeps_only_newest_legacy_status_per_context() -> None
     assert contexts[0]["status"] == "COMPLETED"
 
 
-def test_rest_check_rollup_preserves_newest_api_entry_when_timestamp_is_missing() -> None:
-    """An untimestamped newest status must not lose to an older timestamped entry."""
+def test_rest_check_rollup_preserves_newest_api_entry_when_timestamp_is_incomplete() -> None:
+    """Missing or malformed newest timestamps must not lose to older timestamps."""
     statuses = [
         {"context": "legacy-gate", "state": "pending"},
         {
             "context": "legacy-gate",
             "state": "success",
             "updated_at": "2026-09-05T06:08:49Z",
+        },
+        {"context": "malformed-time", "state": "pending", "updated_at": "not-a-timestamp"},
+        {
+            "context": "malformed-time",
+            "state": "success",
+            "updated_at": "2026-09-05T06:08:48Z",
         },
     ]
     with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
@@ -435,8 +441,9 @@ def test_rest_check_rollup_preserves_newest_api_entry_when_timestamp_is_missing(
 
     assert error is None
     contexts = [item for item in rollup if item["__typename"] == "StatusContext"]
-    assert len(contexts) == 1
+    assert [item["name"] for item in contexts] == ["legacy-gate", "malformed-time"]
     assert contexts[0]["state"] == "PENDING"
+    assert contexts[1]["state"] == "PENDING"
 
 
 def test_rest_check_rollup_enriches_workflow_identity_for_superseded_runs(

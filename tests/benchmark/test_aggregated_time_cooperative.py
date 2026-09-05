@@ -158,3 +158,14 @@ def test_invalid_timestep_and_agent_index_fail_closed() -> None:
     negative_index = _make_episode()
     negative_index.cooperative_goal_steps = {-1: 10}
     assert np.isnan(aggregated_time(negative_index, cooperative_agents=[-1]))
+
+
+def test_overflowing_duration_fails_closed() -> None:
+    """Finite inputs that overflow their duration remain unavailable."""
+    huge_dt = _make_episode(dt=1e308)
+    huge_dt.cooperative_goal_steps = {0: 10}
+    assert np.isnan(aggregated_time(huge_dt, cooperative_agents=[0]))
+
+    huge_step = _make_episode()
+    huge_step.cooperative_goal_steps = {0: 10**400}
+    assert np.isnan(aggregated_time(huge_step, cooperative_agents=[0]))

@@ -2862,6 +2862,17 @@ def _is_valid_nonnegative_finite(value: Any) -> bool:
         return False
 
 
+def _cooperative_duration(step: int, dt: Any) -> float:
+    """Return a finite cooperative duration, or NaN when multiplication overflows."""
+    try:
+        duration = step * dt
+        if not math.isfinite(duration) or duration < 0.0:
+            return float("nan")
+        return float(duration)
+    except (OverflowError, TypeError, ValueError):
+        return float("nan")
+
+
 def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None = None) -> float:
     """Time taken for subset of cooperative agents to meet their goals.
 
@@ -2930,7 +2941,7 @@ def aggregated_time(data: EpisodeData, *, cooperative_agents: list[int] | None =
             max_step = step
     if not seen or max_step is None:
         return float("nan")
-    return float(max_step * data.dt)
+    return _cooperative_duration(max_step, data.dt)
 
 
 # --- Orchestrator ---

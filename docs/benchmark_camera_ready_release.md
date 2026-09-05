@@ -307,9 +307,13 @@ before each `DELETE`, it also fetches the deposition-scoped successor file and
 requires the returned filename and file ID to match the admitted target. It does not use a
 separate `/files` collection response for lifecycle or deletion admission. Local
 symlinks, control/query/fragment/encoded-collision filenames, duplicate aliases,
-and local changes detected immediately before a PUT are rejected. It deletes
-only stable inherited filenames from the unpublished successor and requires an
-exact final filename inventory. It never addresses the published predecessor.
+and local changes detected immediately before a PUT are rejected. The
+server-supplied upload bucket must use the canonical `/api/files/<opaque-bucket-id>`
+shape; deposition, record, and collection paths are not accepted as PUT targets.
+Credential-shaped remote filenames are rejected before they can enter state or a
+receipt. It deletes only stable inherited filenames from the unpublished
+successor and requires an exact final filename inventory. It never addresses the
+published predecessor.
 DELETE 204, 404, 403, 5xx, network, and other unexpected results are classified;
 non-204 results are treated as conditionally idempotent only when a bounded pair
 of consecutive exact readbacks proves the target absent with unchanged

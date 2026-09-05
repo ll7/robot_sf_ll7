@@ -753,6 +753,9 @@ def test_api_base_normalizes_one_trailing_slash() -> None:
         "https://zenodo.org/api/files/bucket?access_token=secret",
         "https://zenodo.org/records/7/files/bundle",
         "https://zenodo.org/apiary/files/bucket",
+        "https://zenodo.org/api/deposit/depositions/7/files",
+        "https://zenodo.org/api/files/bucket/extra",
+        "https://zenodo.org/api/files/bucket%2Fextra",
         "https://zenodo.org/api/../records/7/files/bundle",
         "https://zenodo.org/api/%2e%2e/records/7/files/bundle",
     ],
@@ -1167,6 +1170,21 @@ def test_reconciliation_receipt_rejects_tampered_inventory_binding(tmp_path: Pat
 
     with pytest.raises(publisher.ZenodoPublisherError, match="inventory digest"):
         publisher._validate_state_for_operation(tampered_state)
+
+
+def test_reconciliation_receipt_rejects_credential_shaped_deleted_filename() -> None:
+    """A remote filename that looks like a credential cannot enter a receipt."""
+    files = [{"name": "successor.tar.gz", "size": 1, "sha256": "0" * 64}]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="unsafe deleted filename") as exc_info:
+        publisher._reconciliation_receipt(
+            _successor_draft(),
+            {"successor.tar.gz": "successor-file"},
+            files,
+            ["Bearer secret-reflection"],
+        )
+
+    assert "secret-reflection" not in str(exc_info.value)
 
 
 @pytest.mark.parametrize(
@@ -2167,7 +2185,7 @@ def test_verify_does_not_reflect_secret_shaped_remote_filename(tmp_path: Path) -
     assert report["status"] == "fail"
     serialized = json.dumps(report, sort_keys=True)
     assert secret_name not in serialized
-    assert "duplicate entry at index 1" in serialized
+    assert "invalid or conflicting filename at index 0" in serialized
 
 
 @pytest.mark.parametrize(

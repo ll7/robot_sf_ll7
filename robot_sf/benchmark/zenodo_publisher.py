@@ -34,6 +34,10 @@ _STABLE_ZENODO_STATES = frozenset({"unsubmitted", "done"})
 _REMOTE_VERSION_FIELDS = ("modified", "version", "revision")
 _REMOTE_FILENAME_ALIASES = ("filename", "key")
 _REMOTE_FILE_ID_ALIASES = ("id", "file_id", "fileid")
+_CREDENTIAL_SHAPED_FILENAME_RE = re.compile(
+    r"(?i)^(?:bearer|basic)\s+\S+$|"
+    r"^(?:authorization|access[_ -]?token|api[_ -]?key|password|secret|token)\s*[:=]\s*\S+$"
+)
 _DELETE_READBACK_ATTEMPTS = 3
 _STABLE_READBACK_COUNT = 2
 
@@ -291,6 +295,32 @@ def _validated_remote_url(value: Any, api_base: str, label: str) -> str:
     if normalized_path != api_path and not normalized_path.startswith(f"{api_path}/"):
         raise ZenodoPublisherError(f"Zenodo {label} is not a valid same-API HTTPS URL")
     return value.strip()
+
+
+def _validated_upload_bucket(value: Any, api_base: str) -> str:
+    """Require the canonical Zenodo files-bucket URL for authenticated PUTs.
+
+    A generic same-origin API URL is not sufficient for an upload authority:
+    deposition endpoints, record-file URLs, and collection-style paths must not
+    be repurposed as a bucket. Zenodo's upload response uses the exact
+    ``/api/files/<opaque-bucket-id>`` shape.
+
+    Returns:
+        The validated canonical files-bucket URL.
+    """
+    candidate = _validated_remote_url(value, api_base, "draft upload bucket")
+    try:
+        api_path = urlsplit(_validated_api_base(api_base)).path.rstrip("/")
+        candidate_path = urlsplit(candidate).path
+    except ValueError as exc:
+        raise ZenodoPublisherError("Zenodo draft upload bucket has an invalid path") from exc
+    if candidate_path.endswith("/"):
+        candidate_path = candidate_path[:-1]
+    relative_path = candidate_path[len(api_path) :].lstrip("/")
+    parts = relative_path.split("/")
+    if len(parts) != 2 or parts[0] != "files" or _ZENODO_FILE_ID_RE.fullmatch(parts[1]) is None:
+        raise ZenodoPublisherError("Zenodo draft upload bucket is not a canonical files bucket")
+    return candidate
 
 
 def _validated_latest_draft_link(latest_draft: Any, api_base: str) -> tuple[str, int]:
@@ -989,6 +1019,8 @@ def _validated_file_name(value: Any, label: str) -> str:
     Returns:
         The original validated filename.
     """
+    if isinstance(value, str) and _CREDENTIAL_SHAPED_FILENAME_RE.fullmatch(value.strip()):
+        raise ZenodoPublisherError(f"Zenodo {label} has a credential-shaped filename")
     if (
         not isinstance(value, str)
         or not value
@@ -1849,7 +1881,16 @@ def _reconciliation_receipt(
         A credential-free reconciliation receipt.
     """
     final_state = _public_state(deposition)
-    canonical_deleted = sorted(deleted_files, key=_filename_sort_key)
+    try:
+        canonical_deleted = [
+            _validated_file_name(name, "reconciliation receipt deleted file")
+            for name in deleted_files
+        ]
+    except ZenodoPublisherError as exc:
+        raise ZenodoPublisherError(
+            "Zenodo reconciliation receipt contains an unsafe deleted filename"
+        ) from exc
+    canonical_deleted.sort(key=_filename_sort_key)
     return _seal_payload(
         {
             "schema_version": ZENODO_RECONCILIATION_SCHEMA,
@@ -2362,7 +2403,7 @@ def upload(
     links = deposition.get("links")
     bucket = links.get("bucket") if isinstance(links, dict) else None
     try:
-        bucket = _validated_remote_url(bucket, validated_base, "draft upload bucket")
+        bucket = _validated_upload_bucket(bucket, validated_base)
     except ZenodoPublisherError as exc:
         raise ZenodoPublisherError(
             "Zenodo draft response omitted a secure upload bucket (invalid Zenodo URL)"

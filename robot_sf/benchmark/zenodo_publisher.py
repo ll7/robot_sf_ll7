@@ -7,6 +7,7 @@ import json
 import os
 import posixpath
 import re
+import unicodedata
 from collections.abc import Mapping
 from copy import deepcopy
 from pathlib import Path
@@ -19,16 +20,22 @@ from robot_sf.common.optional_import import try_import
 ZENODO_API_BASE = "https://zenodo.org/api"
 ZENODO_STATE_SCHEMA = "robot-sf-zenodo-deposition.v1"
 ZENODO_VERIFICATION_SCHEMA = "robot-sf-zenodo-verification.v2"
+ZENODO_RECONCILIATION_SCHEMA = "robot-sf-zenodo-reconciliation.v1"
 _REMOTE_DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _SOURCE_TAG_RE = re.compile(r"^https://github\.com/ll7/robot_sf_ll7/releases/tag/[^/?#]+$")
 _ZENODO_DOI_RE = re.compile(r"^10\.5281/zenodo\.\d+$")
+_ZENODO_FILE_ID_RE = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._-]{0,127}$")
 _CLAIM_BOUNDARY_TERMS = ("snqi", "advisory", "ranking")
 _CREDENTIAL_KEYS = ("token", "authorization", "password", "secret")
 _APPROVED_ZENODO_API_HOSTS = frozenset({"zenodo.org"})
 _KNOWN_ZENODO_STATES = frozenset({"unsubmitted", "inprogress", "done", "error"})
 _STABLE_ZENODO_STATES = frozenset({"unsubmitted", "done"})
 _REMOTE_VERSION_FIELDS = ("modified", "version", "revision")
+_REMOTE_FILENAME_ALIASES = ("filename", "key")
+_REMOTE_FILE_ID_ALIASES = ("id", "file_id", "fileid")
+_DELETE_READBACK_ATTEMPTS = 3
+_STABLE_READBACK_COUNT = 2
 
 
 class ZenodoPublisherError(RuntimeError):
@@ -809,6 +816,108 @@ def _verify_integrity(payload: Mapping[str, Any], *, key: str, schema: str) -> N
     _assert_credential_free(payload)
 
 
+def _validate_reconciliation_receipt(state: Mapping[str, Any]) -> None:  # noqa: C901, PLR0912
+    """Validate an optional credential-free receipt for the last draft cleanup.
+
+    The receipt is optional so states written before reconciliation receipts
+    existed remain readable. When present, every field that could authorize a
+    later operation is bound to the sealed state and to a final remote
+    deposition readback.
+    """
+    reconciliation = state.get("reconciliation_receipt")
+    if reconciliation is None:
+        return
+    if not isinstance(reconciliation, Mapping):
+        raise ZenodoPublisherError("Zenodo state reconciliation receipt is malformed")
+    _verify_integrity(
+        reconciliation,
+        key="integrity",
+        schema=ZENODO_RECONCILIATION_SCHEMA,
+    )
+    if reconciliation.get("schema_version") != ZENODO_RECONCILIATION_SCHEMA:
+        raise ZenodoPublisherError("Zenodo state reconciliation receipt schema is invalid")
+    if reconciliation.get("status") != "pass":
+        raise ZenodoPublisherError("Zenodo state reconciliation receipt is not successful")
+    if reconciliation.get("publication_state") != "draft":
+        raise ZenodoPublisherError("Zenodo state reconciliation receipt is not for a draft")
+
+    expected_files, file_problems = _file_inventory(state)
+    if file_problems:
+        raise ZenodoPublisherError(
+            "Zenodo state reconciliation receipt has an invalid intended inventory"
+        )
+    receipt_files = reconciliation.get("files")
+    if not isinstance(receipt_files, list) or receipt_files != state.get("files"):
+        raise ZenodoPublisherError("Zenodo state reconciliation receipt files do not match state")
+    receipt_inventory, receipt_problems = _file_inventory({"files": receipt_files})
+    if receipt_problems or set(receipt_inventory) != set(expected_files):
+        raise ZenodoPublisherError("Zenodo state reconciliation receipt inventory is invalid")
+    if reconciliation.get("intended_inventory_sha256") != _inventory_sha256(receipt_files):
+        raise ZenodoPublisherError(
+            "Zenodo state reconciliation receipt intended inventory digest does not match state"
+        )
+
+    deleted_files = reconciliation.get("deleted_files")
+    if not isinstance(deleted_files, list):
+        raise ZenodoPublisherError("Zenodo state reconciliation receipt deleted files are invalid")
+    validated_deleted: list[str] = []
+    deleted_keys: set[str] = set()
+    intended_keys = {_filename_collision_key(name) for name in expected_files}
+    for deleted_name in deleted_files:
+        try:
+            validated_name = _validated_file_name(
+                deleted_name,
+                "reconciliation receipt deleted file",
+            )
+        except ZenodoPublisherError as exc:
+            raise ZenodoPublisherError(
+                "Zenodo state reconciliation receipt deleted files are invalid"
+            ) from exc
+        collision_key = _filename_collision_key(validated_name)
+        if collision_key in deleted_keys or collision_key in intended_keys:
+            raise ZenodoPublisherError(
+                "Zenodo state reconciliation receipt deleted files are ambiguous"
+            )
+        deleted_keys.add(collision_key)
+        validated_deleted.append(validated_name)
+    if validated_deleted != sorted(validated_deleted, key=_filename_sort_key):
+        raise ZenodoPublisherError(
+            "Zenodo state reconciliation receipt deleted files are not canonical"
+        )
+    deleted_file_count = reconciliation.get("deleted_file_count")
+    if (
+        isinstance(deleted_file_count, bool)
+        or not isinstance(deleted_file_count, int)
+        or deleted_file_count != len(validated_deleted)
+    ):
+        raise ZenodoPublisherError("Zenodo state reconciliation receipt deletion count is invalid")
+
+    for key in ("deposition_id", "record_id", "concept_record_id", "doi"):
+        if reconciliation.get(key) != state.get(key):
+            raise ZenodoPublisherError(
+                "Zenodo state reconciliation receipt identity does not match state"
+            )
+    if reconciliation.get("final_remote_state") != state.get("state"):
+        raise ZenodoPublisherError(
+            "Zenodo state reconciliation receipt final remote state does not match state"
+        )
+    if reconciliation.get("final_remote_submitted") != state.get("submitted"):
+        raise ZenodoPublisherError(
+            "Zenodo state reconciliation receipt final remote lifecycle does not match state"
+        )
+    revision = reconciliation.get("final_remote_revision")
+    if not isinstance(revision, Mapping):
+        raise ZenodoPublisherError("Zenodo state reconciliation receipt revision is invalid")
+    if (
+        not isinstance(revision.get("field"), str)
+        or not revision.get("field")
+        or revision["field"] not in {*_REMOTE_VERSION_FIELDS, "snapshot"}
+        or not isinstance(revision.get("sha256"), str)
+        or _SHA256_RE.fullmatch(revision["sha256"]) is None
+    ):
+        raise ZenodoPublisherError("Zenodo state reconciliation receipt revision is invalid")
+
+
 def _validate_state_for_operation(state: Mapping[str, Any]) -> None:
     """Validate sealed state identity and lifecycle before any API URL use."""
     if not isinstance(state, Mapping):
@@ -837,35 +946,185 @@ def _validate_state_for_operation(state: Mapping[str, Any]) -> None:
         raise ZenodoPublisherError("Zenodo state lifecycle is inconsistent")
     if lifecycle not in _STABLE_ZENODO_STATES:
         raise ZenodoPublisherError("Zenodo state lifecycle is not an admissible operation state")
+    _validate_reconciliation_receipt(state)
+
+
+def _contains_control_character(value: str) -> bool:
+    """Return whether a filename contains a Unicode control character."""
+    return any(
+        unicodedata.category(character) in {"Cc", "Cf"} or not character.isprintable()
+        for character in value
+    )
+
+
+def _filename_collision_key(value: str) -> str:
+    """Return the canonical key used to reject URL/Unicode filename aliases."""
+    return unicodedata.normalize("NFC", unquote(value))
+
+
+def _filename_sort_key(value: str) -> bytes:
+    """Return a stable UTF-8 sort key for validated filenames."""
+    return unicodedata.normalize("NFC", value).encode("utf-8")
+
+
+def _validated_file_id(value: Any, label: str) -> str:
+    """Require one opaque legacy-deposition file ID safe for a URL path.
+
+    Returns:
+        The validated file ID.
+    """
+    if not isinstance(value, str) or _ZENODO_FILE_ID_RE.fullmatch(value) is None:
+        raise ZenodoPublisherError(f"Zenodo {label} has an invalid file ID")
+    return value
+
+
+def _validated_file_name(value: Any, label: str) -> str:
+    """Require a safe, non-ambiguous single deposition filename.
+
+    Raw query/fragment delimiters, controls, path separators, percent-encoded,
+    and non-NFC names are rejected. These rules prevent a filename from being
+    confused with a differently encoded or normalized name by a URL parser or
+    API alias.
+
+    Returns:
+        The original validated filename.
+    """
+    if (
+        not isinstance(value, str)
+        or not value
+        or value in {".", ".."}
+        or "/" in value
+        or "\\" in value
+        or "?" in value
+        or "#" in value
+        or _contains_control_character(value)
+    ):
+        raise ZenodoPublisherError(f"Zenodo {label} has an unsafe filename")
+    decoded = unquote(value)
+    if (
+        "%" in value
+        or unicodedata.normalize("NFC", value) != value
+        or decoded != value
+        or "/" in decoded
+        or "\\" in decoded
+        or "?" in decoded
+        or "#" in decoded
+        or _contains_control_character(decoded)
+        or quote(decoded, safe="") != quote(value, safe="")
+    ):
+        raise ZenodoPublisherError(f"Zenodo {label} has an encoded or unsafe filename")
+    return value
+
+
+def _validated_file_alias(
+    item: Mapping[str, Any],
+    aliases: tuple[str, ...],
+    *,
+    label: str,
+    validator: Any,
+) -> str | None:
+    """Resolve one set of remote aliases and reject conflicting values.
+
+    Returns:
+        The validated alias value, or ``None`` when no alias is present.
+    """
+    observed: list[tuple[str, str]] = []
+    for field in aliases:
+        if field not in item or item[field] is None:
+            continue
+        observed.append((field, validator(item[field], f"{label}.{field}")))
+    if not observed:
+        return None
+    first_value = observed[0][1]
+    if any(value != first_value for _, value in observed[1:]):
+        raise ZenodoPublisherError(f"Zenodo {label} aliases conflict")
+    return first_value
+
+
+def _validated_remote_filename(item: Mapping[str, Any], *, label: str) -> str:
+    """Resolve and validate the ``filename``/``key`` remote aliases.
+
+    Returns:
+        The validated remote filename.
+    """
+    name = _validated_file_alias(
+        item,
+        _REMOTE_FILENAME_ALIASES,
+        label=label,
+        validator=_validated_file_name,
+    )
+    if name is None:
+        raise ZenodoPublisherError(f"Zenodo {label} has no filename")
+    return name
+
+
+def _validated_remote_file_id(item: Mapping[str, Any], *, label: str) -> str:
+    """Resolve and validate the known remote file-ID aliases.
+
+    Returns:
+        The validated remote file ID.
+    """
+    file_id = _validated_file_alias(
+        item,
+        _REMOTE_FILE_ID_ALIASES,
+        label=label,
+        validator=_validated_file_id,
+    )
+    if file_id is None:
+        raise ZenodoPublisherError(f"Zenodo {label} has no file ID")
+    return file_id
 
 
 def _file_inventory(state: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
     """Validate and index the nonempty expected file inventory.
 
     Returns:
-        An index by filename and a list of contract violations.
+        An index by exact filename and a list of contract violations.
     """
     raw_files = state.get("files")
     problems: list[str] = []
     if not isinstance(raw_files, list) or not raw_files:
         return {}, ["expected file inventory is empty"]
     indexed: dict[str, Any] = {}
+    collision_keys: set[str] = set()
     for item in raw_files:
         if not isinstance(item, Mapping):
             problems.append("expected file inventory contains a malformed entry")
             continue
-        name = item.get("name")
-        size = item.get("size")
-        digest = item.get("sha256")
-        if not isinstance(name, str) or not name or name in indexed:
+        try:
+            name = _validated_file_name(item.get("name"), "expected file inventory")
+        except ZenodoPublisherError:
+            problems.append("expected file inventory contains an unsafe or ambiguous filename")
+            continue
+        if name in indexed:
             problems.append("expected file inventory contains a missing or duplicate filename")
             continue
-        if not isinstance(size, int) or size <= 0:
+        collision_key = _filename_collision_key(name)
+        if collision_key in collision_keys:
+            problems.append("expected file inventory contains an encoded or ambiguous filename")
+            continue
+        collision_keys.add(collision_key)
+        size = item.get("size")
+        digest = item.get("sha256")
+        if isinstance(size, bool) or not isinstance(size, int) or size <= 0:
             problems.append(f"expected file {name} is empty or has an invalid size")
         if not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest):
             problems.append(f"expected file {name} has an invalid SHA-256")
         indexed[name] = dict(item)
     return indexed, problems
+
+
+def _inventory_sha256(files: list[Mapping[str, Any]]) -> str:
+    """Hash the canonical intended upload inventory.
+
+    Returns:
+        The lowercase SHA-256 digest of the canonical inventory.
+    """
+    canonical = [
+        {"name": item["name"], "size": item["size"], "sha256": item["sha256"]} for item in files
+    ]
+    canonical.sort(key=lambda item: _filename_sort_key(item["name"]))
+    return hashlib.sha256(_canonical_bytes({"files": canonical})).hexdigest()
 
 
 def _sha256_file(path: Path) -> str:
@@ -881,29 +1140,70 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _validated_upload_files(files: list[Path]) -> list[tuple[Path, int, str]]:
+def _validated_upload_files(files: list[Path]) -> list[tuple[Path, int, str]]:  # noqa: C901
     """Resolve and hash a complete, unique local upload inventory before mutation.
 
     Returns:
         Tuples containing the resolved path, byte size, and SHA-256 digest.
     """
-    if not files:
+    if not isinstance(files, list) or not files:
         raise ZenodoPublisherError("upload requires at least one nonempty file")
     validated: list[tuple[Path, int, str]] = []
     names: set[str] = set()
-    for file_path in files:
-        resolved = file_path.resolve()
-        if not resolved.is_file():
-            raise ZenodoPublisherError(f"upload file not found: {resolved}")
-        name = resolved.name
-        if name in names:
-            raise ZenodoPublisherError(f"upload contains duplicate filename: {name}")
-        names.add(name)
-        size = resolved.stat().st_size
-        if size <= 0:
-            raise ZenodoPublisherError(f"upload file is empty: {name}")
-        validated.append((resolved, size, _sha256_file(resolved)))
+    collision_keys: set[str] = set()
+    for file_path in tuple(files):
+        if not isinstance(file_path, Path):
+            raise ZenodoPublisherError("upload file paths must be pathlib.Path values")
+        try:
+            if file_path.is_symlink():
+                raise ZenodoPublisherError("upload file must not be a symlink")
+            resolved = file_path.resolve(strict=True)
+            if not resolved.is_file() or resolved.is_symlink():
+                raise ZenodoPublisherError(f"upload file not found: {resolved}")
+            name = _validated_file_name(resolved.name, "upload file")
+            if name in names:
+                raise ZenodoPublisherError(f"upload contains duplicate filename: {name}")
+            collision_key = _filename_collision_key(name)
+            if collision_key in collision_keys:
+                raise ZenodoPublisherError(
+                    f"upload contains an encoded or ambiguous filename: {name}"
+                )
+            names.add(name)
+            collision_keys.add(collision_key)
+            size = resolved.stat().st_size
+            if size <= 0:
+                raise ZenodoPublisherError(f"upload file is empty: {name}")
+            digest = _sha256_file(resolved)
+        except ZenodoPublisherError:
+            raise
+        except FileNotFoundError as exc:
+            raise ZenodoPublisherError(f"upload file not found: {file_path}") from exc
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            raise ZenodoPublisherError(f"upload file could not be validated: {file_path}") from exc
+        validated.append((resolved, size, digest))
+    validated.sort(key=lambda item: _filename_sort_key(item[0].name))
     return validated
+
+
+def _assert_local_upload_file_unchanged(
+    file_path: Path,
+    expected_size: int,
+    expected_sha256: str,
+    *,
+    phase: str,
+) -> None:
+    """Require a preflighted local file to remain a regular, byte-identical file."""
+    try:
+        unchanged = (
+            not file_path.is_symlink()
+            and file_path.is_file()
+            and file_path.stat().st_size == expected_size
+            and _sha256_file(file_path) == expected_sha256
+        )
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        raise ZenodoPublisherError(f"upload file changed {phase}: {file_path.name}") from exc
+    if not unchanged:
+        raise ZenodoPublisherError(f"upload file changed {phase}: {file_path.name}")
 
 
 def _draft_file_inventory(
@@ -911,43 +1211,40 @@ def _draft_file_inventory(
     *,
     deposition_id: int,
     api_base: str,
-) -> dict[str, tuple[str, str]]:
+) -> dict[str, str]:
     """Validate and index a complete remote draft-file inventory.
 
     Returns:
-        File IDs and exact deletion URLs keyed by safe, unique filename.
+        Validated file IDs keyed by safe, unique filename.
     """
     if not isinstance(raw_files, list):
         raise ZenodoPublisherError("Zenodo draft response omitted its file inventory")
-    inventory: dict[str, tuple[str, str]] = {}
+    inventory: dict[str, str] = {}
     seen_ids: set[str] = set()
+    collision_keys: set[str] = set()
     for index, item in enumerate(raw_files):
         if not isinstance(item, Mapping):
             raise ZenodoPublisherError(
                 f"Zenodo draft file inventory contains a malformed entry at index {index}"
             )
-        name = item.get("filename")
-        if (
-            not isinstance(name, str)
-            or not name
-            or name in {".", ".."}
-            or "/" in name
-            or "\\" in name
-            or "\x00" in name
-        ):
+        try:
+            name = _validated_remote_filename(
+                item,
+                label=f"draft file inventory at index {index}",
+            )
+        except ZenodoPublisherError as exc:
             raise ZenodoPublisherError(
                 f"Zenodo draft file inventory contains an unsafe filename at index {index}"
-            )
+            ) from exc
         if name in inventory:
-            raise ZenodoPublisherError(f"Zenodo draft contains duplicate file {name}")
-        file_id = item.get("id")
-        if (
-            not isinstance(file_id, str)
-            or re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._-]{0,127}", file_id) is None
-        ):
-            raise ZenodoPublisherError(f"Zenodo draft file {name} has an invalid file ID")
+            raise ZenodoPublisherError("Zenodo draft contains duplicate file filename")
+        collision_key = _filename_collision_key(name)
+        if collision_key in collision_keys:
+            raise ZenodoPublisherError("Zenodo draft contains an encoded or ambiguous filename")
+        collision_keys.add(collision_key)
+        file_id = _validated_remote_file_id(item, label=f"draft file at index {index}")
         if file_id in seen_ids:
-            raise ZenodoPublisherError(f"Zenodo draft contains duplicate file ID {file_id}")
+            raise ZenodoPublisherError("Zenodo draft contains duplicate file ID")
         seen_ids.add(file_id)
         links = item.get("links")
         self_url = links.get("self") if isinstance(links, Mapping) else None
@@ -956,15 +1253,23 @@ def _draft_file_inventory(
             api_base,
             f"draft file {name} identity",
         )
-        expected_url = (
-            f"{api_base}/deposit/depositions/{deposition_id}/files/{quote(file_id, safe='')}"
-        )
+        expected_url = _draft_file_url(api_base, deposition_id, file_id)
         if validated_url != expected_url:
-            raise ZenodoPublisherError(
-                f"Zenodo draft file {name} URL does not match its deposition"
-            )
-        inventory[name] = (file_id, validated_url)
+            raise ZenodoPublisherError("Zenodo draft file URL does not match its deposition")
+        inventory[name] = file_id
     return inventory
+
+
+def _draft_file_url(api_base: str, deposition_id: int, file_id: str) -> str:
+    """Construct the exact successor-scoped legacy deposition-file URL.
+
+    Returns:
+        The successor-scoped file URL.
+    """
+    return (
+        f"{api_base.rstrip('/')}/deposit/depositions/{deposition_id}/files/"
+        f"{quote(file_id, safe='')}"
+    )
 
 
 def _validate_successor_cleanup_state(state: Mapping[str, Any]) -> None:
@@ -988,8 +1293,112 @@ def _validate_successor_cleanup_state(state: Mapping[str, Any]) -> None:
         raise ZenodoPublisherError("Zenodo successor state predecessor binding is invalid")
     concept_doi = state.get("concept_doi")
     expected_concept_doi = f"10.5281/zenodo.{state.get('concept_record_id')}"
-    if concept_doi != expected_concept_doi or concept_doi == predecessor_doi:
+    if concept_doi != expected_concept_doi or concept_doi in {predecessor_doi, state.get("doi")}:
         raise ZenodoPublisherError("Zenodo successor state concept DOI binding is invalid")
+    source_tag = state.get("source_tag")
+    if (
+        not isinstance(source_tag, str)
+        or _expected_source_tag_url(source_tag, label="state successor source tag") != source_tag
+    ):
+        raise ZenodoPublisherError("Zenodo successor state source tag binding is invalid")
+
+
+def _validate_successor_cleanup_metadata(
+    payload: Mapping[str, Any],
+    state: Mapping[str, Any],
+    *,
+    operation: str,
+) -> None:
+    """Require a remote draft to prove the same successor lineage as sealed state."""
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, Mapping):
+        raise ZenodoPublisherError(f"Zenodo {operation} omitted successor metadata")
+    expected_concept_doi = f"10.5281/zenodo.{state.get('concept_record_id')}"
+    _validate_successor_concept(
+        payload,
+        expected_concept_doi=expected_concept_doi,
+        operation=operation,
+    )
+    source_tag = _source_tag(metadata, require_url_scheme=True)
+    if source_tag != state.get("source_tag"):
+        raise ZenodoPublisherError(
+            f"Zenodo {operation} successor source tag does not match sealed state"
+        )
+    predecessor_doi = _successor_predecessor_doi(metadata)
+    if predecessor_doi != state.get("predecessor_doi"):
+        raise ZenodoPublisherError(
+            f"Zenodo {operation} predecessor relation does not match sealed state"
+        )
+
+
+def _get_json_payload(session: _Session, url: str, operation: str) -> Any:
+    """Fetch one JSON payload while normalizing transport failures.
+
+    Returns:
+        The decoded JSON payload.
+    """
+    try:
+        response = session.get(url, timeout=60, allow_redirects=False)
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        raise ZenodoPublisherError(f"Zenodo {operation} request failed") from exc
+    try:
+        if response.status_code >= 300:
+            raise RuntimeError("HTTP redirect or failure")
+        response.raise_for_status()
+        return response.json()
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        raise ZenodoPublisherError(f"Zenodo {operation} request failed") from exc
+
+
+def _get_json_object(session: _Session, url: str, operation: str) -> dict[str, Any]:
+    """Fetch one JSON object while normalizing transport failures.
+
+    Returns:
+        The decoded JSON object.
+    """
+    payload = _get_json_payload(session, url, operation)
+    if not isinstance(payload, dict):
+        raise ZenodoPublisherError(f"Zenodo {operation} response was not a JSON object")
+    return payload
+
+
+def _read_successor_deposition(
+    session: _Session,
+    state: Mapping[str, Any],
+    *,
+    api_base: str,
+    operation: str,
+    require_lineage: bool,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, str]]:
+    """Read one exact successor deposition and derive its validated inventory.
+
+    The legacy ``/files`` collection endpoint is intentionally not used here:
+    the lifecycle, identity, metadata, and file inventory must come from one
+    response so a stale collection cannot authorize deletion.
+
+    Returns:
+        Raw validated deposition response, public lifecycle state, and file IDs.
+    """
+    deposition_id = _positive_deposition_id(state.get("deposition_id"), "state deposition ID")
+    payload = _get_json_object(
+        session,
+        f"{api_base}/deposit/depositions/{deposition_id}",
+        operation,
+    )
+    remote_state = _public_state(payload)
+    for key in ("deposition_id", "record_id", "concept_record_id", "doi"):
+        if remote_state.get(key) != state.get(key):
+            raise ZenodoPublisherError(f"Zenodo {operation} changed reserved identity")
+    _validate_unpublished_draft(payload, operation)
+    if require_lineage:
+        _validate_successor_cleanup_state(state)
+        _validate_successor_cleanup_metadata(payload, state, operation=operation)
+    inventory = _draft_file_inventory(
+        payload.get("files"),
+        deposition_id=deposition_id,
+        api_base=api_base,
+    )
+    return payload, remote_state, inventory
 
 
 def _list_draft_files(
@@ -998,46 +1407,67 @@ def _list_draft_files(
     deposition_id: int,
     api_base: str,
     operation: str,
-) -> dict[str, tuple[str, str]]:
-    """Fetch and validate the current file inventory of one exact draft.
+) -> dict[str, str]:
+    """Compatibility helper that reads inventory from the exact draft response.
 
     Returns:
-        File IDs and exact deletion URLs keyed by safe, unique filename.
+        Validated file IDs keyed by safe, unique filename.
     """
-    response = session.get(
-        f"{api_base}/deposit/depositions/{deposition_id}/files",
-        timeout=60,
-        allow_redirects=False,
+    payload = _get_json_object(
+        session,
+        f"{api_base}/deposit/depositions/{deposition_id}",
+        operation,
     )
-    try:
-        if response.status_code >= 300:
-            raise RuntimeError("HTTP redirect or failure")
-        response.raise_for_status()
-        payload = response.json()
-    except (OSError, RuntimeError, ValueError) as exc:
-        raise ZenodoPublisherError(f"Zenodo {operation} request failed") from exc
     return _draft_file_inventory(
-        payload,
+        payload.get("files"),
         deposition_id=deposition_id,
         api_base=api_base,
     )
 
 
-def _delete_draft_extra(session: _Session, *, name: str, url: str) -> None:
-    """Delete one prevalidated extra from an unpublished draft."""
-    response = session.delete(url, timeout=60, allow_redirects=False)
+def _delete_draft_extra(
+    session: _Session,
+    *,
+    name: str,
+    deposition_id: int,
+    file_id: str,
+    api_base: str,
+) -> str:
+    """Issue one deletion and classify its result without assuming success.
+
+    Returns:
+        ``success``, ``not_found``, ``forbidden``, ``server_error``,
+        ``network``, or ``unexpected``. Every non-success result is resolved
+        only by a later exact-deposition readback.
+    """
+    url = _draft_file_url(api_base, deposition_id, file_id)
     try:
-        if response.status_code != 204:
-            raise RuntimeError("unexpected delete response")
-        response.raise_for_status()
-    except (OSError, RuntimeError, ValueError) as exc:
-        raise ZenodoPublisherError(f"Zenodo delete extra draft file {name} request failed") from exc
+        response = session.delete(url, timeout=60, allow_redirects=False)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return "network"
+    status_code = getattr(response, "status_code", None)
+    if isinstance(status_code, bool) or not isinstance(status_code, int):
+        return "unexpected"
+    if status_code == 204:
+        try:
+            response.raise_for_status()
+        except (OSError, RuntimeError, TypeError, ValueError):
+            return "unexpected"
+        return "success"
+    if status_code == 404:
+        return "not_found"
+    if status_code == 403:
+        return "forbidden"
+    if status_code >= 500:
+        return "server_error"
+    return "unexpected"
 
 
 def _admit_successor_cleanup(
     state: Mapping[str, Any],
     *,
-    initial_inventory: Mapping[str, tuple[str, str]],
+    deposition: Mapping[str, Any],
+    initial_inventory: Mapping[str, str],
     expected_names: set[str],
 ) -> set[str]:
     """Validate successor provenance when the draft contains extra files.
@@ -1048,51 +1478,168 @@ def _admit_successor_cleanup(
     extra_names = set(initial_inventory) - expected_names
     if extra_names:
         _validate_successor_cleanup_state(state)
+        _validate_successor_cleanup_metadata(deposition, state, operation="upload response")
     return extra_names
 
 
 def _reconcile_inherited_draft_files(
     session: _Session,
     *,
-    initial_inventory: Mapping[str, tuple[str, str]],
+    state: Mapping[str, Any],
+    initial_inventory: Mapping[str, str],
     expected_names: set[str],
     extra_names: set[str],
     deposition_id: int,
     api_base: str,
-) -> None:
-    """Remove only stable, pre-existing extras from a proven successor draft."""
-    post_upload_inventory = _list_draft_files(
+) -> tuple[list[str], dict[str, Any], dict[str, str]]:
+    """Reconcile inherited files using exact deposition responses only.
+
+    Returns:
+        Deleted filenames, the final exact deposition response, and its
+        validated file inventory.
+    """
+    post_upload_payload, _, post_upload_inventory = _read_successor_deposition(
         session,
-        deposition_id=deposition_id,
+        state,
         api_base=api_base,
-        operation="post-upload draft file inventory",
+        operation="post-upload successor deposition",
+        require_lineage=bool(extra_names),
     )
     if set(post_upload_inventory) != expected_names | extra_names:
         raise ZenodoPublisherError(
             "Zenodo draft file inventory changed unexpectedly after upload; refusing deletion"
         )
-    if not extra_names:
-        return
-    if any(post_upload_inventory[name] != initial_inventory[name] for name in sorted(extra_names)):
+    if any(
+        post_upload_inventory[name] != initial_inventory[name]
+        for name in sorted(extra_names, key=_filename_sort_key)
+    ):
         raise ZenodoPublisherError(
             "Zenodo inherited draft file identity changed after upload; refusing deletion"
         )
-    for name in sorted(extra_names):
-        _delete_draft_extra(
+    if not extra_names:
+        return [], post_upload_payload, post_upload_inventory
+
+    expected_inventory = dict(post_upload_inventory)
+    deleted_names: list[str] = []
+    for name in sorted(extra_names, key=_filename_sort_key):
+        _, _, pre_delete_inventory = _read_successor_deposition(
+            session,
+            state,
+            api_base=api_base,
+            operation="pre-delete successor deposition",
+            require_lineage=True,
+        )
+        if pre_delete_inventory != expected_inventory:
+            raise ZenodoPublisherError(
+                "Zenodo draft file inventory changed unexpectedly before deletion"
+            )
+        expected_after_delete = dict(pre_delete_inventory)
+        file_id = expected_after_delete.pop(name)
+        outcome = _delete_draft_extra(
             session,
             name=name,
-            url=post_upload_inventory[name][1],
+            deposition_id=deposition_id,
+            file_id=file_id,
+            api_base=api_base,
         )
-    final_inventory = _list_draft_files(
-        session,
-        deposition_id=deposition_id,
-        api_base=api_base,
-        operation="post-delete draft file inventory",
+        final_payload, final_inventory = _stable_delete_readback(
+            session,
+            state=state,
+            expected_before=pre_delete_inventory,
+            expected_after=expected_after_delete,
+            deleted_name=name,
+            outcome=outcome,
+            deposition_id=deposition_id,
+            api_base=api_base,
+        )
+        expected_inventory = final_inventory
+        deleted_names.append(name)
+    return deleted_names, final_payload, expected_inventory
+
+
+def _stable_delete_readback(
+    session: _Session,
+    *,
+    state: Mapping[str, Any],
+    expected_before: Mapping[str, str],
+    expected_after: Mapping[str, str],
+    deleted_name: str,
+    outcome: str,
+    deposition_id: int,
+    api_base: str,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Prove one deletion with a bounded, lifecycle-aware exact-read loop.
+
+    A 404, 403, 5xx, transport failure, or any other non-204 result is
+    conditionally idempotent only when two consecutive exact successor
+    responses show the expected target absence and unchanged lifecycle,
+    identity, and inventory. A 204 receives the same readback proof because
+    the response alone does not prove the remote state after eventual
+    consistency.
+
+    Returns:
+        The stable final deposition response and its validated inventory.
+    """
+    if outcome not in {
+        "success",
+        "not_found",
+        "forbidden",
+        "server_error",
+        "network",
+        "unexpected",
+    }:
+        raise ZenodoPublisherError("Zenodo delete response classification is invalid")
+    previous_snapshot: tuple[Any, ...] | None = None
+    stable_count = 0
+    last_transport_error = False
+    for _ in range(_DELETE_READBACK_ATTEMPTS):
+        try:
+            payload, remote_state, inventory = _read_successor_deposition(
+                session,
+                state,
+                api_base=api_base,
+                operation="post-delete successor deposition",
+                require_lineage=True,
+            )
+        except ZenodoPublisherError as exc:
+            if "request failed" not in str(exc):
+                raise ZenodoPublisherError(
+                    f"Zenodo DELETE {outcome} for {deleted_name} could not be confirmed"
+                ) from exc
+            last_transport_error = True
+            previous_snapshot = None
+            stable_count = 0
+            continue
+        last_transport_error = False
+        if inventory not in (expected_before, expected_after):
+            raise ZenodoPublisherError(
+                "Zenodo draft file inventory changed unexpectedly after deletion"
+            )
+        if inventory != expected_after:
+            previous_snapshot = None
+            stable_count = 0
+            continue
+        revision = _remote_revision_binding(payload, inventory)
+        snapshot = (
+            tuple(sorted(inventory.items(), key=lambda item: _filename_sort_key(item[0]))),
+            remote_state["state"],
+            remote_state["submitted"],
+            revision["field"],
+            revision["sha256"],
+        )
+        if snapshot == previous_snapshot:
+            stable_count += 1
+        else:
+            previous_snapshot = snapshot
+            stable_count = 1
+        if stable_count >= _STABLE_READBACK_COUNT:
+            return payload, inventory
+    detail = (
+        "readback transport failed" if last_transport_error else "stable readback was not observed"
     )
-    if set(final_inventory) != expected_names:
-        raise ZenodoPublisherError(
-            "Zenodo draft file inventory does not match intended upload after cleanup"
-        )
+    raise ZenodoPublisherError(
+        f"Zenodo DELETE {outcome} for {deleted_name} failed closed: {detail}"
+    )
 
 
 def _stream_remote_file(response: _Response) -> tuple[int, str]:
@@ -1238,9 +1785,140 @@ def _remote_optimistic_binding(payload: Mapping[str, Any]) -> dict[str, str] | N
     return None
 
 
+def _remote_revision_binding(
+    payload: Mapping[str, Any],
+    inventory: Mapping[str, str],
+) -> dict[str, str]:
+    """Bind a final remote read to its server revision or exact snapshot.
+
+    Legacy Zenodo responses do not always expose a revision field. In that
+    case an exact identity/lifecycle/file snapshot is used as a conservative
+    local revision so the receipt is still tied to the final response.
+
+    Returns:
+        A field name and SHA-256 digest for the final remote read.
+    """
+    optimistic = _remote_optimistic_binding(payload)
+    if optimistic is not None:
+        return optimistic
+    snapshot = {
+        "deposition_id": payload.get("id"),
+        "record_id": payload.get("record_id"),
+        "concept_record_id": payload.get("conceptrecid"),
+        "doi": payload.get("doi"),
+        "state": payload.get("state"),
+        "submitted": payload.get("submitted"),
+        "files": [
+            {"name": name, "id": file_id}
+            for name, file_id in sorted(
+                inventory.items(), key=lambda item: _filename_sort_key(item[0])
+            )
+        ],
+    }
+    return {
+        "field": "snapshot",
+        "sha256": hashlib.sha256(_canonical_bytes(snapshot)).hexdigest(),
+    }
+
+
+def _reconciliation_receipt(
+    deposition: Mapping[str, Any],
+    inventory: Mapping[str, str],
+    files: list[dict[str, Any]],
+    deleted_files: list[str],
+) -> dict[str, Any]:
+    """Seal a credential-free draft reconciliation result.
+
+    Returns:
+        A credential-free reconciliation receipt.
+    """
+    final_state = _public_state(deposition)
+    canonical_deleted = sorted(deleted_files, key=_filename_sort_key)
+    return _seal_payload(
+        {
+            "schema_version": ZENODO_RECONCILIATION_SCHEMA,
+            "status": "pass",
+            "publication_state": "draft",
+            "deposition_id": final_state["deposition_id"],
+            "record_id": final_state["record_id"],
+            "concept_record_id": final_state["concept_record_id"],
+            "doi": final_state["doi"],
+            "files": [dict(file) for file in files],
+            "intended_inventory_sha256": _inventory_sha256(files),
+            "deleted_files": canonical_deleted,
+            "deleted_file_count": len(canonical_deleted),
+            "final_remote_revision": _remote_revision_binding(deposition, inventory),
+            "final_remote_state": final_state["state"],
+            "final_remote_submitted": final_state["submitted"],
+        },
+        "integrity",
+        ZENODO_RECONCILIATION_SCHEMA,
+    )
+
+
 def _receipt_contract(receipt: Mapping[str, Any]) -> dict[str, Any]:
     """Return receipt fields that bind one verified remote state."""
     return {key: value for key, value in receipt.items() if key != "integrity"}
+
+
+def _verification_file_inventory(
+    raw_files: Any,
+) -> tuple[dict[str, Mapping[str, Any]], list[str]]:
+    """Validate remote filename/ID aliases before verification downloads bytes.
+
+    Returns:
+        A safe filename index and non-secret problem descriptions. Invalid or
+        ambiguous entries are never selected for a download.
+    """
+    problems: list[str] = []
+    if not isinstance(raw_files, list) or not raw_files:
+        return {}, ["remote file inventory is empty"]
+    remote_by_name: dict[str, Mapping[str, Any]] = {}
+    collision_keys: set[str] = set()
+    seen_ids: set[str] = set()
+    for index, item in enumerate(raw_files):
+        if not isinstance(item, Mapping):
+            problems.append("remote file inventory contains a malformed entry")
+            continue
+        try:
+            name = _validated_remote_filename(
+                item,
+                label=f"remote file inventory at index {index}",
+            )
+        except ZenodoPublisherError:
+            problems.append(
+                f"remote file inventory contains an invalid or conflicting filename at index {index}"
+            )
+            continue
+        try:
+            file_id = _validated_file_alias(
+                item,
+                _REMOTE_FILE_ID_ALIASES,
+                label=f"remote file inventory at index {index}",
+                validator=_validated_file_id,
+            )
+        except ZenodoPublisherError:
+            problems.append(
+                f"remote file inventory contains an invalid or conflicting file ID at index {index}"
+            )
+            continue
+        if name in remote_by_name:
+            problems.append(f"remote file inventory contains a duplicate entry at index {index}")
+            continue
+        collision_key = _filename_collision_key(name)
+        if collision_key in collision_keys:
+            problems.append(
+                f"remote file inventory contains an encoded or ambiguous filename at index {index}"
+            )
+            continue
+        if file_id is not None and file_id in seen_ids:
+            problems.append(f"remote file inventory contains a duplicate file ID at index {index}")
+            continue
+        collision_keys.add(collision_key)
+        if file_id is not None:
+            seen_ids.add(file_id)
+        remote_by_name[name] = item
+    return remote_by_name, problems
 
 
 def _public_state(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -1655,19 +2333,16 @@ def upload(
         working_state.get("deposition_id"),
         "state deposition ID",
     )
-    deposition = _json_object(
-        session.get(
-            f"{validated_base}/deposit/depositions/{deposition_id}",
-            timeout=60,
-            allow_redirects=False,
-        ),
+    deposition = _get_json_object(
+        session,
+        f"{validated_base}/deposit/depositions/{deposition_id}",
         "retrieve draft",
     )
     remote_state = _public_state(deposition)
     for key in ("deposition_id", "record_id", "concept_record_id", "doi"):
         if remote_state.get(key) != working_state.get(key):
             raise ZenodoPublisherError("Zenodo draft response changed reserved identity")
-    _validate_unpublished_draft(remote_state, "upload response")
+    _validate_unpublished_draft(deposition, "upload response")
     links = deposition.get("links")
     bucket = links.get("bucket") if isinstance(links, dict) else None
     try:
@@ -1688,11 +2363,18 @@ def upload(
     )
     extra_names = _admit_successor_cleanup(
         working_state,
+        deposition=deposition,
         initial_inventory=initial_inventory,
         expected_names=expected_names,
     )
     uploaded: list[dict[str, Any]] = []
     for resolved, size, sha256 in local_files:
+        _assert_local_upload_file_unchanged(
+            resolved,
+            size,
+            sha256,
+            phase="immediately before transfer",
+        )
         with resolved.open("rb") as stream:
             response = session.put(
                 f"{bucket.rstrip('/')}/{quote(resolved.name)}",
@@ -1701,8 +2383,12 @@ def upload(
                 allow_redirects=False,
             )
         _json_object(response, f"upload {resolved.name}")
-        if resolved.stat().st_size != size or _sha256_file(resolved) != sha256:
-            raise ZenodoPublisherError(f"upload file changed during transfer: {resolved.name}")
+        _assert_local_upload_file_unchanged(
+            resolved,
+            size,
+            sha256,
+            phase="during transfer",
+        )
         uploaded.append(
             {
                 "name": resolved.name,
@@ -1710,17 +2396,25 @@ def upload(
                 "sha256": sha256,
             }
         )
-    _reconcile_inherited_draft_files(
+    deleted_files, final_deposition, final_inventory = _reconcile_inherited_draft_files(
         session,
+        state=working_state,
         initial_inventory=initial_inventory,
         expected_names=expected_names,
         extra_names=extra_names,
         deposition_id=deposition_id,
         api_base=validated_base,
     )
+    reconciliation_receipt = _reconciliation_receipt(
+        final_deposition,
+        final_inventory,
+        uploaded,
+        deleted_files,
+    )
     updated = dict(working_state)
     updated["files"] = uploaded
     updated.pop("verification_receipt", None)
+    updated["reconciliation_receipt"] = reconciliation_receipt
     return _seal_state(updated)
 
 
@@ -1793,7 +2487,9 @@ def publish(  # noqa: C901, PLR0912
     receipt_files = receipt.get("files")
     expected_receipt_files = [
         {"name": name, "size": item["size"], "sha256": item["sha256"]}
-        for name, item in sorted(expected_files.items())
+        for name, item in sorted(
+            expected_files.items(), key=lambda item: _filename_sort_key(item[0])
+        )
     ]
     if receipt_files != expected_receipt_files:
         raise ZenodoPublisherError("verification receipt file inventory does not match state")
@@ -1956,23 +2652,16 @@ def verify(  # noqa: C901, PLR0912, PLR0915
 
     remote_files_value = file_inventory_source.get("files")
     remote_files = remote_files_value if isinstance(remote_files_value, list) else []
-    if not remote_files:
-        problems.append("remote file inventory is empty")
-    remote_by_name: dict[str, Mapping[str, Any]] = {}
-    for index, item in enumerate(remote_files):
-        if not isinstance(item, Mapping):
-            problems.append("remote file inventory contains a malformed entry")
-            continue
-        name = item.get("filename") or item.get("key")
-        if not isinstance(name, str) or not name:
-            problems.append(f"remote file inventory contains an unnamed entry at index {index}")
-            continue
-        if name in remote_by_name:
-            problems.append(f"remote file inventory contains a duplicate entry at index {index}")
-            continue
-        remote_by_name[name] = item
+    remote_by_name, inventory_problems = _verification_file_inventory(remote_files_value)
+    problems.extend(inventory_problems)
     if set(expected_files) != set(remote_by_name):
         problems.append("remote file inventory does not match uploaded file inventory")
+
+    # Do not download any member of an inventory that already contains an
+    # ambiguous alias or malformed entry. A failing report is sufficient; a
+    # partial read would make the verification path depend on an unsafe view.
+    if inventory_problems:
+        expected_files = {}
 
     for name, expected in expected_files.items():
         remote_file = remote_by_name.get(name)
@@ -2042,7 +2731,9 @@ def verify(  # noqa: C901, PLR0912, PLR0915
     if not problems:
         receipt_files = [
             {"name": name, "size": item["size"], "sha256": item["sha256"]}
-            for name, item in sorted(expected_files.items())
+            for name, item in sorted(
+                expected_files.items(), key=lambda item: _filename_sort_key(item[0])
+            )
         ]
         receipt = _seal_payload(
             {
@@ -2119,6 +2810,7 @@ def write_state(path: str | Path, state: dict[str, Any]) -> None:
 
 __all__ = [
     "ZENODO_API_BASE",
+    "ZENODO_RECONCILIATION_SCHEMA",
     "ZENODO_STATE_SCHEMA",
     "ZENODO_VERIFICATION_SCHEMA",
     "ZenodoPublisherError",

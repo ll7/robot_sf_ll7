@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
@@ -162,7 +163,14 @@ def test_get_issue_metadata_requires_complete_payload(mock_run: MagicMock) -> No
 @patch("scripts.ci.pr_contract_check.subprocess.run")
 def test_get_pr_commit_messages_uses_paginated_commit_api(mock_run: MagicMock) -> None:
     """The commit source is fetched through the paginated PR commits endpoint."""
-    mock_run.return_value = MagicMock(returncode=0, stdout="first\nsecond\n")
+    mock_run.return_value = MagicMock(
+        returncode=0,
+        stdout="\n".join(
+            base64.b64encode(message.encode("utf-8")).decode("ascii")
+            for message in ("first", "second")
+        )
+        + "\n",
+    )
 
     assert pr_contract_check.get_pr_commit_messages("8451", "ll7/robot_sf_ll7") == "first\nsecond\n"
     mock_run.assert_called_once_with(
@@ -172,7 +180,9 @@ def test_get_pr_commit_messages_uses_paginated_commit_api(mock_run: MagicMock) -
             "--paginate",
             "repos/ll7/robot_sf_ll7/pulls/8451/commits?per_page=100",
             "--jq",
-            ".[] | .commit.message",
+            '.[] | if (.commit? | type) == "object" and (.commit.message? | type) == "string" '
+            "then .commit.message | @base64 "
+            'else error("invalid commit metadata") end',
         ],
         capture_output=True,
         text=True,
@@ -185,6 +195,14 @@ def test_get_pr_commit_messages_uses_paginated_commit_api(mock_run: MagicMock) -
 def test_get_pr_commit_messages_rejects_empty_success(mock_run: MagicMock) -> None:
     """A successful empty response is unavailable evidence, not a verified commit list."""
     mock_run.return_value = MagicMock(returncode=0, stdout=" \n")
+
+    assert pr_contract_check.get_pr_commit_messages("8451", "ll7/robot_sf_ll7") is None
+
+
+@patch("scripts.ci.pr_contract_check.subprocess.run")
+def test_get_pr_commit_messages_rejects_nonempty_malformed_output(mock_run: MagicMock) -> None:
+    """A malformed jq value cannot masquerade as available commit evidence."""
+    mock_run.return_value = MagicMock(returncode=0, stdout="null\n")
 
     assert pr_contract_check.get_pr_commit_messages("8451", "ll7/robot_sf_ll7") is None
 

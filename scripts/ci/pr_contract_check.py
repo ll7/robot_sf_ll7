@@ -9,6 +9,8 @@ and worker-lane labeling.
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import hashlib
 import json
 import os
@@ -23,7 +25,14 @@ from pathlib import Path, PureWindowsPath
 # genuine programming errors, and satisfies the broad-exception ratchet.
 # ValueError covers json.JSONDecodeError and UnicodeDecodeError (both subclasses);
 # OSError covers FileNotFoundError when git/gh is absent.
-_BEST_EFFORT_ERRORS = (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError)
+_BEST_EFFORT_ERRORS = (
+    OSError,
+    subprocess.SubprocessError,
+    ValueError,
+    binascii.Error,
+    KeyError,
+    TypeError,
+)
 
 from robot_sf.evidence.distance_convention import (  # noqa: E402
     DISTANCE_CONVENTION_FIELD,
@@ -183,7 +192,9 @@ def get_pr_commit_messages(pr_number: str, repo: str) -> str | None:
                 "--paginate",
                 f"repos/{repo}/pulls/{pr_number}/commits?per_page=100",
                 "--jq",
-                ".[] | .commit.message",
+                '.[] | if (.commit? | type) == "object" and (.commit.message? | type) == "string" '
+                "then .commit.message | @base64 "
+                'else error("invalid commit metadata") end',
             ],
             capture_output=True,
             text=True,
@@ -192,7 +203,16 @@ def get_pr_commit_messages(pr_number: str, repo: str) -> str | None:
         )
         if result.returncode != 0:
             return None
-        return result.stdout if result.stdout.strip() else None
+        encoded_messages = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        if not encoded_messages:
+            return None
+        messages: list[str] = []
+        for encoded in encoded_messages:
+            message = base64.b64decode(encoded, validate=True).decode("utf-8")
+            if not message.strip():
+                return None
+            messages.append(message)
+        return "\n".join(messages) + "\n"
     except _BEST_EFFORT_ERRORS:
         return None
 

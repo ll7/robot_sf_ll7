@@ -648,6 +648,20 @@ def test_blocker_without_reason_routes_to_needs_triage() -> None:
     assert any("declined state:blocked" in finding for finding in classification.findings)
 
 
+def test_non_blocking_blocked_by_none_does_not_route_to_triage() -> None:
+    """A documented absence of blockers is not current gate evidence."""
+    classification = classify_issue(
+        _issue(
+            123,
+            body="Blocked by: none.\n## Acceptance Criteria\n- [ ] implement the change",
+        ),
+        available_labels={"state:ready", "state:blocked", "needs-triage"},
+    )
+
+    assert classification.blocker_evidence == ()
+    assert not any(mutation["value"] == "needs-triage" for mutation in classification.mutations)
+
+
 def test_blocked_triage_block_binds_reason_to_blocked_label() -> None:
     """A complete blocked-triage block is accepted as explicit reason evidence."""
     body = (

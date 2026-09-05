@@ -1,0 +1,37 @@
+{
+  "schema_version": "issue_7980_source_ingestion_receipt.v1",
+  "source_ingestion_status": "fixture_verified",
+  "independent_of_packet": true,
+  "fixture_purpose": "deterministic contract test only; not benchmark evidence",
+  "synthesis_sha256": "e6bb7a3553c623e07ef48260325cfe1e161dba71cc6c068dcb412df7062808c0",
+  "source_artifact": {
+    "kind": "deterministic_fixture_crosswalk",
+    "path": "docs/context/evidence/issue_6102_robot_speed_tier_recovery/source_row_crosswalk.issue_7980.fixture.json"
+  },
+  "row_crosswalk": [
+    {"test_id": "orca__cap_3_0__collision_rate", "canonical_row_sha256": "c204a1741a2d4bf77a1e757eb9614d77b6f721794bd51182bc34d922c2c48858"},
+    {"test_id": "orca__cap_3_0__near_miss_rate", "canonical_row_sha256": "35a90600f347363b74cf8c98fe8022a2b5b439cf3aea5e69f6a4c8e11707f85f"},
+    {"test_id": "orca__cap_3_0__success_rate", "canonical_row_sha256": "4caed594079a9d111ce475c642a9f5c759fbacf5f48268a1f5bf1ba01fe8e76d"},
+    {"test_id": "orca__cap_4_0__collision_rate", "canonical_row_sha256": "7fcc6319de3394b8e1ba8bc46833a72d7ff1b2cda31c2b4b840b7fae26581755"},
+    {"test_id": "orca__cap_4_0__near_miss_rate", "canonical_row_sha256": "ac772454829b9f6928bd131c76f546a3730bda2188081f8e8f58eb805d4ed425"},
+    {"test_id": "orca__cap_4_0__success_rate", "canonical_row_sha256": "35a15306eadb718fc6c55e1b7e15624d01e8bd1f2e63cfcde93ec75fec735e0f"},
+    {"test_id": "ppo__cap_3_0__collision_rate", "canonical_row_sha256": "9599efa384b734e4411b14a9be91c4ccc4eca14a9c006348607e9a7faa77900b"},
+    {"test_id": "ppo__cap_3_0__near_miss_rate", "canonical_row_sha256": "dbba6cde004d69943b4bb2ea4a743e1cb37086ffcc9a5d85e9d9606faeaacf91"},
+    {"test_id": "ppo__cap_3_0__success_rate", "canonical_row_sha256": "0b565aba99e530f7f47b971811bd40e78863d894ca8e950579dfa0767e081e64"},
+    {"test_id": "ppo__cap_4_0__collision_rate", "canonical_row_sha256": "d96841359c6fc858d10ccdf4fd7c844fe715c8f4b994db138c26bc8fc0af2e7e"},
+    {"test_id": "ppo__cap_4_0__near_miss_rate", "canonical_row_sha256": "f6cb2401cc4dadc5897f67eb759373d5196061fc8f820a01a3b3fa838ff3b657"},
+    {"test_id": "ppo__cap_4_0__success_rate", "canonical_row_sha256": "0ddfa9be2a83bdcaeba2fce548d4fb6c692f87915cbd8bd70a04ad72c1c07c48"},
+    {"test_id": "prediction_planner__cap_3_0__collision_rate", "canonical_row_sha256": "f4a42c36899b803b1c5b421f6ae83b8bfc480fdace6bee31bc27933a39aa8662"},
+    {"test_id": "prediction_planner__cap_3_0__near_miss_rate", "canonical_row_sha256": "36779665df005ac2e67f70e03337eb6b746d358457c18cfc2f0165b71a238fb4"},
+    {"test_id": "prediction_planner__cap_3_0__success_rate", "canonical_row_sha256": "378c8425d14c9d4d0521052205bb39ade3828200699b14f0710ae7bc2efc23b3"},
+    {"test_id": "prediction_planner__cap_4_0__collision_rate", "canonical_row_sha256": "10ffa01b2e14debbc19806ec09318bd9a96bb455da238a51a5cba8d38c136e26"},
+    {"test_id": "prediction_planner__cap_4_0__near_miss_rate", "canonical_row_sha256": "869836455d0912e8132b54cf80f5255f52cdd6e73c87539a4ca4cfc2666e9d58"},
+    {"test_id": "prediction_planner__cap_4_0__success_rate", "canonical_row_sha256": "da6fc95ea79f1c275d754d120ad76e00637d90e353e9f55f942dae1136490fcf"},
+    {"test_id": "scenario_adaptive_hybrid_orca_v2_collision_guard__cap_3_0__collision_rate", "canonical_row_sha256": "bd20370c154d6328a13b9b596cc5871322f3c5ff5ffa7a69dc93af9acc28a79c"},
+    {"test_id": "scenario_adaptive_hybrid_orca_v2_collision_guard__cap_3_0__near_miss_rate", "canonical_row_sha256": "4329f4aa7ecfce521dda97029f920a95926a6a5070a185f0fbca5c221a182522"},
+    {"test_id": "scenario_adaptive_hybrid_orca_v2_collision_guard__cap_3_0__success_rate", "canonical_row_sha256": "451a17f611fad1fc7699cf8ebeaf5117b5b82571a7ff44b0ca0b3fba08704051"},
+    {"test_id": "scenario_adaptive_hybrid_orca_v2_collision_guard__cap_4_0__collision_rate", "canonical_row_sha256": "88777184ab19f655e4566fe65e205722063216eeced4e48c63241cbab76a0c1a"},
+    {"test_id": "scenario_adaptive_hybrid_orca_v2_collision_guard__cap_4_0__near_miss_rate", "canonical_row_sha256": "c16f79550eb1f908a68e430ed1aa16abed26e25734ff8c1e9e575192d53aa80a"},
+    {"test_id": "scenario_adaptive_hybrid_orca_v2_collision_guard__cap_4_0__success_rate", "canonical_row_sha256": "d9cd5779fe605a91b3a043a7c620f59fbd0647ad46012c9372d80be77006bdac"}
+  ]
+}

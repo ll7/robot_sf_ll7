@@ -1,0 +1,7 @@
+{
+  "artifact_path": "docs/context/evidence/issue_6102_robot_speed_tier_recovery/source_ingestion_receipt.issue_7980.fixture.json",
+  "artifact_sha256": "9e3bfd9b67ba44501f1203a96a1560b7e3a7567fed57baaaf6f021d2d986f4a2",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
+}

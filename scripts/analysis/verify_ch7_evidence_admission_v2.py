@@ -191,12 +191,10 @@ def _verify_manifest_projection(
     excluded = metrics.get("excluded")
     if not isinstance(excluded, list):
         raise Ch7EvidenceAdmissionV2Error("v2 manifest excluded metric boundary is missing")
-    if [
-        (item.get("metric"), item.get("issue"), item.get("status"))
-        for item in excluded
-        if isinstance(item, Mapping)
-    ] != [(item["metric"], item["issue"], item["status"]) for item in expected_excluded]:
-        raise Ch7EvidenceAdmissionV2Error("v2 manifest excluded metric boundary changed")
+    if excluded != list(expected_excluded):
+        raise Ch7EvidenceAdmissionV2Error(
+            "v2 manifest excluded metric boundary differs from the approved ruling"
+        )
     return excluded
 
 

@@ -168,6 +168,33 @@ def test_post_ruling_check_only_rejects_forged_claim_or_exclusion(
         verifier.diagnose_v2_package(package)
 
 
+def test_post_ruling_check_only_rejects_coordinated_forged_exclusion_reason(
+    tmp_path: Path,
+) -> None:
+    package = tmp_path / "package"
+    builder.build_ch7_evidence_package_v2(
+        source_package=SOURCE_PACKAGE, output=package, config_path=FROZEN_CONFIG_PATH
+    )
+    forged_reason = "forged but frozen #7042 ruling"
+    for relative_path, key in (
+        ("manifest.json", "metrics"),
+        ("publication/reduced_atlas.json", "excluded_metrics"),
+        ("source/projection_binding.json", "excluded_metrics"),
+    ):
+        path = package / relative_path
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        entries = payload[key]["excluded"] if key == "metrics" else payload[key]
+        entries[0]["reason"] = forged_reason
+        path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
+    builder._write_checksums(package)
+
+    with pytest.raises(
+        verifier.Ch7EvidenceAdmissionV2Error,
+        match="approved ruling",
+    ):
+        verifier.diagnose_v2_package(package)
+
+
 def test_blocked_builder_output_cannot_cross_the_v2_admission_boundary(tmp_path: Path) -> None:
     output = tmp_path / "package"
     builder.build_ch7_evidence_package_v2(source_package=SOURCE_PACKAGE, output=output)

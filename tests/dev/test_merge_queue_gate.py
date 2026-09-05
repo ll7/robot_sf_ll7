@@ -701,6 +701,68 @@ def test_fetch_pr_snapshot_ignores_superseded_failed_check_run() -> None:
     assert snapshot["checks"] == {"overall": "success"}
 
 
+def test_rollup_ignores_superseded_malformed_gate_identity() -> None:
+    """An old malformed gate record cannot block a newer identity-bound rerun."""
+    rollup = [
+        {
+            "__typename": "CheckRun",
+            "name": "merge-queue-gate",
+            "startedAt": "2026-07-25T12:00:00Z",
+            "status": "COMPLETED",
+            "conclusion": "FAILURE",
+        },
+        {
+            "__typename": "CheckRun",
+            "name": "merge-queue-gate",
+            "workflowName": "Merge Queue Gate",
+            "startedAt": "2026-07-25T12:05:00Z",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        },
+        {
+            "__typename": "CheckRun",
+            "name": "test",
+            "workflowName": "CI",
+            "startedAt": "2026-07-25T12:00:00Z",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        },
+    ]
+
+    assert merge_queue_gate_module._rollup_overall(rollup) == "success"
+
+
+def test_rollup_rejects_newer_malformed_gate_identity() -> None:
+    """A newer malformed gate record still blocks fail-closed admission."""
+    rollup = [
+        {
+            "__typename": "CheckRun",
+            "name": "merge-queue-gate",
+            "workflowName": "Merge Queue Gate",
+            "startedAt": "2026-07-25T12:00:00Z",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        },
+        {
+            "__typename": "CheckRun",
+            "name": "merge-queue-gate",
+            "startedAt": "2026-07-25T12:05:00Z",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        },
+        {
+            "__typename": "CheckRun",
+            "name": "test",
+            "workflowName": "CI",
+            "startedAt": "2026-07-25T12:00:00Z",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        },
+    ]
+
+    assert merge_queue_gate_module._rollup_overall(rollup) == "unknown"
+
+
 def test_fetch_pr_snapshot_ignores_current_gate_check() -> None:
     """The PR-head gate does not wait on its own in-progress check run."""
     raw_pr = _raw_pr()
@@ -749,6 +811,18 @@ def test_fetch_pr_snapshot_ignores_current_gate_check() -> None:
                 }
             ],
             "pending",
+        ),
+        (
+            [
+                {
+                    "__typename": "CheckRun",
+                    "name": "merge-queue-gate",
+                    "startedAt": "2026-07-25T12:05:00Z",
+                    "status": "COMPLETED",
+                    "conclusion": "SUCCESS",
+                }
+            ],
+            "unknown",
         ),
         ([{"status": "COMPLETED", "conclusion": "STALE"}], "failure"),
         ([{"status": "COMPLETED", "conclusion": None}], "pending"),

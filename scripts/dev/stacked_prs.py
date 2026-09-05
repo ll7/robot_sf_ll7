@@ -49,13 +49,14 @@ from collections import Counter
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 # Make direct execution import the repository's canonical gate helpers.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.dev.merge_queue_gate import fetch_threads_resolved  # noqa: E402
+from scripts.dev.merge_queue_gate import GATE_WORKFLOW_NAME, fetch_threads_resolved  # noqa: E402
 from scripts.dev.pr_loop_policy import (  # noqa: E402
     current_explicit_merge_hold_reasons,
     has_current_accepted_gate_verdict,
@@ -92,6 +93,9 @@ MERGE_QUEUE_GATE_CHECK_NAME = "merge-queue-gate"
 REST_PAGE_SIZE = 100
 REST_PAGE_BUDGET = 100
 _SHA_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
+_ACTIONS_RUN_JOB_PATH_RE = re.compile(
+    r"^/actions/runs/(?P<run_id>[0-9]+)/job/(?P<job_id>[0-9]+)/?$"
+)
 
 GhApi = Callable[[str, str, dict[str, Any] | None], tuple[Any | None, str | None]]
 GitRunner = Callable[[list[str], Path], subprocess.CompletedProcess[str]]
@@ -320,6 +324,34 @@ def _review_digest(
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _check_run_identifier(item: dict[str, Any]) -> int | None:
+    """Return a positive REST check-run ID, or ``None`` for malformed data."""
+    raw_identifier = item.get("id")
+    if isinstance(raw_identifier, bool):
+        return None
+    if isinstance(raw_identifier, int):
+        identifier = raw_identifier
+    elif isinstance(raw_identifier, str) and raw_identifier.strip().isdigit():
+        identifier = int(raw_identifier.strip())
+    else:
+        return None
+    return identifier if identifier > 0 else None
+
+
+def _check_run_sort_key(item: dict[str, Any]) -> tuple[int, int, str]:
+    """Return a newest-first-compatible identity key for a REST check run.
+
+    Check-run IDs are monotonic, while queued runs may not have timestamps yet.
+    Prefer the ID so a newer queued run cannot be hidden by an older completed
+    run. Treat malformed or missing IDs as newer than valid IDs so they cannot
+    silently hide behind historical evidence; use the timestamp only to order
+    multiple malformed records deterministically.
+    """
+    timestamp = str(item.get("completed_at") or item.get("started_at") or "")
+    identifier = _check_run_identifier(item)
+    return (0, identifier, timestamp) if identifier is not None else (1, 0, timestamp)
+
+
 def _latest_check_runs(check_runs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
     """Keep the newest check run for each name; count superseded runs."""
 
@@ -327,23 +359,147 @@ def _latest_check_runs(check_runs: list[dict[str, Any]]) -> tuple[list[dict[str,
         app = item.get("app") if isinstance(item.get("app"), dict) else {}
         return str(item.get("name") or app.get("name") or "unknown")
 
-    def sort_key(item: dict[str, Any]) -> tuple[str, int]:
-        timestamp = str(item.get("completed_at") or item.get("started_at") or "")
-        try:
-            identifier = int(item.get("id", 0) or 0)
-        except (TypeError, ValueError):
-            identifier = 0
-        return timestamp, identifier
-
     latest: dict[str, dict[str, Any]] = {}
     for item in check_runs:
         name = check_name(item)
         current = latest.get(name)
-        if current is None or sort_key(item) >= sort_key(current):
+        if current is None or _check_run_sort_key(item) >= _check_run_sort_key(current):
             latest[name] = item
     return sorted(latest.values(), key=lambda item: str(item.get("name") or "")), max(
         0, len(check_runs) - len(latest)
     )
+
+
+def _check_workflow_name(item: dict[str, Any]) -> str:
+    """Return a workflow name from REST or GraphQL-shaped check-run data."""
+    direct = item.get("workflowName") or item.get("workflow_name")
+    if direct:
+        return str(direct)
+    workflow = item.get("workflow")
+    workflow_name = (
+        str(workflow.get("name") or "") if isinstance(workflow, Mapping) else str(workflow or "")
+    )
+    if workflow_name:
+        return workflow_name
+    check_suite = item.get("check_suite")
+    suite_workflow = check_suite.get("workflow") if isinstance(check_suite, Mapping) else None
+    if isinstance(suite_workflow, Mapping):
+        return str(suite_workflow.get("name") or "")
+    return str(suite_workflow or "")
+
+
+def _latest_merge_queue_gate_index(check_runs: list[dict[str, Any]]) -> int | None:
+    """Return the index of the newest merge-queue-gate check run, if present."""
+    candidates = [
+        (index, item)
+        for index, item in enumerate(check_runs)
+        if str(item.get("name") or "").strip().lower() == MERGE_QUEUE_GATE_CHECK_NAME
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda candidate: _check_run_sort_key(candidate[1]))[0]
+
+
+def _actions_run_id(details_url: str, *, repo: str) -> str:
+    """Extract a numeric Actions run ID from this repository's canonical job URL."""
+    try:
+        parsed_url = urlparse(details_url)
+    except ValueError:
+        return ""
+    expected_repo_path = f"/{repo.strip('/')}"
+    if parsed_url.scheme != "https" or parsed_url.netloc.lower() != "github.com":
+        return ""
+    path = parsed_url.path
+    if not path.casefold().startswith(f"{expected_repo_path}/".casefold()):
+        return ""
+    match = _ACTIONS_RUN_JOB_PATH_RE.fullmatch(path[len(expected_repo_path) :])
+    return match.group("run_id") if match is not None else ""
+
+
+def _workflow_run_payload(
+    run_id: str,
+    *,
+    repo: str,
+    api: GhApi,
+    cache: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Fetch a workflow run, caching only a complete dictionary response."""
+    if run_id in cache:
+        return cache[run_id]
+    payload, error = _get_object(f"repos/{repo}/actions/runs/{run_id}", api=api)
+    if error or not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _resolve_check_run_workflow_identity(
+    check_run: dict[str, Any],
+    *,
+    repo: str,
+    api: GhApi,
+    cache: dict[str, dict[str, Any]],
+) -> tuple[str, str]:
+    """Resolve workflow identity and return a structured failure reason when unavailable."""
+    workflow_name = _check_workflow_name(check_run)
+    if workflow_name:
+        return workflow_name, ""
+    details_url = str(check_run.get("details_url") or check_run.get("detailsUrl") or "")
+    run_id = _actions_run_id(details_url, repo=repo)
+    if not run_id:
+        return "", "workflow_url_invalid"
+    check_head_sha = str(check_run.get("head_sha") or "").strip()
+    if not check_head_sha:
+        return "", "check_run_head_missing"
+    workflow_run = _workflow_run_payload(run_id, repo=repo, api=api, cache=cache)
+    if workflow_run is None:
+        return "", "workflow_run_unavailable"
+    run_head_sha = str(workflow_run.get("head_sha") or "").strip()
+    if not run_head_sha or run_head_sha.casefold() != check_head_sha.casefold():
+        return "", "workflow_run_head_mismatch"
+    resolved_name = str(workflow_run.get("name") or "").strip()
+    if not resolved_name:
+        return "", "workflow_name_missing"
+    if run_id not in cache:
+        cache[run_id] = workflow_run
+    return resolved_name, ""
+
+
+def _resolve_check_run_workflow_name(
+    check_run: dict[str, Any],
+    *,
+    repo: str,
+    api: GhApi,
+    cache: dict[str, dict[str, Any]],
+) -> str:
+    """Resolve a check run's workflow name without guessing from its job name."""
+    workflow_name, _reason = _resolve_check_run_workflow_identity(
+        check_run, repo=repo, api=api, cache=cache
+    )
+    return workflow_name
+
+
+def _enrich_merge_queue_gate_check_runs(
+    check_runs: list[dict[str, Any]],
+    *,
+    repo: str,
+    api: GhApi,
+    cache: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Add authoritative workflow identity to the newest gate check run when available."""
+    latest_index = _latest_merge_queue_gate_index(check_runs)
+    if latest_index is None:
+        return check_runs
+    workflow_name, identity_error = _resolve_check_run_workflow_identity(
+        check_runs[latest_index], repo=repo, api=api, cache=cache
+    )
+    if not workflow_name and not identity_error:
+        return check_runs
+    enriched = [dict(item) for item in check_runs]
+    if workflow_name:
+        enriched[latest_index]["workflow_name"] = workflow_name
+    else:
+        enriched[latest_index]["workflow_identity_error"] = identity_error
+    return enriched
 
 
 def summarize_check_runs(check_runs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -351,6 +507,7 @@ def summarize_check_runs(check_runs: list[dict[str, Any]]) -> dict[str, Any]:
     current, superseded_count = _latest_check_runs(check_runs)
     normalized: list[dict[str, Any]] = []
     failures: list[str] = []
+    malformed: list[str] = []
     pending: list[str] = []
     for item in current:
         app = item.get("app") if isinstance(item.get("app"), dict) else {}
@@ -371,8 +528,12 @@ def summarize_check_runs(check_runs: list[dict[str, Any]]) -> dict[str, Any]:
             pending.append(name)
         elif conclusion not in SUCCESS_CONCLUSIONS:
             failures.append(name)
+        if _check_run_identifier(item) is None:
+            malformed.append(name)
     if not current:
         overall = "unknown"
+    elif malformed:
+        overall = "malformed"
     elif pending:
         overall = "pending"
     elif failures:
@@ -385,6 +546,7 @@ def summarize_check_runs(check_runs: list[dict[str, Any]]) -> dict[str, Any]:
         "superseded_count": superseded_count,
         "pending": pending,
         "failures": failures,
+        "malformed": malformed,
     }
 
 
@@ -392,12 +554,8 @@ def summarize_merge_queue_gate(
     check_runs: list[dict[str, Any]], *, head_sha: str
 ) -> dict[str, Any]:
     """Require the newest exact-head Merge Queue Gate check context."""
-    candidates = [
-        item
-        for item in check_runs
-        if str(item.get("name") or "").strip().lower() == MERGE_QUEUE_GATE_CHECK_NAME
-    ]
-    if not candidates:
+    latest_index = _latest_merge_queue_gate_index(check_runs)
+    if latest_index is None:
         return {
             "status": "missing",
             "name": MERGE_QUEUE_GATE_CHECK_NAME,
@@ -405,18 +563,15 @@ def summarize_merge_queue_gate(
             "exact_head": False,
         }
 
-    def sort_key(item: dict[str, Any]) -> tuple[str, int]:
-        timestamp = str(item.get("completed_at") or item.get("started_at") or "")
-        try:
-            identifier = int(item.get("id", 0) or 0)
-        except (TypeError, ValueError):
-            identifier = 0
-        return timestamp, identifier
-
-    latest = max(candidates, key=sort_key)
+    latest = check_runs[latest_index]
+    workflow_name = _check_workflow_name(latest)
     reported_head = str(latest.get("head_sha") or "")
     exact_head = bool(reported_head) and reported_head.lower() == head_sha.lower()
-    if not reported_head:
+    if _check_run_identifier(latest) is None:
+        status = "malformed"
+    elif workflow_name != GATE_WORKFLOW_NAME:
+        status = "mismatch"
+    elif not reported_head:
         status = "malformed"
     elif not exact_head:
         status = "mismatch"
@@ -431,6 +586,8 @@ def summarize_merge_queue_gate(
         "name": str(latest.get("name") or MERGE_QUEUE_GATE_CHECK_NAME),
         "head_sha": reported_head or head_sha,
         "exact_head": exact_head,
+        "workflow_name": workflow_name or None,
+        "workflow_identity_error": latest.get("workflow_identity_error"),
         "check_run_id": latest.get("id"),
         "started_at": latest.get("started_at"),
         "completed_at": latest.get("completed_at"),
@@ -566,6 +723,12 @@ def _merge_queue_gate_reasons(entry: dict[str, Any]) -> list[str]:
     if gate_status == "malformed":
         return ["malformed_merge_queue_gate"]
     if gate_status == "mismatch":
+        if entry.get("merge_queue_gate", {}).get("workflow_identity_error") == (
+            "workflow_run_head_mismatch"
+        ):
+            return ["merge_queue_gate_head_mismatch"]
+        if entry.get("merge_queue_gate", {}).get("workflow_name") != GATE_WORKFLOW_NAME:
+            return ["merge_queue_gate_workflow_mismatch"]
         return ["merge_queue_gate_head_mismatch"]
     if gate_status != "success":
         return [f"merge_queue_gate_not_green:{gate_status or 'unknown'}"]
@@ -688,6 +851,7 @@ def build_stack_status(
         thread_fetcher = default_thread_fetcher
 
     entries: list[dict[str, Any]] = []
+    workflow_cache: dict[str, dict[str, Any]] = {}
     for index, pr in enumerate(live):
         review_data, error = _fetch_review_data(repo, pr["number"], api=api)
         if error or review_data is None:
@@ -707,6 +871,9 @@ def build_stack_status(
                 "status": "error",
                 "error": f"PR #{pr['number']} checks: {error}",
             }
+        check_runs = _enrich_merge_queue_gate_check_runs(
+            check_runs, repo=repo, api=api, cache=workflow_cache
+        )
         threads_resolved, thread_error = thread_fetcher(pr["number"])
         parent = live[index - 1] if index else None
         expected_ref = parent["head_ref"] if parent else "main"

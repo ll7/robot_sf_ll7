@@ -203,8 +203,15 @@ def get_pr_commit_messages(pr_number: str, repo: str) -> str | None:
         )
         if result.returncode != 0:
             return None
-        encoded_messages = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-        if not encoded_messages:
+        raw_output = result.stdout
+        if not isinstance(raw_output, str) or not raw_output:
+            return None
+        if raw_output.endswith("\n"):
+            raw_output = raw_output[:-1]
+        if not raw_output or raw_output.endswith("\n"):
+            return None
+        encoded_messages = raw_output.split("\n")
+        if any(not line or line != line.strip() for line in encoded_messages):
             return None
         messages: list[str] = []
         for encoded in encoded_messages:

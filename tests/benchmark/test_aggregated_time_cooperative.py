@@ -130,3 +130,18 @@ def test_malformed_inputs_fail_closed() -> None:
     bool_step = _make_episode()
     bool_step.cooperative_goal_steps = {0: True, 1: 30}
     assert np.isnan(aggregated_time(bool_step, cooperative_agents=[0, 1]))
+
+
+def test_invalid_timestep_and_agent_index_fail_closed() -> None:
+    """Invalid time units and negative indices cannot produce a duration."""
+    negative_dt = _make_episode(dt=-0.1)
+    negative_dt.cooperative_goal_steps = {0: 10}
+    assert np.isnan(aggregated_time(negative_dt, cooperative_agents=[0]))
+
+    nonfinite_dt = _make_episode(dt=float("inf"))
+    nonfinite_dt.cooperative_goal_steps = {0: 10}
+    assert np.isnan(aggregated_time(nonfinite_dt, cooperative_agents=[0]))
+
+    negative_index = _make_episode()
+    negative_index.cooperative_goal_steps = {-1: 10}
+    assert np.isnan(aggregated_time(negative_index, cooperative_agents=[-1]))

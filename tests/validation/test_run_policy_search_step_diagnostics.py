@@ -17,6 +17,8 @@ from scripts.validation.run_policy_search_step_diagnostics import (
     _observation_perturbation_spec,
     _occlusion_mask_by_distance,
     _pedestrian_state_from_sim,
+    _planner_fallback_degraded_status,
+    _policy_observation_payload,
     _trace_observation_payload,
     _trace_planner_execution_mode,
     _trace_progress_summary,
@@ -240,6 +242,39 @@ def test_stdout_payload_includes_planner_summary(tmp_path) -> None:
     assert payload["progress_summary"] == {"steps_observed": 1}
 
 
+@pytest.mark.parametrize(
+    ("summary", "expected"),
+    [
+        ({"fallback_or_degraded": False}, False),
+        ({"fallback_degraded_status": "clear"}, False),
+        ({"fallback_count": 1}, True),
+        ({"checkpoint_provenance": {"fallback_triggered": False}}, False),
+        ({"checkpoint_provenance": {"load_status": "fallback"}}, True),
+        (
+            {
+                "fallback_degraded_status": "clear",
+                "foresight_prediction": {"fallback_used": True},
+            },
+            True,
+        ),
+    ],
+)
+def test_planner_fallback_status_uses_structured_verdict(summary, expected) -> None:
+    """Diagnostic key names must not turn a false fallback flag into a failure."""
+    result = _planner_fallback_degraded_status(summary)
+
+    assert result["available"] is True
+    assert result["reported_fallback_or_degraded"] is expected
+
+
+def test_planner_fallback_status_is_unavailable_without_explicit_verdict() -> None:
+    """Missing planner diagnostics remain blocked instead of being treated as clear."""
+    result = _planner_fallback_degraded_status(None)
+
+    assert result["available"] is False
+    assert result["reported_fallback_or_degraded"] is None
+
+
 class _DummySimulator:
     def __init__(self) -> None:
         self.robot_pos = [[0.0, 0.0]]
@@ -356,17 +391,197 @@ def test_policy_obs_uses_observed_pedestrian_payload() -> None:
 
     policy_obs = _apply_observed_pedestrians_to_policy_obs(original, perturbation)
 
-    assert policy_obs["pedestrians"]["positions"].tolist() == [[9.0, 9.0]]
-    assert policy_obs["pedestrians"]["velocities"].tolist() == [[0.0, 0.0]]
+    assert policy_obs["pedestrians"]["positions"].tolist() == [[9.0, 9.0], [0.0, 0.0]]
+    assert policy_obs["pedestrians"]["velocities"].tolist() == [[0.0, 0.0], [0.0, 0.0]]
     assert policy_obs["pedestrians"]["count"].tolist() == [1.0]
-    assert policy_obs["pedestrians_positions"].tolist() == [[9.0, 9.0]]
-    assert policy_obs["pedestrians_velocities"].tolist() == [[0.0, 0.0]]
+    assert policy_obs["pedestrians_positions"].tolist() == [[9.0, 9.0], [0.0, 0.0]]
+    assert policy_obs["pedestrians_velocities"].tolist() == [[0.0, 0.0], [0.0, 0.0]]
     assert policy_obs["pedestrians_count"].tolist() == [1.0]
     assert original["pedestrians"]["positions"] == [[1.0, 0.0], [5.0, 0.0]]
 
 
+@pytest.mark.parametrize("layout", ["nested", "flat"])
+def test_policy_obs_orders_world_positions_and_rotates_world_velocities(layout: str) -> None:
+    """Policy inputs should preserve world positions and use ego-frame velocities in either layout."""
+    robot_position = np.asarray([10.0, 10.0], dtype=np.float32)
+    heading = np.pi / 2.0
+    observed = {
+        "positions": [[14.0, 10.0], [10.0, 12.0], [11.0, 10.0]],
+        "velocities": [[4.0, 0.0], [0.0, 2.0], [1.0, 0.0]],
+        "ids": ["ped_far", "ped_near", "ped_closest"],
+    }
+    if layout == "nested":
+        original = {
+            "robot": {"position": robot_position, "heading": [heading]},
+            "pedestrians": {
+                "positions": np.zeros((4, 2), dtype=np.float32),
+                "velocities": np.zeros((4, 2), dtype=np.float32),
+                "count": np.asarray([4.0], dtype=np.float32),
+            },
+        }
+        positions_key = ("pedestrians", "positions")
+        velocities_key = ("pedestrians", "velocities")
+    else:
+        original = {
+            "robot_position": robot_position,
+            "robot_heading": np.asarray([heading], dtype=np.float32),
+            "pedestrians_positions": np.zeros((4, 2), dtype=np.float32),
+            "pedestrians_velocities": np.zeros((4, 2), dtype=np.float32),
+            "pedestrians_count": np.asarray([4.0], dtype=np.float32),
+        }
+        positions_key = ("pedestrians_positions",)
+        velocities_key = ("pedestrians_velocities",)
+
+    policy_obs = _apply_observed_pedestrians_to_policy_obs(original, {"observed": observed})
+
+    if len(positions_key) == 2:
+        positions = policy_obs[positions_key[0]][positions_key[1]]
+        velocities = policy_obs[velocities_key[0]][velocities_key[1]]
+    else:
+        positions = policy_obs[positions_key[0]]
+        velocities = policy_obs[velocities_key[0]]
+    np.testing.assert_allclose(
+        positions,
+        [[11.0, 10.0], [10.0, 12.0], [14.0, 10.0], [0.0, 0.0]],
+    )
+    np.testing.assert_allclose(
+        velocities,
+        [[0.0, -1.0], [2.0, 0.0], [0.0, -4.0], [0.0, 0.0]],
+        atol=1e-6,
+    )
+    assert policy_obs["pedestrians"]["count"].tolist() == [3.0]
+
+
+def test_policy_obs_keeps_false_positive_and_delayed_rows_id_aligned() -> None:
+    """Sorting observed rows must not detach delayed/missed actors from their velocities."""
+    original = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+        "pedestrians": {
+            "positions": np.zeros((3, 2), dtype=np.float32),
+            "velocities": np.zeros((3, 2), dtype=np.float32),
+        },
+    }
+    perturbation = {
+        "observed": {
+            "positions": [[4.0, 0.0], [0.5, 0.0]],
+            "velocities": [[40.0, 0.0], [5.0, 0.0]],
+            "ids": ["ped_delayed", "false_positive_0"],
+        }
+    }
+
+    policy_obs = _apply_observed_pedestrians_to_policy_obs(original, perturbation)
+
+    np.testing.assert_allclose(policy_obs["pedestrians"]["positions"][:2], [[0.5, 0.0], [4.0, 0.0]])
+    np.testing.assert_allclose(
+        policy_obs["pedestrians"]["velocities"][:2], [[5.0, 0.0], [40.0, 0.0]]
+    )
+
+
+def test_policy_observation_emits_ids_in_sorted_row_order() -> None:
+    """Trace-facing policy rows must keep optional IDs paired with sorted inputs."""
+    obs = {
+        "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+    }
+    observed = {
+        "positions": [[4.0, 0.0], [0.5, 0.0], [2.0, 0.0]],
+        "velocities": [[40.0, 0.0], [5.0, 0.0], [20.0, 0.0]],
+        "ids": ["ped_far", "false_positive_0", "ped_middle"],
+    }
+
+    policy_observation = _policy_observation_payload(obs, observed)
+
+    assert policy_observation["ids"] == ["false_positive_0", "ped_middle", "ped_far"]
+    np.testing.assert_allclose(
+        policy_observation["positions"], [[0.5, 0.0], [2.0, 0.0], [4.0, 0.0]]
+    )
+    np.testing.assert_allclose(
+        policy_observation["velocities"], [[5.0, 0.0], [20.0, 0.0], [40.0, 0.0]]
+    )
+    assert policy_observation["ordering"] == "nearest_first_world_distance"
+
+
+def test_policy_obs_rejects_misaligned_observed_rows() -> None:
+    """Observed position, velocity, and ID rows must fail closed when counts diverge."""
+    original = {
+        "pedestrians": {
+            "positions": np.zeros((2, 2), dtype=np.float32),
+            "velocities": np.zeros((2, 2), dtype=np.float32),
+        }
+    }
+    perturbation = {
+        "observed": {
+            "positions": [[1.0, 0.0], [2.0, 0.0]],
+            "velocities": [[0.0, 0.0]],
+            "ids": ["ped_0", "ped_1"],
+        }
+    }
+
+    with pytest.raises(ValueError, match="matching row counts"):
+        _apply_observed_pedestrians_to_policy_obs(original, perturbation)
+
+
+def test_policy_obs_pads_variable_observation_to_fixed_actor_capacity() -> None:
+    """Perception-limited actor counts must preserve fixed learned-policy shapes."""
+    original = {
+        "pedestrians": {
+            "positions": np.zeros((4, 2), dtype=np.float32),
+            "velocities": np.zeros((4, 2), dtype=np.float32),
+            "count": np.asarray([4.0], dtype=np.float32),
+        },
+        "pedestrians_positions": np.zeros((4, 2), dtype=np.float32),
+        "pedestrians_velocities": np.zeros((4, 2), dtype=np.float32),
+        "pedestrians_count": np.asarray([4.0], dtype=np.float32),
+    }
+    perturbation = {
+        "observed": {
+            "positions": [[9.0, 9.0]],
+            "velocities": [[0.0, 0.0]],
+            "ids": ["ped_0"],
+        }
+    }
+
+    policy_obs = _apply_observed_pedestrians_to_policy_obs(original, perturbation)
+
+    assert policy_obs["pedestrians"]["positions"].shape == (4, 2)
+    assert policy_obs["pedestrians"]["positions"].tolist() == [
+        [9.0, 9.0],
+        [0.0, 0.0],
+        [0.0, 0.0],
+        [0.0, 0.0],
+    ]
+    assert policy_obs["pedestrians"]["count"].tolist() == [1.0]
+    assert policy_obs["pedestrians_positions"].shape == (4, 2)
+
+
+def test_policy_obs_rejects_observation_overflow() -> None:
+    """Observed actors beyond the learned-policy capacity must fail closed."""
+    original = {
+        "pedestrians": {
+            "positions": np.zeros((1, 2), dtype=np.float32),
+            "velocities": np.zeros((1, 2), dtype=np.float32),
+        }
+    }
+    perturbation = {
+        "observed": {
+            "positions": [[1.0, 0.0], [2.0, 0.0]],
+            "velocities": [[0.0, 0.0], [0.0, 0.0]],
+        }
+    }
+
+    with pytest.raises(ValueError, match="exceeds policy capacity"):
+        _apply_observed_pedestrians_to_policy_obs(original, perturbation)
+
+
 def test_trace_observation_payload_separates_ground_truth_and_observed() -> None:
     """Trace rows should keep ideal and perception-limited evidence separate."""
+    policy_observation = {
+        "positions": [[1.0, 0.0]],
+        "velocities": [[0.1, 0.0]],
+        "ids": ["ped_0"],
+        "position_frame": "world",
+        "velocity_frame": "robot_ego",
+        "ordering": "nearest_first_world_distance",
+    }
     payload = _trace_observation_payload(
         {
             "ground_truth": {
@@ -386,7 +601,8 @@ def test_trace_observation_payload_separates_ground_truth_and_observed() -> None
                 "actor_count": 2,
                 "observed_actor_count": 1,
             },
-        }
+        },
+        policy_observation=policy_observation,
     )
 
     assert payload["ground_truth_observation"]["ids"] == ["ped_0", "ped_1"]
@@ -394,3 +610,5 @@ def test_trace_observation_payload_separates_ground_truth_and_observed() -> None
     assert payload["observed_observation"]["ids"] == ["ped_0"]
     assert payload["observed_observation"]["missing_ids"] == ["ped_1"]
     assert payload["observed_observation"]["evidence_class"] == "perception_limited"
+    assert payload["policy_observation"]["ids"] == ["ped_0"]
+    assert payload["policy_observation"]["velocity_frame"] == "robot_ego"

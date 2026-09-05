@@ -177,6 +177,52 @@ def test_generic_learned_planner_stats_capture_runtime_fallback() -> None:
     )
 
 
+def test_generic_learned_planner_stats_hash_resolved_checkpoint(tmp_path: Path) -> None:
+    """A successfully loaded learned planner exposes a digest of its resolved artifact."""
+    checkpoint = tmp_path / "resolved-model.zip"
+    checkpoint.write_bytes(b"resolved checkpoint fixture")
+
+    class Planner:
+        _resolved_model_path = checkpoint
+
+        def get_metadata(self) -> dict:
+            return {"status": "ok"}
+
+    policy = lambda _obs: (0.0, 0.0)  # noqa: E731
+    map_runner._attach_checkpoint_runtime_stats(policy, Planner(), {"model_id": "ppo_demo"})
+    provenance = policy._planner_stats()["checkpoint_provenance"]
+
+    assert len(provenance["checkpoint_sha256"]) == 64
+    assert provenance["hash_source"] == "computed_resolved_file"
+    assert provenance["load_succeeded"] is True
+
+
+def test_generic_learned_planner_stats_blocks_hash_io_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A checkpoint hash I/O failure does not manufacture runtime provenance."""
+    checkpoint = tmp_path / "unreadable-model.zip"
+    checkpoint.write_bytes(b"resolved checkpoint fixture")
+
+    class Planner:
+        _resolved_model_path = checkpoint
+
+        def get_metadata(self) -> dict:
+            return {"status": "ok"}
+
+    def fail_hash(_path: Path) -> str:
+        raise OSError("checkpoint became unreadable")
+
+    monkeypatch.setattr(map_runner, "sha256_of_file", fail_hash)
+    policy = lambda _obs: (0.0, 0.0)  # noqa: E731
+    map_runner._attach_checkpoint_runtime_stats(policy, Planner(), {"model_id": "ppo_demo"})
+    provenance = policy._planner_stats()["checkpoint_provenance"]
+
+    assert provenance["checkpoint_sha256"] is None
+    assert provenance["hash_source"] is None
+    assert provenance["load_succeeded"] is True
+
+
 def test_predictive_mppi_policy_exposes_nested_checkpoint_runtime(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

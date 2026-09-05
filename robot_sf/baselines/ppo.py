@@ -137,6 +137,7 @@ class PPOPlanner:
         self.config = self._parse_config(config)
         self._seed = seed
         self._model = None
+        self._resolved_model_path: Path | None = None
         self._status = "ok"
         self._fallback_reason: str | None = None
         self._predictive_foresight: PredictiveForesightEncoder | None = None
@@ -164,6 +165,7 @@ class PPOPlanner:
 
     def _load_model(self) -> None:
         """Load the PPO model from disk or enter fallback mode."""
+        self._resolved_model_path = None
         if self.config.model_id is None:
             validate_no_local_model_path_value(
                 self.config.model_path,
@@ -223,6 +225,7 @@ class PPOPlanner:
         try:
             # Avoid printing system info in CI/test logs
             self._model = PPO.load(str(mp), device=self.config.device, print_system_info=False)
+            self._resolved_model_path = mp
             self._status = "ok"
             self._fallback_reason = None
         except (RuntimeError, ValueError, OSError) as e:
@@ -268,6 +271,7 @@ class PPOPlanner:
         """Update the planner's configuration."""
         self.config = self._parse_config(config)
         self._model = None
+        self._resolved_model_path = None
         self._initialized = False
         if not self._defer_model_loading:
             self._ensure_model_loaded()

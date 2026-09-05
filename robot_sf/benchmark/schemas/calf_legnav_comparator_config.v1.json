@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/calf_legnav_comparator_config.v1.json",
+  "title": "CALF/LegNav-inspired Robot SF comparator config v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "issue",
+    "candidate",
+    "candidate_registry",
+    "scenario_matrix",
+    "scenario_name",
+    "stage",
+    "seed",
+    "horizon",
+    "dt_s",
+    "personal_space_radius_m",
+    "timeout_seconds",
+    "conditions"
+  ],
+  "properties": {
+    "schema_version": {"const": "calf_legnav_comparator_config.v1"},
+    "issue": {"const": 7318},
+    "candidate": {"type": "string", "minLength": 1},
+    "candidate_registry": {"type": "string", "minLength": 1},
+    "scenario_matrix": {"type": "string", "minLength": 1},
+    "scenario_name": {"type": "string", "minLength": 1},
+    "stage": {"type": "string", "minLength": 1},
+    "seed": {"type": "integer"},
+    "horizon": {"type": "integer", "minimum": 1},
+    "dt_s": {"type": "number", "exclusiveMinimum": 0},
+    "personal_space_radius_m": {"type": "number", "exclusiveMinimum": 0},
+    "timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+    "conditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["perfect_perception", "sensor_limited"],
+      "properties": {
+        "perfect_perception": {"$ref": "#/$defs/condition"},
+        "sensor_limited": {"$ref": "#/$defs/condition"}
+      }
+    }
+  },
+  "$defs": {
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ignore_fixture_visibility": {"type": "boolean"},
+        "position_noise_std_m": {"type": "number", "minimum": 0},
+        "position_noise_bound_m": {"type": "number", "minimum": 0},
+        "missed_detection_probability": {"type": "number", "minimum": 0, "maximum": 1},
+        "occlusion_distance_m": {"type": "number", "exclusiveMinimum": 0},
+        "delay_steps": {"type": "integer", "minimum": 0},
+        "observation_perturbation_seed": {"type": "integer"}
+      }
+    }
+  }
+}

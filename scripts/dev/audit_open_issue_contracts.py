@@ -548,6 +548,9 @@ def _render_markdown(report: Mapping[str, Any], *, item_limit: int, json_report:
     ]
     if json_report:
         lines.append(f"- Full JSON report: `{json_report}`")
+    resume_hint = pagination.get("resume_hint")
+    if isinstance(resume_hint, str) and resume_hint:
+        lines.append(f"- Pagination guidance: {_markdown_cell(resume_hint)}")
     lines.extend(
         ["", "## Classification counts", "", "| Classification | Count |", "| --- | ---: |"]
     )

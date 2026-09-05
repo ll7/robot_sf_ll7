@@ -247,6 +247,19 @@ def test_complete_report_has_no_resume_hint() -> None:
     assert report["pagination"]["resume_hint"] is None
 
 
+def test_partial_markdown_report_exposes_resume_hint() -> None:
+    """Markdown output carries the same fresh-run guidance as the JSON report."""
+    report = _report(
+        _fixture([_raw_issue(1)], trailing_empty_page=False),
+        page_size=1,
+        max_pages=1,
+    )
+
+    rendered = _render_markdown(report, item_limit=1, json_report=None)
+    assert "Pagination guidance:" in rendered
+    assert "fresh audit" in rendered
+
+
 def test_hidden_extra_fixture_page_is_truncated() -> None:
     """Extra source pages beyond max-pages remain incomplete even after a short selected page."""
     fixture = _fixture([_raw_issue(1)])

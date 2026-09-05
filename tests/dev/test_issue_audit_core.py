@@ -61,6 +61,34 @@ def _issue(
     }
 
 
+def _healthy_quota_meta(*, core_remaining: int = 500) -> tuple:
+    """Return deterministic quota preflight data for inventory unit tests."""
+    return (
+        issue_audit_core.RateLimitSnapshot(
+            status="ok",
+            graphql_remaining=500,
+            graphql_reset_at=1_800_000_000,
+            core_remaining=core_remaining,
+            core_reset_at=1_800_000_100,
+        ),
+        {
+            "available": True,
+            "status": "ok",
+            "core_remaining": core_remaining,
+            "core_reset_at": 1_800_000_100,
+            "available_budget": max(0, core_remaining - 10),
+            "min_core_remaining": 10,
+            "retry_command": "cmd",
+            "next_action": "none",
+            "reason": "sufficient core quota available",
+            "errors": [],
+            "quota_exhausted": False,
+            "quota_uncertain": False,
+            "budget_exhausted": False,
+        },
+    )
+
+
 def test_state_contradiction_prefers_observed_active_work() -> None:
     """Active work wins over a contradictory ready label to avoid false readiness."""
     classification = classify_issue(
@@ -911,6 +939,67 @@ def test_comment_inventory_reports_degraded_reads_as_unavailable() -> None:
     assert issues[0]["comments"] == []
 
 
+def test_comment_inventory_bails_out_after_actual_rate_limit() -> None:
+    """A rate-limited comment thread stops optional comment reads immediately."""
+    queried: list[int] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert input_text is None
+        endpoint = args[1]
+        issue_number = int(endpoint.split("issues/")[1].split("/")[0])
+        queried.append(issue_number)
+        return subprocess.CompletedProcess(
+            args,
+            1,
+            "",
+            "gh: HTTP 403: API rate limit exceeded for user",
+        )
+
+    issues = [_issue(101), _issue(102), _issue(103)]
+    metadata = attach_issue_comments(
+        "ll7/robot_sf_ll7",
+        issues,
+        runner=runner,
+        request_budget=issue_audit_core._RestRequestBudget.from_available(10),
+    )
+
+    assert queried == [101]
+    assert metadata["processed_issue_count"] == 1
+    assert metadata["requests_attempted"] == 1
+    assert metadata["rate_limited"] is True
+    assert metadata["quota_exhausted"] is True
+    assert metadata["available"] is False
+
+
+def test_generic_permission_403_is_not_quota_exhaustion() -> None:
+    """A permission 403 remains an ordinary incomplete source, not quota exhaustion."""
+    queried: list[int] = []
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert input_text is None
+        endpoint = args[1]
+        issue_number = int(endpoint.split("issues/")[1].split("/")[0])
+        queried.append(issue_number)
+        return subprocess.CompletedProcess(
+            args,
+            1,
+            "",
+            "gh: HTTP 403: Resource not accessible by integration",
+        )
+
+    _rows, metadata = discover_issue_timeline_merged_prs(
+        "ll7/robot_sf_ll7",
+        [101, 102, 103],
+        runner=runner,
+    )
+
+    assert queried == [101, 102, 103]
+    assert metadata["available"] is False
+    assert metadata["errors"]
+    assert metadata.get("rate_limited") is not True
+    assert metadata.get("quota_exhausted") is not True
+
+
 def test_issue_timeline_recovers_merged_cross_referenced_pr() -> None:
     """A bounded issue timeline supplies merged-PR coverage beyond global history."""
 
@@ -996,8 +1085,13 @@ def test_inventory_uses_timeline_fallback_for_partial_closed_history(
     )
     monkeypatch.setattr(
         issue_audit_core,
+        "discover_core_quota",
+        lambda *args, **kwargs: _healthy_quota_meta(),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
         "discover_pull_requests",
-        lambda _repo, *, state, max_pages, runner: (
+        lambda _repo, *, state, max_pages, runner, request_budget: (
             ([], {"truncated": False, "errors": []})
             if state == "open"
             else ([], {"truncated": True, "errors": []})
@@ -1051,8 +1145,20 @@ def test_inventory_uses_an_independent_closed_pr_page_budget(
         "discover_open_issues",
         lambda *args, **kwargs: ([], {"truncated": False, "errors": []}),
     )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_core_quota",
+        lambda *args, **kwargs: _healthy_quota_meta(),
+    )
 
-    def discover_prs(_repo: str, *, state: str, max_pages: int, runner: object) -> tuple:
+    def discover_prs(
+        _repo: str,
+        *,
+        state: str,
+        max_pages: int,
+        runner: object,
+        request_budget: object,
+    ) -> tuple:
         observed.append((state, max_pages))
         return [], {"truncated": False, "errors": []}
 
@@ -1081,6 +1187,191 @@ def test_inventory_uses_an_independent_closed_pr_page_budget(
     issue_audit_core.discover_inventory("ll7/robot_sf_ll7", max_pages=2, max_closed_pr_pages=47)
 
     assert observed == [("open", 2), ("closed", 47)]
+
+
+def test_inventory_preflights_quota_before_comments_with_provided_runner() -> None:
+    """The production inventory runner uses one bounded API path in quota-first order."""
+    calls: list[list[str]] = []
+    issue_payload = {
+        "number": 110,
+        "title": "Bounded issue",
+        "body": "## Acceptance Criteria\n- [x] verified",
+        "state": "open",
+        "updated_at": EXPECTED_ISSUE_UPDATED_AT,
+        "html_url": "https://github.com/ll7/robot_sf_ll7/issues/110",
+        "user": {"login": "maintainer"},
+        "labels": [],
+    }
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert input_text is None
+        calls.append(args)
+        if args == ["api", "rate_limit"]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                json.dumps(
+                    {
+                        "resources": {
+                            "graphql": {"remaining": 500, "reset": 1_800_000_000},
+                            "core": {"remaining": 100, "reset": 1_800_000_100},
+                        }
+                    }
+                ),
+                "",
+            )
+        endpoint = args[1]
+        if "issues?state=open" in endpoint:
+            payload: object = [issue_payload]
+        elif "/comments?" in endpoint:
+            payload = []
+        elif "pulls?state=open" in endpoint or "pulls?state=closed" in endpoint:
+            payload = []
+        elif "/labels?" in endpoint:
+            payload = []
+        else:
+            raise AssertionError(f"unexpected REST endpoint: {endpoint}")
+        return subprocess.CompletedProcess(args, 0, json.dumps(payload), "")
+
+    def command_runner(args: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    inventory = issue_audit_core.discover_inventory(
+        "ll7/robot_sf_ll7",
+        include_comments=True,
+        runner=runner,
+        command_runner=command_runner,
+    )
+
+    assert calls[0] == ["api", "rate_limit"]
+    assert any("/comments?" in args[1] for args in calls[1:])
+    assert inventory["inventory"]["comments"]["processed_issue_count"] == 1
+    assert inventory["quota"]["request_budget"] == 90
+    assert inventory["quota"]["requests_attempted"] == 5
+    assert inventory["quota"]["requests_remaining"] == 85
+
+
+def test_inventory_low_budget_suppresses_ready_mutations_with_production_runner() -> None:
+    """A real bounded inventory run suppresses mutations when its shared budget truncates labels."""
+    calls: list[list[str]] = []
+    issue_payload = {
+        "number": 111,
+        "title": "Ready issue",
+        "body": "## Acceptance Criteria\n- [x] verified\n\n## Validation\n- [x] pytest",
+        "state": "open",
+        "updated_at": EXPECTED_ISSUE_UPDATED_AT,
+        "html_url": "https://github.com/ll7/robot_sf_ll7/issues/111",
+        "user": {"login": "maintainer"},
+        "labels": [{"name": "state:running"}],
+    }
+    label_rows = [{"name": "state:ready"}, {"name": "state:running"}]
+    label_rows.extend({"name": f"fixture-label-{index}"} for index in range(98))
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert input_text is None
+        calls.append(args)
+        if args == ["api", "rate_limit"]:
+            payload: object = {
+                "resources": {
+                    "graphql": {"remaining": 500, "reset": 1_800_000_000},
+                    "core": {"remaining": 16, "reset": 1_800_000_100},
+                }
+            }
+        else:
+            endpoint = args[1]
+            if "issues?state=open" in endpoint:
+                payload = [issue_payload]
+            elif "pulls?state=open" in endpoint or "pulls?state=closed" in endpoint:
+                payload = []
+            elif "/labels?" in endpoint:
+                payload = label_rows
+            else:
+                raise AssertionError(f"unexpected REST endpoint: {endpoint}")
+        return subprocess.CompletedProcess(args, 0, json.dumps(payload), "")
+
+    def command_runner(args: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    inventory = issue_audit_core.discover_inventory(
+        "ll7/robot_sf_ll7",
+        runner=runner,
+        command_runner=command_runner,
+    )
+    plan = build_audit_plan(inventory)
+
+    assert inventory["quota"]["request_budget"] == 6
+    assert inventory["quota"]["requests_attempted"] == 6
+    assert inventory["quota"]["status"] == "insufficient"
+    assert inventory["quota"]["quota_exhausted"] is False
+    assert inventory["quota"]["budget_exhausted"] is True
+    assert inventory["inventory"]["labels"]["truncated"] is True
+    assert plan["classification_status"]["mutations_suppressed"] is True
+    assert plan["mutations"] == []
+    assert plan["issues"][0]["mutations"] == []
+    assert "labels" in plan["truncation_or_errors"]
+
+
+def test_inventory_mid_run_rate_limit_emits_reset_handoff() -> None:
+    """A mid-run rate limit stops later REST reads and publishes retry metadata."""
+    calls: list[list[str]] = []
+    issue_payload = {
+        "number": 112,
+        "title": "Needs closure evidence",
+        "body": "## Acceptance Criteria\n- [x] verified",
+        "state": "open",
+        "updated_at": EXPECTED_ISSUE_UPDATED_AT,
+        "html_url": "https://github.com/ll7/robot_sf_ll7/issues/112",
+        "user": {"login": "maintainer"},
+        "labels": [],
+    }
+
+    def runner(args: list[str], input_text: str | None) -> subprocess.CompletedProcess[str]:
+        assert input_text is None
+        calls.append(args)
+        if args == ["api", "rate_limit"]:
+            payload: object = {
+                "resources": {
+                    "graphql": {"remaining": 500, "reset": 1_800_000_000},
+                    "core": {"remaining": 50, "reset": 1_800_000_100},
+                }
+            }
+            return subprocess.CompletedProcess(args, 0, json.dumps(payload), "")
+        endpoint = args[1]
+        if "issues?state=open" in endpoint:
+            return subprocess.CompletedProcess(args, 0, json.dumps([issue_payload]), "")
+        if "pulls?state=open" in endpoint:
+            return subprocess.CompletedProcess(args, 0, "[]", "")
+        if "pulls?state=closed" in endpoint:
+            return subprocess.CompletedProcess(
+                args,
+                1,
+                "",
+                "gh: HTTP 403: API rate limit exceeded for user",
+            )
+        raise AssertionError(f"REST read should have stopped before: {endpoint}")
+
+    def command_runner(args: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    inventory = issue_audit_core.discover_inventory(
+        "ll7/robot_sf_ll7",
+        runner=runner,
+        command_runner=command_runner,
+    )
+
+    assert [args[1] for args in calls[1:]]
+    assert not any("/timeline?" in args[1] or "/labels?" in args[1] for args in calls[1:])
+    quota = inventory["quota"]
+    assert quota["status"] == "exhausted"
+    assert quota["quota_exhausted"] is True
+    assert quota["rate_limited"] is True
+    assert quota["retry_after_utc"] == "2027-01-15T08:01:40Z"
+    assert isinstance(quota["reset_in_seconds"], int)
+    assert "Retry after reset with:" in quota["handoff"]
+    assert quota["retry_command"] in quota["handoff"]
+    plan = build_audit_plan(inventory)
+    assert plan["classification_status"]["mutations_suppressed"] is True
+    assert plan["mutations"] == []
 
 
 def test_closure_evidence_preserves_targeted_timeline_provenance() -> None:
@@ -2767,7 +3058,7 @@ def test_inventory_quota_exhausted_skips_closed_and_timeline_enrichment(
     monkeypatch.setattr(
         issue_audit_core,
         "discover_pull_requests",
-        lambda _repo, *, state, max_pages, runner: (
+        lambda _repo, *, state, max_pages, runner, request_budget: (
             observed_calls.append(f"prs_{state}") or ([], {"truncated": False, "errors": []})
         ),
     )
@@ -2828,8 +3119,9 @@ def test_inventory_quota_exhausted_skips_closed_and_timeline_enrichment(
 
     inventory = issue_audit_core.discover_inventory("ll7/robot_sf_ll7")
 
-    # Only open PRs are fetched; closed PRs and timeline requests are skipped
-    assert observed_calls == ["prs_open"]
+    # The quota preflight runs before every high-volume REST collection.
+    assert observed_calls == []
+    assert inventory["issues"] == []
     assert inventory["inventory"]["closed_prs"]["quota_exhausted"] is True
     assert inventory["inventory"]["closure_coverage"]["complete_for_open_issues"] is False
     assert inventory["inventory"]["closure_coverage"]["mode"] == "incomplete_quota_exhausted"
@@ -2859,7 +3151,14 @@ def test_inventory_bounds_requests_when_core_quota_is_low(
         lambda *args, **kwargs: ([_issue(101)], {"truncated": False, "errors": []}),
     )
 
-    def mock_prs(_repo: str, *, state: str, max_pages: int, runner: object) -> tuple:
+    def mock_prs(
+        _repo: str,
+        *,
+        state: str,
+        max_pages: int,
+        runner: object,
+        request_budget: object,
+    ) -> tuple:
         if state == "closed":
             observed_closed_pages.append(max_pages)
             # Simulates reading all budgeted pages, returning truncated
@@ -2897,6 +3196,8 @@ def test_inventory_bounds_requests_when_core_quota_is_low(
                 "reason": "sufficient core quota available",
                 "errors": [],
                 "quota_exhausted": False,
+                "quota_uncertain": False,
+                "budget_exhausted": False,
             },
         ),
     )
@@ -2927,7 +3228,8 @@ def test_inventory_bounds_requests_when_core_quota_is_low(
     assert observed_closed_pages == [3]
     # Because 3 pages were consumed, remaining budget is 0, so timeline was skipped
     assert timeline_called is False
-    assert inventory["inventory"]["issue_timeline_merged_prs"]["quota_exhausted"] is True
+    assert inventory["inventory"]["issue_timeline_merged_prs"]["budget_exhausted"] is True
+    assert inventory["inventory"]["issue_timeline_merged_prs"].get("quota_exhausted") is not True
     assert inventory["inventory"]["closure_coverage"]["complete_for_open_issues"] is False
 
 
@@ -2979,7 +3281,7 @@ def test_recovered_core_quota_enables_complete_audit_without_leaked_uncertainty(
     monkeypatch.setattr(
         issue_audit_core,
         "discover_pull_requests",
-        lambda _repo, *, state, max_pages, runner: (
+        lambda _repo, *, state, max_pages, runner, request_budget: (
             ([], {"truncated": False, "errors": []})
             if state == "open"
             else (
@@ -3021,6 +3323,8 @@ def test_recovered_core_quota_enables_complete_audit_without_leaked_uncertainty(
                 "reason": "sufficient core quota available",
                 "errors": [],
                 "quota_exhausted": False,
+                "quota_uncertain": False,
+                "budget_exhausted": False,
             },
         ),
     )

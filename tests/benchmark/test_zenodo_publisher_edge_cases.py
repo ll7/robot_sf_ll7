@@ -1170,6 +1170,49 @@ def test_reconciliation_receipt_rejects_tampered_inventory_binding(tmp_path: Pat
 
 
 @pytest.mark.parametrize(
+    "file_resource",
+    [
+        _draft_file("predecessor.tar.gz", file_id="changed-file"),
+        {
+            **_draft_file("predecessor.tar.gz"),
+            "links": {
+                "self": ("https://zenodo.org/api/deposit/depositions/7/files/inherited-file")
+            },
+        },
+    ],
+)
+def test_upload_rejects_successor_file_identity_drift_before_delete(
+    tmp_path: Path,
+    file_resource: dict[str, Any],
+) -> None:
+    """A file-level readback must bind both identity and URL before DELETE."""
+    bundle = tmp_path / "successor.tar.gz"
+    bundle.write_bytes(b"successor")
+    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
+    uploaded = _draft_file(bundle.name, file_id="successor-file")
+    initial = _successor_draft()
+    initial["files"] = [inherited]
+    post_upload = _successor_draft()
+    post_upload["files"] = [inherited, uploaded]
+    pre_delete = _successor_draft()
+    pre_delete["files"] = [inherited, uploaded]
+    session = _Session()
+    session.gets = [
+        _Response(initial),
+        _Response(post_upload),
+        _Response(pre_delete),
+        _Response(file_resource),
+    ]
+    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
+    session.deletes = [_Response({}, 204)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="identity|deposition"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+    assert session.delete_urls == []
+
+
+@pytest.mark.parametrize(
     "delete_status",
     [
         404,

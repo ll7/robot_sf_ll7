@@ -3141,6 +3141,10 @@ def verify(  # noqa: C901, PLR0912, PLR0915
     remote_metadata = remote.get("metadata") if isinstance(remote.get("metadata"), Mapping) else {}
     problems: list[str] = []
     try:
+        _remote_metadata_contract_sha256(remote)
+    except ZenodoPublisherError as exc:
+        problems.append(str(exc))
+    try:
         remote_optimistic = _remote_optimistic_binding(remote)
     except ZenodoPublisherError as exc:
         problems.append(str(exc))

@@ -36,6 +36,7 @@ from robot_sf.prediction.goal_belief_contract import (
     GoalCandidateKind,
     GoalCandidateProbability,
 )
+from robot_sf.prediction.goal_candidate_provider import GoalCandidateSource
 from robot_sf.prediction.goal_intention import (
     GoalCandidate,
     GoalCandidateAvailability,
@@ -55,7 +56,28 @@ _FINAL_DESTINATION_ROLES = frozenset(
     }
 )
 _ACTIVE_WAYPOINT_ROLES = frozenset({GoalCandidateRole.ACTIVE_WAYPOINT, GoalCandidateRole.BOTH})
-_PRIVILEGED_PROVENANCE_MARKERS = ("assigned_route", "ground_truth")
+_CANONICAL_ACTOR_SAFE_SOURCES = frozenset(
+    source.value for source in GoalCandidateSource if source is not GoalCandidateSource.UNKNOWN
+) | frozenset({"goal_candidate_provider", "public_candidates", "public_fixture"})
+_UNKNOWN_CANDIDATE_SOURCE = GoalCandidateSource.UNKNOWN.value
+_FEASIBLE_STATUS = "feasible"
+_PRIVILEGED_PROVENANCE_MARKERS = (
+    "assigned_route",
+    "ground_truth",
+    "route_assignment",
+    "sim_truth",
+    "truth_label",
+)
+
+
+def _normalize_label(value: str) -> str:
+    """Normalize string-like enum labels for fail-closed metadata checks.
+
+    Returns:
+        Lowercase, whitespace-trimmed string value.
+    """
+    raw_value = getattr(value, "value", value)
+    return str(raw_value).strip().lower()
 
 
 def _is_forbidden_actor_provenance(value: str) -> bool:
@@ -64,10 +86,29 @@ def _is_forbidden_actor_provenance(value: str) -> bool:
     Returns:
         ``True`` when the value identifies forbidden oracle, simulator, route, or truth evidence.
     """
-    normalized = value.strip().lower()
+    normalized = _normalize_label(value)
     return is_forbidden_evidence_source(normalized) or any(
         marker in normalized for marker in _PRIVILEGED_PROVENANCE_MARKERS
     )
+
+
+def _validate_actor_safe_source(
+    value: str,
+    field_name: str,
+    *,
+    allow_unknown: bool = False,
+) -> None:
+    """Require a canonical public source label at the hierarchy boundary."""
+    normalized = _normalize_label(value)
+    allowed = _CANONICAL_ACTOR_SAFE_SOURCES
+    if (allow_unknown and normalized == _UNKNOWN_CANDIDATE_SOURCE) or normalized in allowed:
+        return
+    if _is_forbidden_actor_provenance(normalized):
+        raise ValueError(
+            f"{field_name} must not identify a forbidden oracle or simulator source; "
+            "privileged route/truth evidence is also rejected"
+        )
+    raise ValueError(f"{field_name} must use a canonical actor-safe source")
 
 
 def _validate_candidate_set_metadata(candidate_set: GoalCandidateSet) -> None:
@@ -76,17 +117,13 @@ def _validate_candidate_set_metadata(candidate_set: GoalCandidateSet) -> None:
         raise ValueError(
             "candidate_set.availability must be AVAILABLE for flat projection admission"
         )
-    if _is_forbidden_actor_provenance(candidate_set.source):
-        raise ValueError(
-            "candidate_set.source must not identify a forbidden oracle or simulator source; "
-            "privileged route/truth evidence is also rejected"
-        )
+    _validate_actor_safe_source(candidate_set.source, "candidate_set.source")
     for candidate in candidate_set.candidates:
-        if _is_forbidden_actor_provenance(candidate.source):
-            raise ValueError(
-                f"candidate {candidate.id} has a forbidden oracle or simulator source; "
-                "privileged route/truth evidence is also rejected"
-            )
+        _validate_actor_safe_source(
+            candidate.source,
+            f"candidate {candidate.id}.source",
+            allow_unknown=candidate.role is GoalCandidateRole.UNKNOWN,
+        )
         if any(_is_forbidden_actor_provenance(ref) for ref in candidate.provenance_refs):
             raise ValueError(
                 f"candidate {candidate.id} has privileged oracle, simulator, route, or "
@@ -120,6 +157,17 @@ def _validate_referenced_candidate_semantics(
         raise ValueError(
             "hierarchical probability references unavailable candidate(s): "
             + ", ".join(unavailable_ids)
+        )
+
+    infeasible_ids = sorted(
+        candidate_id
+        for candidate_id in destination_ids | waypoint_ids
+        if _normalize_label(candidate_by_id[candidate_id].feasibility_status) != _FEASIBLE_STATUS
+    )
+    if infeasible_ids:
+        raise ValueError(
+            "hierarchical probability references candidate(s) with non-feasible status: "
+            + ", ".join(infeasible_ids)
         )
 
     incompatible_destinations = sorted(

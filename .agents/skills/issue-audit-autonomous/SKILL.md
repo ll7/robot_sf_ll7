@@ -58,8 +58,11 @@ issue_audit_plan.v1.
        uv run python scripts/dev/issue_audit_core.py apply \
          output/issue_audit_plan.json
 
-   The executor refuses incomplete plans, enforces a bounded mutation budget,
-   uses URI-safe REST label paths, and reads every touched issue back.
+   The executor verifies plan provenance (`source_sha`, `classifier_digest`, producer
+   identity), checks freshness against fetched `origin/main`, refuses incomplete or diagnostic
+   plans, enforces a bounded mutation budget, uses URI-safe REST label paths, and reads every
+   touched issue back. For read-only diagnostic runs without write intent, use
+   `--read-only-diagnostic` during the `plan` step.
 4. Build the pending-decision queue from pending_decisions. For each entry,
    include the issue title/URL, current classification and labels, bounded
    issue body/comment source metadata, blocking evidence, documented options,

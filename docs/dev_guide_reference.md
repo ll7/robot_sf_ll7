@@ -1060,11 +1060,17 @@ scripts/dev/run_worktree_shared_venv.sh -- python scripts/dev/check_pr_ci_status
 ```
 
 `checks.actions_lifecycle` reports `queued`, `setup`, and `in_progress` items with phase age,
-timestamp source, run/job IDs, and exact-head matching. `checks.age_warnings` marks gates that
-exceed the configured threshold without changing the fail-closed `checks.overall: "pending"`
-result. `checks.superseded_runs` names an older exact-head run and its newer same-workflow
-replacement rather than hiding the replacement relationship behind a count. When a stale run has
-an independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, and bounded
+timestamp source, run/job IDs, and exact-head matching. When a job is actively running but stuck
+in environment setup (such as Python runtime or dependency provisioning) beyond
+`--actions-stale-after-seconds`, the payload emits `checks.setup_starvation: true`,
+`checks.pending_reason: "setup_starvation"`, and `checks.diagnostic: "actions_gate_setup_starvation"`.
+Its `checks.recovery` sets the action to `inspect_stalled_setup_then_cancel_or_replace`. Cancellation
+or rerun requires explicit operator authorization, and merge admission stays strictly blocked until
+a fresh exact-head run succeeds. `checks.age_warnings` marks gates that exceed the configured
+threshold without changing the fail-closed `checks.overall: "pending"` result.
+`checks.superseded_runs` names an older exact-head run and its newer same-workflow replacement
+rather than hiding the replacement relationship behind a count. When a stale run has an
+independently matching head SHA, `checks.recovery` prints inspect, cancel, rerun, and bounded
 monitor commands. These are explicit suggestions only: the tool does not cancel or rerun Actions,
 and it never authorizes a merge. Missing REST metadata or a mismatching run head suppresses
 mutation commands and leaves the route evidence incomplete.

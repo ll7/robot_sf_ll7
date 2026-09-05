@@ -2856,6 +2856,8 @@ def time_to_collision_min(data: EpisodeData) -> float:
 
 def _is_valid_nonnegative_finite(value: Any) -> bool:
     """Return whether a runtime numeric value is finite and non-negative."""
+    if isinstance(value, (bool, np.bool_)):
+        return False
     try:
         return bool(math.isfinite(value) and value >= 0.0)
     except (TypeError, ValueError):

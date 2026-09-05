@@ -61,6 +61,52 @@ def test_censored_rows_are_direction_only_and_missing_truth_is_unavailable() -> 
     assert summary.vector_l2_mae is None
 
 
+def test_censored_zero_and_near_zero_directions_are_excluded() -> None:
+    summary = evaluate_goal_force_rows(
+        [
+            GoalForceMetricRow((0.0, 0.0), (0.0, 0.0), censored=True),
+            GoalForceMetricRow(
+                (0.5 * GOAL_FORCE_METRICS_NORM_EPSILON, 0.0),
+                (0.5 * GOAL_FORCE_METRICS_NORM_EPSILON, 0.0),
+                censored=True,
+            ),
+            GoalForceMetricRow((2.0, 0.0), (1.0, 0.0), censored=True),
+        ]
+    )
+
+    assert summary.censored_count == 3
+    assert summary.direction_count == 1
+    assert summary.direction_excluded_count == 2
+    assert summary.exact_vector_count == 0
+    assert summary.magnitude_count == 0
+
+
+def test_mixed_row_denominators_remain_separate() -> None:
+    summary = evaluate_goal_force_rows(
+        [
+            GoalForceMetricRow((2.0, 0.0), (1.0, 0.0)),
+            GoalForceMetricRow((0.0, 0.0), (0.0, 0.0)),
+            GoalForceMetricRow((3.0, 0.0), (1.0, 0.0), censored=True),
+            GoalForceMetricRow((0.0, 0.0), (0.0, 0.0), censored=True),
+            GoalForceMetricRow((1.0, 0.0), None),
+        ]
+    )
+
+    assert summary.row_count == 5
+    assert summary.unavailable_count == 1
+    assert summary.censored_count == 2
+    assert summary.exact_vector_count == 2
+    assert summary.direction_count == 2
+    assert summary.direction_excluded_count == 2
+    assert summary.magnitude_count == 2
+    assert summary.relative_magnitude_count == 1
+    assert summary.relative_magnitude_excluded_count == 1
+    assert summary.vector_l2_mae == pytest.approx(0.5)
+    assert summary.component_bias_xy == pytest.approx((0.5, 0.0))
+    assert summary.magnitude_mae == pytest.approx(0.5)
+    assert summary.relative_magnitude_mae == pytest.approx(1.0)
+
+
 def test_zero_vectors_are_not_fabricated_as_direction_accuracy() -> None:
     summary = evaluate_goal_force_rows(
         [

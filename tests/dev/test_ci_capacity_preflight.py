@@ -422,6 +422,35 @@ def test_shared_venv_recovery_allows_host_python_interpreter_symlink(tmp_path: P
         _remove_linked_recovery_fixture(repo, worktree)
 
 
+def test_shared_venv_recovery_rejects_host_python_link_into_owning_checkout(
+    tmp_path: Path,
+) -> None:
+    """A python* alias must not redirect into the owning checkout."""
+    repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)
+    main_python = repo / ".venv" / "bin" / "python"
+    main_python.parent.mkdir(parents=True)
+    _write_executable(main_python, "#!/usr/bin/env bash\nexit 0\n")
+    worktree_python = worktree / ".venv" / "bin" / "python3"
+    worktree_python.parent.mkdir(parents=True)
+    worktree_python.symlink_to(main_python)
+    try:
+        result = subprocess.run(
+            [str(worktree / "scripts" / "dev" / RECOVER_FAST_PYSF.name)],
+            cwd=worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "host-interpreter link into the owning checkout" in result.stderr
+        assert not capture.exists()
+    finally:
+        _remove_linked_recovery_fixture(repo, worktree)
+
+
 def test_shared_venv_recovery_refuses_symlinked_repository_lock(tmp_path: Path) -> None:
     """The lock guard must not truncate or follow an arbitrary symlink target."""
     repo, worktree, _, capture, _, env = _linked_recovery_fixture(tmp_path)

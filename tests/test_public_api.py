@@ -273,17 +273,54 @@ def test_run_episode_keeps_raw_observation_for_custom_step_planner():
         env.close()
 
 
-def test_benchmark_observation_preserves_static_obstacles():
-    """Canonical baseline observations carry the simulator's obstacle segments."""
+def test_run_episode_keeps_raw_observation_for_callable_planner():
+    """Callable-only planners retain the raw Gymnasium observation contract."""
+    import numpy as np
+
+    received = []
+
+    def callable_planner(obs):
+        received.append(obs)
+        return np.zeros(2, dtype=np.float32)
+
     env = robot_sf.make_env(seed=123)
     try:
-        env.reset(seed=123)
-        observation = robot_sf.api._benchmark_observation_from_env(env, None)
+        robot_sf.run_episode(env, planner=callable_planner, max_steps=1, seed=123)
+        assert len(received) == 1
+        assert isinstance(received[0], dict)
+    finally:
+        env.close()
+
+
+def test_social_force_receives_classic_bottleneck_obstacles(monkeypatch):
+    """SocialForce receives obstacle segments from the classic bottleneck map."""
+    from robot_sf.baselines.interface import Observation
+    from robot_sf.baselines.social_force import SocialForcePlanner
+
+    env = robot_sf.make_env(scenario="classic_bottleneck_low", seed=131)
+    planner = SocialForcePlanner({}, seed=131)
+    received = []
+    original_step = planner.step
+
+    def recording_step(obs):
+        received.append(obs)
+        return original_step(obs)
+
+    monkeypatch.setattr(planner, "step", recording_step)
+
+    try:
+        env.reset(seed=131)
         expected = [
             [float(value) for value in segment] for segment in env.simulator.map_def.obstacles_pysf
         ]
-        assert observation is not None
-        assert observation.obstacles == expected
+        assert env.simulator.map_def.obstacles
+        assert expected
+
+        robot_sf.run_episode(env, planner=planner, max_steps=1, seed=131)
+
+        assert len(received) == 1
+        assert isinstance(received[0], Observation)
+        assert received[0].obstacles == expected
     finally:
         env.close()
 

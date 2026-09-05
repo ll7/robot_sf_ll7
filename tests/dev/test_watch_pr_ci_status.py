@@ -17,6 +17,7 @@ from scripts.dev.watch_pr_ci_status import (
     _parse_timestamp,
     fetch_exact_commit_ci_status,
     fetch_recent_successful_ci_durations,
+    format_human,
     main,
     wait_budget_seconds,
     watch_pr_ci_status,
@@ -631,6 +632,27 @@ def test_pending_after_budget_collects_drift_sample() -> None:
     assert result.drift_sample.median_seconds == 1000
     assert result.drift_sample.recommended_budget_seconds == 1300
     fetch_durations.assert_called_once()
+
+
+def test_pending_after_budget_detects_setup_starvation() -> None:
+    """Timeout with setup starvation emits an explicit runner starvation error."""
+    status = _status("pending")
+    status["checks"]["setup_starvation"] = True  # type: ignore[index]
+    status["checks"]["pending_reason"] = "setup_starvation"  # type: ignore[index]
+
+    result = watch_pr_ci_status(
+        pr_number="42",
+        baseline_seconds=0,
+        poll_interval_seconds=1,
+        fetch_status=MagicMock(return_value=status),
+        fetch_durations=MagicMock(return_value=[1000]),
+    )
+
+    assert result.final_status == "timeout"
+    assert "CI setup starvation detected on hosted runner" in result.error
+    human = format_human(result)
+    assert "pending_reason: setup_starvation" in human
+    assert "setup_starvation: detected on hosted runner" in human
 
 
 def test_once_returns_pending_without_sleep_or_drift_sampling() -> None:

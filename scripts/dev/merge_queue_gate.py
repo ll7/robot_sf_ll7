@@ -62,6 +62,7 @@ import shlex
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -1587,10 +1588,27 @@ def _validate_rest_check_run(check: dict[str, Any], *, head_sha: str, index: int
     return None
 
 
+def _rest_status_timestamp(status: dict[str, Any]) -> datetime | None:
+    """Parse the newest available REST status timestamp, or return ``None``."""
+    raw_timestamp = status.get("updated_at") or status.get("created_at")
+    if not isinstance(raw_timestamp, str) or not raw_timestamp.strip():
+        return None
+    try:
+        timestamp = datetime.fromisoformat(raw_timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return timestamp if timestamp.tzinfo is not None else None
+
+
 def _rest_commit_statuses(
     *, owner: str, name: str, head_sha: str
 ) -> tuple[list[dict[str, Any]], str | None]:
-    """Fetch and validate legacy commit-status contexts for the exact head."""
+    """Fetch and validate the newest legacy status for each exact-head context.
+
+    The REST ``statuses`` endpoint returns the status history, while the GraphQL
+    rollup exposes the current context. Keeping historical entries would allow
+    an older pending or failed status to block a newer successful one.
+    """
     statuses, err = _rest_json_list(
         owner=owner,
         name=name,
@@ -1599,7 +1617,7 @@ def _rest_commit_statuses(
     )
     if err:
         return [], err
-    normalized: list[dict[str, Any]] = []
+    latest_by_context: dict[str, tuple[datetime | None, dict[str, Any]]] = {}
     for index, status in enumerate(statuses):
         context = status.get("context")
         state = status.get("state")
@@ -1611,21 +1629,28 @@ def _rest_commit_statuses(
         ):
             return [], f"REST commit-status response contains a malformed entry at index {index}"
         state_upper = state.upper()
-        normalized.append(
-            {
-                "__typename": "StatusContext",
-                "name": context,
-                "context": context,
-                "status": "COMPLETED" if state.lower() != "pending" else "PENDING",
-                "state": state_upper,
-                "conclusion": state_upper,
-                "targetUrl": status.get("target_url"),
-                "createdAt": status.get("created_at"),
-                "updatedAt": status.get("updated_at"),
-                "head_sha": head_sha,
-            }
-        )
-    return normalized, None
+        normalized = {
+            "__typename": "StatusContext",
+            "name": context,
+            "context": context,
+            "status": "COMPLETED" if state.lower() != "pending" else "PENDING",
+            "state": state_upper,
+            "conclusion": state_upper,
+            "targetUrl": status.get("target_url"),
+            "createdAt": status.get("created_at"),
+            "updatedAt": status.get("updated_at"),
+            "head_sha": head_sha,
+        }
+        timestamp = _rest_status_timestamp(status)
+        previous = latest_by_context.get(context)
+        if previous is None:
+            latest_by_context[context] = (timestamp, normalized)
+        elif timestamp is not None and previous[0] is not None and timestamp > previous[0]:
+            latest_by_context[context] = (timestamp, normalized)
+        # When either timestamp is unavailable or malformed, retain the first
+        # entry. GitHub returns this history newest-first, so this avoids letting
+        # a timestamped older entry replace an untimestamped current entry.
+    return [entry for _timestamp, entry in latest_by_context.values()], None
 
 
 def _rest_check_rollup(

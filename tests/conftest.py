@@ -443,6 +443,9 @@ _FAST_FILES = {
     # (issue #8063).
     "test_goal_belief_contract.py",
     "test_oracle_transition_trace_contract.py",
+    # Hierarchical goal-posterior tests are deterministic contract coverage for
+    # the changed additive prediction module; keep them in PR fast shards.
+    "test_hierarchical_goal_belief_contract.py",
     # Tracker-to-goal-belief adapter tests are deterministic observation-contract
     # coverage; keep them in fast PR shards for the exact-head changed-coverage gate.
     "test_tracker_goal_belief_adapter.py",

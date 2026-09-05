@@ -309,11 +309,12 @@ separate `/files` collection response for lifecycle or deletion admission. Local
 symlinks, control/query/fragment/encoded-collision filenames, duplicate aliases,
 and local changes detected immediately before a PUT are rejected. The
 server-supplied upload bucket must use the canonical `/api/files/<opaque-bucket-id>`
-shape, with no duplicate path separators; deposition, record, and collection paths
-are not accepted as PUT targets. Credential-shaped remote filenames, including
-`Authorization: <scheme> <value>` forms, are rejected before they can enter state
-or a receipt. It deletes only stable inherited filenames from the unpublished
-successor and requires an exact final filename inventory. It never addresses the
+shape, with no duplicate path separators or query/fragment delimiters; deposition,
+record, and collection paths are not accepted as PUT targets. Credential-shaped
+remote filenames, including parameterized `Authorization: <scheme> <value>` forms,
+are rejected before they can enter state or a receipt. It deletes only stable
+inherited filenames from the unpublished successor and requires an exact final
+filename inventory. It never addresses the
 published predecessor.
 DELETE 204, 404, 403, 5xx, network, and other unexpected results are classified;
 non-204 results are treated as conditionally idempotent only when a bounded pair

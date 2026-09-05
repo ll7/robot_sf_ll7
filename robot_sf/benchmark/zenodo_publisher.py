@@ -36,7 +36,7 @@ _REMOTE_FILENAME_ALIASES = ("filename", "key")
 _REMOTE_FILE_ID_ALIASES = ("id", "file_id", "fileid")
 _CREDENTIAL_SHAPED_FILENAME_RE = re.compile(
     r"(?i)^(?:bearer|basic)\s+\S+$|"
-    r"^authorization\s*[:=]\s*[A-Za-z][A-Za-z0-9_-]*\s+\S+$|"
+    r"^authorization\s*[:=]\s*[A-Za-z][A-Za-z0-9_-]*\s+\S(?:[^\r\n]*\S)?$|"
     r"^(?:authorization|access[_ -]?token|api[_ -]?key|password|secret|token)\s*[:=]\s*\S+$"
 )
 _DELETE_READBACK_ATTEMPTS = 3
@@ -288,6 +288,8 @@ def _validated_remote_url(value: Any, api_base: str, label: str) -> str:
         or candidate.password is not None
         or candidate.query
         or candidate.fragment
+        or "?" in value.strip()
+        or "#" in value.strip()
         or not candidate.path
     ):
         raise ZenodoPublisherError(f"Zenodo {label} is not a valid same-origin HTTPS URL")

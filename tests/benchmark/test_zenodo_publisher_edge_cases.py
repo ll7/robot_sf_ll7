@@ -751,6 +751,8 @@ def test_api_base_normalizes_one_trailing_slash() -> None:
         "http://zenodo.org/api/files/bucket",
         "https://other.example/api/files/bucket",
         "https://zenodo.org/api/files/bucket?access_token=secret",
+        "https://zenodo.org/api/files/bucket?",
+        "https://zenodo.org/api/files/bucket#",
         "https://zenodo.org/records/7/files/bundle",
         "https://zenodo.org/apiary/files/bucket",
         "https://zenodo.org/api/deposit/depositions/7/files",
@@ -1180,6 +1182,7 @@ def test_reconciliation_receipt_rejects_tampered_inventory_binding(tmp_path: Pat
         "Authorization: Bearer secret-reflection",
         "Authorization: Token secret-reflection",
         "Authorization=Digest secret-reflection",
+        'Authorization: Digest username="secret-reflection", realm="example", nonce="opaque"',
     ],
 )
 def test_reconciliation_receipt_rejects_credential_shaped_deleted_filename(

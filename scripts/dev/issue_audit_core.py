@@ -24,6 +24,7 @@ import hashlib
 import json
 import math
 import re
+import shlex
 import signal
 import subprocess
 import sys
@@ -1007,7 +1008,7 @@ def discover_issue_timeline_merged_prs(
     rate_limited = False
 
     for issue_number in numbers:
-        if max_requests is not None and pages_read >= max_requests:
+        if max_requests is not None and requests_attempted >= max_requests:
             truncated = True
             if request_budget is not None and request_budget.remaining <= 0:
                 request_budget.mark_budget_exhausted()
@@ -1229,6 +1230,54 @@ def _core_reset_handoff(
     return handoff
 
 
+def _build_plan_retry_command(
+    repo: str,
+    *,
+    remote: str = DEFAULT_REMOTE,
+    mode: str = "autonomous",
+    max_pages: int = DEFAULT_MAX_PAGES,
+    max_closed_pr_pages: int = DEFAULT_MAX_CLOSED_PR_PAGES,
+    include_comments: bool = False,
+    max_comment_pages: int = DEFAULT_MAX_COMMENT_PAGES,
+    max_mutations: int = DEFAULT_MAX_MUTATIONS,
+    max_wall_seconds: float | None = None,
+    output: Path | None = None,
+) -> str:
+    """Serialize the bounded plan invocation used by quota-reset handoffs."""
+    command = [
+        "uv",
+        "run",
+        "python",
+        "scripts/dev/issue_audit_core.py",
+        "plan",
+        "--repo",
+        repo,
+        "--remote",
+        remote,
+        "--mode",
+        mode,
+        "--max-pages",
+        str(max_pages),
+        "--max-closed-pr-pages",
+        str(max_closed_pr_pages),
+    ]
+    if include_comments:
+        command.append("--include-comments")
+    command.extend(
+        (
+            "--max-comment-pages",
+            str(max_comment_pages),
+            "--max-mutations",
+            str(max_mutations),
+        )
+    )
+    if max_wall_seconds is not None:
+        command.extend(("--max-wall-seconds", str(max_wall_seconds)))
+    if output is not None:
+        command.extend(("--output", str(output)))
+    return shlex.join(command)
+
+
 def _skipped_rest_metadata(
     reason: str,
     *,
@@ -1326,7 +1375,7 @@ def discover_core_quota(
 ) -> tuple[RateLimitSnapshot, dict[str, Any]]:
     """Check GitHub core REST capacity before high-volume enrichment."""
     snapshot = fetch_rate_limit_snapshot(runner=runner)
-    cmd = retry_command or f"uv run python scripts/dev/issue_audit_core.py plan --repo {repo}"
+    cmd = retry_command or _build_plan_retry_command(repo)
     if snapshot.status != "ok":
         actual_quota_exhausted = _is_rate_limit_error(snapshot.error)
         subject = (
@@ -1417,12 +1466,26 @@ def discover_inventory(
     deadline: float | None = None,
     runner: Runner | None = None,
     command_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
+    retry_command: str | None = None,
 ) -> dict[str, Any]:
     """Build the complete read-only inventory consumed by the shared classifier."""
     effective_deadline = _resolve_deadline(max_wall_seconds, deadline)
     rest_runner = _deadline_runner(runner or _run_gh, deadline=effective_deadline)
     local_runner = _deadline_command_runner(command_runner or _run_command, effective_deadline)
-    _quota_snapshot, quota_meta = discover_core_quota(repo, runner=rest_runner)
+    effective_retry_command = retry_command or _build_plan_retry_command(
+        repo,
+        remote=remote,
+        max_pages=max_pages,
+        max_closed_pr_pages=max_closed_pr_pages,
+        include_comments=include_comments,
+        max_comment_pages=max_comment_pages,
+        max_wall_seconds=max_wall_seconds,
+    )
+    _quota_snapshot, quota_meta = discover_core_quota(
+        repo,
+        runner=rest_runner,
+        retry_command=effective_retry_command,
+    )
     quota_available = bool(quota_meta.get("available"))
     request_budget = _RestRequestBudget.from_available(
         quota_meta.get("available_budget", 0) if quota_available else 0
@@ -3744,6 +3807,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not math.isfinite(args.max_wall_seconds) or args.max_wall_seconds < 0:
             parser.error("--max-wall-seconds must be finite and non-negative")
         deadline = _deadline_from_seconds(args.max_wall_seconds)
+        retry_command = _build_plan_retry_command(
+            args.repo,
+            remote=args.remote,
+            mode=args.mode,
+            max_pages=args.max_pages,
+            max_closed_pr_pages=args.max_closed_pr_pages,
+            include_comments=args.include_comments,
+            max_comment_pages=args.max_comment_pages,
+            max_mutations=args.max_mutations,
+            max_wall_seconds=args.max_wall_seconds,
+            output=args.output,
+        )
         try:
             with _deadline_interrupt(deadline):
                 inventory = discover_inventory(
@@ -3754,6 +3829,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     include_comments=args.include_comments,
                     max_comment_pages=args.max_comment_pages,
                     deadline=deadline,
+                    retry_command=retry_command,
                 )
         except _AuditDeadlineExceeded:
             inventory = _deadline_timeout_inventory(

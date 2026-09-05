@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 import time
 from typing import TYPE_CHECKING, Any
@@ -3426,3 +3427,308 @@ def test_main_plan_cli_reports_concise_quota_warning_and_exits_2(
     assert saved_plan["mutations"] == []
     assert "core_quota" in saved_plan["inventory_uncertainties"]
     assert "core_quota" in saved_plan["truncation_or_errors"]
+
+
+def test_timeline_max_requests_counts_failed_requests_against_budget() -> None:
+    """A failed timeline request with finite max_requests must not query the next issue.
+
+    Regression for issue #8509: pages_read was used instead of requests_attempted,
+    allowing repeated failures to bypass the budget.
+    """
+    queried_issues: list[int] = []
+
+    def runner(args: list[str], input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+        for part in args:
+            if "issues/" in part and "/timeline" in part:
+                num = int(part.split("issues/")[1].split("/")[0])
+                queried_issues.append(num)
+                if num == 1:
+                    return subprocess.CompletedProcess(
+                        args,
+                        1,
+                        "",
+                        "gh: HTTP 500: timeline request failed",
+                    )
+                return subprocess.CompletedProcess(args, 0, "[]")
+        return subprocess.CompletedProcess(args, 0, "[]")
+
+    _prs, meta = discover_issue_timeline_merged_prs(
+        "ll7/robot_sf_ll7",
+        [1, 2, 3],
+        max_requests=1,
+        runner=runner,
+    )
+
+    # With max_requests=1, only issue 1 should be attempted; the failed request
+    # must count against the budget so issue 2 is never queried.
+    assert queried_issues == [1]
+    assert meta["truncated"] is True
+    assert meta["requests_attempted"] == 1
+    assert meta["pages_read"] == 0
+
+
+def test_timeline_success_path_counts_attempts_consistently() -> None:
+    """Successful timeline requests also count against the budget consistently."""
+    queried_issues: list[int] = []
+
+    def runner(args: list[str], input_text: str | None = None) -> subprocess.CompletedProcess[str]:
+        for part in args:
+            if "issues/" in part and "/timeline" in part:
+                num = int(part.split("issues/")[1].split("/")[0])
+                queried_issues.append(num)
+                return subprocess.CompletedProcess(args, 0, "[]")
+        return subprocess.CompletedProcess(args, 0, "[]")
+
+    _prs, meta = discover_issue_timeline_merged_prs(
+        "ll7/robot_sf_ll7",
+        [1, 2, 3],
+        max_requests=2,
+        runner=runner,
+    )
+
+    # With max_requests=2 and successful requests, exactly two issues are queried.
+    assert queried_issues == [1, 2]
+    assert meta["requests_attempted"] == 2
+    assert meta["pages_read"] == 2
+
+
+def test_plan_cli_retry_command_preserves_non_default_options(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """The quota retry command preserves every bounded plan CLI option and shell-quotes values.
+
+    Regression for issue #8509: the retry command was repo-only, losing
+    --remote, --include-comments, --max-pages, --max-wall-seconds, etc.
+    """
+    observed_retry_command: str | None = None
+
+    def mock_discover_inventory(
+        repo: str, *, retry_command: str | None = None, **kwargs: object
+    ) -> dict[str, object]:
+        nonlocal observed_retry_command
+        observed_retry_command = retry_command
+        return {
+            "repo": repo,
+            "issues": [],
+            "open_prs": [],
+            "merged_prs": [],
+            "labels": [],
+            "claims": {},
+            "worktrees": [],
+            "jobs": [],
+            "quota": {
+                "status": "exhausted",
+                "quota_exhausted": True,
+                "core_remaining": 0,
+                "core_reset_at": 1_800_000_100,
+                "reset_in_seconds": 120,
+                "retry_after_utc": "2027-01-15T08:01:40Z",
+                "retry_command": "fallback",
+                "reason": "GitHub core REST quota exhausted",
+                "errors": ["quota exhausted"],
+            },
+            "inventory": {
+                "quota": {
+                    "status": "exhausted",
+                    "quota_exhausted": True,
+                    "errors": ["quota exhausted"],
+                },
+                "closure_coverage": {"complete_for_open_issues": False},
+            },
+        }
+
+    monkeypatch.setattr(issue_audit_core, "discover_inventory", mock_discover_inventory)
+    output = tmp_path / "plan with spaces.json"
+    repo = "owner/repo; touch pwned"
+
+    code = main(
+        [
+            "plan",
+            "--repo",
+            repo,
+            "--remote",
+            "upstream",
+            "--mode",
+            "interactive",
+            "--include-comments",
+            "--max-pages",
+            "3",
+            "--max-closed-pr-pages",
+            "20",
+            "--max-comment-pages",
+            "2",
+            "--max-mutations",
+            "7",
+            "--max-wall-seconds",
+            "60",
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert code == 2
+    assert observed_retry_command is not None
+    assert shlex.split(observed_retry_command) == [
+        "uv",
+        "run",
+        "python",
+        "scripts/dev/issue_audit_core.py",
+        "plan",
+        "--repo",
+        repo,
+        "--remote",
+        "upstream",
+        "--mode",
+        "interactive",
+        "--max-pages",
+        "3",
+        "--max-closed-pr-pages",
+        "20",
+        "--include-comments",
+        "--max-comment-pages",
+        "2",
+        "--max-mutations",
+        "7",
+        "--max-wall-seconds",
+        "60.0",
+        "--output",
+        str(output),
+    ]
+    assert output.exists()
+
+
+def test_inventory_retry_command_preserves_inventory_bounds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Direct inventory callers receive a retry handoff with their bounded options intact."""
+    observed_retry_command: str | None = None
+
+    def mock_discover_core_quota(
+        repo: str, *, runner: object = None, retry_command: str | None = None
+    ) -> tuple:
+        nonlocal observed_retry_command
+        observed_retry_command = retry_command
+        return (
+            issue_audit_core.RateLimitSnapshot(
+                status="failed",
+                error="quota preflight unavailable",
+            ),
+            {
+                "available": False,
+                "status": "failed",
+                "retry_command": retry_command,
+                "next_action": "retry_preflight",
+                "reason": "quota preflight unavailable",
+                "errors": ["quota preflight unavailable"],
+                "quota_exhausted": False,
+                "quota_uncertain": True,
+            },
+        )
+
+    monkeypatch.setattr(issue_audit_core, "discover_core_quota", mock_discover_core_quota)
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_claims",
+        lambda *args, **kwargs: ({}, {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_worktrees",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_jobs",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+
+    issue_audit_core.discover_inventory(
+        "ll7/robot_sf_ll7",
+        remote="upstream",
+        max_pages=3,
+        max_closed_pr_pages=20,
+        include_comments=True,
+        max_comment_pages=2,
+        max_wall_seconds=60,
+    )
+
+    assert observed_retry_command is not None
+    assert shlex.split(observed_retry_command) == [
+        "uv",
+        "run",
+        "python",
+        "scripts/dev/issue_audit_core.py",
+        "plan",
+        "--repo",
+        "ll7/robot_sf_ll7",
+        "--remote",
+        "upstream",
+        "--mode",
+        "autonomous",
+        "--max-pages",
+        "3",
+        "--max-closed-pr-pages",
+        "20",
+        "--include-comments",
+        "--max-comment-pages",
+        "2",
+        "--max-mutations",
+        str(issue_audit_core.DEFAULT_MAX_MUTATIONS),
+        "--max-wall-seconds",
+        "60",
+    ]
+
+
+def test_inventory_uses_explicit_retry_command_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Callers that already have a complete retry command keep it unchanged."""
+    observed_retry_command: str | None = None
+
+    def mock_discover_core_quota(
+        repo: str, *, runner: object = None, retry_command: str | None = None
+    ) -> tuple:
+        nonlocal observed_retry_command
+        observed_retry_command = retry_command
+        return _healthy_quota_meta()
+
+    monkeypatch.setattr(issue_audit_core, "discover_core_quota", mock_discover_core_quota)
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_open_issues",
+        lambda *args, **kwargs: ([], {"truncated": False, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_pull_requests",
+        lambda *args, **kwargs: ([], {"truncated": False, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_repository_labels",
+        lambda *args, **kwargs: (set(), {"truncated": False, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_claims",
+        lambda *args, **kwargs: ({}, {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_worktrees",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+    monkeypatch.setattr(
+        issue_audit_core,
+        "discover_jobs",
+        lambda *args, **kwargs: ([], {"available": True, "errors": []}),
+    )
+
+    custom_retry = "retry issue-audit plan --repo owner/repo --remote upstream"
+    issue_audit_core.discover_inventory(
+        "ll7/robot_sf_ll7",
+        retry_command=custom_retry,
+    )
+
+    assert observed_retry_command == custom_retry

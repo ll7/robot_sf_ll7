@@ -32,9 +32,10 @@ Environment variables:
                       follow-up issues when PR_READY_PR_BODY_FILE is set.
   PR_READY_SERIAL_FALLBACK
                       Set to "1" to auto-rerun in-process without pytest-xdist
-                      when parallel workers crash (issue #5633), separating an
-                      env crash from real failures. Disabled by default; the
-                      gate stays fail-closed and only reports the diagnostic.
+                      when parallel workers crash or time out (issues #5633 and
+                      #8469), separating an environment issue from real
+                      failures. Disabled by default; the gate stays fail-closed
+                      and only reports the diagnostic.
   PR_READY_TERMINATION_RECEIPT
                       Optional absolute or worktree-relative path for the bounded
                       receipt written when readiness receives a termination signal.

@@ -114,11 +114,40 @@ echo "xdist race workers: $PYTEST_NUM_WORKERS" >&2
 echo "xdist race dist mode: $PYTEST_XDIST_DIST" >&2
 
 set +e
+compact_json_output="$(mktemp "${TMPDIR:-/tmp}/xdist_compact_validation.XXXXXX.json")"
 uv run python "$SCRIPT_DIR/run_compact_validation.py" \
   --artifact-dir "$artifact_dir" \
   --timeout-seconds "$timeout_seconds" \
-  -- "$SCRIPT_DIR/run_tests_parallel.sh" "${pytest_args[@]}"
+  --json \
+  -- "$SCRIPT_DIR/run_tests_parallel.sh" "${pytest_args[@]}" >"$compact_json_output"
 validation_status=$?
+if [[ -s "$compact_json_output" ]]; then
+  cat "$compact_json_output"
+fi
+if [[ "$validation_status" -eq 124 ]]; then
+  timeout_log_path="$(python3 - "$compact_json_output" <<'PY'
+import json
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as handle:
+        print(json.load(handle).get("log_path", ""))
+except (OSError, TypeError, ValueError):
+    print("")
+PY
+)"
+  if [[ -n "$timeout_log_path" && -f "$timeout_log_path" ]]; then
+    uv run python "$SCRIPT_DIR/diagnose_xdist_crash.py" \
+      --log-file "$timeout_log_path" \
+      --requested-workers "$workers" \
+      --dist-mode "$PYTEST_XDIST_DIST" \
+      --execution-mode xdist \
+      --pytest-exit-code "$validation_status" >&2 || true
+  else
+    echo "xdist race timeout diagnostic unavailable: compact-validation log path was not recorded." >&2
+  fi
+fi
+rm -f "$compact_json_output"
 
 uv run python "$SCRIPT_DIR/check_xdist_race_artifacts.py" \
   --run-id "$run_id" \

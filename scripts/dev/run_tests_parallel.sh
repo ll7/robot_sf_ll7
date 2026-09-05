@@ -42,11 +42,10 @@ Environment overrides:
   PYTEST_SHARD_INDEX=<int>
     pytest-split shard index in 1..PYTEST_SHARD_COUNT (default 1).
   PR_READY_SERIAL_FALLBACK=1|0
-    Opt-in fallback for issue #5633: when the parallel run crashes (e.g.
-    native-extension segfaults under xdist), rerun serially with a single
-    worker to separate an environment crash from real test failures. Disabled
-    by default so the gate stays fail-closed: an environment crash is neither
-    success nor a silently skipped validation.
+    Opt-in fallback for issues #5633/#8469: when the parallel run crashes or
+    times out, rerun serially with a single worker to separate an environment
+    or load issue from real failures. Disabled by default so the gate stays
+    fail-closed: an incomplete run is neither success nor silently skipped.
 
 Examples:
   scripts/dev/run_tests_parallel.sh
@@ -263,12 +262,13 @@ else
   echo "Resolved pytest execution mode: pytest-xdist (dist=$dist_mode)." >&2
 fi
 
-# Fallback for issue #5633: when parallel pytest workers crash on a
-# native-extension/segfault combination (not an ordinary assertion failure),
-# a serial rerun separates the environment crash from real test failures.
+# Fallback for issues #5633/#8469: when parallel pytest workers crash on a
+# native-extension/segfault combination or time out (not an ordinary assertion
+# failure), a serial rerun separates the environment/load issue from real
+# failures.
 # Default is fail-closed: only an explicit opt-in reruns serially. The
-# diagnostic itself (issue #5633) captures the crash signature and runtime
-# fingerprint so the crash is never misread as a passed or skipped gate.
+# diagnostic itself captures the crash/timeout signature and runtime fingerprint
+# so the incomplete run is never misread as a passed or skipped gate.
 serial_fallback="${PR_READY_SERIAL_FALLBACK:-0}"
 case "$serial_fallback" in
   1|true|yes|on) serial_fallback=1 ;;

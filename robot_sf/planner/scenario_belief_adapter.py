@@ -64,9 +64,12 @@ def _pedestrian_count(observation: dict[str, Any]) -> int | None:
         raw_count = np.asarray(pedestrians.get("count"), dtype=float).reshape(-1)
     except (TypeError, ValueError):
         return None
-    if raw_count.size == 0 or not np.isfinite(raw_count[0]):
+    if raw_count.size != 1 or not np.isfinite(raw_count[0]):
         return None
-    return max(0, int(raw_count[0]))
+    count = float(raw_count[0])
+    if count < 0.0 or count != round(count):
+        return None
+    return int(count)
 
 
 def _compatibility_payload(
@@ -105,7 +108,15 @@ def project_scenario_belief_for_planner(
     Returns:
         ScenarioBeliefPlannerProjection: Observation plus diagnostic compatibility metadata.
     """
-    observation = belief.to_socnav_struct()
+    try:
+        observation = belief.to_socnav_struct()
+    except Exception:  # noqa: BLE001 - fail closed at the legacy projection boundary
+        compatibility = _compatibility_payload(
+            planner_key=planner_key,
+            status="fail_closed",
+            reason="legacy_observation_unavailable",
+        )
+        return ScenarioBeliefPlannerProjection(observation={}, compatibility=compatibility)
     pedestrians = observation.get("pedestrians")
     if not isinstance(pedestrians, dict):
         compatibility = _compatibility_payload(
@@ -121,7 +132,6 @@ def project_scenario_belief_for_planner(
             status="fail_closed",
             reason="unsupported_uncertainty_planner",
         )
-        pedestrians["uncertainty_compatibility"] = compatibility
         return ScenarioBeliefPlannerProjection(observation=observation, compatibility=compatibility)
 
     count = _pedestrian_count(observation)
@@ -131,18 +141,28 @@ def project_scenario_belief_for_planner(
             status="fail_closed",
             reason="malformed_pedestrian_count",
         )
-        pedestrians["uncertainty_compatibility"] = compatibility
         return ScenarioBeliefPlannerProjection(observation=observation, compatibility=compatibility)
 
-    report = belief.to_uncertainty_report()
+    try:
+        report = belief.to_uncertainty_report()
+    except Exception:  # noqa: BLE001 - fail closed at the uncertainty projection boundary
+        compatibility = _compatibility_payload(
+            planner_key=planner_key,
+            status="fail_closed",
+            reason="uncertainty_report_unavailable",
+        )
+        return ScenarioBeliefPlannerProjection(observation=observation, compatibility=compatibility)
     rows = report.get("agents")
-    if not isinstance(rows, list) or len(rows) < count:
+    if (
+        not isinstance(rows, list)
+        or len(rows) != count
+        or any(not isinstance(row, Mapping) or not _runtime_value_is_finite(row) for row in rows)
+    ):
         compatibility = _compatibility_payload(
             planner_key=planner_key,
             status="fail_closed",
             reason="malformed_uncertainty_report",
         )
-        pedestrians["uncertainty_compatibility"] = compatibility
         return ScenarioBeliefPlannerProjection(observation=observation, compatibility=compatibility)
 
     uncertainty_rows = [dict(row) for row in rows[:count]]
@@ -244,6 +264,8 @@ def _validate_probability(name: str, value: Any) -> float:
 
 def _validate_nonnegative_int(name: str, value: Any) -> int:
     """Return a non-negative integer without truncating fractional input."""
+    if isinstance(value, (bool, np.bool_)):
+        raise ValueError(f"{name} must be a non-negative integer")
     try:
         normalized = int(value)
     except (TypeError, ValueError, OverflowError) as exc:
@@ -279,6 +301,69 @@ def _track_sort_key(track_id: str | int) -> tuple[int, str | int]:
     return (1, track_id)
 
 
+def _validate_nonempty_text(name: str, value: Any) -> str:
+    """Return one required provenance string without accepting empty metadata."""
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{name} must be a non-empty string")
+    return value
+
+
+class _FrozenDict(dict[str, Any]):
+    """Dict-compatible immutable mapping for canonical planner observations.
+
+    Existing planner readers use ``isinstance(value, dict)`` for nested SOCNAV
+    observations. A ``MappingProxyType`` would be immutable but would fail that
+    compatibility check, so this subclass preserves the canonical runtime shape
+    while rejecting ordinary mutation.
+    """
+
+    def _immutable(self, *_args: Any, **_kwargs: Any) -> None:
+        """Reject mutation while allowing normal read-only dict operations."""
+        raise TypeError("frozen mapping is immutable")
+
+    __delitem__ = __setitem__ = clear = pop = popitem = setdefault = update = _immutable
+    __ior__ = _immutable
+
+
+def _normalize_track_provenance(
+    *,
+    frame_id: Any,
+    position_units: Any,
+    velocity_units: Any,
+    position_covariance_units: Any,
+    velocity_covariance_units: Any,
+    source_sensor_ids: Any,
+    calibration_status: Any,
+    tracking_id: Any,
+) -> dict[str, Any]:
+    """Validate and normalize source-owned provenance for one planner track.
+
+    Returns:
+        Normalized provenance fields suitable for ``PlannerTrackBelief``.
+    """
+    normalized_sensor_ids = (
+        tuple(source_sensor_ids) if isinstance(source_sensor_ids, (tuple, list)) else None
+    )
+    if normalized_sensor_ids is None or any(
+        not isinstance(sensor_id, str) or not sensor_id for sensor_id in normalized_sensor_ids
+    ):
+        raise ValueError("source_sensor_ids must contain non-empty strings")
+    return {
+        "frame_id": _validate_nonempty_text("frame_id", frame_id),
+        "position_units": _validate_nonempty_text("position_units", position_units),
+        "velocity_units": _validate_nonempty_text("velocity_units", velocity_units),
+        "position_covariance_units": _validate_nonempty_text(
+            "position_covariance_units", position_covariance_units
+        ),
+        "velocity_covariance_units": _validate_nonempty_text(
+            "velocity_covariance_units", velocity_covariance_units
+        ),
+        "source_sensor_ids": normalized_sensor_ids,
+        "calibration_status": _validate_nonempty_text("calibration_status", calibration_status),
+        "tracking_id": None if tracking_id is None else _validate_track_id(tracking_id),
+    }
+
+
 @dataclass(frozen=True)
 class PlannerTrackBelief:
     """Immutable, entity-ID-keyed planner state from one belief snapshot.
@@ -296,6 +381,11 @@ class PlannerTrackBelief:
     and velocity confidence. Stateful consumers must reset at an externally
     supplied lifecycle boundary until the representation owner supplies a
     generation or retirement epoch.
+
+    ``frame_id``, units, sensor IDs, and calibration status retain source-owned
+    provenance that is otherwise lost when the state vector is flattened. An
+    optional ``tracking_id`` is retained as source metadata only; it is not the
+    primary snapshot key or a lifecycle-generation token.
     """
 
     track_id: str | int
@@ -309,6 +399,14 @@ class PlannerTrackBelief:
     position_confidence: float | None = None
     velocity_confidence: float | None = None
     visibility_state: str | None = None
+    frame_id: str = "map"
+    position_units: str = "m"
+    velocity_units: str = "m/s"
+    position_covariance_units: str = "m^2"
+    velocity_covariance_units: str = "(m/s)^2"
+    source_sensor_ids: tuple[str, ...] = ()
+    calibration_status: str = "unknown"
+    tracking_id: str | int | None = None
 
     def __post_init__(self) -> None:
         """Validate and defensively normalize all planner-track fields."""
@@ -333,6 +431,18 @@ class PlannerTrackBelief:
         )
         if not isinstance(self.source, str) or not self.source:
             raise ValueError("source must be a non-empty string")
+        provenance = _normalize_track_provenance(
+            frame_id=self.frame_id,
+            position_units=self.position_units,
+            velocity_units=self.velocity_units,
+            position_covariance_units=self.position_covariance_units,
+            velocity_covariance_units=self.velocity_covariance_units,
+            source_sensor_ids=self.source_sensor_ids,
+            calibration_status=self.calibration_status,
+            tracking_id=self.tracking_id,
+        )
+        for field_name, value in provenance.items():
+            object.__setattr__(self, field_name, value)
         if self.position_confidence is not None:
             object.__setattr__(
                 self,
@@ -361,6 +471,13 @@ class PlannerTrackBelief:
             "visibility": self.visibility,
             "age_steps": self.age_steps,
             "source": self.source,
+            "frame_id": self.frame_id,
+            "position_units": self.position_units,
+            "velocity_units": self.velocity_units,
+            "position_covariance_units": self.position_covariance_units,
+            "velocity_covariance_units": self.velocity_covariance_units,
+            "source_sensor_ids": list(self.source_sensor_ids),
+            "calibration_status": self.calibration_status,
         }
         if self.position_confidence is not None:
             payload["position_confidence"] = float(self.position_confidence)
@@ -368,28 +485,9 @@ class PlannerTrackBelief:
             payload["velocity_confidence"] = float(self.velocity_confidence)
         if self.visibility_state is not None:
             payload["visibility_state"] = self.visibility_state
+        if self.tracking_id is not None:
+            payload["tracking_id"] = self.tracking_id
         return payload
-
-
-def _copy_runtime_value(value: Any) -> Any:
-    """Copy nested observation values while owning and freezing NumPy arrays.
-
-    Returns:
-        A recursively copied runtime value with independent read-only arrays.
-    """
-    if isinstance(value, np.ndarray):
-        copied = np.array(value, copy=True)
-        copied.setflags(write=False)
-        return copied
-    if isinstance(value, Mapping):
-        return {key: _copy_runtime_value(nested) for key, nested in value.items()}
-    if isinstance(value, list):
-        return [_copy_runtime_value(nested) for nested in value]
-    if isinstance(value, tuple):
-        return tuple(_copy_runtime_value(nested) for nested in value)
-    if isinstance(value, np.generic):
-        return value.item()
-    return value
 
 
 def _freeze_runtime_value(value: Any) -> Any:
@@ -403,9 +501,7 @@ def _freeze_runtime_value(value: Any) -> Any:
         copied.setflags(write=False)
         return copied
     if isinstance(value, Mapping):
-        return MappingProxyType(
-            {key: _freeze_runtime_value(nested) for key, nested in value.items()}
-        )
+        return _FrozenDict({key: _freeze_runtime_value(nested) for key, nested in value.items()})
     if isinstance(value, (list, tuple)):
         return tuple(_freeze_runtime_value(nested) for nested in value)
     if isinstance(value, np.generic):
@@ -502,7 +598,9 @@ class BeliefAwarePlannerInput:
         """Validate mappings and make caller-owned observation data independent."""
         if not isinstance(self.legacy_observation, Mapping):
             raise TypeError("legacy_observation must be a mapping")
-        object.__setattr__(self, "legacy_observation", _copy_runtime_value(self.legacy_observation))
+        object.__setattr__(
+            self, "legacy_observation", _freeze_runtime_value(self.legacy_observation)
+        )
         if not isinstance(self.tracks, Mapping):
             raise TypeError("tracks must be a mapping")
         normalized_tracks = _validate_planner_mapping(self.tracks)
@@ -622,6 +720,33 @@ def _age_steps(age_s: Any, timestep_s: Any) -> int:
     return max(1, int(np.ceil(ratio)))
 
 
+def _entity_track_provenance(agent: Any) -> dict[str, Any]:
+    """Extract source-owned frame, units, and tracking metadata from one entity.
+
+    Returns:
+        Normalized provenance fields suitable for ``PlannerTrackBelief``.
+    """
+    position_frame_id = _validate_nonempty_text(
+        "position frame_id", getattr(agent.position, "frame_id", None)
+    )
+    velocity_frame_id = _validate_nonempty_text(
+        "velocity frame_id", getattr(agent.velocity, "frame_id", None)
+    )
+    if position_frame_id != velocity_frame_id:
+        raise ValueError("position and velocity frame_id must match")
+    tracking = getattr(agent, "tracking", None)
+    return _normalize_track_provenance(
+        frame_id=position_frame_id,
+        position_units=getattr(agent.position, "units", None),
+        velocity_units=getattr(agent.velocity, "units", None),
+        position_covariance_units=getattr(agent.position, "covariance_units", None),
+        velocity_covariance_units=getattr(agent.velocity, "covariance_units", None),
+        source_sensor_ids=getattr(agent.source, "sensor_ids", ()),
+        calibration_status=getattr(agent.source, "calibration_status", "unknown"),
+        tracking_id=None if tracking is None else getattr(tracking, "track_id", None),
+    )
+
+
 def _planner_track_from_entity(
     agent: Any,
     *,
@@ -654,6 +779,7 @@ def _planner_track_from_entity(
     velocity = _entity_float_array(velocity)
     position_covariance = _entity_float_array(position_covariance)
     velocity_covariance = _entity_float_array(velocity_covariance)
+    provenance = _entity_track_provenance(agent)
     try:
         radius = float(agent.radius)
     except (AttributeError, TypeError, ValueError) as exc:
@@ -687,6 +813,7 @@ def _planner_track_from_entity(
         position_confidence=position_confidence,
         velocity_confidence=velocity_confidence,
         visibility_state=visibility_state.value,
+        **provenance,
     )
 
 

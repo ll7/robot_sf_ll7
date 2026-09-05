@@ -416,6 +416,29 @@ def test_rest_check_rollup_keeps_only_newest_legacy_status_per_context() -> None
     assert contexts[0]["status"] == "COMPLETED"
 
 
+def test_rest_check_rollup_preserves_newest_api_entry_when_timestamp_is_missing() -> None:
+    """An untimestamped newest status must not lose to an older timestamped entry."""
+    statuses = [
+        {"context": "legacy-gate", "state": "pending"},
+        {
+            "context": "legacy-gate",
+            "state": "success",
+            "updated_at": "2026-09-05T06:08:49Z",
+        },
+    ]
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps({"total_count": 0, "check_runs": []})),
+            _gh_response(stdout=json.dumps(statuses)),
+        ]
+        rollup, error = _rest_check_rollup(owner="owner", name="repo", head_sha=FULL_SHA)
+
+    assert error is None
+    contexts = [item for item in rollup if item["__typename"] == "StatusContext"]
+    assert len(contexts) == 1
+    assert contexts[0]["state"] == "PENDING"
+
+
 def test_rest_check_rollup_enriches_workflow_identity_for_superseded_runs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

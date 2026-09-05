@@ -62,6 +62,7 @@ import shlex
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -1587,6 +1588,18 @@ def _validate_rest_check_run(check: dict[str, Any], *, head_sha: str, index: int
     return None
 
 
+def _rest_status_timestamp(status: dict[str, Any]) -> datetime | None:
+    """Parse the newest available REST status timestamp, or return ``None``."""
+    raw_timestamp = status.get("updated_at") or status.get("created_at")
+    if not isinstance(raw_timestamp, str) or not raw_timestamp.strip():
+        return None
+    try:
+        timestamp = datetime.fromisoformat(raw_timestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return timestamp if timestamp.tzinfo is not None else None
+
+
 def _rest_commit_statuses(
     *, owner: str, name: str, head_sha: str
 ) -> tuple[list[dict[str, Any]], str | None]:
@@ -1604,7 +1617,7 @@ def _rest_commit_statuses(
     )
     if err:
         return [], err
-    latest_by_context: dict[str, tuple[tuple[str, int], dict[str, Any]]] = {}
+    latest_by_context: dict[str, tuple[datetime | None, dict[str, Any]]] = {}
     for index, status in enumerate(statuses):
         context = status.get("context")
         state = status.get("state")
@@ -1628,16 +1641,16 @@ def _rest_commit_statuses(
             "updatedAt": status.get("updated_at"),
             "head_sha": head_sha,
         }
-        timestamp = status.get("updated_at") or status.get("created_at") or ""
-        if not isinstance(timestamp, str):
-            timestamp = ""
-        # GitHub returns status history newest-first. The negative index keeps
-        # that deterministic preference when timestamps are absent or tied.
-        candidate = (timestamp, -index), normalized
+        timestamp = _rest_status_timestamp(status)
         previous = latest_by_context.get(context)
-        if previous is None or candidate[0] > previous[0]:
-            latest_by_context[context] = candidate
-    return [entry for _key, entry in latest_by_context.values()], None
+        if previous is None:
+            latest_by_context[context] = (timestamp, normalized)
+        elif timestamp is not None and previous[0] is not None and timestamp > previous[0]:
+            latest_by_context[context] = (timestamp, normalized)
+        # When either timestamp is unavailable or malformed, retain the first
+        # entry. GitHub returns this history newest-first, so this avoids letting
+        # a timestamped older entry replace an untimestamped current entry.
+    return [entry for _timestamp, entry in latest_by_context.values()], None
 
 
 def _rest_check_rollup(

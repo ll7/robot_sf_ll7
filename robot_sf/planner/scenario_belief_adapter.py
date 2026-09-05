@@ -833,6 +833,7 @@ def project_belief_aware_planner_input(
             diagnostics=diagnostics,
         )
 
+    legacy_observation, legacy_reason = _safe_legacy_observation(belief)
     scenario_belief_types = _load_scenario_belief_types()
     if scenario_belief_types is None:
         diagnostics = _belief_projection_diagnostics(
@@ -842,7 +843,7 @@ def project_belief_aware_planner_input(
             fallback_reason="scenario_belief_representation_unavailable",
         )
         return BeliefAwarePlannerInput(
-            legacy_observation={},
+            legacy_observation=legacy_observation,
             tracks={},
             belief_step=0,
             diagnostics=diagnostics,
@@ -856,13 +857,12 @@ def project_belief_aware_planner_input(
             fallback_reason="belief_type_unsupported",
         )
         return BeliefAwarePlannerInput(
-            legacy_observation={},
+            legacy_observation=legacy_observation,
             tracks={},
             belief_step=0,
             diagnostics=diagnostics,
         )
 
-    legacy_observation, legacy_reason = _safe_legacy_observation(belief)
     try:
         belief_step = _belief_step(belief)
     except ValueError as exc:

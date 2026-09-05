@@ -662,6 +662,13 @@ def test_non_blocking_blocked_by_none_does_not_route_to_triage() -> None:
     assert not any(mutation["value"] == "needs-triage" for mutation in classification.mutations)
 
 
+def test_non_blocking_gate_text_does_not_hide_a_later_generic_gate() -> None:
+    """A genuine later gate on the same line remains visible to the fallback."""
+    assert issue_audit_core._gate_evidence("Blocked by: none; hard-gated on current review") == [
+        {"kind": "blocked", "text": "explicit current blocker"}
+    ]
+
+
 def test_blocked_triage_block_binds_reason_to_blocked_label() -> None:
     """A complete blocked-triage block is accepted as explicit reason evidence."""
     body = (

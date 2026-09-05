@@ -697,6 +697,39 @@ def test_create_worktree_without_flock_cli_uses_python_fallback(tmp_path: Path) 
         _cleanup_owned_worktree(target, branch)
 
 
+def test_create_worktree_python_fallback_runs_exec_exactly_once(tmp_path: Path) -> None:
+    """--exec must survive the fallback re-entry and run exactly once."""
+    branch = _unique_branch(tmp_path, "py-fallback-exec")
+    target = _worktree_target(tmp_path, branch)
+    marker = tmp_path / "exec-marker.txt"
+    try:
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--minimum-free-bytes",
+                "0",
+                "--exec",
+                "bash",
+                "-c",
+                f"echo ran >> {marker}",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, **FORCE_PYTHON_LOCK_ENV},
+        )
+        assert result.returncode == 0, result.stderr
+        assert marker.is_file(), "fallback must run the --exec command"
+        assert marker.read_text().splitlines() == ["ran"]
+    finally:
+        _cleanup_owned_worktree(target, branch)
+
+
 def test_worktree_creation_lock_helper_contract(tmp_path: Path) -> None:
     """The portable lock helper validates usage and propagates child status."""
     assert os.access(WORKTREE_CREATION_LOCK, os.X_OK)

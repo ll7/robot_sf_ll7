@@ -172,6 +172,22 @@ fi
 # common directory. Serialize the complete orphan-recovery/prune/add
 # transaction per repository; capacity inspection above remains parallel and
 # read-only.
+report_and_exec() {
+  echo "create_worktree: created $worktree_path on branch $branch_name from $base_ref"
+  echo "create_worktree: use scripts/dev/run_worktree_shared_venv.sh for targeted validation."
+
+  if [[ "${#command_args[@]}" -gt 0 ]]; then
+    echo "create_worktree: executing supplied command in $worktree_path"
+    (
+      cd -- "$worktree_path"
+      if [[ -n "$receipt_path" ]]; then
+        python3 "$SCRIPT_DIR/worktree_receipt.py" check --receipt "$receipt_path" --worktree . --json
+      fi
+      exec "${command_args[@]}"
+    )
+  fi
+}
+
 run_locked_transaction() {
   # A concurrent creator may have populated this exact target while this process
   # waited for the repository lock. Recheck under the lock before any mutation.
@@ -225,6 +241,7 @@ run_locked_transaction() {
 if [[ "$locked_transaction" -eq 1 ]]; then
   # Re-entered under worktree_creation_lock.py holding the shared lock file.
   run_locked_transaction
+  report_and_exec
   exit 0
 fi
 
@@ -255,23 +272,20 @@ else
   if [[ -n "$receipt_path" ]]; then
     locked_args+=(--receipt "$receipt_path" --task-id "$task_id")
   fi
+  if [[ "${#command_args[@]}" -gt 0 ]]; then
+    locked_args+=(--exec "${command_args[@]}")
+  fi
   python_lock_rc=0
   python3 "$SCRIPT_DIR/worktree_creation_lock.py" "$worktree_lock_path" -- \
     "$SCRIPT_DIR/create_worktree.sh" "${locked_args[@]}" || python_lock_rc=$?
   if [[ "$python_lock_rc" -ne 0 ]]; then
     exit "$python_lock_rc"
   fi
+  # The re-entered child already ran report_and_exec (including --exec)
+  # under the lock; the parent must not report or re-run it.
+  fallback_reported=1
+  command_args=()
 fi
-echo "create_worktree: created $worktree_path on branch $branch_name from $base_ref"
-echo "create_worktree: use scripts/dev/run_worktree_shared_venv.sh for targeted validation."
-
-if [[ "${#command_args[@]}" -gt 0 ]]; then
-  echo "create_worktree: executing supplied command in $worktree_path"
-  (
-    cd -- "$worktree_path"
-    if [[ -n "$receipt_path" ]]; then
-      python3 "$SCRIPT_DIR/worktree_receipt.py" check --receipt "$receipt_path" --worktree . --json
-    fi
-    exec "${command_args[@]}"
-  )
+if [[ "${fallback_reported:-0}" -eq 0 ]]; then
+  report_and_exec
 fi

@@ -205,18 +205,36 @@ def test_create_review_worktree_blocks_refspecs_and_no_verify(tmp_path: Path) ->
 
 
 def test_review_mode_blocks_a_remote_added_after_configuration(tmp_path: Path) -> None:
-    """The push-only catch-all covers a remote added after configuration."""
+    """The review barrier masks a common pushInsteadOf alias for new remotes."""
     repo, _remote = _fixture_repo(tmp_path)
     second_remote = tmp_path / "second-remote.git"
     _git(tmp_path, "init", "--bare", str(second_remote))
     _git(repo, "push", str(second_remote), "main:refs/heads/main")
+    _git(repo, "config", f"url.{second_remote}.pushInsteadOf", "review-target")
+    _git(repo, "config", f"url.{second_remote}.insteadOf", "read-target")
     worktree = tmp_path / "review-new-remote"
     branch = "review/new-remote"
     try:
         _git(repo, "worktree", "add", "--no-track", "-b", branch, str(worktree), "HEAD")
         configured = _configure(worktree, "review")
         assert configured.returncode == 0, configured.stderr
-        _git(worktree, "remote", "add", "mirror", str(second_remote))
+        alias_key = f"url.{second_remote}.pushInsteadOf"
+        masked_alias = _git(repo, "config", "--get", alias_key, check=False)
+        assert masked_alias.returncode != 0, masked_alias.stdout + masked_alias.stderr
+        configured_again = _configure(worktree, "review")
+        assert configured_again.returncode == 0, configured_again.stderr
+        _git(worktree, "remote", "add", "mirror", "review-target")
+        allowed_fetch = _git(worktree, "fetch", "origin", "main", check=False)
+        assert allowed_fetch.returncode == 0, allowed_fetch.stdout + allowed_fetch.stderr
+        allowed_ls_remote = _git(worktree, "ls-remote", "origin", check=False)
+        assert allowed_ls_remote.returncode == 0, (
+            allowed_ls_remote.stdout + allowed_ls_remote.stderr
+        )
+        _git(worktree, "remote", "add", "read-mirror", "read-target")
+        read_alias = _git(worktree, "ls-remote", "--refs", "read-mirror")
+        assert "refs/heads/main" in read_alias.stdout
+        read_fetch = _git(worktree, "fetch", "read-mirror", "main", check=False)
+        assert read_fetch.returncode == 0, read_fetch.stdout + read_fetch.stderr
         result = _git(
             worktree,
             "push",
@@ -228,9 +246,53 @@ def test_review_mode_blocks_a_remote_added_after_configuration(tmp_path: Path) -
         assert result.returncode != 0, result.stdout + result.stderr
         refs = _git(worktree, "ls-remote", "--refs", str(second_remote)).stdout
         assert "refs/heads/new-remote-bypass" not in refs
+        restored = _configure(worktree, "implementation")
+        assert restored.returncode == 0, restored.stderr
+        restored_alias = _git(repo, "config", "--get", alias_key)
+        assert restored_alias.stdout.strip() == "review-target"
+    finally:
+        _remove_worktree(repo, worktree, branch)
 
-        # An explicit pushurl bypasses pushInsteadOf, but the normal push path
-        # still reaches the review hook; direct read resolution remains usable.
+
+def test_review_mode_fails_closed_for_an_unmaskable_global_push_alias(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A global push alias cannot remain active behind the review catch-all."""
+    repo, _remote = _fixture_repo(tmp_path)
+    second_remote = tmp_path / "second-remote.git"
+    _git(tmp_path, "init", "--bare", str(second_remote))
+    global_config = tmp_path / "global.gitconfig"
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_config))
+    alias_key = f"url.{second_remote}.pushInsteadOf"
+    _git(repo, "config", "--global", alias_key, "review-target")
+    worktree = tmp_path / "review-global-alias"
+    branch = "review/global-alias"
+    try:
+        _git(repo, "worktree", "add", "--no-track", "-b", branch, str(worktree), "HEAD")
+        configured = _configure(worktree, "review")
+        assert configured.returncode != 0
+        assert "cannot mask all inherited URL pushInsteadOf aliases" in (
+            configured.stdout + configured.stderr
+        )
+        remaining = _git(repo, "config", "--global", "--get", alias_key)
+        assert remaining.stdout.strip() == "review-target"
+    finally:
+        _remove_worktree(repo, worktree, branch)
+
+
+def test_review_mode_blocks_a_new_explicit_pushurl_on_the_hook_path(tmp_path: Path) -> None:
+    """A newly added explicit pushurl remains protected when hooks run."""
+    repo, _remote = _fixture_repo(tmp_path)
+    second_remote = tmp_path / "second-remote.git"
+    _git(tmp_path, "init", "--bare", str(second_remote))
+    _git(repo, "push", str(second_remote), "main:refs/heads/main")
+    worktree = tmp_path / "review-explicit-pushurl"
+    branch = "review/explicit-pushurl"
+    try:
+        _git(repo, "worktree", "add", "--no-track", "-b", branch, str(worktree), "HEAD")
+        configured = _configure(worktree, "review")
+        assert configured.returncode == 0, configured.stderr
+        _git(worktree, "remote", "add", "mirror", str(second_remote))
         _git(worktree, "config", "--worktree", "remote.mirror.pushurl", str(second_remote))
         mirror_read = _git(worktree, "ls-remote", "--refs", "mirror")
         assert "refs/heads/main" in mirror_read.stdout

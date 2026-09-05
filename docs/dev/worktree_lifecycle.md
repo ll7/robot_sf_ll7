@@ -61,6 +61,12 @@ configuration/command-line override belongs to the stronger process boundary tra
 is a Git-level workflow guard, not an operating-system sandbox; a deliberate per-command Git
 configuration override can bypass it.
 
+To keep the push-only catch-all effective for remotes added after activation, review setup captures
+and temporarily removes direct repository-local `url.*.pushInsteadOf` entries from the shared Git
+config, restoring them when implementation mode is restored. Generic `url.*.insteadOf` entries are
+left intact for read URL resolution. If an effective push alias remains in an unmaskable config
+scope, review setup fails closed.
+
 If the selected base predates the guard files, `create_worktree.sh --mode review` keeps the target
 clean and temporarily points its worktree-local hooks path at the invoking checkout's tracked
 guard and hook. Keep that invoking checkout available until the review worktree is restored or

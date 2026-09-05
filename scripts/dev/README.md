@@ -171,6 +171,11 @@ cover ordinary Git invocation paths, but are not an operating-system sandbox: a 
 Git configuration override can bypass them. In particular, a remote added after activation with an
 explicit `remote.<name>.pushurl` remains protected by the ordinary hook path, while a deliberate
 `--no-verify` bypass is owned by stronger process isolation in #8343.
+
+Review setup temporarily removes direct repository-local `url.*.pushInsteadOf` entries from the
+shared config so a longer inherited alias cannot outrank the worktree push barrier; implementation
+mode restores those entries. Read-side `url.*.insteadOf` rewrites remain enabled, and setup fails
+closed if an effective push alias cannot be masked.
 Implementation worktrees keep the default pushable behavior. See
 [`worktree_lifecycle.md`](../../docs/dev/worktree_lifecycle.md) for the complete invocation and
 restoration procedure.

@@ -7,6 +7,10 @@ Git config, installs the tracked pre-push hook, and routes push destinations to
 a non-repository URL.  Worktree-local URL and protocol barriers catch direct
 URLs and explicit push URLs as well; the integration probe reads remote state
 through the common Git config so it can retain a read-only remote comparison.
+Inherited repository-local ``url.*.pushInsteadOf`` entries are captured and
+temporarily removed because Git's longest-prefix rewrite selection cannot be
+overridden by a worktree-local rule; they are restored when implementation mode
+is restored.
 This is a Git-level workflow guard, not an operating-system sandbox; a caller
 who deliberately overrides the worktree's Git configuration can bypass these
 local barriers.
@@ -247,6 +251,7 @@ def _blocked_receivepack(identity: dict[str, Path]) -> str:
 
 
 STANDARD_PROTOCOL_NAMES = ("allow", "ext", "file", "git", "http", "https", "ssh")
+URL_PUSH_INSTEAD_OF_PATTERN = r"^url\..*\.pushinsteadof$"
 
 
 def _url_rule_key(blocked_url: str) -> str:
@@ -255,6 +260,103 @@ def _url_rule_key(blocked_url: str) -> str:
 
 def _url_catchall_key(blocked_url: str) -> str:
     return f"url.{blocked_url}.insteadOf"
+
+
+def _parse_config_regexp(
+    result: subprocess.CompletedProcess[str], label: str
+) -> dict[str, list[str]]:
+    """Parse ``git config --get-regexp`` output into ordered key values."""
+    if result.returncode == 1:
+        return {}
+    if result.returncode != 0:
+        raise GuardError(f"git config {label} read failed: {_command_detail(result)}")
+    values: dict[str, list[str]] = {}
+    for line in result.stdout.splitlines():
+        parts = line.split(maxsplit=1)
+        if not parts:
+            continue
+        key, value = parts if len(parts) == 2 else (parts[0], "")
+        values.setdefault(key, []).append(value)
+    return values
+
+
+def _common_config_file(identity: dict[str, Path]) -> Path:
+    """Return the real shared repository config used by linked worktrees."""
+    config_path = identity["common_git_dir"] / "config"
+    if config_path.is_symlink() or not config_path.is_file():
+        raise GuardError(f"shared Git config must be a real file: {config_path}")
+    return config_path
+
+
+def _common_url_push_insteadof_values(identity: dict[str, Path]) -> dict[str, list[str]]:
+    config_path = _common_config_file(identity)
+    result = _run_git(
+        identity["path"],
+        "config",
+        "--no-includes",
+        "--file",
+        str(config_path),
+        "--get-regexp",
+        URL_PUSH_INSTEAD_OF_PATTERN,
+    )
+    return _parse_config_regexp(result, "shared URL pushInsteadOf")
+
+
+def _worktree_url_push_insteadof_values(identity: dict[str, Path]) -> dict[str, list[str]]:
+    config_path = _worktree_config_file(identity)
+    if not config_path.exists():
+        return {}
+    result = _run_git(
+        identity["path"],
+        "config",
+        "--no-includes",
+        "--file",
+        str(config_path),
+        "--get-regexp",
+        URL_PUSH_INSTEAD_OF_PATTERN,
+    )
+    return _parse_config_regexp(result, "worktree URL pushInsteadOf")
+
+
+def _effective_url_push_insteadof_values(identity: dict[str, Path]) -> dict[str, list[str]]:
+    result = _run_git(
+        identity["path"],
+        "config",
+        "--get-regexp",
+        URL_PUSH_INSTEAD_OF_PATTERN,
+    )
+    return _parse_config_regexp(result, "effective URL pushInsteadOf")
+
+
+def _common_config_unset(identity: dict[str, Path], key: str) -> None:
+    config_path = _common_config_file(identity)
+    result = _run_git(
+        identity["path"],
+        "config",
+        "--no-includes",
+        "--file",
+        str(config_path),
+        "--unset-all",
+        key,
+    )
+    if result.returncode not in (0, 1, 5):
+        raise GuardError(f"shared Git config unset failed for {key}: {_command_detail(result)}")
+
+
+def _common_config_add(identity: dict[str, Path], key: str, value: str) -> None:
+    config_path = _common_config_file(identity)
+    result = _run_git(
+        identity["path"],
+        "config",
+        "--no-includes",
+        "--file",
+        str(config_path),
+        "--add",
+        key,
+        value,
+    )
+    if result.returncode != 0:
+        raise GuardError(f"shared Git config add failed for {key}: {_command_detail(result)}")
 
 
 def _protocol_policy_keys(identity: dict[str, Path]) -> set[str]:
@@ -292,6 +394,8 @@ def _capture_backup(identity: dict[str, Path], original_mode: str | None) -> dic
         },
         "remote_urls": {remote: _remote_urls(identity, remote) for remote in remotes},
         "protocol_allows": {key: _worktree_values(identity, key) for key in all_protocol_keys},
+        "common_url_push_insteadofs": _common_url_push_insteadof_values(identity),
+        "worktree_url_push_insteadofs": _worktree_url_push_insteadof_values(identity),
     }
 
 
@@ -338,7 +442,108 @@ def _load_backup(identity: dict[str, Path]) -> dict[str, Any] | None:
     _validate_string_list_mapping(backup.get("remote_receivepacks", {}), "remote.receivepack")
     _validate_string_list_mapping(backup.get("remote_urls"), "remote URL")
     _validate_string_list_mapping(backup.get("protocol_allows", {}), "protocol policy")
+    _validate_string_list_mapping(
+        backup.get("common_url_push_insteadofs", {}), "shared URL pushInsteadOf"
+    )
+    _validate_string_list_mapping(
+        backup.get("worktree_url_push_insteadofs", {}), "worktree URL pushInsteadOf"
+    )
     return backup
+
+
+def _ensure_url_push_insteadof_backup(identity: dict[str, Path], backup: dict[str, Any]) -> None:
+    """Add URL-rewrite state to a backup created by an older guard version."""
+    missing_common = "common_url_push_insteadofs" not in backup
+    missing_worktree = "worktree_url_push_insteadofs" not in backup
+    if not missing_common and not missing_worktree:
+        return
+    if missing_common:
+        backup["common_url_push_insteadofs"] = _common_url_push_insteadof_values(identity)
+    if missing_worktree:
+        worktree_values = _worktree_url_push_insteadof_values(identity)
+        blocked_values = _worktree_values(identity, BLOCKED_URL_KEY)
+        guard_keys = {_url_rule_key(value) for value in blocked_values}
+        backup["worktree_url_push_insteadofs"] = {
+            key: values for key, values in worktree_values.items() if key not in guard_keys
+        }
+    _write_backup(identity, backup)
+
+
+def _restore_url_push_insteadof_values(identity: dict[str, Path], backup: dict[str, Any]) -> None:
+    """Restore URL push aliases removed while review mode was active."""
+    common_values = backup.get("common_url_push_insteadofs", {})
+    current_common = _common_url_push_insteadof_values(identity)
+    _validate_common_url_push_insteadof_restore(common_values, current_common)
+    for key, values in common_values.items():
+        if not current_common.get(key):
+            for value in values:
+                _common_config_add(identity, key, value)
+
+    for key, values in backup.get("worktree_url_push_insteadofs", {}).items():
+        _worktree_unset(identity, key)
+        for value in values:
+            _worktree_add(identity, key, value)
+
+
+def _validate_common_url_push_insteadof_restore(
+    expected: dict[str, list[str]], current: dict[str, list[str]]
+) -> None:
+    conflicts = [
+        key for key, values in expected.items() if current.get(key, []) not in ([], values)
+    ]
+    if conflicts:
+        names = ", ".join(sorted(conflicts))
+        raise GuardError(f"shared URL pushInsteadOf values changed during review: {names}")
+
+
+def _mask_inherited_url_push_insteadof_values(
+    identity: dict[str, Path], backup: dict[str, Any]
+) -> None:
+    """Remove inherited push aliases so the worktree catch-all can win safely.
+
+    Git has no negative or wildcard URL-rewrite config. A same-key empty value
+    in ``config.worktree`` does not mask a multi-valued common/global key, so
+    repository-local entries are removed and restored later. Any remaining
+    alias means the review barrier cannot be established safely.
+    """
+    common_values = backup.get("common_url_push_insteadofs", {})
+    worktree_values = backup.get("worktree_url_push_insteadofs", {})
+    current_common = _common_url_push_insteadof_values(identity)
+    current_worktree = _worktree_url_push_insteadof_values(identity)
+    conflicts = [
+        key
+        for key, values in common_values.items()
+        if current_common.get(key, []) not in ([], values)
+    ]
+    conflicts.extend(
+        key
+        for key, values in worktree_values.items()
+        if current_worktree.get(key, []) not in ([], values)
+    )
+    if conflicts:
+        names = ", ".join(sorted(set(conflicts)))
+        raise GuardError(f"URL pushInsteadOf values changed before review setup: {names}")
+
+    for key in common_values:
+        if current_common.get(key):
+            _common_config_unset(identity, key)
+    for key in worktree_values:
+        if current_worktree.get(key):
+            _worktree_unset(identity, key)
+
+    remaining = _effective_url_push_insteadof_values(identity)
+    if not remaining:
+        return
+    try:
+        _restore_url_push_insteadof_values(identity, backup)
+    except GuardError as exc:
+        raise GuardError(
+            f"review mode cannot restore URL pushInsteadOf values after an unmaskable alias: {exc}"
+        ) from exc
+    names = ", ".join(sorted(remaining))
+    raise GuardError(
+        f"review mode cannot mask all inherited URL pushInsteadOf aliases; remaining keys: {names}"
+    )
 
 
 def _check_hook_files(identity: dict[str, Path], hook_source_root: str | Path | None) -> Path:
@@ -376,6 +581,8 @@ def _configure_review_mode(
     if backup is None:
         backup = _capture_backup(identity, original_mode)
         _write_backup(identity, backup)
+    else:
+        _ensure_url_push_insteadof_backup(identity, backup)
     _prepare_review_barriers(identity, original_mode, backup)
     _worktree_set(identity, "core.hooksPath", str(hook.parent))
     # Set the mode last so a partial setup remains fail-closed only after its
@@ -416,6 +623,7 @@ def _prepare_review_barriers(
         )
         for remote in remotes
     }
+    _mask_inherited_url_push_insteadof_values(identity, backup)
     for remote in remotes:
         # An empty higher-priority value resets inherited common-config
         # pushurl entries. Without it, Git pushes to every effective push URL
@@ -464,6 +672,10 @@ def _restore_implementation_mode(
     blocked_values = _worktree_values(identity, BLOCKED_URL_KEY)
     if len(blocked_values) != 1:
         raise GuardError("review guard blocked push URL is missing or duplicated")
+    _validate_common_url_push_insteadof_restore(
+        backup.get("common_url_push_insteadofs", {}),
+        _common_url_push_insteadof_values(identity),
+    )
     _worktree_unset(identity, _url_rule_key(blocked_values[0]))
     _worktree_unset(identity, _url_catchall_key(blocked_values[0]))
     for remote in set(_remote_names(identity)) | set(backup["remote_pushurls"]):
@@ -475,6 +687,7 @@ def _restore_implementation_mode(
         _worktree_unset(identity, key)
         for value in backup.get("remote_receivepacks", {}).get(remote, []):
             _worktree_add(identity, key, value)
+    _restore_url_push_insteadof_values(identity, backup)
     policy_keys = set(PROTOCOL_POLICY_KEYS) | set(backup.get("protocol_allows", {}))
     policy_keys.update(_protocol_policy_keys(identity))
     for key in policy_keys:

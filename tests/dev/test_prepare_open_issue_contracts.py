@@ -8,14 +8,13 @@ marker region, and fail-closed behavior on drift and malformed inputs.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+import re
+import shlex
+from pathlib import Path
 
 import pytest
 
 from scripts.dev import prepare_open_issue_contracts as prep
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 # --- Fixtures ----------------------------------------------------------------
 
@@ -74,6 +73,20 @@ def _audit_path(tmp_path: Path) -> Path:
     path = tmp_path / "audit.json"
     path.write_text(json.dumps(_audit_fixture()), encoding="utf-8")
     return path
+
+
+def test_preparation_docs_use_explicit_complete_audit_command() -> None:
+    """Preparation docs must not route the bounded default inventory into planning."""
+    docs_path = Path(__file__).resolve().parents[2] / "docs/ai/open-issue-contract-preparation.md"
+    docs = docs_path.read_text(encoding="utf-8")
+    match = re.search(r"### 1\. Audit.*?```bash\n(?P<command>.*?)\n```", docs, re.DOTALL)
+    assert match is not None
+
+    command = shlex.split(match.group("command").replace("\\\n", " "))
+    assert command[:4] == ["uv", "run", "python", "-m"]
+    assert command[command.index("--page-size") + 1] == "100"
+    assert command[command.index("--max-pages") + 1] == "20"
+    assert "--check" in command
 
 
 # --- Plan mode ---------------------------------------------------------------

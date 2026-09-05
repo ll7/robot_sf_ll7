@@ -32,6 +32,9 @@ remote available:
 uv run python -m scripts.dev.audit_open_issue_contracts \
   --repo ll7/robot_sf_ll7 \
   --remote origin \
+  --page-size 20 \
+  --max-pages 1 \
+  --item-limit 20 \
   --json-report output/open_issue_contract_audit.json \
   --format markdown \
   --output output/open_issue_contract_audit.md \
@@ -42,6 +45,12 @@ The command pages through the REST issues endpoint, excludes pull requests, and 
 through the exact-item owner before calling the canonical implementability classifier. A full final
 page at the page limit, duplicate identity, malformed row, exact-read failure, unavailable claim
 state, or listing-to-exact-read drift makes the report non-applicable.
+
+The default developer bounds are deliberately the same conservative `20`-row/`1`-page scan shown
+above, so a growing repository produces a bounded JSON/Markdown artifact instead of timing out. A
+truncated report has `complete: false`, `applicable: false`, and a `pagination.resume_hint`; treat it
+as a partial inventory and rerun from a fresh inventory with explicit larger limits when broader
+coverage is justified. Suffix-only continuation is unsupported.
 
 For an explicitly multi-repository contract, pass a fresh route artifact with
 `--route-preflight-json`; absent or expired route evidence remains non-claimable. The artifact is

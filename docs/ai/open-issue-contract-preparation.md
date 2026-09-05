@@ -31,14 +31,31 @@ The helper is a bounded-github-mutation tool:
 
 ### 1. Audit (report-only)
 
+The audit script's bounded default (`20` rows across `1` page) is useful for a
+quick report-only inventory, but it is not sufficient input for preparation.
+Preparation requires one fresh, complete, error-free audit. The command below
+uses a justified `100` rows per page and `20` pages (capacity for `2,000` raw
+REST rows) and uses `--check` so a truncated or otherwise non-applicable report
+is written for diagnosis but cannot silently continue into planning.
+
 ```bash
 uv run python -m scripts.dev.audit_open_issue_contracts \
   --repo ll7/robot_sf_ll7 \
+  --page-size 100 \
+  --max-pages 20 \
   --format json \
-  --output /tmp/open_issue_audit.json
+  --output /tmp/open_issue_audit.json \
+  --check
 ```
 
-The audit must be `complete: true` with `errors: []` before planning.
+`--check` returns `0` only when the report is complete and applicable. It
+returns `2` after writing the report when pagination or an exact-item read is
+non-applicable; increase `--max-pages` as needed and rerun a fresh audit before
+planning. Do not feed the bounded partial inventory to planning or apply.
+
+The audit must be `complete: true` with `errors: []` before planning. The
+bounded inventory guidance remains documented in
+[`open-issue-contract-audit.md`](open-issue-contract-audit.md).
 
 ### 2. Plan (report-only)
 

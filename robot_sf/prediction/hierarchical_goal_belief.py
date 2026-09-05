@@ -36,12 +36,128 @@ from robot_sf.prediction.goal_belief_contract import (
     GoalCandidateKind,
     GoalCandidateProbability,
 )
-from robot_sf.prediction.goal_intention import GoalCandidateRole, GoalCandidateSet
+from robot_sf.prediction.goal_intention import (
+    GoalCandidate,
+    GoalCandidateAvailability,
+    GoalCandidateRole,
+    GoalCandidateSet,
+)
 
 HIERARCHICAL_GOAL_POSTERIOR_SCHEMA_VERSION = "hierarchical_goal_posterior.v1"
 HIERARCHICAL_PROJECTION_LEVELS = ("active_waypoint", "final_destination")
 _ACTOR_EVIDENCE_SOURCES = frozenset({"upstream_selected"})
 _UNKNOWN_CANDIDATE_ID = "unknown"
+_FINAL_DESTINATION_ROLES = frozenset(
+    {
+        GoalCandidateRole.FINAL_DESTINATION,
+        GoalCandidateRole.ROUTE_ENDPOINT,
+        GoalCandidateRole.BOTH,
+    }
+)
+_ACTIVE_WAYPOINT_ROLES = frozenset({GoalCandidateRole.ACTIVE_WAYPOINT, GoalCandidateRole.BOTH})
+_PRIVILEGED_PROVENANCE_MARKERS = ("assigned_route", "ground_truth")
+
+
+def _is_forbidden_actor_provenance(value: str) -> bool:
+    """Return whether a label uses privileged actor-inference provenance.
+
+    Returns:
+        ``True`` when the value identifies forbidden oracle, simulator, route, or truth evidence.
+    """
+    normalized = value.strip().lower()
+    return is_forbidden_evidence_source(normalized) or any(
+        marker in normalized for marker in _PRIVILEGED_PROVENANCE_MARKERS
+    )
+
+
+def _validate_candidate_set_metadata(candidate_set: GoalCandidateSet) -> None:
+    """Validate provider availability and actor-safe provenance before binding."""
+    if candidate_set.availability is not GoalCandidateAvailability.AVAILABLE:
+        raise ValueError(
+            "candidate_set.availability must be AVAILABLE for flat projection admission"
+        )
+    if _is_forbidden_actor_provenance(candidate_set.source):
+        raise ValueError(
+            "candidate_set.source must not identify a forbidden oracle or simulator source; "
+            "privileged route/truth evidence is also rejected"
+        )
+    for candidate in candidate_set.candidates:
+        if _is_forbidden_actor_provenance(candidate.source):
+            raise ValueError(
+                f"candidate {candidate.id} has a forbidden oracle or simulator source; "
+                "privileged route/truth evidence is also rejected"
+            )
+        if any(_is_forbidden_actor_provenance(ref) for ref in candidate.provenance_refs):
+            raise ValueError(
+                f"candidate {candidate.id} has privileged oracle, simulator, route, or "
+                "truth provenance"
+            )
+
+
+def _validate_referenced_candidate_semantics(
+    candidate_by_id: Mapping[str, GoalCandidate],
+    destination_ids: set[str],
+    waypoint_ids: set[str],
+) -> None:
+    """Validate availability and level-compatible roles for referenced candidates."""
+    unknown_role_ids = sorted(
+        candidate_id
+        for candidate_id in destination_ids | waypoint_ids
+        if candidate_by_id[candidate_id].role is GoalCandidateRole.UNKNOWN
+    )
+    if unknown_role_ids:
+        raise ValueError(
+            "hierarchical probability references candidate(s) with UNKNOWN role: "
+            + ", ".join(unknown_role_ids)
+        )
+
+    unavailable_ids = sorted(
+        candidate_id
+        for candidate_id in destination_ids | waypoint_ids
+        if candidate_by_id[candidate_id].availability is not GoalCandidateAvailability.AVAILABLE
+    )
+    if unavailable_ids:
+        raise ValueError(
+            "hierarchical probability references unavailable candidate(s): "
+            + ", ".join(unavailable_ids)
+        )
+
+    incompatible_destinations = sorted(
+        candidate_id
+        for candidate_id in destination_ids
+        if candidate_by_id[candidate_id].role not in _FINAL_DESTINATION_ROLES
+    )
+    if incompatible_destinations:
+        raise ValueError(
+            "destination probability references candidate(s) with an incompatible role: "
+            + ", ".join(incompatible_destinations)
+        )
+    incompatible_waypoints = sorted(
+        candidate_id
+        for candidate_id in waypoint_ids
+        if candidate_by_id[candidate_id].role not in _ACTIVE_WAYPOINT_ROLES
+    )
+    if incompatible_waypoints:
+        raise ValueError(
+            "waypoint probability references candidate(s) with an incompatible role: "
+            + ", ".join(incompatible_waypoints)
+        )
+
+
+def _validate_waypoint_parent_metadata(
+    candidate_by_id: Mapping[str, GoalCandidate],
+    parents: Mapping[str, str],
+) -> None:
+    """Require each bound waypoint to carry its exact hierarchy parent."""
+    for waypoint_id, destination_id in parents.items():
+        candidate = candidate_by_id[waypoint_id]
+        if candidate.parent_destination_id is None:
+            raise ValueError(f"candidate {waypoint_id} parent_destination_id is missing")
+        if candidate.parent_destination_id != destination_id:
+            raise ValueError(
+                f"candidate {waypoint_id} parent_destination_id disagrees with "
+                f"hierarchy parent {destination_id}"
+            )
 
 
 def _as_sequence(value: Any, field_name: str) -> tuple[Any, ...]:
@@ -444,15 +560,7 @@ class HierarchicalGoalPosteriorV1:
         """
         if type(candidate_set) is not GoalCandidateSet:
             raise TypeError("candidate_set must be a GoalCandidateSet")
-        if is_forbidden_evidence_source(candidate_set.source):
-            raise ValueError(
-                "candidate_set.source must not identify a forbidden oracle or simulator source"
-            )
-        for candidate in candidate_set.candidates:
-            if is_forbidden_evidence_source(candidate.source):
-                raise ValueError(
-                    f"candidate {candidate.id} has a forbidden oracle or simulator source"
-                )
+        _validate_candidate_set_metadata(candidate_set)
 
         actual_digest = stable_digest(candidate_set.to_dict())
         if actual_digest != self.candidate_set_digest:
@@ -473,27 +581,11 @@ class HierarchicalGoalPosteriorV1:
                 + ", ".join(sorted(missing))
             )
 
-        unknown_role_ids = sorted(
-            candidate_id
-            for candidate_id in referenced_ids
-            if candidate_by_id[candidate_id].role is GoalCandidateRole.UNKNOWN
+        _validate_referenced_candidate_semantics(candidate_by_id, destination_ids, waypoint_ids)
+        _validate_waypoint_parent_metadata(
+            candidate_by_id,
+            dict(self.waypoint_parent_destination),
         )
-        if unknown_role_ids:
-            raise ValueError(
-                "hierarchical probability references candidate(s) with UNKNOWN role: "
-                + ", ".join(unknown_role_ids)
-            )
-
-        for waypoint_id, destination_id in self.waypoint_parent_destination:
-            candidate = candidate_by_id[waypoint_id]
-            if (
-                candidate.parent_destination_id is not None
-                and candidate.parent_destination_id != destination_id
-            ):
-                raise ValueError(
-                    f"candidate {waypoint_id} parent_destination_id disagrees with "
-                    f"hierarchy parent {destination_id}"
-                )
 
     def to_goal_belief_v1(
         self,

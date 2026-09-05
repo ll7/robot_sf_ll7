@@ -505,9 +505,10 @@ def run_episode(
     Args:
         env: The Gymnasium simulation environment.
         planner: Optional planner implementing :class:`PlannerProtocol` or a callable action
-            generator. Step-method planners receive the canonical world-frame
-            :class:`~robot_sf.baselines.interface.Observation` built from the environment's
-            simulator state; callable planners receive the raw environment observation.
+            generator. Built-in baseline planners using the canonical contract receive a
+            world-frame :class:`~robot_sf.baselines.interface.Observation`, including static
+            obstacle segments; callable-only, custom step-method, and explicitly dict-native
+            planners receive the raw environment observation.
         max_steps: Maximum step limit before truncating the episode.
         seed: Seed to pass to ``env.reset()``. Defaults to ``env.applied_seed`` or 0.
 

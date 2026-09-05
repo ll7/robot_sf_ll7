@@ -28,6 +28,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+# Make the sibling ``scripts.dev`` package importable when this file is invoked
+# directly (``python scripts/dev/single_account_merge_receipt.py``). Module
+# execution remains the preferred path for callers that start at the repository
+# root, but both interpreter forms must resolve the same receipt owner.
+_REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPOSITORY_ROOT))
+
 RECEIPT_SCHEMA = "single_account_merge_receipt.v1"
 VERIFY_SCHEMA = "single_account_merge_receipt_verification.v1"
 AUTHORITY_FIXTURE_SCHEMA = "single_account_merge_authority_fixture.v1"
@@ -86,8 +94,20 @@ _MACHINE_REVIEW_RE = re.compile(
 )
 _DO_NOT_MERGE_RE = re.compile(r"\[\s*do\s+not\s+merge\s*\]", re.IGNORECASE)
 _DIRECT_MERGE_RE = re.compile(
-    r"pulls/(?:\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*|<[^>]+>|[A-Za-z0-9_.-]+)/merge"
+    r"pulls\s*/\s*(?:\{[^}]+\}|\$[A-Za-z_][A-Za-z0-9_]*|<[^>]+>|[A-Za-z0-9_.${}-]+)"
+    r"\s*/\s*merge",
+    re.IGNORECASE,
 )
+_DIRECT_GH_PR_MERGE_RE = re.compile(r"\bgh\s+(?:\\\s*)?pr\s+(?:\\\s*)?merge\b", re.IGNORECASE)
+_SHELL_REST_COMMAND_RE = re.compile(r"\b(?:gh\s+api|curl)\b", re.IGNORECASE)
+_SHELL_REST_MUTATION_RE = re.compile(
+    r"(?:--(?:method|request)(?:\s+|=)|-X(?:\s+|=)?)(?:PUT|POST|PATCH|DELETE)\b",
+    re.IGNORECASE,
+)
+_PULL_REQUEST_PATH_FRAGMENT_RE = re.compile(
+    r"\b(?:pulls?|pull_requests?)(?:[_/-]|\b)", re.IGNORECASE
+)
+_MERGE_OPERATION_FRAGMENT_RE = re.compile(r"\bmerge(?:[_/-]|\b)", re.IGNORECASE)
 _FULL_ORDINARY_BASE_POLICY_RE = re.compile(
     r"base-policy\s*:\s*ordinary-cas\s*@\s*([0-9a-fA-F]{40})\b",
     re.IGNORECASE,
@@ -2068,7 +2088,32 @@ def _run_gh_api(
         return None, f"gh api returned invalid JSON: {exc}"
 
 
-def validate_merge_authority_fixture(  # noqa: C901, PLR0912 - explicit policy checks.
+def _authority_bypass_line_numbers(source: str, *, suffix: str) -> list[int]:
+    """Return source lines that can write a merge outside the receipt owner.
+
+    Direct endpoint and native CLI matches are checked across the complete file,
+    not one physical line.  Shell-like files also get a conservative composite
+    check so a REST endpoint assembled through variables or continuation lines
+    cannot evade the authority scan.
+    """
+    offsets = [
+        match.start()
+        for pattern in (_DIRECT_MERGE_RE, _DIRECT_GH_PR_MERGE_RE)
+        for match in pattern.finditer(source)
+    ]
+    if suffix.lower() in {".sh", ".yml", ".yaml"}:
+        marker_matches = (
+            _SHELL_REST_COMMAND_RE.search(source),
+            _SHELL_REST_MUTATION_RE.search(source),
+            _PULL_REQUEST_PATH_FRAGMENT_RE.search(source),
+            _MERGE_OPERATION_FRAGMENT_RE.search(source),
+        )
+        if all(marker_matches):
+            offsets.append(min(match.start() for match in marker_matches if match is not None))
+    return sorted({source.count("\n", 0, offset) + 1 for offset in offsets})
+
+
+def validate_merge_authority_fixture(  # noqa: C901, PLR0912, PLR0915 - explicit policy checks.
     repo_root: Path | None = None,
 ) -> dict[str, Any]:
     """Validate that every declared merge caller routes through the receipt owner.
@@ -2137,36 +2182,63 @@ def validate_merge_authority_fixture(  # noqa: C901, PLR0912 - explicit policy c
             reasons.append(f"merge_caller_{caller_rel}_does_not_reference_receipt")
 
     forbidden = fixture.get("forbidden_direct_merge_patterns")
-    if not isinstance(forbidden, list) or not forbidden:
+    if (
+        not isinstance(forbidden, list)
+        or not forbidden
+        or not all(isinstance(pattern, str) and pattern.strip() for pattern in forbidden)
+    ):
         reasons.append("forbidden_merge_patterns_missing")
 
-    scan_roots = (
-        root / "scripts/dev",
-        root / "docs",
-        root / ".agents/skills",
-        root / ".opencode/skills",
-    )
-    for scan_root in scan_roots:
-        if not scan_root.is_dir():
-            continue
-        suffixes = {".py", ".sh"} if scan_root.name == "dev" else {".md"}
+    raw_scan_surfaces = fixture.get("scan_surfaces")
+    scan_surfaces: list[tuple[str, Path, set[str]]] = []
+    if not isinstance(raw_scan_surfaces, list) or not raw_scan_surfaces:
+        reasons.append("scan_surfaces_missing")
+    else:
+        for index, raw_surface in enumerate(raw_scan_surfaces):
+            if not isinstance(raw_surface, Mapping):
+                reasons.append(f"scan_surface_{index}_malformed")
+                continue
+            surface_rel = _string(raw_surface.get("path"))
+            raw_suffixes = raw_surface.get("suffixes")
+            suffixes = (
+                {
+                    str(suffix).lower()
+                    for suffix in raw_suffixes
+                    if isinstance(suffix, str) and suffix.startswith(".")
+                }
+                if isinstance(raw_suffixes, list)
+                else set()
+            )
+            surface_parts = Path(surface_rel).parts
+            if (
+                not surface_rel
+                or Path(surface_rel).is_absolute()
+                or ".." in surface_parts
+                or not suffixes
+            ):
+                reasons.append(f"scan_surface_{index}_malformed")
+                continue
+            surface_path = root / surface_rel
+            if not surface_path.is_dir():
+                reasons.append(f"scan_surface_{surface_rel}_missing")
+                continue
+            scan_surfaces.append((surface_rel, surface_path, suffixes))
+
+    for _surface_rel, scan_root, suffixes in scan_surfaces:
         for candidate in sorted(scan_root.rglob("*")):
-            if not candidate.is_file() or candidate.suffix not in suffixes:
+            if not candidate.is_file() or candidate.suffix.lower() not in suffixes:
                 continue
             if candidate.resolve() == owner_path.resolve():
                 continue
             try:
-                lines = candidate.read_text(encoding="utf-8").splitlines()
+                source = candidate.read_text(encoding="utf-8")
             except OSError as exc:
                 reasons.append(f"merge_authority_scan_failed:{candidate.relative_to(root)}:{exc}")
                 continue
-            for line_number, line in enumerate(lines, start=1):
-                if _DIRECT_MERGE_RE.search(line) or "gh pr merge" in line:
-                    reasons.append(
-                        "direct_merge_bypass:"
-                        + str(candidate.relative_to(root))
-                        + f":{line_number}"
-                    )
+            for line_number in _authority_bypass_line_numbers(source, suffix=candidate.suffix):
+                reasons.append(
+                    "direct_merge_bypass:" + str(candidate.relative_to(root)) + f":{line_number}"
+                )
 
     unique = sorted(set(reasons))
     return {
@@ -2176,6 +2248,10 @@ def validate_merge_authority_fixture(  # noqa: C901, PLR0912 - explicit policy c
         "receipt_owner": owner_rel,
         "merge_callers": [
             _string(item.get("path")) for item in callers if isinstance(item, Mapping)
+        ],
+        "scan_surfaces": [
+            {"path": surface_rel, "suffixes": sorted(suffixes)}
+            for surface_rel, _surface_path, suffixes in scan_surfaces
         ],
         "reasons": unique,
     }

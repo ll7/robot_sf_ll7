@@ -1208,21 +1208,27 @@ def test_merge_authority_fixture_is_current() -> None:
     result = validate_merge_authority_fixture()
     assert result["passed"] is True, result
     assert "scripts/dev/gh_pr_merge.sh" in result["merge_callers"]
+    assert any(surface["path"] == ".github/workflows" for surface in result["scan_surfaces"])
 
 
-def test_merge_authority_fixture_scans_shell_writers(tmp_path: Path) -> None:
-    """A new shell merge writer must be rejected by the authority self-check."""
-    scripts_dir = tmp_path / "scripts" / "dev"
-    scripts_dir.mkdir(parents=True)
+def _write_minimal_authority_fixture(
+    repo_root: Path, *, scan_surfaces: list[dict[str, object]]
+) -> Path:
+    """Create a small authority fixture whose scan surfaces are explicit."""
+    scripts_dir = repo_root / "scripts" / "dev"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
     owner_rel = "scripts/dev/single_account_merge_receipt.py"
     (scripts_dir / "single_account_merge_receipt.py").write_text(
         'def apply_guarded_merge():\n    return "single_account_merge_receipt.v1"\n',
         encoding="utf-8",
     )
     (scripts_dir / "gh_pr_merge.sh").write_text(
-        f"#!/usr/bin/env bash\npython3 {owner_rel}\ngh pr merge 42\n",
+        f"#!/usr/bin/env bash\n# delegates to {owner_rel}\npython3 -m scripts.dev.single_account_merge_receipt\n",
         encoding="utf-8",
     )
+    for surface in scan_surfaces:
+        surface_path = repo_root / str(surface["path"])
+        surface_path.mkdir(parents=True, exist_ok=True)
     (scripts_dir / "single_account_merge_authority_fixture.v1.json").write_text(
         json.dumps(
             {
@@ -1237,9 +1243,44 @@ def test_merge_authority_fixture_scans_shell_writers(tmp_path: Path) -> None:
                         "requires_receipt": True,
                     }
                 ],
-                "forbidden_direct_merge_patterns": ["pulls/<pr>/merge", "gh pr merge"],
+                "forbidden_direct_merge_patterns": [
+                    "pulls/<pr>/merge",
+                    "gh pr merge",
+                    "split REST mutation targeting pulls/<pr>/merge",
+                ],
+                "scan_surfaces": scan_surfaces,
             }
         ),
+        encoding="utf-8",
+    )
+    return repo_root
+
+
+def test_merge_authority_fixture_scans_shell_writers(tmp_path: Path) -> None:
+    """A new shell merge writer must be rejected by the authority self-check."""
+    scan_surfaces = [{"path": "scripts/dev", "suffixes": [".py", ".sh"]}]
+    _write_minimal_authority_fixture(tmp_path, scan_surfaces=scan_surfaces)
+    (tmp_path / "scripts/dev/unsafe_merge.sh").write_text(
+        "#!/usr/bin/env bash\ngh pr merge 42\n", encoding="utf-8"
+    )
+
+    result = validate_merge_authority_fixture(repo_root=tmp_path)
+
+    assert result["passed"] is False
+    assert any(
+        reason.startswith("direct_merge_bypass:scripts/dev/unsafe_merge.sh:")
+        for reason in result["reasons"]
+    )
+
+
+def test_merge_authority_fixture_scans_split_shell_rest_writers(tmp_path: Path) -> None:
+    """A REST merge endpoint assembled across shell statements is rejected."""
+    scan_surfaces = [{"path": "scripts/dev", "suffixes": [".py", ".sh"]}]
+    _write_minimal_authority_fixture(tmp_path, scan_surfaces=scan_surfaces)
+    (tmp_path / "scripts/dev/unsafe_rest_merge.sh").write_text(
+        "#!/usr/bin/env bash\n"
+        'merge_path="repos/o/r/pulls/$PR"\n'
+        'gh api --method PUT "$merge_path/merge"\n',
         encoding="utf-8",
     )
 
@@ -1247,7 +1288,28 @@ def test_merge_authority_fixture_scans_shell_writers(tmp_path: Path) -> None:
 
     assert result["passed"] is False
     assert any(
-        reason.startswith("direct_merge_bypass:scripts/dev/gh_pr_merge.sh:")
+        reason.startswith("direct_merge_bypass:scripts/dev/unsafe_rest_merge.sh:")
+        for reason in result["reasons"]
+    )
+
+
+def test_merge_authority_fixture_scans_workflow_merge_writers(tmp_path: Path) -> None:
+    """A workflow-native merge command is rejected by the authority self-check."""
+    scan_surfaces = [
+        {"path": "scripts/dev", "suffixes": [".py", ".sh"]},
+        {"path": ".github/workflows", "suffixes": [".yml", ".yaml"]},
+    ]
+    _write_minimal_authority_fixture(tmp_path, scan_surfaces=scan_surfaces)
+    (tmp_path / ".github/workflows/unsafe-merge.yml").write_text(
+        "name: unsafe merge\njobs:\n  merge:\n    steps:\n      - run: gh pr merge 42\n",
+        encoding="utf-8",
+    )
+
+    result = validate_merge_authority_fixture(repo_root=tmp_path)
+
+    assert result["passed"] is False
+    assert any(
+        reason.startswith("direct_merge_bypass:.github/workflows/unsafe-merge.yml:")
         for reason in result["reasons"]
     )
 

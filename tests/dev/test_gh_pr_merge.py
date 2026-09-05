@@ -26,18 +26,23 @@ def _fake_python_bin(tmp_path: Path) -> Path:
         "import json, os, pathlib, sys\n"
         "plan = json.loads(pathlib.Path(os.environ['FAKE_PYTHON_PLAN']).read_text())\n"
         "args = sys.argv[1:]\n"
-        "script = pathlib.Path(args[0]).name if args else ''\n"
+        "if args[:2] == ['-m', 'scripts.dev.single_account_merge_receipt']:\n"
+        "    script = 'single_account_merge_receipt.py'\n"
+        "    delegated_args = args[2:]\n"
+        "else:\n"
+        "    script = pathlib.Path(args[0]).name if args else ''\n"
+        "    delegated_args = args[1:]\n"
         "log_path = pathlib.Path(os.environ['FAKE_PYTHON_LOG'])\n"
         "with log_path.open('a', encoding='utf-8') as stream:\n"
-        "    stream.write(json.dumps({'script': script, 'args': args[1:]}) + '\\n')\n"
+        "    stream.write(json.dumps({'script': script, 'args': delegated_args}) + '\\n')\n"
         "if script == 'github_transport_policy.py':\n"
         "    response = plan.get('policy', {})\n"
         "elif script == 'single_account_merge_receipt.py':\n"
-        "    mode_index = args.index('--mode') + 1\n"
-        "    response = plan.get(args[mode_index], {})\n"
-        "    output_index = args.index('--output') + 1 if '--output' in args else None\n"
+        "    mode_index = delegated_args.index('--mode') + 1\n"
+        "    response = plan.get(delegated_args[mode_index], {})\n"
+        "    output_index = delegated_args.index('--output') + 1 if '--output' in delegated_args else None\n"
         "    if output_index is not None and response.get('write_output', True):\n"
-        "        pathlib.Path(args[output_index]).write_text(\n"
+        "        pathlib.Path(delegated_args[output_index]).write_text(\n"
         "            response.get('receipt', '{\\\"status\\\": \\\"ready\\\"}'),\n"
         "            encoding='utf-8',\n"
         "        )\n"
@@ -52,6 +57,23 @@ def _fake_python_bin(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     fake_python.chmod(0o755)
+    return bin_dir
+
+
+def _failing_gh_bin(tmp_path: Path) -> Path:
+    """Write a real executable used to stop the live receipt read safely."""
+    bin_dir = tmp_path / "real-bin"
+    bin_dir.mkdir()
+    fake_gh = bin_dir / "gh"
+    fake_gh.write_text(
+        f"#!{sys.executable}\n"
+        "import os, pathlib, sys\n"
+        "pathlib.Path(os.environ['FAKE_GH_LOG']).write_text(os.getcwd(), encoding='utf-8')\n"
+        "print('fake gh failure', file=sys.stderr)\n"
+        "raise SystemExit(7)\n",
+        encoding="utf-8",
+    )
+    fake_gh.chmod(0o755)
     return bin_dir
 
 
@@ -147,6 +169,30 @@ def test_wrapper_delegates_report_and_apply_with_exact_head(tmp_path: Path) -> N
     for delegated_args in (report_args, apply_args):
         assert delegated_args[delegated_args.index("--expected-head") + 1] == FULL_SHA
         assert delegated_args[delegated_args.index("--repo") + 1] == "o/r"
+
+
+def test_wrapper_runs_receipt_owner_as_a_module_with_the_real_interpreter(
+    tmp_path: Path,
+) -> None:
+    """The shell path must import the receipt package before any live API read."""
+    env = os.environ.copy()
+    env["FAKE_GH_LOG"] = str(tmp_path / "fake-gh-cwd")
+    env["PATH"] = str(_failing_gh_bin(tmp_path)) + os.pathsep + env.get("PATH", "")
+
+    result = subprocess.run(
+        [str(GH_PR_MERGE), "1234", "--match-head-commit", FULL_SHA, "--repo", "o/r"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 1
+    assert "ModuleNotFoundError: No module named 'scripts'" not in result.stderr
+    assert "canonical receipt report was not ready" in result.stderr
+    assert (tmp_path / "fake-gh-cwd").read_text(encoding="utf-8") == str(REPO_ROOT)
 
 
 def test_report_block_blocks_apply(tmp_path: Path) -> None:

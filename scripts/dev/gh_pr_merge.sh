@@ -5,6 +5,9 @@ set -euo pipefail
 # The receipt owner is the only component allowed to perform the merge write;
 # this shell entry point only binds the requested PR head and delegates the
 # report/apply lifecycle to that owner.
+# Source-branch cleanup is intentionally outside this compatibility wrapper.
+# The guarded merger may perform that separate post-merge action only after
+# verifying that the branch contains no unique unpreserved work.
 #
 # Usage:
 #   scripts/dev/gh_pr_merge.sh <pr-number> --match-head-commit <sha> [--repo owner/name]
@@ -17,6 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPOSITORY_ROOT="$SCRIPT_DIR/../.."
 # Delegated owner: scripts/dev/single_account_merge_receipt.py.
 RECEIPT_OWNER="$SCRIPT_DIR/single_account_merge_receipt.py"
+RECEIPT_OWNER_MODULE="scripts.dev.single_account_merge_receipt"
 
 usage() {
   cat <<'EOF_USAGE'
@@ -64,7 +68,7 @@ repo_from_git_remote() {
 
 run_receipt_owner() (
   cd "$REPOSITORY_ROOT"
-  python3 "$RECEIPT_OWNER" "$@"
+  python3 -m "$RECEIPT_OWNER_MODULE" "$@"
 )
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then

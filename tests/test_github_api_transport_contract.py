@@ -180,6 +180,8 @@ def test_comment_wrapper_documents_the_transport_rule() -> None:
 def test_merge_wrapper_delegates_to_receipt_owner_with_exact_head() -> None:
     source = _source("gh_pr_merge.sh")
     assert 'RECEIPT_OWNER="$SCRIPT_DIR/single_account_merge_receipt.py"' in source
+    assert 'RECEIPT_OWNER_MODULE="scripts.dev.single_account_merge_receipt"' in source
+    assert 'python3 -m "$RECEIPT_OWNER_MODULE"' in source
     assert "run_receipt_owner" in source
     assert "--mode report-only" in source
     assert "--mode apply" in source
@@ -211,3 +213,10 @@ def test_merge_wrapper_keeps_argument_and_transport_fail_closed_guards() -> None
         "github_transport_policy.py",
     ):
         assert marker in source
+
+
+def test_merge_wrapper_documents_separate_source_branch_cleanup() -> None:
+    source = _source("gh_pr_merge.sh")
+    assert "Source-branch cleanup is intentionally outside this compatibility wrapper." in source
+    assert "no unique unpreserved work" in source
+    assert "--delete-branch" not in source

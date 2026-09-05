@@ -788,6 +788,11 @@ the pre-follow-up v1 implementation remain structurally readable when `closing_d
 absent, but validation and apply still block with missing closing evidence; callers must generate
 a current receipt before merging.
 
+This compatibility helper intentionally does not delete the source branch. Source-branch cleanup is
+a separate guarded post-merge action under the `gh-pr-merger` deletion boundary and requires
+verification that no unique, unpreserved work remains. Calling the helper alone does not authorize
+branch cleanup.
+
 When the GraphQL-backed PR snapshot is rate-limited, `--mode report-only` and `--mode validate`
 reuse the bounded REST snapshot path for ordinary PR, label, comment, review, requested-reviewer,
 and hosted-check facts. Each live receipt records `evidence_provenance` with the route used for

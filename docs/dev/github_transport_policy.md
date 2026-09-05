@@ -51,3 +51,13 @@ identity, and transport-policy admission, then delegates report and apply to
 its own, so a worktree conflict, quota problem, or other transport failure
 cannot select an unguarded writer. Ordinary-CAS evidence and the owner’s
 immediate live recheck remain authoritative.
+
+The helper deliberately does not delete the source branch. Source-branch
+cleanup is a separate guarded post-merge action and remains subject to the
+`gh-pr-merger` condition that no unique, unpreserved work remains. Invoking the
+compatibility helper alone does not authorize that cleanup.
+
+The authority fixture also declares the scan surfaces for runtime helpers,
+workflow YAML, documentation, and skill guidance. Its self-check rejects
+direct merge endpoints, split shell REST mutations, and native pull-request
+merge commands outside the receipt owner.

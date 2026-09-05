@@ -472,6 +472,11 @@ _FAST_FILES = {
     # coverage for the changed adapter; keep them in fast PR shards for the
     # exact-head changed-coverage gate.
     "test_topology_guided_local_policy.py",
+    # ScenarioBelief projection and stream-gap uncertainty tests are deterministic
+    # planner-contract coverage for the diagnostic adapter in issue #8050.
+    "test_scenario_belief_track_projection.py",
+    "test_scenario_belief_uncertainty_gate.py",
+    "test_stream_gap_planner.py",
     # Route-side/homotopy observability tests are deterministic pure-metric
     # contracts with numpy fixtures; keep them in fast pull-request shards for
     # the exact-head changed-coverage gate (issue #7890).

@@ -104,6 +104,7 @@ def _canonical_bytes(payload: Mapping[str, Any]) -> bytes:
     """
     return json.dumps(
         payload,
+        allow_nan=False,
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),

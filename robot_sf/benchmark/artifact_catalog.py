@@ -7,7 +7,7 @@ import hashlib
 import json
 import re
 import sys
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -97,6 +97,7 @@ class ArtifactCatalog:
     schema_version: str
     catalog_id: str
     artifacts: list[ArtifactCatalogEntry]
+    claim_identity: dict[str, str] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert the catalog to JSON-safe primitives.
@@ -105,7 +106,10 @@ class ArtifactCatalog:
             Dictionary representation of the catalog.
         """
 
-        return asdict(self)
+        payload = asdict(self)
+        if self.claim_identity is None:
+            payload.pop("claim_identity", None)
+        return payload
 
 
 class ArtifactCatalogValidationError(RobotSfError, ValueError):
@@ -136,7 +140,12 @@ def load_artifact_catalog_schema(
     return json.loads(schema_file.read_text(encoding="utf-8"))
 
 
-def load_artifact_catalog(path: Path) -> ArtifactCatalog:
+def load_artifact_catalog(
+    path: Path,
+    *,
+    repository_root: Path | None = None,
+    approved_durable_roots: Iterable[Path] = (),
+) -> ArtifactCatalog:
     """Load and validate a YAML or JSON artifact catalog.
 
     Returns:
@@ -150,13 +159,20 @@ def load_artifact_catalog(path: Path) -> ArtifactCatalog:
             [ArtifactCatalogIssue("/", "expected a mapping payload")],
             source=path,
         )
-    return artifact_catalog_from_dict(payload, catalog_path=path)
+    return artifact_catalog_from_dict(
+        payload,
+        catalog_path=path,
+        repository_root=repository_root,
+        approved_durable_roots=approved_durable_roots,
+    )
 
 
 def artifact_catalog_from_dict(
     payload: Mapping[str, Any],
     *,
     catalog_path: Path,
+    repository_root: Path | None = None,
+    approved_durable_roots: Iterable[Path] = (),
 ) -> ArtifactCatalog:
     """Validate and convert a catalog mapping into typed metadata.
 
@@ -164,13 +180,23 @@ def artifact_catalog_from_dict(
         Typed artifact catalog metadata.
     """
 
-    issues = validate_artifact_catalog_payload(payload, catalog_path=catalog_path)
+    issues = validate_artifact_catalog_payload(
+        payload,
+        catalog_path=catalog_path,
+        repository_root=repository_root,
+        approved_durable_roots=approved_durable_roots,
+    )
     if issues:
         raise ArtifactCatalogValidationError(issues, source=catalog_path)
     return _catalog_from_payload(payload)
 
 
-def validate_artifact_catalog(path: Path) -> list[ArtifactCatalogIssue]:
+def validate_artifact_catalog(
+    path: Path,
+    *,
+    repository_root: Path | None = None,
+    approved_durable_roots: Iterable[Path] = (),
+) -> list[ArtifactCatalogIssue]:
     """Validate an artifact catalog path and return all issues.
 
     Returns:
@@ -184,13 +210,20 @@ def validate_artifact_catalog(path: Path) -> list[ArtifactCatalogIssue]:
         return [ArtifactCatalogIssue("/", f"failed to load catalog: {exc}")]
     if not isinstance(payload, Mapping):
         return [ArtifactCatalogIssue("/", "expected a mapping payload")]
-    return validate_artifact_catalog_payload(payload, catalog_path=path)
+    return validate_artifact_catalog_payload(
+        payload,
+        catalog_path=path,
+        repository_root=repository_root,
+        approved_durable_roots=approved_durable_roots,
+    )
 
 
 def validate_artifact_catalog_payload(
     payload: Mapping[str, Any],
     *,
     catalog_path: Path,
+    repository_root: Path | None = None,
+    approved_durable_roots: Iterable[Path] = (),
 ) -> list[ArtifactCatalogIssue]:
     """Validate schema, identity, path, checksum, and durability rules.
 
@@ -198,8 +231,38 @@ def validate_artifact_catalog_payload(
         List of validation issues. Empty means valid.
     """
 
+    approved_roots = tuple(approved_durable_roots)
     issues = _schema_validation_issues(payload)
-    issues.extend(_semantic_validation_issues(payload, catalog_path=catalog_path))
+    try:
+        catalog_path_resolved = catalog_path.resolve()
+        containment_roots = _containment_roots(
+            catalog_path,
+            repository_root=repository_root,
+            approved_durable_roots=approved_roots,
+        )
+    except (OSError, RuntimeError) as exc:
+        issues.append(
+            ArtifactCatalogIssue(
+                "/",
+                f"could not resolve catalog path safely: {exc}",
+            )
+        )
+    else:
+        if not any(_is_within_root(catalog_path_resolved, root) for root in containment_roots):
+            issues.append(
+                ArtifactCatalogIssue(
+                    "/",
+                    "resolved catalog path escapes the repository and approved durable roots",
+                )
+            )
+    issues.extend(
+        _semantic_validation_issues(
+            payload,
+            catalog_path=catalog_path,
+            repository_root=repository_root,
+            approved_durable_roots=approved_roots,
+        )
+    )
     return issues
 
 
@@ -219,6 +282,8 @@ def _semantic_validation_issues(
     payload: Mapping[str, Any],
     *,
     catalog_path: Path,
+    repository_root: Path | None,
+    approved_durable_roots: Iterable[Path],
 ) -> list[ArtifactCatalogIssue]:
     """Return cross-field and filesystem validation issues."""
 
@@ -248,6 +313,8 @@ def _semantic_validation_issues(
                 _validate_file_ref(
                     file_ref,
                     catalog_path=catalog_path,
+                    repository_root=repository_root,
+                    approved_durable_roots=approved_durable_roots,
                     pointer=f"{prefix}/source_files/{file_index}",
                 )
             )
@@ -258,6 +325,8 @@ def _semantic_validation_issues(
                     _validate_file_ref(
                         file_ref,
                         catalog_path=catalog_path,
+                        repository_root=repository_root,
+                        approved_durable_roots=approved_durable_roots,
                         pointer=f"{prefix}/outputs/{output_key}",
                     )
                 )
@@ -267,16 +336,20 @@ def _semantic_validation_issues(
                 _validate_file_ref(
                     caption_file,
                     catalog_path=catalog_path,
+                    repository_root=repository_root,
+                    approved_durable_roots=approved_durable_roots,
                     pointer=f"{prefix}/caption_file",
                 )
             )
     return issues
 
 
-def _validate_file_ref(
+def _validate_file_ref(  # noqa: C901
     file_ref: Any,
     *,
     catalog_path: Path,
+    repository_root: Path | None,
+    approved_durable_roots: Iterable[Path],
     pointer: str,
 ) -> list[ArtifactCatalogIssue]:
     """Validate one path/checksum pair.
@@ -310,7 +383,33 @@ def _validate_file_ref(
         )
         return issues
 
-    resolved = _resolve_catalog_path(catalog_path, path_text)
+    try:
+        resolved = _resolve_catalog_path(
+            catalog_path,
+            path_text,
+            repository_root=repository_root,
+        )
+        containment_roots = _containment_roots(
+            catalog_path,
+            repository_root=repository_root,
+            approved_durable_roots=approved_durable_roots,
+        )
+    except (OSError, RuntimeError) as exc:
+        issues.append(
+            ArtifactCatalogIssue(
+                f"{pointer}/path",
+                f"could not resolve artifact reference safely: {exc}",
+            )
+        )
+        return issues
+    if not any(_is_within_root(resolved, root) for root in containment_roots):
+        issues.append(
+            ArtifactCatalogIssue(
+                f"{pointer}/path",
+                "resolved artifact reference escapes the repository and approved durable roots",
+            )
+        )
+        return issues
     if not resolved.exists():
         issues.append(ArtifactCatalogIssue(f"{pointer}/path", f"path does not exist: {path_text}"))
         return issues
@@ -342,17 +441,50 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _resolve_catalog_path(catalog_path: Path, path_text: str) -> Path:
+def _resolve_catalog_path(
+    catalog_path: Path,
+    path_text: str,
+    *,
+    repository_root: Path | None = None,
+) -> Path:
     """Resolve a catalog file reference relative to catalog dir or repository root.
 
     Returns:
         Absolute resolved path.
     """
 
-    catalog_relative = (catalog_path.parent / path_text).resolve()
-    if catalog_relative.exists():
+    catalog_candidate = catalog_path.parent / path_text
+    catalog_relative = catalog_candidate.resolve()
+    if catalog_candidate.exists() or catalog_candidate.is_symlink():
         return catalog_relative
-    return (_repo_root_for(catalog_path) / path_text).resolve()
+    fallback_root = (
+        repository_root.resolve() if repository_root is not None else _repo_root_for(catalog_path)
+    )
+    return (fallback_root / path_text).resolve()
+
+
+def _containment_roots(
+    catalog_path: Path,
+    *,
+    repository_root: Path | None,
+    approved_durable_roots: Iterable[Path],
+) -> tuple[Path, ...]:
+    """Return resolved roots allowed to contain catalog file references."""
+    default_root = (
+        repository_root.resolve() if repository_root is not None else _repo_root_for(catalog_path)
+    )
+    roots = [default_root]
+    roots.extend(Path(root).resolve() for root in approved_durable_roots)
+    return tuple(dict.fromkeys(roots))
+
+
+def _is_within_root(path: Path, root: Path) -> bool:
+    """Return whether a resolved path is contained by a resolved root."""
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
 
 
 def _repo_root_for(path: Path) -> Path:
@@ -362,11 +494,11 @@ def _repo_root_for(path: Path) -> Path:
         Repository root or catalog parent when no Git root marker exists.
     """
 
-    resolved = path.resolve()
-    for parent in (resolved.parent, *resolved.parents):
+    absolute = path.absolute()
+    for parent in (absolute.parent, *absolute.parents):
         if (parent / ".git").exists():
-            return parent
-    return resolved.parent
+            return parent.resolve()
+    return absolute.parent.resolve()
 
 
 def _is_local_only_path(value: str) -> bool:
@@ -462,6 +594,11 @@ def _catalog_from_payload(payload: Mapping[str, Any]) -> ArtifactCatalog:
             )
             for artifact in payload["artifacts"]
         ],
+        claim_identity=(
+            {str(key): str(value) for key, value in payload["claim_identity"].items()}
+            if isinstance(payload.get("claim_identity"), Mapping)
+            else None
+        ),
     )
 
 

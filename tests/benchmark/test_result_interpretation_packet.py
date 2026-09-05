@@ -143,6 +143,35 @@ class TestFixturesValid:
         assert packet.packet_id
         assert packet.evidence.evidence_id
 
+    def test_claim_identity_round_trips_as_an_optional_packet_field(self) -> None:
+        """A packet can carry the campaign identity used by strict admission."""
+        payload = copy.deepcopy(_VALID_6944)
+        payload["claim_identity"] = {
+            "campaign_id": "campaign_fixture",
+            "question": payload["question"]["text"],
+            "estimand": payload["estimand"]["description"],
+        }
+
+        packet = build_and_validate_packet(payload)
+
+        assert packet.claim_identity is not None
+        assert packet.claim_identity.campaign_id == "campaign_fixture"
+        assert packet.to_dict()["claim_identity"] == payload["claim_identity"]
+
+    def test_claim_identity_must_match_packet_question_and_estimand(self) -> None:
+        """A packet cannot carry claim text that disagrees with its own fields."""
+        payload = copy.deepcopy(_VALID_6944)
+        payload["claim_identity"] = {
+            "campaign_id": "campaign_fixture",
+            "question": "forged question",
+            "estimand": "forged estimand",
+        }
+
+        errors = validate_packet(payload)
+
+        assert "claim_identity.question must match question.text" in errors
+        assert "claim_identity.estimand must match estimand.description" in errors
+
     def test_fixture_execution_counts_reconcile_to_included_population(self) -> None:
         assert (
             sum(_VALID_6474["execution_mode"]["counts"].values())

@@ -319,6 +319,19 @@ def test_verify_accepts_zenodo_license_and_creator_normalization(tmp_path: Path)
     assert not any(problem.startswith("metadata.") for problem in report["problems"])
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_verify_rejects_non_finite_extra_remote_metadata(tmp_path: Path, value: float) -> None:
+    """Unexpected non-finite remote metadata cannot authorize a verification receipt."""
+    session, state, remote = _metadata_verification_fixture(tmp_path)
+    remote["metadata"]["unexpected"] = value
+
+    report = verify(session, state, _metadata())
+
+    assert report["status"] == "fail"
+    assert "Zenodo remote metadata is malformed" in report["problems"]
+    assert "verification_receipt" not in state
+
+
 def test_verify_accepts_draft_without_advertised_size_when_download_matches(
     tmp_path: Path,
 ) -> None:

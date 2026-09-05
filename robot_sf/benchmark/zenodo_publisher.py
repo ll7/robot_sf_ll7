@@ -11,6 +11,7 @@ import tempfile
 import unicodedata
 from collections.abc import Callable, Mapping
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import quote, unquote, urlsplit
@@ -47,6 +48,19 @@ _STABLE_READBACK_COUNT = 2
 
 class ZenodoPublisherError(RuntimeError):
     """Raised for a rejected local contract or Zenodo API response."""
+
+
+@dataclass(frozen=True)
+class _DeleteReadbackContext:
+    """Immutable inputs for one deletion's exact readback proof."""
+
+    state: Mapping[str, Any]
+    expected_before: Mapping[str, str]
+    expected_after: Mapping[str, str]
+    pre_delete_metadata_contract_sha256: str
+    deleted_name: str
+    outcome: str
+    api_base: str
 
 
 class _Response(Protocol):
@@ -90,6 +104,7 @@ def _canonical_bytes(payload: Mapping[str, Any]) -> bytes:
     """
     return json.dumps(
         payload,
+        allow_nan=False,
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -219,6 +234,25 @@ def _metadata_sha256(metadata: Mapping[str, Any]) -> str:
         Lowercase hexadecimal SHA-256 digest.
     """
     return hashlib.sha256(_canonical_bytes(_metadata_contract(metadata))).hexdigest()
+
+
+def _remote_metadata_contract_sha256(payload: Mapping[str, Any]) -> str:
+    """Hash the credential-free metadata contract in a remote deposition payload.
+
+    Returns:
+        Lowercase hexadecimal SHA-256 digest.
+
+    Raises:
+        ZenodoPublisherError: If the remote metadata cannot be represented as
+            a deterministic JSON contract.
+    """
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, Mapping):
+        raise ZenodoPublisherError("Zenodo remote metadata is malformed")
+    try:
+        return _metadata_sha256(metadata)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ZenodoPublisherError("Zenodo remote metadata is malformed") from exc
 
 
 def _validated_api_base(api_base: str) -> str:
@@ -828,6 +862,10 @@ def _validate_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
     """
     if not isinstance(metadata, Mapping):
         raise ZenodoPublisherError("Zenodo metadata must be a JSON object")
+    try:
+        _canonical_bytes(metadata)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ZenodoPublisherError("Zenodo metadata must contain only finite JSON values") from exc
     if metadata.get("upload_type") != "dataset":
         raise ZenodoPublisherError("Zenodo benchmark publication must use upload_type=dataset")
     if metadata.get("license") != "GPL-3.0-only":
@@ -994,6 +1032,14 @@ def _validate_reconciliation_receipt(state: Mapping[str, Any]) -> None:  # noqa:
         or _SHA256_RE.fullmatch(revision["sha256"]) is None
     ):
         raise ZenodoPublisherError("Zenodo state reconciliation receipt revision is invalid")
+    metadata_contract_sha256 = revision.get("metadata_contract_sha256")
+    if metadata_contract_sha256 is not None and (
+        not isinstance(metadata_contract_sha256, str)
+        or _SHA256_RE.fullmatch(metadata_contract_sha256) is None
+    ):
+        raise ZenodoPublisherError(
+            "Zenodo state reconciliation receipt metadata binding is invalid"
+        )
 
 
 def _validated_upload_attempt_files(
@@ -1828,31 +1874,32 @@ def _reconcile_inherited_draft_files(  # noqa: PLR0913
         Deleted filenames, the final exact deposition response, and its
         validated file inventory.
     """
-    post_upload_payload, _, post_upload_inventory = _read_successor_deposition(
+    previous_payload, _, previous_inventory = _read_successor_deposition(
         session,
         state,
         api_base=api_base,
         operation="post-upload successor deposition",
         require_lineage=bool(extra_names),
     )
-    if set(post_upload_inventory) != expected_names | extra_names:
+    if set(previous_inventory) != expected_names | extra_names:
         raise ZenodoPublisherError(
             "Zenodo draft file inventory changed unexpectedly after upload; refusing deletion"
         )
     if any(
-        post_upload_inventory[name] != initial_inventory[name]
+        previous_inventory[name] != initial_inventory[name]
         for name in sorted(extra_names, key=_filename_sort_key)
     ):
         raise ZenodoPublisherError(
             "Zenodo inherited draft file identity changed after upload; refusing deletion"
         )
     if not extra_names:
-        return list(previously_deleted), post_upload_payload, post_upload_inventory
+        return list(previously_deleted), previous_payload, previous_inventory
 
-    expected_inventory = dict(post_upload_inventory)
+    expected_inventory = dict(previous_inventory)
+    previous_binding = _remote_revision_binding(previous_payload, previous_inventory)
     deleted_names = list(previously_deleted)
     for name in sorted(extra_names, key=_filename_sort_key):
-        _, _, pre_delete_inventory = _read_successor_deposition(
+        pre_delete_payload, _, pre_delete_inventory = _read_successor_deposition(
             session,
             state,
             api_base=api_base,
@@ -1862,6 +1909,11 @@ def _reconcile_inherited_draft_files(  # noqa: PLR0913
         if pre_delete_inventory != expected_inventory:
             raise ZenodoPublisherError(
                 "Zenodo draft file inventory changed unexpectedly before deletion"
+            )
+        pre_delete_binding = _remote_revision_binding(pre_delete_payload, pre_delete_inventory)
+        if pre_delete_binding != previous_binding:
+            raise ZenodoPublisherError(
+                "Zenodo remote binding changed between post-upload and pre-delete readbacks"
             )
         expected_after_delete = dict(pre_delete_inventory)
         file_id = expected_after_delete.pop(name)
@@ -1874,15 +1926,18 @@ def _reconcile_inherited_draft_files(  # noqa: PLR0913
         )
         final_payload, final_inventory = _stable_delete_readback(
             session,
-            state=state,
-            expected_before=pre_delete_inventory,
-            expected_after=expected_after_delete,
-            deleted_name=name,
-            outcome=outcome,
-            deposition_id=deposition_id,
-            api_base=api_base,
+            _DeleteReadbackContext(
+                state=state,
+                expected_before=pre_delete_inventory,
+                expected_after=expected_after_delete,
+                pre_delete_metadata_contract_sha256=pre_delete_binding["metadata_contract_sha256"],
+                deleted_name=name,
+                outcome=outcome,
+                api_base=api_base,
+            ),
         )
         expected_inventory = final_inventory
+        previous_binding = _remote_revision_binding(final_payload, final_inventory)
         deleted_names.append(name)
         if on_deleted is not None:
             on_deleted(name)
@@ -1891,14 +1946,7 @@ def _reconcile_inherited_draft_files(  # noqa: PLR0913
 
 def _stable_delete_readback(
     session: _Session,
-    *,
-    state: Mapping[str, Any],
-    expected_before: Mapping[str, str],
-    expected_after: Mapping[str, str],
-    deleted_name: str,
-    outcome: str,
-    deposition_id: int,
-    api_base: str,
+    context: _DeleteReadbackContext,
 ) -> tuple[dict[str, Any], dict[str, str]]:
     """Prove one deletion with a bounded, lifecycle-aware exact-read loop.
 
@@ -1912,7 +1960,7 @@ def _stable_delete_readback(
     Returns:
         The stable final deposition response and its validated inventory.
     """
-    if outcome not in {
+    if context.outcome not in {
         "success",
         "not_found",
         "forbidden",
@@ -1928,36 +1976,42 @@ def _stable_delete_readback(
         try:
             payload, remote_state, inventory = _read_successor_deposition(
                 session,
-                state,
-                api_base=api_base,
+                context.state,
+                api_base=context.api_base,
                 operation="post-delete successor deposition",
                 require_lineage=True,
             )
         except ZenodoPublisherError as exc:
             if "request failed" not in str(exc):
                 raise ZenodoPublisherError(
-                    f"Zenodo DELETE {outcome} for {deleted_name} could not be confirmed"
+                    f"Zenodo DELETE {context.outcome} for {context.deleted_name} "
+                    "could not be confirmed"
                 ) from exc
             last_transport_error = True
             previous_snapshot = None
             stable_count = 0
             continue
         last_transport_error = False
-        if inventory not in (expected_before, expected_after):
+        if inventory not in (context.expected_before, context.expected_after):
             raise ZenodoPublisherError(
                 "Zenodo draft file inventory changed unexpectedly after deletion"
             )
-        if inventory != expected_after:
+        if inventory != context.expected_after:
             previous_snapshot = None
             stable_count = 0
             continue
         revision = _remote_revision_binding(payload, inventory)
+        if revision["metadata_contract_sha256"] != context.pre_delete_metadata_contract_sha256:
+            raise ZenodoPublisherError(
+                f"Zenodo DELETE {context.outcome} for {context.deleted_name} observed metadata drift"
+            )
         snapshot = (
             tuple(sorted(inventory.items(), key=lambda item: _filename_sort_key(item[0]))),
             remote_state["state"],
             remote_state["submitted"],
             revision["field"],
             revision["sha256"],
+            revision["metadata_contract_sha256"],
         )
         if snapshot == previous_snapshot:
             stable_count += 1
@@ -1970,7 +2024,7 @@ def _stable_delete_readback(
         "readback transport failed" if last_transport_error else "stable readback was not observed"
     )
     raise ZenodoPublisherError(
-        f"Zenodo DELETE {outcome} for {deleted_name} failed closed: {detail}"
+        f"Zenodo DELETE {context.outcome} for {context.deleted_name} failed closed: {detail}"
     )
 
 
@@ -2125,14 +2179,21 @@ def _remote_revision_binding(
 
     Legacy Zenodo responses do not always expose a revision field. In that
     case an exact identity/lifecycle/file snapshot is used as a conservative
-    local revision so the receipt is still tied to the final response.
+    local revision so the receipt is still tied to the final response. When an
+    optimistic revision field exists, the binding still carries the
+    credential-free metadata contract digest so metadata-only changes cannot
+    be hidden behind an unchanged server revision.
 
     Returns:
         A field name and SHA-256 digest for the final remote read.
     """
+    metadata_contract_sha256 = _remote_metadata_contract_sha256(payload)
     optimistic = _remote_optimistic_binding(payload)
     if optimistic is not None:
-        return optimistic
+        return {
+            **optimistic,
+            "metadata_contract_sha256": metadata_contract_sha256,
+        }
     snapshot = {
         "deposition_id": payload.get("id"),
         "record_id": payload.get("record_id"),
@@ -2140,6 +2201,7 @@ def _remote_revision_binding(
         "doi": payload.get("doi"),
         "state": payload.get("state"),
         "submitted": payload.get("submitted"),
+        "metadata_contract_sha256": metadata_contract_sha256,
         "files": [
             {"name": name, "id": file_id}
             for name, file_id in sorted(
@@ -2150,6 +2212,7 @@ def _remote_revision_binding(
     return {
         "field": "snapshot",
         "sha256": hashlib.sha256(_canonical_bytes(snapshot)).hexdigest(),
+        "metadata_contract_sha256": metadata_contract_sha256,
     }
 
 
@@ -3077,6 +3140,10 @@ def verify(  # noqa: C901, PLR0912, PLR0915
     remote_state = _public_state(remote)
     remote_metadata = remote.get("metadata") if isinstance(remote.get("metadata"), Mapping) else {}
     problems: list[str] = []
+    try:
+        _remote_metadata_contract_sha256(remote)
+    except ZenodoPublisherError as exc:
+        problems.append(str(exc))
     try:
         remote_optimistic = _remote_optimistic_binding(remote)
     except ZenodoPublisherError as exc:

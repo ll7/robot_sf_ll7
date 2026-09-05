@@ -311,6 +311,32 @@ def test_create_worktree_dry_run_does_not_invoke_git(tmp_path: Path) -> None:
     assert not target.exists()
 
 
+def test_create_worktree_dry_run_works_outside_git_checkout(tmp_path: Path) -> None:
+    """Dry-run admission remains filesystem-only outside a Git checkout."""
+    target = tmp_path / "new-worktree"
+    result = subprocess.run(
+        [
+            str(CREATE_WORKTREE),
+            "--path",
+            str(target),
+            "--branch",
+            "test/capacity-dry-run-outside-git",
+            "--minimum-free-bytes",
+            "0",
+            "--dry-run",
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "git worktree add was not invoked" in result.stdout
+    assert "not a git repository" not in result.stderr
+    assert not target.exists()
+
+
 def test_create_worktree_executes_command_inside_new_worktree(tmp_path: Path) -> None:
     branch = _unique_branch(tmp_path, "exec-in-worktree")
     target = _worktree_target(tmp_path, branch)

@@ -142,9 +142,6 @@ if [[ -n "$receipt_path" ]]; then
   receipt_path="$(python3 -c 'import os, sys; print(os.path.abspath(sys.argv[1]))' "$receipt_path")"
 fi
 
-git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
-worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
-
 validate_target_preflight() {
   # Validate the target and capacity immediately before a creation mutation.
   if [[ -e "$worktree_path" || -L "$worktree_path" ]]; then
@@ -167,6 +164,8 @@ validate_target_preflight() {
 }
 
 if [[ "$locked_transaction" -eq 1 ]]; then
+  git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
+  worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
   lock_fd="${ROBOT_SF_WORKTREE_LOCK_FD:-}"
   if ! [[ "$lock_fd" =~ ^[0-9]+$ ]]; then
     echo "create_worktree: --__locked-transaction is an internal mode" >&2
@@ -184,6 +183,9 @@ if [[ "$dry_run" -eq 1 ]]; then
   echo "create_worktree: dry-run passed; git worktree add was not invoked."
   exit 0
 fi
+
+git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
+worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
 
 # Git derives linked-worktree administrative directory names from the target
 # basename. Independent callers with distinct full paths but the same basename

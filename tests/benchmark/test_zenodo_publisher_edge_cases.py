@@ -1530,7 +1530,7 @@ def test_upload_rejects_metadata_only_race_during_stable_readback(tmp_path: Path
     post_upload = _successor_draft()
     post_upload["files"] = [inherited, uploaded]
     readbacks: list[dict[str, Any]] = []
-    for title in ("first title", "second title", "third title"):
+    for title in ("Robot SF benchmark dataset", "second title", "third title"):
         readback = _successor_draft()
         readback["files"] = [uploaded]
         readback["metadata"]["title"] = title
@@ -1546,10 +1546,58 @@ def test_upload_rejects_metadata_only_race_during_stable_readback(tmp_path: Path
     session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
     session.deletes = [_Response({}, 204)]
 
-    with pytest.raises(publisher.ZenodoPublisherError, match="stable readback"):
+    with pytest.raises(publisher.ZenodoPublisherError, match="stable readback|metadata drift"):
         publisher.upload(session, _successor_state(), [bundle])
 
-    assert len(session.gets) == 0
+
+@pytest.mark.parametrize("field", ["modified", "version", "revision"])
+def test_upload_rejects_optimistic_metadata_drift_before_stable_readback(
+    tmp_path: Path,
+    field: str,
+) -> None:
+    """A metadata change before the first post-delete readback stays blocked."""
+    bundle = tmp_path / "successor.tar.gz"
+    bundle.write_bytes(b"successor")
+    inherited = _draft_file("predecessor.tar.gz", file_id="inherited-file")
+    uploaded = _draft_file(bundle.name, file_id="successor-file")
+    initial = _successor_draft()
+    initial["files"] = [inherited]
+    post_upload = _successor_draft()
+    post_upload["files"] = [inherited, uploaded]
+    post_upload[field] = "stable-revision"
+    pre_delete = _successor_draft()
+    pre_delete["files"] = [inherited, uploaded]
+    pre_delete[field] = "stable-revision"
+    changed = _successor_draft()
+    changed["files"] = [uploaded]
+    changed[field] = "stable-revision"
+    changed["metadata"]["title"] = "changed after pre-delete read"
+    session = _Session()
+    session.gets = [
+        _Response(initial),
+        _Response(post_upload),
+        _Response(pre_delete),
+        _Response(inherited),
+        _Response(changed),
+        _Response(changed),
+    ]
+    session.puts = [_Response({"checksum": "md5:fixture"}, 201)]
+    session.deletes = [_Response({}, 204)]
+
+    with pytest.raises(publisher.ZenodoPublisherError, match="metadata drift"):
+        publisher.upload(session, _successor_state(), [bundle])
+
+
+@pytest.mark.parametrize("field", ["modified", "version", "revision"])
+def test_remote_revision_binding_retains_optimistic_metadata_digest(field: str) -> None:
+    """Optimistic revision receipts retain the credential-free metadata binding."""
+    payload = _successor_draft()
+    payload[field] = "remote-version"
+
+    revision = publisher._remote_revision_binding(payload, {})
+
+    assert revision["field"] == field
+    assert revision["metadata_contract_sha256"] == publisher._metadata_sha256(payload["metadata"])
 
 
 @pytest.mark.parametrize("metadata", [None, [], {"title": object()}])

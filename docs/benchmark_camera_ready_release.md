@@ -330,8 +330,10 @@ of consecutive exact readbacks proves the target absent with unchanged
 identity, unpublished lifecycle, inventory, and the server revision when one
 is available. When Zenodo exposes no revision field, the receipt records an
 exact final-response snapshot digest including the credential-free metadata
-contract; malformed metadata fails closed before a receipt can be accepted.
-That fallback is not a server-side concurrency token. Any failed or unstable
+contract; optimistic revision bindings carry the same metadata digest and the
+readback proof compares it with the pre-delete response. Malformed metadata
+fails closed before a receipt can be accepted. That fallback is not a
+server-side concurrency token. Any failed or unstable
 readback remains blocking, so rerun the same upload after a partial network interruption. A
 successful upload stores a credential-free `robot-sf-zenodo-reconciliation.v1`
 receipt binding the intended-inventory SHA-256, deleted filename list, and

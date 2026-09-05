@@ -111,17 +111,13 @@ CRASH_SIGNATURES: tuple[tuple[str, tuple[str, ...]], ...] = (
 TIMEOUT_SIGNATURES: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "pytest-timeout",
-        (
-            r"(?i)\bpytest-timeout\b",
-            r"(?i)\btimeout\s*\(>[^)]*\)",
-        ),
+        (r"(?i)\btimeout\s*\(\s*>[^)\n]+\)\s+from\s+pytest-timeout\b",),
     ),
     (
         "subprocess-timeout",
         (
             r"(?i)\b(?:subprocess\.)?TimeoutExpired\b",
-            r"(?i)\btimed out\b",
-            r"(?i)\btimeout expired\b",
+            r"(?i)\btimed out after\s+\d+(?:\.\d+)?\s*(?:seconds?|s)\b",
         ),
     ),
 )
@@ -200,6 +196,11 @@ class Diagnostic:
 
     @property
     def is_parallel_timeout(self) -> bool:
+        """True when a timeout occurred in the parallel pytest-xdist mode."""
+        return self.execution_mode != "no-xdist" and self.is_timeout
+
+    @property
+    def is_timeout(self) -> bool:
         """True when captured output or the exit status indicates a timeout."""
         return bool(self.timeout_signatures) or self.pytest_exit_code == 124
 
@@ -209,6 +210,7 @@ class Diagnostic:
             "crash_classes": list(self.crash_classes),
             "is_environment_crash": self.is_environment_crash,
             "timeout_signatures": list(self.timeout_signatures),
+            "is_timeout": self.is_timeout,
             "is_parallel_timeout": self.is_parallel_timeout,
             "requested_workers": self.requested_workers,
             "dist_mode": self.dist_mode,
@@ -451,7 +453,7 @@ def _diagnostic_verdict(diag: Diagnostic) -> list[str]:
     """Return the final diagnostic verdict lines."""
     if diag.is_environment_crash:
         return _environment_crash_verdict(diag)
-    if diag.is_parallel_timeout:
+    if diag.is_timeout:
         execution_boundary = (
             "true no-xdist serial" if diag.execution_mode == "no-xdist" else "parallel pytest-xdist"
         )
@@ -460,7 +462,12 @@ def _diagnostic_verdict(diag: Diagnostic) -> list[str]:
             f"{execution_boundary} readiness validation (issue #8469).",
             "The run is incomplete/degraded and remains fail-closed; it is not success evidence.",
         ]
-        if diag.serialized_ok is True:
+        if diag.execution_mode == "no-xdist":
+            lines.append(
+                "The true no-xdist serial rerun timed out; treat the serial result as "
+                "incomplete and keep the readiness gate failed."
+            )
+        elif diag.serialized_ok is True:
             lines.append(
                 "The true no-xdist serial rerun passed: this supports a "
                 "load-sensitive or environment-only classification, but does not "

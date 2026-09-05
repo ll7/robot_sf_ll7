@@ -140,6 +140,12 @@ behavior but cannot promote the parallel lane to success evidence. Record the ex
 tests, worker count, runtime/dependency versions, cache location, and process-cleanup result when
 triaging parallel-load friction (issue #8469).
 
+The high-concurrency `run_xdist_race_validation.sh` route also preserves the compact-validation
+summary and, when its outer process boundary returns exit code 124, feeds the recorded log through
+the same reporter with the requested worker and distribution settings. If the outer summary cannot
+provide a log path, the route reports that diagnostic as unavailable and remains failed; it never
+turns an outer timeout into a pass.
+
 ## Local CI-equivalent path
 
 Use `scripts/dev/run_ci_local.sh` when the repository's complete local CI contract is required. Run

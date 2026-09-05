@@ -1025,7 +1025,11 @@ def test_xdist_race_validation_wraps_parallel_tests_and_artifact_scan() -> None:
     assert 'export PYTEST_FAST_FAIL="${PYTEST_FAST_FAIL:-0}"' in script_text
     assert 'export PYTEST_ORDER_MODE="${PYTEST_ORDER_MODE:-none}"' in script_text
     assert "run_compact_validation.py" in script_text
+    assert "--json" in script_text
     assert '"$SCRIPT_DIR/run_tests_parallel.sh" "${pytest_args[@]}"' in script_text
+    assert "diagnose_xdist_crash.py" in script_text
+    assert "--pytest-exit-code" in script_text
+    assert "--execution-mode xdist" in script_text
     assert "check_xdist_race_artifacts.py" in script_text
     assert "--baseline-json" in script_text
 

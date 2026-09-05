@@ -58,6 +58,13 @@ def test_classify_timeout_distinguishes_pytest_and_subprocess_signatures() -> No
     assert dxc.classify_timeout("2 failed, 98 passed in 3.21s") == ()
 
 
+def test_classify_timeout_does_not_match_ordinary_failure_phrases() -> None:
+    """A failure mentioning a wait or plugin name is not itself a timeout receipt."""
+    assert dxc.classify_timeout("AssertionError: timed out waiting for a fixture") == ()
+    assert dxc.classify_timeout("pytest-timeout plugin was enabled") == ()
+    assert dxc.classify_timeout("Timeout (>30s) without a pytest-timeout suffix") == ()
+
+
 def test_first_matching_lines_returns_excerpts() -> None:
     """Excerpts should surface the crash-bearing lines for triage."""
     log = "collecting...\nSegmentation fault (core dumped)\ntidying up\n"
@@ -166,11 +173,28 @@ def test_build_diagnostic_exit_124_is_timeout_and_fail_closed() -> None:
         pytest_exit_code=124,
     )
     assert diag.timeout_signatures == ("process-timeout",)
+    assert diag.is_timeout is True
     assert diag.is_parallel_timeout is True
     rendered = dxc.render_diagnostic(diag)
     assert "issue #8469" in rendered
     assert "incomplete/degraded" in rendered
     assert "success evidence" in rendered
+
+
+def test_serial_timeout_is_not_reported_as_parallel_timeout() -> None:
+    """A no-xdist fallback timeout keeps its boundary distinct from the parallel run."""
+    diag = dxc.build_diagnostic(
+        log_text="",
+        requested_workers="1",
+        execution_mode="no-xdist",
+        runtime=dxc.RuntimeSnapshot("3.13.0", "Linux", "x86_64", 32),
+        pytest_exit_code=124,
+    )
+    assert diag.is_timeout is True
+    assert diag.is_parallel_timeout is False
+    rendered = dxc.render_diagnostic(diag)
+    assert "true no-xdist serial" in rendered
+    assert "serial result as incomplete" in rendered
 
 
 def test_serialized_ok_true_text_reflects_env_only_crash() -> None:
@@ -345,6 +369,7 @@ def test_cli_json_reports_timeout_exit_without_log() -> None:
     )
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
+    assert payload["is_timeout"] is True
     assert payload["is_parallel_timeout"] is True
     assert payload["timeout_signatures"] == ["process-timeout"]
     assert payload["pytest_exit_code"] == 124

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
@@ -16,6 +17,7 @@ from types import SimpleNamespace
 import pytest
 
 from scripts.dev import check_worktree_capacity as capacity
+from scripts.dev import worktree_creation_lock
 from tests.support.environment_guards import git_identity_environment
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -770,6 +772,98 @@ def test_worktree_creation_lock_helper_contract(tmp_path: Path) -> None:
     )
     assert propagated.returncode == 7
     assert lock_path.exists()
+
+
+@pytest.mark.parametrize(
+    ("lock_errno", "expected_returncode"),
+    ((errno.EAGAIN, 75), (errno.EACCES, 75), (errno.EIO, 2)),
+)
+def test_worktree_creation_lock_helper_non_blocking_errno_contract(
+    monkeypatch,
+    tmp_path: Path,
+    lock_errno: int,
+    expected_returncode: int,
+) -> None:
+    """Only documented non-blocking contention errno values map to exit 75."""
+    fcntl = pytest.importorskip("fcntl")
+
+    def fake_flock(_file_descriptor: int, operation: int) -> None:
+        assert operation & fcntl.LOCK_NB
+        raise OSError(lock_errno, "simulated lock contention")
+
+    monkeypatch.setattr(fcntl, "flock", fake_flock)
+    result = worktree_creation_lock.run(
+        ["--non-blocking", str(tmp_path / "test-errno.lock"), "--", sys.executable, "-c", "pass"]
+    )
+
+    assert result == expected_returncode
+
+
+def test_worktree_creation_lock_helper_non_blocking_reports_contention(
+    tmp_path: Path,
+) -> None:
+    """--non-blocking exits 75 on a held lock and runs the child when free."""
+    lock_path = tmp_path / "test-nonblocking.lock"
+    held_marker = tmp_path / "test-nonblocking-held"
+    holder = subprocess.Popen(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            "from pathlib import Path; import sys, time; Path(sys.argv[1]).touch(); time.sleep(30)",
+            str(held_marker),
+        ],
+        cwd=REPO_ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not held_marker.exists() and holder.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert held_marker.exists(), "holder did not acquire the lock before running the child"
+        contended = subprocess.run(
+            [
+                sys.executable,
+                str(WORKTREE_CREATION_LOCK),
+                "--non-blocking",
+                str(lock_path),
+                "--",
+                sys.executable,
+                "-c",
+                "pass",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        assert contended.returncode == 75, contended.stderr
+    finally:
+        holder.terminate()
+        holder.wait(timeout=15)
+    free = subprocess.run(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            "--non-blocking",
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            "pass",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+    assert free.returncode == 0, free.stderr
 
 
 def test_create_worktree_hints_when_orphan_branch_diverged(tmp_path: Path) -> None:

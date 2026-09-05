@@ -31,14 +31,23 @@ The --frozen flag prevents this recovery path from changing dependency locks.
 EOF
 }
 
+locked_recovery=0
+
 if [[ "$#" -gt 0 ]]; then
   if [[ "$#" -eq 1 && ( "$1" == "--help" || "$1" == "-h" ) ]]; then
     show_help
     exit 0
   fi
-  echo "recover_fast_pysf_worktree: this helper accepts no arguments" >&2
-  show_help >&2
-  exit 2
+  # Internal re-entry flag: the portable-lock fallback re-executes this script
+  # under worktree_creation_lock.py --non-blocking so recovery runs while a
+  # Python fcntl holder owns the shared lock file. Never pass this directly.
+  if [[ "$#" -eq 1 && "$1" == "--__locked-recovery" ]]; then
+    locked_recovery=1
+  else
+    echo "recover_fast_pysf_worktree: this helper accepts no arguments" >&2
+    show_help >&2
+    exit 2
+  fi
 fi
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
@@ -264,10 +273,6 @@ if ! check_local_venv_layout; then
   exit 2
 fi
 
-if ! command -v flock >/dev/null 2>&1; then
-  echo "recover_fast_pysf_worktree: flock is required for concurrency-safe recovery" >&2
-  exit 2
-fi
 lock_path="$git_common_dir/robot-sf-fast-pysf-recovery.lock"
 if [[ -L "$lock_path" ]]; then
   echo "recover_fast_pysf_worktree: refusing a symlinked repository recovery lock: $lock_path" >&2
@@ -277,24 +282,45 @@ if [[ -e "$lock_path" && ! -f "$lock_path" ]]; then
   echo "recover_fast_pysf_worktree: repository recovery lock is not a regular file: $lock_path" >&2
   exit 2
 fi
-lock_fd=""
-if ! exec {lock_fd}>"$lock_path"; then
-  echo "recover_fast_pysf_worktree: could not open repository recovery lock: $lock_path" >&2
-  exit 2
-fi
-if ! flock -n "$lock_fd"; then
-  echo "recover_fast_pysf_worktree: another fast-pysf recovery is active for this repository" >&2
-  echo "Wait for it to finish, then retry this explicit command." >&2
-  echo "Lock: $lock_path" >&2
-  exec {lock_fd}>&-
-  exit 75
-fi
+if [[ "$locked_recovery" -eq 1 ]]; then
+  # Re-entered under worktree_creation_lock.py --non-blocking holding the
+  # shared lock file; skip local acquisition and the EXIT-trap release.
+  :
+elif command -v flock >/dev/null 2>&1; then
+  lock_fd=""
+  if ! exec {lock_fd}>"$lock_path"; then
+    echo "recover_fast_pysf_worktree: could not open repository recovery lock: $lock_path" >&2
+    exit 2
+  fi
+  if ! flock -n "$lock_fd"; then
+    echo "recover_fast_pysf_worktree: another fast-pysf recovery is active for this repository" >&2
+    echo "Wait for it to finish, then retry this explicit command." >&2
+    echo "Lock: $lock_path" >&2
+    exec {lock_fd}>&-
+    exit 75
+  fi
 
-release_lock() {
-  flock -u "$lock_fd" 2>/dev/null || true
-  exec {lock_fd}>&-
-}
-trap release_lock EXIT
+  release_lock() {
+    flock -u "$lock_fd" 2>/dev/null || true
+    exec {lock_fd}>&-
+  }
+  trap release_lock EXIT
+else
+  # Portable fallback: fcntl.flock via the helper uses flock(2) on the same
+  # lock file identity, so it serializes against flock-CLI holders.
+  # --non-blocking preserves the exit-75 contention contract.
+  echo "recover_fast_pysf_worktree: flock CLI not used; holding portable lock on $lock_path" >&2
+  python_lock_rc=0
+  python3 "$repo_root/scripts/dev/worktree_creation_lock.py" --non-blocking "$lock_path" -- \
+    "$repo_root/scripts/dev/recover_fast_pysf_worktree.sh" --__locked-recovery || python_lock_rc=$?
+  if [[ "$python_lock_rc" -eq 75 ]]; then
+    echo "recover_fast_pysf_worktree: another fast-pysf recovery is active for this repository" >&2
+    echo "Wait for it to finish, then retry this explicit command." >&2
+    echo "Lock: $lock_path" >&2
+    exit 75
+  fi
+  exit "$python_lock_rc"
+fi
 
 capacity_report=""
 if ! capacity_report="$(python3 "$capacity_checker" --path "$local_venv" 2>&1)"; then

@@ -79,6 +79,14 @@ BLOCKED_TRIAGE_BLOCK_RE = re.compile(
 BLOCKED_BY_REFERENCE_RE = re.compile(
     r"(?im)^\s*(?:#{1,6}\s*)?blocked\s*-?\s*by\s*:\s*#[1-9][0-9]*\b"
 )
+_NON_BLOCKING_GATE_VALUE = r"(?:none|no\s+blockers?|n/?a|not\s+applicable|clear|resolved)"
+NON_BLOCKING_GATE_RE = re.compile(
+    r"(?im)(?:"
+    r"(?<!\w)blocked\s*-?\s*by\s*:\s*" + _NON_BLOCKING_GATE_VALUE + r"(?=[ \t]*(?:[.!?]|$))|"
+    r"^[ \t]*#{0,6}[ \t]*blocked\s*-?\s*by\s*:?[ \t]*\r?\n"
+    r"(?:[ \t]*\r?\n)*[ \t]*" + _NON_BLOCKING_GATE_VALUE + r"[ \t]*(?:[.!?])?[ \t]*$"
+    r")"
+)
 
 BLOCKER_TERMS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "provenance": (
@@ -1218,10 +1226,11 @@ def _canonical_ruling_line_indices(lines: Sequence[str], issue_number: int) -> l
 def _gate_evidence(text: str) -> list[dict[str, str]]:
     """Return current, issue-local provenance, rights, compute, and input gates."""
     evidence: list[dict[str, str]] = []
-    lines = [" ".join(line.lower().split()) for line in text.splitlines()]
+    normalized_text = NON_BLOCKING_GATE_RE.sub("", text)
+    lines = [" ".join(line.lower().split()) for line in normalized_text.splitlines()]
     lines = [line for line in lines if line]
     gate_context = re.compile(
-        r"\b(?:hard[- ]?)?(?:blocked|gated)\s+(?:on|by|until|pending)\b"
+        r"\b(?:hard[- ]?)?(?:blocked[- ]+|gated\s+)(?:on|by|until|pending)\b"
         r"|\b(?:is|are|remains?|currently|still)\s+(?:hard[- ]?)?blocked\b"
         r"|\b(?:cannot|can't|unable to|not able to|not authorized to|not dispatchable)\b"
         r"[^|.;]{0,100}\b(?:submit|launch|run|proceed|stage|access|publish|release|verify|execute)\b"
@@ -1256,7 +1265,7 @@ def _gate_evidence(text: str) -> list[dict[str, str]]:
         re.IGNORECASE,
     )
     generic_gate_pattern = re.compile(
-        r"\b(?:remains?|currently|is|are)?\s*(?:hard[- ]?)?blocked\s+"
+        r"\b(?:remains?|currently|is|are)?\s*(?:hard[- ]?)?blocked[- ]+"
         r"(?:on|by|until|pending)\b|\bhard[- ]gated\s+(?:on|by|until)\b",
         re.IGNORECASE,
     )

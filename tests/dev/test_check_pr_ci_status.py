@@ -2358,3 +2358,204 @@ def test_main_bounded_polling_stops_early_when_pr_merged(
     assert payload["monitor"]["poll_attempt"] == 1
     assert payload["monitor"]["terminal_reason"] == "pr_merged"
     assert payload["state"] == "MERGED"
+
+
+def test_fetch_ci_status_detects_setup_starvation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A job stuck in environment setup >15m triggers setup_starvation."""
+    payload = {
+        "number": 8415,
+        "title": "setup starvation gate",
+        "state": "OPEN",
+        "mergeable": "MERGEABLE",
+        "headRefName": "fix/setup-starvation",
+        "headRefOid": FULL_SHA,
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "fast-feedback (2)",
+                "workflowName": "CI",
+                "status": "in_progress",
+                "conclusion": "",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/841501/job/841502",
+            }
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    api_payloads = {
+        "actions/runs/841501": {
+            "status": "in_progress",
+            "run_started_at": "1970-01-01T00:00:00Z",
+            "head_sha": FULL_SHA,
+        },
+        "actions/jobs/841502": {
+            "status": "in_progress",
+            "started_at": "1970-01-01T00:00:30Z",
+            "conclusion": None,
+            "steps": [
+                {
+                    "name": "Set up job",
+                    "status": "completed",
+                    "conclusion": "success",
+                },
+                {
+                    "name": "Set up CI Python environment",
+                    "status": "in_progress",
+                    "conclusion": None,
+                    "started_at": "1970-01-01T00:01:00Z",
+                },
+            ],
+        },
+    }
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status._rest_api_get", api_payloads.get)
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status.time.time", lambda: 1000.0)
+
+    data = _fetch_ci_status("8415", actions_stale_after_seconds=900)
+
+    checks = data["checks"]
+    assert checks["overall"] == "pending"
+    assert checks["setup_starvation"] is True
+    assert checks["pending_reason"] == "setup_starvation"
+    assert checks["diagnostic"] == "actions_gate_setup_starvation"
+    assert len(checks["setup_starvation_items"]) == 1
+    starved_item = checks["setup_starvation_items"][0]
+    assert starved_item["name"] == "fast-feedback (2)"
+    assert starved_item["phase"] == "setup"
+    assert starved_item["step_name"] == "Set up CI Python environment"
+    assert starved_item["age_seconds"] == 940
+    assert starved_item["age_source"] == "step_started_at"
+    assert starved_item["setup_starvation"] is True
+
+    recovery = checks["recovery"]
+    assert recovery["action"] == "inspect_stalled_setup_then_cancel_or_replace"
+    assert recovery["setup_starvation"] is True
+    assert recovery["authorized"] is False
+    assert recovery["mutation_authorized"] is False
+    assert "Cancellation or rerun requires explicit authorization" in recovery["note"]
+    assert len(recovery["stale_runs"]) == 1
+    stale_cmd = recovery["stale_runs"][0]
+    assert stale_cmd["run_id"] == 841501
+    assert stale_cmd["job_id"] == 841502
+    assert stale_cmd["step_name"] == "Set up CI Python environment"
+    assert stale_cmd["cancel_command"] == "gh run cancel 841501"
+    assert stale_cmd["replacement_command"] == "gh run rerun 841501"
+
+
+def test_fetch_ci_status_normal_in_progress_not_setup_starvation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An active test job is classified as in_progress, not setup starvation."""
+    payload = {
+        "number": 8415,
+        "title": "normal test run",
+        "state": "OPEN",
+        "mergeable": "MERGEABLE",
+        "headRefName": "fix/test-run",
+        "headRefOid": FULL_SHA,
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "fast-feedback (1)",
+                "workflowName": "CI",
+                "status": "in_progress",
+                "conclusion": "",
+                "detailsUrl": "https://github.com/example/repo/actions/runs/841503/job/841504",
+            }
+        ],
+        "reviews": [],
+    }
+    monkeypatch.setattr(
+        "scripts.dev.check_pr_ci_status._gh",
+        MagicMock(return_value=MagicMock(returncode=0, stdout=json.dumps(payload), stderr="")),
+    )
+    api_payloads = {
+        "actions/runs/841503": {
+            "status": "in_progress",
+            "run_started_at": "1970-01-01T00:00:00Z",
+            "head_sha": FULL_SHA,
+        },
+        "actions/jobs/841504": {
+            "status": "in_progress",
+            "started_at": "1970-01-01T00:01:00Z",
+            "conclusion": None,
+            "steps": [
+                {
+                    "name": "Set up CI Python environment",
+                    "status": "completed",
+                    "conclusion": "success",
+                },
+                {
+                    "name": "Run pytest suite",
+                    "status": "in_progress",
+                    "conclusion": None,
+                    "started_at": "1970-01-01T00:05:00Z",
+                },
+            ],
+        },
+    }
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status._rest_api_get", api_payloads.get)
+    monkeypatch.setattr("scripts.dev.check_pr_ci_status.time.time", lambda: 1000.0)
+
+    data = _fetch_ci_status("8415", actions_stale_after_seconds=900)
+
+    checks = data["checks"]
+    assert checks["overall"] == "pending"
+    assert "setup_starvation" not in checks
+    assert checks.get("pending_reason") != "setup_starvation"
+    lifecycle = checks["actions_lifecycle"]
+    assert lifecycle["by_phase"] == {"in_progress": 1}
+    assert lifecycle["setup_starvation_count"] == 0
+
+
+def test_format_human_setup_starvation() -> None:
+    """Human diagnostic should output step details and setup starvation diagnosis."""
+    output = _format_human(
+        {
+            "status": "ok",
+            "pr": 8415,
+            "title": "setup starvation gate",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "branch": "fix/setup-starvation",
+            "head_sha": FULL_SHA,
+            "checks": {
+                "total": 1,
+                "overall": "pending",
+                "by_conclusion": {"": 1},
+                "by_status": {"in_progress": 1},
+                "pending_reason": "setup_starvation",
+                "diagnostic": "actions_gate_setup_starvation",
+                "setup_starvation": True,
+                "setup_starvation_items": [
+                    {
+                        "name": "fast-feedback (2)",
+                        "phase": "setup",
+                        "step_name": "Set up CI Python environment",
+                        "age_seconds": 999,
+                        "run_id": 841501,
+                        "job_id": 841502,
+                    }
+                ],
+                "recovery": {
+                    "action": "inspect_stalled_setup_then_cancel_or_replace",
+                    "setup_starvation": True,
+                },
+            },
+        }
+    )
+
+    assert "pending_reason: setup_starvation  |  affected checks: 1" in output
+    assert (
+        "fast-feedback (2): setup step=Set up CI Python environment age=999s | run 841501 job 841502"
+        in output
+    )
+    assert "diagnostic: actions_gate_setup_starvation  |  fail-closed: true" in output
+    assert (
+        "recovery: inspect_stalled_setup_then_cancel_or_replace | mutation-authorized: false"
+        in output
+    )

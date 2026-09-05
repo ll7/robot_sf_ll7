@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -10,6 +13,9 @@ AGENTS_MD = REPO_ROOT / "AGENTS.md"
 AGENTS_README = REPO_ROOT / ".agents" / "README.md"
 ENTRYPOINTS_DOC = REPO_ROOT / "docs" / "ai" / "agent_workflow_entrypoints.md"
 RELOCATED_GUIDANCE = REPO_ROOT / "docs" / "dev" / "agents" / "relocated-agents-guidance.md"
+CAMERA_READY_RUNNER = REPO_ROOT / "scripts" / "tools" / "run_camera_ready_benchmark.py"
+CREATE_WORKTREE = REPO_ROOT / "scripts" / "dev" / "create_worktree.sh"
+REVIEW_GUARD = REPO_ROOT / "scripts" / "dev" / "review_worktree_guard.py"
 
 CANONICAL_ROUTES = (
     "Read-only observation",
@@ -61,6 +67,191 @@ def test_agent_workflow_entrypoints_commands_exist_or_valid() -> None:
         assert script_rel in text, f"Script not mentioned in entrypoints doc: {script_rel}"
         script_path = REPO_ROOT / script_rel
         assert script_path.is_file(), f"Referenced route script not found: {script_rel}"
+
+
+def test_scientific_acceptance_route_uses_parser_backed_preflight() -> None:
+    """The documented scientific acceptance route must use the real preflight CLI."""
+    text = ENTRYPOINTS_DOC.read_text(encoding="utf-8")
+
+    assert (
+        "uv run python scripts/tools/run_camera_ready_benchmark.py "
+        "--config configs/benchmarks/camera_ready_baseline_safe.yaml --mode preflight"
+    ) in text
+    assert "robot_sf.benchmark.camera_ready_campaign --verify-only" not in text
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(CAMERA_READY_RUNNER),
+            "--config",
+            str(REPO_ROOT / "configs/benchmarks/camera_ready_baseline_safe.yaml"),
+            "--verify-only",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "unrecognized arguments: --verify-only" in result.stderr
+
+
+def test_scientific_acceptance_route_dispatches_preflight(monkeypatch, tmp_path, capsys) -> None:
+    """The documented ``--mode preflight`` path calls the canonical verifier."""
+    from scripts.tools import run_camera_ready_benchmark
+
+    config_path = tmp_path / "entrypoint-config.yaml"
+    config_path.write_text("name: test\n", encoding="utf-8")
+    sentinel_config = object()
+    called: dict[str, object] = {}
+
+    def fake_load_campaign_config(path: Path) -> object:
+        assert path == config_path
+        return sentinel_config
+
+    def fake_prepare_campaign_preflight(config: object, **kwargs: object) -> dict[str, object]:
+        assert config is sentinel_config
+        called.update(kwargs)
+        return {
+            "campaign_id": "entrypoint-preflight",
+            "campaign_root": tmp_path / "output",
+            "validate_config_path": tmp_path / "output" / "validate_config.json",
+            "preview_scenarios_path": tmp_path / "output" / "preview_scenarios.json",
+            "matrix_summary_json_path": tmp_path / "output" / "matrix_summary.json",
+            "matrix_summary_csv_path": tmp_path / "output" / "matrix_summary.csv",
+            "amv_coverage_json_path": tmp_path / "output" / "amv_coverage.json",
+            "amv_coverage_md_path": tmp_path / "output" / "amv_coverage.md",
+            "comparability_json_path": None,
+            "comparability_md_path": None,
+        }
+
+    monkeypatch.setattr(
+        run_camera_ready_benchmark, "load_campaign_config", fake_load_campaign_config
+    )
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "prepare_campaign_preflight",
+        fake_prepare_campaign_preflight,
+    )
+    monkeypatch.setattr(
+        run_camera_ready_benchmark,
+        "run_campaign",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("preflight route must not run the benchmark campaign")
+        ),
+    )
+
+    exit_code = run_camera_ready_benchmark.main(
+        ["--config", str(config_path), "--mode", "preflight"]
+    )
+
+    assert exit_code == 0
+    assert called["campaign_id"] is None
+    assert json.loads(capsys.readouterr().out)["campaign_id"] == "entrypoint-preflight"
+
+
+def test_documented_python_commands_use_project_environment() -> None:
+    """Entrypoint guidance must not reintroduce bare Python interpreters."""
+    for path in (AGENTS_MD, ENTRYPOINTS_DOC):
+        text = path.read_text(encoding="utf-8")
+        assert "python3" not in text
+        assert re.search(r"(?m)^\s*python(?:3)?(?:\s|$)", text) is None
+
+
+def test_read_only_route_requires_explicit_protected_worktree_mode(tmp_path: Path) -> None:
+    """A read-only linked checkout must be created with review mode and its guard enabled."""
+    text = ENTRYPOINTS_DOC.read_text(encoding="utf-8")
+    protected_section = text.split("### Protected read-only worktrees", maxsplit=1)[1].split(
+        "### Route Boundaries and Negative Rules", maxsplit=1
+    )[0]
+    assert "create_worktree.sh" in protected_section
+    assert "--mode review" in protected_section
+    assert "robot-sf.worktree-mode=review" in protected_section
+
+    repo = tmp_path / "repo"
+    worktree = tmp_path / "review"
+    branch = "review/entrypoint-contract"
+    subprocess.run(
+        ["git", "init", "--initial-branch=main", str(repo)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.name", "agent-entrypoint-test"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "agent-entrypoint@example.invalid"],
+        check=True,
+    )
+    (repo / "fixture.txt").write_text("base\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "fixture.txt"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "fixture"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    try:
+        created = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(worktree),
+                "--branch",
+                branch,
+                "--base",
+                "HEAD",
+                "--minimum-free-bytes",
+                "0",
+                "--mode",
+                "review",
+            ],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert created.returncode == 0, created.stdout + created.stderr
+
+        mode = subprocess.run(
+            ["git", "-C", str(worktree), "config", "--get", "robot-sf.worktree-mode"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert mode.stdout.strip() == "review"
+
+        guard = subprocess.run(
+            [sys.executable, str(REVIEW_GUARD), "pre-push", "--worktree", str(worktree)],
+            cwd=worktree,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert guard.returncode == 1, guard.stdout + guard.stderr
+        payload = json.loads(guard.stdout)
+        assert payload["mode"] == "review"
+        assert payload["blocked"] is True
+    finally:
+        subprocess.run(
+            ["git", "-C", str(repo), "worktree", "remove", "--force", str(worktree)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        subprocess.run(
+            ["git", "-C", str(repo), "branch", "-D", branch],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
 
 def test_agent_workflow_entrypoints_documents_route_boundaries_and_negative_rules() -> None:
@@ -131,6 +322,14 @@ def test_agents_md_task_scoped_context_and_mode_specific_sync() -> None:
     assert "never merge `origin/main` into the implementation branch" in text
     assert "review_worktree_guard.py" in text
     assert "#8321" in text
+
+    passive_review_line = next(
+        line
+        for line in text.splitlines()
+        if line.startswith("- **Read-only observation / review**:")
+    )
+    assert ".agents/skills/implementation-verification/SKILL.md" in passive_review_line
+    assert ".agents/skills/goal-pr-review/SKILL.md" not in passive_review_line
 
 
 def test_relocated_guidance_mode_specific_sync() -> None:

@@ -14,11 +14,29 @@ or mutating branches during read-only review.
 
 | Route | Purpose | Required context / evidence | First deterministic command | Permitted mutations | Authoritative acceptance command |
 | --- | --- | --- | --- | --- | --- |
-| **Read-only observation** | PR / issue audit, queue review, CI status, non-mutating review | Target/base/head SHAs, PR/issue metadata, triage state | `git rev-parse HEAD` or `python3 scripts/dev/watch_pr_ci_status.py <pr> --json --once` | None (fail-closed via #8321 guard; no branch pushes or merges) | Structured snapshot report or non-mutating review assessment |
+| **Read-only observation** | PR / issue audit, queue review, CI status, non-mutating review | Target/base/head SHAs, PR/issue metadata, triage state | `git rev-parse HEAD` or `uv run python scripts/dev/watch_pr_ci_status.py <pr> --json --once` | None (fail-closed via #8321 guard; no branch pushes or merges) | Structured snapshot report or non-mutating review assessment |
 | **Documentation-only edit** | Documentation, markdown, instructions, glossaries | Changed paths, referenced file/link targets | `git diff --name-only` or targeted link check | Markdown/text files under `docs/`, `.agents/`, or root instructions | `uv run python scripts/tools/sync_ai_config.py --check` and diff/link verification |
 | **Implementation / runtime change** | Bugfix, feature, or refactor in runtime code/tests | Issue contract, reproduction test, plan | Focused test: `uv run pytest <path> -q` | Scoped code and tests within declared `owned_paths` | `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` |
-| **Scientific / benchmark interpretation** | Benchmark analysis, policy eval, metric review | Scenario/config/seed provenance, campaign runs | Canonical benchmark runner / analyzer or row inspection | None (or diagnostic scripts / artifact manifests only) | `uv run python -m robot_sf.benchmark.camera_ready_campaign --verify-only` (no fallback/degraded as success) |
-| **Environment / worktree repair** | Capacity reclamation, venv repair, git worktree hygiene | Capacity inventory, worktree status, venv health | `python scripts/dev/check_worktree_capacity.py --inventory --json` | Worktree prune, `.venv` recreation, scratch cleanup | `python scripts/dev/check_worktree_optional_deps.py --profile all-extras` |
+| **Scientific / benchmark interpretation** | Benchmark analysis, policy eval, metric review | Scenario/config/seed provenance, campaign runs | Canonical benchmark runner / analyzer or row inspection | None (or diagnostic scripts / artifact manifests only) | `uv run python scripts/tools/run_camera_ready_benchmark.py --config configs/benchmarks/camera_ready_baseline_safe.yaml --mode preflight` (preflight only; no fallback/degraded as success) |
+| **Environment / worktree repair** | Capacity reclamation, venv repair, git worktree hygiene | Capacity inventory, worktree status, venv health | `uv run python scripts/dev/check_worktree_capacity.py --inventory --json` | Worktree prune, `.venv` recreation, scratch cleanup | `uv run python scripts/dev/check_worktree_optional_deps.py --profile all-extras` |
+
+### Protected read-only worktrees
+
+Any read-only observation that needs a linked worktree must opt into the protected review mode at
+creation time. The creator defaults to implementation mode, so omitting `--mode review` is a
+blocked route rather than a read-only setup:
+
+```bash
+scripts/dev/create_worktree.sh \
+  --path "$WORKTREE_PARENT/review-<id>" \
+  --branch "review/<id>" \
+  --base origin/main \
+  --mode review
+```
+
+The creator records `robot-sf.worktree-mode=review` and installs the
+`scripts/dev/review_worktree_guard.py`/pre-push barriers. Treat a failed or missing guard setup as
+blocked; do not continue review work in the default implementation mode.
 
 ### Route Boundaries and Negative Rules
 
@@ -32,7 +50,9 @@ or mutating branches during read-only review.
 
 ## Command Entrypoints
 
-Run Python through the project environment so imports such as `robot_sf` resolve consistently:
+Run Python through the project environment so imports such as `robot_sf` resolve consistently. In a
+fresh linked worktree, run the command through `scripts/dev/run_worktree_shared_venv.sh` as described
+in the worktree bootstrap guidance:
 
 ```bash
 uv run python scripts/<path>.py
@@ -69,10 +89,10 @@ token-saving workflow callable from a fresh checkout and return an explicit mach
 `unavailable` state when `CODEX_ROUTING_REPO` is not configured:
 
 ```bash
-python3 scripts/save-codex-token-checkpoint.py --task-class issue_implementation --format text
-python3 scripts/advise-provider-routing.py --json
-python3 scripts/read-active-ledger.py --json --limit 1
-python3 scripts/resolve-route.py --help
+uv run python scripts/save-codex-token-checkpoint.py --task-class issue_implementation --format text
+uv run python scripts/advise-provider-routing.py --json
+uv run python scripts/read-active-ledger.py --json --limit 1
+uv run python scripts/resolve-route.py --help
 ```
 
 Set `CODEX_ROUTING_REPO` to a checkout of the canonical shared routing repository to delegate route
@@ -158,7 +178,7 @@ TARGET_REPO="$(pwd)"
 TARGET_HEAD="$(git -C "$TARGET_REPO" rev-parse HEAD)"
 ROUTING_REPO="${CODEX_ROUTING_REPO:?set CODEX_ROUTING_REPO to a codex-personal-skills checkout}"
 HANDOFF_FILE="${HANDOFF_FILE:?set HANDOFF_FILE to the flat handoff.v2 YAML above}"
-python3 "$ROUTING_REPO/scripts/resolve-route.py" \
+uv run --project "$ROUTING_REPO" python "$ROUTING_REPO/scripts/resolve-route.py" \
   --task-id ROBOTSF-EXAMPLE --task-class issue_implementation --risk R1 \
   --handoff-file "$HANDOFF_FILE" \
   --frozen-head "$TARGET_HEAD" --target-repo "$TARGET_REPO" \

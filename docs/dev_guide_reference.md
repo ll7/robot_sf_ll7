@@ -717,7 +717,9 @@ before the queue auto-merges a PR:
   member, or collaborator; verdict-like text from an untrusted contributor is ignored. The metadata
   digest is computed from the live title/body through the REST-backed snapshot and stale or missing
   metadata evidence fails closed. The gate also requires no unresolved actionable review threads and no outstanding explicitly requested
-  reviewers. The current source-head CI rollup
+  reviewers. A trusted unexpired exact-head `review-claim` also blocks admission while its review
+  worker is active; the claim must be released after exact-head evidence is published and before
+  `merge-ready` is applied. The current source-head CI rollup
   must also remain green; superseded check runs are discarded with the same helper used by the
   guarded merger preflight. Under the REST quota fallback, check runs are enriched with their
   authoritative Actions workflow identity before that classifier runs; missing identity remains
@@ -732,9 +734,9 @@ before the queue auto-merges a PR:
 - **Audit record**: the job emits a `merge_queue_gate.v1` audit with the evaluated head SHA, the
   source-head SHA encoded in the queue ref and its binding verdict, queue merging strategy, base
   SHA, label set, metadata digest and metadata-verdict status, gate-verdict status, staleness
-  verdict, CI conclusion, reviewer-thread resolution plus requested-reviewer status, and the
-  current closing-discipline status/blockers from PR commit and issue metadata, so every merge
-  decision is inspectable and reproducible.
+  verdict, CI conclusion, reviewer-thread resolution plus requested-reviewer and review-claim
+  status, and the current closing-discipline status/blockers from PR commit and issue metadata, so
+  every merge decision is inspectable and reproducible.
 - **Self-test**: `uv run python scripts/dev/merge_queue_gate.py --self-test` exercises the
   fail-closed contract deterministically (the issue #6274 validation scenarios).
 

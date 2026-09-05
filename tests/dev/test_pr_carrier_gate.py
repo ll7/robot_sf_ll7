@@ -37,9 +37,13 @@ def _pr_payload(
 def _comments_payload(*bodies: str) -> str:
     return json.dumps(
         [
-            {"user": {"login": "ll7"}, "body": body}
+            {"user": {"login": "ll7"}, "authorAssociation": "COLLABORATOR", "body": body}
             if not body.startswith("bot:")
-            else {"user": {"login": "github-actions[bot]"}, "body": body[4:]}
+            else {
+                "user": {"login": "github-actions[bot]"},
+                "authorAssociation": "MEMBER",
+                "body": body[4:],
+            }
             for body in bodies
         ]
     )
@@ -55,6 +59,7 @@ def _reviews_payload(
         [
             {
                 "user": {"login": "ll7"},
+                "authorAssociation": "COLLABORATOR",
                 "body": body,
                 "commit_id": commit_id,
                 "state": state,
@@ -220,6 +225,74 @@ def test_gate_admits_implementation_review_compatibility_comment() -> None:
 
     assert result["status"] == "ok"
     assert result["carrier_source"] == "issue_comment"
+
+
+def test_gate_withholds_merge_ready_while_exact_head_review_claim_is_active() -> None:
+    """An in-flight trusted review claim cannot authorize the live head."""
+    title = "fix(benchmark): gate carriers"
+    body = _body_with_carrier("### Summary\n\nBounded gate repair.", HEAD_SHA)
+    claim = f"review-claim: lane-a @ {HEAD_SHA} until 2099-01-01T00:00:00Z"
+    with patch(
+        "scripts.dev.pr_carrier_gate._gh_api_get",
+        side_effect=[
+            _proc(stdout=_pr_payload(title=title, body=body)),
+            _proc(stdout=_comments_payload(_review_comment(), claim)),
+        ],
+    ):
+        result = check_merge_ready_carriers(
+            7610,
+            live_head=HEAD_SHA,
+            live_base=BASE_SHA,
+        )
+
+    assert result["status"] == "error"
+    assert "active exact-head review claim" in result["error"]
+    assert "review worker is still running" in result["error"]
+
+
+def test_gate_allows_current_carrier_after_exact_head_review_claim_release() -> None:
+    """A released claim leaves the existing exact-head carrier gate authoritative."""
+    title = "fix(benchmark): gate carriers"
+    body = _body_with_carrier("### Summary\n\nBounded gate repair.", HEAD_SHA)
+    claim = f"review-claim: lane-a @ {HEAD_SHA} until 2099-01-01T00:00:00Z"
+    release = f"review-claim: released @ {HEAD_SHA}"
+    with patch(
+        "scripts.dev.pr_carrier_gate._gh_api_get",
+        side_effect=[
+            _proc(stdout=_pr_payload(title=title, body=body)),
+            _proc(stdout=_comments_payload(_review_comment(), claim, release)),
+        ],
+    ):
+        result = check_merge_ready_carriers(
+            7610,
+            live_head=HEAD_SHA,
+            live_base=BASE_SHA,
+        )
+
+    assert result["status"] == "ok"
+
+
+def test_gate_withholds_merge_ready_for_active_review_endpoint_claim() -> None:
+    """A claim in the canonical review endpoint is also an admission hold."""
+    title = "fix(benchmark): gate carriers"
+    body = _body_with_carrier("### Summary\n\nBounded gate repair.", HEAD_SHA)
+    claim = f"review-claim: lane-a @ {HEAD_SHA} until 2099-01-01T00:00:00Z"
+    with patch(
+        "scripts.dev.pr_carrier_gate._gh_api_get",
+        side_effect=[
+            _proc(stdout=_pr_payload(title=title, body=body)),
+            _proc(stdout=_comments_payload()),
+            _proc(stdout=_reviews_payload(claim)),
+        ],
+    ):
+        result = check_merge_ready_carriers(
+            7610,
+            live_head=HEAD_SHA,
+            live_base=BASE_SHA,
+        )
+
+    assert result["status"] == "error"
+    assert "active exact-head review claim" in result["error"]
 
 
 def test_gate_rejects_review_endpoint_foreign_commit() -> None:

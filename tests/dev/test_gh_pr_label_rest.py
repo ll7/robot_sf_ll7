@@ -220,7 +220,7 @@ class TestAddLabel:
         )
 
     def test_merge_ready_withholds_write_when_carrier_gate_fails(self) -> None:
-        """A stale carrier (e.g. pending domain review) blocks the label write."""
+        """A carrier blocker, including an active review worker, blocks the label write."""
         head_sha = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
         with (
             patch(
@@ -235,7 +235,8 @@ class TestAddLabel:
                 "scripts.dev.gh_pr_label_rest.check_merge_ready_carriers",
                 return_value={
                     "status": "error",
-                    "error": "review comment carries stale-carrier sentinel(s)",
+                    "error": "active exact-head review claim 'lane-a' covers the live head; "
+                    "review worker is still running and merge-ready must be withheld",
                 },
             ),
             patch("scripts.dev.gh_pr_label_rest._gh_api_post") as mock_post,
@@ -247,7 +248,7 @@ class TestAddLabel:
             )
 
         assert result["status"] == "error"
-        assert "stale-carrier sentinel" in result["error"]
+        assert "review worker is still running" in result["error"]
         mock_post.assert_not_called()
 
     def test_merge_ready_stale_state_skips_post(self) -> None:

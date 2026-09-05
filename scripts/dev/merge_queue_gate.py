@@ -16,6 +16,8 @@ fail-closed preflight as ``gh-pr-merger``:
     a proven docs-only changed-file set covered by CI's ``paths-ignore`` rules,
   - no unresolved actionable review threads,
   - no outstanding explicitly requested reviewers,
+  - no unexpired trusted exact-head ``review-claim`` held by an active review
+    worker,
   - a current closing-discipline recheck over the PR body and commit messages,
   - the merge queue's ``ALLGREEN`` strategy, so every constituent entry must
     pass its own required gate check,
@@ -32,7 +34,8 @@ It emits a ``merge_queue_gate.v1`` audit record with the evaluated head SHA,
 queue merging strategy, base SHA, label set, metadata digest and trailer
 statuses, exact-head changed-coverage status, staleness verdict, CI conclusion,
 reviewer-thread resolution, requested-reviewer status, and closing-discipline
-status so the merge decision is inspectable and reproducible.
+status, and review-claim status so the merge decision is inspectable and
+reproducible.
 
 The pure function ``evaluate_merge_gate`` is deterministic and exercised by
 ``--self-test`` (the validation contract for issue #6274). The CLI resolves a
@@ -89,6 +92,7 @@ from scripts.dev.check_pr_ci_status import (  # noqa: E402
 from scripts.dev.github_graphql_retry import GraphQLRetryOutcome, run_with_retry  # noqa: E402
 from scripts.dev.github_quota import quota_reset_handoff  # noqa: E402
 from scripts.dev.pr_loop_policy import (  # noqa: E402
+    active_review_claim,
     has_any_pr_metadata_verdict,
     has_current_accepted_gate_verdict,
     has_current_pr_metadata_verdict,
@@ -182,6 +186,7 @@ class MergeGateAudit:
     staleness_verdict: str
     thread_resolution: str
     reviewer_request_status: str
+    review_claim_status: str
     ancestry_state: str
     merge_ready: bool
     passed: bool
@@ -279,6 +284,37 @@ def _reviewer_request_reason(status: str) -> str | None:
     )
 
 
+def _review_claim_status(pr: dict[str, Any], *, head_sha: str, now: datetime | None) -> str:
+    """Classify whether a trusted review worker still claims the live head.
+
+    Live snapshots carry the result explicitly so the queue audit records the
+    exact read used for admission. Pure callers may instead provide raw
+    ``comments``/``reviews`` collections; those are evaluated with the shared
+    ``active_review_claim`` parser. Older fixtures without either source remain
+    ``not_evaluated`` for compatibility, while an explicitly malformed live
+    result fails closed.
+    """
+    explicit = pr.get("review_claim")
+    if explicit is not None:
+        if not isinstance(explicit, dict):
+            return "unknown"
+        status = explicit.get("status")
+        return status if status in {"active", "clear", "unavailable"} else "unknown"
+
+    if "comments" not in pr and "reviews" not in pr:
+        return "not_evaluated"
+    comments = pr.get("comments", [])
+    reviews = pr.get("reviews", [])
+    if not isinstance(comments, list) or not isinstance(reviews, list):
+        return "unavailable"
+    claim = active_review_claim(
+        {"comments": comments, "reviews": reviews},
+        head_sha,
+        now,
+    )
+    return "active" if claim is not None else "clear"
+
+
 def _closing_discipline_state(pr: dict[str, Any]) -> tuple[str, list[str]]:
     """Validate the live closing-discipline result carried by a PR snapshot.
 
@@ -349,6 +385,7 @@ def _fail_closed_reasons(  # noqa: PLR0913
     thread_resolution: str,
     reviewer_request_status: str,
     merge_group_head_binding: str,
+    review_claim_status: str = "not_evaluated",
     body_not_ready_sentinels: list[str] | None = None,
     ancestry_state: str = "",
     closing_discipline_status: str = "not_evaluated",
@@ -383,6 +420,11 @@ def _fail_closed_reasons(  # noqa: PLR0913
     rev_reason = _reviewer_request_reason(reviewer_request_status)
     if rev_reason:
         reasons.append(rev_reason)
+
+    if review_claim_status == "active":
+        reasons.append("active_review_claim")
+    elif review_claim_status not in {"clear", "not_evaluated"}:
+        reasons.append("review_claim_not_verified")
 
     if ancestry_state and ancestry_state != "clean":
         reasons.append("stacked_ancestry_not_independently_mergeable")
@@ -484,6 +526,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission
     reviewers_requested: bool | None = None,
     merge_group_head_sha: str = "",
     queue_merging_strategy: str = "",
+    now: datetime | None = None,
 ) -> MergeGateAudit:
     """Evaluate the merge-queue gate for one PR snapshot.
 
@@ -498,7 +541,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission
         ``gate_verdicts`` / ``comments`` / ``reviews`` body excerpts),
         ``metadata_digest`` and trusted ``metadata_verdicts``, and
         ``reviewers_requested`` when supplied by the live snapshot, plus the
-        optional live ``closing_discipline`` result.
+        optional live ``closing_discipline`` and ``review_claim`` results.
       main_sha: current ``main`` HEAD SHA. When both ``base_sha`` and
         ``main_sha`` are present and differ, the gate fails closed as stale. When
         either is absent, staleness is reported as ``not_applicable`` (the merge
@@ -519,11 +562,15 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission
         ``merge_group.head_ref``. When provided, it must prefix-match the live
         PR head SHA; any mismatch fails closed so a queue ref cannot be rebound
         to a newer or unrelated PR head.
+      now: explicit UTC evaluation instant for raw review-claim sources. Live
+        snapshots already carry a claim result; ``None`` uses the current UTC
+        time through ``active_review_claim``.
 
     Returns a ``MergeGateAudit`` with ``passed`` and a list of fail-closed
     ``reasons``. The audit always records the evaluated head SHA, base SHA, label
-    set, gate-verdict and metadata-verdict statuses, staleness verdict, CI
-    conclusion, changed-coverage status, and thread resolution so the decision is inspectable.
+    set, gate-verdict, metadata-verdict, and review-claim statuses, staleness
+    verdict, CI conclusion, changed-coverage status, and thread resolution so
+    the decision is inspectable.
     """
     head_sha = str(pr.get("head_sha", "") or "")
     labels = _label_names(pr)
@@ -571,6 +618,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission
     gate_verdict_status = _gate_verdict_status(pr, head_sha)
     metadata_digest_value = str(pr.get("metadata_digest", "") or "")
     metadata_verdict_status = _metadata_verdict_status(pr, metadata_digest_value)
+    review_claim_status = _review_claim_status(pr, head_sha=head_sha, now=now)
 
     merge_group_head_sha = str(merge_group_head_sha or "").lower()
     merge_group_head_binding, queue_strategy = _resolve_merge_group_binding(
@@ -600,6 +648,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission
             thread_resolution=thread_resolution,
             reviewer_request_status=reviewer_request_status,
             merge_group_head_binding=merge_group_head_binding,
+            review_claim_status=review_claim_status,
             body_not_ready_sentinels=body_not_ready_sentinels,
             ancestry_state=ancestry_state,
             closing_discipline_status=closing_discipline_status,
@@ -632,6 +681,7 @@ def evaluate_merge_gate(  # noqa: C901, PLR0913 - explicit fail-closed admission
         staleness_verdict=staleness_verdict,
         thread_resolution=thread_resolution,
         reviewer_request_status=reviewer_request_status,
+        review_claim_status=review_claim_status,
         ancestry_state=ancestry_state,
         merge_ready=merge_ready,
         passed=passed,
@@ -921,6 +971,25 @@ def _to_body_snapshot(items: Any, *, limit: int = 180) -> dict[str, Any]:
                 }
             )
     return {"latest": latest}
+
+
+def _to_review_claim_snapshot(comments: Any, reviews: Any, *, head_sha: str) -> dict[str, Any]:
+    """Project the live review-claim result onto the evaluated head."""
+    if not isinstance(comments, list) or not isinstance(reviews, list):
+        return {"status": "unavailable"}
+    claim = active_review_claim(
+        {"comments": comments, "reviews": reviews},
+        head_sha,
+        None,
+    )
+    if claim is None:
+        return {"status": "clear"}
+    return {
+        "status": "active",
+        "lane": claim.lane,
+        "head_sha": claim.sha,
+        "expires_at": claim.expires_at.isoformat() if claim.expires_at is not None else None,
+    }
 
 
 def _to_receipt_check_runs(
@@ -1893,6 +1962,11 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
             expected_metadata_digest=current_metadata_digest,
         ),
     }
+    review_claim = _to_review_claim_snapshot(
+        payload.get("comments"),
+        payload.get("reviews"),
+        head_sha=head_sha,
+    )
 
     snapshot: dict[str, Any] = {
         "number": payload.get("number"),
@@ -1913,6 +1987,7 @@ def fetch_pr_snapshot(  # noqa: C901, PLR0912 - validates several independent li
         "metadata_verdicts": _extract_metadata_verdicts(payload),
         "review_snapshot": _to_body_snapshot(payload.get("reviews")),
         "comment_snapshot": _to_body_snapshot(payload.get("comments")),
+        "review_claim": review_claim,
         "required_checks": required_checks,
         "review_evidence": review_evidence,
         "requested_reviewers": requested_reviewers,
@@ -2162,6 +2237,7 @@ def _format_summary(audit: MergeGateAudit) -> str:
         f"- exact-head changed-coverage status: `{audit.changed_coverage_status}`",
         f"- changed-coverage head SHA: `{audit.changed_coverage_head_sha or '?'}`",
         f"- gate-verdict status: `{audit.gate_verdict_status}`",
+        f"- exact-head review-claim status: `{audit.review_claim_status}`",
         f"- PR metadata digest: `{audit.metadata_digest or '?'}`",
         f"- PR metadata verdict status: `{audit.metadata_verdict_status}`",
         f"- closing-discipline status: `{audit.closing_discipline_status}`",
@@ -2185,7 +2261,8 @@ def _format_summary(audit: MergeGateAudit) -> str:
         "`gate-verdict: accepted` trailer + current `pr-metadata: reconciled` "
         "trailer + exact-head `changed-coverage-gate` proof (or a complete CI-ignored docs-only "
         "file-set proof) + resolved threads + no outstanding reviewer requests + "
-        "`ALLGREEN` queue strategy; fail-closed on any missing dimension. "
+        "no active exact-head review claim + `ALLGREEN` queue strategy; fail-closed on any "
+        "missing dimension. "
         "See `docs/dev_guide.md` and "
         "`.agents/skills/gh-pr-merger/SKILL.md`."
     )
@@ -2502,6 +2579,7 @@ def _self_test() -> int:
         "staleness_verdict",
         "thread_resolution",
         "reviewer_request_status",
+        "review_claim_status",
         "merge_ready",
         "passed",
         "reasons",

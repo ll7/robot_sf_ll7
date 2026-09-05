@@ -16,6 +16,8 @@ This module closes that class of drift:
   and, when it declares a base, the exact live base;
 - a human ``COMMENTED`` review from the PR reviews endpoint is valid only when
   its body names that live head/base and its ``commit_id`` is the live head;
+- an unexpired trusted ``review-claim`` covering the live head means an exact-
+  head review worker is still active, so the merge-ready write is withheld;
 - a body or comment carrying stale-narrative sentinels (including
   "not current-base merge evidence" and pending domain-review dispositions)
   invalidates the merge-ready disposition;
@@ -36,7 +38,11 @@ from typing import TYPE_CHECKING, Any
 
 from scripts.dev._gh_rest import gh_api_get as _gh_api_get
 from scripts.dev._gh_rest import parse_json as _parse_json
-from scripts.dev.pr_loop_policy import extract_sha_carriers, invalid_sha_carriers
+from scripts.dev.pr_loop_policy import (
+    active_review_claim,
+    extract_sha_carriers,
+    invalid_sha_carriers,
+)
 from scripts.dev.pr_metadata import find_not_ready_body_sentinels
 
 if TYPE_CHECKING:
@@ -199,6 +205,17 @@ def _review_carrier_error(
     )
 
 
+def _active_review_claim_error(entries: Sequence[dict[str, Any]], *, live_head: str) -> str | None:
+    """Return an error when a trusted review worker still claims the live head."""
+    claim = active_review_claim({"comments": list(entries)}, live_head, None)
+    if claim is None:
+        return None
+    return (
+        f"active exact-head review claim {claim.lane!r} covers the live head {live_head}; "
+        "review worker is still running and merge-ready must be withheld"
+    )
+
+
 def _reviews_verdict(
     number: int,
     *,
@@ -219,6 +236,10 @@ def _reviews_verdict(
         return {"status": "error", "error": reviews_error}
     if not isinstance(reviews, list):
         return {"status": "error", "error": "PR review carriers payload was not a list"}
+
+    claim_error = _active_review_claim_error(reviews, live_head=live_head)
+    if claim_error:
+        return {"status": "error", "error": claim_error}
 
     narrative_error = _stale_narrative_error(reviews, body="")
     if narrative_error:
@@ -276,6 +297,10 @@ def _comments_verdict(
     if not isinstance(comments, list):
         return {"status": "error", "error": "PR carrier comments payload was not a list"}
 
+    claim_error = _active_review_claim_error(comments, live_head=live_head)
+    if claim_error:
+        return {"status": "error", "error": claim_error}
+
     narrative_error = _stale_narrative_error(comments, body=body)
     if narrative_error:
         return {"status": "error", "error": narrative_error}
@@ -307,7 +332,8 @@ def check_merge_ready_carriers(
     Reads the live PR object and its issue comments immediately, then checks
     body-digest freshness, body not-ready sentinels, stale-carrier narratives,
     and the existence of a human exact-head review comment bound to
-    ``live_head``/``live_base``. Any failure returns ``status: error`` and the
+    ``live_head``/``live_base``. An active trusted review claim for the live
+    head is also a hard blocker. Any failure returns ``status: error`` and the
     merge-ready write must be withheld.
     """
     if number < 1:

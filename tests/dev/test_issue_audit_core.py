@@ -3585,6 +3585,7 @@ def test_timeline_success_path_counts_attempts_consistently() -> None:
     assert queried_issues == [1, 2]
     assert meta["requests_attempted"] == 2
     assert meta["pages_read"] == 2
+    assert meta["request_limit_exhausted"] is True
 
 
 def test_plan_cli_retry_command_preserves_non_default_options(

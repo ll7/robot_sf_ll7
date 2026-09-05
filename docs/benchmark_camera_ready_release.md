@@ -302,7 +302,9 @@ the byte-identical bundle used for GitHub. Zenodo new-version drafts inherit the
 predecessor files. When the sealed state proves exact new-version provenance,
 `upload` validates the complete local and remote inventories, uploads the
 intended files, and re-reads the exact successor deposition response after the
-upload, immediately before each deletion, and after cleanup. It does not use a
+upload, immediately before each deletion, and after cleanup. Immediately
+before each `DELETE`, it also fetches the deposition-scoped successor file and
+requires the returned filename and file ID to match the admitted target. It does not use a
 separate `/files` collection response for lifecycle or deletion admission. Local
 symlinks, control/query/fragment/encoded-collision filenames, duplicate aliases,
 and local changes detected immediately before a PUT are rejected. It deletes

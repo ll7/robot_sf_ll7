@@ -1265,8 +1265,9 @@ def _gate_evidence(text: str) -> list[dict[str, str]]:
         r"clear|resolved)\b",
         re.IGNORECASE,
     )
+    gate_lines = [non_blocking_gate_pattern.sub("", line) for line in lines]
     for kind, (topics, blockers) in BLOCKER_TERMS.items():
-        for line in lines:
+        for line in gate_lines:
             topic = next((term for term in topics if term in line), None)
             blocker = next((term for term in blockers if term in line), None)
             if not topic:
@@ -1313,9 +1314,8 @@ def _gate_evidence(text: str) -> list[dict[str, str]]:
                     }
                 )
                 break
-    for line in lines:
-        generic_gate_line = non_blocking_gate_pattern.sub("", line)
-        if generic_gate_pattern.search(generic_gate_line) and not report_pattern.search(line):
+    for line in gate_lines:
+        if generic_gate_pattern.search(line) and not report_pattern.search(line):
             evidence.append({"kind": "blocked", "text": "explicit current blocker"})
             break
     return evidence

@@ -666,6 +666,12 @@ def test_non_blocking_blocked_by_phrase_does_not_route_to_triage(phrase: str) ->
     assert not any(mutation["value"] == "needs-triage" for mutation in classification.mutations)
 
 
+@pytest.mark.parametrize("prefix", ["Provenance is", "Dataset is", "Compute remains"])
+def test_non_blocking_declaration_does_not_trigger_domain_gate(prefix: str) -> None:
+    """Domain-specific gate detection also ignores explicit no-blocker text."""
+    assert issue_audit_core._gate_evidence(f"{prefix} blocked by: none") == []
+
+
 def test_non_blocking_declaration_does_not_hide_a_later_gate() -> None:
     """A later genuine gate on the same line remains current evidence."""
     classification = classify_issue(

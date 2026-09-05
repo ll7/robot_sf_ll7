@@ -71,7 +71,12 @@ def test_snapshot_requests_single_ci_read(monkeypatch: pytest.MonkeyPatch) -> No
     )
 
     assert result["status"] == "error"
-    ci_fetch.assert_called_once_with("42", max_attempts=1, allow_rest_fallback=False)
+    ci_fetch.assert_called_once_with(
+        "42",
+        repo="ll7/robot_sf_ll7",
+        max_attempts=1,
+        allow_rest_fallback=False,
+    )
 
 
 def _evidence(**overrides: Any) -> StabilitySnapshotEvidence:

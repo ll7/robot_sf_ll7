@@ -329,6 +329,62 @@ def test_main_accepts_pr_flag_alias(capsys: pytest.CaptureFixture) -> None:
     assert "PR #42" in capsys.readouterr().out
 
 
+def test_main_passes_explicit_repo_to_normal_monitor(capsys: pytest.CaptureFixture) -> None:
+    """An explicit repository must route the normal PR read away from the local remote."""
+    mock_data = json.dumps(
+        {
+            "number": 42,
+            "title": "explicit repository",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "explicit-repository",
+            "headRefOid": "abc123",
+            "statusCheckRollup": [],
+            "reviews": [],
+        }
+    )
+
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout=mock_data, stderr="")
+        rc = main(["42", "--repo", "ll7/robot_sf_ll7"])
+
+    assert rc == 0
+    gh_args = mock_run.call_args.args[0]
+    assert gh_args[-2:] == ["--repo", "ll7/robot_sf_ll7"]
+    assert "PR #42" in capsys.readouterr().out
+
+
+def test_main_passes_explicit_repo_when_resolving_pr_from_branch(
+    capsys: pytest.CaptureFixture,
+) -> None:
+    """Branch-based PR resolution and the subsequent CI read share the explicit repository."""
+    pr_data = json.dumps(
+        {
+            "number": 42,
+            "title": "resolved repository",
+            "state": "OPEN",
+            "mergeable": "MERGEABLE",
+            "headRefName": "resolved-repository",
+            "headRefOid": "abc123",
+            "statusCheckRollup": [],
+            "reviews": [],
+        }
+    )
+
+    with patch("scripts.dev.check_pr_ci_status.subprocess.run") as mock_run:
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="42\n", stderr=""),
+            MagicMock(returncode=0, stdout=pr_data, stderr=""),
+        ]
+        rc = main(["--repo", "ll7/robot_sf_ll7"])
+
+    assert rc == 0
+    assert mock_run.call_count == 2
+    for call in mock_run.call_args_list:
+        assert call.args[0][-2:] == ["--repo", "ll7/robot_sf_ll7"]
+    assert "PR #42" in capsys.readouterr().out
+
+
 def test_main_rejects_conflicting_positional_and_pr_flag(
     capsys: pytest.CaptureFixture,
 ) -> None:

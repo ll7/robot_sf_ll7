@@ -158,11 +158,14 @@ def _gh(args: list[str], timeout: float = 30) -> subprocess.CompletedProcess:
     )
 
 
-def _resolve_pr_number(pr_number: str | None) -> str:
+def _resolve_pr_number(pr_number: str | None, *, repo: str = "") -> str:
     """Resolve PR number from argument or current branch."""
     if pr_number:
         return pr_number
-    result = _gh(["pr", "view", "--json", "number", "--jq", ".number"])
+    args = ["pr", "view", "--json", "number", "--jq", ".number"]
+    if repo:
+        args.extend(["--repo", repo])
+    result = _gh(args)
     if result.returncode != 0:
         print(
             "Could not determine PR number from current branch. "
@@ -1225,6 +1228,7 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
     pr_number: str,
     backoff: float = 0.0,
     *,
+    repo: str = "",
     max_attempts: int | None = None,
     allow_rest_fallback: bool = True,
     actions_stale_after_seconds: int = DEFAULT_ACTIONS_STALE_AFTER_SECONDS,
@@ -1244,15 +1248,19 @@ def _fetch_ci_status(  # noqa: C901 - explicit route/error/lifecycle branches.
 
     retry_sleep = _sleep_with_wall_budget if _ACTIVE_WALL_DEADLINE is not None else None
 
+    gh_args = [
+        "pr",
+        "view",
+        pr_number,
+        "--json",
+        "number,title,state,mergeable,headRefName,headRefOid,statusCheckRollup,reviews",
+    ]
+    if repo:
+        gh_args.extend(["--repo", repo])
+
     retry = run_with_retry(
         _gh,
-        [
-            "pr",
-            "view",
-            pr_number,
-            "--json",
-            "number,title,state,mergeable,headRefName,headRefOid,statusCheckRollup,reviews",
-        ],
+        gh_args,
         **_ci_retry_kwargs(max_attempts),
         **({"sleep": retry_sleep} if retry_sleep is not None else {}),
     )
@@ -1869,7 +1877,7 @@ def _fetch_stability_snapshot(
     # its bounded transient retry and REST fallback behavior, but using either
     # here would mix evidence from different time windows and violate the
     # route-evidence contract.
-    ci = _fetch_ci_status(pr, max_attempts=1, allow_rest_fallback=False)
+    ci = _fetch_ci_status(pr, repo=repo, max_attempts=1, allow_rest_fallback=False)
     if ci.get("status") == "error":
         error_text = str(ci.get("error", "") or "")
         quota_kinds = {"graphql_quota_exhausted"}
@@ -2109,6 +2117,7 @@ def _non_negative_int(value: str) -> int:
 class _CIPollOptions:
     """Bounded CI fetch options shared by each poll attempt."""
 
+    repo: str = ""
     actions_stale_after_seconds: int = DEFAULT_ACTIONS_STALE_AFTER_SECONDS
     starvation_seconds: float = DEFAULT_QUEUE_STARVATION_SECONDS
 
@@ -2144,6 +2153,7 @@ def _poll_ci_status(  # noqa: C901 - explicit bounded deadline/error branches.
                 data = _fetch_ci_status(
                     pr,
                     backoff=backoff if attempt == 1 else 0.0,
+                    repo=options.repo,
                     actions_stale_after_seconds=options.actions_stale_after_seconds,
                     starvation_seconds=options.starvation_seconds,
                 )
@@ -2245,6 +2255,7 @@ def _fetch_data(args: argparse.Namespace, pr: str) -> tuple[dict[str, Any], int]
             expected_head_sha=args.expected_head_sha,
             max_wall_seconds=args.max_wall_seconds,
             poll_options=_CIPollOptions(
+                repo=args.repo,
                 actions_stale_after_seconds=args.actions_stale_after_seconds,
                 starvation_seconds=args.queue_starvation_seconds,
             ),
@@ -2367,7 +2378,7 @@ codes: 0 stable, 1 changed/failure/error, 2 inconclusive
     parser.add_argument(
         "--repo",
         default="",
-        help="owner/name REST target (default: derive from the origin git remote)",
+        help="owner/name GitHub target for reads (default: derive from the origin git remote)",
     )
     parser.add_argument(
         "--expected-main-sha",
@@ -2426,7 +2437,7 @@ codes: 0 stable, 1 changed/failure/error, 2 inconclusive
     pr_number = args.pr_number_option or args.pr_number
 
     try:
-        pr = _resolve_pr_number(pr_number)
+        pr = _resolve_pr_number(pr_number, repo=args.repo)
         data, attempts = _fetch_data(args, pr)
     except FileNotFoundError:
         print("gh CLI not found. Install GitHub CLI: https://cli.github.com/", file=sys.stderr)

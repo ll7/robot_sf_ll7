@@ -50,6 +50,10 @@ receipt_path=""
 task_id=""
 dry_run=0
 command_args=()
+# Internal re-entry flag: the portable-lock fallback re-executes this script
+# under worktree_creation_lock.py so the critical section runs while a Python
+# fcntl holder owns the shared lock file. Never pass this flag directly.
+locked_transaction=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -90,6 +94,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run)
       dry_run=1
+      shift
+      ;;
+    --__locked-transaction)
+      locked_transaction=1
       shift
       ;;
     --exec)
@@ -149,7 +157,9 @@ capacity_args=(--path "$worktree_path")
 if [[ -n "$minimum_free_bytes" ]]; then
   capacity_args+=(--minimum-free-bytes "$minimum_free_bytes")
 fi
-python3 "$SCRIPT_DIR/check_worktree_capacity.py" "${capacity_args[@]}"
+if [[ "$locked_transaction" -eq 0 ]]; then
+  python3 "$SCRIPT_DIR/check_worktree_capacity.py" "${capacity_args[@]}"
+fi
 
 if [[ "$dry_run" -eq 1 ]]; then
   echo "create_worktree: dry-run passed; git worktree add was not invoked."
@@ -162,67 +172,96 @@ fi
 # common directory. Serialize the complete orphan-recovery/prune/add
 # transaction per repository; capacity inspection above remains parallel and
 # read-only.
-if ! command -v flock >/dev/null 2>&1; then
-  echo "create_worktree: flock is required for concurrency-safe worktree creation" >&2
-  exit 2
-fi
-git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
-worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
-exec {worktree_lock_fd}>"$worktree_lock_path"
-if ! flock "$worktree_lock_fd"; then
-  echo "create_worktree: failed to acquire repository worktree-creation lock" >&2
-  exit 2
-fi
+run_locked_transaction() {
+  # A concurrent creator may have populated this exact target while this process
+  # waited for the repository lock. Recheck under the lock before any mutation.
+  if [[ -e "$worktree_path" || -L "$worktree_path" ]]; then
+    echo "refusing to overwrite existing worktree target: $worktree_path" >&2
+    exit 2
+  fi
 
-# A concurrent creator may have populated this exact target while this process
-# waited for the repository lock. Recheck under the lock before any mutation.
-if [[ -e "$worktree_path" || -L "$worktree_path" ]]; then
-  echo "refusing to overwrite existing worktree target: $worktree_path" >&2
-  exit 2
-fi
-
-# Recover from a prior interrupted checkout: git can die mid-"Updating files"
-# (e.g. SIGPIPE when output is piped through head), leaving the branch ref
-# present without a registered worktree. The next retry would otherwise fail
-# with a bare "fatal: a branch named '<branch>' already exists".
-if git show-ref --verify --quiet "refs/heads/$branch_name"; then
-  if ! git worktree list --porcelain | grep -q "^branch refs/heads/$branch_name$"; then
-    if git rev-parse --verify --quiet "$branch_name^{commit}" >/dev/null &&
-       git merge-base --is-ancestor "$branch_name" "$base_ref" >/dev/null 2>&1; then
-      echo "create_worktree: removing orphan branch '$branch_name' (points at base $base_ref)" >&2
-      git branch -D "$branch_name"
-    else
-      echo "create_worktree: orphan branch '$branch_name' does not point at base $base_ref;" >&2
-      echo "create_worktree: recover manually with:" >&2
-      echo "  git branch -D $branch_name && git worktree prune" >&2
-      exit 2
+  # Recover from a prior interrupted checkout: git can die mid-"Updating files"
+  # (e.g. SIGPIPE when output is piped through head), leaving the branch ref
+  # present without a registered worktree. The next retry would otherwise fail
+  # with a bare "fatal: a branch named '<branch>' already exists".
+  if git show-ref --verify --quiet "refs/heads/$branch_name"; then
+    if ! git worktree list --porcelain | grep -q "^branch refs/heads/$branch_name$"; then
+      if git rev-parse --verify --quiet "$branch_name^{commit}" >/dev/null &&
+         git merge-base --is-ancestor "$branch_name" "$base_ref" >/dev/null 2>&1; then
+        echo "create_worktree: removing orphan branch '$branch_name' (points at base $base_ref)" >&2
+        git branch -D "$branch_name"
+      else
+        echo "create_worktree: orphan branch '$branch_name' does not point at base $base_ref;" >&2
+        echo "create_worktree: recover manually with:" >&2
+        echo "  git branch -D $branch_name && git worktree prune" >&2
+        exit 2
+      fi
     fi
   fi
-fi
-git worktree prune
+  git worktree prune
 
-# Avoid automatic upstream-tracking writes to the shared repository config.  A
-# linked worktree's branch can be configured explicitly later with
-# ``git branch --set-upstream-to``; creation itself must remain safe when
-# several workers create worktrees concurrently.
-git worktree add --no-track -b "$branch_name" "$worktree_path" "$base_ref"
-if [[ "$worktree_mode" == "review" ]]; then
-  review_guard_args=(--worktree "$worktree_path" --mode review)
-  # A review candidate may be created from a base that predates this guard.
-  # Keep the target clean by using the invoking checkout's tracked helper and
-  # hook until the guard itself is present in the selected base.
-  if [[ ! -f "$worktree_path/scripts/dev/review_worktree_guard.py" ||
-        ! -x "$worktree_path/scripts/dev/git_hooks/pre-push" ]]; then
-    review_guard_args+=(--hook-source-root "$SCRIPT_DIR")
+  # Avoid automatic upstream-tracking writes to the shared repository config.  A
+  # linked worktree's branch can be configured explicitly later with
+  # ``git branch --set-upstream-to``; creation itself must remain safe when
+  # several workers create worktrees concurrently.
+  git worktree add --no-track -b "$branch_name" "$worktree_path" "$base_ref"
+  if [[ "$worktree_mode" == "review" ]]; then
+    review_guard_args=(--worktree "$worktree_path" --mode review)
+    # A review candidate may be created from a base that predates this guard.
+    # Keep the target clean by using the invoking checkout's tracked helper and
+    # hook until the guard itself is present in the selected base.
+    if [[ ! -f "$worktree_path/scripts/dev/review_worktree_guard.py" ||
+          ! -x "$worktree_path/scripts/dev/git_hooks/pre-push" ]]; then
+      review_guard_args+=(--hook-source-root "$SCRIPT_DIR")
+    fi
+    python3 "$SCRIPT_DIR/review_worktree_guard.py" configure "${review_guard_args[@]}"
   fi
-  python3 "$SCRIPT_DIR/review_worktree_guard.py" configure "${review_guard_args[@]}"
+  if [[ -n "$receipt_path" ]]; then
+    python3 "$SCRIPT_DIR/worktree_receipt.py" create \
+      --worktree "$worktree_path" --task-id "$task_id" --base-ref "$base_ref" --output "$receipt_path"
+  fi
+}
+
+if [[ "$locked_transaction" -eq 1 ]]; then
+  # Re-entered under worktree_creation_lock.py holding the shared lock file.
+  run_locked_transaction
+  exit 0
 fi
-if [[ -n "$receipt_path" ]]; then
-  python3 "$SCRIPT_DIR/worktree_receipt.py" create \
-    --worktree "$worktree_path" --task-id "$task_id" --base-ref "$base_ref" --output "$receipt_path"
+
+git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
+worktree_lock_path="$git_common_dir/robot-sf-create-worktree.lock"
+use_python_lock=0
+if [[ -n "${ROBOT_SF_WORKTREE_FORCE_PYTHON_LOCK:-}" ]]; then
+  use_python_lock=1
+elif ! command -v flock >/dev/null 2>&1; then
+  use_python_lock=1
 fi
-flock -u "$worktree_lock_fd"
-exec {worktree_lock_fd}>&-
+
+if [[ "$use_python_lock" -eq 0 ]]; then
+  exec {worktree_lock_fd}>"$worktree_lock_path"
+  if ! flock "$worktree_lock_fd"; then
+    echo "create_worktree: failed to acquire repository worktree-creation lock" >&2
+    exit 2
+  fi
+  run_locked_transaction
+  flock -u "$worktree_lock_fd"
+  exec {worktree_lock_fd}>&-
+else
+  # Portable fallback: fcntl.flock via the helper uses flock(2) on the same
+  # lock file identity, so it serializes against flock-CLI holders.
+  echo "create_worktree: flock CLI not used; holding portable lock on $worktree_lock_path" >&2
+  locked_args=(--__locked-transaction --path "$worktree_path" --branch "$branch_name"
+    --base "$base_ref" --mode "$worktree_mode")
+  if [[ -n "$receipt_path" ]]; then
+    locked_args+=(--receipt "$receipt_path" --task-id "$task_id")
+  fi
+  python_lock_rc=0
+  python3 "$SCRIPT_DIR/worktree_creation_lock.py" "$worktree_lock_path" -- \
+    "$SCRIPT_DIR/create_worktree.sh" "${locked_args[@]}" || python_lock_rc=$?
+  if [[ "$python_lock_rc" -ne 0 ]]; then
+    exit "$python_lock_rc"
+  fi
+fi
 echo "create_worktree: created $worktree_path on branch $branch_name from $base_ref"
 echo "create_worktree: use scripts/dev/run_worktree_shared_venv.sh for targeted validation."
 

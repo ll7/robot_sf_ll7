@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,10 @@ from tests.support.environment_guards import git_identity_environment
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CHECK_CAPACITY = REPO_ROOT / "scripts" / "dev" / "check_worktree_capacity.py"
 CREATE_WORKTREE = REPO_ROOT / "scripts" / "dev" / "create_worktree.sh"
+WORKTREE_CREATION_LOCK = REPO_ROOT / "scripts" / "dev" / "worktree_creation_lock.py"
+# Test hook honored by create_worktree.sh: force the portable Python fcntl
+# fallback even when the flock CLI is installed (issue #8488).
+FORCE_PYTHON_LOCK_ENV = {"ROBOT_SF_WORKTREE_FORCE_PYTHON_LOCK": "1"}
 
 
 def _unique_branch(tmp_path: Path, name: str) -> str:
@@ -450,6 +455,68 @@ def test_create_worktree_recovers_orphan_branch_before_add(tmp_path: Path) -> No
         _cleanup_owned_worktree(_worktree_target(tmp_path, branch), branch)
 
 
+def test_create_worktree_python_fallback_serializes_against_lock_holder(
+    tmp_path: Path,
+) -> None:
+    """The portable fallback must wait for the same shared lock file identity."""
+    fcntl = pytest.importorskip("fcntl")
+    branch = _unique_branch(tmp_path, "py-fallback-locked")
+    target = _worktree_target(tmp_path, branch)
+    common_dir = Path(
+        subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+    lock_path = common_dir / "robot-sf-create-worktree.lock"
+    process: subprocess.Popen[str] | None = None
+    try:
+        _create_orphan_branch(branch)
+        with lock_path.open("a+", encoding="utf-8") as lock_file:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            process = subprocess.Popen(
+                [
+                    str(CREATE_WORKTREE),
+                    "--path",
+                    str(target),
+                    "--branch",
+                    branch,
+                    "--minimum-free-bytes",
+                    "0",
+                ],
+                cwd=REPO_ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env={**os.environ, **FORCE_PYTHON_LOCK_ENV},
+            )
+            time.sleep(0.5)
+            assert process.poll() is None, "fallback creator did not wait for the lock"
+            assert not target.exists()
+            assert (
+                subprocess.run(
+                    ["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"],
+                    cwd=REPO_ROOT,
+                    check=False,
+                ).returncode
+                == 0
+            )
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+        stdout, stderr = process.communicate(timeout=120)
+        assert process.returncode == 0, f"stdout={stdout!r} stderr={stderr!r}"
+        assert "portable lock" in stderr
+        assert target.is_dir()
+    finally:
+        if process is not None and process.poll() is None:
+            process.kill()
+            process.communicate()
+        _cleanup_owned_worktree(target, branch)
+
+
 def test_create_worktree_lock_covers_orphan_recovery_and_add(tmp_path: Path) -> None:
     """The repository lock must cover branch cleanup through worktree registration."""
     fcntl = pytest.importorskip("fcntl")
@@ -506,6 +573,170 @@ def test_create_worktree_lock_covers_orphan_recovery_and_add(tmp_path: Path) -> 
             process.kill()
             process.communicate()
         _cleanup_owned_worktree(target, branch)
+
+
+def test_create_worktree_python_fallback_concurrent_creations_serialize(
+    tmp_path: Path,
+) -> None:
+    """Two competing fallback creations must both complete and register cleanly."""
+    first_root = tmp_path / "first"
+    second_root = tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    first_branch = _unique_branch(first_root, "py-fallback-race")
+    second_branch = _unique_branch(second_root, "py-fallback-race")
+    first_target = _worktree_target(first_root, first_branch)
+    second_target = _worktree_target(second_root, second_branch)
+    assert first_branch != second_branch
+    processes: list[subprocess.Popen[str]] = []
+    try:
+        for branch, target in (
+            (first_branch, first_target),
+            (second_branch, second_target),
+        ):
+            processes.append(
+                subprocess.Popen(
+                    [
+                        str(CREATE_WORKTREE),
+                        "--path",
+                        str(target),
+                        "--branch",
+                        branch,
+                        "--minimum-free-bytes",
+                        "0",
+                    ],
+                    cwd=REPO_ROOT,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env={**os.environ, **FORCE_PYTHON_LOCK_ENV},
+                )
+            )
+        for process in processes:
+            stdout, stderr = process.communicate(timeout=180)
+            assert process.returncode == 0, f"stdout={stdout!r} stderr={stderr!r}"
+            assert "portable lock" in stderr
+        assert first_target.is_dir()
+        assert second_target.is_dir()
+        registered = subprocess.run(
+            ["git", "worktree", "list"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        assert f"[{first_branch}]" in registered
+        assert f"[{second_branch}]" in registered
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+                process.communicate()
+        _cleanup_owned_worktree(first_target, first_branch)
+        _cleanup_owned_worktree(second_target, second_branch)
+
+
+def test_create_worktree_python_fallback_refuses_low_space(tmp_path: Path) -> None:
+    """Failed capacity admission still refuses on the portable fallback path."""
+    target = tmp_path / "new-worktree"
+    result = subprocess.run(
+        [
+            str(CREATE_WORKTREE),
+            "--path",
+            str(target),
+            "--branch",
+            _unique_branch(tmp_path, "py-fallback-blocked"),
+            "--minimum-free-bytes",
+            str(2**63),
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, **FORCE_PYTHON_LOCK_ENV},
+    )
+
+    assert result.returncode == 2
+    assert "available space is below" in result.stdout
+    assert not target.exists()
+
+
+def test_create_worktree_without_flock_cli_uses_python_fallback(tmp_path: Path) -> None:
+    """A PATH without flock (e.g. macOS) must fall back instead of exiting 2."""
+    stub_bin = tmp_path / "stub-bin"
+    stub_bin.mkdir()
+    for tool in ("bash", "sh", "git", "git-lfs", "python3", "dirname", "cat", "grep", "du"):
+        resolved = shutil.which(tool)
+        assert resolved is not None, f"test host is missing required tool: {tool}"
+        (stub_bin / tool).symlink_to(resolved)
+    assert shutil.which("flock", path=str(stub_bin)) is None, "stub PATH must hide flock"
+    branch = _unique_branch(tmp_path, "no-flock-fallback")
+    target = _worktree_target(tmp_path, branch)
+    try:
+        result = subprocess.run(
+            [
+                str(CREATE_WORKTREE),
+                "--path",
+                str(target),
+                "--branch",
+                branch,
+                "--minimum-free-bytes",
+                "0",
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, "PATH": str(stub_bin)},
+        )
+        assert result.returncode == 0, result.stderr
+        assert "portable lock" in result.stderr
+        assert "flock is required" not in result.stderr
+        assert target.is_dir()
+    finally:
+        _cleanup_owned_worktree(target, branch)
+
+
+def test_worktree_creation_lock_helper_contract(tmp_path: Path) -> None:
+    """The portable lock helper validates usage and propagates child status."""
+    assert os.access(WORKTREE_CREATION_LOCK, os.X_OK)
+    compile_result = subprocess.run(
+        [sys.executable, "-m", "py_compile", str(WORKTREE_CREATION_LOCK)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert compile_result.returncode == 0, compile_result.stderr
+
+    lock_path = tmp_path / "test-creation.lock"
+    usage = subprocess.run(
+        [sys.executable, str(WORKTREE_CREATION_LOCK), str(lock_path)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert usage.returncode == 2
+    assert "usage" in usage.stderr
+
+    propagated = subprocess.run(
+        [
+            sys.executable,
+            str(WORKTREE_CREATION_LOCK),
+            str(lock_path),
+            "--",
+            sys.executable,
+            "-c",
+            "import sys; sys.exit(7)",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert propagated.returncode == 7
+    assert lock_path.exists()
 
 
 def test_create_worktree_hints_when_orphan_branch_diverged(tmp_path: Path) -> None:

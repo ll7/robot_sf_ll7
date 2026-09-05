@@ -58,12 +58,16 @@ Use validation proportional to the file/change type, with claim strength as an e
 Claim strength overrides the nominal row: a docs or workflow edit that asserts a benchmark, metric,
 schema, model-provenance, or paper-facing result must use the stronger proof tier for that claim.
 
-## Always-Load Context
+## Core Context and Task-Scoped Retrieval
 
-Read only the surfaces relevant to the task. Prefer repo-local files over ad-hoc summaries in issue comments.
+Always-required contract: read `docs/maintainer_values.md` and this `AGENTS.md`. If
+`local.machine.md` or `local.machine.<name>.md` exists at the repository root, read the applicable
+machine context before running expensive commands. Then retrieve only the references relevant to the
+task; do not load the full context tree by default. Prefer repo-local files over ad-hoc summaries in
+issue comments.
 
-- `docs/maintainer_values.md`: compact current values and hard contracts.
-- `AGENTS.md`: top-level execution rules, repo structure, and workflow defaults.
+Task-relevant references include:
+
 - `memory/MEMORY.md`: concise repo-local memory index for stable facts and links to topic files.
 - `docs/code_review.md`: benchmark-facing review criteria, provenance checks, and regression traps.
 - `docs/context/INDEX.md`: retrieval-first catalog for current context-note entry points.
